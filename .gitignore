@@ -1,0 +1,36 @@
+# ==================== PYTHON ESSENTIALS ====================
+# Cache y archivos compilados de Python
+__pycache__/              # Cache de bytecode
+*.py[cod]                 # Archivos .pyc, .pyo, .pyd
+*.so                      # Shared objects
+
+# ==================== VIRTUAL ENVIRONMENT ====================
+# Entorno virtual del proyecto
+.venv/                    # Entorno virtual (estándar moderno)
+venv/                     # Entorno virtual alternativo
+
+# ==================== ENVIRONMENT & SECRETS ====================
+# Variables de entorno y configuración sensible
+.env                      # Variables de entorno (¡NUNCA commitear!)
+
+# ==================== DATABASE ====================
+# Archivos de base de datos locales (si los hubiera)
+*.sql.backup              # Backups de PostgreSQL
+*.dump                    # Dumps de base de datos
+
+# ==================== TESTING ====================
+# Archivos generados por pytest
+.pytest_cache/            # Cache de pytest
+.coverage                 # Datos de cobertura
+htmlcov/                  # Reportes HTML de cobertura
+
+# ==================== LOGS ====================
+# Archivos de log
+*.log                     # Archivos de log
+
+# ==================== IDE & OS ====================
+# VS Code y sistema operativo
+.vscode/                  # Configuración de VS Code
+.DS_Store                 # Metadatos de macOS
+
+# Nota: Iremos añadiendo más patrones conforme los necesitemos
