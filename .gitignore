@@ -1,92 +1,25 @@
-# Python# Archivos compilados y cache de Python
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-__pycache__/__pycache__/              # Cache de bytecode de Python
+# Virtual Environment
+.venv/
 
-*.py[cod]*.py[cod]                 # Archivos .pyc, .pyo, .pyd compilados
+# Environment Variables
+.env
 
-*.so*.so                      # Shared objects (librerías compiladas)
+# Database
+*.db
 
+# Testing
+.pytest_cache/
+.coverage
 
+# OS specific
+.DS_Store
 
-# Virtual environments# Entornos virtuales de Python
-
-.venv/.venv/                    # Entorno virtual estándar (recomendado)
-
-venv/venv/                     # Entorno virtual alternativo
-
-
-
-# Environment variables# Variables de entorno y configuración sensible
-
-.env.env                      # Variables de entorno (¡NUNCA commitear!)
-
-.env.local.env.local                # Variables de entorno locales
-
-.env.*.local.env.*.local              # Variables de entorno por ambiente
-
-
-
-# Database# Archivos de base de datos locales
-
-*.sql.backup*.sql.backup              # Backups de PostgreSQL
-
-*.dump*.dump                    # Dumps de base de datos
-
-*.db*.db                      # Bases de datos SQLite (si las hay)
-
-
-
-# Testing# Archivos generados por herramientas de testing
-
-.pytest_cache/.pytest_cache/            # Cache de pytest
-
-.coverage.coverage                 # Datos de cobertura de código
-
-htmlcov/htmlcov/                  # Reportes HTML de cobertura
-
-.tox/.tox/                     # Entornos de testing con tox
-
-coverage.xmlcoverage.xml              # Reportes XML de cobertura
-
-
-
-# Logs# Archivos de log del sistema
-
-*.log*.log                     # Todos los archivos de log
-
-logs/logs/                     # Carpeta de logs
-
-
-
-# IDEs# Configuraciones del editor e IDE
-
-.vscode/.vscode/                  # Configuración de Visual Studio Code
-
-.idea/.idea/                    # Configuración de PyCharm/IntelliJ
-
-*.swp*.swp                     # Archivos temporales de Vim
-
-*.swo*.swo                     # Archivos temporales de Vim
-
-
-
-# OS specific# Archivos específicos del sistema operativo
-
-.DS_Store.DS_Store                 # Metadatos de carpetas en macOS
-
-.DS_Store?.DS_Store?                # Variante de DS_Store
-
-Thumbs.dbThumbs.db                 # Cache de thumbnails de Windows
-
-Desktop.ini
-
-# Archivos generados durante el build y distribución
-
-# Build & Distributionbuild/                    # Carpeta de build
-
-build/dist/                     # Distribuciones compiladas
-
-dist/*.egg-info/               # Metadata de paquetes Python
-
+# Build
+dist/
 *.egg-info/
-# Nota: Este .gitignore crecerá según las necesidades del proyecto
