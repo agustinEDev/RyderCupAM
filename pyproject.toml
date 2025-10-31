@@ -1,0 +1,57 @@
+# pyproject.toml
+# Archivo de configuración central para el proyecto Python (PEP 518)
+# Contiene la configuración de todas las herramientas de desarrollo:
+# - Black: Formateo automático de código
+# - Ruff: Linting rápido y moderno
+# - MyPy: Verificación de tipos estática
+# - Pytest: Framework de testing
+
+# ==================== BLACK - Formateo de Código ====================
+[tool.black]
+line-length = 100              # Longitud máxima de línea (consistente con ruff)
+target-version = ['py311']     # Versión de Python objetivo para el formateo
+include = '\.pyi?$'           # Incluir archivos .py y .pyi (type stubs)
+extend-exclude = '''          # Carpetas a excluir del formateo
+/(
+  | \.git                     # Carpeta de Git
+  | \.venv                    # Entorno virtual
+  | alembic                   # Migraciones de base de datos
+)/
+'''
+
+# ==================== RUFF - Linting Rápido ====================
+[tool.ruff]
+line-length = 100             # Longitud máxima de línea (consistente con black)
+select = ["E", "F", "I", "W"] # Reglas activas: Error, Flake8, Import, Warning
+ignore = ["E501"]             # Ignorar E501 (line too long) - Black se encarga
+fixable = ["ALL"]             # Intentar arreglar automáticamente todos los errores
+unfixable = []                # No hay errores que no se puedan arreglar automáticamente
+exclude = [                   # Carpetas a excluir del linting
+    ".git",                   # Carpeta de Git
+    ".venv",                  # Entorno virtual
+    "__pycache__",           # Cache de Python
+    "alembic",               # Migraciones de base de datos
+]
+
+# ==================== MYPY - Verificación de Tipos ====================
+[tool.mypy]
+python_version = "3.11"            # Versión de Python para type checking
+warn_return_any = true             # Advertir cuando una función retorna Any
+warn_unused_configs = true         # Advertir sobre configuraciones no usadas
+disallow_untyped_defs = true       # Requerir type hints en definiciones de funciones
+ignore_missing_imports = true      # Ignorar imports de librerías sin tipos
+exclude = ["alembic", "tests"]     # Excluir migraciones y tests del type checking
+
+# ==================== PYTEST - Framework de Testing ====================
+[tool.pytest.ini_options]
+testpaths = ["tests"]              # Carpeta donde buscar los tests
+python_files = "test_*.py"         # Patrón de archivos de test
+python_classes = "Test*"           # Patrón de clases de test
+python_functions = "test_*"        # Patrón de funciones de test
+asyncio_mode = "auto"              # Modo automático para tests async (FastAPI)
+addopts = "-v --strict-markers"    # Opciones: verbose y marcadores estrictos
+markers = [                        # Marcadores personalizados para categorizar tests
+    "unit: Unit tests",            # Tests unitarios
+    "integration: Integration tests", # Tests de integración
+    "e2e: End-to-end tests",       # Tests end-to-end
+]

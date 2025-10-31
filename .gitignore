@@ -1,25 +1,25 @@
-# Python
+# Python bytecode and cache files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Virtual Environment
+# Virtual environment directory
 .venv/
 
-# Environment Variables
+# Environment variables and secrets
 .env
 
-# Database
+# Local database files
 *.db
 
-# Testing
+# Testing artifacts and coverage reports
 .pytest_cache/
 .coverage
 
-# OS specific
+# macOS system files
 .DS_Store
 
-# Build
+# Build and distribution files
 dist/
 *.egg-info/
