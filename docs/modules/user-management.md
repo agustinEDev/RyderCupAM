@@ -19,26 +19,31 @@ Módulo responsable de la gestión de usuarios, incluyendo registro, autenticaci
 1. El usuario proporciona: email, nombre, apellido y contraseña
 2. El sistema valida que el email tenga formato correcto
 3. El sistema valida que la contraseña cumpla con los requisitos de seguridad
-4. El sistema verifica que el email no esté ya registrado
-5. El sistema hashea la contraseña usando bcrypt
-6. El sistema crea el usuario en la base de datos PostgreSQL
-7. El sistema devuelve los datos del usuario creado
+4. **[UoW]** El sistema inicia una transacción
+5. El sistema verifica que el email no esté ya registrado (dentro de la transacción)
+6. El sistema hashea la contraseña usando bcrypt
+7. El sistema crea el usuario en la base de datos PostgreSQL
+8. **[UoW]** El sistema confirma la transacción (commit)
+9. El sistema devuelve los datos del usuario creado
 
 **Flujos Alternativos**:
-- **4a**: Si el email ya está registrado → Error: "User with email 'xxx' already exists" (HTTP 409)
+- **5a**: Si el email ya está registrado → **[UoW]** Rollback → Error: "User with email 'xxx' already exists" (HTTP 409)
 - **2a**: Si el email no es válido → Error: "Invalid email format" (HTTP 400)
 - **3a**: Si la contraseña no cumple requisitos → Error: "Password does not meet requirements" (HTTP 400)
+- **7a**: Si falla el guardado → **[UoW]** Rollback automático → Error de servidor (HTTP 500)
 
 **Postcondiciones**:
 - Usuario creado en la tabla `users` de PostgreSQL
 - Contraseña almacenada de forma segura (hasheada con bcrypt)
 - Timestamps `created_at` y `updated_at` registrados
+- **Transacción confirmada** o **revertida** completamente
 
 **Reglas de Negocio**:
 - Email debe ser único en el sistema (constraint UNIQUE en BD)
 - La contraseña debe tener mínimo 8 caracteres
 - La contraseña debe contener al menos: 1 mayúscula, 1 minúscula, 1 número
 - Nombre y apellido son obligatorios y no pueden exceder 100 caracteres
+- **Todas las operaciones deben ejecutarse en una transacción atómica**
 
 ---
 
@@ -53,18 +58,21 @@ Módulo responsable de la gestión de usuarios, incluyendo registro, autenticaci
 
 **Flujo Principal**:
 1. El usuario proporciona: email y contraseña
-2. El sistema busca el usuario por email en PostgreSQL
-3. El sistema verifica que la contraseña sea correcta usando bcrypt
-4. El sistema genera un token de acceso JWT
-5. El sistema devuelve el token y los datos del usuario
+2. **[UoW]** El sistema inicia una transacción de lectura
+3. El sistema busca el usuario por email en PostgreSQL
+4. El sistema verifica que la contraseña sea correcta usando bcrypt
+5. **[UoW]** El sistema cierra la transacción (no requiere commit)
+6. El sistema genera un token de acceso JWT
+7. El sistema devuelve el token y los datos del usuario
 
 **Flujos Alternativos**:
-- **2a**: Si el usuario no existe → Error: "Invalid email or password" (HTTP 401)
-- **3a**: Si la contraseña es incorrecta → Error: "Invalid email or password" (HTTP 401)
+- **3a**: Si el usuario no existe → Error: "Invalid email or password" (HTTP 401)
+- **4a**: Si la contraseña es incorrecta → Error: "Invalid email or password" (HTTP 401)
 
 **Postcondiciones**:
 - Token JWT válido generado con claims: user_id, email, exp, iat
 - Usuario autenticado en el sistema
+- **No se modifican datos en la BD** (solo lectura)
 
 **Reglas de Negocio**:
 - El token debe expirar después de 24 horas (configurable)
@@ -73,7 +81,7 @@ Módulo responsable de la gestión de usuarios, incluyendo registro, autenticaci
 
 ---
 
-## 🏗️ Modelo de Dominio
+## 🗃️ Modelo de Dominio
 
 ### Entity: User
 
@@ -168,32 +176,189 @@ print(password)  # "********"
 
 ## 🔧 Componentes Técnicos
 
+### Unit of Work Pattern
+
+El patrón **Unit of Work** mantiene una lista de objetos afectados por una transacción de negocio y coordina la escritura de cambios, garantizando la consistencia.
+
+#### Interfaz (Application Layer)
+
+**Ubicación**: `src/modules/user/application/ports/user_unit_of_work.py`
+
+```python
+from abc import ABC, abstractmethod
+from src.shared.application.unit_of_work import UnitOfWork
+from src.modules.user.domain.repositories.user_repository import UserRepository
+
+class UserUnitOfWork(UnitOfWork):
+    """
+    Unit of Work para el módulo User.
+    
+    Proporciona acceso a los repositorios del módulo y gestiona
+    las transacciones de base de datos.
+    """
+    
+    @property
+    @abstractmethod
+    def users(self) -> UserRepository:
+        """Repositorio de usuarios."""
+        pass
+```
+
+#### Implementación (Infrastructure Layer)
+
+**Ubicación**: `src/modules/user/infrastructure/persistence/user_unit_of_work_impl.py`
+
+```python
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from src.shared.infrastructure.database.sqlalchemy_unit_of_work import SQLAlchemyUnitOfWork
+from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
+from src.modules.user.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
+
+class UserUnitOfWorkImpl(SQLAlchemyUnitOfWork, UserUnitOfWork):
+    """
+    Implementación del Unit of Work para el módulo User usando SQLAlchemy.
+    
+    Gestiona la sesión de SQLAlchemy y proporciona acceso a los repositorios.
+    """
+    
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        super().__init__(session_factory)
+        self._users_repo: UserRepositoryImpl | None = None
+    
+    @property
+    def users(self) -> UserRepositoryImpl:
+        """Lazy loading del repositorio de usuarios."""
+        if self._users_repo is None:
+            self._users_repo = UserRepositoryImpl(self._session)
+        return self._users_repo
+```
+
+**Características**:
+- Extiende `SQLAlchemyUnitOfWork` base (shared)
+- Implementa `UserUnitOfWork` específica
+- Lazy loading de repositorios
+- Gestión automática de sesiones SQLAlchemy
+- Context manager para transacciones
+
+#### Base Unit of Work (Shared)
+
+**Ubicación**: `src/shared/application/unit_of_work.py`
+
+```python
+from abc import ABC, abstractmethod
+
+class UnitOfWork(ABC):
+    """Interfaz base para Unit of Work."""
+    
+    @abstractmethod
+    async def __aenter__(self):
+        """Inicia una transacción."""
+        pass
+    
+    @abstractmethod
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Finaliza una transacción (commit o rollback)."""
+        pass
+    
+    @abstractmethod
+    async def commit(self) -> None:
+        """Confirma los cambios."""
+        pass
+    
+    @abstractmethod
+    async def rollback(self) -> None:
+        """Revierte los cambios."""
+        pass
+```
+
+**Ubicación**: `src/shared/infrastructure/database/sqlalchemy_unit_of_work.py`
+
+```python
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from src.shared.application.unit_of_work import UnitOfWork
+
+class SQLAlchemyUnitOfWork(UnitOfWork):
+    """Implementación base de UoW con SQLAlchemy."""
+    
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self._session_factory = session_factory
+        self._session: AsyncSession | None = None
+    
+    async def __aenter__(self):
+        """Inicia una nueva sesión de SQLAlchemy."""
+        self._session = self._session_factory()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Cierra la sesión, con rollback automático si hay excepción."""
+        if exc_type is not None:
+            await self.rollback()
+        if self._session:
+            await self._session.close()
+    
+    async def commit(self) -> None:
+        """Confirma la transacción."""
+        if self._session:
+            await self._session.commit()
+    
+    async def rollback(self) -> None:
+        """Revierte la transacción."""
+        if self._session:
+            await self._session.rollback()
+```
+
+---
+
 ### Repositories
 
 #### UserRepository (ABC - Domain Layer)
 
+**Ubicación**: `src/modules/user/domain/repositories/user_repository.py`
+
 ```python
+from abc import ABC, abstractmethod
+from typing import Optional
+from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.value_objects.email import Email
+
 class UserRepository(ABC):
-    @abstractmethod
-    async def save(user: User) -> User
+    """Interfaz del repositorio de usuarios."""
     
     @abstractmethod
-    async def find_by_id(user_id: UserId) -> Optional[User]
+    async def save(self, user: User) -> User:
+        """Guarda un usuario."""
+        pass
     
     @abstractmethod
-    async def find_by_email(email: Email) -> Optional[User]
+    async def find_by_id(self, user_id: UserId) -> Optional[User]:
+        """Busca un usuario por ID."""
+        pass
     
     @abstractmethod
-    async def exists_by_email(email: Email) -> bool
+    async def find_by_email(self, email: Email) -> Optional[User]:
+        """Busca un usuario por email."""
+        pass
     
     @abstractmethod
-    async def update(user: User) -> User
+    async def exists_by_email(self, email: Email) -> bool:
+        """Verifica si existe un usuario con el email dado."""
+        pass
     
     @abstractmethod
-    async def delete(user_id: UserId) -> None
+    async def update(self, user: User) -> User:
+        """Actualiza un usuario."""
+        pass
+    
+    @abstractmethod
+    async def delete(self, user_id: UserId) -> None:
+        """Elimina un usuario."""
+        pass
 ```
 
 #### UserRepositoryImpl (Infrastructure Layer)
+
+**Ubicación**: `src/modules/user/infrastructure/persistence/user_repository_impl.py`
 
 **Tecnologías**:
 - SQLAlchemy 2.0 con async support
@@ -201,51 +366,104 @@ class UserRepository(ABC):
 - asyncpg como driver
 
 **Características**:
-- Usa `AsyncSession` de SQLAlchemy
+- Usa `AsyncSession` proporcionada por el UoW
 - Mapeo entre `UserModel` (ORM) y `User` (Entity)
-- Transacciones manejadas por FastAPI dependency
+- **NO maneja transacciones** (delegado al UoW)
 - Índice en columna `email` para búsquedas rápidas
 
 **Ejemplo de implementación**:
 ```python
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+
 class UserRepositoryImpl(UserRepository):
+    """Implementación del repositorio de usuarios con SQLAlchemy."""
+    
     def __init__(self, session: AsyncSession):
+        """
+        Constructor.
+        
+        Args:
+            session: Sesión de SQLAlchemy proporcionada por el UoW
+        """
         self._session = session
     
     async def save(self, user: User) -> User:
-        model = UserModel(
+        """Guarda un usuario en la base de datos."""
+        model = self._to_model(user)
+        self._session.add(model)
+        await self._session.flush()  # NO commit, lo hace el UoW
+        return user
+    
+    async def find_by_email(self, email: Email) -> Optional[User]:
+        """Busca un usuario por email."""
+        result = await self._session.execute(
+            select(UserModel).where(UserModel.email == str(email))
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+    
+    async def exists_by_email(self, email: Email) -> bool:
+        """Verifica si existe un usuario con el email."""
+        result = await self._session.execute(
+            select(UserModel.id).where(UserModel.email == str(email))
+        )
+        return result.scalar_one_or_none() is not None
+    
+    def _to_model(self, user: User) -> UserModel:
+        """Convierte entidad a modelo SQLAlchemy."""
+        return UserModel(
             id=user.id.value,
             email=str(user.email),
             hashed_password=user.password.get_value(),
             first_name=user.first_name,
             last_name=user.last_name,
         )
-        self._session.add(model)
-        await self._session.flush()
-        return user
     
-    async def find_by_email(self, email: Email) -> Optional[User]:
-        result = await self._session.execute(
-            select(UserModel).where(UserModel.email == str(email))
+    def _to_entity(self, model: UserModel) -> User:
+        """Convierte modelo SQLAlchemy a entidad."""
+        return User(
+            id=UserId.from_string(str(model.id)),
+            email=Email.create(model.email),
+            password=Password.from_hash(model.hashed_password),
+            first_name=model.first_name,
+            last_name=model.last_name,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
         )
-        model = result.scalar_one_or_none()
-        return self._to_entity(model) if model else None
 ```
+
+**⚠️ Importante**: El repositorio NO maneja transacciones. Solo hace `flush()` para sincronizar con la BD, pero el `commit()` o `rollback()` lo gestiona el Unit of Work.
+
+---
 
 ### Domain Services
 
 #### PasswordHasher (ABC - Domain Layer)
 
+**Ubicación**: `src/modules/user/domain/services/password_hasher.py`
+
 ```python
+from abc import ABC, abstractmethod
+
 class PasswordHasher(ABC):
-    @abstractmethod
-    async def hash(plain_password: str) -> str
+    """Servicio de dominio para hashear contraseñas."""
     
     @abstractmethod
-    async def verify(plain_password: str, hashed_password: str) -> bool
+    async def hash(self, plain_password: str) -> str:
+        """Hashea una contraseña en texto plano."""
+        pass
+    
+    @abstractmethod
+    async def verify(self, plain_password: str, hashed_password: str) -> bool:
+        """Verifica una contraseña contra su hash."""
+        pass
 ```
 
 #### BcryptPasswordHasher (Infrastructure Layer)
+
+**Ubicación**: `src/modules/user/infrastructure/security/bcrypt_password_hasher.py`
 
 **Tecnología**: passlib con bcrypt
 
@@ -257,40 +475,77 @@ class PasswordHasher(ABC):
 **Ejemplo**:
 ```python
 from passlib.context import CryptContext
+import asyncio
+from functools import partial
 
 class BcryptPasswordHasher(PasswordHasher):
-    def __init__(self):
-        self._context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    """Implementación de PasswordHasher usando bcrypt."""
+    
+    def __init__(self, rounds: int = 12):
+        self._context = CryptContext(
+            schemes=["bcrypt"],
+            deprecated="auto",
+            bcrypt__rounds=rounds
+        )
     
     async def hash(self, plain_password: str) -> str:
-        return self._context.hash(plain_password)
+        """Hashea una contraseña de forma asíncrona."""
+        # Ejecutar en thread pool para no bloquear event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, 
+            partial(self._context.hash, plain_password)
+        )
     
     async def verify(self, plain_password: str, hashed_password: str) -> bool:
-        return self._context.verify(plain_password, hashed_password)
+        """Verifica una contraseña de forma asíncrona."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            partial(self._context.verify, plain_password, hashed_password)
+        )
 ```
+
+---
 
 ### Application Services
 
 #### TokenService (ABC - Application Layer)
 
+**Ubicación**: `src/modules/user/application/services/token_service.py`
+
 ```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
 @dataclass(frozen=True)
 class TokenPayload:
+    """Payload del token JWT."""
     user_id: str
     email: str
 
 class TokenService(ABC):
-    @abstractmethod
-    def generate(user_id: str, email: str) -> str
+    """Servicio para gestionar tokens JWT."""
     
     @abstractmethod
-    def verify(token: str) -> TokenPayload
+    def generate(self, user_id: str, email: str) -> str:
+        """Genera un token JWT."""
+        pass
     
     @abstractmethod
-    def decode(token: str) -> Optional[TokenPayload]
+    def verify(self, token: str) -> TokenPayload:
+        """Verifica y decodifica un token JWT."""
+        pass
+    
+    @abstractmethod
+    def decode(self, token: str) -> TokenPayload | None:
+        """Decodifica un token sin verificar (uso con precaución)."""
+        pass
 ```
 
 #### JWTTokenService (Infrastructure Layer)
+
+**Ubicación**: `src/modules/user/infrastructure/security/jwt_token_service.py`
 
 **Tecnología**: python-jose con cryptography
 
@@ -316,6 +571,222 @@ ACCESS_TOKEN_EXPIRE_MINUTES=1440
   "iat": 1735603200
 }
 ```
+
+---
+
+## 🎯 Casos de Uso con Unit of Work
+
+### RegisterUserUseCase
+
+**Ubicación**: `src/modules/user/application/use_cases/register_user/register_user_use_case.py`
+
+```python
+from dataclasses import dataclass
+from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
+from src.modules.user.domain.services.password_hasher import PasswordHasher
+from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.errors.user_errors import EmailAlreadyExistsError
+
+@dataclass(frozen=True)
+class RegisterUserCommand:
+    """Comando para registrar un usuario."""
+    email: str
+    password: str
+    first_name: str
+    last_name: str
+
+@dataclass(frozen=True)
+class UserResponse:
+    """Respuesta con datos del usuario."""
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    created_at: str
+
+class RegisterUserUseCase:
+    """Caso de uso: Registrar un nuevo usuario."""
+    
+    def __init__(
+        self,
+        uow: UserUnitOfWork,
+        password_hasher: PasswordHasher
+    ):
+        """
+        Constructor.
+        
+        Args:
+            uow: Unit of Work para gestionar transacciones
+            password_hasher: Servicio para hashear contraseñas
+        """
+        self._uow = uow
+        self._password_hasher = password_hasher
+    
+    async def execute(self, command: RegisterUserCommand) -> UserResponse:
+        """
+        Ejecuta el caso de uso de registro.
+        
+        Args:
+            command: Comando con los datos del usuario
+            
+        Returns:
+            UserResponse con los datos del usuario creado
+            
+        Raises:
+            EmailAlreadyExistsError: Si el email ya está registrado
+            InvalidEmailError: Si el formato del email es inválido
+            InvalidPasswordError: Si la contraseña no cumple requisitos
+        """
+        # Crear value objects (validación temprana)
+        email = Email.create(command.email)
+        
+        # Iniciar transacción con Unit of Work
+        async with self._uow:
+            # Verificar que el email no existe (dentro de la transacción)
+            if await self._uow.users.exists_by_email(email):
+                raise EmailAlreadyExistsError(command.email)
+            
+            # Crear entidad de dominio
+            user = await User.create(
+                email=email,
+                plain_password=command.password,
+                first_name=command.first_name,
+                last_name=command.last_name,
+                hasher=self._password_hasher
+            )
+            
+            # Guardar usuario
+            await self._uow.users.save(user)
+            
+            # Confirmar transacción
+            await self._uow.commit()
+        
+        # Retornar respuesta
+        return UserResponse(
+            id=user.id.to_string(),
+            email=str(user.email),
+            first_name=user.first_name,
+            last_name=user.last_name,
+            created_at=user.created_at.isoformat()
+        )
+```
+
+**Flujo de la transacción**:
+1. `async with self._uow:` → Inicia sesión SQLAlchemy
+2. `exists_by_email()` → Consulta en BD (dentro de transacción)
+3. `User.create()` → Crea entidad (solo en memoria)
+4. `save()` → `INSERT` + `flush()` (sincroniza con BD, pero NO commit)
+5. `commit()` → Confirma cambios en BD
+6. `__aexit__()` → Cierra sesión automáticamente
+
+**Manejo de errores**:
+- Si ocurre cualquier excepción, el `__aexit__()` hace `rollback()` automático
+- La sesión se cierra siempre, incluso si hay error
+
+---
+
+### LoginUserUseCase
+
+**Ubicación**: `src/modules/user/application/use_cases/login_user/login_user_use_case.py`
+
+```python
+from dataclasses import dataclass
+from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
+from src.modules.user.application.services.token_service import TokenService
+from src.modules.user.domain.services.password_hasher import PasswordHasher
+from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.errors.user_errors import InvalidCredentialsError
+
+@dataclass(frozen=True)
+class LoginUserCommand:
+    """Comando para hacer login."""
+    email: str
+    password: str
+
+@dataclass(frozen=True)
+class LoginResponse:
+    """Respuesta del login."""
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class LoginUserUseCase:
+    """Caso de uso: Autenticar usuario."""
+    
+    def __init__(
+        self,
+        uow: UserUnitOfWork,
+        password_hasher: PasswordHasher,
+        token_service: TokenService
+    ):
+        """
+        Constructor.
+        
+        Args:
+            uow: Unit of Work para gestionar transacciones
+            password_hasher: Servicio para verificar contraseñas
+            token_service: Servicio para generar tokens JWT
+        """
+        self._uow = uow
+        self._password_hasher = password_hasher
+        self._token_service = token_service
+    
+    async def execute(self, command: LoginUserCommand) -> LoginResponse:
+        """
+        Ejecuta el caso de uso de login.
+        
+        Args:
+            command: Comando con email y contraseña
+            
+        Returns:
+            LoginResponse con token y datos del usuario
+            
+        Raises:
+            InvalidCredentialsError: Si las credenciales son inválidas
+        """
+        email = Email.create(command.email)
+        
+        # Usar UoW solo para lectura (no requiere commit)
+        async with self._uow:
+            # Buscar usuario
+            user = await self._uow.users.find_by_email(email)
+            if user is None:
+                raise InvalidCredentialsError()
+            
+            # Verificar contraseña
+            is_valid = await user.verify_password(
+                command.password,
+                self._password_hasher
+            )
+            if not is_valid:
+                raise InvalidCredentialsError()
+            
+            # No se requiere commit (solo lectura)
+        
+        # Generar token (fuera de la transacción)
+        token = self._token_service.generate(
+            user_id=user.id.to_string(),
+            email=str(user.email)
+        )
+        
+        return LoginResponse(
+            access_token=token,
+            token_type="bearer",
+            user=UserResponse(
+                id=user.id.to_string(),
+                email=str(user.email),
+                first_name=user.first_name,
+                last_name=user.last_name,
+                created_at=user.created_at.isoformat()
+            )
+        )
+```
+
+**Nota sobre transacciones de lectura**:
+- El login solo lee datos, no los modifica
+- Aunque no se llama `commit()`, el UoW gestiona correctamente la sesión
+- El `__aexit__()` cierra la sesión automáticamente
 
 ---
 
@@ -349,13 +820,20 @@ CREATE INDEX idx_users_created_at ON users(created_at);
 
 ### SQLAlchemy Model
 
+**Ubicación**: `src/modules/user/infrastructure/persistence/user_model.py`
+
 ```python
 from sqlalchemy import Column, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base
 import uuid
 from datetime import datetime
 
+Base = declarative_base()
+
 class UserModel(Base):
+    """Modelo SQLAlchemy para la tabla users."""
+    
     __tablename__ = "users"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -420,6 +898,33 @@ class RegisterRequest(BaseModel):
   {"detail": "User with email 'user@example.com' already exists"}
   ```
 - **422 Unprocessable Entity**: Formato de datos inválido (Pydantic)
+
+**Controller con Unit of Work**:
+```python
+from fastapi import APIRouter, Depends, status
+from src.modules.user.presentation.schemas.register_request import RegisterRequest
+from src.modules.user.presentation.schemas.user_response import UserResponse
+from src.modules.user.application.use_cases.register_user.register_user_use_case import (
+    RegisterUserUseCase,
+    RegisterUserCommand
+)
+
+router = APIRouter(prefix="/api/users", tags=["users"])
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    request: RegisterRequest,
+    use_case: RegisterUserUseCase = Depends(get_register_use_case)
+):
+    """Registra un nuevo usuario."""
+    command = RegisterUserCommand(
+        email=request.email,
+        password=request.password,
+        first_name=request.first_name,
+        last_name=request.last_name
+    )
+    return await use_case.execute(command)
+```
 
 ---
 
@@ -488,11 +993,12 @@ tests/
 │       ├── test_password_vo.py    # Value Object Password
 │       ├── test_user_id_vo.py     # Value Object UserId
 │       └── test_user_entity.py    # Entity User
-├── integration/                    # Tests con BD
+├── integration/                    # Tests con BD y UoW
 │   └── modules/user/
 │       ├── test_register_use_case.py
 │       ├── test_login_use_case.py
-│       └── test_user_repository.py
+│       ├── test_user_repository.py
+│       └── test_user_unit_of_work.py  # Tests del UoW
 └── e2e/                           # Tests de endpoints
     └── test_user_endpoints.py
 ```
@@ -503,35 +1009,43 @@ tests/
 ```python
 import pytest
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.errors.user_errors import InvalidEmailError
 
 def test_create_valid_email():
+    """Verifica que se puede crear un email válido."""
     email = Email.create("user@example.com")
     assert str(email) == "user@example.com"
 
 def test_email_normalized_to_lowercase():
+    """Verifica que el email se normaliza a lowercase."""
     email = Email.create("User@EXAMPLE.COM")
     assert str(email) == "user@example.com"
 
 def test_invalid_email_raises_error():
-    with pytest.raises(ValueError, match="Invalid email format"):
+    """Verifica que un email inválido lanza error."""
+    with pytest.raises(InvalidEmailError, match="Invalid email format"):
         Email.create("invalid-email")
 ```
 
-#### Integration Test - Register Use Case
+#### Integration Test - Register Use Case con UoW
 ```python
 import pytest
-from unittest.mock import AsyncMock
+from src.modules.user.application.use_cases.register_user.register_user_use_case import (
+    RegisterUserUseCase,
+    RegisterUserCommand
+)
+from src.modules.user.domain.errors.user_errors import EmailAlreadyExistsError
 
 @pytest.mark.asyncio
-async def test_register_user_successfully():
+async def test_register_user_successfully(
+    user_uow,
+    password_hasher
+):
+    """Verifica que se puede registrar un usuario correctamente."""
     # Arrange
-    mock_repo = AsyncMock()
-    mock_repo.exists_by_email.return_value = False
-    mock_hasher = AsyncMock()
-    
-    use_case = RegisterUserUseCase(mock_repo, mock_hasher)
+    use_case = RegisterUserUseCase(user_uow, password_hasher)
     command = RegisterUserCommand(
-        email="user@example.com",
+        email="test@example.com",
         password="ValidPass123",
         first_name="John",
         last_name="Doe"
@@ -541,8 +1055,127 @@ async def test_register_user_successfully():
     response = await use_case.execute(command)
     
     # Assert
-    assert response.email == "user@example.com"
-    mock_repo.save.assert_called_once()
+    assert response.email == "test@example.com"
+    assert response.first_name == "John"
+    
+    # Verificar que fue guardado en BD
+    async with user_uow:
+        from src.modules.user.domain.value_objects.email import Email
+        saved_user = await user_uow.users.find_by_email(Email.create("test@example.com"))
+        assert saved_user is not None
+
+@pytest.mark.asyncio
+async def test_register_user_duplicate_email_raises_error(
+    user_uow,
+    password_hasher
+):
+    """Verifica que no se puede registrar un usuario con email duplicado."""
+    # Arrange
+    use_case = RegisterUserUseCase(user_uow, password_hasher)
+    command = RegisterUserCommand(
+        email="duplicate@example.com",
+        password="ValidPass123",
+        first_name="John",
+        last_name="Doe"
+    )
+    
+    # Act - Primer registro
+    await use_case.execute(command)
+    
+    # Assert - Segundo registro debe fallar
+    with pytest.raises(EmailAlreadyExistsError):
+        await use_case.execute(command)
+```
+
+#### Integration Test - Unit of Work
+```python
+import pytest
+from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.email import Email
+
+@pytest.mark.asyncio
+async def test_unit_of_work_commits_changes(user_uow, password_hasher):
+    """Verifica que el UoW hace commit de los cambios."""
+    # Arrange
+    email = Email.create("uow-test@example.com")
+    
+    # Act
+    async with user_uow:
+        user = await User.create(
+            email=email,
+            plain_password="ValidPass123",
+            first_name="UoW",
+            last_name="Test",
+            hasher=password_hasher
+        )
+        await user_uow.users.save(user)
+        await user_uow.commit()
+    
+    # Assert - Verificar en nueva transacción
+    async with user_uow:
+        saved_user = await user_uow.users.find_by_email(email)
+        assert saved_user is not None
+        assert saved_user.first_name == "UoW"
+
+@pytest.mark.asyncio
+async def test_unit_of_work_rollbacks_on_error(user_uow, password_hasher):
+    """Verifica que el UoW hace rollback automático en caso de error."""
+    # Arrange
+    email = Email.create("rollback-test@example.com")
+    
+    # Act - Simular error
+    try:
+        async with user_uow:
+            user = await User.create(
+                email=email,
+                plain_password="ValidPass123",
+                first_name="Rollback",
+                last_name="Test",
+                hasher=password_hasher
+            )
+            await user_uow.users.save(user)
+            raise Exception("Simulated error")
+    except Exception:
+        pass
+    
+    # Assert - Verificar que NO fue guardado
+    async with user_uow:
+        saved_user = await user_uow.users.find_by_email(email)
+        assert saved_user is None
+
+@pytest.mark.asyncio
+async def test_unit_of_work_multiple_operations(user_uow, password_hasher):
+    """Verifica que el UoW maneja múltiples operaciones en una transacción."""
+    # Arrange
+    email1 = Email.create("multi1@example.com")
+    email2 = Email.create("multi2@example.com")
+    
+    # Act - Múltiples operaciones
+    async with user_uow:
+        user1 = await User.create(
+            email=email1,
+            plain_password="ValidPass123",
+            first_name="User",
+            last_name="One",
+            hasher=password_hasher
+        )
+        user2 = await User.create(
+            email=email2,
+            plain_password="ValidPass123",
+            first_name="User",
+            last_name="Two",
+            hasher=password_hasher
+        )
+        await user_uow.users.save(user1)
+        await user_uow.users.save(user2)
+        await user_uow.commit()
+    
+    # Assert - Ambos usuarios deben existir
+    async with user_uow:
+        saved_user1 = await user_uow.users.find_by_email(email1)
+        saved_user2 = await user_uow.users.find_by_email(email2)
+        assert saved_user1 is not None
+        assert saved_user2 is not None
 ```
 
 #### E2E Test - Register Endpoint
@@ -553,21 +1186,115 @@ from src.main import app
 
 @pytest.mark.asyncio
 async def test_register_endpoint():
+    """Test E2E del endpoint de registro."""
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.post(
             "/api/users/register",
             json={
-                "email": "test@example.com",
+                "email": "e2e@example.com",
                 "password": "ValidPass123",
-                "first_name": "Test",
-                "last_name": "User"
+                "first_name": "E2E",
+                "last_name": "Test"
             }
         )
         
         assert response.status_code == 201
         data = response.json()
-        assert data["email"] == "test@example.com"
+        assert data["email"] == "e2e@example.com"
+        assert data["first_name"] == "E2E"
         assert "id" in data
+        assert "created_at" in data
+
+@pytest.mark.asyncio
+async def test_register_endpoint_duplicate_email():
+    """Test E2E verificando que no se puede duplicar email."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        # Primer registro
+        await client.post(
+            "/api/users/register",
+            json={
+                "email": "duplicate@example.com",
+                "password": "ValidPass123",
+                "first_name": "First",
+                "last_name": "User"
+            }
+        )
+        
+        # Segundo registro (debe fallar)
+        response = await client.post(
+            "/api/users/register",
+            json={
+                "email": "duplicate@example.com",
+                "password": "ValidPass123",
+                "first_name": "Second",
+                "last_name": "User"
+            }
+        )
+        
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+```
+
+### Fixtures de Testing
+
+**Ubicación**: `tests/conftest.py`
+
+```python
+import pytest
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from src.modules.user.infrastructure.persistence.user_unit_of_work_impl import UserUnitOfWorkImpl
+from src.modules.user.infrastructure.security.bcrypt_password_hasher import BcryptPasswordHasher
+from src.modules.user.infrastructure.persistence.user_model import Base
+
+# Database para tests
+TEST_DATABASE_URL = "postgresql+asyncpg://test:test@localhost:5432/ryder_cup_test"
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Crea un event loop para toda la sesión de tests."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+@pytest.fixture(scope="session")
+async def engine():
+    """Crea el engine de SQLAlchemy para tests."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    
+    # Crear todas las tablas
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    yield engine
+    
+    # Limpiar al final
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    
+    await engine.dispose()
+
+@pytest.fixture
+async def session_factory(engine):
+    """Factory para crear sesiones de SQLAlchemy."""
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+@pytest.fixture
+async def user_uow(session_factory):
+    """Fixture que proporciona un Unit of Work limpio para cada test."""
+    uow = UserUnitOfWorkImpl(session_factory)
+    
+    # Limpiar datos antes del test
+    async with uow:
+        await uow._session.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
+        await uow.commit()
+    
+    yield uow
+
+@pytest.fixture
+def password_hasher():
+    """Fixture que proporciona un PasswordHasher."""
+    return BcryptPasswordHasher(rounds=4)  # Menos rounds para tests más rápidos
 ```
 
 ### Ejecutar Tests
@@ -579,19 +1306,22 @@ pytest
 # Solo unit tests
 pytest tests/unit/ -v
 
-# Solo integration tests
+# Solo integration tests (incluye UoW)
 pytest tests/integration/ -v
 
 # Con cobertura
 pytest --cov=src --cov-report=html
 
-# Tests específicos
-pytest tests/unit/modules/user/test_email_vo.py -v
+# Tests específicos del UoW
+pytest tests/integration/modules/user/test_user_unit_of_work.py -v
 
-# Con markers
+# Tests con markers
 pytest -m unit
 pytest -m integration
 pytest -m e2e
+
+# Tests en paralelo (más rápido)
+pytest -n auto
 ```
 
 ---
@@ -661,6 +1391,12 @@ print(secrets.token_urlsafe(32))
 - Índices para performance sin sacrificar seguridad
 - Constraints a nivel de BD
 
+✅ **Transacciones**:
+- **Unit of Work** garantiza atomicidad
+- Rollback automático en caso de error
+- Previene estados inconsistentes en BD
+- Aislamiento de transacciones
+
 ✅ **API**:
 - Validación de entrada con Pydantic
 - HTTPS obligatorio en producción
@@ -679,6 +1415,7 @@ print(secrets.token_urlsafe(32))
 - [ ] Añadir 2FA (futuro)
 - [ ] Monitoreo de intentos de login fallidos
 - [ ] Backup encriptado de base de datos
+- [ ] Auditoría de transacciones con UoW
 
 ---
 
@@ -710,6 +1447,14 @@ print(secrets.token_urlsafe(32))
 - [ ] Exportación de datos (GDPR)
 - [ ] Anonimización de datos para analytics
 
+### Mejoras en Unit of Work
+- [ ] Soporte para transacciones anidadas
+- [ ] Eventos de dominio con UoW
+- [ ] Caché de entidades dentro de UoW
+- [ ] Métricas de performance de transacciones
+- [ ] Retry logic para transacciones fallidas
+- [ ] Logging detallado de operaciones
+
 ---
 
 ## 📚 Referencias
@@ -732,6 +1477,16 @@ print(secrets.token_urlsafe(32))
 ### Artículos y Recursos
 - Clean Architecture in Python
 - Domain-Driven Design patterns
+- Unit of Work Pattern (Martin Fowler)
 - OAuth 2.0 y JWT best practices
 - Password hashing con bcrypt
 - Async Python patterns
+- SQLAlchemy async best practices
+
+### Patrones Implementados
+- **Unit of Work**: Gestión de transacciones y consistencia
+- **Repository Pattern**: Abstracción de persistencia
+- **Domain-Driven Design**: Entidades y Value Objects
+- **Dependency Injection**: FastAPI Depends
+- **Factory Pattern**: Creación de entidades
+- **Command Pattern**: DTOs para casos de uso

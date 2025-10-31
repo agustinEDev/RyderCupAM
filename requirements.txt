@@ -1,19 +1,37 @@
-# Web Framework & Server
-fastapi==0.115.0          # Modern, fast web framework for building APIs
-uvicorn[standard]==0.30.0 # ASGI server implementation for FastAPI
+# ================================
+# WEB FRAMEWORK Y SERVIDOR
+# ================================
 
-# Database & ORM
-sqlalchemy==2.0.35        # SQL toolkit and Object-Relational Mapping
-alembic==1.13.3          # Database migration tool for SQLAlchemy
-psycopg2-binary==2.9.9   # PostgreSQL adapter for Python
+# FastAPI - Framework web moderno para crear APIs REST
+# Características: validación automática, documentación auto-generada, type hints
+fastapi==0.115.0
 
-# Data Validation & Settings
-pydantic==2.9.0          # Data validation using Python type annotations
-pydantic-settings==2.5.0 # Settings management using Pydantic
+# Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
+# [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
+uvicorn[standard]==0.30.0
 
-# Authentication & Security
-python-jose[cryptography]==3.3.0  # JWT tokens handling
-passlib[bcrypt]==1.7.4            # Password hashing library with bcrypt
 
-# File Upload & Forms
-python-multipart==0.0.9  # Support for multipart/form-data requests
+# ================================
+# TESTING Y DESARROLLO
+# ================================
+
+# pytest - Framework de testing moderno y potente
+# Más simple que unittest, mejor output de errores, fixtures potentes
+pytest==8.3.0
+
+# pytest-xdist - Plugin para ejecutar tests en paralelo
+# Acelera significativamente la ejecución de tests usando múltiples workers
+pytest-xdist==3.8.0
+
+# httpx - Cliente HTTP para testar APIs FastAPI
+# Permite hacer requests HTTP en tests de integración
+httpx==0.27.0
+
+
+# ================================
+# SEGURIDAD Y CRIPTOGRAFÍA
+# ================================
+
+# bcrypt - Librería para hashing seguro de passwords
+# Implementa algoritmo bcrypt con salt automático
+bcrypt==4.1.2

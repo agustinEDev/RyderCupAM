@@ -1,107 +1,78 @@
-"""Password Value Object."""
-import re
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+# -*- coding: utf-8 -*-
+"""
+Password Value Object - Password seguro con hashing y validación.
 
-if TYPE_CHECKING:
-    from src.modules.user.domain.services.password_hasher import PasswordHasher
+Este Value Object representa un password hasheado y validado.
+"""
+
+import bcrypt
+from dataclasses import dataclass
+
+
+class InvalidPasswordError(Exception):
+    """Excepción lanzada cuando un password no es válido."""
+    pass
 
 
 @dataclass(frozen=True)
 class Password:
-    """Password as a Value Object.
+    """
+    Value Object para passwords hasheados.
     
-    Represents a hashed password. Never stores passwords in plain text.
-    The hashed value is immutable to ensure security.
+    Almacena el hash, no el password original.
     """
     
     hashed_value: str
     
-    # Password requirements
-    MIN_LENGTH = 8
-    REQUIRE_UPPERCASE = True
-    REQUIRE_LOWERCASE = True
-    REQUIRE_DIGIT = True
-    
     @classmethod
-    async def create(cls, plain_password: str, hasher: "PasswordHasher") -> "Password":
-        """Create a Password instance from plain text.
-        
-        Args:
-            plain_password: The password in plain text
-            hasher: Password hashing service
-            
-        Returns:
-            Password: Password value object with hashed value
-            
-        Raises:
-            ValueError: If password doesn't meet requirements
+    def from_plain_text(cls, plain_password: str) -> 'Password':
         """
-        cls._validate_password_strength(plain_password)
-        hashed = await hasher.hash(plain_password)
-        return cls(hashed_value=hashed)
+        Crea Password desde texto plano.
+        Valida fortaleza y hashea automáticamente.
+        """
+        if not cls._is_strong_password(plain_password):
+            raise InvalidPasswordError("Password no cumple requisitos de seguridad")
+        
+        hashed = cls._hash_password(plain_password)
+        return cls(hashed)
     
-    @classmethod
-    def from_hash(cls, hashed_password: str) -> "Password":
-        """Create a Password instance from an already hashed value.
-        
-        This is used when loading a user from the database.
-        
-        Args:
-            hashed_password: Already hashed password
-            
-        Returns:
-            Password: Password value object
-        """
-        return cls(hashed_value=hashed_password)
+    @staticmethod
+    def _hash_password(plain_password: str) -> str:
+        """Hashea password con bcrypt y salt."""
+        # Usar rounds más bajo para tests (detecta si estamos en testing)
+        import os
+        rounds = 4 if os.getenv('TESTING') == 'true' else 12
+        salt = bcrypt.gensalt(rounds=rounds)
+        hashed = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
     
-    @classmethod
-    def _validate_password_strength(cls, plain_password: str) -> None:
-        """Validate password strength requirements.
+    @staticmethod
+    def _is_strong_password(password: str) -> bool:
+        """Valida si el password cumple requisitos de seguridad."""
+        if not isinstance(password, str) or len(password) < 8:
+            return False
         
-        Args:
-            plain_password: Password to validate
-            
-        Raises:
-            ValueError: If password doesn't meet requirements
-        """
-        if not plain_password:
-            raise ValueError("Password cannot be empty")
+        # Al menos una mayúscula, una minúscula y un número
+        has_upper = any(c.isupper() for c in password)
+        has_lower = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
         
-        if len(plain_password) < cls.MIN_LENGTH:
-            raise ValueError(f"Password must be at least {cls.MIN_LENGTH} characters long")
-        
-        if cls.REQUIRE_UPPERCASE and not re.search(r'[A-Z]', plain_password):
-            raise ValueError("Password must contain at least one uppercase letter")
-        
-        if cls.REQUIRE_LOWERCASE and not re.search(r'[a-z]', plain_password):
-            raise ValueError("Password must contain at least one lowercase letter")
-        
-        if cls.REQUIRE_DIGIT and not re.search(r'\d', plain_password):
-            raise ValueError("Password must contain at least one digit")
+        return has_upper and has_lower and has_digit
     
-    async def verify(self, plain_password: str, hasher: "PasswordHasher") -> bool:
-        """Verify if a plain password matches this hashed password.
-        
-        Args:
-            plain_password: Password to verify
-            hasher: Password hashing service
-            
-        Returns:
-            bool: True if password matches, False otherwise
-        """
-        return await hasher.verify(plain_password, self.hashed_value)
-    
-    def get_value(self) -> str:
-        """Get the hashed password value.
-        
-        Returns:
-            str: The hashed password
-        """
-        return self.hashed_value
+    def verify(self, plain_password: str) -> bool:
+        """Verifica si un password plano coincide con el hash."""
+        try:
+            return bcrypt.checkpw(
+                plain_password.encode('utf-8'),
+                self.hashed_value.encode('utf-8')
+            )
+        except Exception:
+            return False
     
     def __str__(self) -> str:
-        return "********"  # Never expose password, even hashed
+        """Representación string segura (sin mostrar hash)."""
+        return "[Password Hash]"
     
-    def __repr__(self) -> str:
-        return "Password(***)"
+    def __eq__(self, other) -> bool:
+        """Operador de igualdad."""
+        return isinstance(other, Password) and self.hashed_value == other.hashed_value

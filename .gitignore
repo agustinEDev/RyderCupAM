@@ -10,16 +10,5 @@ __pycache__/
 # Environment variables and secrets
 .env
 
-# Local database files
-*.db
-
-# Testing artifacts and coverage reports
-.pytest_cache/
-.coverage
-
 # macOS system files
 .DS_Store
-
-# Build and distribution files
-dist/
-*.egg-info/

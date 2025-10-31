@@ -1,78 +1,76 @@
-"""Email Value Object."""
+# -*- coding: utf-8 -*-
+"""
+Email Value Object - Dirección de email válida y normalizada.
+
+Este Value Object representa una dirección de email.
+"""
+
 import re
 from dataclasses import dataclass
 
 
+class InvalidEmailError(Exception):
+    """Excepción lanzada cuando un email no es válido."""
+    pass
+
+
 @dataclass(frozen=True)
 class Email:
-    """Email address as a Value Object.
+    """
+    Value Object para direcciones de email.
     
-    Ensures that email addresses are valid and normalized.
-    Immutable to guarantee consistency.
+    Inmutable y validado automáticamente.
     """
     
     value: str
     
-    # RFC 5322 simplified regex pattern
-    EMAIL_PATTERN = re.compile(
-        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    )
-    MAX_LENGTH = 254
-    
-    def __post_init__(self) -> None:
-        """Validate email after initialization.
-        
-        Raises:
-            ValueError: If email format is invalid or too long
-        """
-        if not self.value:
-            raise ValueError("Email cannot be empty")
-        
-        if len(self.value) > self.MAX_LENGTH:
-            raise ValueError(f"Email cannot exceed {self.MAX_LENGTH} characters")
-        
-        # Normalize to lowercase
-        normalized = self.value.lower().strip()
-        
-        if not self.EMAIL_PATTERN.match(normalized):
-            raise ValueError(f"Invalid email format: {self.value}")
-        
-        # Update value through __dict__ since dataclass is frozen
+    def __post_init__(self):
+        """Validación y normalización automática."""
+        normalized = self._normalize_email(self.value)
+        if not self._is_valid_email(normalized):
+            raise InvalidEmailError(f"'{self.value}' no es un email válido")
+        # Usar object.__setattr__ porque la clase es frozen
         object.__setattr__(self, 'value', normalized)
     
-    @classmethod
-    def create(cls, email: str) -> "Email":
-        """Factory method to create an Email instance.
-        
-        Args:
-            email: Email address string
-            
-        Returns:
-            Email: Email value object instance
-            
-        Raises:
-            ValueError: If email is invalid
-        """
-        return cls(value=email)
+    @staticmethod
+    def _normalize_email(email: str) -> str:
+        """Normaliza el email: lowercase y sin espacios."""
+        if not isinstance(email, str):
+            return ""
+        return email.strip().lower()
     
-    def get_domain(self) -> str:
-        """Extract the domain part of the email.
+    @staticmethod
+    def _is_valid_email(email: str) -> bool:
+        """Valida si un string tiene formato de email válido."""
+        if not isinstance(email, str) or not email:
+            return False
         
-        Returns:
-            str: Domain portion of the email
-        """
-        return self.value.split('@')[1]
-    
-    def get_local_part(self) -> str:
-        """Extract the local part of the email (before @).
+        # Verificar que no empiece o termine con punto
+        if email.startswith('.') or email.endswith('.'):
+            return False
+            
+        # Verificar que no tenga puntos consecutivos
+        if '..' in email:
+            return False
         
-        Returns:
-            str: Local portion of the email
-        """
-        return self.value.split('@')[0]
+        # Patrón más estricto para emails
+        # - Parte local: alfanuméricos, puntos, guiones, más y porcentaje (pero no al inicio/final)
+        # - Símbolo @
+        # - Dominio: alfanuméricos y guiones (pero no al inicio/final), luego punto y TLD
+        pattern = r'^[a-zA-Z0-9][a-zA-Z0-9._%+-]*[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$'
+        
+        # Permitir emails de un solo carácter antes del @
+        if '@' in email:
+            local_part = email.split('@')[0]
+            if len(local_part) == 1:
+                pattern = r'^[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$'
+        
+        return re.match(pattern, email) is not None
     
     def __str__(self) -> str:
+        """Representación string legible."""
         return self.value
     
-    def __repr__(self) -> str:
-        return f"Email({self.value})"
+    def __eq__(self, other) -> bool:
+        """Operador de igualdad."""
+        return isinstance(other, Email) and self.value == other.value

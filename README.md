@@ -29,16 +29,19 @@ Una plataforma que permite a grupos de amigos organizar torneos de golf al estil
 ┌─────────────────────────────────────────┐
 │        Application Layer                │
 │  (Use Cases, Application Services)      │
+│         + Unit of Work                  │
 └─────────────────────────────────────────┘
                   ↓
 ┌─────────────────────────────────────────┐
 │           Domain Layer                  │
 │   (Entities, Value Objects, Rules)      │
+│      + Repository Interfaces            │
 └─────────────────────────────────────────┘
                   ↑
 ┌─────────────────────────────────────────┐
 │       Infrastructure Layer              │
 │  (DB, External APIs, Implementations)   │
+│    + Unit of Work Implementation        │
 └─────────────────────────────────────────┘
 ```
 
@@ -68,6 +71,7 @@ Sistema de puntuación y resultados.
 ### Fase 1: Fundamentos ✨ (Actual)
 - [x] Estructura del proyecto
 - [x] Módulo de usuarios
+- [x] Patrón Unit of Work
 - [ ] Caso de uso: Registro de usuario
 - [ ] Caso de uso: Login de usuario
 
@@ -204,18 +208,46 @@ src/
 ├── modules/          # Módulos de negocio
 │   └── user/        # Módulo de usuarios
 │       ├── domain/          # Lógica de negocio
-│       ├── application/     # Casos de uso
-│       ├── infrastructure/  # Implementaciones
+│       ├── application/     # Casos de uso + UoW
+│       ├── infrastructure/  # Implementaciones + UoW Impl
 │       └── presentation/    # Schemas y mappers
 ├── shared/          # Código compartido
+│   ├── domain/      # Interfaces compartidas
+│   └── infrastructure/  # Unit of Work base
 ├── config/          # Configuración
 └── main.py          # Punto de entrada
+```
+
+## 🔄 Patrón Unit of Work
+
+El proyecto implementa el patrón **Unit of Work** para gestionar transacciones y mantener la consistencia de datos.
+
+### Beneficios
+- ✅ **Transacciones atómicas**: Commit o rollback de todas las operaciones juntas
+- ✅ **Consistencia**: Garantiza la integridad de los datos
+- ✅ **Testeable**: Fácil de mockear en tests
+- ✅ **Desacoplamiento**: Los casos de uso no dependen de la implementación de BD
+
+### Uso en Casos de Uso
+
+```python
+async def execute(self, command: RegisterUserCommand) -> UserResponse:
+    async with self._uow:
+        # Operaciones con repositorios
+        user = await User.create(...)
+        await self._uow.users.save(user)
+        
+        # Commit automático al salir del context manager
+        await self._uow.commit()
+        
+    return UserResponse(...)
 ```
 
 ## 📚 Documentación Adicional
 
 - [Estructura del Proyecto](docs/project-structure.md)
 - [Módulo User Management](docs/modules/user-management.md)
+- [Patrón Unit of Work](docs/patterns/unit-of-work.md)
 - [Guía de Contribución](docs/contributing.md)
 
 ## 🔐 Variables de Entorno

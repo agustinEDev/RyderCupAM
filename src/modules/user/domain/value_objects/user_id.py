@@ -1,55 +1,55 @@
-"""User ID Value Object."""
+# -*- coding: utf-8 -*-
+"""
+UserId Value Object - Identificador único para usuarios.
+
+Este Value Object representa el identificador único de un usuario.
+"""
+
+import uuid
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+
+
+class InvalidUserIdError(Exception):
+    """Excepción lanzada cuando un UserId no es válido."""
+    pass
 
 
 @dataclass(frozen=True)
 class UserId:
-    """User identifier as a Value Object.
+    """
+    Value Object para identificadores únicos de usuario.
     
-    Represents a unique identifier for a user using UUID v4.
-    Being immutable (frozen), it guarantees identity consistency.
+    Inmutable y validado automáticamente.
     """
     
-    value: UUID
+    value: str
+    
+    def __post_init__(self):
+        """Validación automática después de la inicialización."""
+        if not self._is_valid_uuid(self.value):
+            raise InvalidUserIdError(f"'{self.value}' no es un UUID válido")
     
     @classmethod
-    def generate(cls) -> "UserId":
-        """Generate a new unique user ID.
-        
-        Returns:
-            UserId: A new user identifier
-        """
-        return cls(value=uuid4())
+    def generate(cls) -> 'UserId':
+        """Genera un nuevo UserId con UUID aleatorio."""
+        new_uuid = str(uuid.uuid4())
+        return cls(new_uuid)
     
-    @classmethod
-    def from_string(cls, user_id: str) -> "UserId":
-        """Create a UserId from a string representation.
-        
-        Args:
-            user_id: String representation of UUID
-            
-        Returns:
-            UserId: User identifier instance
-            
-        Raises:
-            ValueError: If the string is not a valid UUID
-        """
+    @staticmethod
+    def _is_valid_uuid(uuid_string: str) -> bool:
+        """Valida si un string tiene formato UUID válido."""
+        if not isinstance(uuid_string, str):
+            return False
         try:
-            return cls(value=UUID(user_id))
-        except (ValueError, AttributeError) as e:
-            raise ValueError(f"Invalid user ID format: {user_id}") from e
-    
-    def to_string(self) -> str:
-        """Convert to string representation.
-        
-        Returns:
-            str: String representation of the UUID
-        """
-        return str(self.value)
+            uuid_obj = uuid.UUID(uuid_string)
+            return str(uuid_obj) == uuid_string
+        except (ValueError, TypeError):
+            return False
     
     def __str__(self) -> str:
-        return self.to_string()
+        """Representación string legible."""
+        return self.value
     
-    def __repr__(self) -> str:
-        return f"UserId({self.value})"
+    def __eq__(self, other) -> bool:
+        """Operador de igualdad."""
+        return isinstance(other, UserId) and self.value == other.value
