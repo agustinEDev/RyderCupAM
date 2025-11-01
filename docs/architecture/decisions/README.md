@@ -13,12 +13,18 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 | [ADR-002](./ADR-002-value-objects.md) | Implementación de Value Objects | ✅ Aceptado | 31 Oct 2025 | 🔥 Alto |
 | [ADR-003](./ADR-003-testing-strategy.md) | Estrategia de Testing y Optimización | ✅ Aceptado | 31 Oct 2025 | 🟡 Medio |
 | [ADR-004](./ADR-004-tech-stack.md) | Stack Tecnológico y Herramientas | ✅ Aceptado | 31 Oct 2025 | 🔥 Alto |
+| [ADR-005](./ADR-005-repository-pattern.md) | Repository Pattern Implementation | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
+| [ADR-006](./ADR-006-unit-of-work-pattern.md) | Unit of Work for Transaction Management | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
+| [ADR-007](./ADR-007-domain-events-pattern.md) | Domain Events for Event-Driven Architecture | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
 
 ## 📊 Resumen de Decisiones por Área
 
 ### 🏗️ **Arquitectura y Diseño**
 - **[ADR-001](./ADR-001-clean-architecture.md)**: Clean Architecture con separación en capas (Domain, Application, Infrastructure)
 - **[ADR-002](./ADR-002-value-objects.md)**: Value Objects inmutables para conceptos de dominio (UserId, Email, Password)
+- **[ADR-005](./ADR-005-repository-pattern.md)**: Repository Pattern para abstracción de datos y desacoplamiento
+- **[ADR-006](./ADR-006-unit-of-work-pattern.md)**: Unit of Work para gestión transaccional y consistencia
+- **[ADR-007](./ADR-007-domain-events-pattern.md)**: Domain Events para arquitectura event-driven y desacoplamiento de efectos secundarios
 
 ### 🔧 **Tecnología y Herramientas**  
 - **[ADR-004](./ADR-004-tech-stack.md)**: Python 3.12 + FastAPI + bcrypt + pytest como stack principal
@@ -31,18 +37,20 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 ### ✅ Decisiones Implementadas:
 - Clean Architecture con 3 capas establecidas
 - Value Objects: UserId, Email, Password (49 tests)
+- Repository Pattern: Interfaces completas para persistencia (31 tests)
+- Unit of Work: Gestión transaccional con async context manager (18 tests)
 - FastAPI aplicación funcionando con health endpoint
-- Sistema de testing optimizado (80 tests en 0.54s)
+- Sistema de testing optimizado (150 tests en 0.59s)
 
 ### 🔄 En Progreso:
-- Interfaces de repositorio (siguiente milestone)
-- Unit of Work pattern (planificado)
+- Application Layer (Use Cases) - siguiente milestone
+- Infrastructure Layer (implementaciones concretas)
 
 ### ⏳ Próximas Decisiones ADR:
-- **ADR-005**: Patrón Repository y persistencia de datos
-- **ADR-006**: Casos de uso y servicios de aplicación
-- **ADR-007**: Estrategia de autenticación y autorización
-- **ADR-008**: API design y versionado
+- **ADR-008**: Casos de uso y servicios de aplicación
+- **ADR-009**: Estrategia de autenticación y autorización
+- **ADR-010**: API design y versionado
+- **ADR-011**: Database schema y migrations
 
 ## 📈 Métricas de Impacto
 

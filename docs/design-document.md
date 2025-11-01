@@ -118,7 +118,7 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 | **Database** | PostgreSQL | 15+ | ACID, extensibilidad, performance |
 | **ORM** | SQLAlchemy | 2.0+ | Async support, type safety |
 | **Authentication** | JWT + bcrypt | - | Stateless, secure hashing |
-| **Testing** | pytest + pytest-xdist | 8.3+ | Parallel execution, fixtures |
+| **Testing** | pytest + pytest-xdist + pytest-asyncio | 8.3+ | Parallel execution, async support |
 | **API Docs** | OpenAPI/Swagger | Auto | Generación automática |
 
 ### Decisiones Clave
@@ -129,6 +129,9 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 2. **ADR-002**: Value Objects para encapsulación y validación
 3. **ADR-003**: Testing strategy con optimizaciones de performance
 4. **ADR-004**: Tech stack moderno con FastAPI y PostgreSQL
+5. **ADR-005**: Repository Pattern para abstracción de datos *(Implementado)*
+6. **ADR-006**: Unit of Work para gestión transaccional *(Implementado)*
+7. **ADR-007**: Domain Events para arquitectura event-driven *(Planificado)*
 
 ---
 
@@ -156,6 +159,9 @@ UpdateProfileUseCase
 
 # Infrastructure
 UserRepository
+UserRepositoryInterface
+UserUnitOfWork
+UserUnitOfWorkInterface
 TokenService
 ```
 
@@ -243,6 +249,253 @@ class Password:
     def create(cls, plain_password: str) -> 'Password':
         # bcrypt hashing with environment-based rounds
 ```
+
+---
+
+## 🏗️ Repository Pattern
+
+### Interfaces de Repositorio
+
+Los repositorios definen contratos claros para la persistencia de datos siguiendo los principios de Clean Architecture:
+
+#### UserRepositoryInterface
+```python
+@abstractmethod
+class UserRepositoryInterface(ABC):
+    async def save(self, user: User) -> None:
+        """Persiste un usuario en el almacén de datos."""
+        pass
+
+    async def find_by_id(self, user_id: UserId) -> Optional[User]:
+        """Busca un usuario por su ID único."""
+        pass
+
+    async def find_by_email(self, email: Email) -> Optional[User]:
+        """Busca un usuario por su email."""
+        pass
+
+    async def delete(self, user: User) -> None:
+        """Elimina un usuario del almacén de datos."""
+        pass
+
+    async def list_all(self) -> List[User]:
+        """Retorna todos los usuarios."""
+        pass
+
+    async def exists_by_email(self, email: Email) -> bool:
+        """Verifica si existe un usuario con el email dado."""
+        pass
+
+    async def count(self) -> int:
+        """Cuenta el total de usuarios."""
+        pass
+
+    async def update(self, user: User) -> None:
+        """Actualiza un usuario existente."""
+        pass
+```
+
+### Beneficios del Patrón Repository
+
+- **Testabilidad**: Fácil creación de mocks para pruebas unitarias
+- **Desacoplamiento**: La lógica de dominio no depende de tecnologías específicas
+- **Flexibilidad**: Cambios de base de datos sin afectar la lógica de negocio
+- **Principio de Inversión de Dependencias**: Las capas superiores dependen de abstracciones
+
+---
+
+## 🔄 Unit of Work Pattern
+
+### Gestión de Transacciones
+
+El patrón Unit of Work coordina múltiples repositorios y garantiza la consistencia transaccional:
+
+#### UnitOfWorkInterface (Base)
+```python
+@abstractmethod
+class UnitOfWorkInterface(ABC):
+    async def __aenter__(self) -> 'UnitOfWorkInterface':
+        """Inicia el contexto de la unidad de trabajo."""
+        pass
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Finaliza el contexto, haciendo rollback si hay errores."""
+        pass
+
+    @abstractmethod
+    async def commit(self) -> None:
+        """Confirma todos los cambios de la transacción."""
+        pass
+
+    @abstractmethod
+    async def rollback(self) -> None:
+        """Revierte todos los cambios de la transacción."""
+        pass
+
+    @abstractmethod
+    async def flush(self) -> None:
+        """Sincroniza los cambios sin confirmar la transacción."""
+        pass
+
+    @abstractmethod
+    def is_active(self) -> bool:
+        """Indica si la unidad de trabajo está activa."""
+        pass
+```
+
+#### UserUnitOfWorkInterface
+```python
+@abstractmethod
+class UserUnitOfWorkInterface(UnitOfWorkInterface):
+    @property
+    @abstractmethod
+    def users(self) -> UserRepositoryInterface:
+        """Acceso al repositorio de usuarios."""
+        pass
+```
+
+### Uso del Unit of Work
+
+```python
+# Caso de uso con transacciones
+async def register_user_use_case(
+    email: str, 
+    password: str,
+    uow: UserUnitOfWorkInterface
+) -> User:
+    async with uow:
+        # Validar que el email no existe
+        if await uow.users.exists_by_email(Email(email)):
+            raise UserAlreadyExistsError()
+        
+        # Crear y guardar usuario
+        user = User.create(email, password)
+        await uow.users.save(user)
+        
+        # Commit automático al salir del contexto
+        await uow.commit()
+        return user
+```
+
+### Beneficios del Unit of Work
+
+- **Atomicidad**: Garantiza que todas las operaciones se completen o fallen juntas
+- **Consistencia**: Mantiene la integridad de los datos a través de múltiples repositorios
+- **Gestión Automática**: Context manager que maneja commit/rollback automáticamente
+- **Claridad**: Delimita claramente los límites transaccionales
+
+---
+
+## 🔄 Domain Events Pattern
+
+### Comunicación Event-Driven
+
+Los eventos de dominio permiten desacoplar efectos secundarios de la lógica principal de negocio, especialmente útil en un sistema de torneos donde múltiples acciones ocurren en respuesta a eventos específicos.
+
+#### DomainEvent Base Class
+```python
+@dataclass(frozen=True)
+class DomainEvent(ABC):
+    """Evento de dominio base."""
+    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    occurred_on: datetime = field(default_factory=datetime.now)
+    aggregate_id: str
+    event_version: int = 1
+
+@dataclass(frozen=True)
+class UserRegisteredEvent(DomainEvent):
+    """Usuario registrado exitosamente."""
+    user_id: str
+    email: str
+    full_name: str
+    registration_source: str = "web"
+```
+
+#### Event Collection en Entidades
+```python
+class User:
+    def __init__(self, ...):
+        self._domain_events: List[DomainEvent] = []
+    
+    @classmethod
+    def create(cls, ...) -> 'User':
+        user = cls(...)
+        user.add_domain_event(UserRegisteredEvent(
+            aggregate_id=str(user.id),
+            user_id=str(user.id),
+            email=str(user.email),
+            full_name=user.get_full_name()
+        ))
+        return user
+    
+    def add_domain_event(self, event: DomainEvent) -> None:
+        """Añade evento para publicar después del commit."""
+        self._domain_events.append(event)
+```
+
+#### Event Bus & Handlers
+```python
+class EventBus(ABC):
+    @abstractmethod
+    async def publish(self, event: DomainEvent) -> None:
+        """Publica evento a todos sus handlers."""
+        pass
+
+class EventHandler(ABC):
+    @abstractmethod
+    async def handle(self, event: DomainEvent) -> None:
+        """Maneja un evento específico."""
+        pass
+
+# Handler específico
+class WelcomeEmailEventHandler(EventHandler):
+    async def handle(self, event: UserRegisteredEvent) -> None:
+        await self._email_service.send_welcome_email(
+            email=event.email,
+            full_name=event.full_name
+        )
+```
+
+### Casos de Uso de Eventos en Ryder Cup
+
+#### User Management Events
+- **UserRegisteredEvent**: Email bienvenida, auditoría, métricas
+- **UserLoggedInEvent**: Actualizar última conexión, detectar actividad sospechosa
+
+#### Tournament Management Events  
+- **TournamentCreatedEvent**: Enviar invitaciones, notificar administradores
+- **PlayerJoinedTournamentEvent**: Actualizar equipos, recalcular handicaps
+- **MatchStartedEvent**: Notificar jugadores, activar sistema de scoring
+
+#### Scoring Events
+- **MatchCompletedEvent**: Actualizar leaderboard, notificar resultados
+- **TournamentFinishedEvent**: Generar reportes, actualizar estadísticas
+
+### Integration con Unit of Work
+
+```python
+class RegisterUserUseCase:
+    async def execute(self, command: RegisterUserCommand) -> UserResponse:
+        async with self._uow:
+            # Lógica de negocio limpia - sin efectos secundarios
+            user = User.create(...)  # Genera eventos automáticamente
+            await self._uow.users.save(user)
+            await self._uow.commit()
+            
+            # Publicar eventos después del commit exitoso
+            await self._uow.publish_events(self._event_bus)
+        
+        return UserResponse(...)
+```
+
+### Beneficios de Domain Events
+
+- **Single Responsibility**: Use cases enfocados solo en lógica de negocio principal
+- **Desacoplamiento**: Efectos secundarios manejados por handlers independientes
+- **Extensibilidad**: Nueva funcionalidad = nuevo handler, sin modificar código existente
+- **Testabilidad**: Tests aislados para use cases y handlers por separado
+- **Auditoría**: Trazabilidad completa de eventos de negocio importantes
+- **Performance**: Procesamiento asíncrono de efectos secundarios
 
 ---
 
