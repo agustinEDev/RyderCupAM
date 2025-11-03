@@ -103,10 +103,13 @@ ryder-cup-manager/
 │   │   │   ├── entities/
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── base_entity.py
-│   │   │   ├── events/                 # Domain Events Base
+│   │   │   ├── events/                 # ✅ Domain Events System
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── domain_event.py
-│   │   │   │   └── event_handler.py
+│   │   │   │   ├── domain_event.py     # ✅ Base class implementada
+│   │   │   │   ├── event_handler.py    # ✅ Handler interface
+│   │   │   │   ├── event_bus.py        # ✅ EventBus interface
+│   │   │   │   ├── in_memory_event_bus.py  # ✅ EventBus implementation
+│   │   │   │   └── exceptions.py       # ✅ Event exceptions
 │   │   │   ├── errors/
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── domain_error.py
@@ -117,17 +120,52 @@ ryder-cup-manager/
 │   │   │   ├── __init__.py
 │   │   │   ├── use_case.py
 │   │   │   ├── result.py
-│   │   │   ├── unit_of_work.py         # Interfaz base UoW
-│   │   │   └── event_bus.py            # Interfaz EventBus
+│   │   │   ├── unit_of_work.py         # ✅ Interfaz base UoW
+│   │   │   └── event_bus.py            # Interfaz EventBus (deprecated - moved to domain)
 │   │   │
 │   │   ├── infrastructure/
 │   │   │   ├── database/
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── database.py
 │   │   │   │   └── sqlalchemy_unit_of_work.py  # UoW base SQLAlchemy
+│   │   │   ├── logging/                # ✅ Sistema de Logging
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── logger.py           # ✅ Logger interface
+│   │   │   │   ├── config.py           # ✅ Configuración logging
+│   │   │   │   ├── formatters.py       # ✅ Text/JSON/Structured formatters
+│   │   │   │   ├── python_logger.py    # ✅ Implementación principal
+│   │   │   │   ├── factory.py          # ✅ LoggerFactory singleton
+│   │   │   │   └── event_handlers.py   # ✅ Integration Domain Events
 │   │   │   ├── http/
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── exception_handlers.py
+│   │   │   └── __init__.py
+│   │   │
+│   │   └── __init__.py
+│   │
+│   ├── users/                          # ✅ Módulo Users (Implementado)
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── user.py             # ✅ User entity con event collection
+│   │   │   ├── value_objects/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── email.py            # ✅ Email value object
+│   │   │   │   ├── password.py         # ✅ Password value object  
+│   │   │   │   └── user_id.py          # ✅ UserId value object
+│   │   │   ├── repositories/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── user_repository.py  # ✅ Repository interface
+│   │   │   │   └── user_unit_of_work.py # ✅ UoW interface
+│   │   │   ├── events/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── user_registered_event.py # ✅ UserRegisteredEvent
+│   │   │   ├── handlers/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── user_registered_event_handler.py # ✅ Event handler
+│   │   │   ├── errors/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── __init__.py         # ✅ User exceptions
 │   │   │   └── __init__.py
 │   │   │
 │   │   └── __init__.py
@@ -167,7 +205,7 @@ ryder-cup-manager/
 │
 ├── docs/                               # Documentación
 │   ├── architecture/
-│   │   ├── decisions/                  # ADRs
+│   │   ├── decisions/                  # ✅ ADRs (8 decisions)
 │   │   └── diagrams/
 │   ├── patterns/
 │   │   └── unit-of-work.md            # Documentación del patrón

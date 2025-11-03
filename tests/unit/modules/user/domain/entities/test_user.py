@@ -359,3 +359,129 @@ class TestUserIntegration:
         assert user.first_name == ""  # Nombre vacío
         assert user.email == "email-invalido"  # Email inválido
         assert is_valid is False  # Validación falla por email y otros campos
+
+
+class TestUserEntityEventCollection:
+    """Tests para la colección de eventos de dominio en la entidad User"""
+
+    def test_new_user_has_no_domain_events_initially(self):
+        """
+        Test: Usuario nuevo no tiene eventos de dominio inicialmente
+        Given: Se crea una instancia nueva de User
+        When: Se verifica si tiene eventos
+        Then: No debe tener eventos de dominio
+        """
+        # Arrange & Act
+        user = User(first_name="Test", last_name="User", email="test@test.com")
+        
+        # Assert
+        assert user.has_domain_events() is False
+        assert len(user.get_domain_events()) == 0
+    
+    def test_create_user_generates_user_registered_event(self):
+        """
+        Test: Crear usuario con factory method genera evento UserRegistered
+        Given: Datos válidos para crear usuario
+        When: Se usa User.create()
+        Then: Debe generar evento UserRegisteredEvent
+        """
+        # Arrange
+        first_name = "Juan"
+        last_name = "Pérez"
+        email = "juan.perez@test.com"
+        password = "SecurePass123!"
+        
+        # Act
+        user = User.create(first_name, last_name, email, password)
+        
+        # Assert
+        assert user.has_domain_events() is True
+        events = user.get_domain_events()
+        assert len(events) == 1
+        
+        # Verificar que es el evento correcto
+        from src.users.domain.events.user_registered_event import UserRegisteredEvent
+        event = events[0]
+        assert isinstance(event, UserRegisteredEvent)
+        assert event.user_id == str(user.id.value)
+        assert event.email == email
+        assert event.name == first_name
+        assert event.surname == last_name
+    
+    def test_clear_domain_events_removes_all_events(self):
+        """
+        Test: clear_domain_events elimina todos los eventos
+        Given: Usuario con eventos de dominio
+        When: Se llama a clear_domain_events()
+        Then: No debe tener eventos de dominio
+        """
+        # Arrange
+        user = User.create("Ana", "García", "ana@test.com", "Password123!")
+        assert user.has_domain_events() is True
+        
+        # Act
+        user.clear_domain_events()
+        
+        # Assert
+        assert user.has_domain_events() is False
+        assert len(user.get_domain_events()) == 0
+    
+    def test_get_domain_events_returns_copy(self):
+        """
+        Test: get_domain_events retorna una copia, no la lista original
+        Given: Usuario con eventos de dominio
+        When: Se obtiene la lista de eventos y se modifica
+        Then: La lista interna no debe cambiar
+        """
+        # Arrange
+        user = User.create("Luis", "Martín", "luis@test.com", "Password123!")
+        original_count = len(user.get_domain_events())
+        
+        # Act
+        events = user.get_domain_events()
+        events.clear()  # Modificamos la copia
+        
+        # Assert
+        assert len(user.get_domain_events()) == original_count  # Original no cambió
+        assert user.has_domain_events() is True
+    
+    def test_add_domain_event_method(self):
+        """
+        Test: _add_domain_event agrega eventos correctamente
+        Given: Usuario sin eventos
+        When: Se agrega un evento manualmente
+        Then: Debe tener el evento agregado
+        """
+        # Arrange
+        user = User(first_name="Test", last_name="User", email="test@test.com")
+        from src.users.domain.events.user_registered_event import UserRegisteredEvent
+        
+        # Act
+        event = UserRegisteredEvent(
+            user_id="test-id-123",
+            email="test@test.com",
+            name="Test",
+            surname="User"
+        )
+        user._add_domain_event(event)
+        
+        # Assert
+        assert user.has_domain_events() is True
+        assert len(user.get_domain_events()) == 1
+        assert user.get_domain_events()[0] == event
+    
+    def test_user_created_event_has_correct_aggregate_id(self):
+        """
+        Test: Evento generado tiene el aggregate_id correcto
+        Given: Se crea un usuario
+        When: Se verifica el evento generado
+        Then: El aggregate_id debe coincidir con el ID del usuario
+        """
+        # Arrange & Act
+        user = User.create("Pedro", "López", "pedro@test.com", "Password123!")
+        
+        # Assert
+        events = user.get_domain_events()
+        event = events[0]
+        assert event.aggregate_id == str(user.id.value)
+        assert event.aggregate_id == event.user_id

@@ -1,10 +1,11 @@
 from datetime import datetime
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List
 
 from ..value_objects.user_id import UserId
 from ..value_objects.email import Email
 from ..value_objects.password import Password
+from src.shared.domain.events.domain_event import DomainEvent
 
 
 @dataclass
@@ -28,6 +29,9 @@ class User:
     # TODO: ¿Cómo manejar las fechas?
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    
+    # Colección de eventos de dominio
+    _domain_events: List[DomainEvent] = field(default_factory=list, init=False)
     
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
@@ -70,7 +74,7 @@ class User:
         email = Email(email_str)
         password = Password.from_plain_text(plain_password)
         
-        return cls(
+        user = cls(
             id=user_id,
             email=email,
             password=password,
@@ -79,6 +83,35 @@ class User:
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
+        
+        # Generar evento de registro
+        from src.users.domain.events.user_registered_event import UserRegisteredEvent
+        user._add_domain_event(UserRegisteredEvent(
+            user_id=str(user_id.value),
+            email=email_str,
+            name=first_name,
+            surname=last_name
+        ))
+        
+        return user
+    
+    # === Métodos para manejo de eventos de dominio ===
+    
+    def _add_domain_event(self, event: DomainEvent) -> None:
+        """Agrega un evento de dominio a la colección interna."""
+        self._domain_events.append(event)
+    
+    def get_domain_events(self) -> List[DomainEvent]:
+        """Obtiene una copia de todos los eventos de dominio pendientes."""
+        return self._domain_events.copy()
+    
+    def clear_domain_events(self) -> None:
+        """Limpia todos los eventos de dominio de la colección."""
+        self._domain_events.clear()
+    
+    def has_domain_events(self) -> bool:
+        """Verifica si la entidad tiene eventos de dominio pendientes."""
+        return len(self._domain_events) > 0
     
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

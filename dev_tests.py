@@ -86,18 +86,25 @@ def parse_results(output):
         'errors': 0,
         'skipped': 0
     }
-    # Busca líneas tipo: "== 18 passed, 2 failed, 1 skipped in ... =="
-    summary = re.findall(r"=+ ([\d]+) passed(?:, ([\d]+) failed)?(?:, ([\d]+) skipped)?(?:, ([\d]+) errors)? in", output)
+    
+    # Busca líneas tipo: "== 159 passed, 1 warning in 0.62s =="
+    # Puede incluir: passed, failed, skipped, errors, warnings
+    summary_pattern = r"=+ (\d+) passed(?:, (\d+) failed)?(?:, (\d+) skipped)?(?:, (\d+) errors)?(?:, (\d+) warnings?)? in"
+    summary = re.findall(summary_pattern, output)
+    
     if summary:
         passed = int(summary[0][0])
         failed = int(summary[0][1]) if summary[0][1] else 0
         skipped = int(summary[0][2]) if summary[0][2] else 0
         errors = int(summary[0][3]) if summary[0][3] else 0
+        # warnings no cuentan como tests, son solo informativos
+        
         stats['passed'] = passed
         stats['failed'] = failed
         stats['skipped'] = skipped
         stats['errors'] = errors
         stats['total'] = passed + failed + skipped + errors
+    
     return stats
 
 # ================================
@@ -138,6 +145,13 @@ def categorize_tests(output):
                 'unit_of_work': {
                     'base_interface': [],
                     'user_unit_of_work': [],
+                    'other': []
+                },
+                'events': {
+                    'domain_events': [],
+                    'event_handlers': [],
+                    'event_bus': [],
+                    'user_events': [],
                     'other': []
                 },
                 'services': {
@@ -227,6 +241,12 @@ def categorize_tests(output):
                     'file_storage': [],
                     'other': []
                 }
+            },
+            'domain_events': {
+                'event_integration': [],
+                'handler_integration': [],
+                'bus_integration': [],
+                'other': []
             }
         },
         'e2e': [],
@@ -280,6 +300,23 @@ def categorize_tests(output):
                             categories['unit']['domain']['errors']['validation_errors'].append(line)
                         else:
                             categories['unit']['domain']['errors']['domain_errors'].append(line)
+                    elif '/events/' in line:
+                        if 'test_domain_event' in line or 'domain_event' in line:
+                            categories['unit']['domain']['events']['domain_events'].append(line)
+                        elif 'test_event_handler' in line or 'event_handler' in line:
+                            categories['unit']['domain']['events']['event_handlers'].append(line)
+                        elif 'test_event_bus' in line or 'event_bus' in line:
+                            categories['unit']['domain']['events']['event_bus'].append(line)
+                        elif 'user_registered_event' in line or '/user/' in line:
+                            categories['unit']['domain']['events']['user_events'].append(line)
+                        else:
+                            categories['unit']['domain']['events']['other'].append(line)
+                    elif '/handlers/' in line and '/domain/' in line:
+                        # Esta es para handlers de dominio (como UserRegisteredEventHandler)
+                        if 'user_registered_event_handler' in line or '/user/' in line:
+                            categories['unit']['domain']['events']['event_handlers'].append(line)
+                        else:
+                            categories['unit']['domain']['events']['event_handlers'].append(line)
                     elif '/services/' in line:
                         categories['unit']['domain']['services']['domain_services'].append(line)
                     else:
@@ -355,8 +392,17 @@ def categorize_tests(output):
                         categories['integration']['services']['files'].append(line)
                     else:
                         categories['integration']['services']['external_apis'].append(line)  # Default a external_apis
+                elif '/domain_events/' in line:
+                    if 'integration' in line:
+                        categories['integration']['domain_events']['event_integration'].append(line)
+                    elif 'handler' in line:
+                        categories['integration']['domain_events']['handler_integration'].append(line)
+                    elif 'bus' in line:
+                        categories['integration']['domain_events']['bus_integration'].append(line)
+                    else:
+                        categories['integration']['domain_events']['other'].append(line)
                 else:
-                    categories['integration']['api']['endpoints'].append(line)  # Default general
+                    categories['integration']['api']['endpoints']['other'].append(line)  # Default a other endpoint
             elif 'tests/e2e/' in line:
                 categories['e2e'].append(line)
             else:
@@ -500,6 +546,74 @@ def print_object_subcategories(category_name, objects_dict, category_icon):
 # ================================
 # SALIDA BONITA
 # ================================
+def count_tests_by_category(categories):
+    """
+    Cuenta los tests por categoría principal (unit, integration, e2e).
+    
+    Args:
+        categories: Dict con las categorías de tests
+        
+    Returns:
+        dict: Estadísticas por categoría
+    """
+    stats = {
+        'unit': {'total': 0, 'passed': 0, 'failed': 0, 'skipped': 0, 'errors': 0},
+        'integration': {'total': 0, 'passed': 0, 'failed': 0, 'skipped': 0, 'errors': 0},
+        'e2e': {'total': 0, 'passed': 0, 'failed': 0, 'skipped': 0, 'errors': 0},
+        'otros': {'total': 0, 'passed': 0, 'failed': 0, 'skipped': 0, 'errors': 0}
+    }
+    
+    def count_lines_in_nested_dict(data):
+        """Recursivamente cuenta líneas en estructuras anidadas."""
+        lines = []
+        if isinstance(data, dict):
+            for value in data.values():
+                lines.extend(count_lines_in_nested_dict(value))
+        elif isinstance(data, list):
+            lines.extend(data)
+        return lines
+    
+    def categorize_line_status(line):
+        """Determina el estado de una línea de test."""
+        if 'PASSED' in line:
+            return 'passed'
+        elif 'FAILED' in line:
+            return 'failed'
+        elif 'SKIPPED' in line:
+            return 'skipped'
+        elif 'ERROR' in line:
+            return 'errors'
+        return 'passed'  # Default
+    
+    # Contar tests unitarios
+    unit_lines = count_lines_in_nested_dict(categories['unit'])
+    for line in unit_lines:
+        status = categorize_line_status(line)
+        stats['unit'][status] += 1
+        stats['unit']['total'] += 1
+    
+    # Contar tests de integración
+    integration_lines = count_lines_in_nested_dict(categories['integration'])
+    for line in integration_lines:
+        status = categorize_line_status(line)
+        stats['integration'][status] += 1
+        stats['integration']['total'] += 1
+    
+    # Contar tests e2e
+    for line in categories['e2e']:
+        status = categorize_line_status(line)
+        stats['e2e'][status] += 1
+        stats['e2e']['total'] += 1
+    
+    # Contar otros tests
+    for line in categories['otros']:
+        status = categorize_line_status(line)
+        stats['otros'][status] += 1
+        stats['otros']['total'] += 1
+    
+    return stats
+
+
 def print_stats(stats, output, exit_code):
     print(f"\n{Colors.HEADER}{Colors.BOLD}🧪 EJECUCIÓN DE TESTS - RYDER CUP MANAGER{Colors.ENDC}")
     print(f"{Colors.OKBLUE}📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 🖥️  {platform.system()} | 🐍 Python {platform.python_version()}{Colors.ENDC}")
@@ -529,6 +643,8 @@ def print_stats(stats, output, exit_code):
                 print_object_subcategories("Interfaces de Repositorio", domain_tests['repositories'], "🗄️")
             if any(domain_tests['unit_of_work'].values()):
                 print_object_subcategories("Unit of Work", domain_tests['unit_of_work'], "🔄")
+            if any(domain_tests['events'].values()):
+                print_object_subcategories("Domain Events", domain_tests['events'], "🎭")
             if any(domain_tests['errors'].values()):
                 print_object_subcategories("Excepciones de Dominio", domain_tests['errors'], "⚠️")
             if any(domain_tests['services'].values()):
@@ -599,6 +715,20 @@ def print_stats(stats, output, exit_code):
                 print_object_subcategories("Mensajería", service_tests['messaging'], "📨")
             if any(service_tests['files'].values()):
                 print_object_subcategories("Archivos", service_tests['files'], "📁")
+        
+        # Domain Events Tests
+        events_tests = categories['integration']['domain_events']
+        events_has_tests = any(subcat for subcat in events_tests.values())
+        if events_has_tests:
+            print(f"\n  {Colors.BOLD}🎭 DOMAIN EVENTS{Colors.ENDC}")
+            if events_tests['event_integration']:
+                print_category_results("Integración de Eventos", events_tests['event_integration'], "🎪")
+            if events_tests['handler_integration']:
+                print_category_results("Integración de Handlers", events_tests['handler_integration'], "🎯")
+            if events_tests['bus_integration']:
+                print_category_results("Integración de Event Bus", events_tests['bus_integration'], "🚌")
+            if events_tests['other']:
+                print_category_results("Otros Events", events_tests['other'], "🎨")
     
     # Tests E2E
     if categories['e2e']:
@@ -608,18 +738,88 @@ def print_stats(stats, output, exit_code):
     if categories['otros']:
         print_category_results("Otros", categories['otros'], "📝")
     
-    # Resumen final
+    # Resumen final con estadísticas por categoría
     print(f"\n{Colors.HEADER}{Colors.BOLD}📈 RESUMEN GENERAL{Colors.ENDC}")
     print(f"{Colors.OKCYAN}{'═' * 50}{Colors.ENDC}")
+    
+    # Obtener estadísticas por categoría
+    category_stats = count_tests_by_category(categories)
+    
+    # Mostrar estadísticas generales
     print(f"{Colors.OKCYAN}📊 Total tests ejecutados: {stats['total']}{Colors.ENDC}")
     print(f"{Colors.OKGREEN}✅ Pasados: {stats['passed']}{Colors.ENDC}")
     print(f"{Colors.FAIL}❌ Fallados: {stats['failed']}{Colors.ENDC}")
     print(f"{Colors.WARNING}⏭️  Omitidos: {stats['skipped']}{Colors.ENDC}")
     print(f"{Colors.FAIL}⚠️  Errores: {stats['errors']}{Colors.ENDC}")
     
+    # Mostrar desglose por tipo de test
+    print(f"\n{Colors.BOLD}📋 DESGLOSE POR TIPO DE TEST{Colors.ENDC}")
+    print(f"{Colors.OKCYAN}{'─' * 50}{Colors.ENDC}")
+    
+    # Tests Unitarios
+    unit_stats = category_stats['unit']
+    if unit_stats['total'] > 0:
+        print(f"{Colors.BOLD}🔬 Tests Unitarios:{Colors.ENDC}")
+        print(f"   📊 Total: {unit_stats['total']}")
+        print(f"   {Colors.OKGREEN}✅ Pasados: {unit_stats['passed']}{Colors.ENDC}")
+        if unit_stats['failed'] > 0:
+            print(f"   {Colors.FAIL}❌ Fallados: {unit_stats['failed']}{Colors.ENDC}")
+        if unit_stats['skipped'] > 0:
+            print(f"   {Colors.WARNING}⏭️  Omitidos: {unit_stats['skipped']}{Colors.ENDC}")
+        if unit_stats['errors'] > 0:
+            print(f"   {Colors.FAIL}⚠️  Errores: {unit_stats['errors']}{Colors.ENDC}")
+        unit_percent = 100 * unit_stats['passed'] / unit_stats['total'] if unit_stats['total'] > 0 else 0
+        print(f"   🎯 Éxito: {unit_percent:.1f}%")
+    
+    # Tests de Integración
+    integration_stats = category_stats['integration']
+    if integration_stats['total'] > 0:
+        print(f"\n{Colors.BOLD}🔗 Tests de Integración:{Colors.ENDC}")
+        print(f"   📊 Total: {integration_stats['total']}")
+        print(f"   {Colors.OKGREEN}✅ Pasados: {integration_stats['passed']}{Colors.ENDC}")
+        if integration_stats['failed'] > 0:
+            print(f"   {Colors.FAIL}❌ Fallados: {integration_stats['failed']}{Colors.ENDC}")
+        if integration_stats['skipped'] > 0:
+            print(f"   {Colors.WARNING}⏭️  Omitidos: {integration_stats['skipped']}{Colors.ENDC}")
+        if integration_stats['errors'] > 0:
+            print(f"   {Colors.FAIL}⚠️  Errores: {integration_stats['errors']}{Colors.ENDC}")
+        integration_percent = 100 * integration_stats['passed'] / integration_stats['total'] if integration_stats['total'] > 0 else 0
+        print(f"   🎯 Éxito: {integration_percent:.1f}%")
+    
+    # Tests E2E
+    e2e_stats = category_stats['e2e']
+    if e2e_stats['total'] > 0:
+        print(f"\n{Colors.BOLD}🎯 Tests End-to-End:{Colors.ENDC}")
+        print(f"   📊 Total: {e2e_stats['total']}")
+        print(f"   {Colors.OKGREEN}✅ Pasados: {e2e_stats['passed']}{Colors.ENDC}")
+        if e2e_stats['failed'] > 0:
+            print(f"   {Colors.FAIL}❌ Fallados: {e2e_stats['failed']}{Colors.ENDC}")
+        if e2e_stats['skipped'] > 0:
+            print(f"   {Colors.WARNING}⏭️  Omitidos: {e2e_stats['skipped']}{Colors.ENDC}")
+        if e2e_stats['errors'] > 0:
+            print(f"   {Colors.FAIL}⚠️  Errores: {e2e_stats['errors']}{Colors.ENDC}")
+        e2e_percent = 100 * e2e_stats['passed'] / e2e_stats['total'] if e2e_stats['total'] > 0 else 0
+        print(f"   🎯 Éxito: {e2e_percent:.1f}%")
+    
+    # Otros tests
+    otros_stats = category_stats['otros']
+    if otros_stats['total'] > 0:
+        print(f"\n{Colors.BOLD}📝 Otros Tests:{Colors.ENDC}")
+        print(f"   📊 Total: {otros_stats['total']}")
+        print(f"   {Colors.OKGREEN}✅ Pasados: {otros_stats['passed']}{Colors.ENDC}")
+        if otros_stats['failed'] > 0:
+            print(f"   {Colors.FAIL}❌ Fallados: {otros_stats['failed']}{Colors.ENDC}")
+        if otros_stats['skipped'] > 0:
+            print(f"   {Colors.WARNING}⏭️  Omitidos: {otros_stats['skipped']}{Colors.ENDC}")
+        if otros_stats['errors'] > 0:
+            print(f"   {Colors.FAIL}⚠️  Errores: {otros_stats['errors']}{Colors.ENDC}")
+        otros_percent = 100 * otros_stats['passed'] / otros_stats['total'] if otros_stats['total'] > 0 else 0
+        print(f"   🎯 Éxito: {otros_percent:.1f}%")
+    
+    # Porcentaje general de éxito
     if stats['total'] > 0:
         percent = 100 * stats['passed'] / stats['total']
-        print(f"{Colors.BOLD}📊 Tests exitosos: {stats['passed']}/{stats['total']}{Colors.ENDC}")
+        print(f"\n{Colors.BOLD}📊 Tests exitosos: {stats['passed']}/{stats['total']}{Colors.ENDC}")
         if percent == 100:
             print(f"{Colors.OKGREEN}{Colors.BOLD}🎉 Porcentaje de éxito: {percent:.1f}% - ¡PERFECTO!{Colors.ENDC}")
         elif percent >= 80:

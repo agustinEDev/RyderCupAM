@@ -256,6 +256,10 @@ bcrypt==4.1.2          # Hashing de passwords seguro
 - ✅ **Verificación constante** de funcionalidad
 - ✅ **Tests primero** para validar cada componente
 - ✅ **Clean Architecture** siguiendo principios SOLID
+- ✅ **Documentación profesional** con ADRs y Design Document
+- ✅ **Nunca realizar todo el trabajo** El usuario debe supervisar y entender cada paso
+- ✅ **Ir siempre fichero a fichero**, construyendo el proyecto gradualmente
+- ✅ **Pedir confirmación** antes de realizar cambios.
 
 **PRÓXIMA SESIÓN**: Continuar con interfaces de repositorio y Unit of Work pattern
 

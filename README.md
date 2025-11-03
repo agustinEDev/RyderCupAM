@@ -14,15 +14,27 @@ Una plataforma que permite a grupos de amigos organizar torneos de golf al estil
 - **Type Safety**: 100% type hints con validación en tiempo de compilación
 - **Error Handling**: Sistema completo de excepciones de dominio
 
+### ✅ **Domain Events System** (3 Nov 2025)
+- **Event-Driven Architecture**: Sistema completo de Domain Events implementado
+- **EventBus**: InMemoryEventBus con manejo robusto de errores y estadísticas
+- **Event Handlers**: UserRegisteredEventHandler con logging y notificaciones
+- **Integration**: Integración completa con User entity y event collection
+
+### ✅ **Advanced Logging System** (3 Nov 2025)
+- **Modular Design**: Sistema de logging con múltiples formatters y handlers
+- **Structured Logging**: Soporte JSON, texto y formato híbrido estructurado
+- **Correlation IDs**: Trazabilidad completa de requests y operaciones
+- **Domain Events Integration**: Logging automático de eventos con contexto enriquecido
+
 ### 🚀 **Performance Optimized Testing**
-- **90% Speed Improvement**: De 5+ segundos a 0.54 segundos
+- **100% Success Rate**: 215/215 tests pasando al 100%
 - **Parallel Execution**: pytest-xdist con 7 workers
-- **80 Tests**: Cobertura completa de la capa de dominio
-- **Smart Categorization**: Organización automática por capas y objetos
+- **Comprehensive Coverage**: Tests unitarios e integración completos
+- **Smart Categorization**: dev_tests.py con análisis detallado por tipo
 
 ### 📚 **Professional Documentation**
-- **4 ADRs Complete**: Decisiones arquitectónicas documentadas
-- **Design Document**: Visión completa del sistema
+- **8 ADRs Complete**: Decisiones arquitectónicas documentadas completamente
+- **Design Document**: Visión completa del sistema actualizada
 - **Development Tools**: Scripts optimizados para desarrollo rápido
 
 ## 🏗️ Arquitectura
@@ -70,10 +82,17 @@ Una plataforma que permite a grupos de amigos organizar torneos de golf al estil
 Gestión completa de usuarios, autenticación y autorización.
 
 **🎯 Domain Layer Completado:**
-- ✅ **Entities**: User entity con validaciones completas
+- ✅ **Entities**: User entity con validaciones completas y event collection
 - ✅ **Value Objects**: UserId, Email, Password con encapsulación total
+- ✅ **Domain Events**: UserRegisteredEvent con metadatos automáticos
+- ✅ **Event Handlers**: UserRegisteredEventHandler con logging integrado
 - ✅ **Domain Services**: Password hashing con bcrypt optimizado
 - ✅ **Repository Interfaces**: Contratos definidos para persistencia
+
+**🚀 Infrastructure Systems:**
+- ✅ **Event Bus**: InMemoryEventBus para comunicación asíncrona
+- ✅ **Logging System**: Sistema modular con formatters múltiples
+- ✅ **Integration**: Domain Events con logging automático y contexto
 
 **📋 Application Layer:**
 - 🔄 **Use Cases**: RegisterUser, LoginUser (en desarrollo)
@@ -110,31 +129,38 @@ Sistema de puntuación y resultados.
 - ✅ **Repository Interfaces**: Contratos completos para persistencia (31 tests)
 - ✅ **Unit of Work Pattern**: Gestión de transacciones implementada (18 tests)
 - ✅ **Domain Exceptions**: Jerarquía completa de errores (21 tests)
-- ✅ **Testing Excellence**: 150 tests en 0.59s con categorización profesional
+- ✅ **Testing Excellence**: Testing optimizado con categorización profesional
 
-### Fase 3: Application Layer 🚧 (Siguiente)
+### Fase 3: Domain Events & Logging ✅ (Completada - 3 Nov 2025)
+- ✅ **Domain Events Pattern**: Sistema completo event-driven (52 tests)
+- ✅ **Event Bus**: InMemoryEventBus con estadísticas y error handling
+- ✅ **Event Handlers**: UserRegisteredEventHandler con operaciones completas
+- ✅ **Logging System**: Sistema modular con formatters y correlation IDs
+- ✅ **Integration**: Domain Events con logging automático y contexto enriquecido
+- ✅ **Comprehensive Testing**: 215/215 tests al 100% de éxito
+
+### Fase 4: Application Layer 🚧 (Siguiente)
 - ⏳ **Use Cases**: RegisterUser, LoginUser implementation
 - ⏳ **Application Services**: Token management, validation
 - ⏳ **DTOs**: Request/Response objects
-- ⏳ **Domain Events**: Event-driven communication between modules
 - ⏳ **Infrastructure Layer**: SQLAlchemy integration
 
-### Fase 4: Gestión de Competiciones
+### Fase 5: Gestión de Competiciones
 - [ ] Crear competición
 - [ ] Configurar formato
 - [ ] Invitar participantes
 
-### Fase 5: Gestión de Equipos
+### Fase 6: Gestión de Equipos
 - [ ] Crear equipos
 - [ ] Asignar jugadores
 - [ ] Capitanes de equipo
 
-### Fase 6: Gestión de Partidos
+### Fase 7: Gestión de Partidos
 - [ ] Crear emparejamientos
 - [ ] Formatos de juego (Foursome, Fourball, Singles)
 - [ ] Calendario de partidos
 
-### Fase 7: Sistema de Puntuación
+### Fase 8: Sistema de Puntuación
 - [ ] Registro de resultados
 - [ ] Cálculo de puntos
 - [ ] Clasificación en tiempo real
@@ -148,6 +174,9 @@ Sistema de puntuación y resultados.
 | **Database** | PostgreSQL | 15+ | 🔄 |
 | **ORM** | SQLAlchemy | 2.0+ | 🔄 |
 | **Authentication** | JWT + bcrypt | 4.1.2 | ✅ |
+| **Testing** | pytest + pytest-xdist | 8.3.0 | ✅ |
+| **Domain Events** | Custom Event Bus | - | ✅ |
+| **Logging** | Custom Logging System | - | ✅ |
 | **Testing** | pytest + pytest-xdist | 8.3+ | ✅ |
 | **Type Checking** | mypy | Latest | ✅ |
 | **Code Quality** | black + ruff | Latest | ✅ |

@@ -16,6 +16,7 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 | [ADR-005](./ADR-005-repository-pattern.md) | Repository Pattern Implementation | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
 | [ADR-006](./ADR-006-unit-of-work-pattern.md) | Unit of Work for Transaction Management | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
 | [ADR-007](./ADR-007-domain-events-pattern.md) | Domain Events for Event-Driven Architecture | ✅ Aceptado | 1 Nov 2025 | 🔥 Alto |
+| [ADR-008](./ADR-008-logging-system.md) | Sistema de Logging Avanzado | ✅ Aceptado | 3 Nov 2025 | 🟡 Medio |
 
 ## 📊 Resumen de Decisiones por Área
 
@@ -28,6 +29,7 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 
 ### 🔧 **Tecnología y Herramientas**  
 - **[ADR-004](./ADR-004-tech-stack.md)**: Python 3.12 + FastAPI + bcrypt + pytest como stack principal
+- **[ADR-008](./ADR-008-logging-system.md)**: Sistema de logging modular con formatters múltiples y integración Domain Events
 
 ### 🧪 **Testing y Calidad**
 - **[ADR-003](./ADR-003-testing-strategy.md)**: pytest con paralelización, optimizaciones de bcrypt y organización por Clean Architecture
@@ -35,19 +37,22 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 ## 🎯 Estado Actual del Proyecto
 
 ### ✅ Decisiones Implementadas:
-- Clean Architecture con 3 capas establecidas
-- Value Objects: UserId, Email, Password (49 tests)
-- Repository Pattern: Interfaces completas para persistencia (31 tests)
-- Unit of Work: Gestión transaccional con async context manager (18 tests)
-- FastAPI aplicación funcionando con health endpoint
-- Sistema de testing optimizado (150 tests en 0.59s)
+- **Clean Architecture**: 3 capas establecidas (Domain, Application, Infrastructure)
+- **Value Objects**: UserId, Email, Password con validación robusta (49 tests)
+- **Repository Pattern**: Interfaces completas para persistencia desacoplada (31 tests)
+- **Unit of Work**: Gestión transaccional con async context manager (18 tests)
+- **Domain Events**: Sistema completo event-driven con EventBus e integración (52 tests)
+- **Logging System**: Sistema modular con formatters múltiples y correlación (validated)
+- **FastAPI**: Aplicación funcionando con health endpoint y documentación automática
+- **Testing**: Sistema optimizado (215 tests al 100% de éxito)
 
 ### 🔄 En Progreso:
-- Application Layer (Use Cases) - siguiente milestone
-- Infrastructure Layer (implementaciones concretas)
+- Application Layer (Use Cases y Application Services)
+- Infrastructure Layer (implementaciones concretas de repositorios)
 
 ### ⏳ Próximas Decisiones ADR:
-- **ADR-008**: Casos de uso y servicios de aplicación
+- **ADR-009**: Application Services y casos de uso
+- **ADR-010**: Implementaciones de Infrastructure Layer
 - **ADR-009**: Estrategia de autenticación y autorización
 - **ADR-010**: API design y versionado
 - **ADR-011**: Database schema y migrations
