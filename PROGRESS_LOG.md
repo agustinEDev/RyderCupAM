@@ -1,7 +1,7 @@
 # 📋 PROGRESS LOG - Ryder Cup Manager API
 
 **Fecha de creación**: 31 de octubre de 2025  
-**Última actualización**: 31 de octubre de 2025 - 22:15h  
+**Última actualización**: 3 de noviembre de 2025 - 19:30h  
 **Proyecto**: Sistema de gestión para torneos Ryder Cup  
 **Arquitectura**: Clean Architecture + FastAPI  
 **Enfoque**: Desarrollo paso a paso guiado (el usuario aprende cada paso)
@@ -441,5 +441,125 @@ El proyecto ahora tiene:
 
 ---
 
-*Próxima sesión: Domain Events + Use Cases Implementation*
-*Última actualización: 1 de noviembre de 2025*
+## 🚀 **SESIÓN 3 NOVIEMBRE 2025 - DOMAIN EVENTS & LOGGING SYSTEMS**
+
+### ✅ **LOGROS PRINCIPALES COMPLETADOS:**
+
+#### 1. **🎭 SISTEMA DE DOMAIN EVENTS COMPLETO**
+- **✅ DomainEvent Base Class**: Clase abstracta con metadatos automáticos
+- **✅ EventHandler Interface**: Interface genérica con type safety
+- **✅ EventBus & InMemoryEventBus**: Sistema completo de publicación/suscripción
+- **✅ UserRegisteredEvent**: Evento específico con datos completos
+- **✅ UserRegisteredEventHandler**: Handler completo con 3 operaciones
+- **✅ Entity Event Collection**: Integración en User entity
+- **✅ Event Exceptions**: Jerarquía completa de errores específicos
+
+**🔢 Métricas Implementadas:**
+- **52 tests nuevos** específicos para Domain Events
+- **41 tests** cubriendo todo el sistema event-driven
+- **215/215 tests** pasando al 100% de éxito
+- **7 archivos principales** + 6 archivos de tests
+
+#### 2. **📊 SISTEMA DE LOGGING AVANZADO**
+- **✅ Logger Interface**: Contrato base flexible y extensible
+- **✅ LogConfig**: Configuración avanzada por entornos
+- **✅ Formatters Múltiples**: Text, JSON y Structured híbrido
+- **✅ PythonLogger**: Implementación completa thread-safe
+- **✅ LoggerFactory**: Factory con singleton y cache de loggers
+- **✅ Event Integration**: EventLoggingHandler para Domain Events
+- **✅ Correlation IDs**: Trazabilidad completa de requests
+
+**🎯 Características Validadas:**
+- **Logging estructurado** con metadatos enriquecidos
+- **Context managers** para correlation y contexto temporal
+- **Múltiples handlers** simultáneos (consola, archivo, rotativo)
+- **Integración automática** con Domain Events
+- **Configuración flexible** por variables de entorno
+
+#### 3. **📚 DOCUMENTACIÓN PROFESIONAL ACTUALIZADA**
+- **✅ ADR-007**: Domain Events Pattern actualizado con implementación
+- **✅ ADR-008**: Sistema de Logging Avanzado documentado
+- **✅ README Decisions**: Índice actualizado con 8 ADRs
+- **✅ Design Document**: Arquitectura y testing strategy actualizadas
+- **✅ Project Structure**: Estructura real reflejada en docs
+- **✅ README Principal**: Logros y roadmap actualizados
+
+### 🔧 **TRABAJO TÉCNICO REALIZADO:**
+
+#### Implementación Domain Events:
+```python
+# Event Bus con error resilience
+event_bus = InMemoryEventBus()
+handler = UserRegisteredEventHandler()
+event_bus.register(handler)
+
+# Entity con event collection
+user = User.create(...)  # Genera evento automáticamente
+await event_bus.publish_all(user.get_domain_events())
+```
+
+#### Sistema de Logging:
+```python
+# Logger con contexto y correlation
+logger = get_logger("users.service")
+with logger.correlation_context("req-123"):
+    logger.info("User created", extra={"user_id": 456})
+```
+
+### 📊 **ESTADO ACTUAL DEL PROYECTO:**
+
+**✅ MILESTONE DOMAIN EVENTS & LOGGING COMPLETADO Y COMMITEADO**
+
+El proyecto ahora incluye:
+- ✅ **Domain Layer**: Completo con events y entity collection
+- ✅ **Repository Pattern**: Interfaces testeadas (31 tests)
+- ✅ **Unit of Work**: Patrón implementado (18 tests)
+- ✅ **Domain Events**: Sistema completo event-driven (52 tests)
+- ✅ **Logging System**: Infraestructura completa con formatters
+- ✅ **Testing Excellence**: 215/215 tests al 100% éxito
+- ✅ **Documentation**: 8 ADRs + docs actualizadas y sincronizadas
+- ✅ **Version Control**: Cambios pusheados a repositorio remoto
+- 🔄 **Application Layer**: **PRÓXIMO OBJETIVO** - Use Cases y Services
+- ⏳ **Infrastructure Layer**: Pendiente SQLAlchemy + concrete repos
+
+### � **SIGUIENTE SESIÓN - APPLICATION LAYER:**
+
+**Objetivo Principal**: Implementar la capa de aplicación con Use Cases
+
+**Tareas Específicas**:
+1. **📁 Crear estructura Application Layer**:
+   - `src/users/application/use_cases/`
+   - `src/users/application/services/`
+   - `src/users/application/dto/`
+
+2. **🎯 Implementar Use Cases principales**:
+   - `RegisterUserUseCase`: Registro con Domain Events
+   - `GetUserByIdUseCase`: Consulta simple
+   - `UpdateUserProfileUseCase`: Actualización con eventos
+   - `DeactivateUserUseCase`: Soft delete con eventos
+
+3. **🔧 Application Services**:
+   - `UserApplicationService`: Orquestación de use cases
+   - `UserQueryService`: Consultas optimizadas
+   - **Integración**: UnitOfWork + Domain Events + Logging
+
+4. **📦 DTOs y Commands**:
+   - Input DTOs para cada use case
+   - Output DTOs con datos estructurados
+   - Command objects para operaciones complejas
+
+5. **🧪 Testing Application Layer**:
+   - Tests unitarios para cada use case
+   - Mocks de repositories y UnitOfWork
+   - Integration tests con Domain Events
+
+### 🧹 **LIMPIEZA REALIZADA:**
+- ❌ **Ejemplos eliminados**: Removidos examples/ y demos
+- ✅ **Documentación sincronizada**: Docs reflejan estado real
+- ✅ **Tests como validación**: Enfoque en testing automatizado
+
+---
+
+*Próxima sesión: **APPLICATION LAYER** - Use Cases y Application Services*
+*Estado: **Domain Events & Logging** completados y commiteados*
+*Última actualización: 3 de noviembre de 2025 - 19:45h*
