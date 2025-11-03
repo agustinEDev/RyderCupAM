@@ -129,6 +129,17 @@ def categorize_tests(output):
                     'team_repository': [],
                     'other': []
                 },
+                'errors': {
+                    'user_errors': [],
+                    'domain_errors': [],
+                    'validation_errors': [],
+                    'other': []
+                },
+                'unit_of_work': {
+                    'base_interface': [],
+                    'user_unit_of_work': [],
+                    'other': []
+                },
                 'services': {
                     'domain_services': [],
                     'other': []
@@ -223,7 +234,10 @@ def categorize_tests(output):
     }
     
     for line in output.splitlines():
-        if line.strip().startswith('tests/') and ('PASSED' in line or 'FAILED' in line or 'SKIPPED' in line):
+        # Manejar tanto el formato paralelo como el secuencial
+        # Formato paralelo: "[gw5] [  0%] PASSED tests/unit/..."
+        # Formato secuencial: "tests/unit/... PASSED"
+        if 'tests/' in line and ('PASSED' in line or 'FAILED' in line or 'SKIPPED' in line):
             # Determinar categoría basada en la ruta
             if 'tests/unit/' in line:
                 if '/domain/' in line:
@@ -246,12 +260,26 @@ def categorize_tests(output):
                         else:
                             categories['unit']['domain']['value_objects']['other'].append(line)
                     elif '/repositories/' in line:
-                        if 'user_repository' in line or '/user/' in line:
+                        if 'unit_of_work' in line:
+                            if 'user_unit_of_work' in line:
+                                categories['unit']['domain']['repositories']['user_repository'].append(line)
+                            elif '/shared/' in line or 'test_unit_of_work_interface' in line:
+                                categories['unit']['domain']['unit_of_work']['base_interface'].append(line)
+                            else:
+                                categories['unit']['domain']['unit_of_work']['other'].append(line)
+                        elif 'user_repository' in line or '/user/' in line:
                             categories['unit']['domain']['repositories']['user_repository'].append(line)
                         elif 'team_repository' in line or '/team/' in line:
                             categories['unit']['domain']['repositories']['team_repository'].append(line)
                         else:
                             categories['unit']['domain']['repositories']['other'].append(line)
+                    elif '/errors/' in line:
+                        if 'user_errors' in line or 'test_user_errors' in line:
+                            categories['unit']['domain']['errors']['user_errors'].append(line)
+                        elif 'validation' in line:
+                            categories['unit']['domain']['errors']['validation_errors'].append(line)
+                        else:
+                            categories['unit']['domain']['errors']['domain_errors'].append(line)
                     elif '/services/' in line:
                         categories['unit']['domain']['services']['domain_services'].append(line)
                     else:
@@ -413,6 +441,13 @@ def print_object_subcategories(category_name, objects_dict, category_icon):
         # Repositories
         'user_repository': ('👤🗄️', 'User Repository'),
         'team_repository': ('⚽🗄️', 'Team Repository'),
+        # Errors
+        'user_errors': ('👤⚠️', 'User Errors'),
+        'domain_errors': ('🏗️⚠️', 'Domain Errors'),
+        'validation_errors': ('✅⚠️', 'Validation Errors'),
+        # Unit of Work
+        'base_interface': ('🔄⚙️', 'Base Interface'),
+        'user_unit_of_work': ('👤🔄', 'User Unit of Work'),
         # Use Cases
         'user_use_cases': ('👤⚙️', 'User Use Cases'),
         'team_use_cases': ('⚽⚙️', 'Team Use Cases'),
@@ -492,6 +527,10 @@ def print_stats(stats, output, exit_code):
                 print_object_subcategories("Value Objects", domain_tests['value_objects'], "💎")
             if any(domain_tests['repositories'].values()):
                 print_object_subcategories("Interfaces de Repositorio", domain_tests['repositories'], "🗄️")
+            if any(domain_tests['unit_of_work'].values()):
+                print_object_subcategories("Unit of Work", domain_tests['unit_of_work'], "🔄")
+            if any(domain_tests['errors'].values()):
+                print_object_subcategories("Excepciones de Dominio", domain_tests['errors'], "⚠️")
             if any(domain_tests['services'].values()):
                 print_object_subcategories("Servicios de Dominio", domain_tests['services'], "⚙️")
         

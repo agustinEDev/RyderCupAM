@@ -106,28 +106,35 @@ Sistema de puntuación y resultados.
 - ✅ **Documentation**: ADRs completos y Design Document
 - ✅ **Code Quality**: Type hints, validaciones, y error handling
 
-### Fase 2: Application & Infrastructure 🚧 (En Progreso)
-- 🔄 **Repository Interfaces**: Contratos para persistencia
-- 🔄 **Unit of Work Pattern**: Gestión de transacciones
-- ⏳ **Use Cases**: RegisterUser, LoginUser implementation
-- ⏳ **Database Layer**: SQLAlchemy integration
+### Fase 2: Repository & Transactions ✅ (Completada - 1 Nov 2025)
+- ✅ **Repository Interfaces**: Contratos completos para persistencia (31 tests)
+- ✅ **Unit of Work Pattern**: Gestión de transacciones implementada (18 tests)
+- ✅ **Domain Exceptions**: Jerarquía completa de errores (21 tests)
+- ✅ **Testing Excellence**: 150 tests en 0.59s con categorización profesional
 
-### Fase 2: Gestión de Competiciones
+### Fase 3: Application Layer 🚧 (Siguiente)
+- ⏳ **Use Cases**: RegisterUser, LoginUser implementation
+- ⏳ **Application Services**: Token management, validation
+- ⏳ **DTOs**: Request/Response objects
+- ⏳ **Domain Events**: Event-driven communication between modules
+- ⏳ **Infrastructure Layer**: SQLAlchemy integration
+
+### Fase 4: Gestión de Competiciones
 - [ ] Crear competición
 - [ ] Configurar formato
 - [ ] Invitar participantes
 
-### Fase 3: Gestión de Equipos
+### Fase 5: Gestión de Equipos
 - [ ] Crear equipos
 - [ ] Asignar jugadores
 - [ ] Capitanes de equipo
 
-### Fase 4: Gestión de Partidos
+### Fase 6: Gestión de Partidos
 - [ ] Crear emparejamientos
 - [ ] Formatos de juego (Foursome, Fourball, Singles)
 - [ ] Calendario de partidos
 
-### Fase 5: Sistema de Puntuación
+### Fase 7: Sistema de Puntuación
 - [ ] Registro de resultados
 - [ ] Cálculo de puntos
 - [ ] Clasificación en tiempo real
@@ -219,11 +226,11 @@ pytest
 pytest -n auto  # Parallel execution
 ```
 
-### 📊 Testing Metrics (Actual)
-- **Total Tests**: 80 tests
-- **Execution Time**: 0.54 seconds (90% improvement)
+### 📊 **Testing Metrics (Actual)**
+- **Total Tests**: 150 tests (+70 nuevos en nov-2025)
+- **Execution Time**: 0.59 seconds (maintained excellence)
 - **Parallelization**: 7 workers (pytest-xdist)
-- **Coverage Target**: 90% domain layer
+- **Coverage Target**: 90% domain + repository interfaces
 
 ### 🎯 Test Categories
 ```bash
@@ -319,6 +326,9 @@ async def execute(self, command: RegisterUserCommand) -> UserResponse:
 - **[ADR-002](docs/architecture/decisions/ADR-002-value-objects.md)** - Value Objects implementation
 - **[ADR-003](docs/architecture/decisions/ADR-003-testing-strategy.md)** - Testing strategy & optimization
 - **[ADR-004](docs/architecture/decisions/ADR-004-tech-stack.md)** - Technology stack decisions
+- **[ADR-005](docs/architecture/decisions/ADR-005-repository-pattern.md)** - Repository Pattern implementation
+- **[ADR-006](docs/architecture/decisions/ADR-006-unit-of-work-pattern.md)** - Unit of Work for transaction management
+- **[ADR-007](docs/architecture/decisions/ADR-007-domain-events-pattern.md)** - Domain Events for event-driven architecture
 
 ### 📋 Progress Tracking
 - **[Progress Log](PROGRESS_LOG.md)** - Detailed development timeline

@@ -23,6 +23,10 @@ ryder-cup-manager/
 │   │   │   │   ├── services/           # Servicios de dominio
 │   │   │   │   │   ├── __init__.py
 │   │   │   │   │   └── password_hasher.py
+│   │   │   │   ├── events/             # Domain Events
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── user_registered_event.py
+│   │   │   │   │   └── user_logged_in_event.py
 │   │   │   │   ├── errors/
 │   │   │   │   │   ├── __init__.py
 │   │   │   │   │   └── user_errors.py
@@ -42,9 +46,15 @@ ryder-cup-manager/
 │   │   │   │   ├── services/           # Servicios de aplicación
 │   │   │   │   │   ├── __init__.py
 │   │   │   │   │   └── token_service.py
-│   │   │   │   ├── ports/              # Interfaces (Unit of Work)
+│   │   │   │   ├── event_handlers/     # Event Handlers
 │   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user_unit_of_work.py
+│   │   │   │   │   ├── welcome_email_handler.py
+│   │   │   │   │   ├── user_audit_handler.py
+│   │   │   │   │   └── user_metrics_handler.py
+│   │   │   │   ├── ports/              # Interfaces (Unit of Work, EventBus)
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── user_unit_of_work.py
+│   │   │   │   │   └── event_bus.py
 │   │   │   │   └── __init__.py
 │   │   │   │
 │   │   │   ├── infrastructure/         # Capa de infraestructura
@@ -57,6 +67,10 @@ ryder-cup-manager/
 │   │   │   │   │   ├── __init__.py
 │   │   │   │   │   ├── bcrypt_password_hasher.py
 │   │   │   │   │   └── jwt_token_service.py
+│   │   │   │   ├── events/             # Event Infrastructure
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── in_memory_event_bus.py
+│   │   │   │   │   └── event_handler_registry.py
 │   │   │   │   ├── http/
 │   │   │   │   │   ├── __init__.py
 │   │   │   │   │   └── user_controller.py
@@ -89,6 +103,10 @@ ryder-cup-manager/
 │   │   │   ├── entities/
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── base_entity.py
+│   │   │   ├── events/                 # Domain Events Base
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── domain_event.py
+│   │   │   │   └── event_handler.py
 │   │   │   ├── errors/
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── domain_error.py
@@ -99,7 +117,8 @@ ryder-cup-manager/
 │   │   │   ├── __init__.py
 │   │   │   ├── use_case.py
 │   │   │   ├── result.py
-│   │   │   └── unit_of_work.py         # Interfaz base UoW
+│   │   │   ├── unit_of_work.py         # Interfaz base UoW
+│   │   │   └── event_bus.py            # Interfaz EventBus
 │   │   │
 │   │   ├── infrastructure/
 │   │   │   ├── database/
