@@ -230,11 +230,29 @@ open http://localhost:8000/docs
 ### 🎯 Test Pyramid Implementado
 
 ```mermaid
-pyramid
-    title Test Strategy
-    top "🌐 E2E Tests (5%)"
-    middle "🔄 Integration Tests (15%)"
-    bottom "🔧 Unit Tests (80%)"
+graph TD
+    subgraph "🎯 Test Strategy Pyramid"
+        A["🌐 E2E Tests (5%)
+        Pocos, lentos, alta confianza
+        Full system integration"]
+        B["🔄 Integration Tests (15%)
+        Algunos, medios, confianza media
+        Component collaboration"]
+        C["🔧 Unit Tests (80%)
+        Muchos, rápidos, feedback inmediato
+        Isolated components"]
+    end
+    
+    A -.-> B
+    B -.-> C
+    
+    classDef e2e fill:#ffebee,stroke:#f44336,stroke-width:2px
+    classDef integration fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef unit fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    
+    class A e2e
+    class B integration
+    class C unit
 ```
 
 ### 📊 Estado Actual de Tests
