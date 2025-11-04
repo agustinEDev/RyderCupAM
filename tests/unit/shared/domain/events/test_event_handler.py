@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 from src.shared.domain.events.event_handler import EventHandler
 from src.shared.domain.events.domain_event import DomainEvent
-from src.users.domain.events.user_registered_event import UserRegisteredEvent
+from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 
 
 class TestEvent(DomainEvent):
@@ -118,8 +118,8 @@ class TestEventHandlerInterface:
         event = UserRegisteredEvent(
             user_id="123",
             email="test@test.com",
-            name="Test",
-            surname="User"
+            first_name="Test",
+            last_name="User"
         )
         
         # Act

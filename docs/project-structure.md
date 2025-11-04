@@ -1,617 +1,82 @@
-# Estructura del Proyecto
+# 📂 Estructura del Proyecto
 
-## 📁 Organización de Carpetas
+Este documento describe la organización de carpetas y ficheros del proyecto Ryder Cup Manager API. La estructura sigue los principios de **Clean Architecture** y **Monolito Modular**, separando el código por responsabilidades (capas) y por funcionalidades de negocio (módulos).
 
-```
-ryder-cup-manager/
-│
-├── src/
-│   ├── modules/                        # Módulos del sistema
-│   │   ├── user/                       # Módulo de usuarios
-│   │   │   ├── domain/                 # Capa de dominio
-│   │   │   │   ├── entities/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user.py
-│   │   │   │   ├── value_objects/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── email.py
-│   │   │   │   │   ├── password.py
-│   │   │   │   │   └── user_id.py
-│   │   │   │   ├── repositories/       # Interfaces de repositorios
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user_repository.py
-│   │   │   │   ├── services/           # Servicios de dominio
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── password_hasher.py
-│   │   │   │   ├── events/             # Domain Events
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── user_registered_event.py
-│   │   │   │   │   └── user_logged_in_event.py
-│   │   │   │   ├── errors/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user_errors.py
-│   │   │   │   └── __init__.py
-│   │   │   │
-│   │   │   ├── application/            # Capa de aplicación
-│   │   │   │   ├── use_cases/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── register_user/
-│   │   │   │   │   │   ├── __init__.py
-│   │   │   │   │   │   ├── register_user_use_case.py
-│   │   │   │   │   │   └── register_user_dto.py
-│   │   │   │   │   └── login_user/
-│   │   │   │   │       ├── __init__.py
-│   │   │   │   │       ├── login_user_use_case.py
-│   │   │   │   │       └── login_user_dto.py
-│   │   │   │   ├── services/           # Servicios de aplicación
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── token_service.py
-│   │   │   │   ├── event_handlers/     # Event Handlers
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── welcome_email_handler.py
-│   │   │   │   │   ├── user_audit_handler.py
-│   │   │   │   │   └── user_metrics_handler.py
-│   │   │   │   ├── ports/              # Interfaces (Unit of Work, EventBus)
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── user_unit_of_work.py
-│   │   │   │   │   └── event_bus.py
-│   │   │   │   └── __init__.py
-│   │   │   │
-│   │   │   ├── infrastructure/         # Capa de infraestructura
-│   │   │   │   ├── persistence/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── user_repository_impl.py
-│   │   │   │   │   ├── user_model.py
-│   │   │   │   │   └── user_unit_of_work_impl.py  # Implementación UoW
-│   │   │   │   ├── security/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── bcrypt_password_hasher.py
-│   │   │   │   │   └── jwt_token_service.py
-│   │   │   │   ├── events/             # Event Infrastructure
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── in_memory_event_bus.py
-│   │   │   │   │   └── event_handler_registry.py
-│   │   │   │   ├── http/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user_controller.py
-│   │   │   │   └── __init__.py
-│   │   │   │
-│   │   │   ├── presentation/           # Capa de presentación
-│   │   │   │   ├── schemas/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   ├── register_request.py
-│   │   │   │   │   ├── login_request.py
-│   │   │   │   │   └── user_response.py
-│   │   │   │   ├── mappers/
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── user_mapper.py
-│   │   │   │   └── __init__.py
-│   │   │   │
-│   │   │   └── __init__.py
-│   │   │
-│   │   ├── competition/                # Módulo de competiciones (futuro)
-│   │   ├── team/                       # Módulo de equipos (futuro)
-│   │   ├── match/                      # Módulo de partidos (futuro)
-│   │   ├── scoring/                    # Módulo de puntuación (futuro)
-│   │   └── __init__.py
-│   │
-│   ├── shared/                         # Código compartido
-│   │   ├── domain/
-│   │   │   ├── value_objects/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── base_id.py
-│   │   │   ├── entities/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── base_entity.py
-│   │   │   ├── events/                 # ✅ Domain Events System
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── domain_event.py     # ✅ Base class implementada
-│   │   │   │   ├── event_handler.py    # ✅ Handler interface
-│   │   │   │   ├── event_bus.py        # ✅ EventBus interface
-│   │   │   │   ├── in_memory_event_bus.py  # ✅ EventBus implementation
-│   │   │   │   └── exceptions.py       # ✅ Event exceptions
-│   │   │   ├── errors/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── domain_error.py
-│   │   │   │   └── not_found_error.py
-│   │   │   └── __init__.py
-│   │   │
-│   │   ├── application/
-│   │   │   ├── __init__.py
-│   │   │   ├── use_case.py
-│   │   │   ├── result.py
-│   │   │   ├── unit_of_work.py         # ✅ Interfaz base UoW
-│   │   │   └── event_bus.py            # Interfaz EventBus (deprecated - moved to domain)
-│   │   │
-│   │   ├── infrastructure/
-│   │   │   ├── database/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── database.py
-│   │   │   │   └── sqlalchemy_unit_of_work.py  # UoW base SQLAlchemy
-│   │   │   ├── logging/                # ✅ Sistema de Logging
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── logger.py           # ✅ Logger interface
-│   │   │   │   ├── config.py           # ✅ Configuración logging
-│   │   │   │   ├── formatters.py       # ✅ Text/JSON/Structured formatters
-│   │   │   │   ├── python_logger.py    # ✅ Implementación principal
-│   │   │   │   ├── factory.py          # ✅ LoggerFactory singleton
-│   │   │   │   └── event_handlers.py   # ✅ Integration Domain Events
-│   │   │   ├── http/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── exception_handlers.py
-│   │   │   └── __init__.py
-│   │   │
-│   │   └── __init__.py
-│   │
-│   ├── users/                          # ✅ Módulo Users (Implementado)
-│   │   ├── domain/
-│   │   │   ├── entities/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── user.py             # ✅ User entity con event collection
-│   │   │   ├── value_objects/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── email.py            # ✅ Email value object
-│   │   │   │   ├── password.py         # ✅ Password value object  
-│   │   │   │   └── user_id.py          # ✅ UserId value object
-│   │   │   ├── repositories/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── user_repository.py  # ✅ Repository interface
-│   │   │   │   └── user_unit_of_work.py # ✅ UoW interface
-│   │   │   ├── events/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── user_registered_event.py # ✅ UserRegisteredEvent
-│   │   │   ├── handlers/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── user_registered_event_handler.py # ✅ Event handler
-│   │   │   ├── errors/
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── __init__.py         # ✅ User exceptions
-│   │   │   └── __init__.py
-│   │   │
-│   │   └── __init__.py
-│   │
-│   ├── config/                         # Configuración
-│   │   ├── __init__.py
-│   │   ├── database.py
-│   │   ├── auth.py
-│   │   └── settings.py
-│   │
-│   └── main.py                         # Punto de entrada
-│
-├── tests/                              # Tests
-│   ├── unit/
-│   │   ├── __init__.py
-│   │   └── modules/
-│   │       └── user/
-│   │           ├── __init__.py
-│   │           ├── test_user_entity.py
-│   │           ├── test_email_vo.py
-│   │           └── test_password_vo.py
-│   ├── integration/
-│   │   ├── __init__.py
-│   │   └── modules/
-│   │       └── user/
-│   │           ├── __init__.py
-│   │           ├── test_register_use_case.py
-│   │           ├── test_login_use_case.py
-│   │           └── test_user_unit_of_work.py
-│   └── e2e/
-│       ├── __init__.py
-│       └── test_user_endpoints.py
-│
-├── alembic/                            # Migraciones de BD
-│   ├── versions/
-│   └── env.py
-│
-├── docs/                               # Documentación
-│   ├── architecture/
-│   │   ├── decisions/                  # ✅ ADRs (8 decisions)
-│   │   └── diagrams/
-│   ├── patterns/
-│   │   └── unit-of-work.md            # Documentación del patrón
-│   └── modules/
-│       └── user-management.md
-│
-├── scripts/                            # Scripts útiles
-│   └── setup_database.sh
-│
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── requirements-dev.txt
-├── pyproject.toml
-├── alembic.ini
-└── README.md
-```
+## 🌳 Estructura de Directorios Detallada
 
-## 🎯 Explicación de las Capas
-
-### Domain Layer (Núcleo)
-- **Entities**: Clases de negocio con identidad única
-- **Value Objects**: Clases inmutables usando `@dataclass(frozen=True)`
-- **Repository Interfaces**: Protocolos (ABC) para persistencia
-- **Domain Services**: Lógica de negocio que no pertenece a una entidad
-- **Domain Errors**: Excepciones personalizadas del dominio
-
-### Application Layer
-- **Use Cases**: Orquestación de casos de uso usando patrón Command
-- **DTOs**: Dataclasses para transferencia entre capas
-- **Application Services**: Servicios auxiliares (tokens, emails, etc.)
-- **Ports (Unit of Work)**: Interfaces para gestión de transacciones
-
-### Infrastructure Layer
-- **Persistence**: Implementación de repositorios con SQLAlchemy
-- **Unit of Work Implementation**: Implementación concreta del UoW con SQLAlchemy
-- **External Services**: APIs externas, librerías de terceros
-- **Security**: Implementación de seguridad (bcrypt, JWT)
-- **HTTP**: Controllers usando FastAPI routers
-
-### Presentation Layer
-- **Schemas**: Pydantic models para validación de API
-- **Mappers**: Conversión entre schemas y entidades
-- **Validators**: Validación de entrada con Pydantic
-
-## 📋 Reglas de Dependencia
+El siguiente árbol representa la estructura completa y actual del proyecto.
 
 ```
-┌──────────────────────────────────┐
-│   Infrastructure & Presentation  │  ← Puede usar todo
-└────────────────┬─────────────────┘
-                 ↓
-┌────────────────────────────────┐
-│        Application             │  ← Usa Domain + UoW Interface
-└────────────────┬───────────────┘
-                 ↓
-┌────────────────────────────────┐
-│          Domain                │  ← No depende de nada
-└────────────────────────────────┘
+.
+├── alembic/ # 📜 Scripts y configuración de migraciones de base de datos
+│ └── versions/ # - Ficheros de migración versionados
+├── docs/ # 📚 Documentación del proyecto
+│ ├── architecture/
+│ │ └── decisions/ # - Architecture Decision Records (ADRs)
+│ └── project-structure.md
+├── src/ # 🐍 Código fuente de la aplicación
+│ ├── config/ # - Configuración de infraestructura (ej: conexión a BD)
+│ │ └── database.py
+│ ├── modules/ # - Módulos de negocio (ej: user)
+│ │ └── user/
+│ │ ├── application/ # - Casos de uso y lógica de aplicación
+│ │ │ └── handlers/ # - Manejadores de eventos de dominio
+│ │ ├── domain/ # - Lógica y reglas de negocio puras (entidades, VOs)
+│ │ └── infrastructure/ # - Implementación técnica (repositorios, mappers)
+│ │ └── persistence/
+│ │ └── sqlalchemy/
+│ └── shared/ # - Código compartido entre módulos
+│ ├── domain/ # - Abstracciones de dominio (Eventos, UoW, etc.)
+│ └── infrastructure/ # - Implementaciones compartidas (EventBus, Logging)
+├── tests/ # 🧪 Tests automatizados
+│ ├── integration/ # - Tests que verifican la colaboración entre componentes
+│ │ ├── api/
+│ │ ├── domain_events/
+│ │ └── modules/
+│ └── unit/ # - Tests que verifican componentes de forma aislada
+│ ├── modules/
+│ └── shared/
+├── .env # - Fichero de variables de entorno (ignorado por Git)
+├── .gitignore # - Ficheros y carpetas ignorados por Git
+├── alembic.ini # - Fichero de configuración principal de Alembic
+├── docker-compose.yml # - Orquestación de los contenedores de desarrollo (app + db)
+├── Dockerfile # - "Receta" para construir la imagen Docker de la aplicación
+├── main.py # - Punto de entrada de la aplicación FastAPI
+├── PROGRESS_LOG.md # - Bitácora de progreso y decisiones de la sesión
+├── README.md # - Portada y resumen general del proyecto
+└── requirements.txt # - Dependencias de Python del proyecto
 ```
 
-**Reglas:**
-1. Domain no depende de ninguna capa (solo stdlib de Python)
-2. Application solo depende de Domain e interfaces (ports)
-3. Infrastructure implementa las interfaces definidas en Application
-4. Infrastructure y Presentation pueden usar Application y Domain
-5. Las dependencias siempre apuntan hacia el dominio
+## 🔬 Descripción Detallada de Componentes Clave
 
-## 🔄 Flujo de una Petición con Unit of Work
+### `src/` - El Corazón de la Aplicación
 
-```
-HTTP Request (FastAPI)
-    ↓
-Router → Controller (Infrastructure)
-    ↓
-Pydantic Schema Validation (Presentation)
-    ↓
-Mapper (Presentation) → DTO
-    ↓
-Use Case (Application)
-    ↓
-┌─────────────────────────────────────┐
-│      Unit of Work (UoW)             │
-│  ┌───────────────────────────────┐  │
-│  │ async with uow:               │  │
-│  │   await uow.users.save(user)  │  │
-│  │   await uow.commit()          │  │
-│  └───────────────────────────────┘  │
-│         ↓                            │
-│  Repository Implementation          │
-│         ↓                            │
-│  SQLAlchemy Session                 │
-└─────────────────────────────────────┘
-    ↓
-Database
-```
+-   **`src/config/database.py`**: Configura la conexión a la base de datos con SQLAlchemy y registra adaptadores para nuestros `ValueObjects`.
+-   **`src/modules/user/`**: Contiene todo el código relacionado con la gestión de usuarios, organizado por capas:
+    -   `domain/`: Lógica de negocio pura. Aquí viven las entidades (`User`), `ValueObjects` (`UserId`, `Email`), y las **interfaces** de los repositorios y del `Unit of Work`.
+    -   `application/handlers/`: Implementaciones concretas de los manejadores de eventos. Orquestan acciones en respuesta a eventos de dominio (ej: enviar un email cuando un usuario se registra).
+    -   `infrastructure/persistence/sqlalchemy/`: Implementa los contratos del dominio usando SQLAlchemy.
+        -   `mappers.py`: Define cómo la entidad `User` se mapea a la tabla `users`. Utiliza `TypeDecorator` y `composite` para manejar los `ValueObjects`.
+        -   `user_repository.py`: Implementación del `UserRepositoryInterface`.
+        -   `unit_of_work.py`: Implementación del `UserUnitOfWorkInterface`.
+-   **`src/shared/`**: Código agnóstico al dominio de negocio, pero fundamental para la arquitectura.
+    -   `domain/`: Interfaces genéricas como `UnitOfWorkInterface`, `DomainEvent`, `EventHandler`.
+    -   `infrastructure/`: Implementaciones concretas como `InMemoryEventBus` y el sistema de `Logging`.
 
-## 🏗️ Patrón Unit of Work
+### `tests/` - Garantía de Calidad
 
-### Interfaz Base (Shared)
+-   **`tests/unit/`**: Tests rápidos y aislados que no tocan la base de datos ni la red. Su estructura refleja la de `src/`, probando la lógica de dominio y las interfaces de forma pura.
+-   **`tests/integration/`**: Tests que verifican la colaboración entre varias partes del sistema. Requieren que el entorno Docker (`docker-compose up`) esté activo.
+    -   `api/`: Prueban los endpoints de FastAPI.
+    -   `domain_events/`: Verifican el flujo completo desde que se genera un evento hasta que su manejador lo procesa.
+    -   `modules/.../persistence/`: Prueban que la capa de persistencia funciona correctamente contra una base de datos real.
 
-**Ubicación**: `src/shared/application/unit_of_work.py`
+## 🗺️ Visión a Futuro
 
-```python
-from abc import ABC, abstractmethod
-from typing import Protocol
+A medida que el proyecto crezca, esta estructura se expandirá:
 
-class UnitOfWork(ABC):
-    """Interfaz base para Unit of Work."""
-    
-    @abstractmethod
-    async def __aenter__(self):
-        """Inicia una transacción."""
-        pass
-    
-    @abstractmethod
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Finaliza una transacción (commit o rollback)."""
-        pass
-    
-    @abstractmethod
-    async def commit(self) -> None:
-        """Confirma los cambios."""
-        pass
-    
-    @abstractmethod
-    async def rollback(self) -> None:
-        """Revierte los cambios."""
-        pass
-```
+-   **Nuevos Módulos**: Se crearán directorios como `src/modules/tournament/`, cada uno con sus capas `domain`, `application`, e `infrastructure`.
+-   **Casos de Uso**: La capa `application/` se poblará con los casos de uso (Use Cases) que orquestan la lógica de dominio para realizar acciones concretas.
+-   **Capa de Presentación**: La capa `infrastructure/` contendrá los endpoints de FastAPI que exponen los casos de uso a través de la API REST.
 
-### Implementación SQLAlchemy (Shared)
-
-**Ubicación**: `src/shared/infrastructure/database/sqlalchemy_unit_of_work.py`
-
-```python
-from sqlalchemy.ext.asyncio import AsyncSession
-
-class SQLAlchemyUnitOfWork(UnitOfWork):
-    """Implementación base de UoW con SQLAlchemy."""
-    
-    def __init__(self, session_factory):
-        self._session_factory = session_factory
-        self._session: AsyncSession | None = None
-    
-    async def __aenter__(self):
-        self._session = self._session_factory()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            await self.rollback()
-        await self._session.close()
-    
-    async def commit(self) -> None:
-        await self._session.commit()
-    
-    async def rollback(self) -> None:
-        await self._session.rollback()
-```
-
-### Interfaz Específica del Módulo (Application)
-
-**Ubicación**: `src/modules/user/application/ports/user_unit_of_work.py`
-
-```python
-from abc import abstractmethod
-from src.shared.application.unit_of_work import UnitOfWork
-from src.modules.user.domain.repositories.user_repository import UserRepository
-
-class UserUnitOfWork(UnitOfWork):
-    """Unit of Work para el módulo User."""
-    
-    @property
-    @abstractmethod
-    def users(self) -> UserRepository:
-        """Repositorio de usuarios."""
-        pass
-```
-
-### Implementación Concreta (Infrastructure)
-
-**Ubicación**: `src/modules/user/infrastructure/persistence/user_unit_of_work_impl.py`
-
-```python
-from src.shared.infrastructure.database.sqlalchemy_unit_of_work import SQLAlchemyUnitOfWork
-from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
-from src.modules.user.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
-
-class UserUnitOfWorkImpl(SQLAlchemyUnitOfWork, UserUnitOfWork):
-    """Implementación del UoW para el módulo User."""
-    
-    @property
-    def users(self) -> UserRepository:
-        if not hasattr(self, '_users_repo'):
-            self._users_repo = UserRepositoryImpl(self._session)
-        return self._users_repo
-```
-
-### Uso en Cases de Uso
-
-**Ubicación**: `src/modules/user/application/use_cases/register_user/register_user_use_case.py`
-
-```python
-class RegisterUserUseCase:
-    def __init__(
-        self,
-        uow: UserUnitOfWork,
-        password_hasher: PasswordHasher
-    ):
-        self._uow = uow
-        self._password_hasher = password_hasher
-    
-    async def execute(self, command: RegisterUserCommand) -> UserResponse:
-        async with self._uow:
-            # Verificar que el email no existe
-            if await self._uow.users.exists_by_email(Email.create(command.email)):
-                raise EmailAlreadyExistsError(command.email)
-            
-            # Crear usuario
-            user = await User.create(
-                email=Email.create(command.email),
-                plain_password=command.password,
-                first_name=command.first_name,
-                last_name=command.last_name,
-                hasher=self._password_hasher
-            )
-            
-            # Guardar usuario
-            await self._uow.users.save(user)
-            
-            # Commit de la transacción
-            await self._uow.commit()
-        
-        return UserResponse(...)
-```
-
-## 📝 Convenciones de Nombres
-
-### Python Style Guide (PEP 8)
-- **Modules/Packages**: `snake_case` (ej: `user_repository.py`)
-- **Classes**: `PascalCase` (ej: `UserRepository`, `RegisterUserUseCase`)
-- **Functions/Methods**: `snake_case` (ej: `find_by_email()`)
-- **Constants**: `UPPER_SNAKE_CASE` (ej: `MAX_LOGIN_ATTEMPTS`)
-- **Private**: Prefijo `_` (ej: `_validate_password()`)
-
-### Sufijos Específicos
-- **Entities**: `.py` (ej: `user.py` → clase `User`)
-- **Value Objects**: `.py` (ej: `email.py` → clase `Email`)
-- **Use Cases**: `_use_case.py` (ej: `register_user_use_case.py`)
-- **Repositories**: `_repository.py` (interfaz) / `_repository_impl.py` (implementación)
-- **Unit of Work**: `_unit_of_work.py` (interfaz) / `_unit_of_work_impl.py` (implementación)
-- **DTOs**: `_dto.py` (ej: `register_user_dto.py`)
-- **Tests**: `test_*.py` (ej: `test_user_entity.py`)
-- **Schemas**: `_request.py` / `_response.py` (ej: `register_request.py`)
-
-## 🛠️ Dependencias Principales
-
-### requirements.txt
-```
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-sqlalchemy==2.0.35
-alembic==1.13.3
-pydantic==2.9.0
-pydantic-settings==2.5.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
-psycopg2-binary==2.9.9
-```
-
-### requirements-dev.txt
-```
-pytest==8.3.0
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
-httpx==0.27.0
-faker==30.0.0
-black==24.8.0
-ruff==0.6.0
-mypy==1.11.0
-```
-
-## 🏗️ Configuración del Proyecto
-
-### pyproject.toml
-```toml
-[tool.black]
-line-length = 100
-target-version = ['py311']
-
-[tool.ruff]
-line-length = 100
-select = ["E", "F", "I"]
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-```
-
-## 📦 Estructura de Imports
-
-```python
-# Ejemplo en un use case
-from typing import Protocol  # Standard library
-from dataclasses import dataclass  # Standard library
-
-from src.modules.user.domain.entities.user import User  # Domain
-from src.modules.user.domain.repositories.user_repository import UserRepository  # Domain
-from src.modules.user.domain.errors.user_errors import EmailAlreadyExistsError  # Domain
-from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork  # Application
-from src.shared.application.use_case import UseCase  # Shared
-```
-
-**Orden de imports:**
-1. Standard library
-2. Third-party packages
-3. Domain layer
-4. Application layer (incluyendo ports)
-5. Infrastructure layer
-6. Shared
-
-## 🗃️ Base de Datos
-
-### SQLAlchemy Models vs Domain Entities
-- **Models** (Infrastructure): Clases SQLAlchemy para ORM
-- **Entities** (Domain): POPOs (Plain Old Python Objects)
-- **Mapper**: Convierte entre Model ↔ Entity
-- **Unit of Work**: Gestiona la sesión y transacciones de SQLAlchemy
-
-### Migraciones con Alembic
-```bash
-# Crear migración
-alembic revision --autogenerate -m "create users table"
-
-# Aplicar migraciones
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
-
-## 🧪 Testing del Unit of Work
-
-### Test de Integración
-
-```python
-import pytest
-from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
-
-@pytest.mark.asyncio
-async def test_unit_of_work_commits_changes(uow: UserUnitOfWork):
-    """Verifica que el UoW hace commit de los cambios."""
-    async with uow:
-        user = await User.create(...)
-        await uow.users.save(user)
-        await uow.commit()
-    
-    # Verificar que el usuario fue guardado
-    async with uow:
-        saved_user = await uow.users.find_by_email(user.email)
-        assert saved_user is not None
-
-@pytest.mark.asyncio
-async def test_unit_of_work_rollbacks_on_error(uow: UserUnitOfWork):
-    """Verifica que el UoW hace rollback en caso de error."""
-    try:
-        async with uow:
-            user = await User.create(...)
-            await uow.users.save(user)
-            raise Exception("Simulated error")
-    except Exception:
-        pass
-    
-    # Verificar que el usuario NO fue guardado
-    async with uow:
-        saved_user = await uow.users.find_by_email(user.email)
-        assert saved_user is None
-```
-
-## 🎯 Ventajas del Unit of Work
-
-### ✅ Transaccionalidad
-- **Atomicidad**: Todas las operaciones se confirman o revierten juntas
-- **Consistencia**: Los datos mantienen su integridad
-- **Control**: Punto único para gestionar transacciones
-
-### ✅ Testabilidad
-- **Mock fácil**: Se puede mockear toda la UoW
-- **Tests aislados**: No se necesita BD real para tests unitarios
-- **Fixtures**: Fácil crear fixtures para tests
-
-### ✅ Desacoplamiento
-- **Independencia**: Casos de uso no dependen de SQLAlchemy
-- **Flexibilidad**: Fácil cambiar de ORM o BD
-- **Clean Architecture**: Respeta las reglas de dependencia
-
-### ✅ Mantenibilidad
-- **Punto único**: Un lugar para lógica de transacciones
-- **Reutilización**: Base UoW compartida entre módulos
-- **Extensibilidad**: Fácil añadir nuevos repositorios
+Esta estructura modular nos permite añadir nuevas funcionalidades de forma aislada y organizada, manteniendo la complejidad bajo control.

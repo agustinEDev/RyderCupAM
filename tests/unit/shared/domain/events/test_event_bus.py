@@ -15,7 +15,7 @@ from src.shared.domain.events.in_memory_event_bus import InMemoryEventBus
 from src.shared.domain.events.event_handler import EventHandler
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.events.exceptions import EventHandlerError
-from src.users.domain.events.user_registered_event import UserRegisteredEvent
+from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 
 
 class TestEvent(DomainEvent):

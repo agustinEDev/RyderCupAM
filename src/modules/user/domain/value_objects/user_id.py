@@ -1,55 +1,47 @@
-# -*- coding: utf-8 -*-
-"""
-UserId Value Object - Identificador único para usuarios.
-
-Este Value Object representa el identificador único de un usuario.
-"""
-
+# src/modules/user/domain/value_objects/user_id.py
 import uuid
 from dataclasses import dataclass
-
 
 class InvalidUserIdError(Exception):
     """Excepción lanzada cuando un UserId no es válido."""
     pass
 
-
 @dataclass(frozen=True)
 class UserId:
     """
     Value Object para identificadores únicos de usuario.
-    
-    Inmutable y validado automáticamente.
+    Almacena internamente un objeto UUID, garantizando siempre un estado válido.
     """
-    
-    value: str
-    
-    def __post_init__(self):
-        """Validación automática después de la inicialización."""
-        if not self._is_valid_uuid(self.value):
-            raise InvalidUserIdError(f"'{self.value}' no es un UUID válido")
-    
+    value: uuid.UUID
+
+    def __init__(self, value: uuid.UUID | str):
+        """
+        Constructor que acepta tanto un objeto UUID como un string UUID.
+        Esto proporciona flexibilidad al crear instancias.
+        """
+        val = None
+        if isinstance(value, uuid.UUID):
+            val = value
+        elif isinstance(value, str):
+            try:
+                val = uuid.UUID(value)
+            except ValueError:
+                raise InvalidUserIdError(f"'{value}' no es un string UUID válido")
+        else:
+            raise InvalidUserIdError(f"Se esperaba un UUID o un string, pero se recibió {type(value)}")
+
+        # Usar object.__setattr__ porque la clase es frozen
+        object.__setattr__(self, 'value', val)
+
     @classmethod
     def generate(cls) -> 'UserId':
-        """Genera un nuevo UserId con UUID aleatorio."""
-        new_uuid = str(uuid.uuid4())
-        return cls(new_uuid)
-    
-    @staticmethod
-    def _is_valid_uuid(uuid_string: str) -> bool:
-        """Valida si un string tiene formato UUID válido."""
-        if not isinstance(uuid_string, str):
-            return False
-        try:
-            uuid_obj = uuid.UUID(uuid_string)
-            return str(uuid_obj) == uuid_string
-        except (ValueError, TypeError):
-            return False
-    
+        """Genera un nuevo UserId con un UUID v4 aleatorio."""
+        return cls(uuid.uuid4())
+
     def __str__(self) -> str:
-        """Representación string legible."""
-        return self.value
-    
+        """Representación string del UUID."""
+        return str(self.value)
+
     def __eq__(self, other) -> bool:
         """Operador de igualdad."""
         return isinstance(other, UserId) and self.value == other.value

@@ -8,7 +8,6 @@ from ..value_objects.password import Password
 from src.shared.domain.events.domain_event import DomainEvent
 
 
-@dataclass
 class User:
     """
     Entidad User - Representa un usuario en el sistema.
@@ -17,21 +16,25 @@ class User:
     y participar en torneos Ryder Cup.
     """
     
-    # Identificador único usando Value Object
-    id: Optional[UserId] = None
-    
-    # Campos básicos usando Value Objects
-    email: Optional[Email] = None
-    password: Optional[Password] = None
-    first_name: str = ""
-    last_name: str = ""
-    
-    # TODO: ¿Cómo manejar las fechas?
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    
-    # Colección de eventos de dominio
-    _domain_events: List[DomainEvent] = field(default_factory=list, init=False)
+    def __init__(
+        self,
+        id: Optional[UserId],
+        email: Optional[Email],
+        password: Optional[Password],
+        first_name: str,
+        last_name: str,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
+        domain_events: Optional[List[DomainEvent]] = None
+    ):
+        self.id = id
+        self.email = email
+        self.password = password
+        self.first_name = first_name
+        self.last_name = last_name
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+        self._domain_events: List[DomainEvent] = domain_events or []
     
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
@@ -85,12 +88,12 @@ class User:
         )
         
         # Generar evento de registro
-        from src.users.domain.events.user_registered_event import UserRegisteredEvent
+        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
         user._add_domain_event(UserRegisteredEvent(
             user_id=str(user_id.value),
             email=email_str,
-            name=first_name,
-            surname=last_name
+            first_name=first_name,
+            last_name=last_name
         ))
         
         return user

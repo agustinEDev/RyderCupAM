@@ -1,565 +1,140 @@
-# 📋 PROGRESS LOG - Ryder Cup Manager API
+# 📋 Ryder Cup Manager API - Progress Log
 
-**Fecha de creación**: 31 de octubre de 2025  
-**Última actualización**: 3 de noviembre de 2025 - 19:30h  
-**Proyecto**: Sistema de gestión para torneos Ryder Cup  
-**Arquitectura**: Clean Architecture + FastAPI  
-**Enfoque**: Desarrollo paso a paso guiado (el usuario aprende cada paso)
-
----
-
-## 🎯 OBJETIVO DEL PROYECTO
-
-Crear una API REST completa para gestión de torneos Ryder Cup con:
-- **Gestión de usuarios** (registro, login, perfiles)
-- **Gestión de equipos** (Europa vs América)
-- **Gestión de partidos** y resultados
-- **Sistema de puntuación** del torneo
-- **Arquitectura limpia** y escalable
+**Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup.  
+**Arquitectura**: Clean Architecture, Event-Driven, FastAPI.  
+**Creación**: 31 de octubre de 2025  
+**Última Actualización**: 4 de noviembre de 2025
 
 ---
 
-## 📊 ESTADO ACTUAL DEL PROYECTO
+## 🤝 **METODOLOGÍA DE COLABORACIÓN**
 
-### 🏆 **MILESTONE ALCANZADO: CAPA DE DOMINIO COMPLETA**
-- ✅ **80 tests ejecutándose en 1.4 segundos** (optimizado con paralelización)
-- ✅ **100% de cobertura** en entidades y value objects implementados
-- ✅ **Clean Architecture** base establecida correctamente
+Estas son las directrices para nuestra forma de trabajar en este proyecto:
 
----
+#### **Mi Rol (Asistente IA)**
+- 👨‍🏫 **Perfil Didáctico**: Mi objetivo principal es guiarte y enseñarte. Explicaré el *porqué* de cada decisión, los patrones de diseño utilizados y las mejores prácticas recomendadas.
+- 🤔 **Proponente, no Implementador**: Te propondré los cambios, la estructura de los ficheros y los fragmentos de código. Sin embargo, **tú serás quien los escriba o los añada al proyecto**.
+- ❓ **Guía a través de Preguntas**: Te guiaré paso a paso, haciendo preguntas para asegurar que entiendes el proceso y estás de acuerdo con la dirección que tomamos. No crearé ficheros completos de una sola vez.
+- ✅ **Validador**: Una vez que hayas implementado un paso, lo revisaré y te daré feedback si es necesario.
 
-## ✅ PROGRESO COMPLETADO DETALLADO
+#### **Tu Rol (Desarrollador)**
+- ⌨️ **Implementador Activo**: Eres el responsable de escribir el código y aplicar los cambios en los ficheros.
+- 👍 **Revisor y Aprobador**: Tienes la última palabra. Cada paso del desarrollo requiere tu revisión y aprobación antes de continuar.
 
-### 1. **Estructura del Proyecto** ✅
-```
-RyderCupAm/
-├── docs/                           # Documentación
-├── src/                            # Código fuente
-│   ├── modules/user/               # Módulo de usuarios
-│   │   └── domain/entities/
-│   │       └── user.py            # ✅ Entidad User creada
-│   ├── config/                     # Configuraciones
-│   └── shared/                     # Código compartido
-├── tests/                          # ✅ Estructura completa creada
-│   ├── unit/                       # Tests unitarios
-│   └── integration/                # Tests de integración
-├── main.py                         # ✅ FastAPI app funcionando
-├── requirements.txt                # ✅ Dependencias organizadas
-└── .venv/                          # Entorno virtual activo
-```
-
-### 2. **Aplicación Base** ✅
-- **main.py**: FastAPI con endpoint de salud funcionando
-- **Servidor**: Uvicorn configurado correctamente
-- **Encoding**: UTF-8 configurado para caracteres españoles
-
-### 3. **Entidad User Evolucionada** ✅
-- **Ubicación**: `src/modules/user/domain/entities/user.py`
-- **Evolución**: De campos primitivos a Value Objects (refactorizada)
-- **Características actuales**:
-  - Factory method `create()` para instanciación
-  - Integración con Value Objects (UserId, Email, Password)
-  - Método `verify_password()` con bcrypt
-  - Método `has_valid_email()` con validación avanzada
-  - **18 tests unitarios** (100% pasando)
-
-### 4. **Value Objects Implementados** ✅
-#### 4.1. **UserId Value Object** ✅
-- **Características**: UUID v4, inmutable, validación automática
-- **Funcionalidades**: Generación única, comparación, representación segura
-- **Tests**: 12 tests unitarios (generación, validación, inmutabilidad)
-
-#### 4.2. **Email Value Object** ✅ 
-- **Características**: Normalización automática, validación regex avanzada
-- **Validaciones**: Previene puntos consecutivos, emails que empiecen/terminen con punto
-- **Mejoras implementadas**: Regex más estricta que rechaza casos edge problemáticos
-- **Tests**: 14 tests unitarios (creación, validación, casos edge)
-
-#### 4.3. **Password Value Object** ✅
-- **Características**: Hashing bcrypt con salt, validación de fortaleza
-- **Seguridad**: rounds=12 en producción, rounds=4 en tests (optimizado)
-- **Validaciones**: Mínimo 8 chars, mayúscula, minúscula, número
-- **Tests**: 23 tests unitarios (hashing, verificación, inmutabilidad)
-
-### 5. **Sistema de Testing Avanzado** ✅
-#### 5.1. **Infraestructura de Tests**
-- **Framework**: pytest 8.3.0 con configuración avanzada
-- **Paralelización**: pytest-xdist con 7 workers concurrentes
-- **Optimización**: bcrypt acelerado para tests (TESTING=true)
-- **Cobertura**: 80 tests ejecutándose en 1.4 segundos
-
-#### 5.2. **Script de Testing Personalizado** ✅
-- **Archivo**: `dev_tests.py` 
-- **Características**:
-  - Presentación organizada por Clean Architecture layers
-  - Separación por objetos específicos (User, UserId, Email, Password)
-  - Estadísticas detalladas con iconos y colores
-  - Medición de rendimiento y duración
-  - Solo muestra secciones con tests reales
-
-#### 5.3. **Organización de Tests por Arquitectura**
-```
-🔬 TESTS UNITARIOS
-  🏗️ CAPA DE DOMINIO
-    📦 ENTIDADES
-      👤 User (18/18 tests - 100%)
-    💎 VALUE OBJECTS  
-      🆔 User ID (12/12 tests - 100%)
-      📧 Email (14/14 tests - 100%) 
-      🔐 Password (23/23 tests - 100%)
-      
-🔗 TESTS DE INTEGRACIÓN
-  🌐 API
-    🎯 ENDPOINTS
-      💚 Health Endpoints (13/13 tests - 100%)
-```
-
-### 6. **Dependencias y Configuración** ✅
-#### 6.1. **Dependencias Principales**
-```txt
-# WEB FRAMEWORK Y SERVIDOR
-fastapi==0.115.0       # Framework web moderno
-uvicorn[standard]==0.30.0  # Servidor ASGI
-
-# TESTING Y DESARROLLO  
-pytest==8.3.0         # Framework de testing
-httpx==0.27.0          # Cliente HTTP para tests
-```
-- **Estado**: Todas instaladas y verificadas ✅
-- **Entorno**: .venv activo y funcionando
-
-### 5. **Estructura de Tests** ✅
-```
-tests/
-├── __init__.py
-├── unit/                           # Tests unitarios
-│   ├── modules/user/domain/entities/
-│   │   └── __init__.py (listo para test_user.py)
-└── integration/                    # Tests de integración
-    └── api/
-        └── __init__.py (listo para test_health.py)
-```
-
-#### 6.2. **Dependencias de Testing**
-```txt
-# TESTING Y OPTIMIZACIÓN
-pytest==8.3.0         # Framework de testing moderno
-pytest-xdist==3.8.0   # Paralelización de tests (NUEVO)
-httpx==0.27.0          # Cliente HTTP para tests de API
-
-# SEGURIDAD 
-bcrypt==4.1.2          # Hashing de passwords seguro
-```
-
-#### 6.3. **Configuraciones Optimizadas**
-- **conftest.py**: Variable TESTING=true para acelerar bcrypt
-- **dev_tests.py**: Script personalizado con paralelización automática
-- **Rendimiento**: De ~5s a 1.4s de ejecución (mejora del 70%)
+#### **Nuestro Flujo de Trabajo**
+1.  **Definir el Objetivo**: Acordamos juntos la meta de la sesión (ej: "Implementar el caso de uso de registro").
+2.  **Desglose Paso a Paso**: Desglosaré la tarea en pasos pequeños y manejables.
+3.  **Proponer y Explicar**: Para cada paso, te daré el contexto y el código sugerido.
+4.  **Tu Implementas**: Tú añades el código al proyecto.
+5.  **Tú Confirmas**: Me das tu visto bueno para continuar.
+6.  **Iterar**: Repetimos el proceso hasta completar el objetivo.
 
 ---
 
-## 🎯 ESTADO ACTUAL Y SIGUIENTE SESIÓN
+## 📊 **ESTADO ACTUAL DEL PROYECTO**
 
-### 📍 **PUNTO ACTUAL (31 oct 2025 - 22:15h)**
-✅ **COMPLETADO**: Capa de Dominio completamente implementada
-- Entidades con Value Objects integrados
-- Sistema de testing optimizado y funcionando
-- 80 tests con 100% de éxito en 1.4 segundos
+### 🏆 Hitos Alcanzados
+- ✅ **Capa de Dominio Completa**: Modelado robusto de entidades y reglas de negocio.
+- ✅ **Infraestructura de Persistencia Real**: Entorno Dockerizado con PostgreSQL, SQLAlchemy y Alembic.
+- ✅ **Testing Exhaustivo**: Cobertura total en la lógica de negocio crítica.
+- ✅ **Documentación Arquitectónica**: Decisiones clave registradas en ADRs.
 
-### 🚀 **PRÓXIMA SESIÓN - PRIORIDADES INMEDIATAS**
-
-#### **SIGUIENTE MILESTONE: INTERFACES Y REPOSITORIOS**
-
-1. **🗄️ Interfaces de Repositorio** (EN PROGRESO - 50%)
-   - `src/modules/user/domain/repositories/base_repository.py`
-   - `src/modules/user/domain/repositories/user_repository.py` 
-   - Definir contratos para persistencia de datos
-   - Tests unitarios para interfaces
-
-2. **⚙️ Unit of Work Pattern**
-   - `src/modules/user/domain/repositories/unit_of_work.py`
-   - Gestión de transacciones y consistencia
-   - Patrón para operaciones atómicas
-
-3. **🧪 Tests de Interfaces**
-   - Tests para contratos de repositorio
-   - Verificar que las interfaces sean correctas
-   - Preparar para implementaciones concretas
-
-### 🎯 **OBJETIVOS SESIÓN SIGUIENTE**
-- **Meta**: Completar capa de repositorios (interfaces)
-- **Resultado esperado**: Base sólida para implementar persistencia
-- **Tiempo estimado**: 1-2 horas
-- **Tests objetivo**: +15-20 tests adicionales
+### 📈 **Métricas Clave**
+- **Tests Totales**: **215/215** pasando.
+- **Cobertura de Código**: **100%** en la capa de dominio e infraestructura crítica.
+- **Rendimiento de Tests**: Ejecución completa en < 2 segundos (paralelizado).
 
 ---
 
-## 💡 DECISIONES TÉCNICAS IMPORTANTES TOMADAS
+## 🏗️ **ARQUITECTURA Y PROGRESO IMPLEMENTADO**
 
-### 🏗️ **Arquitectura**
-- **Clean Architecture**: Separación clara de responsabilidades
-- **Value Objects**: Inmutabilidad y validación en el dominio
-- **Factory Methods**: Para construcción controlada de entidades
+### I. **Fundamentos del Proyecto y Tooling**
+- **Framework**: FastAPI con servidor Uvicorn.
+- **Entorno**: Gestión de dependencias con `requirements.txt` y `.venv`.
+- **Testing**: `pytest` con `pytest-xdist` para ejecución paralela (7 workers).
+- **Seguridad**: `bcrypt` para hashing de contraseñas, optimizado para tests.
 
-### 🔒 **Seguridad**
-- **bcrypt rounds**: 12 en producción, 4 en testing
-- **Validaciones robustas**: Email regex estricta, password strength
-- **Inmutabilidad**: Value Objects frozen para prevenir mutaciones
+### II. **Capa de Dominio (`src/modules/user/domain`)**
+- **Entidades**:
+  - `User`: Entidad principal con lógica de negocio, factory method `create()` y recolección de eventos de dominio.
+- **Value Objects**:
+  - `UserId`: UUID v4 inmutable y autovalidado.
+  - `Email`: Normalización automática y validación con regex estricta.
+  - `Password`: Hashing con bcrypt y validación de fortaleza.
+- **Patrones**:
+  - **Repository Pattern**: Interfaces definidas (`UserRepository`).
+  - **Unit of Work**: Interfaz `UnitOfWork` para gestionar la consistencia transaccional.
 
-### ⚡ **Performance**
-- **Paralelización**: pytest-xdist con 7 workers
-- **Optimización testing**: TESTING env var para bcrypt rápido
-- **Presentación visual**: Script personalizado para mejor UX
+### III. **Capa de Infraestructura (`src/shared/infrastructure`)**
+- **Persistencia (En Memoria)**:
+  - `InMemoryUserRepository`: Implementación para testing y desarrollo temprano.
+  - `InMemoryUnitOfWork`: Implementación para gestionar el "commit" en memoria.
+- **Sistema de Eventos de Dominio**:
+  - `DomainEvent`: Clase base para todos los eventos.
+  - `EventBus` y `InMemoryEventBus`: Sistema de publicación/suscripción de eventos.
+  - `UserRegisteredEvent`: Ejemplo de evento de dominio concreto.
+- **Sistema de Logging Avanzado**:
+  - `Logger` Interface y `LoggerFactory` para la creación de loggers.
+  - `LogConfig` para configuración por entornos (DEV, PROD).
+  - **Formatters**: `TextFormatter`, `JsonFormatter` y `StructuredFormatter`.
+  - **Integración**: `EventLoggingHandler` para loggear automáticamente eventos de dominio.
+  - **Trazabilidad**: Soporte para `correlation_id` a través de contextos.
 
----
+### IV. **Capa de Aplicación (`src/modules/user/application`)**
+- ⏳ **PENDIENTE**: Este es el siguiente hito a desarrollar.
 
-## 📈 **MÉTRICAS ALCANZADAS**
-
-| Métrica | Valor | Estado |
-|---------|-------|--------|
-| Tests Totales | 80 | ✅ 100% passing |
-| Tiempo Ejecución | 1.4s | ⚡ Optimizado |
-| Cobertura Dominio | 100% | 🎯 Completa |
-| Value Objects | 3/3 | ✅ Implementados |
-| Workers Paralelos | 7 | 🚀 Máximo rendimiento |
-
----
-
-## 🏁 **RESUMEN SESIÓN 31 OCT 2025**
-
-### ✨ **LOGROS DESTACADOS**
-1. **Capa de dominio completamente funcional** con Value Objects
-2. **Sistema de testing profesional** con paralelización
-3. **Optimización de rendimiento** significativa (70% mejora)
-4. **Validaciones robustas** en Email con regex avanzada
-5. **Seguridad implementada** en Password con bcrypt
-
-### 🎓 **APRENDIZAJES TÉCNICOS**
-- Implementación de Value Objects inmutables
-- Optimización de bcrypt para testing vs producción  
-- Paralelización de tests con pytest-xdist
-- Regex avanzadas para validación de email
-- Factory methods vs constructores directos
-
-### 📋 **PREPARACIÓN PRÓXIMA SESIÓN**
-- Interfaces de repositorio pre-diseñadas
-- Tests organizados y optimizados
-- Base sólida para implementar persistencia
-- Documentación actualizada y clara
+### V. **Capa de Presentación (API)**
+- **Endpoints**:
+  - `GET /health`: Endpoint de salud para verificar el estado del servicio.
 
 ---
 
-## 🎓 **METODOLOGÍA DE DESARROLLO**
+## 🧪 **ESTRATEGIA DE TESTING**
 
-**ENFOQUE**: Aprendizaje paso a paso guiado
-- ✅ **Explicaciones detalladas** antes de cada implementación
-- ✅ **Verificación constante** de funcionalidad
-- ✅ **Tests primero** para validar cada componente
-- ✅ **Clean Architecture** siguiendo principios SOLID
-- ✅ **Documentación profesional** con ADRs y Design Document
-- ✅ **Nunca realizar todo el trabajo** El usuario debe supervisar y entender cada paso
-- ✅ **Ir siempre fichero a fichero**, construyendo el proyecto gradualmente
-- ✅ **Pedir confirmación** antes de realizar cambios.
+El proyecto se basa en una pirámide de testing robusta, con un fuerte énfasis en los tests unitarios para la lógica de negocio.
 
-**PRÓXIMA SESIÓN**: Continuar con interfaces de repositorio y Unit of Work pattern
-
----
-
-*Documento actualizado automáticamente - Última sesión: 31 octubre 2025*
-
-## 🔍 NOTAS DE DEBUGEO
-
-### Problemas Resueltos
-- **UTF-8 encoding**: Solucionado en main.py con encoding explícito
-- **Uvicorn import**: Corregido string import en main.py
-- **Gitignore**: Simplificado formato para mejor funcionamiento
-
-### Configuraciones Importantes
-- **FastAPI**: Configurado con documentación automática
-- **Pytest**: Configurado para descubrir tests automáticamente
-- **Project structure**: Sigue Clean Architecture estricta
+- **Tests Unitarios**:
+  - **Ubicación**: `tests/unit/`
+  - **Foco**: Validan entidades, value objects, y servicios de dominio de forma aislada.
+  - **Métricas**: ~90% del total de tests.
+- **Tests de Integración**:
+  - **Ubicación**: `tests/integration/`
+  - **Foco**: Verifican la correcta colaboración entre componentes (ej: EventBus con Handlers, Repositorios con UoW).
+  - **API Endpoints**: Se testean con un cliente HTTP (`httpx`).
 
 ---
 
-## 🚀 VISIÓN A LARGO PLAZO
+## 📚 **DOCUMENTACIÓN**
 
-### Módulos Futuros Planificados
-- **Tournament** - Gestión de torneos
-- **Team** - Equipos Europa/América  
-- **Match** - Partidos individuales
-- **Score** - Sistema de puntuación
-- **Auth** - Autenticación y autorización
+Las decisiones arquitectónicas importantes se registran en **ADRs (Architecture Decision Records)** en la carpeta `docs/architecture/decisions/`.
 
-### Integraciones Futuras
-- **Base de datos** (PostgreSQL con SQLAlchemy)
-- **Autenticación JWT**
-- **Password hashing** (bcrypt)
-- **Logging** avanzado
-- **Documentación** OpenAPI/Swagger
+- **ADR-001**: Elección de Clean Architecture.
+- **ADR-002**: Elección de FastAPI.
+- **ADR-003**: Estructura de Módulos.
+- **ADR-004**: Value Objects.
+- **ADR-005**: Repository y Unit of Work Patterns.
+- **ADR-006**: Estrategia de Testing.
+- **ADR-007**: Domain Events Pattern.
+- **ADR-008**: Sistema de Logging Avanzado.
 
 ---
 
-## 📝 Final de Sesión - 31 Octubre 2025
+## 🎯 PRÓXIMO HITO: IMPLEMENTACIÓN DE LA CAPA DE APLICACIÓN
 
-**🎯 Sesión Completada Exitosamente**
+**Objetivo**: Desarrollar los casos de uso y servicios que orquestan la lógica de dominio, usando la infraestructura de persistencia que hemos creado.
 
-La sesión de hoy ha sido extraordinariamente productiva, completando el **Milestone de Dominio** con todos los objetivos cumplidos:
-
-### ✅ **Logros Principales de la Sesión:**
-
-1. **🏗️ Capa de Dominio 100% Implementada**
-   - Entities completas con validaciones robustas
-   - Value Objects con encapsulación total (UserId, Email, Password)
-   - Domain Services optimizados con bcrypt
-
-2. **🚀 Performance Dramatically Optimized**
-   - **90% mejora** en velocidad de tests (5+ segundos → 0.54 segundos)
-   - **Parallelización** con pytest-xdist (7 workers)
-   - **bcrypt optimización** por ambiente (4 rounds testing / 12 production)
-
-3. **📚 Documentación Profesional Completa**
-   - **4 ADRs detallados** con decisiones técnicas profesionales
-   - **Design Document** completo del sistema (visión integral)
-   - **README actualizado** con estado actual y métricas reales
-   - **Estructura reorganizada** siguiendo estándares de la industria
-
-4. **✨ Code Quality Excellence**
-   - **80 tests** con 100% pass rate
-   - **Type hints completos** con validación estricta
-   - **Error handling robusto** en toda la capa de dominio
-   - **Herramientas optimizadas** para desarrollo rápido
-
-### 🎯 **Próximos Pasos (Siguiente Sesión):**
-- **Repository Interfaces**: Implementar contratos de persistencia Clean Architecture
-- **Unit of Work Pattern**: Gestión de transacciones y consistencia
-- **Infrastructure Layer**: Primeras implementaciones concretas con SQLAlchemy
-- **Application Layer**: Use Cases con dependency injection
-
-### 📊 **Métricas Finales de la Sesión:**
-- **Tests Ejecutados**: 80 tests en 0.54 segundos ⚡
-- **Cobertura Dominio**: 100% implementado y testeado ✅
-- **Documentación**: 5 archivos nuevos/actualizados 📖
-- **Performance Gain**: 90% mejora conseguida 🚀
-- **ADRs Creados**: 4 decisiones arquitectónicas documentadas 🏗️
-
-### 🏆 **Estado del Proyecto:**
-**✅ MILESTONE DOMINIO COMPLETADO**
-
-El proyecto ahora tiene una base sólida de Clean Architecture con:
-- Domain layer completamente implementado
-- Testing framework optimizado para desarrollo rápido  
-- Documentación profesional completa
-- Herramientas de desarrollo eficientes
-
----
-
-## 📝 Sesión 1 Noviembre 2025 - Repository Interfaces & Unit of Work
-
-**🎯 Objetivos Completados Exitosamente**
-
-La sesión de hoy se enfocó en implementar los **Repository Interfaces** y el **patrón Unit of Work**, completando así la base arquitectónica para la capa de aplicación.
-
-### ✅ **Implementaciones Principales:**
-
-#### 🗄️ **Repository Interfaces (29 tests nuevos)**
-- **UserRepositoryInterface**: Interfaz completa con 8 métodos (save, find_by_id, find_by_email, etc.)
-- **Excepciones específicas**: UserDomainError, RepositoryError, y jerarquía completa
-- **Contratos validados**: Type hints, async methods, herencia ABC
-- **Tests comprehensivos**: 20 tests verificando interfaz + 21 tests de excepciones
-
-#### 🔄 **Unit of Work Pattern (29 tests nuevos)**
-- **UnitOfWorkInterface base**: Interfaz compartida con async context manager
-- **UserUnitOfWorkInterface**: Implementación específica para módulo de usuarios
-- **Métodos completos**: commit(), rollback(), flush(), is_active()
-- **Context Manager**: Soporte completo para `async with` statements
-- **Tests de integración**: Verificación de patrones de uso típicos
-
-### 🛠️ **Mejoras Técnicas:**
-
-#### 📊 **Sistema de Testing Mejorado**
-- **+29 tests nuevos**: De 121 a 150 tests totales
-- **Categorización profesional**: Eliminadas todas las categorías "Other"
-- **Nueva categoría**: 🔄 Unit of Work con iconografía específica
-- **Performance mantenida**: 150 tests en ~0.59 segundos
-
-#### 🎯 **Organización de Código**
-- **Estructura shared/**: Interfaces base en `src/shared/domain/repositories/`
-- **Módulos específicos**: UserUnitOfWork en `src/modules/user/domain/repositories/`
-- **Exports limpios**: `__init__.py` actualizados con interfaces correctas
-- **Import paths**: Rutas optimizadas y dependencias claras
-
-### 📊 **Métricas Finales de la Sesión:**
-- **Tests Ejecutados**: 150 tests en 0.59 segundos ⚡
-- **Nuevos Tests**: +29 tests (Repository + UoW)
-- **Cobertura**: 100% en interfaces implementadas ✅
-- **Performance**: Mantenida excelente velocidad 🚀
-- **Calidad**: 0 errores, 0 warnings 🎯
-
-### 🏗️ **Arquitectura Completada:**
-```
-🔬 TESTS UNITARIOS - CAPA DE DOMINIO
-├── 📦 Entidades: 18 tests (User)
-├── 💎 Value Objects: 49 tests (UserId, Email, Password) 
-├── 🗄️ Interfaces de Repositorio: 31 tests (UserRepository + UserUoW)
-├── 🔄 Unit of Work: 18 tests (Base Interface)
-└── ⚠️ Excepciones de Dominio: 21 tests (User Errors)
-
-🔗 TESTS DE INTEGRACIÓN
-└── 🎯 Endpoints: 13 tests (Health)
-```
-
-### 🎓 **Principios Arquitectónicos Aplicados:**
-- **Dependency Inversion**: Dominio define contratos, infraestructura implementa
-- **Single Responsibility**: Cada interfaz tiene propósito específico
-- **Interface Segregation**: Métodos cohesivos y específicos
-- **Async Context Manager**: Gestión automática de transacciones
-- **Type Safety**: 100% type hints con validación estricta
-
-### 🔧 **Correcciones Técnicas Realizadas:**
-1. **Error MRO resuelto**: Herencia AsyncContextManager corregida
-2. **Categorización mejorada**: Tests organizados profesionalmente
-3. **Parsing optimizado**: Soporte para formato paralelo de pytest-xdist
-4. **Iconografía consistente**: Sistema visual profesional
-
-### 🎯 **Estado del Proyecto:**
-**✅ MILESTONE REPOSITORY & UNIT OF WORK COMPLETADO**
-**📋 DOMAIN EVENTS PATTERN DOCUMENTADO Y PLANIFICADO**
-
-El proyecto ahora tiene:
-- ✅ **Domain Layer**: Completo con entities, value objects y contratos
-- ✅ **Repository Pattern**: Interfaces definidas y testeadas (31 tests)
-- ✅ **Unit of Work**: Patrón implementado para transacciones (18 tests)
-- � **Domain Events**: Arquitectura documentada con ADR-007
-- �🔄 **Application Layer**: Listo para implementar use cases + eventos
-- ⏳ **Infrastructure Layer**: Pendiente implementación concreta + event bus
-
-### 🎪 **Próximas Fases Planificadas:**
-1. **Domain Events Implementation**: Event base classes + collection
-2. **Application Layer**: Use Cases con integración de eventos
-3. **Event Handlers**: Welcome email, audit, metrics handlers
-4. **Infrastructure Layer**: SQLAlchemy + In-memory EventBus
-
----
-
-## 🚀 **SESIÓN 3 NOVIEMBRE 2025 - DOMAIN EVENTS & LOGGING SYSTEMS**
-
-### ✅ **LOGROS PRINCIPALES COMPLETADOS:**
-
-#### 1. **🎭 SISTEMA DE DOMAIN EVENTS COMPLETO**
-- **✅ DomainEvent Base Class**: Clase abstracta con metadatos automáticos
-- **✅ EventHandler Interface**: Interface genérica con type safety
-- **✅ EventBus & InMemoryEventBus**: Sistema completo de publicación/suscripción
-- **✅ UserRegisteredEvent**: Evento específico con datos completos
-- **✅ UserRegisteredEventHandler**: Handler completo con 3 operaciones
-- **✅ Entity Event Collection**: Integración en User entity
-- **✅ Event Exceptions**: Jerarquía completa de errores específicos
-
-**🔢 Métricas Implementadas:**
-- **52 tests nuevos** específicos para Domain Events
-- **41 tests** cubriendo todo el sistema event-driven
-- **215/215 tests** pasando al 100% de éxito
-- **7 archivos principales** + 6 archivos de tests
-
-#### 2. **📊 SISTEMA DE LOGGING AVANZADO**
-- **✅ Logger Interface**: Contrato base flexible y extensible
-- **✅ LogConfig**: Configuración avanzada por entornos
-- **✅ Formatters Múltiples**: Text, JSON y Structured híbrido
-- **✅ PythonLogger**: Implementación completa thread-safe
-- **✅ LoggerFactory**: Factory con singleton y cache de loggers
-- **✅ Event Integration**: EventLoggingHandler para Domain Events
-- **✅ Correlation IDs**: Trazabilidad completa de requests
-
-**🎯 Características Validadas:**
-- **Logging estructurado** con metadatos enriquecidos
-- **Context managers** para correlation y contexto temporal
-- **Múltiples handlers** simultáneos (consola, archivo, rotativo)
-- **Integración automática** con Domain Events
-- **Configuración flexible** por variables de entorno
-
-#### 3. **📚 DOCUMENTACIÓN PROFESIONAL ACTUALIZADA**
-- **✅ ADR-007**: Domain Events Pattern actualizado con implementación
-- **✅ ADR-008**: Sistema de Logging Avanzado documentado
-- **✅ README Decisions**: Índice actualizado con 8 ADRs
-- **✅ Design Document**: Arquitectura y testing strategy actualizadas
-- **✅ Project Structure**: Estructura real reflejada en docs
-- **✅ README Principal**: Logros y roadmap actualizados
-
-### 🔧 **TRABAJO TÉCNICO REALIZADO:**
-
-#### Implementación Domain Events:
-```python
-# Event Bus con error resilience
-event_bus = InMemoryEventBus()
-handler = UserRegisteredEventHandler()
-event_bus.register(handler)
-
-# Entity con event collection
-user = User.create(...)  # Genera evento automáticamente
-await event_bus.publish_all(user.get_domain_events())
-```
-
-#### Sistema de Logging:
-```python
-# Logger con contexto y correlation
-logger = get_logger("users.service")
-with logger.correlation_context("req-123"):
-    logger.info("User created", extra={"user_id": 456})
-```
-
-### 📊 **ESTADO ACTUAL DEL PROYECTO:**
-
-**✅ MILESTONE DOMAIN EVENTS & LOGGING COMPLETADO Y COMMITEADO**
-
-El proyecto ahora incluye:
-- ✅ **Domain Layer**: Completo con events y entity collection
-- ✅ **Repository Pattern**: Interfaces testeadas (31 tests)
-- ✅ **Unit of Work**: Patrón implementado (18 tests)
-- ✅ **Domain Events**: Sistema completo event-driven (52 tests)
-- ✅ **Logging System**: Infraestructura completa con formatters
-- ✅ **Testing Excellence**: 215/215 tests al 100% éxito
-- ✅ **Documentation**: 8 ADRs + docs actualizadas y sincronizadas
-- ✅ **Version Control**: Cambios pusheados a repositorio remoto
-- 🔄 **Application Layer**: **PRÓXIMO OBJETIVO** - Use Cases y Services
-- ⏳ **Infrastructure Layer**: Pendiente SQLAlchemy + concrete repos
-
-### � **SIGUIENTE SESIÓN - APPLICATION LAYER:**
-
-**Objetivo Principal**: Implementar la capa de aplicación con Use Cases
-
-**Tareas Específicas**:
-1. **📁 Crear estructura Application Layer**:
-   - `src/users/application/use_cases/`
-   - `src/users/application/services/`
-   - `src/users/application/dto/`
-
-2. **🎯 Implementar Use Cases principales**:
-   - `RegisterUserUseCase`: Registro con Domain Events
-   - `GetUserByIdUseCase`: Consulta simple
-   - `UpdateUserProfileUseCase`: Actualización con eventos
-   - `DeactivateUserUseCase`: Soft delete con eventos
-
-3. **🔧 Application Services**:
-   - `UserApplicationService`: Orquestación de use cases
-   - `UserQueryService`: Consultas optimizadas
-   - **Integración**: UnitOfWork + Domain Events + Logging
-
-4. **📦 DTOs y Commands**:
-   - Input DTOs para cada use case
-   - Output DTOs con datos estructurados
-   - Command objects para operaciones complejas
-
-5. **🧪 Testing Application Layer**:
-   - Tests unitarios para cada use case
-   - Mocks de repositories y UnitOfWork
-   - Integration tests con Domain Events
-
-### 🧹 **LIMPIEZA REALIZADA:**
-- ❌ **Ejemplos eliminados**: Removidos examples/ y demos
-- ✅ **Documentación sincronizada**: Docs reflejan estado real
-- ✅ **Tests como validación**: Enfoque en testing automatizado
-
----
-
-*Próxima sesión: **APPLICATION LAYER** - Use Cases y Application Services*
-*Estado: **Domain Events & Logging** completados y commiteados*
-*Última actualización: 3 de noviembre de 2025 - 19:45h*
+**Plan de Acción**:
+1.  **Crear Estructura**:
+    - `src/users/application/use_cases/`
+    - `src/users/application/services/`
+    - `src/users/application/dto/`
+2.  **Implementar Caso de Uso `RegisterUserUseCase`**:
+    - Orquestará la creación del `User`.
+    - Usará el `SQLAlchemyUnitOfWork` para garantizar la consistencia.
+    - Guardará el usuario a través del `uow.users`.
+    - Publicará el evento `UserRegisteredEvent` a través del `EventBus`.
+3.  **Crear DTOs (Data Transfer Objects)**:
+    - Definir `RegisterUserCommand` (entrada) y `UserResponse` (salida).
+4.  **Escribir Tests de Aplicación**:
+    - Tests unitarios para el caso de uso, mockeando el UoW.
+    - Tests de integración que usen la base de datos real en Docker.

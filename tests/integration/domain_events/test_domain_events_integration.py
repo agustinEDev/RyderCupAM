@@ -13,8 +13,8 @@ from unittest.mock import patch, MagicMock
 
 from src.modules.user.domain.entities.user import User
 from src.shared.domain.events.in_memory_event_bus import InMemoryEventBus
-from src.users.domain.handlers.user_registered_event_handler import UserRegisteredEventHandler
-from src.users.domain.events.user_registered_event import UserRegisteredEvent
+from src.modules.user.application.handlers.user_registered_event_handler import UserRegisteredEventHandler
+from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 
 
 class TestDomainEventsIntegration:
@@ -180,8 +180,8 @@ class TestDomainEventsIntegration:
             published_event = mock_handle.call_args[0][0]
             assert isinstance(published_event, UserRegisteredEvent)
             assert published_event.email == "luis.martin@test.com"
-            assert published_event.name == "Luis"
-            assert published_event.surname == "Martín"
+            assert published_event.first_name == "Luis"
+            assert published_event.last_name == "Martín"
     
     @pytest.mark.asyncio
     async def test_error_resilience_in_event_processing(self):
@@ -252,8 +252,8 @@ class TestDomainEventsIntegration:
             "event_id": original_event.event_id,
             "user_id": original_event.user_id,
             "email": original_event.email,
-            "name": original_event.name,
-            "surname": original_event.surname,
+            "first_name": original_event.first_name,
+            "last_name": original_event.last_name,
             "occurred_on": original_event.occurred_on
         }
         
@@ -265,8 +265,8 @@ class TestDomainEventsIntegration:
         assert original_event.event_id == original_data["event_id"]
         assert original_event.user_id == original_data["user_id"]
         assert original_event.email == original_data["email"]
-        assert original_event.name == original_data["name"]
-        assert original_event.surname == original_data["surname"]
+        assert original_event.first_name == original_data["first_name"]
+        assert original_event.last_name == original_data["last_name"]
         assert original_event.occurred_on == original_data["occurred_on"]
     
     def test_event_collection_returns_copy(self):

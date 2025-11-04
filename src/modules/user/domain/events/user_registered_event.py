@@ -27,8 +27,8 @@ class UserRegisteredEvent(DomainEvent):
     Attributes:
         user_id: ID específico del usuario (se usa como aggregate_id automáticamente)
         email: Email del usuario registrado
-        name: Nombre del usuario
-        surname: Apellido del usuario
+        first_name: Nombre del usuario
+        last_name: Apellido del usuario
         registration_method: Método usado para registrarse (email, google, etc.)
         is_email_verified: Si el email fue verificado al registro
         registration_ip: IP desde donde se registró (opcional por privacidad)
@@ -37,8 +37,8 @@ class UserRegisteredEvent(DomainEvent):
     # Datos específicos del usuario registrado (CAMPOS OBLIGATORIOS)
     user_id: str
     email: str
-    name: str
-    surname: str
+    first_name: str
+    last_name: str
     
     # Metadatos del registro (CAMPOS OPCIONALES con defaults)
     registration_method: str = "email"  # email, google, facebook, etc.
@@ -46,9 +46,14 @@ class UserRegisteredEvent(DomainEvent):
     registration_ip: Optional[str] = None
     
     @property
+    def aggregate_id(self) -> str:
+        """El ID del agregado es el ID del usuario."""
+        return self.user_id
+
+    @property
     def full_name(self) -> str:
         """Nombre completo del usuario registrado."""
-        return f"{self.name} {self.surname}".strip()
+        return f"{self.first_name} {self.last_name}".strip()
     
     def to_dict(self) -> dict:
         """
@@ -61,8 +66,8 @@ class UserRegisteredEvent(DomainEvent):
             'user_data': {
                 'user_id': self.user_id,
                 'email': self.email,
-                'name': self.name,
-                'surname': self.surname,
+                'first_name': self.first_name,
+                'last_name': self.last_name,
                 'full_name': self.full_name,
             },
             'registration_context': {
