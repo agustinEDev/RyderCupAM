@@ -1,7 +1,7 @@
 # Ryder Cup Amateur Manager - Design Document
 
 **Versión**: 1.0  
-**Fecha**: 31 de octubre de 2025  
+**Fecha**: 3 de noviembre de 2025  
 **Autor**: Equipo de Desarrollo  
 **Estado**: En desarrollo
 
@@ -82,8 +82,10 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 **🎯 Domain Layer** (Centro de la aplicación)
 - **Entities**: User, Tournament, Team, Match, Score
 - **Value Objects**: UserId, Email, Password, Handicap
-- **Domain Services**: Password hashing, handicap calculations
+- **Domain Events**: UserRegisteredEvent, TournamentCreatedEvent
+- **Event Handlers**: UserRegisteredEventHandler, audit handlers
 - **Repository Interfaces**: Contratos para persistencia
+- **Domain Services**: Password hashing, handicap calculations
 
 **📋 Application Layer** (Orquestación)
 - **Use Cases**: RegisterUser, CreateTournament, CalculateScore
@@ -96,6 +98,8 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 - **Database**: PostgreSQL con SQLAlchemy ORM
 - **Authentication**: JWT tokens con bcrypt hashing
 - **Repository Implementations**: Concrete database access
+- **Logging System**: Sistema modular con formatters múltiples
+- **Event Bus**: InMemoryEventBus para Domain Events
 
 ### Principios Arquitectónicos
 
@@ -147,22 +151,29 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 **Componentes Principales:**
 ```python
 # Domain
-User(Entity)
-UserId(ValueObject)
-Email(ValueObject)  
-Password(ValueObject)
+User(Entity)                    # ✅ Implementado
+UserId(ValueObject)            # ✅ Implementado  
+Email(ValueObject)             # ✅ Implementado
+Password(ValueObject)          # ✅ Implementado
+UserRegisteredEvent           # ✅ Implementado
+
+# Events & Handlers
+UserRegisteredEventHandler    # ✅ Implementado
+EventBus, InMemoryEventBus   # ✅ Implementado
+EventLoggingHandler          # ✅ Implementado
 
 # Application
-RegisterUserUseCase
-LoginUserUseCase
-UpdateProfileUseCase
+RegisterUserUseCase          # ✅ Implementado
+LoginUserUseCase            # ⏳ Planeado
+UpdateProfileUseCase        # ⏳ Planeado
 
 # Infrastructure
-UserRepository
-UserRepositoryInterface
-UserUnitOfWork
-UserUnitOfWorkInterface
-TokenService
+UserRepository              # 🔧 Interface implementada
+UserRepositoryInterface     # ✅ Implementado
+UserUnitOfWork             # 🔧 Interface implementada
+UserUnitOfWorkInterface    # ✅ Implementado
+TokenService               # ⏳ Planeado
+LoggingSystem             # ✅ Implementado
 ```
 
 ### 2. Tournament Management Module *(Planeado)*
@@ -615,25 +626,56 @@ app.add_middleware(
 
 - **Framework**: pytest 8.3.0 con pytest-xdist 3.8.0
 - **Paralelización**: 7 workers (cores disponibles - 1)
-- **Performance**: 80 tests ejecutados en 0.54 segundos
-- **Cobertura**: Objetivo del 90% en código de dominio
+- **Performance**: 218 tests ejecutados al 100% de éxito
+- **Cobertura**: Dominio y events con cobertura completa
+- **Categorización**: Script dev_tests.py con análisis detallado por tipo
+
+### Estadísticas Actuales de Testing
+
+```python
+📊 Tests Unitarios: 197/197 (100% éxito)
+├── Domain Entities: 73 tests
+├── Value Objects: 49 tests  
+├── Repository Interfaces: 31 tests
+├── Unit of Work: 18 tests
+├── Domain Events: 52 tests
+├── Application Use Cases: 2 tests
+└── Excepciones: 21 tests
+
+🔗 Tests de Integración: 21/21 (100% éxito)
+├── API Endpoints: 13 tests
+└── Domain Events Integration: 7 tests
+
+🎯 Total: 218/218 tests (100% éxito)
+```
 
 ### Optimizaciones Implementadas
 
 1. **bcrypt Rounds**: 4 rounds en testing vs 12 en producción
 2. **Parallel Execution**: pytest-xdist con multiprocessing
 3. **Test Categorization**: Organizados por capa y objeto
-4. **Fast Feedback**: Script dev_tests.py con categorización visual
+4. **Fast Feedback**: dev_tests.py con estadísticas detalladas por tipo
+5. **Domain Events Testing**: 52 tests cubriendo todo el sistema de eventos
+6. **Integration Testing**: 7 tests específicos para flujos end-to-end
 
 ### Test Organization
 
 ```python
-# Categorización automática por capas
+# Categorización automática por capas y funcionalidad
 tests/
-├── domain/           # Tests de lógica de negocio
-├── application/      # Tests de casos de uso
-├── infrastructure/   # Tests de persistencia
-└── integration/      # Tests de integración
+├── unit/
+│   ├── shared/
+│   │   ├── domain/events/         # Tests Domain Events
+│   │   └── infrastructure/logging/ # Tests Logging System
+│   ├── users/domain/
+│   │   ├── entities/              # Tests User entity  
+│   │   ├── value_objects/         # Tests Email, Password, UserId
+│   │   ├── handlers/              # Tests UserRegisteredEventHandler
+│   │   └── errors/                # Tests excepciones
+│   └── modules/user/domain/       # Tests complementarios
+└── integration/
+    ├── api/                       # Tests endpoints FastAPI
+    └── domain_events/             # Tests integración eventos
 ```
 
 ---

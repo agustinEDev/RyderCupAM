@@ -30,10 +30,7 @@ class TestUserIdGeneration:
         
         # Assert
         assert user_id is not None
-        assert isinstance(user_id.value, str)
-        # Verifica que es UUID válido intentando parsearlo
-        uuid_obj = uuid.UUID(user_id.value)
-        assert str(uuid_obj) == user_id.value
+        assert isinstance(user_id.value, uuid.UUID)
 
     def test_generate_creates_unique_ids(self):
         """
@@ -46,7 +43,7 @@ class TestUserIdGeneration:
         ids = [UserId.generate() for _ in range(10)]
         
         # Assert
-        id_values = [user_id.value for user_id in ids]
+        id_values = [str(user_id.value) for user_id in ids]
         assert len(set(id_values)) == 10  # Todos únicos
 
 
@@ -67,7 +64,7 @@ class TestUserIdValidation:
         user_id = UserId(valid_uuid)
         
         # Assert
-        assert user_id.value == valid_uuid
+        assert str(user_id.value) == valid_uuid
 
     def test_invalid_uuid_string_rejected(self):
         """
@@ -83,7 +80,7 @@ class TestUserIdValidation:
         with pytest.raises(InvalidUserIdError) as exc_info:
             UserId(invalid_uuid)
         
-        assert "no es un UUID válido" in str(exc_info.value)
+        assert "no es un string UUID válido" in str(exc_info.value)
 
     def test_empty_string_rejected(self):
         """
@@ -196,7 +193,7 @@ class TestUserIdStringRepresentation:
         str_representation = str(user_id)
         
         # Assert
-        assert str_representation == user_id.value
+        assert str_representation == str(user_id.value)
 
     def test_repr_is_informative(self):
         """
@@ -213,4 +210,4 @@ class TestUserIdStringRepresentation:
         
         # Assert
         assert "UserId" in repr_str
-        assert user_id.value in repr_str
+        assert str(user_id.value) in repr_str

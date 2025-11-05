@@ -7,6 +7,7 @@ Este Value Object representa una dirección de email.
 
 import re
 from dataclasses import dataclass
+from email_validator import validate_email, EmailNotValidError
 
 
 class InvalidEmailError(Exception):
@@ -26,46 +27,28 @@ class Email:
     
     def __post_init__(self):
         """Validación y normalización automática."""
-        normalized = self._normalize_email(self.value)
-        if not self._is_valid_email(normalized):
-            raise InvalidEmailError(f"'{self.value}' no es un email válido")
-        # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, 'value', normalized)
-    
-    @staticmethod
-    def _normalize_email(email: str) -> str:
-        """Normaliza el email: lowercase y sin espacios."""
-        if not isinstance(email, str):
-            return ""
-        return email.strip().lower()
-    
-    @staticmethod
-    def _is_valid_email(email: str) -> bool:
-        """Valida si un string tiene formato de email válido."""
-        if not isinstance(email, str) or not email:
-            return False
-        
-        # Verificar que no empiece o termine con punto
-        if email.startswith('.') or email.endswith('.'):
-            return False
+        if not isinstance(self.value, str):
+            raise InvalidEmailError("El email debe ser un string")
+
+        # 1. Normalizar: quitar espacios y convertir a minúsculas ANTES de validar
+        normalized_email = self.value.strip().lower()
+
+        if not normalized_email:
+            raise InvalidEmailError("El email no puede ser nulo o vacío")
             
-        # Verificar que no tenga puntos consecutivos
-        if '..' in email:
-            return False
-        
-        # Patrón más estricto para emails
-        # - Parte local: alfanuméricos, puntos, guiones, más y porcentaje (pero no al inicio/final)
-        # - Símbolo @
-        # - Dominio: alfanuméricos y guiones (pero no al inicio/final), luego punto y TLD
-        pattern = r'^[a-zA-Z0-9][a-zA-Z0-9._%+-]*[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$'
-        
-        # Permitir emails de un solo carácter antes del @
-        if '@' in email:
-            local_part = email.split('@')[0]
-            if len(local_part) == 1:
-                pattern = r'^[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$'
-        
-        return re.match(pattern, email) is not None
+        try:
+            # 2. Validar el email ya normalizado
+            valid = validate_email(normalized_email, check_deliverability=False)
+            
+            # 3. Asignar el valor normalizado y validado
+            # Usar object.__setattr__ porque la clase es frozen
+            object.__setattr__(self, 'value', valid.normalized)
+            
+        except EmailNotValidError as e:
+            # Capturar el error de la librería y lanzar nuestra excepción de dominio
+            raise InvalidEmailError(f"'{self.value}' no es un email válido: {e}") from e
+    
+
     
     def __str__(self) -> str:
         """Representación string legible."""

@@ -31,16 +31,17 @@ class TestUserCreation:
         data = sample_user_data
         
         # Act
-        user = User(
+        user = User.create(
             first_name=data["name"],
             last_name=data["surname"],
-            email=data["email"]
+            email_str=data["email"],
+            plain_password="DefaultPassword123!"
         )
         
         # Assert
         assert user.first_name == data["name"]
         assert user.last_name == data["surname"]
-        assert user.email == data["email"]
+        assert str(user.email) == data["email"]
 
     def test_create_user_with_spanish_characters(self):
         """
@@ -55,12 +56,17 @@ class TestUserCreation:
         email = "jose.maria@español.com"
         
         # Act
-        user = User(first_name=first_name, last_name=last_name, email=email)
+        user = User.create(
+            first_name=first_name, 
+            last_name=last_name, 
+            email_str=email,
+            plain_password="DefaultPassword123!"
+        )
         
         # Assert
         assert user.first_name == "José María"
         assert user.last_name == "Aznar Botín"
-        assert user.email == "jose.maria@español.com"
+        assert str(user.email) == "jose.maria@español.com"
 
     def test_create_multiple_users(self, multiple_users_data):
         """
@@ -72,10 +78,11 @@ class TestUserCreation:
         # Arrange & Act
         users = []
         for data in multiple_users_data:
-            user = User(
+            user = User.create(
                 first_name=data["name"],
                 last_name=data["surname"],
-                email=data["email"]
+                email_str=data["email"],
+                plain_password="DefaultPassword123!"
             )
             users.append(user)
         
@@ -97,7 +104,12 @@ class TestUserMethods:
         Then: Retorna nombre completo con formato correcto
         """
         # Arrange
-        user = User(first_name="Carlos", last_name="Rodríguez", email="carlos@test.com")
+        user = User.create(
+            first_name="Carlos", 
+            last_name="Rodríguez", 
+            email_str="carlos@test.com",
+            plain_password="DefaultPassword123!"
+        )
         
         # Act
         full_name = user.get_full_name()
@@ -113,7 +125,12 @@ class TestUserMethods:
         Then: Retorna nombre completo respetando espacios
         """
         # Arrange
-        user = User(first_name="María José", last_name="García López", email="maria@test.com")
+        user = User.create(
+            first_name="María José", 
+            last_name="García López", 
+            email_str="maria@test.com",
+            plain_password="DefaultPassword123!"
+        )
         
         # Act
         full_name = user.get_full_name()
@@ -129,7 +146,12 @@ class TestUserMethods:
         Then: Retorna nombre completo con un espacio entre ellos
         """
         # Arrange
-        user = User(first_name="Ana", last_name="Martín", email="ana@test.com")
+        user = User.create(
+            first_name="Ana", 
+            last_name="Martín", 
+            email_str="ana@test.com",
+            plain_password="DefaultPassword123!"
+        )
         
         # Act
         full_name = user.get_full_name()
@@ -149,11 +171,11 @@ class TestUserValidation:
         Then: Retorna True
         """
         # Arrange
-        user = User(
+        user = User.create(
             first_name="Pedro", 
             last_name="Sánchez", 
-            email="pedro.sanchez@test.com",
-            password="password123"
+            email_str="pedro.sanchez@test.com",
+            plain_password="ValidPassword123!"
         )
         
         # Act
@@ -170,11 +192,11 @@ class TestUserValidation:
         Then: Retorna True
         """
         # Arrange
-        user = User(
+        user = User.create(
             first_name="Laura", 
             last_name="González", 
-            email="laura@test.com",
-            password="password123"
+            email_str="laura@test.com",
+            plain_password="ValidPassword123!"
         )
         
         # Act
@@ -192,7 +214,12 @@ class TestUserValidation:
         """
         # Act & Assert - Ahora falla al crear el Email Value Object
         with pytest.raises(InvalidEmailError):
-            User(first_name="Miguel", last_name="Ruiz", email=Email("email-sin-arroba.com"))
+            User.create(
+                first_name="Miguel", 
+                last_name="Ruiz", 
+                email_str="email-sin-arroba.com",
+                plain_password="ValidPassword123!"
+            )
 
     def test_is_valid_with_invalid_email_no_domain(self):
         """
@@ -203,7 +230,12 @@ class TestUserValidation:
         """
         # Act & Assert
         with pytest.raises(InvalidEmailError):
-            User(first_name="Carmen", last_name="López", email=Email("carmen@"))
+            User.create(
+                first_name="Carmen", 
+                last_name="López", 
+                email_str="carmen@",
+                plain_password="ValidPassword123!"
+            )
 
     def test_is_valid_with_empty_email(self):
         """
@@ -214,7 +246,12 @@ class TestUserValidation:
         """
         # Act & Assert
         with pytest.raises(InvalidEmailError):
-            User(first_name="Roberto", last_name="Martínez", email=Email(""))
+            User.create(
+                first_name="Roberto", 
+                last_name="Martínez", 
+                email_str="",
+                plain_password="ValidPassword123!"
+            )
 
     def test_is_valid_with_complex_valid_email(self):
         """
@@ -224,10 +261,11 @@ class TestUserValidation:
         Then: Se crea exitosamente y tiene email válido
         """
         # Arrange & Act
-        user = User(
+        user = User.create(
             first_name="Antonio", 
             last_name="García", 
-            email=Email("antonio.garcia123+test@empresa.co.es")
+            email_str="antonio.garcia123+test@empresa.co.es",
+            plain_password="ValidPassword123!"
         )
         
         # Assert
@@ -246,7 +284,12 @@ class TestUserEdgeCases:
         Then: Se crea pero nombre queda vacío (comportamiento actual)
         """
         # Arrange & Act
-        user = User(first_name="", last_name="Pérez", email="test@example.com")
+        user = User.create(
+            first_name="", 
+            last_name="Pérez", 
+            email_str="test@example.com",
+            plain_password="ValidPassword123!"
+        )
         
         # Assert
         assert user.first_name == ""
@@ -260,7 +303,12 @@ class TestUserEdgeCases:
         Then: Se crea pero apellido queda vacío
         """
         # Arrange & Act
-        user = User(first_name="Juan", last_name="", email="test@example.com")
+        user = User.create(
+            first_name="Juan", 
+            last_name="", 
+            email_str="test@example.com",
+            plain_password="ValidPassword123!"
+        )
         
         # Assert
         assert user.first_name == "Juan"
@@ -274,7 +322,12 @@ class TestUserEdgeCases:
         Then: Retorna solo el apellido (strip elimina espacios)
         """
         # Arrange
-        user = User(first_name="", last_name="Rodríguez", email="test@example.com")
+        user = User.create(
+            first_name="", 
+            last_name="Rodríguez", 
+            email_str="test@example.com",
+            plain_password="ValidPassword123!"
+        )
         
         # Act
         full_name = user.get_full_name()
@@ -290,7 +343,12 @@ class TestUserEdgeCases:
         Then: Retorna solo el nombre (strip elimina espacios)
         """
         # Arrange
-        user = User(first_name="Carlos", last_name="", email="test@example.com")
+        user = User.create(
+            first_name="Carlos", 
+            last_name="", 
+            email_str="test@example.com",
+            plain_password="ValidPassword123!"
+        )
         
         # Act
         full_name = user.get_full_name()
@@ -317,14 +375,14 @@ class TestUserIntegration:
         first_name = "Fernando"
         last_name = "Alonso"
         email = "fernando.alonso@f1.com"
-        password = "password123"
+        password = "ValidPassword123!"
         
         # Act
-        user = User(
+        user = User.create(
             first_name=first_name, 
             last_name=last_name, 
-            email=email, 
-            password=password
+            email_str=email, 
+            plain_password=password
         )
         full_name = user.get_full_name()
         is_valid = user.is_valid()
@@ -332,8 +390,8 @@ class TestUserIntegration:
         # Assert
         assert user.first_name == first_name
         assert user.last_name == last_name
-        assert user.email == email
-        assert user.password == password
+        assert str(user.email) == email
+        assert user.verify_password(password) is True
         assert full_name == "Fernando Alonso"
         assert is_valid is True
 
@@ -347,15 +405,150 @@ class TestUserIntegration:
         # Arrange
         data = invalid_user_data
         
-        # Act
-        user = User(
-            first_name=data["name"],
-            last_name=data["surname"],
-            email=data["email"]
+        # Act & Assert
+        with pytest.raises(InvalidEmailError):
+            User.create(
+                first_name=data["name"],
+                last_name=data["surname"],
+                email_str=data["email"],
+                plain_password="ValidPassword123!"
+            )
+
+
+class TestUserEntityEventCollection:
+    """Tests para la colección de eventos de dominio en la entidad User"""
+
+    def test_new_user_has_no_domain_events_initially(self):
+        """
+        Test: Usuario nuevo no tiene eventos de dominio inicialmente
+        Given: Se crea una instancia nueva de User
+        When: Se verifica si tiene eventos
+        Then: No debe tener eventos de dominio
+        """
+        # Arrange & Act
+        user = User.create(
+            first_name="Test", 
+            last_name="User", 
+            email_str="test@test.com",
+            plain_password="ValidPassword123!"
         )
-        is_valid = user.is_valid()
+        # Limpiamos el evento de creación para este test específico
+        user.clear_domain_events()
         
         # Assert
-        assert user.first_name == ""  # Nombre vacío
-        assert user.email == "email-invalido"  # Email inválido
-        assert is_valid is False  # Validación falla por email y otros campos
+        assert user.has_domain_events() is False
+        assert len(user.get_domain_events()) == 0
+    
+    def test_create_user_generates_user_registered_event(self):
+        """
+        Test: Crear usuario con factory method genera evento UserRegistered
+        Given: Datos válidos para crear usuario
+        When: Se usa User.create()
+        Then: Debe generar evento UserRegisteredEvent
+        """
+        # Arrange
+        first_name = "Juan"
+        last_name = "Pérez"
+        email = "juan.perez@test.com"
+        password = "SecurePass123!"
+        
+        # Act
+        user = User.create(first_name, last_name, email, password)
+        
+        # Assert
+        assert user.has_domain_events() is True
+        events = user.get_domain_events()
+        assert len(events) == 1
+        
+        # Verificar que es el evento correcto
+        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        event = events[0]
+        assert isinstance(event, UserRegisteredEvent)
+        assert event.user_id == str(user.id.value)
+        assert event.email == email
+        assert event.first_name == first_name
+        assert event.last_name == last_name
+    
+    def test_clear_domain_events_removes_all_events(self):
+        """
+        Test: clear_domain_events elimina todos los eventos
+        Given: Usuario con eventos de dominio
+        When: Se llama a clear_domain_events()
+        Then: No debe tener eventos de dominio
+        """
+        # Arrange
+        user = User.create("Ana", "García", "ana@test.com", "Password123!")
+        assert user.has_domain_events() is True
+        
+        # Act
+        user.clear_domain_events()
+        
+        # Assert
+        assert user.has_domain_events() is False
+        assert len(user.get_domain_events()) == 0
+    
+    def test_get_domain_events_returns_copy(self):
+        """
+        Test: get_domain_events retorna una copia, no la lista original
+        Given: Usuario con eventos de dominio
+        When: Se obtiene la lista de eventos y se modifica
+        Then: La lista interna no debe cambiar
+        """
+        # Arrange
+        user = User.create("Luis", "Martín", "luis@test.com", "Password123!")
+        original_count = len(user.get_domain_events())
+        
+        # Act
+        events = user.get_domain_events()
+        events.clear()  # Modificamos la copia
+        
+        # Assert
+        assert len(user.get_domain_events()) == original_count  # Original no cambió
+        assert user.has_domain_events() is True
+    
+    def test_add_domain_event_method(self):
+        """
+        Test: _add_domain_event agrega eventos correctamente
+        Given: Usuario sin eventos
+        When: Se agrega un evento manualmente
+        Then: Debe tener el evento agregado
+        """
+        # Arrange
+        user = User.create(
+            first_name="Test", 
+            last_name="User", 
+            email_str="test@test.com",
+            plain_password="ValidPassword123!"
+        )
+        user.clear_domain_events() # Limpiar evento de creación
+        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        
+        # Act
+        event = UserRegisteredEvent(
+            user_id="test-id-123",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User"
+        )
+        user._add_domain_event(event)
+        
+        # Assert
+        assert user.has_domain_events() is True
+        assert len(user.get_domain_events()) == 1
+        assert user.get_domain_events()[0] == event
+    
+    def test_user_created_event_has_correct_aggregate_id(self):
+        """
+        Test: Evento generado tiene el aggregate_id correcto
+        Given: Se crea un usuario
+        When: Se verifica el evento generado
+        Then: El aggregate_id debe coincidir con el ID del usuario
+        """
+        # Arrange & Act
+        user = User.create("Pedro", "López", "pedro@test.com", "Password123!")
+        
+        # Assert
+        events = user.get_domain_events()
+        event = events[0]
+        assert event.aggregate_id == str(user.id.value)
+        assert event.aggregate_id == event.user_id

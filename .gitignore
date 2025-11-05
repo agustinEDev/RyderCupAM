@@ -15,3 +15,14 @@ __pycache__/
 
 # VSCode settings
 .vscode/
+
+# Test reports
+tests/reports/
+
+# Log files
+*.log
+
+# Build and distribution artifacts
+build/
+dist/
+*.egg-info/

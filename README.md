@@ -1,393 +1,501 @@
-# Ryder Cup Manager
+# 🏆 Ryder Cup Amateur Manager
 
-Aplicación para crear y gestionar competiciones tipo Ryder Cup entre amigos.
+<div align="center">
+
+![Badge-Python](https://img.shields.io/badge/Python-3.12+-3776ab?style=for-the-badge&logo=python&logoColor=white)
+![Badge-FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Badge-PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)
+![Badge-SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-red?style=for-the-badge&logo=python&logoColor=white)
+![Badge-Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=for-the-badge&logo=docker&logoColor=white)
+
+**Un sistema completo de gestión de torneos de golf amateur siguiendo el prestigioso formato Ryder Cup**
+
+*Arquitectura limpia • Domain-Driven Design • Testing exhaustivo • Documentación completa*
+
+---
+
+[🚀 **Inicio Rápido**](#-inicio-rápido) • [📖 **Documentación**](#-documentación) • [🏗️ **Arquitectura**](#️-arquitectura) • [🧪 **Testing**](#-testing-strategy) • [📊 **Estado del Proyecto**](#-estado-del-proyecto)
+
+---
+
+</div>
 
 ## 🎯 Visión del Proyecto
 
-Una plataforma que permite a grupos de amigos organizar torneos de golf al estilo Ryder Cup, con equipos, emparejamientos, diferentes formatos de juego y seguimiento de puntuaciones.
+El **Ryder Cup Amateur Manager** es una aplicación de gestión de torneos de golf que replica el emocionante formato de equipos de la prestigiosa Ryder Cup profesional. Diseñado para organizar competiciones amateur entre equipos Europa vs Estados Unidos, el sistema ofrece gestión completa de jugadores, cálculo automático de handicaps y seguimiento en tiempo real de resultados.
 
-## 🎉 Logros Destacados
+### ✨ Características Principales
 
-### ✅ **Domain Layer Complete** (31 Oct 2025)
-- **Clean Architecture**: Implementación completa con 3 capas separadas
-- **Value Objects**: UserId, Email, Password con validación robusta
-- **Type Safety**: 100% type hints con validación en tiempo de compilación
-- **Error Handling**: Sistema completo de excepciones de dominio
-
-### 🚀 **Performance Optimized Testing**
-- **90% Speed Improvement**: De 5+ segundos a 0.54 segundos
-- **Parallel Execution**: pytest-xdist con 7 workers
-- **80 Tests**: Cobertura completa de la capa de dominio
-- **Smart Categorization**: Organización automática por capas y objetos
-
-### 📚 **Professional Documentation**
-- **4 ADRs Complete**: Decisiones arquitectónicas documentadas
-- **Design Document**: Visión completa del sistema
-- **Development Tools**: Scripts optimizados para desarrollo rápido
+- 🏌️ **Gestión de Torneos** - Creación y administración de competiciones formato Ryder Cup
+- 👥 **Equipos Europa vs USA** - Formación automática de equipos con balance competitivo
+- 🎯 **Sistema de Handicaps** - Cálculo automático y ajuste por condiciones del campo
+- 📊 **Scoring en Tiempo Real** - Resultados y estadísticas actualizadas instantáneamente
+- 🏆 **Gestión de Formatos** - Soporte para fourball, foursomes y singles
+- 📱 **Interface Responsiva** - Acceso optimizado desde cualquier dispositivo
+- 🔐 **Seguridad Robusta** - Autenticación JWT con encriptación bcrypt
+- 🌐 **API RESTful** - Documentación automática con OpenAPI/Swagger
 
 ## 🏗️ Arquitectura
 
-**Monolito Modular con Clean Architecture**
+### Clean Architecture + Domain-Driven Design
 
-### Principios Arquitectónicos
+El proyecto implementa **Clean Architecture** con principios de **Domain-Driven Design**, garantizando mantenibilidad, testabilidad y escalabilidad.
 
-- **Independencia de Frameworks**: La lógica de negocio no depende de frameworks específicos
-- **Testeable**: La lógica de negocio puede testearse sin UI, BD, o servicios externos
-- **Independencia de UI**: La UI puede cambiar sin modificar la lógica de negocio
-- **Independencia de Base de Datos**: Podemos cambiar la BD sin afectar las reglas de negocio
-- **Independencia de Agentes Externos**: La lógica de negocio no conoce el mundo exterior
+```mermaid
+graph TB
+    subgraph "🌐 Infrastructure Layer"
+        FastAPI[FastAPI Web Framework]
+        PostgreSQL[(PostgreSQL Database)]
+        SQLAlchemy[SQLAlchemy ORM]
+        Docker[Docker Containers]
+        JWT[JWT Authentication]
+    end
+    
+    subgraph "📋 Application Layer"
+        UseCases[Use Cases]
+        DTOs[Data Transfer Objects]
+        Handlers[Event Handlers]
+        Services[Application Services]
+    end
+    
+    subgraph "🎯 Domain Layer"
+        Entities[Domain Entities]
+        ValueObjects[Value Objects]
+        Events[Domain Events]
+        Repositories[Repository Interfaces]
+        Rules[Business Rules]
+    end
+    
+    FastAPI --> UseCases
+    UseCases --> Entities
+    SQLAlchemy --> Repositories
+    Handlers --> Events
+    Services --> DTOs
+    
+    classDef infrastructure fill:#e1f5fe
+    classDef application fill:#f3e5f5
+    classDef domain fill:#e8f5e8
+    
+    class FastAPI,PostgreSQL,SQLAlchemy,Docker,JWT infrastructure
+    class UseCases,DTOs,Handlers,Services application
+    class Entities,ValueObjects,Events,Repositories,Rules domain
+```
 
-### Capas de la Arquitectura
+### 📦 Estructura Modular
+
+```mermaid
+graph LR
+    subgraph "🏗️ Clean Architecture Layers"
+        subgraph "Domain"
+            User[👤 User Entity]
+            Email[📧 Email VO]
+            Password[🔐 Password VO]
+            Events[📢 Domain Events]
+        end
+        
+        subgraph "Application"
+            RegisterUC[📝 Register Use Case]
+            LoginUC[🔑 Login Use Case]
+            EventHandlers[🎯 Event Handlers]
+        end
+        
+        subgraph "Infrastructure"
+            API[🌐 FastAPI]
+            DB[🗄️ PostgreSQL]
+            Repos[📊 Repositories]
+        end
+    end
+    
+    API --> RegisterUC
+    RegisterUC --> User
+    User --> Events
+    Events --> EventHandlers
+    Repos --> DB
+    
+    classDef domain fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef application fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef infrastructure fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    
+    class User,Email,Password,Events domain
+    class RegisterUC,LoginUC,EventHandlers application
+    class API,DB,Repos infrastructure
+```
+
+### 🔄 Patrones de Diseño Implementados
+
+#### Repository Pattern + Unit of Work
+
+```mermaid
+sequenceDiagram
+    participant UC as Use Case
+    participant UoW as Unit of Work
+    participant Repo as Repository
+    participant DB as Database
+    participant Event as Event Bus
+    
+    UC->>UoW: async with uow:
+    UoW->>Repo: uow.users.save(user)
+    Repo->>DB: INSERT/UPDATE
+    UC->>UoW: await uow.commit()
+    UoW->>Event: publish_events()
+    Event->>UC: events handled
+    
+    Note over UC,Event: Transaccional + Event-Driven
+```
+
+#### Domain Events Pattern
+
+```mermaid
+graph LR
+    subgraph "🎯 Domain Entity"
+        User[User.create] --> Event[UserRegisteredEvent]
+    end
+    
+    subgraph "📢 Event Publishing"
+        Event --> EventBus[Event Bus]
+    end
+    
+    subgraph "🎯 Event Handlers"
+        EventBus --> Welcome[Welcome Email]
+        EventBus --> Audit[Audit Log]
+        EventBus --> Metrics[User Metrics]
+    end
+    
+    classDef event fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef handler fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    
+    class Event,EventBus event
+    class Welcome,Audit,Metrics handler
+```
+
+## 🚀 Inicio Rápido
+
+### Prerrequisitos
+
+- **Docker** y **Docker Compose** instalados
+- **Python 3.12+** (para desarrollo local)
+- **Git** para clonar el repositorio
+
+### 🐳 Configuración con Docker (Recomendado)
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/agustinEDev/RyderCupAM.git
+cd RyderCupAM
+
+# 2. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus configuraciones
+
+# 3. Levantar el entorno completo
+docker-compose up -d
+
+# 4. Ejecutar migraciones de base de datos
+docker-compose exec app alembic upgrade head
+
+# 5. ¡Listo! La API está disponible en http://localhost:8000
+```
+
+### 🔧 Desarrollo Local
+
+```bash
+# 1. Crear entorno virtual
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate    # Windows
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Configurar base de datos (requiere PostgreSQL)
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ryderdb"
+alembic upgrade head
+
+# 4. Ejecutar servidor de desarrollo
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### ⚡ Verificación de la Instalación
+
+```bash
+# Verificar que la API responde
+curl http://localhost:8000/health
+
+# Acceder a la documentación interactiva
+open http://localhost:8000/docs
+```
+
+## 🧪 Testing Strategy
+
+### 🎯 Test Pyramid Implementado
+
+```mermaid
+graph TD
+    subgraph "🎯 Test Strategy Pyramid"
+        A["🌐 E2E Tests (5%)
+        Pocos, lentos, alta confianza
+        Full system integration"]
+        B["🔄 Integration Tests (15%)
+        Algunos, medios, confianza media
+        Component collaboration"]
+        C["🔧 Unit Tests (80%)
+        Muchos, rápidos, feedback inmediato
+        Isolated components"]
+    end
+    
+    A -.-> B
+    B -.-> C
+    
+    classDef e2e fill:#ffebee,stroke:#f44336,stroke-width:2px
+    classDef integration fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef unit fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    
+    class A e2e
+    class B integration
+    class C unit
+```
+
+### 📊 Estado Actual de Tests
 
 ```
-┌─────────────────────────────────────────┐
-│         Presentation Layer              │
-│    (Schemas, Validators, Mappers)       │
-└─────────────────────────────────────────┘
-                  ↓
-┌─────────────────────────────────────────┐
-│        Application Layer                │
-│  (Use Cases, Application Services)      │
-│         + Unit of Work                  │
-└─────────────────────────────────────────┘
-                  ↓
-┌─────────────────────────────────────────┐
-│           Domain Layer                  │
-│   (Entities, Value Objects, Rules)      │
-│      + Repository Interfaces            │
-└─────────────────────────────────────────┘
-                  ↑
-┌─────────────────────────────────────────┐
-│       Infrastructure Layer              │
-│  (DB, External APIs, Implementations)   │
-│    + Unit of Work Implementation        │
-└─────────────────────────────────────────┘
+📊 Estadísticas de Testing (218 tests total)
+├── 🔧 Tests Unitarios: 197/197 (100% éxito)
+│   ├── Domain Entities: 73 tests
+│   ├── Value Objects: 49 tests  
+│   ├── Repository Interfaces: 31 tests
+│   ├── Unit of Work: 18 tests
+│   ├── Domain Events: 52 tests
+│   ├── Application Use Cases: 2 tests
+│   └── Excepciones: 21 tests
+│
+├── 🔗 Tests de Integración: 21/21 (100% éxito)
+│   ├── API Endpoints: 13 tests
+│   └── Domain Events Integration: 7 tests
+│
+└── ⚡ Performance: 218 tests en ~2 segundos (paralelización)
 ```
 
-## 📦 Módulos del Sistema
+### 🚀 Ejecutar Tests
 
-### Módulo: User Management ✅ (Implementado)
-Gestión completa de usuarios, autenticación y autorización.
+```bash
+# Ejecutar todos los tests con el script optimizado
+python dev_tests.py
 
-**🎯 Domain Layer Completado:**
-- ✅ **Entities**: User entity con validaciones completas
-- ✅ **Value Objects**: UserId, Email, Password con encapsulación total
-- ✅ **Domain Services**: Password hashing con bcrypt optimizado
-- ✅ **Repository Interfaces**: Contratos definidos para persistencia
+# Tests específicos
+pytest tests/unit/                    # Solo unit tests
+pytest tests/integration/             # Solo integration tests
+pytest tests/unit/modules/user/       # Tests del módulo user
 
-**📋 Application Layer:**
-- 🔄 **Use Cases**: RegisterUser, LoginUser (en desarrollo)
-- 🔄 **Unit of Work**: Patrón implementado para transacciones
-- ⏳ **DTOs**: Request/Response objects
+# Con cobertura
+pytest --cov=src --cov-report=html
+```
 
-**🌐 Infrastructure Layer:**
-- ⏳ **Repository Implementations**: Concrete database access
-- ⏳ **Database Adapters**: SQLAlchemy integration
+## 📊 Estado del Proyecto
 
-### Módulo: Competition Management (Futuro)
-Creación y gestión de competiciones.
+### 🎯 Roadmap de Desarrollo
 
-### Módulo: Team Management (Futuro)
-Gestión de equipos y jugadores.
+```mermaid
+gantt
+    title Desarrollo del Proyecto
+    dateFormat  YYYY-MM-DD
+    section Fase 1: Foundation ✅
+    Clean Architecture Setup    :done, arch, 2024-10-01, 2024-10-15
+    User Management            :done, user, 2024-10-15, 2024-10-30
+    Authentication & Security  :done, auth, 2024-10-25, 2024-11-05
+    Testing Framework         :done, test, 2024-11-01, 2024-11-10
+    Documentation            :done, docs, 2024-11-05, 2024-11-15
+    
+    section Fase 2: Core Features 🚧
+    Tournament Management    :active, tour, 2024-11-15, 2024-12-15
+    Team Formation          :team, 2024-12-01, 2024-12-30
+    Basic Scoring System    :score, 2024-12-15, 2025-01-15
+    
+    section Fase 3: Advanced Features ⏳
+    Handicap Calculation    :handicap, 2025-01-15, 2025-02-15
+    Real-time Updates      :realtime, 2025-02-01, 2025-03-01
+    Statistics Dashboard   :stats, 2025-02-15, 2025-03-15
+    
+    section Fase 4: Production 🎯
+    Performance Optimization :perf, 2025-03-15, 2025-04-15
+    Mobile App Companion    :mobile, 2025-04-01, 2025-05-15
+    Advanced Analytics     :analytics, 2025-05-01, 2025-06-01
+```
 
-### Módulo: Match Management (Futuro)
-Gestión de partidos y formatos de juego.
+### ✅ Características Implementadas
 
-### Módulo: Scoring (Futuro)
-Sistema de puntuación y resultados.
+- **✅ Foundation (100% Complete)**
+  - Clean Architecture con Domain-Driven Design
+  - User management completo con Value Objects
+  - Sistema de autenticación JWT + bcrypt
+  - Repository Pattern con Unit of Work
+  - Domain Events con Event Bus
+  - Testing framework optimizado (218 tests)
+  - Documentación completa con ADRs
+  - **Capa de Aplicación con Casos de Uso (`RegisterUserUseCase`)**
 
-## 🚀 Roadmap
+- **🚧 En Desarrollo**
+  - **Conexión de Casos de Uso a la API (Composition Root)**
+  - Tournament management system
+  - Team formation algorithms
+  - Handicap calculation engine
 
-### Fase 1: Foundation ✅ (Completada - 31 Oct 2025)
-- ✅ **Clean Architecture**: 3-layer separation implementada
-- ✅ **Domain Layer**: Entities y Value Objects completamente implementados
-- ✅ **User Management**: Sistema completo de validación y hashing
-- ✅ **Testing Framework**: 80 tests con optimización de performance (0.54s)
-- ✅ **Documentation**: ADRs completos y Design Document
-- ✅ **Code Quality**: Type hints, validaciones, y error handling
-
-### Fase 2: Repository & Transactions ✅ (Completada - 1 Nov 2025)
-- ✅ **Repository Interfaces**: Contratos completos para persistencia (31 tests)
-- ✅ **Unit of Work Pattern**: Gestión de transacciones implementada (18 tests)
-- ✅ **Domain Exceptions**: Jerarquía completa de errores (21 tests)
-- ✅ **Testing Excellence**: 150 tests en 0.59s con categorización profesional
-
-### Fase 3: Application Layer 🚧 (Siguiente)
-- ⏳ **Use Cases**: RegisterUser, LoginUser implementation
-- ⏳ **Application Services**: Token management, validation
-- ⏳ **DTOs**: Request/Response objects
-- ⏳ **Domain Events**: Event-driven communication between modules
-- ⏳ **Infrastructure Layer**: SQLAlchemy integration
-
-### Fase 4: Gestión de Competiciones
-- [ ] Crear competición
-- [ ] Configurar formato
-- [ ] Invitar participantes
-
-### Fase 5: Gestión de Equipos
-- [ ] Crear equipos
-- [ ] Asignar jugadores
-- [ ] Capitanes de equipo
-
-### Fase 6: Gestión de Partidos
-- [ ] Crear emparejamientos
-- [ ] Formatos de juego (Foursome, Fourball, Singles)
-- [ ] Calendario de partidos
-
-### Fase 7: Sistema de Puntuación
-- [ ] Registro de resultados
-- [ ] Cálculo de puntos
-- [ ] Clasificación en tiempo real
+- **⏳ Planificado**
+  - Real-time scoring updates
+  - Advanced tournament formats
+  - Mobile companion app
+  - Statistical analytics
 
 ## 🛠️ Stack Tecnológico
 
-| Componente | Tecnología | Versión | Status |
-|------------|------------|---------|---------|
-| **Backend** | Python | 3.12+ | ✅ |
-| **Web Framework** | FastAPI | 0.115+ | ✅ |
-| **Database** | PostgreSQL | 15+ | 🔄 |
-| **ORM** | SQLAlchemy | 2.0+ | 🔄 |
-| **Authentication** | JWT + bcrypt | 4.1.2 | ✅ |
-| **Testing** | pytest + pytest-xdist | 8.3+ | ✅ |
-| **Type Checking** | mypy | Latest | ✅ |
-| **Code Quality** | black + ruff | Latest | ✅ |
+### Backend Core
+- **Python 3.12+** - Lenguaje principal con type hints avanzados
+- **FastAPI 0.115+** - Framework web async con documentación automática
+- **SQLAlchemy 2.0+** - ORM con soporte async y type safety
+- **PostgreSQL 15+** - Base de datos principal con extensiones JSON
+- **Alembic** - Manejo de migraciones de base de datos
 
-**🚀 Performance Optimizations:**
-- **Parallel Testing**: pytest-xdist con 7 workers
-- **bcrypt Optimization**: Environment-based rounds (4 testing / 12 production)
-- **Fast Feedback**: Custom test runner con categorización visual
+### Infrastructure & DevOps
+- **Docker & Docker Compose** - Containerización y orquestación
+- **JWT + bcrypt** - Autenticación stateless y hashing seguro
+- **pytest + pytest-xdist** - Testing framework con paralelización
+- **Git + GitHub** - Control de versiones y CI/CD
 
-## 📋 Requisitos
+### Architecture Patterns
+- **Clean Architecture** - Separación de responsabilidades en capas
+- **Domain-Driven Design** - Modelado rico del dominio de negocio
+- **Repository Pattern** - Abstracción de la capa de persistencia
+- **Unit of Work** - Gestión transaccional
+- **Domain Events** - Comunicación desacoplada entre componentes
 
-- **Python**: 3.12+ (recomendado para type hints avanzados)
-- **PostgreSQL**: 15+ (para fase de infraestructura)
-- **Dependencias**: Ver `requirements.txt` para lista completa
-- **Memory**: 4GB RAM mínimo
-- **CPU**: Multi-core recomendado para testing paralelo
+## 📖 Documentación
 
-## 🚀 Instalación y Configuración
+### 📚 Documentación Principal
 
-### 1. Clonar el repositorio
-
-```bash
-git clone <repo-url>
-cd ryder-cup-manager
-```
-
-### 2. Crear entorno virtual
-
-```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
-
-### 3. Instalar dependencias
-
-```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # Para desarrollo
-```
-
-### 4. Configurar variables de entorno
-
-```bash
-cp .env.example .env
-# Editar .env con tus configuraciones
-```
-
-### 5. Configurar base de datos
-
-```bash
-# Crear base de datos
-createdb ryder_cup_manager
-
-# Ejecutar migraciones
-alembic upgrade head
-```
-
-### 6. Ejecutar la aplicación
-
-```bash
-uvicorn src.main:app --reload
-```
-
-La API estará disponible en `http://localhost:8000`
-Documentación interactiva en `http://localhost:8000/docs`
-
-## 🧪 Testing
-
-### 🚀 Quick Start
-```bash
-# Ejecutar con script optimizado (recomendado)
-python dev_tests.py
-
-# Tests tradicionales
-pytest
-pytest -n auto  # Parallel execution
-```
-
-### 📊 **Testing Metrics (Actual)**
-- **Total Tests**: 150 tests (+70 nuevos en nov-2025)
-- **Execution Time**: 0.59 seconds (maintained excellence)
-- **Parallelization**: 7 workers (pytest-xdist)
-- **Coverage Target**: 90% domain + repository interfaces
-
-### 🎯 Test Categories
-```bash
-# Por capa arquitectónica
-pytest tests/domain/           # Domain logic tests
-pytest tests/application/      # Use case tests  
-pytest tests/infrastructure/   # Database tests
-
-# Por objeto específico
-pytest tests/ -k "User"        # All User-related tests
-pytest tests/ -k "Email"       # Email value object tests
-```
-
-### 🔧 Performance Optimizations
-- **bcrypt rounds**: 4 (testing) vs 12 (production)
-- **Parallel execution**: Automatic worker detection
-- **Fast feedback**: Visual categorization by layers
-
-## 🔍 Linting y Formateo
-
-```bash
-# Formatear código
-black src tests
-
-# Linting
-ruff check src tests
-
-# Type checking
-mypy src
-```
-
-## 📝 Convenciones de Código
-
-- **Estilo**: PEP 8
-- **Nombres de clases**: PascalCase
-- **Nombres de funciones/variables**: snake_case
-- **Nombres de constantes**: UPPER_SNAKE_CASE
-- **Idioma del código**: Inglés
-- **Idioma de documentación**: Español
-- **Line length**: 100 caracteres
-
-## 🗂️ Estructura del Proyecto
-
-```
-src/
-├── modules/          # Módulos de negocio
-│   └── user/        # Módulo de usuarios
-│       ├── domain/          # Lógica de negocio
-│       ├── application/     # Casos de uso + UoW
-│       ├── infrastructure/  # Implementaciones + UoW Impl
-│       └── presentation/    # Schemas y mappers
-├── shared/          # Código compartido
-│   ├── domain/      # Interfaces compartidas
-│   └── infrastructure/  # Unit of Work base
-├── config/          # Configuración
-└── main.py          # Punto de entrada
-```
-
-## 🔄 Patrón Unit of Work
-
-El proyecto implementa el patrón **Unit of Work** para gestionar transacciones y mantener la consistencia de datos.
-
-### Beneficios
-- ✅ **Transacciones atómicas**: Commit o rollback de todas las operaciones juntas
-- ✅ **Consistencia**: Garantiza la integridad de los datos
-- ✅ **Testeable**: Fácil de mockear en tests
-- ✅ **Desacoplamiento**: Los casos de uso no dependen de la implementación de BD
-
-### Uso en Casos de Uso
-
-```python
-async def execute(self, command: RegisterUserCommand) -> UserResponse:
-    async with self._uow:
-        # Operaciones con repositorios
-        user = await User.create(...)
-        await self._uow.users.save(user)
-        
-        # Commit automático al salir del context manager
-        await self._uow.commit()
-        
-    return UserResponse(...)
-```
-
-## 📚 Documentación Completa
-
-### 📖 Core Documentation
-- **[Design Document](docs/design-document.md)** - Visión completa del sistema
+- **[Design Document](docs/design-document.md)** - Diseño completo del sistema
 - **[Project Structure](docs/project-structure.md)** - Organización del código
-- **[User Management Module](docs/modules/user-management.md)** - Documentación específica
+- **[Architecture Decisions](docs/architecture/decisions/)** - ADRs y decisiones técnicas
+- **[API Documentation](http://localhost:8000/docs)** - Swagger/OpenAPI interactivo
 
-### 🏗️ Architecture Decision Records (ADRs)
-- **[ADR-001](docs/architecture/decisions/ADR-001-clean-architecture.md)** - Clean Architecture adoption
-- **[ADR-002](docs/architecture/decisions/ADR-002-value-objects.md)** - Value Objects implementation
-- **[ADR-003](docs/architecture/decisions/ADR-003-testing-strategy.md)** - Testing strategy & optimization
-- **[ADR-004](docs/architecture/decisions/ADR-004-tech-stack.md)** - Technology stack decisions
-- **[ADR-005](docs/architecture/decisions/ADR-005-repository-pattern.md)** - Repository Pattern implementation
-- **[ADR-006](docs/architecture/decisions/ADR-006-unit-of-work-pattern.md)** - Unit of Work for transaction management
-- **[ADR-007](docs/architecture/decisions/ADR-007-domain-events-pattern.md)** - Domain Events for event-driven architecture
+### 🎯 Guías de Desarrollo
 
-### 📋 Progress Tracking
-- **[Progress Log](PROGRESS_LOG.md)** - Detailed development timeline
+- **[Testing Guide](tests/README.md)** - Estrategias y mejores prácticas de testing
+- **[Module Documentation](docs/modules/)** - Documentación específica por módulo
+- **[Contributing Guide](CONTRIBUTING.md)** - Guía para contribuidores
 
-## 🔐 Variables de Entorno
+### 📋 ADRs (Architecture Decision Records)
 
-```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/ryder_cup_manager
+| ADR | Decisión | Estado |
+|-----|----------|--------|
+| [ADR-001](docs/architecture/decisions/ADR-001-clean-architecture.md) | Clean Architecture | ✅ Implementado |
+| [ADR-002](docs/architecture/decisions/ADR-002-value-objects.md) | Value Objects | ✅ Implementado |
+| [ADR-003](docs/architecture/decisions/ADR-003-testing-strategy.md) | Testing Strategy | ✅ Implementado |
+| [ADR-004](docs/architecture/decisions/ADR-004-tech-stack.md) | Tech Stack | ✅ Implementado |
+| [ADR-005](docs/architecture/decisions/ADR-005-repository-pattern.md) | Repository Pattern | ✅ Implementado |
+| [ADR-006](docs/architecture/decisions/ADR-006-unit-of-work.md) | Unit of Work | ✅ Implementado |
+| [ADR-007](docs/architecture/decisions/ADR-007-domain-events.md) | Domain Events | ✅ Implementado |
+| [ADR-009](docs/architecture/decisions/ADR-009-docker-environment.md) | Docker Environment | ✅ Implementado |
+| [ADR-010](docs/architecture/decisions/ADR-010-alembic-migrations.md) | Alembic Migrations | ✅ Implementado |
+| [ADR-011](docs/architecture/decisions/ADR-011-application-layer-use-cases.md) | Application Layer & Use Cases | ✅ Implementado |
+| [ADR-012](docs/architecture/decisions/ADR-012-composition-root.md) | Composition Root | ✅ Aceptado |
 
-# JWT
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+## 🔧 API Reference
 
-# Application
-DEBUG=True
-ENVIRONMENT=development
+### 🔐 Authentication Endpoints
+
+```http
+POST   /api/v1/auth/register     # User registration
+POST   /api/v1/auth/login        # User authentication  
+POST   /api/v1/auth/logout       # User logout
+POST   /api/v1/auth/refresh      # Token refresh
 ```
 
-## � Quick Development Start
+### 👤 User Management
 
-```bash
-# 1. Setup environment
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Run optimized tests
-python dev_tests.py
-
-# 3. Start development (when ready)
-uvicorn src.main:app --reload
+```http
+GET    /api/v1/users/profile     # Get current user profile
+PUT    /api/v1/users/profile     # Update user profile
+GET    /api/v1/users/{user_id}   # Get user by ID
 ```
 
-## �📊 API Endpoints
+### 🏆 Tournament Management (Planned)
 
-### 🔐 Authentication (Planned)
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/refresh` - Token refresh
+```http
+GET    /api/v1/tournaments       # List tournaments
+POST   /api/v1/tournaments       # Create tournament
+GET    /api/v1/tournaments/{id}  # Get tournament details
+PUT    /api/v1/tournaments/{id}  # Update tournament
+```
 
-### 👥 Users (Planned)  
-- `GET /api/v1/users/profile` - Get current user profile
-- `PUT /api/v1/users/profile` - Update user profile
+### 📊 Health & Monitoring
 
-**📖 Documentation**: Available at `/docs` (Swagger UI) when server is running
+```http
+GET    /health                   # Health check endpoint
+GET    /docs                     # Interactive API documentation
+GET    /redoc                    # Alternative API documentation
+```
 
 ## 🤝 Contribución
 
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+### 🚀 Proceso de Contribución
+
+1. **Fork** el repositorio
+2. **Crear** una rama para tu feature (`git checkout -b feature/amazing-feature`)
+3. **Implementar** los cambios siguiendo las convenciones del proyecto
+4. **Ejecutar** tests y asegurar 100% de cobertura en nuevos componentes
+5. **Commit** tus cambios (`git commit -m 'Add amazing feature'`)
+6. **Push** a la rama (`git push origin feature/amazing-feature`)
+7. **Abrir** un Pull Request con descripción detallada
+
+### 📋 Estándares de Código
+
+- **Style Guide**: PEP 8 + Black formatter
+- **Type Hints**: Obligatorios en todo el código
+- **Testing**: Cobertura mínima 90% para nuevas features
+- **Documentation**: Docstrings estilo Google para todas las funciones públicas
+- **Architecture**: Seguir Clean Architecture y principios DDD
+
+### 🧪 Quality Gates
+
+```bash
+# Antes de cada commit
+black src/ tests/                # Formateo de código
+mypy src/                        # Type checking
+pytest --cov=src --cov-fail-under=90  # Tests con cobertura
+```
 
 ## 📄 Licencia
 
-Este proyecto es de uso privado.
+Este proyecto está bajo la licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
 
-## 👥 Autores
+## 📧 Contacto y Soporte
 
-Tu equipo de desarrollo
+### 👨‍💻 Equipo de Desarrollo
+
+- **Lead Developer**: [Agustín Estévez](mailto:agustin@ryderclub.com)
+- **GitHub**: [@agustinEDev](https://github.com/agustinEDev)
+- **Project Repository**: [RyderCupAM](https://github.com/agustinEDev/RyderCupAM)
+
+### 🐛 Reportar Issues
+
+Si encuentras un bug o tienes una sugerencia de mejora:
+
+1. Revisa los [issues existentes](https://github.com/agustinEDev/RyderCupAM/issues)
+2. Si no existe, [crea un nuevo issue](https://github.com/agustinEDev/RyderCupAM/issues/new)
+3. Proporciona la máxima información posible para reproducir el problema
+
+### 💬 Comunidad
+
+- **Discussions**: [GitHub Discussions](https://github.com/agustinEDev/RyderCupAM/discussions)
+- **Updates**: Sigue el proyecto para recibir notificaciones de nuevas releases
+
+---
+
+<div align="center">
+
+**⭐ Si este proyecto te resulta útil, considera darle una estrella en GitHub ⭐**
+
+*Desarrollado con ❤️ para la comunidad de golf amateur*
+
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=agustinEDev.RyderCupAM)
+
+</div>
