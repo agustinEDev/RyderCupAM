@@ -120,6 +120,7 @@ def process_results(report_file: str) -> dict:
         
         results_by_file[filepath].append({
             "name": test_name,
+            "nodeid": test["nodeid"],  # Guardamos el nodeid original
             "outcome": test["outcome"],
             "duration": duration
         })
@@ -192,10 +193,10 @@ def generate_markdown_report(results: dict, total_time: float):
             status_icon = ICONS.get(test['outcome'].upper(), "❓")
             description = ' '.join(docstrings.get(test['name'], "No description provided.").split())
             
-            # Busca usando lookup optimizado
-            test_key = f"{filepath}::{test['name']}"
-            full_test_data = test_lookup.get(test_key)
-            slow_icon = f" {ICONS['SLOW']}" if test_key in slowest_test_nodeids else ""
+            # Usar el nodeid original guardado en el test
+            test_nodeid = test['nodeid']
+            full_test_data = test_lookup.get(test_nodeid)
+            slow_icon = f" {ICONS['SLOW']}" if test_nodeid in slowest_test_nodeids else ""
             
             f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
             f.write(f"  > _{description}_\n")
