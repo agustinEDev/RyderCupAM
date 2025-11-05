@@ -8,68 +8,63 @@ El siguiente árbol representa la estructura completa y actual del proyecto.
 
 ```
 .
-├── alembic/ # 📜 Scripts y configuración de migraciones de base de datos
-│ └── versions/ # - Ficheros de migración versionados
-├── docs/ # 📚 Documentación del proyecto
-│ ├── architecture/
-│ │ └── decisions/ # - Architecture Decision Records (ADRs)
-│ └── project-structure.md
-├── src/ # 🐍 Código fuente de la aplicación
-│ ├── config/ # - Configuración de infraestructura (ej: conexión a BD)
-│ │ └── database.py
-│ ├── modules/ # - Módulos de negocio (ej: user)
-│ │ └── user/
-│ │ ├── application/ # - Casos de uso y lógica de aplicación
-│ │ │ └── handlers/ # - Manejadores de eventos de dominio
-│ │ ├── domain/ # - Lógica y reglas de negocio puras (entidades, VOs)
-│ │ └── infrastructure/ # - Implementación técnica (repositorios, mappers)
-│ │ └── persistence/
-│ │ └── sqlalchemy/
-│ └── shared/ # - Código compartido entre módulos
-│ ├── domain/ # - Abstracciones de dominio (Eventos, UoW, etc.)
-│ └── infrastructure/ # - Implementaciones compartidas (EventBus, Logging)
-├── tests/ # 🧪 Tests automatizados
-│ ├── integration/ # - Tests que verifican la colaboración entre componentes
-│ │ ├── api/
-│ │ ├── domain_events/
-│ │ └── modules/
-│ └── unit/ # - Tests que verifican componentes de forma aislada
-│ ├── modules/
-│ └── shared/
-├── .env # - Fichero de variables de entorno (ignorado por Git)
-├── .gitignore # - Ficheros y carpetas ignorados por Git
-├── alembic.ini # - Fichero de configuración principal de Alembic
-├── docker-compose.yml # - Orquestación de los contenedores de desarrollo (app + db)
-├── Dockerfile # - "Receta" para construir la imagen Docker de la aplicación
-├── main.py # - Punto de entrada de la aplicación FastAPI
-├── PROGRESS_LOG.md # - Bitácora de progreso y decisiones de la sesión
-├── README.md # - Portada y resumen general del proyecto
-└── requirements.txt # - Dependencias de Python del proyecto
+├── alembic/
+├── docs/
+│   └── architecture/
+│       └── decisions/ # - ADRs: ADR-001 a ADR-012
+├── src/
+│   ├── config/
+│   ├── modules/
+│   │   └── user/
+│   │       ├── application/
+│   │       │   ├── dto/ # - Data Transfer Objects (user_dto.py)
+│   │       │   └── use_cases/ # - Casos de Uso (register_user.py)
+│   │       ├── domain/
+│   │       │   ├── entities/
+│   │       │   ├── errors/ # - Excepciones de dominio (user_errors.py)
+│   │       │   ├── services/ # - Servicios de dominio (user_finder.py)
+│   │       │   └── value_objects/
+│   │       └── infrastructure/
+│   │           └── persistence/
+│   │               ├── in_memory/ # - Implementaciones para tests unitarios
+│   │               └── sqlalchemy/ # - Implementaciones para producción/integración
+│   └── shared/
+│       ├── domain/
+│       └── infrastructure/
+├── tests/
+│   ├── integration/
+│   └── unit/
+│       └── modules/
+│           └── user/
+│               └── application/
+│                   └── use_cases/ # - Tests para los casos de uso
+├── .env
+├── alembic.ini
+├── docker-compose.yml
+├── Dockerfile
+├── main.py
+├── PROGRESS_LOG.md
+├── README.md
+└── requirements.txt
 ```
 
 ## 🔬 Descripción Detallada de Componentes Clave
 
 ### `src/` - El Corazón de la Aplicación
 
--   **`src/config/database.py`**: Configura la conexión a la base de datos con SQLAlchemy y registra adaptadores para nuestros `ValueObjects`.
 -   **`src/modules/user/`**: Contiene todo el código relacionado con la gestión de usuarios, organizado por capas:
-    -   `domain/`: Lógica de negocio pura. Aquí viven las entidades (`User`), `ValueObjects` (`UserId`, `Email`), y las **interfaces** de los repositorios y del `Unit of Work`.
-    -   `application/handlers/`: Implementaciones concretas de los manejadores de eventos. Orquestan acciones en respuesta a eventos de dominio (ej: enviar un email cuando un usuario se registra).
-    -   `infrastructure/persistence/sqlalchemy/`: Implementa los contratos del dominio usando SQLAlchemy.
-        -   `mappers.py`: Define cómo la entidad `User` se mapea a la tabla `users`. Utiliza `TypeDecorator` y `composite` para manejar los `ValueObjects`.
-        -   `user_repository.py`: Implementación del `UserRepositoryInterface`.
-        -   `unit_of_work.py`: Implementación del `UserUnitOfWorkInterface`.
--   **`src/shared/`**: Código agnóstico al dominio de negocio, pero fundamental para la arquitectura.
-    -   `domain/`: Interfaces genéricas como `UnitOfWorkInterface`, `DomainEvent`, `EventHandler`.
-    -   `infrastructure/`: Implementaciones concretas como `InMemoryEventBus` y el sistema de `Logging`.
+    -   `domain/`: Lógica de negocio pura. Aquí viven las entidades (`User`), `ValueObjects`, **interfaces** de repositorios, y ahora también los `services` (como `UserFinder`) y `errors` específicos del dominio.
+    -   `application/`: Orquesta la lógica de dominio para realizar acciones concretas.
+        -   `dto/`: Define los contratos de datos (`RegisterUserRequestDTO`, `UserResponseDTO`) para la comunicación con los casos de uso.
+        -   `use_cases/`: Contiene la implementación de los casos de uso, como `RegisterUserUseCase`.
+    -   `infrastructure/persistence/`: Implementa los contratos del dominio.
+        -   `sqlalchemy/`: Implementación real con base de datos.
+        -   `in_memory/`: Implementación de "dobles de prueba" para los tests unitarios, permitiendo una ejecución rápida y aislada.
 
 ### `tests/` - Garantía de Calidad
 
--   **`tests/unit/`**: Tests rápidos y aislados que no tocan la base de datos ni la red. Su estructura refleja la de `src/`, probando la lógica de dominio y las interfaces de forma pura.
--   **`tests/integration/`**: Tests que verifican la colaboración entre varias partes del sistema. Requieren que el entorno Docker (`docker-compose up`) esté activo.
-    -   `api/`: Prueban los endpoints de FastAPI.
-    -   `domain_events/`: Verifican el flujo completo desde que se genera un evento hasta que su manejador lo procesa.
-    -   `modules/.../persistence/`: Prueban que la capa de persistencia funciona correctamente contra una base de datos real.
+-   **`tests/unit/modules/user/application/use_cases/`**: Nueva sección dedicada a los tests unitarios de los casos de uso. Estos tests utilizan la persistencia `in_memory` para validar la lógica de la aplicación sin tocar la base de datos.
+-   **`tests/integration/`**: Tests que verifican la colaboración entre varias partes del sistema, como un endpoint de la API llamando a un caso de uso que interactúa con la base de datos real (en Docker).
 
 ## 🗺️ Visión a Futuro
 

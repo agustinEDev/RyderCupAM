@@ -37,10 +37,11 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - ✅ **Capa de Dominio Completa**: Modelado robusto de entidades y reglas de negocio.
 - ✅ **Infraestructura de Persistencia Real**: Entorno Dockerizado con PostgreSQL, SQLAlchemy y Alembic.
 - ✅ **Testing Exhaustivo**: Cobertura total en la lógica de negocio crítica.
+- ✅ **Capa de Aplicación Iniciada**: Implementado y testeado el primer caso de uso (`RegisterUserUseCase`).
 - ✅ **Documentación Arquitectónica**: Decisiones clave registradas en ADRs.
 
 ### 📈 **Métricas Clave**
-- **Tests Totales**: **215/215** pasando.
+- **Tests Totales**: **218/218** pasando.
 - **Cobertura de Código**: **100%** en la capa de dominio e infraestructura crítica.
 - **Rendimiento de Tests**: Ejecución completa en < 2 segundos (paralelizado).
 
@@ -81,7 +82,13 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
   - **Trazabilidad**: Soporte para `correlation_id` a través de contextos.
 
 ### IV. **Capa de Aplicación (`src/modules/user/application`)**
-- ⏳ **PENDIENTE**: Este es el siguiente hito a desarrollar.
+- **Casos de Uso**:
+  - `RegisterUserUseCase`: Orquesta la lógica de registro, validación y persistencia de un nuevo usuario.
+- **DTOs**:
+  - `RegisterUserRequestDTO`: Contrato de entrada para el registro.
+  - `UserResponseDTO`: Contrato de salida para exponer datos del usuario de forma segura.
+- **Servicios de Dominio**:
+  - `UserFinder`: Encapsula la lógica de búsqueda de usuarios.
 
 ### V. **Capa de Presentación (API)**
 - **Endpoints**:
@@ -116,6 +123,49 @@ Las decisiones arquitectónicas importantes se registran en **ADRs (Architecture
 - **ADR-006**: Estrategia de Testing.
 - **ADR-007**: Domain Events Pattern.
 - **ADR-008**: Sistema de Logging Avanzado.
+- **ADR-009**: Entorno Dockerizado.
+- **ADR-010**: Migraciones con Alembic.
+
+---
+
+## 🎯 **SESIÓN 4: Persistencia Real y Containerización (4 de Noviembre de 2025)**
+
+### **Objetivos de la Sesión**
+1.  **Implementar una capa de persistencia real** con PostgreSQL.
+2.  **Integrar SQLAlchemy** como ORM.
+3.  **Configurar Alembic** para migraciones de base de datos.
+4.  **Containerizar la aplicación** y la base de datos con Docker y Docker Compose.
+5.  **Crear tests de integración** para la nueva capa de persistencia.
+
+### **Resultados y Decisiones**
+
+#### 1. **Containerización con Docker**
+-   **Acción**: Se creó un `Dockerfile` multi-etapa para optimizar la imagen de la aplicación.
+-   **Acción**: Se configuró un `docker-compose.yml` para orquestar los servicios de la aplicación (`app`) y la base de datos (`db`).
+-   **Decisión**: Se utiliza PostgreSQL 15 en un contenedor, garantizando un entorno de desarrollo consistente y aislado.
+-   **ADR**: Se creó `ADR-009-docker-environment.md` para documentar esta decisión.
+
+#### 2. **Capa de Persistencia con SQLAlchemy**
+-   **Acción**: Se implementó la capa de persistencia en `src/modules/user/infrastructure/persistence/sqlalchemy/`.
+-   **`mappers.py`**: Se definió el mapeo entre la entidad `User` y la tabla `users`. Se utilizaron `TypeDecorator` para `UserId` y `composite` para `Email` y `Password` para manejar los Value Objects correctamente.
+-   **`user_repository.py`**: Implementación concreta del `UserRepositoryInterface` con SQLAlchemy.
+-   **`unit_of_work.py`**: Implementación del `UserUnitOfWorkInterface` que gestiona la sesión y las transacciones de SQLAlchemy.
+
+#### 3. **Migraciones con Alembic**
+-   **Acción**: Se configuró Alembic para gestionar las migraciones de la base de datos.
+-   **Acción**: Se creó la migración inicial para la tabla `users`.
+-   **Decisión**: Alembic se convierte en la herramienta estándar para cualquier cambio en el esquema de la base de datos.
+-   **ADR**: Se creó `ADR-010-alembic-migrations.md`.
+
+#### 4. **Tests de Integración de Persistencia**
+-   **Acción**: Se crearon nuevos tests de integración en `tests/integration/modules/user/infrastructure/persistence/sqlalchemy/` para validar la capa de persistencia.
+-   **`conftest.py`**: Se añadieron fixtures para gestionar una base de datos de test, asegurando el aislamiento entre tests.
+-   **Resultado**: Se validó con éxito que la capa de persistencia funciona como se esperaba contra una base de datos real.
+
+### **Estado Final de la Sesión**
+-   **Entregable**: Una aplicación completamente containerizada con una capa de persistencia funcional y robusta.
+-   **Métricas**: El número total de tests se mantuvo o aumentó, todos pasando.
+-   **Próximos Pasos**: Implementar la capa de aplicación (casos de uso) utilizando la nueva infraestructura de persistencia.
 
 ---
 

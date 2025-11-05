@@ -258,20 +258,21 @@ graph TD
 ### 📊 Estado Actual de Tests
 
 ```
-📊 Estadísticas de Testing (215 tests total)
-├── 🔧 Tests Unitarios: 195/195 (100% éxito)
+📊 Estadísticas de Testing (218 tests total)
+├── 🔧 Tests Unitarios: 197/197 (100% éxito)
 │   ├── Domain Entities: 73 tests
 │   ├── Value Objects: 49 tests  
 │   ├── Repository Interfaces: 31 tests
 │   ├── Unit of Work: 18 tests
 │   ├── Domain Events: 52 tests
+│   ├── Application Use Cases: 2 tests
 │   └── Excepciones: 21 tests
 │
-├── 🔗 Tests de Integración: 20/20 (100% éxito)
+├── 🔗 Tests de Integración: 21/21 (100% éxito)
 │   ├── API Endpoints: 13 tests
 │   └── Domain Events Integration: 7 tests
 │
-└── ⚡ Performance: 215 tests en ~8 segundos (paralelización)
+└── ⚡ Performance: 218 tests en ~2 segundos (paralelización)
 ```
 
 ### 🚀 Ejecutar Tests
@@ -328,10 +329,12 @@ gantt
   - Sistema de autenticación JWT + bcrypt
   - Repository Pattern con Unit of Work
   - Domain Events con Event Bus
-  - Testing framework optimizado (215 tests)
+  - Testing framework optimizado (218 tests)
   - Documentación completa con ADRs
+  - **Capa de Aplicación con Casos de Uso (`RegisterUserUseCase`)**
 
 - **🚧 En Desarrollo**
+  - **Conexión de Casos de Uso a la API (Composition Root)**
   - Tournament management system
   - Team formation algorithms
   - Handicap calculation engine
@@ -392,6 +395,8 @@ gantt
 | [ADR-007](docs/architecture/decisions/ADR-007-domain-events.md) | Domain Events | ✅ Implementado |
 | [ADR-009](docs/architecture/decisions/ADR-009-docker-environment.md) | Docker Environment | ✅ Implementado |
 | [ADR-010](docs/architecture/decisions/ADR-010-alembic-migrations.md) | Alembic Migrations | ✅ Implementado |
+| [ADR-011](docs/architecture/decisions/ADR-011-application-layer-use-cases.md) | Application Layer & Use Cases | ✅ Implementado |
+| [ADR-012](docs/architecture/decisions/ADR-012-composition-root.md) | Composition Root | ✅ Aceptado |
 
 ## 🔧 API Reference
 

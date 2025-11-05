@@ -23,6 +23,7 @@ class User:
         password: Optional[Password],
         first_name: str,
         last_name: str,
+        handicap: Optional[float] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
         domain_events: Optional[List[DomainEvent]] = None
@@ -32,6 +33,7 @@ class User:
         self.password = password
         self.first_name = first_name
         self.last_name = last_name
+        self.handicap = handicap
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
         self._domain_events: List[DomainEvent] = domain_events or []
@@ -83,6 +85,7 @@ class User:
             password=password,
             first_name=first_name,
             last_name=last_name,
+            handicap=None,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )

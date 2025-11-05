@@ -19,6 +19,8 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 | [ADR-008](./ADR-008-logging-system.md) | Sistema de Logging Avanzado | ✅ Aceptado | 3 Nov 2025 | 🟡 Medio |
 | [ADR-009](./ADR-009-docker-for-development-environment.md) | Uso de Docker para el Entorno de Desarrollo | ✅ Aceptado | 4 Nov 2025 | 🔥 Alto |
 | [ADR-010](./ADR-010-alembic-for-database-migrations.md) | Uso de Alembic para Migraciones de BD | ✅ Aceptado | 4 Nov 2025 | 🔥 Alto |
+| [ADR-011](./ADR-011-application-layer-use-cases.md) | Capa de Aplicación con Casos de Uso | ✅ Aceptado | 5 Nov 2025 | 🔥 Alto |
+| [ADR-012](./ADR-012-composition-root.md) | Patrón Composition Root | ✅ Aceptado | 5 Nov 2025 | 🔥 Alto |
 
 ## 📊 Resumen de Decisiones por Área
 
@@ -28,6 +30,8 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 - **[ADR-005](./ADR-005-repository-pattern.md)**: Repository Pattern para abstracción de datos.
 - **[ADR-006](./ADR-006-unit-of-work-pattern.md)**: Unit of Work para gestión transaccional.
 - **[ADR-007](./ADR-007-domain-events-pattern.md)**: Domain Events para arquitectura event-driven.
+- **[ADR-011](./ADR-011-application-layer-use-cases.md)**: Casos de Uso para orquestar la lógica de aplicación.
+- **[ADR-012](./ADR-012-composition-root.md)**: Composition Root para inyección de dependencias.
 
 ### 🔧 **Tecnología y Herramientas**  
 - **[ADR-004](./ADR-004-tech-stack.md)**: Python 3.12 + FastAPI + bcrypt + pytest como stack principal.
