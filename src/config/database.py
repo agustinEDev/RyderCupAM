@@ -13,7 +13,7 @@ if not DATABASE_URL:
 
 # 1. Reemplazar 'postgresql://' por 'postgresql+asyncpg://' si es necesario
 # asyncpg es el driver que SQLAlchemy usa para operaciones asíncronas con PostgreSQL
-if DATABASE_URL.startswith("postgresql://"):
+if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # 2. Crear un motor (engine) asíncrono
