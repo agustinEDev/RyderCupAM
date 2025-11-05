@@ -19,9 +19,19 @@ os.environ['TESTING'] = 'true'
 
 # --- Importaciones de la Aplicación ---
 from main import app as fastapi_app
-from src.config.database import DATABASE_URL
+from src.config.database import DATABASE_URL as APP_DATABASE_URL # Renombramos para evitar conflicto
 from src.config.dependencies import get_db_session
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metadata, start_mappers
+
+# Usamos la URL de la app como base, pero la sobreescribimos si es necesario
+DATABASE_URL = APP_DATABASE_URL
+if not DATABASE_URL:
+    user = os.getenv("POSTGRES_USER", "user")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    db = os.getenv("POSTGRES_DB", "rydercup_db")
+    port = os.getenv("DATABASE_PORT", "5434")
+    host = "localhost"
+    DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 # ======================================================================================
 # HOOKS DE CONFIGURACIÓN GLOBAL DE PYTEST
