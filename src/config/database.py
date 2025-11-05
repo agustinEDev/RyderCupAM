@@ -8,8 +8,17 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Si DATABASE_URL no está definida (ej. en desarrollo local), la construimos
 if not DATABASE_URL:
-    raise ValueError("No se ha definido la variable de entorno DATABASE_URL")
+    user = os.getenv("POSTGRES_USER", "user")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    db = os.getenv("POSTGRES_DB", "rydercup_db")
+    port = os.getenv("DATABASE_PORT", "5434")
+    host = "localhost"
+    DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db}"
+
+if not DATABASE_URL:
+    raise ValueError("No se ha definido la variable de entorno DATABASE_URL o sus componentes")
 
 # 1. Reemplazar 'postgresql://' por 'postgresql+asyncpg://' si es necesario
 # asyncpg es el driver que SQLAlchemy usa para operaciones asíncronas con PostgreSQL
