@@ -131,11 +131,13 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 
 1. **ADR-001**: Clean Architecture para mantenibilidad y testabilidad
 2. **ADR-002**: Value Objects para encapsulación y validación
-3. **ADR-003**: Testing strategy con optimizaciones de performance
+3. **ADR-003**: Estrategia de testing con paralelización y aislamiento de BD
 4. **ADR-004**: Tech stack moderno con FastAPI y PostgreSQL
-5. **ADR-005**: Repository Pattern para abstracción de datos *(Implementado)*
-6. **ADR-006**: Unit of Work para gestión transaccional *(Implementado)*
-7. **ADR-007**: Domain Events para arquitectura event-driven *(Planificado)*
+5. **ADR-005**: Repository Pattern para abstracción de datos
+6. **ADR-006**: Unit of Work para gestión transaccional
+7. **ADR-007**: Domain Events para arquitectura event-driven
+8. **ADR-011**: Casos de Uso para orquestar la lógica de aplicación
+9. **ADR-012**: Composition Root para inyección de dependencias
 
 ---
 
@@ -148,33 +150,15 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 - Gestión de perfiles y preferencias
 - Control de acceso basado en roles
 
-**Componentes Principales:**
-```python
-# Domain
-User(Entity)                    # ✅ Implementado
-UserId(ValueObject)            # ✅ Implementado  
-Email(ValueObject)             # ✅ Implementado
-Password(ValueObject)          # ✅ Implementado
-UserRegisteredEvent           # ✅ Implementado
+**Componentes Implementados:**
+- **Domain**: `User` (Entity), `UserId`, `Email`, `Password` (Value Objects), `UserRegisteredEvent`.
+- **Application**: `RegisterUserUseCase`, `RegisterUserDTO`, `UserRegisteredEventHandler`.
+- **Infrastructure**: `SQLAlchemyUserRepository`, `SQLAlchemyUnitOfWork`, `InMemoryEventBus`, `auth_routes.py` (API Endpoint).
+- **Config**: `dependencies.py` (Composition Root), `mappers.py`.
 
-# Events & Handlers
-UserRegisteredEventHandler    # ✅ Implementado
-EventBus, InMemoryEventBus   # ✅ Implementado
-EventLoggingHandler          # ✅ Implementado
-
-# Application
-RegisterUserUseCase          # ✅ Implementado
-LoginUserUseCase            # ⏳ Planeado
-UpdateProfileUseCase        # ⏳ Planeado
-
-# Infrastructure
-UserRepository              # 🔧 Interface implementada
-UserRepositoryInterface     # ✅ Implementado
-UserUnitOfWork             # 🔧 Interface implementada
-UserUnitOfWorkInterface    # ✅ Implementado
-TokenService               # ⏳ Planeado
-LoggingSystem             # ✅ Implementado
-```
+**Componentes Planeados:**
+- **Application**: `LoginUserUseCase`, `UpdateProfileUseCase`.
+- **Infrastructure**: `TokenService` (para JWT).
 
 ### 2. Tournament Management Module *(Planeado)*
 
@@ -368,24 +352,29 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 ### Uso del Unit of Work
 
 ```python
-# Caso de uso con transacciones
-async def register_user_use_case(
-    email: str, 
-    password: str,
-    uow: UserUnitOfWorkInterface
-) -> User:
-    async with uow:
-        # Validar que el email no existe
-        if await uow.users.exists_by_email(Email(email)):
-            raise UserAlreadyExistsError()
-        
-        # Crear y guardar usuario
-        user = User.create(email, password)
-        await uow.users.save(user)
-        
-        # Commit automático al salir del contexto
-        await uow.commit()
-        return user
+class RegisterUserUseCase:
+    async def execute(self, dto: RegisterUserDTO) -> User:
+        async with self._uow:
+            # 1. Verificar si el usuario ya existe
+            if await self._user_finder.by_email(dto.email):
+                raise UserAlreadyExistsError()
+            
+            # 2. Crear la entidad User (la lógica de hashing y eventos está encapsulada)
+            user = User.create(
+                first_name=dto.first_name,
+                last_name=dto.last_name,
+                email_str=dto.email,
+                plain_password=dto.password
+            )
+            
+            # 3. Guardar y confirmar
+            await self._uow.users.save(user)
+            await self._uow.commit()
+            
+            # 4. Publicar eventos (fuera de la transacción principal si es necesario)
+            # La publicación se gestionaría en el Composition Root o una capa superior.
+            
+            return user
 ```
 
 ### Beneficios del Unit of Work
@@ -493,8 +482,8 @@ class RegisterUserUseCase:
             await self._uow.users.save(user)
             await self._uow.commit()
             
-            # Publicar eventos después del commit exitoso
-            await self._uow.publish_events(self._event_bus)
+            # La publicación de eventos se gestiona fuera del UoW,
+            # por ejemplo, en un middleware o decorador.
         
         return UserResponse(...)
 ```
@@ -573,6 +562,31 @@ DELETE /api/v1/tournaments/{id}  # Delete tournament
 
 ---
 
+## 🌐 API Design
+
+La API sigue los principios RESTful y está documentada automáticamente a través de OpenAPI (Swagger).
+
+### Endpoints de Autenticación (`/api/v1/auth`)
+
+#### `POST /register`
+
+-   **Descripción**: Registra un nuevo usuario en el sistema.
+-   **Request Body**:
+    ```json
+    {
+      "first_name": "string",
+      "last_name": "string",
+      "email": "user@example.com",
+      "password": "string"
+    }
+    ```
+-   **Respuestas**:
+    -   `201 Created`: Usuario registrado con éxito. Devuelve los datos del usuario sin la contraseña.
+    -   `409 Conflict`: Si el email ya existe.
+    -   `422 Unprocessable Entity`: Si los datos de entrada son inválidos (ej. email con formato incorrecto o contraseña débil).
+
+---
+
 ## 🔐 Seguridad
 
 ### Autenticación y Autorización
@@ -606,6 +620,16 @@ app.add_middleware(
 ---
 
 ## 🧪 Testing Strategy
+
+Nuestra estrategia de testing se centra en la **pirámide de testing** y está diseñada para ser rápida, fiable y mantenible.
+
+-   **Tests Unitarios (`tests/unit`)**: Verifican componentes aislados, principalmente en la capa de Dominio. No tienen dependencias externas y son extremadamente rápidos.
+-   **Tests de Integración (`tests/integration`)**: Verifican la colaboración entre componentes. La característica clave es el **aislamiento total de la base de datos**:
+    -   Se utiliza `pytest-xdist` para ejecutar pruebas en paralelo.
+    -   Cada proceso de prueba (`worker`) crea, utiliza y destruye su propia base de datos PostgreSQL temporal.
+    -   Esto elimina las condiciones de carrera y garantiza que las pruebas sean 100% independientes y fiables.
+
+Para una descripción detallada, consulta el **[ADR-003](./architecture/decisions/ADR-003-testing-strategy.md)** y la **[Guía de Testing](../../tests/README.md)**.
 
 ### Test Pyramid
 

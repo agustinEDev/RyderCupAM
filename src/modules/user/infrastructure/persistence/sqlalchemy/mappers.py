@@ -47,22 +47,21 @@ users_table = Table(
     Column('updated_at', DateTime, nullable=False),
 )
 
-
 def start_mappers():
     """
-    Inicia los mapeadores de SQLAlchemy.
+    Inicia el mapeo entre las entidades de dominio y las tablas de la base de datos.
+    Es idempotente, por lo que se puede llamar de forma segura varias veces.
     """
-    if User in mapper_registry.mappers:
-        mapper_registry.dispose()
+    # La forma correcta de comprobar si un mapper ya existe para una clase
+    if User not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(User, users_table, properties={
+            # Mapeamos las columnas de los ValueObjects a atributos "privados"
+            # para que SQLAlchemy no intente mapearlas automáticamente a los públicos.
+            '_email': users_table.c.email,
+            '_password': users_table.c.password,
 
-    mapper_registry.map_imperatively(User, users_table, properties={
-        # Mapeamos las columnas de los ValueObjects a atributos "privados"
-        # para que SQLAlchemy no intente mapearlas automáticamente a los públicos.
-        '_email': users_table.c.email,
-        '_password': users_table.c.password,
-
-        # Ahora, creamos los atributos públicos usando 'composite' y apuntando
-        # a los atributos privados que acabamos de definir.
-        'email': composite(Email, '_email'),
-        'password': composite(Password, '_password'),
-    })
+            # Ahora, creamos los atributos públicos usando 'composite' y apuntando
+            # a los atributos privados que acabamos de definir.
+            'email': composite(Email, '_email'),
+            'password': composite(Password, '_password'),
+        })

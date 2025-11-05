@@ -258,7 +258,7 @@ graph TD
 ### 📊 Estado Actual de Tests
 
 ```
-📊 Estadísticas de Testing (218 tests total)
+📊 Estadísticas de Testing (220 tests total)
 ├── 🔧 Tests Unitarios: 197/197 (100% éxito)
 │   ├── Domain Entities: 73 tests
 │   ├── Value Objects: 49 tests  
@@ -268,11 +268,11 @@ graph TD
 │   ├── Application Use Cases: 2 tests
 │   └── Excepciones: 21 tests
 │
-├── 🔗 Tests de Integración: 21/21 (100% éxito)
-│   ├── API Endpoints: 13 tests
+├── 🔗 Tests de Integración: 23/23 (100% éxito)
+│   ├── API Endpoints: 15 tests
 │   └── Domain Events Integration: 7 tests
 │
-└── ⚡ Performance: 218 tests en ~2 segundos (paralelización)
+└── ⚡ Performance: 220 tests en ~2 segundos (paralelización)
 ```
 
 ### 🚀 Ejecutar Tests
@@ -302,7 +302,7 @@ gantt
     Clean Architecture Setup    :done, arch, 2024-10-01, 2024-10-15
     User Management            :done, user, 2024-10-15, 2024-10-30
     Authentication & Security  :done, auth, 2024-10-25, 2024-11-05
-    Testing Framework         :done, test, 2024-11-01, 2024-11-10
+    Testing Framework         :done, test, 2024-11-01, 2024-11-05
     Documentation            :done, docs, 2024-11-05, 2024-11-15
     
     section Fase 2: Core Features 🚧
@@ -329,12 +329,12 @@ gantt
   - Sistema de autenticación JWT + bcrypt
   - Repository Pattern con Unit of Work
   - Domain Events con Event Bus
-  - Testing framework optimizado (218 tests)
+  - **Testing framework robusto y paralelizado (220 tests)**
+  - **Composition Root para inyección de dependencias**
+  - **Implementación y conexión del `RegisterUserUseCase` a la API**
   - Documentación completa con ADRs
-  - **Capa de Aplicación con Casos de Uso (`RegisterUserUseCase`)**
 
 - **🚧 En Desarrollo**
-  - **Conexión de Casos de Uso a la API (Composition Root)**
   - Tournament management system
   - Team formation algorithms
   - Handicap calculation engine

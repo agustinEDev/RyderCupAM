@@ -82,7 +82,38 @@ pytest tests/unit/modules/user/domain/value_objects/test_user_id.py
 pytest tests/unit/modules/user/domain/entities/test_user.py::TestUserCreation::test_create_user_with_valid_data
 ```
 
-## 📊 Interpretación de los Reportes
+## �️ Configuración Clave
+
+La configuración de nuestro entorno de pruebas se basa en varios ficheros y convenciones importantes.
+
+### 1. `pytest.ini`
+
+Este fichero es **esencial** y no debe ser eliminado. Contiene dos configuraciones críticas:
+
+-   `asyncio_mode = auto`: Le indica a `pytest-asyncio` que ejecute automáticamente todas las funciones de prueba marcadas como `async def`. Esto nos ahorra tener que añadir el decorador `@pytest.mark.asyncio` a cada test asíncrono.
+-   `markers`: Registra marcadores personalizados como `integration` para que podamos categorizar y filtrar pruebas sin generar advertencias.
+
+### 2. `tests/conftest.py`
+
+Este es el corazón de nuestra configuración de `pytest`. Define fixtures y hooks globales que son cruciales para el funcionamiento de las pruebas.
+
+#### Hooks Globales
+
+-   `pytest_configure(config)`: Se asegura de que los **mappers de SQLAlchemy** se inicialicen una sola vez por sesión de prueba, incluso cuando se ejecutan en paralelo con `pytest-xdist`. Esto previene condiciones de carrera y errores de inicialización.
+
+#### Fixtures Principales
+
+-   `client()`: Es la fixture principal para los **tests de integración de la API**. Proporciona un `AsyncClient` de `httpx` para realizar peticiones a la aplicación FastAPI. Su característica más importante es el **aislamiento total de la base de datos**:
+    -   Crea una **base de datos de prueba única para cada proceso trabajador** de `pytest-xdist` (ej. `test_db_gw0`, `test_db_gw1`).
+    -   Crea todo el esquema de tablas antes de cada test.
+    -   Destruye la base de datos de prueba completa después de cada test.
+    -   Esto garantiza que las pruebas paralelas no interfieran entre sí y que cada test se ejecute en un entorno limpio.
+
+-   `db_session()`: Proporciona una **sesión de base de datos (`AsyncSession`) aislada** para tests que interactúan directamente con la capa de persistencia (por ejemplo, para probar un repositorio). Al igual que la fixture `client`, crea y destruye el esquema de la base de datos para cada test.
+
+-   **Fixtures de Datos** (`sample_user_data`, `multiple_users_data`, etc.): Proveen datos consistentes y reutilizables para las pruebas unitarias y de integración, facilitando la escritura y lectura de los tests.
+
+## �📊 Interpretación de los Reportes
 
 Después de cada ejecución de `dev_tests.py`, encontrarás dos reportes en la carpeta `tests/reports/`:
 

@@ -16,21 +16,22 @@ Módulo responsable de la gestión de usuarios, incluyendo registro, autenticaci
 - El email no debe estar registrado previamente
 
 **Flujo Principal**:
-1. El usuario proporciona: email, nombre, apellido y contraseña
-2. El sistema valida que el email tenga formato correcto
-3. El sistema valida que la contraseña cumpla con los requisitos de seguridad
-4. **[UoW]** El sistema inicia una transacción
-5. El sistema verifica que el email no esté ya registrado (dentro de la transacción)
-6. El sistema hashea la contraseña usando bcrypt
-7. El sistema crea el usuario en la base de datos PostgreSQL
-8. **[UoW]** El sistema confirma la transacción (commit)
-9. El sistema devuelve los datos del usuario creado
+1. El usuario proporciona datos a través de la API (email, nombre, apellido, contraseña).
+2. El Caso de Uso `RegisterUserUseCase` recibe un `RegisterUserDTO`.
+3. **[Dominio]** El Value Object `Email` valida y normaliza el email.
+4. **[Dominio]** El Value Object `Password` valida la fortaleza de la contraseña.
+5. **[UoW]** El sistema inicia una transacción.
+6. El servicio de dominio `UserFinder` verifica que el email no exista.
+7. La entidad `User` se crea a través de su factory `User.create()`, que a su vez hashea la contraseña y genera un evento `UserRegisteredEvent`.
+8. El repositorio `UserRepository` guarda la nueva entidad `User`.
+9. **[UoW]** El sistema confirma la transacción (commit).
+10. El sistema devuelve los datos del usuario creado.
 
 **Flujos Alternativos**:
-- **5a**: Si el email ya está registrado → **[UoW]** Rollback → Error: "User with email 'xxx' already exists" (HTTP 409)
-- **2a**: Si el email no es válido → Error: "Invalid email format" (HTTP 400)
-- **3a**: Si la contraseña no cumple requisitos → Error: "Password does not meet requirements" (HTTP 400)
-- **7a**: Si falla el guardado → **[UoW]** Rollback automático → Error de servidor (HTTP 500)
+- **6a**: Si el email ya está registrado → `UserAlreadyExistsError` → HTTP 409
+- **3a**: Si el email no es válido → `InvalidEmailError` → HTTP 422 (Unprocessable Entity)
+- **4a**: Si la contraseña no es válida → `InvalidPasswordError` → HTTP 422 (Unprocessable Entity)
+- **8a**: Si falla el guardado → **[UoW]** Rollback automático → HTTP 500 (Error de Servidor)
 
 **Postcondiciones**:
 - Usuario creado en la tabla `users` de PostgreSQL
@@ -276,7 +277,7 @@ class User:
 
 #### UserRepositoryInterface
 
-**Ubicación**: `src/modules/user/domain/interfaces/user_repository_interface.py`
+**Ubicación**: `src/modules/user/domain/repositories/user_repository.py`
 
 ```python
 from abc import ABC, abstractmethod
@@ -326,7 +327,7 @@ class UserRepositoryInterface(ABC):
 
 #### UnitOfWorkInterface (Base)
 
-**Ubicación**: `src/shared/domain/interfaces/unit_of_work_interface.py`
+**Ubicación**: `src/shared/domain/repositories/unit_of_work.py`
 
 ```python
 from abc import ABC, abstractmethod
@@ -366,7 +367,7 @@ class UnitOfWorkInterface(ABC):
 
 #### UserUnitOfWorkInterface
 
-**Ubicación**: `src/modules/user/domain/interfaces/user_unit_of_work_interface.py`
+**Ubicación**: `src/modules/user/domain/repositories/unit_of_work.py`
 
 ```python
 from abc import abstractmethod
@@ -400,104 +401,35 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
 #### Implementación (Infrastructure Layer)
 
-**Ubicación**: `src/modules/user/infrastructure/persistence/user_unit_of_work_impl.py`
+**Ubicación**: `src/shared/infrastructure/persistence/sqlalchemy/sqlalchemy_unit_of_work.py`
 
 ```python
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from src.shared.infrastructure.database.sqlalchemy_unit_of_work import SQLAlchemyUnitOfWork
-from src.modules.user.application.ports.user_unit_of_work import UserUnitOfWork
-from src.modules.user.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
+from src.modules.user.domain.repositories.user_repository import UserRepository
+from src.shared.domain.repositories.unit_of_work import UnitOfWorkInterface
 
-class UserUnitOfWorkImpl(SQLAlchemyUnitOfWork, UserUnitOfWork):
+class SQLAlchemyUnitOfWork(UnitOfWorkInterface):
     """
-    Implementación del Unit of Work para el módulo User usando SQLAlchemy.
-    
-    Gestiona la sesión de SQLAlchemy y proporciona acceso a los repositorios.
+    Implementación del Unit of Work genérico usando SQLAlchemy.
+    Gestiona la sesión y proporciona acceso a los repositorios.
     """
-    
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
-        super().__init__(session_factory)
-        self._users_repo: UserRepositoryImpl | None = None
-    
-    @property
-    def users(self) -> UserRepositoryImpl:
-        """Lazy loading del repositorio de usuarios."""
-        if self._users_repo is None:
-            self._users_repo = UserRepositoryImpl(self._session)
-        return self._users_repo
-```
-
-**Características**:
-- Extiende `SQLAlchemyUnitOfWork` base (shared)
-- Implementa `UserUnitOfWork` específica
-- Lazy loading de repositorios
-- Gestión automática de sesiones SQLAlchemy
-- Context manager para transacciones
-
-#### Base Unit of Work (Shared)
-
-**Ubicación**: `src/shared/application/unit_of_work.py`
-
-```python
-from abc import ABC, abstractmethod
-
-class UnitOfWork(ABC):
-    """Interfaz base para Unit of Work."""
-    
-    @abstractmethod
-    async def __aenter__(self):
-        """Inicia una transacción."""
-        pass
-    
-    @abstractmethod
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Finaliza una transacción (commit o rollback)."""
-        pass
-    
-    @abstractmethod
-    async def commit(self) -> None:
-        """Confirma los cambios."""
-        pass
-    
-    @abstractmethod
-    async def rollback(self) -> None:
-        """Revierte los cambios."""
-        pass
-```
-
-**Ubicación**: `src/shared/infrastructure/database/sqlalchemy_unit_of_work.py`
-
-```python
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from src.shared.application.unit_of_work import UnitOfWork
-
-class SQLAlchemyUnitOfWork(UnitOfWork):
-    """Implementación base de UoW con SQLAlchemy."""
     
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
     
     async def __aenter__(self):
-        """Inicia una nueva sesión de SQLAlchemy."""
         self._session = self._session_factory()
+        self.users = UserRepository(self._session)
         return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Cierra la sesión, con rollback automático si hay excepción."""
-        if exc_type is not None:
-            await self.rollback()
-        if self._session:
-            await self._session.close()
-    
-    async def commit(self) -> None:
-        """Confirma la transacción."""
-        if self._session:
-            await self._session.commit()
-    
-    async def rollback(self) -> None:
-        """Revierte la transacción."""
-        if self._session:
+```
+
+**Características**:
+- Implementa la `UnitOfWorkInterface`.
+- Gestiona el ciclo de vida de la sesión de SQLAlchemy.
+- Proporciona una instancia del `UserRepository` dentro del contexto transaccional.
+- Utiliza un `async context manager` para garantizar `commit` o `rollback` automáticos.
+
             await self._session.rollback()
 ```
 
