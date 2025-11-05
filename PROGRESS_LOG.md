@@ -3,7 +3,7 @@
 **Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup.  
 **Arquitectura**: Clean Architecture, Event-Driven, FastAPI.  
 **Creación**: 31 de octubre de 2025  
-**Última Actualización**: 4 de noviembre de 2025
+**Última Actualización**: 5 de noviembre de 2025
 
 ---
 
@@ -30,6 +30,74 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 6.  **Iterar**: Repetimos el proceso hasta completar el objetivo.
 
 ---
+
+## 🎯 **SESIÓN 4: Persistencia Real y Containerización (4 de Noviembre de 2025)**
+
+### **Objetivos de la Sesión**
+1.  Implementar una capa de persistencia real con PostgreSQL.
+2.  Integrar SQLAlchemy como ORM.
+3.  Configurar Alembic para migraciones de base de datos.
+4.  Containerizar la aplicación y la base de datos con Docker y Docker Compose.
+5.  Crear tests de integración para la nueva capa de persistencia.
+
+### **Resultados y Decisiones**
+-   **Entregable**: Una aplicación completamente containerizada con una capa de persistencia funcional y robusta, validada por tests de integración.
+-   **ADRs Creados**: `ADR-009` (Docker) y `ADR-010` (Alembic).
+
+---
+
+## 🎯 **SESIÓN 5: End-to-End User Registration y Refactorización de Tests (5 de Noviembre de 2025)**
+
+### **Objetivos de la Sesión**
+1.  Conectar la Lógica de Aplicación a la API.
+2.  Implementar el Composition Root.
+3.  Refactorizar y Estabilizar el Entorno de Pruebas para ejecución paralela.
+4.  Actualizar toda la documentación del proyecto.
+
+### **Resultados y Decisiones**
+
+#### 1. **Implementación de la Capa de API y Composition Root**
+-   **Acción**: Se implementó el endpoint `POST /api/v1/auth/register` y se conectó al `RegisterUserUseCase` a través de un **Composition Root** (`src/config/dependencies.py`), utilizando la inyección de dependencias de FastAPI.
+-   **ADR**: Se materializaron las decisiones de `ADR-011` y `ADR-012`.
+
+#### 2. **Refactorización Crítica del Entorno de Pruebas**
+-   **Problema**: Se identificaron y solucionaron condiciones de carrera en los tests de integración al ejecutarse en paralelo.
+-   **Solución**: Se refactorizó la fixture `client` en `tests/conftest.py` para crear una **base de datos PostgreSQL única y aislada para cada proceso de prueba**, garantizando tests 100% fiables.
+-   **Resultado**: El sistema de pruebas ahora es robusto, fiable y soporta paralelización de forma segura.
+
+#### 3. **Actualización Exhaustiva de la Documentación**
+-   **Acción**: Se revisaron y sincronizaron todos los documentos clave (`README.md`, ADRs, `project-structure.md`, etc.) con el estado actual del código.
+
+### **Estado Final de la Sesión**
+-   **Entregable**: El primer caso de uso (`RegisterUser`) está **100% completo y funcional de extremo a extremo**.
+-   **Métricas**: **220/220 tests** pasando.
+
+---
+
+## 🚀 **PRÓXIMOS PASOS**
+
+### 1. **Implementar Caso de Uso: Cambio de Contraseña (Change Password)**
+
+**Actor**: Usuario autenticado.
+
+**Descripción**: Permite a un usuario cambiar su contraseña actual por una nueva.
+
+**Flujo Principal**:
+1.  El usuario proporciona su contraseña actual, la nueva contraseña y la confirmación.
+2.  El sistema verifica que el usuario esté autenticado.
+3.  **[UoW]** Se inicia una transacción.
+4.  El sistema recupera al usuario de la base de datos.
+5.  El sistema verifica que la "contraseña actual" proporcionada sea correcta.
+6.  El sistema valida que la "nueva contraseña" cumpla con los requisitos de fortaleza (usando el Value Object `Password`).
+7.  El sistema actualiza la contraseña del usuario en la entidad.
+8.  El repositorio guarda los cambios del usuario.
+9.  **[UoW]** Se confirma la transacción.
+10. El sistema podría generar un evento `PasswordChangedEvent` para notificar al usuario.
+
+### 2. **Implementar Caso de Uso: Login de Usuario (User Login)**
+
+Continuar con la implementación del flujo de autenticación para generar los tokens JWT.
+
 
 ## 📊 **ESTADO ACTUAL DEL PROYECTO**
 
@@ -169,22 +237,75 @@ Las decisiones arquitectónicas importantes se registran en **ADRs (Architecture
 
 ---
 
-## 🎯 PRÓXIMO HITO: IMPLEMENTACIÓN DE LA CAPA DE APLICACIÓN
+---
 
-**Objetivo**: Desarrollar los casos de uso y servicios que orquestan la lógica de dominio, usando la infraestructura de persistencia que hemos creado.
+## 🎯 **SESIÓN 5: End-to-End User Registration y Refactorización de Tests (5 de Noviembre de 2025)**
 
-**Plan de Acción**:
-1.  **Crear Estructura**:
-    - `src/users/application/use_cases/`
-    - `src/users/application/services/`
-    - `src/users/application/dto/`
-2.  **Implementar Caso de Uso `RegisterUserUseCase`**:
-    - Orquestará la creación del `User`.
-    - Usará el `SQLAlchemyUnitOfWork` para garantizar la consistencia.
-    - Guardará el usuario a través del `uow.users`.
-    - Publicará el evento `UserRegisteredEvent` a través del `EventBus`.
-3.  **Crear DTOs (Data Transfer Objects)**:
-    - Definir `RegisterUserCommand` (entrada) y `UserResponse` (salida).
-4.  **Escribir Tests de Aplicación**:
-    - Tests unitarios para el caso de uso, mockeando el UoW.
-    - Tests de integración que usen la base de datos real en Docker.
+### **Objetivos de la Sesión**
+1.  **Conectar la Lógica de Aplicación a la API**: Exponer el `RegisterUserUseCase` a través de un endpoint de FastAPI.
+2.  **Implementar el Composition Root**: Crear un sistema de inyección de dependencias para construir y proveer los servicios necesarios.
+3.  **Refactorizar y Estabilizar el Entorno de Pruebas**: Asegurar que los tests de integración funcionen de manera fiable en un entorno de ejecución paralela.
+4.  **Actualizar la Documentación**: Sincronizar todos los documentos de diseño y arquitectura con el estado actual del proyecto.
+
+### **Resultados y Decisiones**
+
+Ha sido una sesión de una intensidad y productividad excepcionales, centrada en cerrar el ciclo completo del primer caso de uso y en robustecer la base del proyecto para el futuro.
+
+#### 1. **Implementación de la Capa de API y Composition Root**
+-   **Acción**: Se creó el fichero `src/config/dependencies.py` para actuar como el **Composition Root** de la aplicación. Este fichero centraliza la creación de instancias complejas como el `UnitOfWork` y los `UseCases`.
+-   **Acción**: Se implementó el endpoint `POST /api/v1/auth/register` en `src/modules/user/infrastructure/api/v1/auth_routes.py`.
+-   **Decisión**: Se utiliza el sistema de **Inyección de Dependencias** de FastAPI (`Depends`) para obtener las instancias necesarias del Composition Root, desacoplando completamente la capa de API de las implementaciones concretas.
+-   **ADR**: Esta implementación materializa las decisiones de `ADR-011` y `ADR-012`.
+
+#### 2. **Refactorización Crítica del Entorno de Pruebas**
+-   **Problema**: Durante la ejecución de tests de integración en paralelo con `pytest-xdist` (a través de `dev_tests.py`), surgieron **condiciones de carrera** y errores `IntegrityError` en la base de datos. Múltiples procesos de prueba intentaban modificar el mismo esquema de base de datos simultáneamente.
+-   **Solución**: Se llevó a cabo una refactorización profunda de `tests/conftest.py`:
+    1.  La fixture `client` ahora crea una **base de datos PostgreSQL completamente nueva y aislada para cada proceso trabajador** de `pytest-xdist`, utilizando un nombre único (ej. `test_db_gw0`).
+    2.  Cada test de integración se ejecuta en su propia base de datos, que es creada antes del test y destruida después.
+    3.  El hook `pytest_configure` se optimizó para garantizar que los mappers de SQLAlchemy se inicialicen una sola vez por sesión de pruebas.
+-   **Resultado**: El sistema de pruebas ahora es **100% fiable y robusto** para la ejecución en paralelo, eliminando los fallos intermitentes y garantizando el aislamiento de los tests.
+
+#### 3. **Actualización Exhaustiva de la Documentación**
+-   **Acción**: Se revisaron y actualizaron los siguientes documentos para reflejar el estado final del proyecto:
+    -   `README.md` (principal)
+    -   `tests/README.md`
+    -   `docs/architecture/decisions/ADR-003-testing-strategy.md`
+    -   `docs/project-structure.md`
+    -   `docs/modules/user-management.md`
+-   **Resultado**: Toda la documentación clave está ahora sincronizada con el código, proporcionando una fuente de verdad fiable para el equipo.
+
+### **Estado Final de la Sesión**
+-   **Entregable**: El primer caso de uso (`RegisterUser`) está **100% completo y funcional de extremo a extremo**, desde la petición HTTP hasta la persistencia en la base de datos, validado por una suite de tests robusta y paralelizable.
+-   **Métricas**: **220/220 tests** pasando en todos los escenarios de ejecución.
+-   **Próximos Pasos**: Abordar los siguientes casos de uso del módulo de autenticación.
+
+---
+
+## 🚀 **PRÓXIMOS PASOS**
+
+### 1. **Implementar Caso de Uso: Cambio de Contraseña (Change Password)**
+
+**Actor**: Usuario autenticado.
+
+**Descripción**: Permite a un usuario cambiar su contraseña actual por una nueva.
+
+**Flujo Principal**:
+1.  El usuario proporciona su contraseña actual, la nueva contraseña y la confirmación de la nueva contraseña.
+2.  El sistema verifica que el usuario esté autenticado.
+3.  **[UoW]** Se inicia una transacción.
+4.  El sistema recupera al usuario de la base de datos.
+5.  El sistema verifica que la "contraseña actual" proporcionada sea correcta.
+6.  El sistema valida que la "nueva contraseña" cumpla con los requisitos de fortaleza (usando el Value Object `Password`).
+7.  El sistema actualiza la contraseña del usuario en la entidad.
+8.  El repositorio guarda los cambios del usuario.
+9.  **[UoW]** Se confirma la transacción.
+10. El sistema podría generar un evento `PasswordChangedEvent` para notificar al usuario por email.
+
+**Flujos Alternativos**:
+-   **5a**: Si la contraseña actual es incorrecta → Error "Contraseña actual no válida" (HTTP 400).
+-   **6a**: Si la nueva contraseña no cumple los requisitos → Error de validación (HTTP 422).
+-   Si la nueva contraseña y la confirmación no coinciden → Error "Las contraseñas no coinciden" (HTTP 400).
+
+### 2. **Implementar Caso de Uso: Login de Usuario (User Login)**
+
+Continuar con la implementación del flujo de autenticación para generar los tokens JWT.

@@ -57,12 +57,14 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    # Obtenemos la URL de la base de datos desde la variable de entorno
     db_url = os.getenv('DATABASE_URL')
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
-    # Inyectamos la URL de la base de datos en la configuración de Alembic
+    # Alembic necesita un driver síncrono. Reemplazamos asyncpg.
+    if "postgresql+asyncpg" in db_url:
+        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
+
     config.set_main_option('sqlalchemy.url', db_url)
 
     connectable = engine_from_config(

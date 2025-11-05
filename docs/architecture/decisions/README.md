@@ -40,4 +40,4 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 - **[ADR-010](./ADR-010-alembic-for-database-migrations.md)**: Alembic para la gestión versionada del esquema de la base de datos.
 
 ### 🧪 **Testing y Calidad**
-- **[ADR-003](./ADR-003-testing-strategy.md)**: pytest con paralelización y organización por capas.
+- **[ADR-003](./ADR-003-testing-strategy.md)**: pytest con paralelización, aislamiento de BD por worker y organización por capas.

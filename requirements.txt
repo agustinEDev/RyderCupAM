@@ -36,6 +36,14 @@ psycopg2-binary==2.9.9
 # Permite versionar y aplicar cambios en el esquema de la base de datos
 alembic==1.13.2
 
+# asyncpg - Driver asíncrono para PostgreSQL, necesario para SQLAlchemy en modo async
+# Es la alternativa a psycopg2 para operaciones no bloqueantes con la base de datos
+asyncpg==0.29.0
+
+# greenlet - Librería para concurrencia ligera (micro-hilos)
+# Requerido por SQLAlchemy para puentear sus componentes internos síncronos en un entorno async
+greenlet==3.0.3
+
 
 # ================================
 # SEGURIDAD

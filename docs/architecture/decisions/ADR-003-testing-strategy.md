@@ -163,6 +163,40 @@ except ImportError:
 - **Paralelización**: Fallback automático si no está disponible
 - **Mantenimiento**: Script bien documentado y modular
 
+## Aislamiento de la Base de Datos en Tests de Integración
+
+### Problema Adicional Identificado
+
+Durante la implementación de los tests de integración que interactúan con la base de datos, se detectó un problema crítico al ejecutar las pruebas en paralelo con `pytest-xdist`:
+
+-   **Condiciones de Carrera**: Múltiples procesos de prueba intentaban crear y destruir tablas (`metadata.create_all()`, `metadata.drop_all()`) en la **misma base de datos de prueba** simultáneamente.
+-   **Errores de Integridad**: Esto provocaba errores `sqlalchemy.exc.IntegrityError` intermitentes y poco predecibles, ya que un proceso intentaba crear un esquema que ya existía o acceder a tablas que otro proceso estaba eliminando.
+
+### Decisión de Aislamiento
+
+Para resolver este problema y garantizar que los tests de integración sean **atómicos, independientes y fiables**, se implementó una estrategia de aislamiento completo a nivel de base de datos.
+
+La fixture `client` en `tests/conftest.py` fue refactorizada para:
+
+1.  **Detectar el Worker ID**: Identifica el ID del proceso trabajador asignado por `pytest-xdist` (ej. `gw0`, `gw1`).
+2.  **Crear una Base de Datos Única**: Antes de que se ejecute cada test, se crea una base de datos PostgreSQL completamente nueva con un nombre único que incluye el `worker_id` (ej. `test_db_gw0`).
+3.  **Ejecutar el Test**: El test se ejecuta contra esta base de datos temporal y aislada.
+4.  **Destruir la Base de Datos**: Una vez que el test finaliza, la base de datos temporal se destruye por completo.
+
+### Justificación
+
+-   **Aislamiento Total**: Elimina cualquier posibilidad de que los tests paralelos interfieran entre sí a nivel de datos.
+-   **Fiabilidad**: Los fallos en los tests de integración ahora se deben de manera inequívoca a problemas en el código de la aplicación, no a la configuración del entorno de pruebas.
+-   **Estado Limpio Garantizado**: Cada test comienza con un esquema de base de datos limpio, asegurando la reproducibilidad de los resultados.
+
+### Consecuencias
+
+-   **Positivas**:
+    -   ✅ **Tests 100% fiables** en entorno paralelo.
+    -   ✅ Depuración de tests de integración mucho más sencilla.
+-   **Negativas**:
+    -   ❌ **Ligero aumento en el tiempo de setup/teardown** de cada test de integración debido a la creación/destrucción de la base de datos. Sin embargo, este coste es marginal comparado con el beneficio de la paralelización y la fiabilidad.
+
 ## Validación de Decisión
 
 ### Criterios de Éxito:
