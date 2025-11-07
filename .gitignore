@@ -27,3 +27,7 @@ build/
 dist/
 *.egg-info/
 
+# IA generated files
+*.code-workspace
+CLAUDE.md
+GEMINI.md

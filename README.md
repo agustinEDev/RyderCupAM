@@ -7,6 +7,8 @@
 ![Badge-PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Badge-SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-red?style=for-the-badge&logo=python&logoColor=white)
 ![Badge-Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=for-the-badge&logo=docker&logoColor=white)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/agustinEDev/RyderCupAM?utm_source=oss&utm_medium=github&utm_campaign=agustinEDev%2FRyderCupAM&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 
 **Un sistema completo de gestión de torneos de golf amateur siguiendo el prestigioso formato Ryder Cup**
 
