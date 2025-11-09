@@ -57,7 +57,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         use_case = UpdateUserHandicapManuallyUseCase(uow)
 
         # Act & Assert - valor fuera de rango
-        with pytest.raises(ValueError, match="entre -10.0 y 54.0"):
+        with pytest.raises(ValueError, match=r"entre -10\.0 y 54\.0"):
             await use_case.execute(user.id, 100.0)
 
     @pytest.mark.asyncio

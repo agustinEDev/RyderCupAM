@@ -144,16 +144,15 @@ class RFEGHandicapService(HandicapService):
 
             datos = response.json()
 
-            # Extraer hándicap del primer resultado
+            # Buscar coincidencia exacta en todos los resultados
             # La API de RFEG devuelve la estructura: {"data": {"hits": [{"document": {...}}]}}
             if datos and 'data' in datos:
-                data = datos['data']
-                if 'hits' in data and len(data['hits']) > 0:
-                    jugador = data['hits'][0]['document']
+                hits = datos['data'].get('hits') or []
+                nombre_buscado = full_name.upper()
 
-                    # Verificar que el nombre coincide exactamente (case-insensitive)
+                for hit in hits:
+                    jugador = (hit or {}).get('document', {})
                     nombre_encontrado = jugador.get('full_name', '').upper()
-                    nombre_buscado = full_name.upper()
 
                     if nombre_encontrado == nombre_buscado:
                         handicap = jugador.get('handicap')

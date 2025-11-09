@@ -628,7 +628,7 @@ class TestUserUpdateHandicap:
         """Test: Actualizar con valor inválido lanza ValueError."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
         
-        with pytest.raises(ValueError, match="debe estar entre -10.0 y 54.0"):
+        with pytest.raises(ValueError, match=r"debe estar entre -10\.0 y 54\.0"):
             user.update_handicap(100.0)
 
     def test_update_handicap_below_minimum_raises_error(self):

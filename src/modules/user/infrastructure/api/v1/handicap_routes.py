@@ -14,7 +14,7 @@ from src.modules.user.application.use_cases.update_multiple_handicaps_use_case i
 from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.config.dependencies import get_update_handicap_use_case, get_update_multiple_handicaps_use_case
+from src.config.dependencies import get_update_handicap_use_case, get_update_multiple_handicaps_use_case, get_update_handicap_manually_use_case
 
 
 router = APIRouter(prefix="/handicaps", tags=["handicaps"])
@@ -83,6 +83,7 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
     total: int
     updated: int
     not_found: int
+    no_handicap_found: int
     errors: int
     message: str
 
@@ -90,10 +91,11 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
         json_schema_extra={
             "example": {
                 "total": 10,
-                "updated": 8,
+                "updated": 7,
                 "not_found": 1,
+                "no_handicap_found": 1,
                 "errors": 1,
-                "message": "Procesados 10 usuarios: 8 actualizados, 1 no encontrado, 1 error"
+                "message": "Procesados 10 usuarios: 7 actualizados, 1 no encontrado, 1 sin hándicap, 1 error"
             }
         }
     )
@@ -178,6 +180,7 @@ async def update_multiple_handicaps(
         f"Procesados {stats['total']} usuarios: "
         f"{stats['updated']} actualizados, "
         f"{stats['not_found']} no encontrados, "
+        f"{stats['no_handicap_found']} sin hándicap, "
         f"{stats['errors']} errores"
     )
 
@@ -200,14 +203,14 @@ async def update_multiple_handicaps(
 )
 async def update_user_handicap_manually(
     request: UpdateHandicapManuallyRequestDTO,
-    session_factory = Depends(lambda: None)  # Temporary, will add to dependencies
+    use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case)
 ):
     """
     Actualiza el hándicap de un usuario manualmente (sin consultar RFEG).
 
     Args:
         request: DTO con el ID del usuario y el nuevo valor de hándicap
-        session_factory: Factory de sesión inyectado por FastAPI
+        use_case: Caso de uso inyectado por FastAPI con gestión automática de sesiones
 
     Returns:
         Usuario actualizado con su nuevo hándicap
@@ -216,13 +219,7 @@ async def update_user_handicap_manually(
         404: Si el usuario no existe
         400: Si el hándicap no está en el rango válido
     """
-    # Importar aquí para evitar dependencias circulares
-    from src.config.database import async_session_maker
-    from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import SQLAlchemyUnitOfWork
-
     user_id = UserId(request.user_id)
-    uow = SQLAlchemyUnitOfWork(async_session_maker())
-    use_case = UpdateUserHandicapManuallyUseCase(uow)
 
     try:
         result = await use_case.execute(user_id, request.handicap)

@@ -184,6 +184,7 @@ class TestUpdateMultipleHandicapsUseCase:
         assert stats['total'] == 2
         assert stats['updated'] == 2
         assert stats['not_found'] == 0
+        assert stats['no_handicap_found'] == 0
         assert stats['errors'] == 0
 
     @pytest.mark.asyncio
@@ -209,6 +210,8 @@ class TestUpdateMultipleHandicapsUseCase:
         assert stats['total'] == 2
         assert stats['updated'] == 1
         assert stats['not_found'] == 1
+        assert stats['no_handicap_found'] == 0
+        assert stats['errors'] == 0
 
     @pytest.mark.asyncio
     async def test_update_multiple_empty_list(self):
@@ -226,3 +229,6 @@ class TestUpdateMultipleHandicapsUseCase:
         # Assert
         assert stats['total'] == 0
         assert stats['updated'] == 0
+        assert stats['not_found'] == 0
+        assert stats['no_handicap_found'] == 0
+        assert stats['errors'] == 0

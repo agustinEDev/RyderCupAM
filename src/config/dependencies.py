@@ -6,6 +6,7 @@ from src.modules.user.application.use_cases.register_user_use_case import Regist
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.update_user_handicap_use_case import UpdateUserHandicapUseCase
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
+from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -115,3 +116,19 @@ def get_update_multiple_handicaps_use_case(
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return UpdateMultipleHandicapsUseCase(uow, handicap_service)
+
+def get_update_handicap_manually_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UpdateUserHandicapManuallyUseCase:
+    """
+    Proveedor del caso de uso UpdateUserHandicapManuallyUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `UpdateUserHandicapManuallyUseCase`.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    
+    Nota: Este caso de uso NO depende del HandicapService porque actualiza
+    manualmente sin consultar servicios externos como RFEG.
+    """
+    return UpdateUserHandicapManuallyUseCase(uow)

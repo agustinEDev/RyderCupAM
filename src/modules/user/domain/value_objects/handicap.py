@@ -22,14 +22,15 @@ class Handicap:
         >>> str(handicap)
         '15.5'
 
-        >>> Handicap(60.0)  # Lanza ValueError
+        >>> Handicap(60.0)  # Lanza ValueError (rango inválido)
+        >>> Handicap("15.5")  # Lanza TypeError (tipo inválido)
     """
     value: float
 
     def __post_init__(self):
         """Valida que el hándicap esté en el rango permitido."""
         if not isinstance(self.value, (int, float)):
-            raise ValueError(
+            raise TypeError(
                 f"El hándicap debe ser un número. Recibido: {type(self.value).__name__}"
             )
 

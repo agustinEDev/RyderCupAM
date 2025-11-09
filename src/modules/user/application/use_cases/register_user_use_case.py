@@ -1,10 +1,14 @@
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO, UserResponseDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -63,10 +67,9 @@ class RegisterUserUseCase:
                     handicap_value = await self._handicap_service.search_handicap(
                         new_user.get_full_name()
                     )
-                except Exception as e:
+                except HandicapServiceError as e:
                     # No falla el registro si no se encuentra el hándicap
-                    # TODO: Agregar logging apropiado
-                    print(f"No se pudo obtener hándicap inicial: {e}")
+                    logger.warning("No se pudo obtener hándicap inicial para %s: %s", new_user.get_full_name(), e)
 
             # 2.6 Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None and request.manual_handicap is not None:

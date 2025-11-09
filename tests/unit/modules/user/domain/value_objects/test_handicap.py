@@ -46,22 +46,22 @@ class TestHandicapValidation:
 
     def test_handicap_below_minimum_raises_error(self):
         """Test: Crear hándicap por debajo del mínimo lanza ValueError."""
-        with pytest.raises(ValueError, match="debe estar entre -10.0 y 54.0"):
+        with pytest.raises(ValueError, match=r"debe estar entre -10\.0 y 54\.0"):
             Handicap(-10.1)
 
     def test_handicap_above_maximum_raises_error(self):
         """Test: Crear hándicap por encima del máximo lanza ValueError."""
-        with pytest.raises(ValueError, match="debe estar entre -10.0 y 54.0"):
+        with pytest.raises(ValueError, match=r"debe estar entre -10\.0 y 54\.0"):
             Handicap(54.1)
 
     def test_handicap_with_invalid_type_raises_error(self):
-        """Test: Crear hándicap con tipo inválido lanza ValueError."""
-        with pytest.raises(ValueError, match="debe ser un número"):
+        """Test: Crear hándicap con tipo inválido lanza TypeError."""
+        with pytest.raises(TypeError, match="debe ser un número"):
             Handicap("15.5")
 
     def test_handicap_with_none_raises_error(self):
-        """Test: Crear hándicap con None lanza ValueError."""
-        with pytest.raises(ValueError):
+        """Test: Crear hándicap con None lanza TypeError."""
+        with pytest.raises(TypeError):
             Handicap(None)
 
 

@@ -5,7 +5,10 @@ Caso de uso para actualizar hándicaps de múltiples usuarios.
 Útil para actualizar todos los participantes de una competición.
 """
 
+import logging
 from typing import List, Dict
+
+logger = logging.getLogger(__name__)
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.services.handicap_service import HandicapService
@@ -51,10 +54,11 @@ class UpdateMultipleHandicapsUseCase:
         Returns:
             Diccionario con estadísticas de la operación:
             {
-                'total': int,          # Total de usuarios procesados
-                'updated': int,        # Usuarios actualizados exitosamente
-                'not_found': int,      # Usuarios no encontrados en BD
-                'errors': int          # Errores al buscar hándicap
+                'total': int,              # Total de usuarios procesados
+                'updated': int,            # Usuarios actualizados exitosamente
+                'not_found': int,          # Usuarios no encontrados en BD
+                'no_handicap_found': int,  # Usuarios encontrados pero sin hándicap en RFEG
+                'errors': int              # Errores al buscar hándicap
             }
 
         Note:
@@ -65,6 +69,7 @@ class UpdateMultipleHandicapsUseCase:
             'total': len(user_ids),
             'updated': 0,
             'not_found': 0,
+            'no_handicap_found': 0,
             'errors': 0
         }
 
@@ -86,11 +91,14 @@ class UpdateMultipleHandicapsUseCase:
                         user.update_handicap(handicap_value)
                         await self._uow.users.save(user)
                         stats['updated'] += 1
+                    else:
+                        # Hándicap no encontrado en RFEG (respuesta válida)
+                        stats['no_handicap_found'] += 1
+                        logger.info("No se encontró hándicap en RFEG para %s", user.get_full_name())
 
                 except HandicapServiceError as e:
                     stats['errors'] += 1
-                    # TODO: Agregar logging apropiado
-                    print(f"Error actualizando {user.get_full_name()}: {e}")
+                    logger.error("Error actualizando hándicap para %s: %s", user.get_full_name(), e)
 
             # 3. Commit una sola vez al final (transacción única)
             await self._uow.commit()
