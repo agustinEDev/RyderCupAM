@@ -31,3 +31,7 @@ dist/
 *.code-workspace
 CLAUDE.md
 GEMINI.md
+
+# Postman collections (may contain local environment data)
+*.postman_collection.json
+*.postman_environment.json
