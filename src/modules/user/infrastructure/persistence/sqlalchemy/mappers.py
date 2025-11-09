@@ -1,7 +1,7 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 from sqlalchemy import (
-    Table, MetaData, Column, String, DateTime
+    Table, MetaData, Column, String, DateTime, Float
 )
 from sqlalchemy.orm import registry, composite
 from sqlalchemy.types import TypeDecorator, CHAR
@@ -43,6 +43,8 @@ users_table = Table(
     Column('last_name', String(50), nullable=False),
     Column('email', String(255), nullable=False, unique=True),
     Column('password', String(255), nullable=False),
+    Column('handicap', Float, nullable=True),
+    Column('handicap_updated_at', DateTime, nullable=True),
     Column('created_at', DateTime, nullable=False),
     Column('updated_at', DateTime, nullable=False),
 )

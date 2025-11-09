@@ -24,6 +24,7 @@ class User:
         first_name: str,
         last_name: str,
         handicap: Optional[float] = None,
+        handicap_updated_at: Optional[datetime] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
         domain_events: Optional[List[DomainEvent]] = None
@@ -34,6 +35,7 @@ class User:
         self.first_name = first_name
         self.last_name = last_name
         self.handicap = handicap
+        self.handicap_updated_at = handicap_updated_at
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
         self._domain_events: List[DomainEvent] = domain_events or []
@@ -60,7 +62,46 @@ class User:
         if self.password is None:
             return False
         return self.password.verify(plain_password)
-    
+
+    def update_handicap(self, new_handicap: Optional[float]) -> None:
+        """
+        Actualiza el hándicap del usuario y emite un evento de dominio.
+
+        Valida que el hándicap esté en el rango permitido (-10.0 a 54.0)
+        y solo emite el evento si el valor realmente cambió.
+
+        Args:
+            new_handicap: Nuevo valor del hándicap (None para eliminar)
+
+        Raises:
+            ValueError: Si el hándicap no está en el rango válido
+        """
+        from ..value_objects.handicap import Handicap
+        from ..events.handicap_updated_event import HandicapUpdatedEvent
+
+        old_handicap = getattr(self, 'handicap', None)
+
+        # Validar si es un Handicap válido usando el Value Object
+        if new_handicap is not None:
+            validated = Handicap(new_handicap)  # Valida el rango
+            self.handicap = validated.value
+        else:
+            self.handicap = None
+
+        # Actualizar timestamps
+        now = datetime.now()
+        self.handicap_updated_at = now
+        self.updated_at = now
+
+        # Emitir evento solo si cambió
+        if old_handicap != self.handicap:
+            self._add_domain_event(HandicapUpdatedEvent(
+                user_id=str(self.id.value),
+                old_handicap=old_handicap,
+                new_handicap=self.handicap,
+                updated_at=self.updated_at
+            ))
+
     @classmethod
     def create(cls, first_name: str, last_name: str, email_str: str, plain_password: str) -> 'User':
         """
@@ -86,6 +127,7 @@ class User:
             first_name=first_name,
             last_name=last_name,
             handicap=None,
+            handicap_updated_at=None,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
@@ -105,18 +147,26 @@ class User:
     
     def _add_domain_event(self, event: DomainEvent) -> None:
         """Agrega un evento de dominio a la colección interna."""
+        if not hasattr(self, '_domain_events'):
+            self._domain_events = []
         self._domain_events.append(event)
     
     def get_domain_events(self) -> List[DomainEvent]:
         """Obtiene una copia de todos los eventos de dominio pendientes."""
+        if not hasattr(self, '_domain_events'):
+            self._domain_events = []
         return self._domain_events.copy()
     
     def clear_domain_events(self) -> None:
         """Limpia todos los eventos de dominio de la colección."""
+        if not hasattr(self, '_domain_events'):
+            self._domain_events = []
         self._domain_events.clear()
-    
+
     def has_domain_events(self) -> bool:
         """Verifica si la entidad tiene eventos de dominio pendientes."""
+        if not hasattr(self, '_domain_events'):
+            self._domain_events = []
         return len(self._domain_events) > 0
     
     def __str__(self) -> str:

@@ -24,17 +24,18 @@ El siguiente árbol representa la estructura completa y actual del proyecto.
 │   │       │   ├── handlers/
 │   │       │   └── use_cases/
 │   │       ├── domain/
-│   │       │   ├── entities/
-│   │       │   ├── events/
-│   │       │   ├── errors/
-│   │       │   ├── repositories/ # - Interfaces de Repositorios
-│   │       │   ├── services/
-│   │       │   └── value_objects/
+│   │       │   ├── entities/        # User entity
+│   │       │   ├── events/          # UserRegisteredEvent, HandicapUpdatedEvent
+│   │       │   ├── errors/          # User y Handicap errors
+│   │       │   ├── repositories/    # Interfaces de Repositorios
+│   │       │   ├── services/        # PasswordHasher, HandicapService (interfaces)
+│   │       │   └── value_objects/   # UserId, Email, Password, Handicap
 │   │       └── infrastructure/
 │   │           ├── api/
-│   │           │   └── v1/ # - Endpoints de la API (auth_routes.py)
+│   │           │   └── v1/          # auth_routes.py, handicap_routes.py
+│   │           ├── external/        # RFEGHandicapService, MockHandicapService
 │   │           └── persistence/
-│   │               └── sqlalchemy/ # - Implementaciones de Repositorios
+│   │               └── sqlalchemy/  # Implementaciones de Repositorios
 │   └── shared/
 │       ├── domain/
 │       └── infrastructure/
@@ -62,12 +63,14 @@ El siguiente árbol representa la estructura completa y actual del proyecto.
     -   `mappers.py`: Inicia el mapeo entre las entidades del dominio y las tablas de la base de datos.
 
 -   **`src/modules/user/`**: Contiene todo el código relacionado con la gestión de usuarios, organizado por capas:
-    -   `domain/`: Lógica de negocio pura. Aquí viven las entidades (`User`), `ValueObjects`, **interfaces** de repositorios (`repositories/`), servicios de dominio (`services/`) y errores.
+    -   `domain/`: Lógica de negocio pura. Aquí viven las entidades (`User`), `ValueObjects` (`UserId`, `Email`, `Password`, `Handicap`), **interfaces** de repositorios (`repositories/`), servicios de dominio (`services/` - `HandicapService`, `PasswordHasher`), eventos (`UserRegisteredEvent`, `HandicapUpdatedEvent`) y errores.
     -   `application/`: Orquesta la lógica de dominio.
         -   `dto/`: Contratos de datos para la comunicación con los casos de uso.
-        -   `use_cases/`: Implementación de los casos de uso (`RegisterUserUseCase`).
+        -   `use_cases/`: Implementación de los casos de uso (`RegisterUserUseCase`, `UpdateUserHandicapUseCase`, `UpdateMultipleHandicapsUseCase`).
+        -   `handlers/`: Event handlers (`UserRegisteredEventHandler`).
     -   `infrastructure/`: Implementaciones concretas.
-        -   `api/v1/`: Endpoints de FastAPI (`auth_routes.py`).
+        -   `api/v1/`: Endpoints de FastAPI (`auth_routes.py`, `handicap_routes.py`).
+        -   `external/`: Servicios externos (`RFEGHandicapService`, `MockHandicapService`).
         -   `persistence/sqlalchemy/`: Implementación del `UserRepository` con SQLAlchemy.
 
 ### `tests/` - Garantía de Calidad

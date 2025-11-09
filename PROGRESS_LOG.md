@@ -1,9 +1,9 @@
 # 📋 Ryder Cup Manager API - Progress Log
 
-**Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup.  
-**Arquitectura**: Clean Architecture, Event-Driven, FastAPI.  
-**Creación**: 31 de octubre de 2025  
-**Última Actualización**: 5 de noviembre de 2025
+**Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup.
+**Arquitectura**: Clean Architecture, Event-Driven, FastAPI.
+**Creación**: 31 de octubre de 2025
+**Última Actualización**: 9 de noviembre de 2025
 
 ---
 
@@ -109,9 +109,10 @@ Continuar con la implementación del flujo de autenticación para generar los to
 - ✅ **Documentación Arquitectónica**: Decisiones clave registradas en ADRs.
 
 ### 📈 **Métricas Clave**
-- **Tests Totales**: **218/218** pasando.
+- **Tests Totales**: **299/299** pasando (100% éxito).
 - **Cobertura de Código**: **100%** en la capa de dominio e infraestructura crítica.
-- **Rendimiento de Tests**: Ejecución completa en < 2 segundos (paralelizado).
+- **Rendimiento de Tests**: Ejecución completa en ~8 segundos (paralelizado).
+- **Módulos Implementados**: User Management + Handicap Management
 
 ---
 
@@ -141,26 +142,36 @@ Continuar con la implementación del flujo de autenticación para generar los to
 - **Sistema de Eventos de Dominio**:
   - `DomainEvent`: Clase base para todos los eventos.
   - `EventBus` y `InMemoryEventBus`: Sistema de publicación/suscripción de eventos.
-  - `UserRegisteredEvent`: Ejemplo de evento de dominio concreto.
+  - `UserRegisteredEvent`, `HandicapUpdatedEvent`: Eventos de dominio concretos.
 - **Sistema de Logging Avanzado**:
   - `Logger` Interface y `LoggerFactory` para la creación de loggers.
   - `LogConfig` para configuración por entornos (DEV, PROD).
   - **Formatters**: `TextFormatter`, `JsonFormatter` y `StructuredFormatter`.
   - **Integración**: `EventLoggingHandler` para loggear automáticamente eventos de dominio.
   - **Trazabilidad**: Soporte para `correlation_id` a través de contextos.
+- **Servicios Externos**:
+  - `RFEGHandicapService`: Integración con RFEG mediante scraping
+  - `MockHandicapService`: Mock para testing determinístico
 
 ### IV. **Capa de Aplicación (`src/modules/user/application`)**
 - **Casos de Uso**:
-  - `RegisterUserUseCase`: Orquesta la lógica de registro, validación y persistencia de un nuevo usuario.
+  - `RegisterUserUseCase`: Orquesta la lógica de registro, validación y persistencia de un nuevo usuario (con búsqueda de hándicap opcional).
+  - `UpdateUserHandicapUseCase`: Actualización individual de hándicap desde RFEG.
+  - `UpdateMultipleHandicapsUseCase`: Actualización batch de hándicaps con estadísticas.
 - **DTOs**:
   - `RegisterUserRequestDTO`: Contrato de entrada para el registro.
   - `UserResponseDTO`: Contrato de salida para exponer datos del usuario de forma segura.
+  - `UpdateHandicapRequestDTO`, `UpdateMultipleHandicapsRequestDTO`: Contratos para actualización de hándicaps.
 - **Servicios de Dominio**:
   - `UserFinder`: Encapsula la lógica de búsqueda de usuarios.
+  - `HandicapService` (Interface): Contrato para servicios de búsqueda de hándicap.
 
 ### V. **Capa de Presentación (API)**
 - **Endpoints**:
   - `GET /health`: Endpoint de salud para verificar el estado del servicio.
+  - `POST /api/v1/auth/register`: Registro de nuevos usuarios.
+  - `POST /api/v1/handicaps/update`: Actualización individual de hándicap.
+  - `POST /api/v1/handicaps/update-multiple`: Actualización batch de hándicaps.
 
 ---
 
@@ -193,6 +204,10 @@ Las decisiones arquitectónicas importantes se registran en **ADRs (Architecture
 - **ADR-008**: Sistema de Logging Avanzado.
 - **ADR-009**: Entorno Dockerizado.
 - **ADR-010**: Migraciones con Alembic.
+- **ADR-011**: Casos de Uso en Capa de Aplicación.
+- **ADR-012**: Composition Root para Inyección de Dependencias.
+- **ADR-013**: External Services Pattern.
+- **ADR-014**: Handicap Management System.
 
 ---
 
@@ -278,6 +293,96 @@ Ha sido una sesión de una intensidad y productividad excepcionales, centrada en
 -   **Entregable**: El primer caso de uso (`RegisterUser`) está **100% completo y funcional de extremo a extremo**, desde la petición HTTP hasta la persistencia en la base de datos, validado por una suite de tests robusta y paralelizable.
 -   **Métricas**: **220/220 tests** pasando en todos los escenarios de ejecución.
 -   **Próximos Pasos**: Abordar los siguientes casos de uso del módulo de autenticación.
+
+---
+
+## 🎯 **SESIÓN 6: Sistema de Gestión de Hándicaps RFEG (9 de Noviembre de 2025)**
+
+### **Objetivos de la Sesión**
+1. Integrar servicio de búsqueda de hándicaps desde la RFEG
+2. Implementar actualización automática de hándicaps en múltiples puntos del ciclo de vida
+3. Crear arquitectura extensible para servicios externos
+4. Mantener tests al 100% de cobertura
+
+### **Resultados y Decisiones**
+
+#### 1. **Implementación del Módulo de Handicaps**
+- **Acción**: Se implementó un sistema completo de gestión de hándicaps siguiendo Clean Architecture
+- **Capa de Dominio**:
+  - `Handicap` Value Object con validación de rango (-10.0 a 54.0)
+  - `HandicapService` interface (ABC) para servicios de búsqueda
+  - `HandicapUpdatedEvent` para auditoría de cambios
+  - `HandicapErrors` específicos del dominio
+  - Método `User.update_handicap()` con emisión de eventos
+
+#### 2. **Integración con RFEG**
+- **Acción**: Se implementó scraping dinámico de la página de la RFEG
+- **`RFEGHandicapService`**: Implementación concreta que:
+  - Extrae el token Bearer dinámicamente de la página HTML
+  - Realiza búsquedas por nombre completo del jugador
+  - Maneja errores y timeouts de forma robusta
+- **`MockHandicapService`**: Implementación para testing con respuestas configurables
+- **Decisión**: Se creó `ADR-013` documentando el patrón External Services
+
+#### 3. **Casos de Uso Implementados**
+- **`UpdateUserHandicapUseCase`**: Actualización individual de hándicap
+- **`UpdateMultipleHandicapsUseCase`**: Actualización batch con estadísticas
+- **`RegisterUserUseCase`**: Integrado con búsqueda opcional de hándicap (no bloqueante)
+- **Decisión**: Los hándicaps se actualizan en 3 puntos del ciclo de vida:
+  1. Registro de usuario (opcional)
+  2. Creación de competición (planeado)
+  3. Inicio de partidos (planeado)
+
+#### 4. **API REST Endpoints**
+- **Acción**: Se crearon nuevos endpoints en `/api/v1/handicaps`:
+  - `POST /api/v1/handicaps/update` - Actualización individual
+  - `POST /api/v1/handicaps/update-multiple` - Actualización batch
+- **Composition Root**: Se integró el `HandicapService` en `dependencies.py`
+
+#### 5. **Suite de Tests Completa**
+- **Acción**: Se crearon 79 nuevos tests cubriendo toda la funcionalidad
+- **Tests Unitarios** (74 tests):
+  - 20 tests para `Handicap` Value Object
+  - 16 tests para `HandicapUpdatedEvent`
+  - 13 tests para método `User.update_handicap()`
+  - 18 tests para `MockHandicapService`
+  - 7 tests para casos de uso
+- **Tests de Integración** (5 tests):
+  - Tests de endpoints con integración real a RFEG
+  - Uso de nombres reales: "Rafael Nadal Parera" y "Carlos Alcaraz Garfia"
+- **Resultado**: **299/299 tests pasando (100% éxito)**
+
+#### 6. **Refactorización de Código**
+- **Problema**: Se detectó duplicación en `register_user.py` y `register_user_use_case.py`
+- **Solución**: Se eliminó el archivo duplicado y se estandarizó en `*_use_case.py`
+- **Acción**: Se actualizaron todas las importaciones en el proyecto
+- **Decisión**: Se adoptó convención de nombres `*_use_case.py` para todos los casos de uso
+
+### **Estado Final de la Sesión**
+- **Entregable**: Sistema completo de gestión de hándicaps integrado con RFEG
+- **Métricas**: **299/299 tests** pasando (100% éxito)
+- **ADRs Creados**: `ADR-013` (External Services Pattern) y `ADR-014` (Handicap Management)
+- **Coverage**: 100% en todas las nuevas funcionalidades
+
+### **Arquitectura Implementada**
+
+```
+Domain Layer:
+├── value_objects/handicap.py      # Validación -10.0 a 54.0
+├── services/handicap_service.py   # Interface ABC
+├── events/handicap_updated_event.py # Evento con delta calculation
+└── errors/handicap_errors.py      # Excepciones específicas
+
+Application Layer:
+├── use_cases/update_user_handicap_use_case.py
+├── use_cases/update_multiple_handicaps_use_case.py
+└── use_cases/register_user_use_case.py (actualizado)
+
+Infrastructure Layer:
+├── external/rfeg_handicap_service.py    # Scraping RFEG
+├── external/mock_handicap_service.py    # Testing mock
+└── api/v1/handicap_routes.py            # REST endpoints
+```
 
 ---
 

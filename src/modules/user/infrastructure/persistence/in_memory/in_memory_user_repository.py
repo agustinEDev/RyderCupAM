@@ -39,6 +39,14 @@ class InMemoryUserRepository(UserRepositoryInterface):
         if user.id in self._users:
             self._users[user.id] = user
 
+    async def find_by_full_name(self, full_name: str) -> Optional[User]:
+        full_name_lower = full_name.lower().strip()
+        for user in self._users.values():
+            user_full_name = f"{user.first_name} {user.last_name}".lower()
+            if user_full_name == full_name_lower:
+                return user
+        return None
+
     async def exists_by_email(self, email: Email) -> bool:
         return any(user.email == email for user in self._users.values())
 

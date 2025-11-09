@@ -88,6 +88,22 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_full_name(self, full_name: str) -> Optional[User]:
+        """
+        Busca un usuario por su nombre completo (first_name + last_name).
+        
+        Args:
+            full_name (str): El nombre completo del usuario
+            
+        Returns:
+            Optional[User]: El usuario encontrado o None si no existe
+            
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def update(self, user: User) -> None:
         """
         Actualiza un usuario existente en el repositorio.
