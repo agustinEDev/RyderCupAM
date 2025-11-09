@@ -6,6 +6,7 @@ Punto de entrada de la aplicación FastAPI.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from pydantic import BaseModel
@@ -91,6 +92,20 @@ app = FastAPI(
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
     lifespan=lifespan
+)
+
+# Configurar CORS para permitir peticiones desde el frontend
+# En desarrollo: permite localhost:5173 (Vite dev server)
+# En producción: configurar origins específicos según deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, OPTIONS, etc.)
+    allow_headers=["*"],  # Permite todos los headers
 )
 
 # Incluir los routers de la API
