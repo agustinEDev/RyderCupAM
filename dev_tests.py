@@ -120,6 +120,7 @@ def process_results(report_file: str) -> dict:
         
         results_by_file[filepath].append({
             "name": test_name,
+            "nodeid": test["nodeid"],  # Guardamos el nodeid original
             "outcome": test["outcome"],
             "duration": duration
         })
@@ -132,6 +133,26 @@ def process_results(report_file: str) -> dict:
 
 def display_results(test_structure: dict, results_by_file: dict):
     """Muestra los resultados de forma organizada en la terminal."""
+    def _count_outcomes(tests_in_file: list) -> tuple:
+        """Cuenta passed/failed/skipped en una lista de tests."""
+        passed = sum(1 for t in tests_in_file if t.get('outcome') == 'passed')
+        failed = sum(1 for t in tests_in_file if t.get('outcome') == 'failed')
+        skipped = sum(1 for t in tests_in_file if t.get('outcome') == 'skipped')
+        return passed, failed, skipped
+
+    def _status_and_color(passed: int, failed: int) -> tuple:
+        """Devuelve el icono de estado y color según counts."""
+        status_icon = ICONS["PASSED"] if failed == 0 and passed > 0 else ICONS["FAILED"]
+        color = COLORS["GREEN"] if failed == 0 else COLORS["RED"]
+        return status_icon, color
+
+    def _print_file_result(file_path: Path, tests_in_file: list) -> None:
+        """Imprime la línea de resumen para un fichero de tests."""
+        passed, failed, skipped = _count_outcomes(tests_in_file)
+        status_icon, color = _status_and_color(passed, failed)
+        print(f"      {status_icon} {color}{file_path.name}{COLORS['ENDC']} "
+              f"({ICONS['PASSED']} {passed}, {ICONS['FAILED']} {failed}, {ICONS['SKIPPED']} {skipped})")
+
     for scope, modules in test_structure.items():
         print_header(f"{scope} TESTS")
         for module, layers in modules.items():
@@ -141,18 +162,54 @@ def display_results(test_structure: dict, results_by_file: dict):
                 for file_path in files:
                     str_path = str(file_path)
                     tests_in_file = results_by_file.get(str_path, [])
-                    passed = sum(1 for t in tests_in_file if t['outcome'] == 'passed')
-                    failed = sum(1 for t in tests_in_file if t['outcome'] == 'failed')
-                    skipped = sum(1 for t in tests_in_file if t['outcome'] == 'skipped')
-                    
-                    status_icon = ICONS["PASSED"] if failed == 0 and passed > 0 else ICONS["FAILED"]
-                    color = COLORS["GREEN"] if failed == 0 else COLORS["RED"]
-                    
-                    print(f"      {status_icon} {color}{file_path.name}{COLORS['ENDC']} "
-                          f"({ICONS['PASSED']} {passed}, {ICONS['FAILED']} {failed}, {ICONS['SKIPPED']} {skipped})")
+                    _print_file_result(file_path, tests_in_file)
 
 def generate_markdown_report(results: dict, total_time: float):
     """Genera un fichero Markdown con el resumen de los tests."""
+    def _write_markdown_header(f, success_rate: float, failed: int) -> None:
+        """Escribe el encabezado del reporte Markdown."""
+        f.write("# 🚀 Resumen de Ejecución de Tests\n\n")
+        f.write(f"- **Fecha**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        result_status = '✅ ÉXITO' if (success_rate == 100 and failed == 0) else '❌ FALLIDO'
+        f.write(f"- **Resultado General**: {result_status}\n\n")
+
+    def _write_global_stats(f, summary: dict, success_rate: float, total_time: float) -> None:
+        """Escribe la tabla de estadísticas globales."""
+        f.write("## 📊 Estadísticas Globales\n\n")
+        f.write("| Métrica | Valor |\n|---|---|\n")
+        f.write(f"| ✅ **Tests Pasados** | {summary.get('passed', 0)} |\n")
+        f.write(f"| ❌ **Tests Fallados** | {summary.get('failed', 0)} |\n")
+        f.write(f"| ⚠️ **Tests Omitidos** | {summary.get('skipped', 0)} |\n")
+        f.write(f"| **Total de Tests** | {summary.get('total', 0)} |\n")
+        f.write(f"| **Tasa de Éxito** | {success_rate:.2f}% |\n")
+        f.write(f"| ⏱️ **Duración Total** | {total_time:.2f} segundos |\n\n")
+
+    def _write_test_details(f, filepath: str, tests: list, slowest_test_nodeids: set, test_lookup: dict) -> None:
+        """Escribe los detalles de los tests de un archivo."""
+        f.write(f"---\n\n### {ICONS['FOLDER']} `{filepath}`\n\n")
+        docstrings = get_docstrings_from_file(filepath)
+        
+        for test in sorted(tests, key=lambda x: x['name']):
+            status_icon = ICONS.get(test['outcome'].upper(), "❓")
+            description = ' '.join(docstrings.get(test['name'], "No description provided.").split())
+            
+            # Usar el nodeid original guardado en el test
+            test_nodeid = test['nodeid']
+            full_test_data = test_lookup.get(test_nodeid)
+            slow_icon = f" {ICONS['SLOW']}" if test_nodeid in slowest_test_nodeids else ""
+            
+            f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
+            f.write(f"  > _{description}_\n")
+
+            # Agregar error details si el test falló
+            if test['outcome'] == 'failed' and full_test_data:
+                longrepr = full_test_data.get("call", {}).get("longrepr")
+                if longrepr:
+                    f.write("\n  ```text\n")
+                    f.write(longrepr)
+                    f.write("\n  ```\n")
+            f.write("\n")
+
     summary = results["summary"]
     passed = summary.get("passed", 0)
     failed = summary.get("failed", 0)
@@ -160,52 +217,20 @@ def generate_markdown_report(results: dict, total_time: float):
     success_rate = (passed / total * 100) if total > 0 else 0
     
     report_path = REPORTS_DIR / "test_summary.md"
+    slowest_tests = sorted([t for t in results['tests'] if t.get('outcome') == 'passed'], 
+                           key=lambda x: x.get('call', {}).get('duration', 0.0), 
+                           reverse=True)
+    
+    # Crear lookup optimizado y set para búsquedas rápidas
+    test_lookup = {test['nodeid']: test for test in results['tests']}
+    slowest_test_nodeids = {test['nodeid'] for test in slowest_tests[:5]}
     
     with open(report_path, "w") as f:
-        f.write("# 🚀 Resumen de Ejecución de Tests\n\n")
-        f.write(f"- **Fecha**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"- **Resultado General**: {'✅ ÉXITO' if success_rate == 100 and failed == 0 else '❌ FALLIDO'}\n\n")
+        _write_markdown_header(f, success_rate, failed)
+        _write_global_stats(f, summary, success_rate, total_time)
         
-        f.write("## 📊 Estadísticas Globales\n\n")
-        f.write("| Métrica | Valor |\n|---|---|\n")
-        f.write(f"| ✅ **Tests Pasados** | {passed} |\n")
-        f.write(f"| ❌ **Tests Fallados** | {failed} |\n")
-        f.write(f"| ⚠️ **Tests Omitidos** | {summary.get('skipped', 0)} |\n")
-        f.write(f"| **Total de Tests** | {total} |\n")
-        f.write(f"| **Tasa de Éxito** | {success_rate:.2f}% |\n")
-        f.write(f"| ⏱️ **Duración Total** | {total_time:.2f} segundos |\n\n")
-        
-        slowest_tests = sorted([t for t in results['tests'] if t.get('outcome') == 'passed'], 
-                               key=lambda x: x.get('call', {}).get('duration', 0.0), 
-                               reverse=True)
-
         for filepath, tests in sorted(results["by_file"].items()):
-            f.write(f"---\n\n### {ICONS['FOLDER']} `{filepath}`\n\n")
-            docstrings = get_docstrings_from_file(filepath)
-            
-            for test in sorted(tests, key=lambda x: x['name']):
-                status_icon = ICONS.get(test['outcome'].upper(), "❓")
-                docstring_key = test['name']
-                description = docstrings.get(docstring_key, "No description provided.")
-                description = ' '.join(description.split())
-                
-                # Encuentra el test original en la lista completa para acceder a todos sus datos
-                full_test_data = next((t for t in results['tests'] if t['nodeid'] == f"{filepath}::{test['name']}"), None)
-
-                slow_icon = f" {ICONS['SLOW']}" if full_test_data in slowest_tests[:5] else ""
-                
-                f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
-                f.write(f"  > _{description}_\n")
-
-                # --- INICIO DE LA CORRECCIÓN ---
-                if test['outcome'] == 'failed' and full_test_data:
-                    longrepr = full_test_data.get("call", {}).get("longrepr")
-                    if longrepr:
-                        f.write("\n  ```text\n")
-                        f.write(longrepr)
-                        f.write("\n  ```\n")
-                # --- FIN DE LA CORRECCIÓN ---
-                f.write("\n")
+            _write_test_details(f, filepath, tests, slowest_test_nodeids, test_lookup)
 
     print(f"\n{ICONS['DOC']} Reporte Markdown generado en: {report_path}")
 

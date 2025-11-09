@@ -174,12 +174,19 @@ El sistema implementa **Clean Architecture** con 3 capas principales:
 - Asignación de jugadores
 - Gestión de capitanes
 
-### 4. Handicap Management Module *(Planeado)*
+### 4. Handicap Management Module *(Implementado)*
 
 **Responsabilidades:**
-- Cálculo automático de handicaps
-- Ajustes por condiciones del campo
-- Historial de evolución
+- Búsqueda de hándicaps desde RFEG
+- Actualización automática en múltiples puntos del ciclo de vida
+- Validación de rangos (-10.0 a 54.0)
+- Auditoría de cambios con Domain Events
+
+**Componentes Implementados:**
+- **Domain**: `Handicap` (Value Object), `HandicapService` (Interface), `HandicapUpdatedEvent`, `HandicapErrors`.
+- **Application**: `UpdateUserHandicapUseCase`, `UpdateMultipleHandicapsUseCase`.
+- **Infrastructure**: `RFEGHandicapService` (scraping), `MockHandicapService` (testing), `handicap_routes.py` (API).
+- **Decisiones**: Se creó `ADR-013` (External Services Pattern) y `ADR-014` (Handicap Management System).
 
 ### 5. Scoring Module *(Planeado)*
 
@@ -203,9 +210,13 @@ class User:
     password: Password
     first_name: str
     last_name: str
-    handicap: Optional[Handicap]
+    handicap: Optional[float]  # Validado por Handicap Value Object
     created_at: datetime
     updated_at: datetime
+
+    def update_handicap(self, new_handicap: Optional[float]) -> None:
+        """Actualiza hándicap y emite HandicapUpdatedEvent."""
+        # Lógica de validación y emisión de eventos
 ```
 
 #### Tournament Entity *(Diseño)*
@@ -228,7 +239,7 @@ class Tournament:
 @dataclass(frozen=True)
 class Email:
     value: str
-    
+
     def __post_init__(self):
         if not self._is_valid_email(self.value):
             raise InvalidEmailError(f"Invalid email: {self.value}")
@@ -239,10 +250,21 @@ class Email:
 @dataclass(frozen=True)
 class Password:
     hashed_value: str
-    
+
     @classmethod
     def create(cls, plain_password: str) -> 'Password':
         # bcrypt hashing with environment-based rounds
+```
+
+#### Handicap Value Object
+```python
+@dataclass(frozen=True)
+class Handicap:
+    value: float
+
+    def __post_init__(self):
+        if not (-10.0 <= self.value <= 54.0):
+            raise ValueError(f"Hándicap debe estar entre -10.0 y 54.0")
 ```
 
 ---
@@ -516,6 +538,12 @@ POST   /api/v1/auth/refresh      # Token refresh
 GET    /api/v1/users/profile     # Get current user profile
 PUT    /api/v1/users/profile     # Update user profile
 GET    /api/v1/users/{user_id}   # Get user by ID
+```
+
+#### Handicaps
+```
+POST   /api/v1/handicaps/update             # Update single user handicap
+POST   /api/v1/handicaps/update-multiple    # Batch update handicaps
 ```
 
 #### Tournaments *(Planeado)*

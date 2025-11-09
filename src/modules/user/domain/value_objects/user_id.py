@@ -45,3 +45,13 @@ class UserId:
     def __eq__(self, other) -> bool:
         """Operador de igualdad."""
         return isinstance(other, UserId) and self.value == other.value
+
+    def __lt__(self, other) -> bool:
+        """Operador menor que (para ordenamiento)."""
+        if not isinstance(other, UserId):
+            return NotImplemented
+        return self.value < other.value
+
+    def __hash__(self) -> int:
+        """Hash del UserId para uso en sets y dicts."""
+        return hash(self.value)

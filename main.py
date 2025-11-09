@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
 
-from src.modules.user.infrastructure.api.v1 import auth_routes
+from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
 
 
@@ -49,6 +49,18 @@ app.include_router(
     auth_routes.router,
     prefix="/api/v1/auth",
     tags=["Authentication"],
+)
+
+app.include_router(
+    handicap_routes.router,
+    prefix="/api/v1",
+    tags=["Handicaps"],
+)
+
+app.include_router(
+    user_routes.router,
+    prefix="/api/v1/users",
+    tags=["Users"],
 )
 
 # Endpoint raíz para health check y metadata básica

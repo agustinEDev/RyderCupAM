@@ -7,6 +7,8 @@
 ![Badge-PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Badge-SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-red?style=for-the-badge&logo=python&logoColor=white)
 ![Badge-Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=for-the-badge&logo=docker&logoColor=white)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/agustinEDev/RyderCupAM?utm_source=oss&utm_medium=github&utm_campaign=agustinEDev%2FRyderCupAM&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 
 **Un sistema completo de gestión de torneos de golf amateur siguiendo el prestigioso formato Ryder Cup**
 
@@ -28,12 +30,13 @@ El **Ryder Cup Amateur Manager** es una aplicación de gestión de torneos de go
 
 - 🏌️ **Gestión de Torneos** - Creación y administración de competiciones formato Ryder Cup
 - 👥 **Equipos Europa vs USA** - Formación automática de equipos con balance competitivo
-- 🎯 **Sistema de Handicaps** - Cálculo automático y ajuste por condiciones del campo
+- 🎯 **Sistema de Handicaps** - Integración con RFEG para búsqueda y actualización automática de handicaps
 - 📊 **Scoring en Tiempo Real** - Resultados y estadísticas actualizadas instantáneamente
 - 🏆 **Gestión de Formatos** - Soporte para fourball, foursomes y singles
 - 📱 **Interface Responsiva** - Acceso optimizado desde cualquier dispositivo
 - 🔐 **Seguridad Robusta** - Autenticación JWT con encriptación bcrypt
 - 🌐 **API RESTful** - Documentación automática con OpenAPI/Swagger
+- 🔄 **Servicios Externos** - Integración con servicios de la Federación Española de Golf (RFEG)
 
 ## 🏗️ Arquitectura
 
@@ -258,21 +261,23 @@ graph TD
 ### 📊 Estado Actual de Tests
 
 ```
-📊 Estadísticas de Testing (220 tests total)
-├── 🔧 Tests Unitarios: 197/197 (100% éxito)
-│   ├── Domain Entities: 73 tests
-│   ├── Value Objects: 49 tests  
+📊 Estadísticas de Testing (299 tests total)
+├── 🔧 Tests Unitarios: 271/271 (100% éxito)
+│   ├── Domain Entities: 86 tests
+│   ├── Value Objects: 69 tests (incluye Handicap)
 │   ├── Repository Interfaces: 31 tests
 │   ├── Unit of Work: 18 tests
-│   ├── Domain Events: 52 tests
-│   ├── Application Use Cases: 2 tests
+│   ├── Domain Events: 68 tests (incluye HandicapUpdatedEvent)
+│   ├── Application Use Cases: 9 tests
+│   ├── External Services: 18 tests (MockHandicapService)
 │   └── Excepciones: 21 tests
 │
-├── 🔗 Tests de Integración: 23/23 (100% éxito)
-│   ├── API Endpoints: 15 tests
+├── 🔗 Tests de Integración: 28/28 (100% éxito)
+│   ├── API Endpoints: 20 tests (incluye handicap endpoints)
 │   └── Domain Events Integration: 7 tests
+│   └── Persistence: 1 test
 │
-└── ⚡ Performance: 220 tests en ~2 segundos (paralelización)
+└── ⚡ Performance: 299 tests en ~8 segundos (paralelización)
 ```
 
 ### 🚀 Ejecutar Tests
@@ -329,15 +334,17 @@ gantt
   - Sistema de autenticación JWT + bcrypt
   - Repository Pattern con Unit of Work
   - Domain Events con Event Bus
-  - **Testing framework robusto y paralelizado (220 tests)**
+  - **Handicap Management System integrado con RFEG**
+  - **Testing framework robusto y paralelizado (299 tests)**
   - **Composition Root para inyección de dependencias**
-  - **Implementación y conexión del `RegisterUserUseCase` a la API**
+  - **Implementación y conexión de Use Cases a la API**
+  - **External Services Pattern para integración con RFEG**
   - Documentación completa con ADRs
 
 - **🚧 En Desarrollo**
   - Tournament management system
   - Team formation algorithms
-  - Handicap calculation engine
+  - Advanced tournament features
 
 - **⏳ Planificado**
   - Real-time scoring updates
@@ -396,7 +403,9 @@ gantt
 | [ADR-009](docs/architecture/decisions/ADR-009-docker-environment.md) | Docker Environment | ✅ Implementado |
 | [ADR-010](docs/architecture/decisions/ADR-010-alembic-migrations.md) | Alembic Migrations | ✅ Implementado |
 | [ADR-011](docs/architecture/decisions/ADR-011-application-layer-use-cases.md) | Application Layer & Use Cases | ✅ Implementado |
-| [ADR-012](docs/architecture/decisions/ADR-012-composition-root.md) | Composition Root | ✅ Aceptado |
+| [ADR-012](docs/architecture/decisions/ADR-012-composition-root.md) | Composition Root | ✅ Implementado |
+| [ADR-013](docs/architecture/decisions/ADR-013-external-services-pattern.md) | External Services Pattern | ✅ Implementado |
+| [ADR-014](docs/architecture/decisions/ADR-014-handicap-management-system.md) | Handicap Management System | ✅ Implementado |
 
 ## 🔧 API Reference
 
@@ -404,7 +413,7 @@ gantt
 
 ```http
 POST   /api/v1/auth/register     # User registration
-POST   /api/v1/auth/login        # User authentication  
+POST   /api/v1/auth/login        # User authentication
 POST   /api/v1/auth/logout       # User logout
 POST   /api/v1/auth/refresh      # Token refresh
 ```
@@ -415,6 +424,13 @@ POST   /api/v1/auth/refresh      # Token refresh
 GET    /api/v1/users/profile     # Get current user profile
 PUT    /api/v1/users/profile     # Update user profile
 GET    /api/v1/users/{user_id}   # Get user by ID
+```
+
+### 🎯 Handicap Management
+
+```http
+POST   /api/v1/handicaps/update             # Update single user handicap
+POST   /api/v1/handicaps/update-multiple    # Batch handicap update
 ```
 
 ### 🏆 Tournament Management (Planned)

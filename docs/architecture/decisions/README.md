@@ -21,6 +21,8 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 | [ADR-010](./ADR-010-alembic-for-database-migrations.md) | Uso de Alembic para Migraciones de BD | ✅ Aceptado | 4 Nov 2025 | 🔥 Alto |
 | [ADR-011](./ADR-011-application-layer-use-cases.md) | Capa de Aplicación con Casos de Uso | ✅ Aceptado | 5 Nov 2025 | 🔥 Alto |
 | [ADR-012](./ADR-012-composition-root.md) | Patrón Composition Root | ✅ Aceptado | 5 Nov 2025 | 🔥 Alto |
+| [ADR-013](./ADR-013-external-services-pattern.md) | External Services Pattern | ✅ Aceptado | 9 Nov 2025 | 🔥 Alto |
+| [ADR-014](./ADR-014-handicap-management-system.md) | Handicap Management System | ✅ Aceptado | 9 Nov 2025 | 🔥 Alto |
 
 ## 📊 Resumen de Decisiones por Área
 
@@ -41,3 +43,7 @@ Este directorio contiene las decisiones arquitectónicas importantes tomadas dur
 
 ### 🧪 **Testing y Calidad**
 - **[ADR-003](./ADR-003-testing-strategy.md)**: pytest con paralelización, aislamiento de BD por worker y organización por capas.
+
+### 🔄 **Integraciones Externas**
+- **[ADR-013](./ADR-013-external-services-pattern.md)**: External Services Pattern para integración con servicios externos (RFEG).
+- **[ADR-014](./ADR-014-handicap-management-system.md)**: Sistema de gestión de hándicaps con Value Objects, Domain Events y servicios externos.

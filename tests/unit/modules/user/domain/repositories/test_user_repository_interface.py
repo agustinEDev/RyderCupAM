@@ -141,6 +141,9 @@ class TestUserRepositoryInterface:
             async def find_by_email(self, email: Email):
                 pass
             
+            async def find_by_full_name(self, full_name: str):
+                return None
+            
             async def exists_by_email(self, email: Email) -> bool:
                 return False
             

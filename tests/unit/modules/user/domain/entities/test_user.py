@@ -552,3 +552,132 @@ class TestUserEntityEventCollection:
         event = events[0]
         assert event.aggregate_id == str(user.id.value)
         assert event.aggregate_id == event.user_id
+
+
+class TestUserUpdateHandicap:
+    """Tests para el método update_handicap() de User."""
+
+    def test_update_handicap_with_valid_value(self):
+        """Test: Actualizar hándicap con un valor válido."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        user.update_handicap(15.5)
+        
+        assert user.handicap == 15.5
+
+    def test_update_handicap_emits_domain_event(self):
+        """Test: Actualizar hándicap emite un evento de dominio."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.clear_domain_events()  # Limpiar evento de creación
+        
+        user.update_handicap(15.5)
+        
+        events = user.get_domain_events()
+        assert len(events) == 1
+        assert events[0].__class__.__name__ == "HandicapUpdatedEvent"
+
+    def test_update_handicap_event_contains_correct_data(self):
+        """Test: El evento de actualización contiene los datos correctos."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.clear_domain_events()
+        
+        user.update_handicap(15.5)
+        
+        event = user.get_domain_events()[0]
+        assert event.user_id == str(user.id.value)
+        assert event.old_handicap is None
+        assert event.new_handicap == 15.5
+
+    def test_update_handicap_from_existing_value(self):
+        """Test: Actualizar hándicap cuando ya tiene un valor previo."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.update_handicap(15.5)
+        user.clear_domain_events()
+        
+        user.update_handicap(20.0)
+        
+        event = user.get_domain_events()[0]
+        assert event.old_handicap == 15.5
+        assert event.new_handicap == 20.0
+
+    def test_update_handicap_to_none(self):
+        """Test: Actualizar hándicap a None (eliminar hándicap)."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.update_handicap(15.5)
+        user.clear_domain_events()
+        
+        user.update_handicap(None)
+        
+        assert user.handicap is None
+        event = user.get_domain_events()[0]
+        assert event.old_handicap == 15.5
+        assert event.new_handicap is None
+
+    def test_update_handicap_does_not_emit_event_if_same_value(self):
+        """Test: No emite evento si el valor no cambia."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.update_handicap(15.5)
+        user.clear_domain_events()
+        
+        user.update_handicap(15.5)
+        
+        events = user.get_domain_events()
+        assert len(events) == 0
+
+    def test_update_handicap_with_invalid_value_raises_error(self):
+        """Test: Actualizar con valor inválido lanza ValueError."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        with pytest.raises(ValueError, match=r"debe estar entre -10\.0 y 54\.0"):
+            user.update_handicap(100.0)
+
+    def test_update_handicap_below_minimum_raises_error(self):
+        """Test: Actualizar con valor por debajo del mínimo lanza error."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        with pytest.raises(ValueError):
+            user.update_handicap(-15.0)
+
+    def test_update_handicap_updates_timestamp(self):
+        """Test: Actualizar hándicap actualiza el timestamp updated_at."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        original_updated_at = user.updated_at
+        
+        import time
+        time.sleep(0.01)  # Pequeña espera para asegurar diferencia de timestamp
+        
+        user.update_handicap(15.5)
+        
+        assert user.updated_at > original_updated_at
+
+    def test_update_handicap_with_negative_value(self):
+        """Test: Actualizar con hándicap negativo válido."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        user.update_handicap(-5.0)
+        
+        assert user.handicap == -5.0
+
+    def test_update_handicap_with_zero(self):
+        """Test: Actualizar con hándicap cero."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        user.update_handicap(0.0)
+        
+        assert user.handicap == 0.0
+
+    def test_update_handicap_minimum_valid_value(self):
+        """Test: Actualizar con valor mínimo válido (-10.0)."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        user.update_handicap(-10.0)
+        
+        assert user.handicap == -10.0
+
+    def test_update_handicap_maximum_valid_value(self):
+        """Test: Actualizar con valor máximo válido (54.0)."""
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        
+        user.update_handicap(54.0)
+        
+        assert user.handicap == 54.0

@@ -165,13 +165,30 @@ def invalid_user_data() -> dict:
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Fixture que proporciona una sesión de BD asíncrona y aislada para cada test,
-    gestionando la creación y destrucción de tablas.
+    usando una base de datos temporal específica para tests.
     """
-    db_url = DATABASE_URL
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    # Crear una base de datos temporal para este test específico
+    import uuid
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    test_id = str(uuid.uuid4())[:8]
+    db_name = f"test_db_session_{worker_id}_{test_id}"
+    
+    # URL base para conectarse a PostgreSQL (sin la base de datos específica)
+    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    if db_url_base.startswith("postgresql://"):
+        db_url_base = db_url_base.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    engine = create_async_engine(db_url)
+    # URL para la base de datos de test específica
+    test_db_url = f"{db_url_base}/{db_name}"
+
+    # Motor para crear/eliminar la base de datos temporal
+    admin_engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
+    async with admin_engine.connect() as conn:
+        await conn.execute(text(f"CREATE DATABASE {db_name}"))
+    await admin_engine.dispose()
+
+    # Motor conectado a la base de datos de test
+    engine = create_async_engine(test_db_url)
     
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
@@ -187,7 +204,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with TestSessionLocal() as session:
         yield session
 
-    async with engine.begin() as conn:
-        await conn.run_sync(metadata.drop_all)
-
+    # Limpieza: eliminar la base de datos temporal completa
     await engine.dispose()
+    
+    admin_engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
+    async with admin_engine.connect() as conn:
+        await conn.execute(text(f"DROP DATABASE {db_name}"))
+    await admin_engine.dispose()

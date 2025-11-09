@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from src.config.dependencies import get_register_user_use_case
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO, UserResponseDTO
-from src.modules.user.application.use_cases.register_user import RegisterUserUseCase
+from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 
 router = APIRouter()

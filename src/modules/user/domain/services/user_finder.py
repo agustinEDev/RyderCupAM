@@ -4,6 +4,7 @@ from typing import Optional
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.user_id import UserId
 
 class UserFinder:
     """
@@ -17,6 +18,10 @@ class UserFinder:
         """Encuentra un usuario por su correo electrónico."""
         return await self._user_repository.find_by_email(email)
 
-    # En el futuro, podríamos añadir más métodos:
-    # async def by_id(self, user_id: UserId) -> Optional[User]: ...
-    # async def active_users(self) -> List[User]: ...
+    async def by_id(self, user_id: UserId) -> Optional[User]:
+        """Encuentra un usuario por su ID."""
+        return await self._user_repository.find_by_id(user_id)
+
+    async def by_full_name(self, full_name: str) -> Optional[User]:
+        """Encuentra un usuario por su nombre completo."""
+        return await self._user_repository.find_by_full_name(full_name)

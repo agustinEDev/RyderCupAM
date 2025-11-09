@@ -51,6 +51,29 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """
         self._session.add(user)
 
+    async def find_by_full_name(self, full_name: str) -> Optional[User]:
+        """Busca un usuario por su nombre completo."""
+        # Separar el nombre completo en palabras para buscar
+        name_parts = full_name.strip().split()
+        if len(name_parts) < 2:
+            return None
+            
+        # Buscar por primera coincidencia exacta de first_name + last_name
+        for i in range(1, len(name_parts)):
+            first_name = " ".join(name_parts[:i])
+            last_name = " ".join(name_parts[i:])
+            
+            statement = select(User).filter(
+                func.lower(User.first_name) == func.lower(first_name),
+                func.lower(User.last_name) == func.lower(last_name)
+            )
+            result = await self._session.execute(statement)
+            user = result.scalar_one_or_none()
+            if user:
+                return user
+                
+        return None
+
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""
         statement = select(func.count()).select_from(User).filter_by(email=email)
