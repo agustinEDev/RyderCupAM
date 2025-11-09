@@ -73,6 +73,7 @@ class UserResponseDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
     handicap: Optional[float] = Field(None, description="Handicap de golf del usuario.")
+    handicap_updated_at: Optional[datetime] = Field(None, description="Fecha y hora de la última actualización del handicap.")
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
     updated_at: datetime = Field(..., description="Fecha y hora de la última actualización.")
 
