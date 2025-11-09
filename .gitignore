@@ -35,3 +35,4 @@ GEMINI.md
 # Postman collections (may contain local environment data)
 *.postman_collection.json
 *.postman_environment.json
+Ryder_Cup_API.postman_collection.json

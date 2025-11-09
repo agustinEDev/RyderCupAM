@@ -1,10 +1,16 @@
-# 🏆 Ryder Cup Amateur Manager
+# 🏆 Ryder Cup Amateur Manager - Backend API
 
-> Sistema de gestión de torneos de golf amateur formato Ryder Cup
+> REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-330%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-360%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
+[![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
+
+## 🌐 Frontend
+
+Este es el **backend API**. Para la aplicación web frontend, visita:
+👉 **[RyderCupAm-Web](https://github.com/agustinEDev/RyderCupAm-Web)** *(próximamente)*
 
 ## 🚀 Quick Start
 
@@ -34,12 +40,14 @@ open http://localhost:8000/docs
 
 Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architecture + DDD
 
-## ✨ Features
+## ✨ Features API
 
-- ✅ **User Management** - Registro, autenticación JWT
-- ✅ **Handicap System** - Integración RFEG, actualización automática
-- 🚧 **Tournament Management** - Creación y gestión de torneos
-- ⏳ **Real-time Scoring** - Resultados en vivo
+- ✅ **User Management** - Registro, autenticación JWT, gestión de perfil
+- ✅ **Authentication** - Login/Logout con tokens JWT + Domain Events
+- ✅ **Handicap System** - Integración RFEG, actualización automática y batch
+- ✅ **Session Management** - Estrategia progresiva (Fase 1 implementada)
+- 🚧 **Tournament Management** - Creación y gestión de torneos (próximamente)
+- ⏳ **Real-time Scoring** - Resultados en vivo (planeado)
 
 ## 🏗️ Arquitectura
 
@@ -53,13 +61,32 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (330 tests, ~8s)
-pytest tests/unit/           # Unit tests (302)
-pytest tests/integration/    # Integration tests (28)
+python dev_tests.py          # Full suite (360 tests, ~12s)
+pytest tests/unit/           # Unit tests (313)
+pytest tests/integration/    # Integration tests (47)
 pytest --cov=src             # Con cobertura
 ```
 
 **Cobertura**: >90% en lógica de negocio
+
+### Endpoints API Disponibles
+
+```bash
+# Authentication
+POST   /api/v1/auth/register         # User registration
+POST   /api/v1/auth/login            # JWT authentication
+POST   /api/v1/auth/logout           # Logout with audit
+
+# Handicap Management
+POST   /api/v1/handicaps/update              # RFEG lookup + fallback
+POST   /api/v1/handicaps/update-manual       # Manual update
+POST   /api/v1/handicaps/update-multiple     # Batch processing
+
+# User Management
+GET    /api/v1/users/search          # Search by email/name
+```
+
+**Documentación completa**: `http://localhost:8000/docs` (Swagger UI)
 
 ## 💻 Desarrollo
 
@@ -78,21 +105,26 @@ mypy src/
 
 ## 📊 Estado del Proyecto
 
-**Fase 1: Foundation** ✅ Completado
-- Clean Architecture + DDD
-- User management + JWT auth
-- Handicap system (RFEG integration)
-- 330 tests (100% passing)
+**Fase 1: Foundation** ✅ Completado (9 Nov 2025)
+- Clean Architecture + DDD completo
+- User management + JWT authentication
+- Login/Logout con Domain Events
+- Session Management (Fase 1)
+- Handicap system (RFEG integration + batch)
+- 360 tests (100% passing)
+- 7 endpoints API funcionales
 
 **Fase 2: Core Features** 🚧 En desarrollo
-- Tournament management
+- Tournament CRUD operations
 - Team formation algorithms
 - Basic scoring system
+- **Frontend Web Application** → [RyderCupAm-Web](https://github.com/agustinEDev/RyderCupAm-Web)
 
 **Fase 3: Advanced** ⏳ Planeado
-- Real-time updates
+- Real-time updates (WebSockets)
 - Statistics dashboard
 - Mobile companion app
+- Admin panel
 
 ## 🤝 Contribuir
 
