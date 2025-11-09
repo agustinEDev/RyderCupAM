@@ -183,6 +183,8 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ### Auth
 - `POST /api/v1/auth/register` - Registro de usuario
+- `POST /api/v1/auth/login` - Autenticación JWT + UserLoggedInEvent
+- `POST /api/v1/auth/logout` - Logout con auditoría + UserLoggedOutEvent
 
 ### Handicaps
 - `POST /api/v1/handicaps/update` - RFEG lookup + fallback
@@ -198,19 +200,19 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ## Testing
 
-**Estrategia**: Test Pyramid (90% unit, 10% integration)
+**Estrategia**: Test Pyramid (87% unit, 13% integration)
 
 ```
-330 tests (100% passing)
-├── Unit: 302
-│   ├── Domain: ~200
+360 tests (100% passing)
+├── Unit: 313 (24 archivos)
+│   ├── Domain: ~220
 │   ├── Application: ~50
-│   └── Infrastructure: ~50
-└── Integration: 28
+│   └── Infrastructure: ~40
+└── Integration: 47 (7 archivos)
 ```
 
 **Cobertura**: >90% en lógica de negocio
-**Performance**: ~8s (paralelización con pytest-xdist)
+**Performance**: ~12s (paralelización con pytest-xdist)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
@@ -224,17 +226,70 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Infra**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md)
 
-**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
+**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md)
 
 ---
 
-## Métricas Actuales
+## 📊 Métricas del Proyecto
+
+**Última actualización**: 9 Nov 2025
+
+### Testing
 
 | Métrica | Valor |
 |---------|-------|
-| Tests | 330 (100% pass) |
+| Tests totales | 360 (100% passing) |
+| Tests unitarios | 313 (24 archivos) |
+| Tests integración | 47 (7 archivos) |
 | Cobertura | >90% |
-| Módulos | 1/3 completo |
-| Endpoints | 5 activos |
-| Integraciones | 1 (RFEG) |
-| Líneas código | ~15,000 |
+| Tiempo ejecución | ~12s (paralelo) |
+
+### Progreso de Módulos
+
+| Módulo | Estado | Tests | Endpoints |
+|--------|--------|-------|-----------|
+| User | ✅ Completo + Auth | 313+ | 7 |
+| Tournament | 🚧 En desarrollo | 0 | 0 |
+| Team | ⏳ Pendiente | 0 | 0 |
+
+### Value Objects Implementados (69 tests)
+
+- **UserId** (12 tests) - Identificador UUID único
+- **Email** (14 tests) - Email validado y normalizado
+- **Password** (23 tests) - Contraseña bcrypt hasheada
+- **Handicap** (20 tests) - Rango -10.0 a 54.0 (RFEG/EGA)
+
+### Domain Events Implementados (38 tests)
+
+- **UserRegisteredEvent** (9 tests) - Usuario registrado
+- **HandicapUpdatedEvent** (16 tests) - Handicap actualizado con delta
+- **UserLoggedOutEvent** (7 tests) - Usuario cerró sesión (auditoría)
+- **UserLoggedInEvent** (7 tests) - Usuario inició sesión (auditoría completa)
+
+### Use Cases Implementados (40 tests)
+
+**User Module (7 use cases)**:
+- `RegisterUserUseCase` (5 tests) - Registro de usuario
+- `LoginUserUseCase` (5 tests) - Autenticación JWT + eventos
+- `LogoutUserUseCase` (5 tests) - Logout con auditoría completa
+- `UpdateUserHandicapUseCase` (10 tests) - Actualización desde RFEG con fallback
+- `UpdateUserHandicapManuallyUseCase` (6 tests) - Actualización manual directa
+- `UpdateMultipleHandicapsUseCase` - Batch update con estadísticas
+- `FindUserUseCase` (10 tests) - Búsqueda por email o nombre
+
+### API Endpoints Activos (7)
+
+| Endpoint | Método | Auth | Status |
+|----------|--------|------|--------|
+| `/api/v1/auth/register` | POST | No | ✅ Activo |
+| `/api/v1/auth/login` | POST | No | ✅ Activo |
+| `/api/v1/auth/logout` | POST | JWT | ✅ Activo |
+| `/api/v1/handicaps/update` | POST | ⏳ Pendiente | ✅ Activo |
+| `/api/v1/handicaps/update-manual` | POST | ⏳ Pendiente | ✅ Activo |
+| `/api/v1/handicaps/update-multiple` | POST | ⏳ Pendiente | ✅ Activo |
+| `/api/v1/users/search` | GET | ⏳ Pendiente | ✅ Activo |
+
+### External Services Implementados (18 tests)
+
+- **RFEGHandicapService** (5 tests integración) - Web scraping RFEG real
+- **MockHandicapService** (13 tests) - Mock determinístico para testing

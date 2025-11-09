@@ -127,28 +127,6 @@ class MockHandicapService(HandicapService):
 
 ---
 
-## Implementación
-
-### Archivos
-```
-user/domain/value_objects/handicap.py
-user/domain/events/handicap_updated_event.py
-user/domain/services/handicap_service.py
-user/application/use_cases/update_*_handicap*.py
-user/infrastructure/external/rfeg_handicap_service.py
-user/infrastructure/api/v1/handicap_routes.py
-```
-
-### Tests
-- 20 tests Handicap VO
-- 16 tests HandicapUpdatedEvent
-- 18 tests External Services
-- 7 tests Use Cases
-- 18 tests Integration
-**Total: 79 tests nuevos**
-
----
-
 ## Puntos de Actualización
 
 **1. Registro Usuario** (Opcional, no bloqueante)
@@ -171,19 +149,10 @@ await update_user_handicap_manually_use_case.execute(user_id, 15.5)
 
 ---
 
-## Métricas
-
-| Métrica | Antes | Después |
-|---------|-------|---------|
-| Tests | 299 | 330 |
-| Tests handicap | 0 | 79 |
-| Cobertura handicap | 0% | 100% |
-
----
-
 ## Referencias
 
 - [ADR-002: Value Objects](./ADR-002-value-objects.md)
 - [ADR-007: Domain Events](./ADR-007-domain-events-pattern.md)
 - [ADR-013: External Services](./ADR-013-external-services-pattern.md)
 - [RFEG Handicaps](https://www.rfegolf.es/Handicaps.aspx)
+- [Design Document](../design-document.md) - Ver sección Métricas para detalles de implementación

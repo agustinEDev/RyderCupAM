@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
-from src.config.dependencies import get_find_user_use_case
-from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUserResponseDTO
+from src.config.dependencies import get_find_user_use_case, get_current_user
+from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUserResponseDTO, UserResponseDTO
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 
@@ -19,6 +19,7 @@ async def find_user(
     email: Optional[str] = Query(None, description="Email del usuario a buscar"),
     full_name: Optional[str] = Query(None, description="Nombre completo del usuario a buscar"),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user)
 ):
     """
     Endpoint para buscar un usuario por email o nombre completo.

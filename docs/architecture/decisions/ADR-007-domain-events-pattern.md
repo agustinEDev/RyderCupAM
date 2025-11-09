@@ -157,45 +157,8 @@ class RegisterUserUseCase:
 - `DomainEvent` base class (Domain Layer)
 - `EventHandler` interface (Application Layer)
 - `EventBus` interface + `InMemoryEventBus` (Shared)
-- `UserRegisteredEvent`, `HandicapUpdatedEvent` (Domain)
+- Eventos específicos de dominio (ej: `UserRegisteredEvent`, `HandicapUpdatedEvent`)
 - Handlers específicos (Application)
-
-### Tests
-```
-68 tests Domain Events
-├── DomainEvent Base: 10
-├── EventHandler Interface: 19
-├── EventBus: 15
-├── UserRegisteredEvent: 8
-└── HandicapUpdatedEvent: 16
-```
-
----
-
-## Eventos Implementados
-
-**1. UserRegisteredEvent**
-- Propósito: Usuario registrado
-- Handlers: Email bienvenida, auditoría
-- Tests: 8
-
-**2. HandicapUpdatedEvent**
-- Propósito: Handicap actualizado
-- Datos: user_id, old/new handicap, delta
-- Handlers: Auditoría, notificaciones
-- Tests: 16
-
----
-
-## Métricas
-
-| Métrica | Valor |
-|---------|-------|
-| Tests totales | 330 |
-| Tests Domain Events | 68 |
-| Cobertura | 100% |
-| Eventos impl | 2 |
-| Handlers impl | 2 |
 
 ---
 
@@ -207,3 +170,4 @@ class RegisterUserUseCase:
 - [ADR-006: Unit of Work](./ADR-006-unit-of-work-pattern.md)
 - [ADR-008: Logging System](./ADR-008-logging-system.md)
 - [ADR-014: Handicap System](./ADR-014-handicap-management-system.md)
+- [Design Document](../design-document.md) - Ver sección Métricas para eventos implementados

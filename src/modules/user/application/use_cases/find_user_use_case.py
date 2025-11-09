@@ -3,7 +3,7 @@ from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUs
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 

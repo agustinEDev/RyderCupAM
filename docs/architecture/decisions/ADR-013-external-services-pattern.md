@@ -176,19 +176,6 @@ except HandicapServiceError:
 
 ---
 
-## Métricas
-
-| Métrica | Valor |
-|---------|-------|
-| Tests External Services | 18 |
-| Tests RFEG integration | 5 |
-| Tests Mock | 13 |
-| Cobertura | 100% |
-| Tiempo tests mock | < 10ms |
-| Tiempo tests RFEG real | ~2s |
-
----
-
 ## Referencias
 
 - **Patrones**: Dependency Inversion (SOLID), Strategy Pattern, Adapter Pattern
@@ -196,3 +183,4 @@ except HandicapServiceError:
 - [ADR-005: Repository Pattern](./ADR-005-repository-pattern.md)
 - [ADR-012: Composition Root](./ADR-012-composition-root.md)
 - [ADR-014: Handicap System](./ADR-014-handicap-management-system.md)
+- [Design Document](../design-document.md) - Ver sección Métricas para servicios externos implementados

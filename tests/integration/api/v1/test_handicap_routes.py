@@ -37,21 +37,25 @@ class TestHandicapEndpoints:
     @pytest.mark.asyncio
     async def test_update_handicap_endpoint_success(self, client: AsyncClient):
         """Test: Endpoint de actualización de hándicap funciona correctamente."""
-        # Arrange - Crear un usuario primero mediante el endpoint de registro
-        user_data = {
-            "email": "rafa@test.com",
-            "password": "Pass123!",
-            "first_name": "Rafael",
-            "last_name": "Nadal Parera"
-        }
-        register_response = await client.post("/api/v1/auth/register", json=user_data)
-        assert register_response.status_code == 201
-        user_id = register_response.json()["id"]
+        # Arrange - Crear un usuario autenticado
+        from tests.conftest import create_authenticated_user
 
-        # Act - Llamar al endpoint (ahora usando mock en lugar de llamada real)
+        auth_data = await create_authenticated_user(
+            client,
+            "rafa@test.com",
+            "Pass123!",
+            "Rafael",
+            "Nadal Parera"
+        )
+
+        user_id = auth_data["user_id"]
+        token = auth_data["token"]
+
+        # Act - Llamar al endpoint con autenticación
         response = await client.post(
             "/api/v1/handicaps/update",
-            json={"user_id": user_id}
+            json={"user_id": user_id},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert
@@ -64,13 +68,25 @@ class TestHandicapEndpoints:
     @pytest.mark.asyncio
     async def test_update_handicap_endpoint_user_not_found(self, client: AsyncClient):
         """Test: Actualizar hándicap de usuario inexistente devuelve 404."""
-        # Arrange
+        # Arrange - Crear usuario autenticado primero
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "auth@test.com",
+            "Pass123!",
+            "Auth",
+            "User"
+        )
+        token = auth_data["token"]
+
         non_existent_id = "123e4567-e89b-12d3-a456-426614174000"
 
         # Act
         response = await client.post(
             "/api/v1/handicaps/update",
-            json={"user_id": non_existent_id}
+            json={"user_id": non_existent_id},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert
@@ -81,6 +97,18 @@ class TestHandicapEndpoints:
     async def test_update_multiple_handicaps_endpoint(self, client: AsyncClient):
         """Test: Endpoint de actualización múltiple funciona correctamente."""
         # Arrange - Crear varios usuarios mediante el endpoint de registro
+        from tests.conftest import create_authenticated_user
+
+        # Crear usuario autenticado para hacer la petición
+        auth_data = await create_authenticated_user(
+            client,
+            "admin@test.com",
+            "Pass123!",
+            "Admin",
+            "User"
+        )
+        token = auth_data["token"]
+
         user1_data = {
             "email": "rafa.multiple@test.com",
             "password": "Pass123!",
@@ -104,7 +132,8 @@ class TestHandicapEndpoints:
         # Act
         response = await client.post(
             "/api/v1/handicaps/update-multiple",
-            json={"user_ids": user_ids}
+            json={"user_ids": user_ids},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert
@@ -124,10 +153,23 @@ class TestHandicapEndpoints:
     @pytest.mark.asyncio
     async def test_update_multiple_handicaps_empty_list(self, client: AsyncClient):
         """Test: Actualizar lista vacía devuelve estadísticas correctas."""
+        # Arrange - Crear usuario autenticado
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "empty@test.com",
+            "Pass123!",
+            "Empty",
+            "Test"
+        )
+        token = auth_data["token"]
+
         # Act
         response = await client.post(
             "/api/v1/handicaps/update-multiple",
-            json={"user_ids": []}
+            json={"user_ids": []},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert
@@ -140,20 +182,23 @@ class TestHandicapEndpoints:
     async def test_update_handicap_player_not_in_mock(self, client: AsyncClient):
         """Test: Jugador no configurado en el mock devuelve handicap None."""
         # Arrange - Crear un usuario que no está en el mock
-        user_data = {
-            "email": "unknown@test.com",
-            "password": "Pass123!",
-            "first_name": "Jugador",
-            "last_name": "Desconocido"
-        }
-        register_response = await client.post("/api/v1/auth/register", json=user_data)
-        assert register_response.status_code == 201
-        user_id = register_response.json()["id"]
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "unknown@test.com",
+            "Pass123!",
+            "Jugador",
+            "Desconocido"
+        )
+        user_id = auth_data["user_id"]
+        token = auth_data["token"]
 
         # Act - Llamar al endpoint
         response = await client.post(
             "/api/v1/handicaps/update",
-            json={"user_id": user_id}
+            json={"user_id": user_id},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert
@@ -166,10 +211,23 @@ class TestHandicapEndpoints:
     @pytest.mark.asyncio
     async def test_update_handicap_invalid_uuid(self, client: AsyncClient):
         """Test: UUID inválido devuelve error de validación."""
+        # Arrange - Crear usuario autenticado
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "invalid@test.com",
+            "Pass123!",
+            "Invalid",
+            "UUID"
+        )
+        token = auth_data["token"]
+
         # Act
         response = await client.post(
             "/api/v1/handicaps/update",
-            json={"user_id": "invalid-uuid"}
+            json={"user_id": "invalid-uuid"},
+            headers={"Authorization": f"Bearer {token}"}
         )
 
         # Assert

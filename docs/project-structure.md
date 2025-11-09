@@ -20,36 +20,40 @@ src/
 ├── modules/            # Módulos de negocio
 │   └── user/
 │       ├── domain/
-│       │   ├── entities/        # User
+│       │   ├── entities/        # User (with login/logout methods)
 │       │   ├── value_objects/   # UserId, Email, Password, Handicap
-│       │   ├── events/          # UserRegistered, HandicapUpdated
-│       │   ├── repositories/    # Interfaces
+│       │   ├── events/          # UserRegistered, HandicapUpdated, 
+│       │   │                    # UserLoggedIn, UserLoggedOut
+│       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork)
 │       │   ├── services/        # Domain services (interfaces)
 │       │   └── errors/          # Domain exceptions
 │       │
 │       ├── application/
-│       │   ├── use_cases/       # RegisterUser, UpdateHandicap
-│       │   ├── dto/             # Request/Response DTOs
+│       │   ├── use_cases/       # RegisterUser, LoginUser, LogoutUser,
+│       │   │                    # UpdateHandicap, FindUser
+│       │   ├── dto/             # Request/Response DTOs (Login, Logout)
 │       │   └── handlers/        # Event handlers
 │       │
 │       └── infrastructure/
-│           ├── api/v1/          # FastAPI routes
-│           ├── persistence/     # SQLAlchemy repos
+│           ├── api/v1/          # FastAPI routes (auth_routes, handicap_routes)
+│           ├── persistence/     # SQLAlchemy repos + UnitOfWork impl
 │           └── external/        # RFEG service, mocks
 │
 └── shared/
     ├── domain/         # Base classes (DomainEvent, Entity)
-    └── infrastructure/ # Shared utilities
+    └── infrastructure/ # Shared utilities (JWT handler, EventBus)
 
 tests/
-├── unit/               # Tests aislados (90%)
+├── unit/               # Tests aislados
 │   └── modules/user/
-│       ├── domain/
-│       ├── application/
-│       └── infrastructure/
+│       ├── domain/     # Entities, VOs, Events
+│       ├── application/# Use Cases, DTOs  
+│       └── infrastructure/ # Repos, External services
 │
-└── integration/        # Tests con BD/API (10%)
-    └── api/v1/
+└── integration/        # Tests con BD/API
+    ├── api/v1/         # Auth routes, handicap routes
+    ├── domain_events/  # Event integration
+    └── modules/user/   # Application integration
 ```
 
 ## Separación de Responsabilidades
