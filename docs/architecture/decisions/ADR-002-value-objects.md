@@ -32,6 +32,7 @@ class User:
 - **UserId**: Identificador único basado en UUID
 - **Email**: Dirección de email validada y normalizada
 - **Password**: Contraseña hasheada con bcrypt
+- **Handicap**: Hándicap de golf con validación de rango RFEG/EGA (-10.0 a 54.0)
 
 ### Ejemplo de Implementación:
 
@@ -97,6 +98,11 @@ class Email:
 - **Solución**: bcrypt automático + validación de fortaleza
 - **Beneficio**: Seguridad por defecto, imposible almacenar sin hash
 
+#### Handicap:
+- **Problema**: Valores de hándicap inválidos (ej: 999.0, -100.0), sin validación consistente
+- **Solución**: Validación automática de rango según reglas RFEG/EGA (-10.0 a 54.0)
+- **Beneficio**: Garantiza hándicaps válidos, type-safe, inmutable
+
 ## Consecuencias
 
 ### Positivas:
@@ -147,16 +153,21 @@ class Email:
 
 ## Validación
 
-### Métricas de Éxito (31 Oct 2025):
-- ✅ **49 tests específicos** de Value Objects (100% passing)
+### Métricas de Éxito (Actualizado 9 Nov 2025):
+- ✅ **69 tests específicos** de Value Objects (100% passing)
+  - Email: 14 tests
+  - Password: 23 tests
+  - UserId: 12 tests
+  - Handicap: 20 tests (nuevo)
 - ✅ **0 bugs** relacionados con validación de datos
 - ✅ **Código expresivo**: `User.create(email=Email("test@example.com"))`
-- ✅ **Performance**: 0.54s para 80 tests (incluyendo Value Objects)
+- ✅ **Performance**: ~8s para 330 tests totales (incluyendo Value Objects)
 
 ### Criterios de Validación:
 - [x] Imposible crear emails inválidos (✅ 14 tests)
-- [x] Passwords siempre hasheados (✅ 23 tests)  
+- [x] Passwords siempre hasheados (✅ 23 tests)
 - [x] UUIDs únicos y válidos (✅ 12 tests)
+- [x] Hándicaps en rango válido (✅ 20 tests)
 - [x] Objetos inmutables (✅ Tests de inmutabilidad)
 
 ## Referencias
@@ -165,13 +176,72 @@ class Email:
 - [Value Objects Explained](https://martinfowler.com/bliki/ValueObject.html)
 - [Python Dataclasses Documentation](https://docs.python.org/3/library/dataclasses.html)
 
-## Evolución Futura
+## Evolución e Implementaciones
+
+### Value Objects Implementados (9 Nov 2025):
+- ✅ **Handicap**: Handicap de golf con validación RFEG/EGA (-10.0 a 54.0)
+  - Implementación completa con `@dataclass(frozen=True)`
+  - Validación automática en `__post_init__`
+  - Factory method `from_optional()` para valores opcionales
+  - Type checking estricto (int/float)
+  - 20 tests específicos con 100% de cobertura
+  - Ver [ADR-014](./ADR-014-handicap-management-system.md) para detalles
+
+#### Implementación Completa: Handicap Value Object
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass(frozen=True)
+class Handicap:
+    """
+    Value Object que representa el hándicap de golf de un usuario.
+
+    Rango válido: -10.0 a 54.0 según reglas RFEG/EGA.
+    Es inmutable y garantiza que solo existan hándicaps válidos.
+    """
+    value: float
+
+    def __post_init__(self):
+        """Valida que el hándicap esté en el rango permitido."""
+        if not isinstance(self.value, (int, float)):
+            raise TypeError(
+                f"El hándicap debe ser un número. Recibido: {type(self.value).__name__}"
+            )
+
+        if self.value < -10.0 or self.value > 54.0:
+            raise ValueError(
+                f"El hándicap debe estar entre -10.0 y 54.0. "
+                f"Recibido: {self.value}"
+            )
+
+    def __str__(self) -> str:
+        """Representación en string con un decimal."""
+        return f"{self.value:.1f}"
+
+    def __float__(self) -> float:
+        """Permite convertir a float directamente."""
+        return self.value
+
+    @classmethod
+    def from_optional(cls, value: Optional[float]) -> Optional['Handicap']:
+        """Crea un Handicap desde un valor opcional."""
+        return cls(value) if value is not None else None
+```
+
+**Beneficios del Handicap VO**:
+- ✅ **Validación automática**: Imposible crear `Handicap(999.0)` o `Handicap(-100.0)`
+- ✅ **Type Safety**: `TypeError` si se pasa string u otro tipo
+- ✅ **Inmutabilidad**: `frozen=True` previene modificaciones
+- ✅ **Reglas de negocio centralizadas**: Validación RFEG/EGA en un solo lugar
+- ✅ **Testabilidad**: 20 tests específicos cubriendo todos los casos edge
+- ✅ **Expresividad**: Código autodocumentado con tipos específicos
 
 ### Value Objects Planificados:
 - **TeamId**: Identificador de equipo
 - **Score**: Puntuación con validación de rango
 - **MatchDate**: Fecha con validaciones de torneo
-- **HandicapValue**: Handicap de golf con reglas específicas
 
 ### Extensiones Posibles:
 - **Serialización**: JSON automático para APIs

@@ -1,854 +1,240 @@
-# Ryder Cup Amateur Manager - Design Document
+# Design Document - Ryder Cup Manager
 
-**Versión**: 1.0  
-**Fecha**: 3 de noviembre de 2025  
-**Autor**: Equipo de Desarrollo  
-**Estado**: En desarrollo
+**v2.0** · 9 Nov 2025 · En desarrollo
 
 ---
 
-## 📋 Tabla de Contenidos
+## Resumen
 
-1. [Visión General](#-visión-general)
-2. [Objetivos del Sistema](#-objetivos-del-sistema)
-3. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-4. [Decisiones Técnicas](#-decisiones-técnicas)
-5. [Módulos del Sistema](#-módulos-del-sistema)
-6. [Modelos de Datos](#-modelos-de-datos)
-7. [API Design](#-api-design)
-8. [Seguridad](#-seguridad)
-9. [Testing Strategy](#-testing-strategy)
-10. [Deployment](#-deployment)
-11. [Roadmap](#-roadmap)
+Sistema de torneos de golf amateur formato Ryder Cup.
+
+**Stack**: Python 3.12+, FastAPI, PostgreSQL, Clean Architecture + DDD
+
+**Features**:
+- User management + JWT auth
+- Handicap system (RFEG integration)
+- Tournament management (planeado)
+- Real-time scoring (planeado)
 
 ---
 
-## 🎯 Visión General
+## Arquitectura
 
-El **Ryder Cup Amateur Manager** es un sistema completo de gestión de torneos de golf amateur que simula el formato de la prestigiosa Ryder Cup profesional. El sistema permite organizar competiciones entre equipos, gestionar jugadores, calcular handicaps y administrar resultados en tiempo real.
-
-### Características Principales
-
-- 🏌️ **Gestión de Torneos**: Creación y administración de competiciones formato Ryder Cup
-- 👥 **Gestión de Equipos**: Formación de equipos Europa vs Estados Unidos
-- 🎯 **Sistema de Handicaps**: Cálculo automático y ajuste de handicaps
-- 📊 **Seguimiento en Tiempo Real**: Resultados y estadísticas actualizadas
-- 🏆 **Gestión de Resultados**: Registro y validación de scores
-- 📱 **Interface Responsiva**: Acceso desde dispositivos móviles y desktop
-
----
-
-## 🎯 Objetivos del Sistema
-
-### Objetivos Funcionales
-
-1. **Simplicidad de Uso**: Interface intuitiva para organizadores y jugadores
-2. **Precisión**: Cálculos exactos de handicaps y resultados
-3. **Flexibilidad**: Adaptable a diferentes formatos de torneo
-4. **Transparencia**: Información clara y accesible para todos los participantes
-5. **Escalabilidad**: Soporte para múltiples torneos simultáneos
-
-### Objetivos No Funcionales
-
-- **Performance**: Respuesta < 200ms en operaciones críticas
-- **Disponibilidad**: 99.9% uptime durante torneos
-- **Seguridad**: Protección de datos personales y resultados
-- **Mantenibilidad**: Código limpio y bien documentado
-- **Usabilidad**: Interface responsive y accesible
-
----
-
-## 🏗️ Arquitectura del Sistema
-
-### Clean Architecture
-
-El sistema implementa **Clean Architecture** con 3 capas principales:
+### Clean Architecture (3 capas)
 
 ```
-┌─────────────────────────────────────┐
-│           🌐 Infrastructure         │
-│  (FastAPI, SQLAlchemy, PostgreSQL) │
-├─────────────────────────────────────┤
-│           📋 Application            │
-│    (Use Cases, Services, DTOs)     │
-├─────────────────────────────────────┤
-│            🎯 Domain               │
-│   (Entities, Value Objects, Rules) │
-└─────────────────────────────────────┘
+Infrastructure (FastAPI, SQLAlchemy, RFEG)
+    ↓
+Application (Use Cases, DTOs, Handlers)
+    ↓
+Domain (Entities, VOs, Events, Repos)
 ```
 
-#### Capas Detalladas
+**Regla**: Dependencias hacia adentro.
 
-**🎯 Domain Layer** (Centro de la aplicación)
-- **Entities**: User, Tournament, Team, Match, Score
-- **Value Objects**: UserId, Email, Password, Handicap
-- **Domain Events**: UserRegisteredEvent, TournamentCreatedEvent
-- **Event Handlers**: UserRegisteredEventHandler, audit handlers
-- **Repository Interfaces**: Contratos para persistencia
-- **Domain Services**: Password hashing, handicap calculations
+**Patrones**: Repository, UoW, Domain Events, Value Objects, External Services.
 
-**📋 Application Layer** (Orquestación)
-- **Use Cases**: RegisterUser, CreateTournament, CalculateScore
-- **DTOs**: Request/Response objects
-- **Application Services**: Token management, notifications
-- **Unit of Work**: Gestión de transacciones
-
-**🌐 Infrastructure Layer** (Detalles técnicos)
-- **Web Framework**: FastAPI con automatic OpenAPI
-- **Database**: PostgreSQL con SQLAlchemy ORM
-- **Authentication**: JWT tokens con bcrypt hashing
-- **Repository Implementations**: Concrete database access
-- **Logging System**: Sistema modular con formatters múltiples
-- **Event Bus**: InMemoryEventBus para Domain Events
-
-### Principios Arquitectónicos
-
-1. **Dependency Inversion**: Dependencies point inward
-2. **Single Responsibility**: Each class has one reason to change
-3. **Open/Closed**: Open for extension, closed for modification
-4. **Interface Segregation**: Small, specific interfaces
-5. **Liskov Substitution**: Subtypes must be substitutable
+> ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
 ---
 
-## 🔧 Decisiones Técnicas
+## Módulos
 
-### Tech Stack
+### User Management
 
-| Componente | Tecnología | Versión | Justificación |
-|------------|------------|---------|---------------|
-| **Backend** | Python | 3.12+ | Type hints avanzados, performance |
-| **Web Framework** | FastAPI | 0.115+ | Async, automatic docs, validation |
-| **Database** | PostgreSQL | 15+ | ACID, extensibilidad, performance |
-| **ORM** | SQLAlchemy | 2.0+ | Async support, type safety |
-| **Authentication** | JWT + bcrypt | - | Stateless, secure hashing |
-| **Testing** | pytest + pytest-xdist + pytest-asyncio | 8.3+ | Parallel execution, async support |
-| **API Docs** | OpenAPI/Swagger | Auto | Generación automática |
+**Domain**:
+- Entity: `User`
+- VOs: `UserId`, `Email`, `Password`, `Handicap`
+- Events: `UserRegistered`, `HandicapUpdated`
+- Repos: `UserRepositoryInterface`
+- Services: `HandicapService` (interface)
 
-### Decisiones Clave
+**Application**:
+- Use Cases: `RegisterUser`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
+- DTOs: Request/Response
+- Handlers: `UserRegisteredEventHandler`
 
-**📚 Para detalles completos, consultar los ADRs en `docs/architecture/decisions/`**
+**Infrastructure**:
+- Routes: `/auth/*`, `/handicaps/*`, `/users/*`
+- Repos: `SQLAlchemyUserRepository`
+- External: `RFEGHandicapService`, `MockHandicapService`
 
-1. **ADR-001**: Clean Architecture para mantenibilidad y testabilidad
-2. **ADR-002**: Value Objects para encapsulación y validación
-3. **ADR-003**: Estrategia de testing con paralelización y aislamiento de BD
-4. **ADR-004**: Tech stack moderno con FastAPI y PostgreSQL
-5. **ADR-005**: Repository Pattern para abstracción de datos
-6. **ADR-006**: Unit of Work para gestión transaccional
-7. **ADR-007**: Domain Events para arquitectura event-driven
-8. **ADR-011**: Casos de Uso para orquestar la lógica de aplicación
-9. **ADR-012**: Composition Root para inyección de dependencias
+> ADRs: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
----
+### Tournament *(Planeado)*
 
-## 📦 Módulos del Sistema
-
-### 1. User Management Module
-
-**Responsabilidades:**
-- Registro y autenticación de usuarios
-- Gestión de perfiles y preferencias
-- Control de acceso basado en roles
-
-**Componentes Implementados:**
-- **Domain**: `User` (Entity), `UserId`, `Email`, `Password` (Value Objects), `UserRegisteredEvent`.
-- **Application**: `RegisterUserUseCase`, `RegisterUserDTO`, `UserRegisteredEventHandler`.
-- **Infrastructure**: `SQLAlchemyUserRepository`, `SQLAlchemyUnitOfWork`, `InMemoryEventBus`, `auth_routes.py` (API Endpoint).
-- **Config**: `dependencies.py` (Composition Root), `mappers.py`.
-
-**Componentes Planeados:**
-- **Application**: `LoginUserUseCase`, `UpdateProfileUseCase`.
-- **Infrastructure**: `TokenService` (para JWT).
-
-### 2. Tournament Management Module *(Planeado)*
-
-**Responsabilidades:**
-- Creación y configuración de torneos
-- Gestión de formatos y reglas
-- Programación de partidos
-
-### 3. Team Management Module *(Planeado)*
-
-**Responsabilidades:**
-- Formación de equipos Europa/USA
-- Asignación de jugadores
-- Gestión de capitanes
-
-### 4. Handicap Management Module *(Implementado)*
-
-**Responsabilidades:**
-- Búsqueda de hándicaps desde RFEG
-- Actualización automática en múltiples puntos del ciclo de vida
-- Validación de rangos (-10.0 a 54.0)
-- Auditoría de cambios con Domain Events
-
-**Componentes Implementados:**
-- **Domain**: `Handicap` (Value Object), `HandicapService` (Interface), `HandicapUpdatedEvent`, `HandicapErrors`.
-- **Application**: `UpdateUserHandicapUseCase`, `UpdateMultipleHandicapsUseCase`.
-- **Infrastructure**: `RFEGHandicapService` (scraping), `MockHandicapService` (testing), `handicap_routes.py` (API).
-- **Decisiones**: Se creó `ADR-013` (External Services Pattern) y `ADR-014` (Handicap Management System).
-
-### 5. Scoring Module *(Planeado)*
-
-**Responsabilidades:**
-- Registro de scores en tiempo real
-- Validación de resultados
-- Cálculo de puntos por formato
+**Domain**: Tournament, Team, Match, Score entities
+**Features**: Formación equipos, scoring, leaderboard
 
 ---
 
-## 📊 Modelos de Datos
+## Modelos de Datos
 
-### Core Entities
+### User Entity
 
-#### User Entity
 ```python
-@dataclass
-class User:
-    id: UserId
-    email: Email
-    password: Password
+User:
+    id: UserId (UUID)
+    email: Email (validado, normalizado)
+    password: Password (bcrypt, rounds=12)
     first_name: str
     last_name: str
-    handicap: Optional[float]  # Validado por Handicap Value Object
+    handicap: float? (-10.0 a 54.0)
+    handicap_updated_at: datetime?
     created_at: datetime
     updated_at: datetime
-
-    def update_handicap(self, new_handicap: Optional[float]) -> None:
-        """Actualiza hándicap y emite HandicapUpdatedEvent."""
-        # Lógica de validación y emisión de eventos
 ```
 
-#### Tournament Entity *(Diseño)*
-```python
-@dataclass
-class Tournament:
-    id: TournamentId
-    name: str
-    format: TournamentFormat
-    start_date: date
-    end_date: date
-    status: TournamentStatus
-    teams: List[Team]
+**Schema**:
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    handicap FLOAT,
+    handicap_updated_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_users_email ON users(email);
 ```
 
-### Value Objects
-
-#### Email Value Object
-```python
-@dataclass(frozen=True)
-class Email:
-    value: str
-
-    def __post_init__(self):
-        if not self._is_valid_email(self.value):
-            raise InvalidEmailError(f"Invalid email: {self.value}")
-```
-
-#### Password Value Object
-```python
-@dataclass(frozen=True)
-class Password:
-    hashed_value: str
-
-    @classmethod
-    def create(cls, plain_password: str) -> 'Password':
-        # bcrypt hashing with environment-based rounds
-```
-
-#### Handicap Value Object
-```python
-@dataclass(frozen=True)
-class Handicap:
-    value: float
-
-    def __post_init__(self):
-        if not (-10.0 <= self.value <= 54.0):
-            raise ValueError(f"Hándicap debe estar entre -10.0 y 54.0")
-```
+> ADR: [002](architecture/decisions/ADR-002-value-objects.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md)
 
 ---
 
-## 🏗️ Repository Pattern
+## Flujos de Negocio
 
-### Interfaces de Repositorio
+### 1. Registro Usuario
 
-Los repositorios definen contratos claros para la persistencia de datos siguiendo los principios de Clean Architecture:
-
-#### UserRepositoryInterface
-```python
-@abstractmethod
-class UserRepositoryInterface(ABC):
-    async def save(self, user: User) -> None:
-        """Persiste un usuario en el almacén de datos."""
-        pass
-
-    async def find_by_id(self, user_id: UserId) -> Optional[User]:
-        """Busca un usuario por su ID único."""
-        pass
-
-    async def find_by_email(self, email: Email) -> Optional[User]:
-        """Busca un usuario por su email."""
-        pass
-
-    async def delete(self, user: User) -> None:
-        """Elimina un usuario del almacén de datos."""
-        pass
-
-    async def list_all(self) -> List[User]:
-        """Retorna todos los usuarios."""
-        pass
-
-    async def exists_by_email(self, email: Email) -> bool:
-        """Verifica si existe un usuario con el email dado."""
-        pass
-
-    async def count(self) -> int:
-        """Cuenta el total de usuarios."""
-        pass
-
-    async def update(self, user: User) -> None:
-        """Actualiza un usuario existente."""
-        pass
+```
+Client → API → UseCase → User.create() → UoW.save() → commit()
+                                            ↓
+                                       EventBus → Handlers
 ```
 
-### Beneficios del Patrón Repository
+1. Validar email no existe
+2. `User.create()` genera `UserRegisteredEvent`
+3. UoW guarda + commit
+4. Eventos publicados
+5. Handlers procesan (email, audit)
 
-- **Testabilidad**: Fácil creación de mocks para pruebas unitarias
-- **Desacoplamiento**: La lógica de dominio no depende de tecnologías específicas
-- **Flexibilidad**: Cambios de base de datos sin afectar la lógica de negocio
-- **Principio de Inversión de Dependencias**: Las capas superiores dependen de abstracciones
+> ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
+
+### 2. Update Handicap (RFEG)
+
+```
+API → UseCase → HandicapService.search(name) → RFEG
+                      ↓
+                user.update_handicap() → HandicapUpdatedEvent
+                      ↓
+                  UoW.commit()
+```
+
+1. Buscar usuario
+2. Consultar RFEG con nombre completo
+3. Actualizar + emitir evento
+4. Commit publica evento
+
+**Fallback**: Si RFEG falla, usar `manual_handicap` (opcional)
+
+> ADR: [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
 ---
 
-## 🔄 Unit of Work Pattern
+## Integraciones Externas
 
-### Gestión de Transacciones
+### RFEG (Real Federación Española de Golf)
 
-El patrón Unit of Work coordina múltiples repositorios y garantiza la consistencia transaccional:
+**Tipo**: Web scraping (no API pública)
+**Flujo**: Extraer token → Buscar por nombre → Parsear JSON
+**Timeout**: 10s
+**Errors**: Log + retornar None
 
-#### UnitOfWorkInterface (Base)
-```python
-@abstractmethod
-class UnitOfWorkInterface(ABC):
-    async def __aenter__(self) -> 'UnitOfWorkInterface':
-        """Inicia el contexto de la unidad de trabajo."""
-        pass
+**Implementación**:
+- Interface: `HandicapService` (domain)
+- Impl: `RFEGHandicapService` (infra)
+- Mock: `MockHandicapService` (tests)
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Finaliza el contexto, haciendo rollback si hay errores."""
-        pass
-
-    @abstractmethod
-    async def commit(self) -> None:
-        """Confirma todos los cambios de la transacción."""
-        pass
-
-    @abstractmethod
-    async def rollback(self) -> None:
-        """Revierte todos los cambios de la transacción."""
-        pass
-
-    @abstractmethod
-    async def flush(self) -> None:
-        """Sincroniza los cambios sin confirmar la transacción."""
-        pass
-
-    @abstractmethod
-    def is_active(self) -> bool:
-        """Indica si la unidad de trabajo está activa."""
-        pass
-```
-
-#### UserUnitOfWorkInterface
-```python
-@abstractmethod
-class UserUnitOfWorkInterface(UnitOfWorkInterface):
-    @property
-    @abstractmethod
-    def users(self) -> UserRepositoryInterface:
-        """Acceso al repositorio de usuarios."""
-        pass
-```
-
-### Uso del Unit of Work
-
-```python
-class RegisterUserUseCase:
-    async def execute(self, dto: RegisterUserDTO) -> User:
-        async with self._uow:
-            # 1. Verificar si el usuario ya existe
-            if await self._user_finder.by_email(dto.email):
-                raise UserAlreadyExistsError()
-            
-            # 2. Crear la entidad User (la lógica de hashing y eventos está encapsulada)
-            user = User.create(
-                first_name=dto.first_name,
-                last_name=dto.last_name,
-                email_str=dto.email,
-                plain_password=dto.password
-            )
-            
-            # 3. Guardar y confirmar
-            await self._uow.users.save(user)
-            await self._uow.commit()
-            
-            # 4. Publicar eventos (fuera de la transacción principal si es necesario)
-            # La publicación se gestionaría en el Composition Root o una capa superior.
-            
-            return user
-```
-
-### Beneficios del Unit of Work
-
-- **Atomicidad**: Garantiza que todas las operaciones se completen o fallen juntas
-- **Consistencia**: Mantiene la integridad de los datos a través de múltiples repositorios
-- **Gestión Automática**: Context manager que maneja commit/rollback automáticamente
-- **Claridad**: Delimita claramente los límites transaccionales
+> ADR: [013](architecture/decisions/ADR-013-external-services-pattern.md)
 
 ---
 
-## 🔄 Domain Events Pattern
+## Seguridad
 
-### Comunicación Event-Driven
+### Autenticación
 
-Los eventos de dominio permiten desacoplar efectos secundarios de la lógica principal de negocio, especialmente útil en un sistema de torneos donde múltiples acciones ocurren en respuesta a eventos específicos.
+**JWT**: HS256, exp 60min, secret en env
+**Password**: bcrypt, rounds=12 (prod), rounds=4 (test)
 
-#### DomainEvent Base Class
-```python
-@dataclass(frozen=True)
-class DomainEvent(ABC):
-    """Evento de dominio base."""
-    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    occurred_on: datetime = field(default_factory=datetime.now)
-    aggregate_id: str
-    event_version: int = 1
+### Validación
 
-@dataclass(frozen=True)
-class UserRegisteredEvent(DomainEvent):
-    """Usuario registrado exitosamente."""
-    user_id: str
-    email: str
-    full_name: str
-    registration_source: str = "web"
-```
+1. Pydantic (API): tipos y formatos
+2. Value Objects (Domain): reglas de negocio
+3. Database: constraints (UNIQUE, NOT NULL)
 
-#### Event Collection en Entidades
-```python
-class User:
-    def __init__(self, ...):
-        self._domain_events: List[DomainEvent] = []
-    
-    @classmethod
-    def create(cls, ...) -> 'User':
-        user = cls(...)
-        user.add_domain_event(UserRegisteredEvent(
-            aggregate_id=str(user.id),
-            user_id=str(user.id),
-            email=str(user.email),
-            full_name=user.get_full_name()
-        ))
-        return user
-    
-    def add_domain_event(self, event: DomainEvent) -> None:
-        """Añade evento para publicar después del commit."""
-        self._domain_events.append(event)
-```
-
-#### Event Bus & Handlers
-```python
-class EventBus(ABC):
-    @abstractmethod
-    async def publish(self, event: DomainEvent) -> None:
-        """Publica evento a todos sus handlers."""
-        pass
-
-class EventHandler(ABC):
-    @abstractmethod
-    async def handle(self, event: DomainEvent) -> None:
-        """Maneja un evento específico."""
-        pass
-
-# Handler específico
-class WelcomeEmailEventHandler(EventHandler):
-    async def handle(self, event: UserRegisteredEvent) -> None:
-        await self._email_service.send_welcome_email(
-            email=event.email,
-            full_name=event.full_name
-        )
-```
-
-### Casos de Uso de Eventos en Ryder Cup
-
-#### User Management Events
-- **UserRegisteredEvent**: Email bienvenida, auditoría, métricas
-- **UserLoggedInEvent**: Actualizar última conexión, detectar actividad sospechosa
-
-#### Tournament Management Events  
-- **TournamentCreatedEvent**: Enviar invitaciones, notificar administradores
-- **PlayerJoinedTournamentEvent**: Actualizar equipos, recalcular handicaps
-- **MatchStartedEvent**: Notificar jugadores, activar sistema de scoring
-
-#### Scoring Events
-- **MatchCompletedEvent**: Actualizar leaderboard, notificar resultados
-- **TournamentFinishedEvent**: Generar reportes, actualizar estadísticas
-
-### Integration con Unit of Work
-
-```python
-class RegisterUserUseCase:
-    async def execute(self, command: RegisterUserCommand) -> UserResponse:
-        async with self._uow:
-            # Lógica de negocio limpia - sin efectos secundarios
-            user = User.create(...)  # Genera eventos automáticamente
-            await self._uow.users.save(user)
-            await self._uow.commit()
-            
-            # La publicación de eventos se gestiona fuera del UoW,
-            # por ejemplo, en un middleware o decorador.
-        
-        return UserResponse(...)
-```
-
-### Beneficios de Domain Events
-
-- **Single Responsibility**: Use cases enfocados solo en lógica de negocio principal
-- **Desacoplamiento**: Efectos secundarios manejados por handlers independientes
-- **Extensibilidad**: Nueva funcionalidad = nuevo handler, sin modificar código existente
-- **Testabilidad**: Tests aislados para use cases y handlers por separado
-- **Auditoría**: Trazabilidad completa de eventos de negocio importantes
-- **Performance**: Procesamiento asíncrono de efectos secundarios
+> ADR: [004](architecture/decisions/ADR-004-tech-stack.md)
 
 ---
 
-## 🔌 API Design
+## API Endpoints
 
-### RESTful Endpoints
+### Auth
+- `POST /api/v1/auth/register` - Registro de usuario
 
-#### Authentication
-```
-POST   /api/v1/auth/register     # User registration
-POST   /api/v1/auth/login        # User login
-POST   /api/v1/auth/logout       # User logout
-POST   /api/v1/auth/refresh      # Token refresh
-```
+### Handicaps
+- `POST /api/v1/handicaps/update` - RFEG lookup + fallback
+- `POST /api/v1/handicaps/update-manual` - Manual directo
+- `POST /api/v1/handicaps/update-multiple` - Batch update
 
-#### Users
-```
-GET    /api/v1/users/profile     # Get current user profile
-PUT    /api/v1/users/profile     # Update user profile
-GET    /api/v1/users/{user_id}   # Get user by ID
-```
+### Users
+- `GET /api/v1/users/search` - Buscar por email o nombre
 
-#### Handicaps
-```
-POST   /api/v1/handicaps/update             # Update single user handicap
-POST   /api/v1/handicaps/update-multiple    # Batch update handicaps
-```
-
-#### Tournaments *(Planeado)*
-```
-GET    /api/v1/tournaments       # List tournaments
-POST   /api/v1/tournaments       # Create tournament
-GET    /api/v1/tournaments/{id}  # Get tournament details
-PUT    /api/v1/tournaments/{id}  # Update tournament
-DELETE /api/v1/tournaments/{id}  # Delete tournament
-```
-
-### API Response Format
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "user_123",
-    "email": "player@example.com",
-    "first_name": "John",
-    "last_name": "Doe"
-  },
-  "message": "Operation completed successfully",
-  "timestamp": "2025-10-31T10:30:00Z"
-}
-```
-
-### Error Response Format
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid email format",
-    "details": {
-      "field": "email",
-      "value": "invalid-email"
-    }
-  },
-  "timestamp": "2025-10-31T10:30:00Z"
-}
-```
+> Detalle: [API.md](API.md)
 
 ---
 
-## 🌐 API Design
+## Testing
 
-La API sigue los principios RESTful y está documentada automáticamente a través de OpenAPI (Swagger).
+**Estrategia**: Test Pyramid (90% unit, 10% integration)
 
-### Endpoints de Autenticación (`/api/v1/auth`)
+```
+330 tests (100% passing)
+├── Unit: 302
+│   ├── Domain: ~200
+│   ├── Application: ~50
+│   └── Infrastructure: ~50
+└── Integration: 28
+```
 
-#### `POST /register`
+**Cobertura**: >90% en lógica de negocio
+**Performance**: ~8s (paralelización con pytest-xdist)
 
--   **Descripción**: Registra un nuevo usuario en el sistema.
--   **Request Body**:
-    ```json
-    {
-      "first_name": "string",
-      "last_name": "string",
-      "email": "user@example.com",
-      "password": "string"
-    }
-    ```
--   **Respuestas**:
-    -   `201 Created`: Usuario registrado con éxito. Devuelve los datos del usuario sin la contraseña.
-    -   `409 Conflict`: Si el email ya existe.
-    -   `422 Unprocessable Entity`: Si los datos de entrada son inválidos (ej. email con formato incorrecto o contraseña débil).
+> ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
 ---
 
-## 🔐 Seguridad
+## Referencias ADRs
 
-### Autenticación y Autorización
+**Fundación**: [001](architecture/decisions/ADR-001-clean-architecture.md), [004](architecture/decisions/ADR-004-tech-stack.md)
 
-1. **JWT Tokens**: Stateless authentication
-2. **bcrypt Hashing**: Secure password storage (12 rounds production)
-3. **Role-Based Access**: Admin, Captain, Player roles
-4. **Rate Limiting**: Protection against brute force
-5. **HTTPS Only**: Encrypted communication
+**Patrones**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
-### Data Protection
+**Infra**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md)
 
-- **Input Validation**: All inputs validated at domain level
-- **SQL Injection Protection**: Parameterized queries via ORM
-- **XSS Protection**: Output encoding and CSP headers
-- **CORS Configuration**: Restricted cross-origin requests
-
-### Security Headers
-
-```python
-# FastAPI middleware configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://ryderclub.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
-```
+**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
 ---
 
-## 🧪 Testing Strategy
+## Métricas Actuales
 
-Nuestra estrategia de testing se centra en la **pirámide de testing** y está diseñada para ser rápida, fiable y mantenible.
-
--   **Tests Unitarios (`tests/unit`)**: Verifican componentes aislados, principalmente en la capa de Dominio. No tienen dependencias externas y son extremadamente rápidos.
--   **Tests de Integración (`tests/integration`)**: Verifican la colaboración entre componentes. La característica clave es el **aislamiento total de la base de datos**:
-    -   Se utiliza `pytest-xdist` para ejecutar pruebas en paralelo.
-    -   Cada proceso de prueba (`worker`) crea, utiliza y destruye su propia base de datos PostgreSQL temporal.
-    -   Esto elimina las condiciones de carrera y garantiza que las pruebas sean 100% independientes y fiables.
-
-Para una descripción detallada, consulta el **[ADR-003](./architecture/decisions/ADR-003-testing-strategy.md)** y la **[Guía de Testing](../../tests/README.md)**.
-
-### Test Pyramid
-
-```
-     ┌─────────────────┐
-     │   🌐 E2E Tests   │  (Pocos, lentos, alta confianza)
-     │      (5%)        │
-  ┌──┴─────────────────┴──┐
-  │  🔄 Integration Tests │  (Algunos, medios, confianza media)
-  │       (15%)           │
-┌─┴───────────────────────┴─┐
-│     🔧 Unit Tests         │  (Muchos, rápidos, baja confianza)
-│        (80%)              │
-└───────────────────────────┘
-```
-
-### Configuración Actual
-
-- **Framework**: pytest 8.3.0 con pytest-xdist 3.8.0
-- **Paralelización**: 7 workers (cores disponibles - 1)
-- **Performance**: 218 tests ejecutados al 100% de éxito
-- **Cobertura**: Dominio y events con cobertura completa
-- **Categorización**: Script dev_tests.py con análisis detallado por tipo
-
-### Estadísticas Actuales de Testing
-
-```python
-📊 Tests Unitarios: 197/197 (100% éxito)
-├── Domain Entities: 73 tests
-├── Value Objects: 49 tests  
-├── Repository Interfaces: 31 tests
-├── Unit of Work: 18 tests
-├── Domain Events: 52 tests
-├── Application Use Cases: 2 tests
-└── Excepciones: 21 tests
-
-🔗 Tests de Integración: 21/21 (100% éxito)
-├── API Endpoints: 13 tests
-└── Domain Events Integration: 7 tests
-
-🎯 Total: 218/218 tests (100% éxito)
-```
-
-### Optimizaciones Implementadas
-
-1. **bcrypt Rounds**: 4 rounds en testing vs 12 en producción
-2. **Parallel Execution**: pytest-xdist con multiprocessing
-3. **Test Categorization**: Organizados por capa y objeto
-4. **Fast Feedback**: dev_tests.py con estadísticas detalladas por tipo
-5. **Domain Events Testing**: 52 tests cubriendo todo el sistema de eventos
-6. **Integration Testing**: 7 tests específicos para flujos end-to-end
-
-### Test Organization
-
-```python
-# Categorización automática por capas y funcionalidad
-tests/
-├── unit/
-│   ├── shared/
-│   │   ├── domain/events/         # Tests Domain Events
-│   │   └── infrastructure/logging/ # Tests Logging System
-│   ├── users/domain/
-│   │   ├── entities/              # Tests User entity  
-│   │   ├── value_objects/         # Tests Email, Password, UserId
-│   │   ├── handlers/              # Tests UserRegisteredEventHandler
-│   │   └── errors/                # Tests excepciones
-│   └── modules/user/domain/       # Tests complementarios
-└── integration/
-    ├── api/                       # Tests endpoints FastAPI
-    └── domain_events/             # Tests integración eventos
-```
-
----
-
-## 🚀 Deployment
-
-### Environments
-
-| Environment | Purpose | URL | Database |
-|-------------|---------|-----|----------|
-| **Development** | Local development | localhost:8000 | SQLite |
-| **Testing** | CI/CD pipeline | - | PostgreSQL (Docker) |
-| **Staging** | Pre-production | staging.ryderclub.com | PostgreSQL |
-| **Production** | Live system | app.ryderclub.com | PostgreSQL (HA) |
-
-### Container Configuration
-
-```dockerfile
-# Multi-stage build for optimization
-FROM python:3.12-slim as builder
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-FROM python:3.12-slim
-WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY src/ ./src/
-EXPOSE 8000
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Health Checks
-
-```python
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow(),
-        "version": "1.0.0",
-        "database": await check_database_connection()
-    }
-```
-
----
-
-## 🗺️ Roadmap
-
-### Fase 1: Foundation ✅ (Completada)
-- ✅ Clean Architecture setup
-- ✅ User management básico
-- ✅ Authentication con JWT
-- ✅ Value Objects implementation
-- ✅ Testing framework optimizado
-- ✅ Comprehensive documentation
-
-### Fase 2: Core Features 🚧 (En progreso)
-- 🔄 Repository interfaces
-- 🔄 Unit of Work pattern
-- ⏳ Tournament creation
-- ⏳ Team management
-- ⏳ Basic scoring
-
-### Fase 3: Advanced Features ⏳ (Planeado)
-- ⏳ Handicap calculation system
-- ⏳ Real-time scoring updates
-- ⏳ Match format configurations
-- ⏳ Tournament brackets
-- ⏳ Statistics dashboard
-
-### Fase 4: Enhancement ⏳ (Planeado)
-- ⏳ Mobile app companion
-- ⏳ Advanced analytics
-- ⏳ Tournament history
-- ⏳ Social features
-- ⏳ Integration with golf associations
-
-### Fase 5: Production ⏳ (Futuro)
-- ⏳ Load balancing setup
-- ⏳ Monitoring and alerting
-- ⏳ Backup and disaster recovery
-- ⏳ Performance optimization
-- ⏳ Multi-language support
-
----
-
-## 📚 Referencias
-
-### Documentation
-- **Architecture Decisions**: [`docs/architecture/decisions/`](./architecture/decisions/)
-- **Module Documentation**: [`docs/modules/`](./modules/)
-- **Project Structure**: [`docs/project-structure.md`](./project-structure.md)
-
-### External Resources
-- [Clean Architecture - Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Domain-Driven Design](https://martinfowler.com/tags/domain%20driven%20design.html)
-- [Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
-
-### Code Quality
-- **Style Guide**: PEP 8 + Black formatter
-- **Type Checking**: mypy strict mode
-- **Documentation**: Google docstring style
-- **Testing**: pytest best practices
-
----
-
-## 📞 Contacto y Soporte
-
-**Equipo de Desarrollo**
-- **Lead Developer**: [Agustín Estévez](mailto:agustin@ryderclub.com)
-- **Architecture Review**: Internal team
-- **Documentation**: Living document, updated continuously
-
-**Repository**
-- **GitHub**: [agustinEDev/RyderCupAM](https://github.com/agustinEDev/RyderCupAM)
-- **Branch**: `develop` (active development)
-- **Issues**: GitHub Issues para bugs y features
-
----
-
-*Documento actualizado: 31 de octubre de 2025*  
-*Próxima revisión: Con cada milestone completado*
+| Métrica | Valor |
+|---------|-------|
+| Tests | 330 (100% pass) |
+| Cobertura | >90% |
+| Módulos | 1/3 completo |
+| Endpoints | 5 activos |
+| Integraciones | 1 (RFEG) |
+| Líneas código | ~15,000 |
