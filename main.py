@@ -117,6 +117,9 @@ allowed_origins = list(dict.fromkeys(allowed_origins))
 if not allowed_origins:
     allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+# Debug: imprimir allowed_origins al iniciar
+print(f"🔒 CORS allowed_origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
