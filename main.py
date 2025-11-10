@@ -4,6 +4,9 @@ Ryder Cup Manager - Main Application
 
 Punto de entrada de la aplicación FastAPI.
 """
+import os
+from dotenv import load_dotenv
+load_dotenv()  # Cargar variables de entorno desde .env
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,9 +100,11 @@ app = FastAPI(
 # Configurar CORS para permitir peticiones desde el frontend
 # En desarrollo: permite localhost:5173 (Vite dev server)
 # En producción: configurar origins específicos según deployment
+# Creamos una variable de entorno para cargar origins desde Render
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        os.getenv("FRONTEND_ORIGINS", "").split(","),
         "http://localhost:5173",  # Vite dev server
         "http://127.0.0.1:5173",
     ],
