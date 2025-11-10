@@ -14,18 +14,34 @@ Este es el **backend API**. Para la aplicación web frontend, visita:
 
 ## 🚀 Quick Start
 
+### Local (Docker Compose)
 ```bash
-# Clone
 git clone https://github.com/agustinEDev/RyderCupAM.git
 cd RyderCupAM
 
-# Setup con Docker (recomendado)
+# Iniciar servicios (PostgreSQL + API)
 docker-compose up -d
-docker-compose exec app alembic upgrade head
+
+# Ver logs
+docker-compose logs -f app
 
 # Acceder
 open http://localhost:8000/docs
 ```
+
+### Producción (Render.com)
+```bash
+# 1. Crear PostgreSQL Database en Render
+# 2. Crear Web Service (Runtime: Docker)
+# 3. Configurar variables de entorno:
+DATABASE_URL=<internal-database-url>
+SECRET_KEY=<random-32-chars>
+ENVIRONMENT=production
+FRONTEND_ORIGINS=https://www.rydercupfriends.com
+# 4. Push a GitHub → Auto-deploy
+```
+
+Ver guía completa en [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md)
 
 ## 📚 Documentación
 

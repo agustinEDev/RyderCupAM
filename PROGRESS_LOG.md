@@ -3,7 +3,7 @@
 **Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup  
 **Arquitectura**: Clean Architecture, Event-Driven, FastAPI  
 **Creación**: 31 de octubre de 2025  
-**Última Actualización**: 9 de noviembre de 2025
+**Última Actualización**: 11 de noviembre de 2025
 
 ---
 
@@ -42,6 +42,7 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - ✅ **Infraestructura Docker**: Entorno completo containerizado con PostgreSQL y Alembic
 - ✅ **Testing Robusto**: Suite completa paralelizable con 100% de fiabilidad
 - ✅ **Documentación ADR**: 15 decisiones arquitectónicas documentadas
+- ✅ **Deployment Producción**: API y Frontend desplegados en Render.com con CORS seguro
 
 ### 📈 **Métricas Clave**
 - **Tests Totales**: **360/360** pasando (100% éxito)
@@ -92,14 +93,22 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 
 ### **API Endpoints Disponibles**
 - `GET /health` - Health check
-- `GET /docs` - Swagger documentation  
+- `GET /docs` - Swagger documentation (HTTP Basic Auth)
 - `POST /api/v1/auth/register` - Registro de usuarios
 - `POST /api/v1/auth/login` - Autenticación JWT
 - `POST /api/v1/auth/logout` - Logout con auditoría
+- `GET /api/v1/auth/current-user` - Usuario actual por token
 - `GET /api/v1/users/search` - Búsqueda de usuarios
 - `POST /api/v1/handicaps/update` - Actualización individual
 - `POST /api/v1/handicaps/update-multiple` - Actualización batch
 - `POST /api/v1/handicaps/update-manual` - Actualización manual
+
+### **Entornos Desplegados**
+- **API Producción**: `https://rydercupam-euzt.onrender.com`
+- **Frontend Producción**: `https://www.rydercupfriends.com`
+- **Base de Datos**: PostgreSQL 15 (Render managed)
+- **CORS**: Configurado con origins específicos por entorno
+- **SSL/HTTPS**: Automático por Render
 
 ### **Funcionalidades Implementadas**
 - ✅ **Gestión de Usuarios**: Registro completo con validaciones
@@ -209,7 +218,6 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 - **Session Management Fase 2**: Token blacklist para revocación inmediata
 - **Refresh Token**: Renovación automática de tokens (implementable sin blacklist)
 - **Rate Limiting**: Implementar límites en endpoints públicos
-- **CORS Validation**: Añadir validación para frontend
-- **SSL/TLS**: Configurar certificados para producción
 - **Database Optimization**: Optimizar queries con índices
 - **RFEG Caching**: Implementar cache para consultas frecuentes
+- **Monitoring**: Logs estructurados y métricas de producción
