@@ -1,32 +1,43 @@
-# 1. Imagen base: Usamos una imagen oficial de Python ligera
+# ==========================================
+# DOCKERFILE - Solo aplicación FastAPI
+# ==========================================
+# Este Dockerfile funciona para:
+# - Desarrollo local (con docker-compose.yml que incluye PostgreSQL)
+# - Producción en Render/Railway (con base de datos externa)
+# ==========================================
+
+# 1. Imagen base: Python ligera
 FROM python:3.11-slim
 
-# 2. Instalar dependencias del sistema necesarias
-# netcat-openbsd: Para verificar conexión con PostgreSQL
-# postgresql-client: Para herramientas de postgres si es necesario
+# 2. Instalar dependencias del sistema
+# netcat-openbsd: Para verificar conexión con PostgreSQL (opcional en producción)
+# postgresql-client: Para herramientas CLI de postgres si es necesario
 RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Directorio de trabajo: Establecemos el directorio donde se ejecutará la app
+# 3. Directorio de trabajo
 WORKDIR /app
 
-# 4. Copiar e instalar dependencias:
-# Copiamos primero el fichero de requisitos para aprovechar el cache de Docker
+# 4. Copiar e instalar dependencias de Python
+# (aprovecha cache de Docker si requirements.txt no cambia)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiar el código de la aplicación y el script de inicio
+# 5. Copiar código de la aplicación
 COPY . .
-COPY entrypoint.sh /entrypoint.sh
 
-# 6. Dar permisos de ejecución al script
+# 6. Copiar y configurar script de inicio
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# 7. Exponer el puerto (por defecto 8000, pero configurable con ENV PORT)
+# 7. Exponer puerto (configurable con ENV PORT)
 EXPOSE 8000
 
-# 8. Comando de ejecución:
-# Ejecuta el script que espera a la BD y ejecuta migraciones antes de iniciar
+# 8. Ejecutar script de inicio
+# Este script maneja:
+# - Espera a PostgreSQL (solo si DATABASE_HOST está configurado)
+# - Ejecuta migraciones con Alembic
+# - Inicia la aplicación FastAPI
 ENTRYPOINT ["/entrypoint.sh"]

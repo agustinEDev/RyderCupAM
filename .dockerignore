@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.venv
+venv/
+
+# Environment files (se configuran por variables de entorno)
+.env
+.env.*
+
+# Documentation
+*.md
+docs/
+README.md
+DEPLOYMENT.md
+LOCAL_VS_PRODUCTION.md
+
+# Tests
+tests/
+.pytest_cache
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Postman
+*.postman_collection.json
+*.postman_environment.json
+
+# Otros
+CLAUDE.md
+GEMINI.md
+STITCH_PROMPT.md
