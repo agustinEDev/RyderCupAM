@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()  # Cargar variables de entorno desde .env
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
@@ -110,6 +110,22 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=3600,  # Cache preflight por 1 hora
 )
+
+# Middleware manual para manejar OPTIONS (workaround para bug de CORS)
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
+            },
+        )
+    response = await call_next(request)
+    return response
 
 # Incluir los routers de la API
 app.include_router(
