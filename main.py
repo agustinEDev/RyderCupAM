@@ -98,27 +98,13 @@ app = FastAPI(
 )
 
 # Configurar CORS para permitir peticiones desde el frontend
-# En desarrollo: permite localhost:5173 (Vite dev server)
-# En producción: configurar origins específicos desde variable de entorno
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
-allowed_origins = []
-
-if FRONTEND_ORIGINS:
-    # Si hay origins configurados en variable de entorno, usarlos
-    allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
-
-# Siempre incluir localhost en desarrollo
-allowed_origins.extend([
-    "http://localhost:5173",  # Vite dev server
-    "http://127.0.0.1:5173",
-])
-
+# TEMPORAL: Permitir todos los orígenes para debug
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # TEMPORAL: permitir todos para verificar CORS
     allow_credentials=True,
-    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, OPTIONS, etc.)
-    allow_headers=["*"],  # Permite todos los headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Incluir los routers de la API
