@@ -98,34 +98,33 @@ app = FastAPI(
 )
 
 # Configurar CORS para permitir peticiones desde el frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://rydercupweb-3sqn.onrender.com",
+# Leemos orígenes desde la variable de entorno FRONTEND_ORIGINS
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
+allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
+
+# Incluir localhost en desarrollo (no en producción)
+ENV = os.getenv("ENVIRONMENT", "development").lower()
+if ENV != "production":
+    allowed_origins.extend([
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],  # Debe manejar OPTIONS automáticamente
-    allow_headers=["*"],
-    max_age=3600,  # Cache preflight por 1 hora
-)
+    ])
 
-# Middleware manual para manejar OPTIONS (workaround para bug de CORS)
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Credentials": "true",
-            },
-        )
-    response = await call_next(request)
-    return response
+# Eliminar duplicados conservando orden
+allowed_origins = list(dict.fromkeys(allowed_origins))
+
+# Si no hay orígenes configurados, dejar solo localhost (modo seguro por defecto)
+if not allowed_origins:
+    allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=3600,
+)
 
 # Incluir los routers de la API
 app.include_router(
