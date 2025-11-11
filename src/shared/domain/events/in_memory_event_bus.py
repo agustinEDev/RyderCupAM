@@ -104,7 +104,7 @@ class InMemoryEventBus(EventBus):
         for event in events:
             try:
                 await self.publish(event)
-            except Exception as e:
+            except Exception:
                 self._logger.error(
                     f"Failed to publish event {event.event_id} in batch",
                     exc_info=True

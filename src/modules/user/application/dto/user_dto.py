@@ -4,6 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
 
+# Constants
+EMAIL_DESCRIPTION = "Correo electrónico del usuario."
+
+
 # ======================================================================================
 # DTO para el Caso de Uso: Registrar Usuario
 # ======================================================================================
@@ -13,7 +17,7 @@ class RegisterUserRequestDTO(BaseModel):
     DTO de entrada para el caso de uso de registro de usuario.
     Define los datos necesarios para crear un nuevo usuario.
     """
-    email: EmailStr = Field(..., description="Correo electrónico del usuario.")
+    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     password: str = Field(..., min_length=8, description="Contraseña del usuario (mínimo 8 caracteres).")
     first_name: str = Field(..., min_length=2, description="Nombre del usuario.")
     last_name: str = Field(..., min_length=2, description="Apellido del usuario.")
@@ -33,7 +37,7 @@ class FindUserRequestDTO(BaseModel):
     DTO de entrada para el caso de uso de búsqueda de usuario.
     Permite buscar por email o nombre completo.
     """
-    email: Optional[EmailStr] = Field(None, description="Correo electrónico del usuario.")
+    email: Optional[EmailStr] = Field(None, description=EMAIL_DESCRIPTION)
     full_name: Optional[str] = Field(None, min_length=3, description="Nombre completo del usuario.")
 
     @field_validator('email', 'full_name', mode='before')
@@ -53,7 +57,7 @@ class FindUserResponseDTO(BaseModel):
     Devuelve información básica del usuario encontrado.
     """
     user_id: UUID = Field(..., description="ID único del usuario encontrado.")
-    email: EmailStr = Field(..., description="Correo electrónico del usuario.")
+    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
 
     # Configuración de Pydantic actualizada para V2
@@ -69,7 +73,7 @@ class UserResponseDTO(BaseModel):
     Se utiliza para devolver información del usuario de forma segura (sin contraseña).
     """
     id: UUID = Field(..., description="ID único del usuario.")
-    email: EmailStr = Field(..., description="Correo electrónico del usuario.")
+    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
     handicap: Optional[float] = Field(None, description="Handicap de golf del usuario.")
@@ -103,7 +107,7 @@ class LoginRequestDTO(BaseModel):
     DTO de entrada para el caso de uso de login.
     Define las credenciales necesarias para autenticar un usuario.
     """
-    email: EmailStr = Field(..., description="Correo electrónico del usuario.")
+    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     password: str = Field(..., min_length=8, description="Contraseña del usuario.")
 
 

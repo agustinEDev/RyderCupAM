@@ -133,12 +133,15 @@ class TestUserRepositoryInterface:
         
         class MockUserRepository(UserRepositoryInterface):
             async def save(self, user: User) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def find_by_id(self, user_id: UserId):
+                # Mock implementation - returns None for test
                 pass
             
             async def find_by_email(self, email: Email):
+                # Mock implementation - returns None for test
                 pass
             
             async def find_by_full_name(self, full_name: str):
@@ -148,6 +151,7 @@ class TestUserRepositoryInterface:
                 return False
             
             async def update(self, user: User) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def delete_by_id(self, user_id: UserId) -> bool:

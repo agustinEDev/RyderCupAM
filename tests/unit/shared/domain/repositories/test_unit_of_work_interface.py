@@ -44,9 +44,6 @@ class TestUnitOfWorkInterface:
 
     def test_aenter_method_signature(self):
         """Verifica la signatura del método __aenter__."""
-        method = getattr(UnitOfWorkInterface, '__aenter__')
-        type_hints = get_type_hints(method)
-        
         # __aenter__ debe retornar el propio UnitOfWork
         # En este caso, no podemos verificar el return type específico
         # porque es abstracto, pero podemos verificar que existe
@@ -54,8 +51,6 @@ class TestUnitOfWorkInterface:
 
     def test_aexit_method_signature(self):
         """Verifica la signatura del método __aexit__."""
-        method = getattr(UnitOfWorkInterface, '__aexit__')
-        
         # __aexit__ debe aceptar exc_type, exc_val, exc_tb
         assert hasattr(UnitOfWorkInterface, '__aexit__')
 
@@ -102,15 +97,19 @@ class TestUnitOfWorkInterface:
                 return self
             
             async def __aexit__(self, exc_type, exc_val, exc_tb):
+                # Mock implementation - context manager cleanup
                 pass
             
             async def commit(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def rollback(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:
@@ -208,6 +207,7 @@ class TestUnitOfWorkContractCompliance:
                 self._rolled_back = True
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:
@@ -216,6 +216,7 @@ class TestUnitOfWorkContractCompliance:
         # Test sin excepción - debe hacer commit
         uow = TestUnitOfWork()
         async with uow:
+            # Empty context for testing commit on success
             pass
         
         assert uow._committed is True
@@ -264,9 +265,11 @@ class TestUnitOfWorkUsagePatterns:
                 self._committed = True
             
             async def rollback(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:

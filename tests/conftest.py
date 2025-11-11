@@ -55,7 +55,8 @@ def pytest_configure(config):
 
     # Si los mappers ya fueron iniciados por el maestro, no hacemos nada en los workers
     elif hasattr(config, 'mappers_initialized') and config.mappers_initialized:
-        pass
+        # Mappers already initialized by master process, skip initialization
+        return
         
     # Fallback por si un worker arranca sin que el maestro haya terminado
     else:

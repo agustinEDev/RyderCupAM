@@ -62,12 +62,15 @@ class TestUserUnitOfWorkInterface:
                 self._active = False
             
             async def commit(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def rollback(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:
@@ -162,9 +165,11 @@ class TestUserUnitOfWorkContractCompliance:
                 self._committed = True
             
             async def rollback(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:
@@ -218,12 +223,14 @@ class TestUserUnitOfWorkContractCompliance:
                 self._active = False
             
             async def commit(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             async def rollback(self) -> None:
                 self._rolled_back = True
             
             async def flush(self) -> None:
+                # Mock implementation - no operation needed for test
                 pass
             
             def is_active(self) -> bool:
