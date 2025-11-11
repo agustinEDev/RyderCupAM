@@ -142,3 +142,56 @@ class LogoutResponseDTO(BaseModel):
     """
     message: str = Field(default="Logout exitoso", description="Mensaje de confirmación.")
     logged_out_at: datetime = Field(..., description="Timestamp del logout.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Update Profile
+# ======================================================================================
+
+class UpdateProfileRequestDTO(BaseModel):
+    """
+    DTO de entrada para actualización de información personal del usuario.
+    Al menos uno de los campos debe ser proporcionado.
+    """
+    first_name: Optional[str] = Field(None, min_length=2, description="Nuevo nombre del usuario.")
+    last_name: Optional[str] = Field(None, min_length=2, description="Nuevo apellido del usuario.")
+
+    def model_post_init(self, __context) -> None:
+        """Valida que se proporcione al menos un campo."""
+        if not self.first_name and not self.last_name:
+            raise ValueError("Debe proporcionar al menos 'first_name' o 'last_name'.")
+
+
+class UpdateProfileResponseDTO(BaseModel):
+    """DTO de salida para actualización de perfil."""
+    user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
+    message: str = Field(default="Perfil actualizado exitosamente", description="Mensaje de confirmación.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Update Security
+# ======================================================================================
+
+class UpdateSecurityRequestDTO(BaseModel):
+    """
+    DTO de entrada para actualización de datos de seguridad (email y/o password).
+    Requiere contraseña actual para verificación.
+    """
+    current_password: str = Field(..., min_length=8, description="Contraseña actual (requerida).")
+    new_email: Optional[EmailStr] = Field(None, description="Nuevo email.")
+    new_password: Optional[str] = Field(None, min_length=8, description="Nuevo password.")
+    confirm_password: Optional[str] = Field(None, description="Confirmación del nuevo password.")
+
+    def model_post_init(self, __context) -> None:
+        """Valida que se proporcione al menos un campo y confirma password si aplica."""
+        if not self.new_email and not self.new_password:
+            raise ValueError("Debe proporcionar 'new_email' o 'new_password'.")
+
+        if self.new_password and self.new_password != self.confirm_password:
+            raise ValueError("El nuevo password y su confirmación no coinciden.")
+
+
+class UpdateSecurityResponseDTO(BaseModel):
+    """DTO de salida para actualización de seguridad."""
+    user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
+    message: str = Field(default="Datos de seguridad actualizados", description="Mensaje de confirmación.")

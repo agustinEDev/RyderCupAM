@@ -266,3 +266,332 @@ class TestUserRoutes:
         
         # Ambas búsquedas deben devolver el mismo user_id
         assert email_data["user_id"] == name_data["user_id"]
+
+    # ========================================================================
+    # Tests para Update Profile (PATCH /api/v1/users/profile)
+    # ========================================================================
+
+    async def test_update_profile_first_name_only(self, client: AsyncClient):
+        """Verifica que se puede actualizar solo el nombre."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "profile.test@example.com",
+            "securePassword123",
+            "Original",
+            "Name"
+        )
+        token = auth_data["token"]
+
+        # Actualizar solo first_name
+        update_response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "Updated", "last_name": None},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+        data = update_response.json()
+        assert data["user"]["first_name"] == "Updated"
+        assert data["user"]["last_name"] == "Name"  # No cambió
+        assert "Profile updated" in data["message"]
+
+    async def test_update_profile_last_name_only(self, client: AsyncClient):
+        """Verifica que se puede actualizar solo el apellido."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "profile2.test@example.com",
+            "securePassword123",
+            "John",
+            "Original"
+        )
+        token = auth_data["token"]
+
+        # Actualizar solo last_name
+        update_response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": None, "last_name": "Updated"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+        data = update_response.json()
+        assert data["user"]["first_name"] == "John"  # No cambió
+        assert data["user"]["last_name"] == "Updated"
+
+    async def test_update_profile_both_names(self, client: AsyncClient):
+        """Verifica que se pueden actualizar ambos campos."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "profile3.test@example.com",
+            "securePassword123",
+            "Old",
+            "Names"
+        )
+        token = auth_data["token"]
+
+        # Actualizar ambos
+        update_response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "New", "last_name": "Names"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+        data = update_response.json()
+        assert data["user"]["first_name"] == "New"
+        assert data["user"]["last_name"] == "Names"
+
+    async def test_update_profile_requires_authentication(self, client: AsyncClient):
+        """Verifica que se requiere autenticación."""
+        update_response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "New", "last_name": None}
+        )
+
+        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+
+    async def test_update_profile_rejects_empty_names(self, client: AsyncClient):
+        """Verifica que no se aceptan strings vacíos (validación Pydantic)."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "profile4.test@example.com",
+            "securePassword123",
+            "Test",
+            "User"
+        )
+        token = auth_data["token"]
+
+        # Intentar actualizar con string vacío
+        update_response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "", "last_name": None},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        # Pydantic devuelve 422 para errores de validación
+        assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    # ========================================================================
+    # Tests para Update Security (PATCH /api/v1/users/security)
+    # ========================================================================
+
+    async def test_update_security_email_only(self, client: AsyncClient):
+        """Verifica que se puede actualizar solo el email."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "security.test@example.com",
+            "securePassword123",
+            "Security",
+            "Test"
+        )
+        token = auth_data["token"]
+
+        # Actualizar solo email
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "securePassword123",
+                "new_email": "newemail@example.com",
+                "new_password": None,
+                "confirm_password": None
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+        data = update_response.json()
+        assert data["user"]["email"] == "newemail@example.com"
+        assert "Security settings updated" in data["message"]
+
+    async def test_update_security_password_only(self, client: AsyncClient):
+        """Verifica que se puede actualizar solo el password."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "security2.test@example.com",
+            "oldPassword123",
+            "Security2",
+            "Test"
+        )
+        token = auth_data["token"]
+
+        # Actualizar solo password
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "oldPassword123",
+                "new_email": None,
+                "new_password": "newPassword456",
+                "confirm_password": "newPassword456"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+
+        # Verificar que el nuevo password funciona
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "security2.test@example.com",
+                "password": "newPassword456"
+            }
+        )
+        assert login_response.status_code == status.HTTP_200_OK
+
+    async def test_update_security_both_email_and_password(self, client: AsyncClient):
+        """Verifica que se pueden actualizar ambos."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "security3.test@example.com",
+            "oldPassword123",
+            "Security3",
+            "Test"
+        )
+        token = auth_data["token"]
+
+        # Actualizar ambos
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "oldPassword123",
+                "new_email": "newemail3@example.com",
+                "new_password": "newPassword789",
+                "confirm_password": "newPassword789"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_200_OK
+        data = update_response.json()
+        assert data["user"]["email"] == "newemail3@example.com"
+
+        # Verificar login con nuevo email y password
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "newemail3@example.com",
+                "password": "newPassword789"
+            }
+        )
+        assert login_response.status_code == status.HTTP_200_OK
+
+    async def test_update_security_rejects_wrong_current_password(self, client: AsyncClient):
+        """Verifica que rechaza password actual incorrecto."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "security4.test@example.com",
+            "correctPassword123",
+            "Security4",
+            "Test"
+        )
+        token = auth_data["token"]
+
+        # Intentar con password incorrecto
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "wrongPassword",
+                "new_email": "newemail@example.com",
+                "new_password": None,
+                "confirm_password": None
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "incorrect" in update_response.json()["detail"].lower()
+
+    async def test_update_security_rejects_duplicate_email(self, client: AsyncClient):
+        """Verifica que rechaza email ya en uso."""
+        from tests.conftest import create_authenticated_user
+
+        # Crear dos usuarios
+        auth_data1 = await create_authenticated_user(
+            client,
+            "user1@example.com",
+            "SecurePass123",
+            "User1",
+            "Test"
+        )
+
+        await create_authenticated_user(
+            client,
+            "user2@example.com",
+            "SecurePass123",
+            "User2",
+            "Test"
+        )
+
+        token1 = auth_data1["token"]
+
+        # User1 intenta usar email de User2
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "SecurePass123",
+                "new_email": "user2@example.com",  # Ya existe
+                "new_password": None,
+                "confirm_password": None
+            },
+            headers={"Authorization": f"Bearer {token1}"}
+        )
+
+        assert update_response.status_code == status.HTTP_409_CONFLICT
+        assert "already in use" in update_response.json()["detail"]
+
+    async def test_update_security_requires_authentication(self, client: AsyncClient):
+        """Verifica que se requiere autenticación."""
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "password123",
+                "new_email": "newemail@example.com",
+                "new_password": None,
+                "confirm_password": None
+            }
+        )
+
+        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+
+    async def test_update_security_password_confirmation_must_match(self, client: AsyncClient):
+        """Verifica que el password y su confirmación deben coincidir."""
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "security5.test@example.com",
+            "SecurePass123",
+            "Security5",
+            "Test"
+        )
+        token = auth_data["token"]
+
+        # Passwords no coinciden
+        update_response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "SecurePass123",
+                "new_email": None,
+                "new_password": "NewSecurePass456",
+                "confirm_password": "DifferentPass456"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

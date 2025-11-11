@@ -2,8 +2,8 @@
 
 **Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup  
 **Arquitectura**: Clean Architecture, Event-Driven, FastAPI  
-**Creación**: 31 de octubre de 2025  
-**Última Actualización**: 11 de noviembre de 2025
+**Creación**: 31 de octubre de 2025
+**Última Actualización**: 11 de noviembre de 2025 (Sesión 2)
 
 ---
 
@@ -45,13 +45,13 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - ✅ **Deployment Producción**: API y Frontend desplegados en Render.com con CORS seguro
 
 ### 📈 **Métricas Clave**
-- **Tests Totales**: **360/360** pasando (100% éxito)
-- **Tests Unitarios**: 313 (87%)
-- **Tests Integración**: 47 (13%)
-- **Cobertura**: 100% en lógica de negocio crítica
-- **Performance**: ~12 segundos ejecución completa (paralelo)
-- **API Endpoints**: 7 endpoints funcionales
-- **Módulos Completos**: User Management + Authentication + Handicap Management + External Services
+- **Tests Totales**: **395/395** pasando (100% éxito)
+- **Tests Unitarios**: 341 (86%)
+- **Tests Integración**: 54 (14%)
+- **Cobertura**: >90% en lógica de negocio crítica
+- **Performance**: ~13 segundos ejecución completa (paralelo)
+- **API Endpoints**: 9 endpoints funcionales
+- **Módulos Completos**: User Management + Authentication + Profile Management + Handicap Management + External Services
 
 ---
 
@@ -68,14 +68,16 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 
 ```
 ├── Domain Layer (Dominio)
-│   ├── Entidades: User (factory + eventos + login/logout)
+│   ├── Entidades: User (factory + eventos + login/logout + profile/security)
 │   ├── Value Objects: UserId, Email, Password, Handicap
 │   ├── Servicios: HandicapService (interface)
-│   └── Eventos: UserRegistered, HandicapUpdated, UserLoggedIn, UserLoggedOut
+│   └── Eventos: UserRegistered, HandicapUpdated, UserLoggedIn, UserLoggedOut,
+│                UserProfileUpdated, UserEmailChanged, UserPasswordChanged
 
-├── Application Layer (Aplicación)  
-│   ├── Use Cases: Register, Login, Logout, UpdateHandicap, UpdateMultiple, Find
-│   ├── DTOs: Request/Response contracts (Auth + Business)
+├── Application Layer (Aplicación)
+│   ├── Use Cases: Register, Login, Logout, UpdateProfile, UpdateSecurity,
+│   │              UpdateHandicap, UpdateMultiple, Find
+│   ├── DTOs: Request/Response contracts (Auth + Profile + Security + Business)
 │   └── Handlers: Event processing
 
 ├── Infrastructure Layer (Infraestructura)
@@ -92,14 +94,15 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 ```
 
 ### **API Endpoints Disponibles**
-- `GET /health` - Health check
+- `GET /` - Health check
 - `GET /docs` - Swagger documentation (HTTP Basic Auth)
 - `POST /api/v1/auth/register` - Registro de usuarios
 - `POST /api/v1/auth/login` - Autenticación JWT
 - `POST /api/v1/auth/logout` - Logout con auditoría
-- `GET /api/v1/auth/current-user` - Usuario actual por token
+- `PATCH /api/v1/users/profile` - Actualizar nombre/apellido (sin password)
+- `PATCH /api/v1/users/security` - Actualizar email/password (con verificación)
 - `GET /api/v1/users/search` - Búsqueda de usuarios
-- `POST /api/v1/handicaps/update` - Actualización individual
+- `POST /api/v1/handicaps/update` - Actualización RFEG + fallback manual
 - `POST /api/v1/handicaps/update-multiple` - Actualización batch
 - `POST /api/v1/handicaps/update-manual` - Actualización manual
 
@@ -113,10 +116,12 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 ### **Funcionalidades Implementadas**
 - ✅ **Gestión de Usuarios**: Registro completo con validaciones
 - ✅ **Autenticación JWT**: Login/Logout con tokens bearer
+- ✅ **Profile Management**: Actualización de nombre/apellido sin password
+- ✅ **Security Management**: Actualización de email/password con verificación
 - ✅ **Session Management**: Estrategia progresiva (Fase 1 - client-side logout)
-- ✅ **Sistema de Hándicaps**: Integración RFEG + actualizaciones automáticas  
-- ✅ **Búsqueda Externa**: Scraping dinámico de la RFEG con manejo de errores
-- ✅ **Eventos de Dominio**: Auditoría y trazabilidad completa (4 eventos)
+- ✅ **Sistema de Hándicaps**: Integración RFEG + actualizaciones automáticas + error handling
+- ✅ **Búsqueda Externa**: Scraping dinámico de la RFEG con manejo de errores robusto
+- ✅ **Eventos de Dominio**: Auditoría y trazabilidad completa (7 eventos)
 - ✅ **Testing Determinístico**: Mocks + fixtures + aislamiento DB
 - ✅ **Clean Architecture**: 100% compliance con dependency inversion
 
@@ -151,13 +156,13 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 
 ---
 
-## 🎯 **ÚLTIMA SESIÓN: Autenticación JWT y Clean Architecture Compliance (9 de Noviembre de 2025)**
+## 🎯 **SESIÓN ANTERIOR: Autenticación JWT y Clean Architecture Compliance (9 de Noviembre de 2025)**
 
 ### **Principales Logros de la Sesión**
 
 #### 1. **Sistema de Autenticación JWT Completo**
 - ✅ **LoginUserUseCase**: Autenticación con JWT tokens + UserLoggedInEvent
-- ✅ **LogoutUserUseCase**: Logout con auditoría completa + UserLoggedOutEvent  
+- ✅ **LogoutUserUseCase**: Logout con auditoría completa + UserLoggedOutEvent
 - ✅ **Domain Events**: UserLoggedInEvent + UserLoggedOutEvent para trazabilidad
 - ✅ **API Endpoints**: POST /auth/login y POST /auth/logout funcionales
 - ✅ **Session Management**: Estrategia progresiva documentada (ADR-015)
@@ -187,13 +192,103 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 
 ---
 
+## 🎯 **ÚLTIMA SESIÓN: Profile & Security Management + Handicap Error Handling (11 de Noviembre de 2025)**
+
+### **Principales Logros de la Sesión**
+
+#### 1. **Gestión Completa de Perfil de Usuario**
+- ✅ **UpdateProfileUseCase**: Actualizar nombre/apellido sin requerir password
+  - Validación Pydantic (min_length=2)
+  - Solo actualiza campos proporcionados
+  - UserProfileUpdatedEvent para auditoría
+  - 7 tests unitarios + 7 tests integración
+
+- ✅ **UpdateSecurityUseCase**: Actualizar email/password con verificación
+  - Requiere current_password para cualquier cambio
+  - Validación de email duplicado
+  - UserEmailChangedEvent + UserPasswordChangedEvent
+  - Permite actualizar email, password o ambos
+  - 9 tests unitarios + 8 tests integración
+
+- ✅ **Separación de Responsabilidades**:
+  - `/users/profile`: Datos personales (sin password)
+  - `/users/security`: Credenciales (requiere password)
+
+#### 2. **Mejoras en Handicap Management**
+- ✅ **Error Handling Robusto**:
+  - HandicapNotFoundError cuando jugador no existe en RFEG
+  - Mensaje descriptivo: "No se encontró hándicap en RFEG para 'Nombre Completo'"
+  - Fallback manual opcional via `manual_handicap`
+
+- ✅ **Frontend Integration**:
+  - Manejo de errores 404 (player not found)
+  - Manejo de errores 503 (service unavailable)
+  - Mensajes claros al usuario
+
+- ✅ **Tests Actualizados**:
+  - 7 tests unitarios corregidos
+  - 2 tests integración nuevos (con y sin fallback)
+
+#### 3. **Mejoras en Frontend (RyderCupWeb)**
+- ✅ **EditProfile.jsx Completo**:
+  - 3 secciones: Personal Info, Security Settings, Handicap
+  - Validación inteligente: solo envía campos modificados
+  - Error handling robusto (Pydantic arrays, strings, objects)
+  - Placeholders claros ("Leave empty to keep current...")
+
+- ✅ **CORS Configuration**:
+  - Backend permite puertos 5173 y 5174 en desarrollo
+  - Configuración dinámica según ENVIRONMENT
+
+- ✅ **Mensajes en Inglés**:
+  - "Profile updated successfully"
+  - "Security settings updated successfully"
+  - Consistencia en toda la aplicación
+
+#### 4. **Domain Events Adicionales**
+- ✅ **UserProfileUpdatedEvent**: Emitido al cambiar nombre/apellido
+- ✅ **UserEmailChangedEvent**: Emitido al cambiar email
+- ✅ **UserPasswordChangedEvent**: Emitido al cambiar password
+- Todos con tests unitarios completos (7, 7, 6 tests respectivamente)
+
+#### 5. **Documentación Completa Actualizada**
+**Backend (RyderCupAm)**:
+- ✅ CLAUDE.md: +3 eventos, +2 use cases, +2 endpoints, métricas actualizadas
+- ✅ README.md: Test count 360 → 395
+- ✅ docs/API.md: Documentación completa de PATCH /users/profile y /users/security
+- ✅ docs/design-document.md: Eventos, use cases, endpoints, métricas actualizadas
+- ✅ docs/project-structure.md: Estructura actualizada con nuevos componentes
+
+**Frontend (RyderCupWeb)**:
+- ✅ CLAUDE.md: Endpoints consumidos, error handling, estado actual
+- ✅ README.md: Features, endpoints, Fase 1 MVP completado
+
+#### 6. **Mejoras de Calidad**
+- **Tests Coverage**: De 360 a 395 tests (+35 tests)
+  - Unit tests: 313 → 341 (+28)
+  - Integration tests: 47 → 54 (+7)
+- **API Endpoints**: De 7 a 9 (+2 endpoints)
+- **Domain Events**: De 4 a 7 (+3 eventos)
+- **Use Cases**: De 7 a 9 (+2 use cases)
+- **Performance**: Tests en ~13s con paralelización
+- **Code Quality**: 100% Clean Architecture compliance mantenido
+
+### **Estado Final**
+- **Entregable**: Sistema completo de gestión de perfil y seguridad con error handling robusto
+- **Tests**: **395/395 pasando** (100% éxito)
+- **Funcionalidades**: User Management + Authentication + Profile Management + Security Management + Handicap Management + External Services + Session Management
+- **Frontend**: EditProfile completo con 3 secciones funcionales
+- **Documentación**: 100% actualizada en ambos repositorios
+
+---
+
 ## 🚀 **PRÓXIMOS PASOS**
 
 ### **Hoja de Ruta Inmediata**
 
-#### 1. **Autorización Avanzada** ✅ *Autenticación JWT Completa*
+#### 1. **Autorización Avanzada** ✅ *Profile & Security Management Completo*
 - **Authorization Middleware**: Proteger endpoints por roles/permisos
-- **Password Change**: Caso de uso para cambio de contraseñas
+- **Role-Based Access Control (RBAC)**: Sistema de permisos granular
 
 #### 2. **Módulo de Competiciones** 
 - **Competition Entity**: Modelar torneos y competiciones
@@ -208,11 +303,10 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 - **API Documentation**: OpenAPI enriquecido con ejemplos
 
 ### **Casos de Uso Pendientes**
-- `ChangePasswordUseCase` - Cambio seguro de contraseñas  
 - `CreateCompetitionUseCase` - Gestión de torneos
-- `UpdateUserProfileUseCase` - Actualización de perfiles
 - `CreateTeamUseCase` - Formación de equipos
 - `CalculateScoreUseCase` - Sistema de puntuación
+- `AssignRoleUseCase` - Gestión de roles y permisos
 
 ### **Deuda Técnica y Mejoras**
 - **Session Management Fase 2**: Token blacklist para revocación inmediata

@@ -2,7 +2,7 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-360%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-395%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
@@ -10,7 +10,7 @@
 ## 🌐 Frontend
 
 Este es el **backend API**. Para la aplicación web frontend, visita:
-👉 **[RyderCupAm-Web](https://github.com/agustinEDev/RyderCupAm-Web)** *(próximamente)*
+👉 **[RyderCupWeb](https://github.com/agustinEDev/RyderCupWeb)**
 
 ## 🚀 Quick Start
 

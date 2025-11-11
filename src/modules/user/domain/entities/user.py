@@ -185,11 +185,11 @@ class User:
             token_used=token_used
         ))
 
-    def record_login(self, logged_in_at: datetime, ip_address: Optional[str] = None, 
+    def record_login(self, logged_in_at: datetime, ip_address: Optional[str] = None,
                     user_agent: Optional[str] = None, session_id: Optional[str] = None) -> None:
         """
         Registra un evento de login exitoso para este usuario.
-        
+
         Args:
             logged_in_at: Timestamp del login exitoso
             ip_address: Dirección IP desde donde se hizo login (opcional)
@@ -197,7 +197,7 @@ class User:
             session_id: ID de la sesión creada (opcional)
         """
         from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEvent
-        
+
         self._add_domain_event(UserLoggedInEvent(
             user_id=str(self.id.value),
             logged_in_at=logged_in_at,
@@ -206,7 +206,113 @@ class User:
             session_id=session_id,
             login_method="email"  # Por ahora solo email, preparado para OAuth
         ))
-    
+
+    def update_profile(self, first_name: Optional[str] = None, last_name: Optional[str] = None) -> None:
+        """
+        Actualiza la información personal del usuario (nombre y apellidos).
+
+        Solo emite evento si al menos uno de los campos cambió.
+
+        Args:
+            first_name: Nuevo nombre (None = no cambiar)
+            last_name: Nuevo apellido (None = no cambiar)
+
+        Raises:
+            ValueError: Si ambos parámetros son None o si los valores son strings vacíos
+        """
+        from src.modules.user.domain.events.user_profile_updated_event import UserProfileUpdatedEvent
+
+        # Validar que al menos un campo se quiera actualizar
+        if first_name is None and last_name is None:
+            raise ValueError("At least one field (first_name or last_name) must be provided")
+
+        # Validar que los campos no sean strings vacíos
+        if first_name is not None and first_name.strip() == "":
+            raise ValueError("first_name cannot be empty")
+        if last_name is not None and last_name.strip() == "":
+            raise ValueError("last_name cannot be empty")
+
+        # Guardar valores anteriores
+        old_first_name = self.first_name
+        old_last_name = self.last_name
+
+        # Determinar qué cambió
+        first_name_changed = first_name is not None and first_name != old_first_name
+        last_name_changed = last_name is not None and last_name != old_last_name
+
+        # Si nada cambió realmente, no hacer nada
+        if not first_name_changed and not last_name_changed:
+            return
+
+        # Aplicar cambios
+        if first_name_changed:
+            self.first_name = first_name
+        if last_name_changed:
+            self.last_name = last_name
+
+        # Actualizar timestamp
+        self.updated_at = datetime.now()
+
+        # Emitir evento
+        self._add_domain_event(UserProfileUpdatedEvent(
+            user_id=str(self.id.value),
+            old_first_name=old_first_name if first_name_changed else None,
+            new_first_name=first_name if first_name_changed else None,
+            old_last_name=old_last_name if last_name_changed else None,
+            new_last_name=last_name if last_name_changed else None,
+            updated_at=self.updated_at
+        ))
+
+    def change_email(self, new_email: str) -> None:
+        """
+        Cambia el email del usuario.
+
+        Args:
+            new_email: Nuevo email (ya validado por el use case)
+
+        Raises:
+            ValueError: Si el email no es válido
+        """
+        from src.modules.user.domain.events.user_email_changed_event import UserEmailChangedEvent
+
+        new_email_vo = Email(new_email)
+        old_email_str = str(self.email.value) if self.email else ""
+
+        if new_email == old_email_str:
+            return  # No cambió nada
+
+        self.email = new_email_vo
+        self.updated_at = datetime.now()
+
+        self._add_domain_event(UserEmailChangedEvent(
+            user_id=str(self.id.value),
+            old_email=old_email_str,
+            new_email=new_email,
+            changed_at=self.updated_at
+        ))
+
+    def change_password(self, new_password: str) -> None:
+        """
+        Cambia el password del usuario.
+
+        Args:
+            new_password: Nuevo password en texto plano
+
+        Raises:
+            ValueError: Si el password no es válido
+        """
+        from src.modules.user.domain.events.user_password_changed_event import UserPasswordChangedEvent
+
+        new_password_vo = Password.from_plain_text(new_password)
+        self.password = new_password_vo
+        self.updated_at = datetime.now()
+
+        self._add_domain_event(UserPasswordChangedEvent(
+            user_id=str(self.id.value),
+            changed_at=self.updated_at,
+            changed_from_ip=None
+        ))
+
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""
         return f"User(id={self.id}, email={self.email}, name={self.get_full_name()})"

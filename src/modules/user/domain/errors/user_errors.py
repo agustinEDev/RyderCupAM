@@ -44,9 +44,29 @@ class UserNotFoundError(UserDomainError):
 class UserAlreadyExistsError(UserDomainError):
     """
     Excepción lanzada cuando se intenta crear un usuario que ya existe.
-    
+
     Se utiliza principalmente cuando se detecta un conflicto por email duplicado
     durante la creación de nuevos usuarios.
+    """
+    pass
+
+
+class DuplicateEmailError(UserDomainError):
+    """
+    Excepción lanzada cuando se intenta usar un email que ya está en uso.
+
+    Se utiliza cuando un usuario intenta cambiar su email a uno que
+    ya pertenece a otro usuario en el sistema.
+    """
+    pass
+
+
+class InvalidCredentialsError(UserDomainError):
+    """
+    Excepción lanzada cuando las credenciales proporcionadas son inválidas.
+
+    Se utiliza durante la autenticación o verificación de contraseña actual
+    cuando el password proporcionado no coincide con el almacenado.
     """
     pass
 

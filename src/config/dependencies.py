@@ -10,6 +10,8 @@ from src.modules.user.application.use_cases.find_user_use_case import FindUserUs
 from src.modules.user.application.use_cases.update_user_handicap_use_case import UpdateUserHandicapUseCase
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
 from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
+from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
+from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -165,6 +167,32 @@ def get_logout_user_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return LogoutUserUseCase(uow)
+
+def get_update_profile_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow)
+) -> UpdateProfileUseCase:
+    """
+    Proveedor del caso de uso UpdateProfileUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `UpdateProfileUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return UpdateProfileUseCase(uow)
+
+def get_update_security_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow)
+) -> UpdateSecurityUseCase:
+    """
+    Proveedor del caso de uso UpdateSecurityUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `UpdateSecurityUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return UpdateSecurityUseCase(uow)
 
 # Esquema de seguridad HTTP Bearer para Swagger
 security = HTTPBearer()
