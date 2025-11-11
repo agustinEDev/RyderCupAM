@@ -12,6 +12,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
+# Constants
+POSTGRESQL_PREFIX = "postgresql://"
+POSTGRESQL_ASYNC_PREFIX = "postgresql+asyncpg://"
+
 # --- Configuración Inicial del Entorno de Test ---
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -31,7 +35,7 @@ if not DATABASE_URL:
     db = os.getenv("POSTGRES_DB")
     port = os.getenv("DATABASE_PORT")
     host = "localhost"
-    DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db}"
+    DATABASE_URL = f"{POSTGRESQL_PREFIX}{user}:{password}@{host}:{port}/{db}"
 
 # ======================================================================================
 # HOOKS DE CONFIGURACIÓN GLOBAL DE PYTEST
@@ -89,8 +93,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
-    if db_url_base.startswith("postgresql://"):
-        db_url_base = db_url_base.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if db_url_base.startswith(POSTGRESQL_PREFIX):
+        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
 
     # URL para la base de datos de test específica
     test_db_url = f"{db_url_base}/{db_name}"
@@ -107,12 +111,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with test_engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
 
-    TestSessionLocal = async_sessionmaker(
+    test_session_local = async_sessionmaker(
         autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession, expire_on_commit=False
     )
 
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
-        async with TestSessionLocal() as session:
+        async with test_session_local() as session:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
@@ -176,8 +180,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
-    if db_url_base.startswith("postgresql://"):
-        db_url_base = db_url_base.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if db_url_base.startswith(POSTGRESQL_PREFIX):
+        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
 
     # URL para la base de datos de test específica
     test_db_url = f"{db_url_base}/{db_name}"
@@ -194,7 +198,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
 
-    TestSessionLocal = async_sessionmaker(
+    test_session_local = async_sessionmaker(
         autocommit=False, 
         autoflush=False, 
         bind=engine, 
@@ -202,7 +206,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         expire_on_commit=False
     )
     
-    async with TestSessionLocal() as session:
+    async with test_session_local() as session:
         yield session
 
     # Limpieza: eliminar la base de datos temporal completa
