@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()  # Cargar variables de entorno desde .env
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html

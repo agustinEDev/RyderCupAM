@@ -6,7 +6,6 @@ se ejecuta con éxito un login.
 """
 
 import pytest
-from datetime import datetime
 from unittest.mock import AsyncMock
 
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase

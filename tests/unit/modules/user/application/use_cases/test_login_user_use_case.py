@@ -9,8 +9,6 @@ import pytest
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
