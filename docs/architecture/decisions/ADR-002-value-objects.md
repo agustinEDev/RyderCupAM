@@ -32,6 +32,7 @@ class User:
 - **UserId**: Identificador único basado en UUID
 - **Email**: Dirección de email validada y normalizada
 - **Password**: Contraseña hasheada con bcrypt
+- **Handicap**: Hándicap de golf con validación de rango RFEG/EGA (-10.0 a 54.0)
 
 ### Ejemplo de Implementación:
 
@@ -97,6 +98,11 @@ class Email:
 - **Solución**: bcrypt automático + validación de fortaleza
 - **Beneficio**: Seguridad por defecto, imposible almacenar sin hash
 
+#### Handicap:
+- **Problema**: Valores de hándicap inválidos (ej: 999.0, -100.0), sin validación consistente
+- **Solución**: Validación automática de rango según reglas RFEG/EGA (-10.0 a 54.0)
+- **Beneficio**: Garantiza hándicaps válidos, type-safe, inmutable
+
 ## Consecuencias
 
 ### Positivas:
@@ -145,35 +151,10 @@ class Email:
 - **Variable TESTING**: Detección automática del entorno
 - **Performance**: Value Objects no impactan velocidad de tests
 
-## Validación
-
-### Métricas de Éxito (31 Oct 2025):
-- ✅ **49 tests específicos** de Value Objects (100% passing)
-- ✅ **0 bugs** relacionados con validación de datos
-- ✅ **Código expresivo**: `User.create(email=Email("test@example.com"))`
-- ✅ **Performance**: 0.54s para 80 tests (incluyendo Value Objects)
-
-### Criterios de Validación:
-- [x] Imposible crear emails inválidos (✅ 14 tests)
-- [x] Passwords siempre hasheados (✅ 23 tests)  
-- [x] UUIDs únicos y válidos (✅ 12 tests)
-- [x] Objetos inmutables (✅ Tests de inmutabilidad)
-
 ## Referencias
 
 - [Domain-Driven Design by Eric Evans](https://domainlanguage.com/ddd/)
 - [Value Objects Explained](https://martinfowler.com/bliki/ValueObject.html)
 - [Python Dataclasses Documentation](https://docs.python.org/3/library/dataclasses.html)
-
-## Evolución Futura
-
-### Value Objects Planificados:
-- **TeamId**: Identificador de equipo
-- **Score**: Puntuación con validación de rango
-- **MatchDate**: Fecha con validaciones de torneo
-- **HandicapValue**: Handicap de golf con reglas específicas
-
-### Extensiones Posibles:
-- **Serialización**: JSON automático para APIs
-- **Comparación**: Ordenamiento natural para algunos VOs
-- **Transformaciones**: Métodos de conversión entre formatos
+- [ADR-014: Handicap Management System](./ADR-014-handicap-management-system.md) - Implementación específica de Handicap VO
+- [Design Document](../design-document.md) - Ver sección Métricas para Value Objects implementados

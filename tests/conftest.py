@@ -26,10 +26,10 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metad
 # Usamos la URL de la app como base, pero la sobreescribimos si es necesario
 DATABASE_URL = APP_DATABASE_URL
 if not DATABASE_URL:
-    user = os.getenv("POSTGRES_USER", "user")
-    password = os.getenv("POSTGRES_PASSWORD", "pass")
-    db = os.getenv("POSTGRES_DB", "rydercup_db")
-    port = os.getenv("DATABASE_PORT", "5434")
+    user = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    db = os.getenv("POSTGRES_DB")
+    port = os.getenv("DATABASE_PORT")
     host = "localhost"
     DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
@@ -206,8 +206,96 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Limpieza: eliminar la base de datos temporal completa
     await engine.dispose()
-    
+
     admin_engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
     async with admin_engine.connect() as conn:
         await conn.execute(text(f"DROP DATABASE {db_name}"))
     await admin_engine.dispose()
+
+
+# ======================================================================================
+# AUTHENTICATION HELPERS FOR INTEGRATION TESTS
+# ======================================================================================
+
+@pytest_asyncio.fixture
+async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
+    """
+    Fixture que proporciona un cliente autenticado con un token JWT válido.
+
+    Returns:
+        Tuple con (client, user_data) donde user_data incluye el token de acceso
+    """
+    # Registrar un usuario
+    user_data = {
+        "email": "testuser@example.com",
+        "password": "TestPass123!",
+        "first_name": "Test",
+        "last_name": "User"
+    }
+
+    register_response = await client.post("/api/v1/auth/register", json=user_data)
+    assert register_response.status_code == 201
+
+    # Hacer login para obtener el token
+    login_data = {
+        "email": user_data["email"],
+        "password": user_data["password"]
+    }
+
+    login_response = await client.post("/api/v1/auth/login", json=login_data)
+    assert login_response.status_code == 200
+
+    response_data = login_response.json()
+    access_token = response_data["access_token"]
+    user_info = response_data["user"]
+
+    # Agregar el token al cliente como header por defecto
+    client.headers.update({"Authorization": f"Bearer {access_token}"})
+
+    return client, {
+        "token": access_token,
+        "user": user_info,
+        "credentials": user_data
+    }
+
+
+async def create_authenticated_user(client: AsyncClient, email: str, password: str, first_name: str, last_name: str) -> dict:
+    """
+    Helper para crear un usuario y obtener su token de autenticación.
+
+    Args:
+        client: Cliente HTTP de testing
+        email: Email del usuario
+        password: Contraseña del usuario
+        first_name: Nombre
+        last_name: Apellido
+
+    Returns:
+        Dict con 'token', 'user_id' y 'user_data'
+    """
+    # Registrar usuario
+    user_data = {
+        "email": email,
+        "password": password,
+        "first_name": first_name,
+        "last_name": last_name
+    }
+
+    register_response = await client.post("/api/v1/auth/register", json=user_data)
+    assert register_response.status_code == 201
+    user_id = register_response.json()["id"]
+
+    # Login
+    login_response = await client.post("/api/v1/auth/login", json={
+        "email": email,
+        "password": password
+    })
+    assert login_response.status_code == 200
+
+    token = login_response.json()["access_token"]
+
+    return {
+        "token": token,
+        "user_id": user_id,
+        "user_data": user_data
+    }

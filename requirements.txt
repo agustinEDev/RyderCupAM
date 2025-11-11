@@ -53,6 +53,10 @@ greenlet==3.0.3
 # Implementa el algoritmo bcrypt, un estándar para el almacenamiento seguro de claves
 bcrypt==4.2.0
 
+# python-jose - Librería para crear y verificar tokens JWT (JSON Web Tokens)
+# Incluye soporte para varios algoritmos de firma (HS256, RS256, etc.)
+python-jose[cryptography]==3.3.0
+
 
 # ================================
 # TESTING Y DESARROLLO
@@ -77,3 +81,7 @@ pytest-json-report==1.5.0
 # pytest-xdist - Plugin para pytest que permite ejecutar tests en paralelo
 # Acelera significativamente la suite de tests distribuyendo el trabajo
 pytest-xdist==3.8.0
+
+# pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
+# Permite usar async/await en tests y fixtures con asyncio_mode = auto
+pytest-asyncio==0.24.0

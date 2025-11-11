@@ -73,12 +73,22 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 ```
 
 ### Características Implementadas
+
+**Core Features**:
 1. **Async Context Manager**: Gestión automática con `async with`
 2. **Type Safety**: Interfaces tipadas para mejor desarrollo
 3. **Module-Specific**: UoW específicas para cada módulo
 4. **Exception Handling**: Rollback automático en caso de error
 
+**Evolution (9 Nov 2025)** - Clean Architecture Enhancement:
+5. **Fully Automatic Transactions**: Context manager handles all commit/rollback
+6. **Domain Events Publication**: Automatic event publishing post-commit  
+7. **Zero Transaction Code in Use Cases**: Complete separation of concerns
+8. **Robust Error Handling**: Guaranteed rollback on any exception
+
 ### Patrón de Uso
+
+**Versión Inicial (1 Nov 2025)**:
 ```python
 async def execute_use_case(command: Command, uow: UserUnitOfWorkInterface):
     async with uow:  # Inicia transacción
@@ -86,9 +96,21 @@ async def execute_use_case(command: Command, uow: UserUnitOfWorkInterface):
         user = await User.create(...)
         await uow.users.save(user)
         
-        # Commit automático al salir del context manager
+        # Commit explícito
         await uow.commit()
     # Si hay excepción, rollback automático en __aexit__
+```
+
+**Versión Actual (9 Nov 2025)** - Evolucionado para Clean Architecture:
+```python
+async def execute_use_case(command: Command, uow: UserUnitOfWorkInterface):
+    async with uow:  # Context manager maneja TODO automáticamente
+        # Solo lógica de negocio - Use Case no conoce transacciones
+        user = await User.create(...)
+        await uow.users.save(user)
+        
+        # NO más commit explícito - violaba Clean Architecture
+    # Commit automático en __aexit__ (éxito) o rollback (excepción)
 ```
 
 ## Consequences
@@ -131,11 +153,19 @@ UnitOfWorkInterface (Base)
 - **is_active()**: Estado de la transacción
 
 ## Implementation Status
+
+**Fase 1 (1 Nov 2025)**:
 - ✅ **Base UnitOfWorkInterface**: Definición completa con async context manager
-- ✅ **UserUnitOfWorkInterface**: Específica para módulo de usuarios
+- ✅ **UserUnitOfWorkInterface**: Específica para módulo de usuarios  
 - ✅ **Tests unitarios**: 18 tests verificando comportamiento de interfaces
 - ✅ **Documentation**: Integración completa en Design Document
-- ⏳ **Concrete implementations**: SQLAlchemy implementation (próxima fase)
+
+**Fase 2 (9 Nov 2025)** - Evolución hacia Clean Architecture:
+- ✅ **SQLAlchemy Implementation**: Implementación concreta con PostgreSQL
+- ✅ **Automatic Transaction Management**: Context manager maneja commit/rollback completamente
+- ✅ **Domain Events Integration**: Publicación automática de eventos post-commit
+- ✅ **Clean Architecture Compliance**: Use Cases no manejan aspectos técnicos
+- ✅ **360 Tests Passing**: Validación completa del patrón evolucionado
 
 ## Performance Considerations
 - **Connection pooling**: Una conexión por UoW

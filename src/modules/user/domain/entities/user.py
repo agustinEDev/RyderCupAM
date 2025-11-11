@@ -168,6 +168,44 @@ class User:
         if not hasattr(self, '_domain_events'):
             self._domain_events = []
         return len(self._domain_events) > 0
+
+    def record_logout(self, logged_out_at: datetime, token_used: Optional[str] = None) -> None:
+        """
+        Registra un evento de logout para este usuario.
+        
+        Args:
+            logged_out_at: Timestamp del logout
+            token_used: Token JWT utilizado (opcional)
+        """
+        from src.modules.user.domain.events.user_logged_out_event import UserLoggedOutEvent
+        
+        self._add_domain_event(UserLoggedOutEvent(
+            user_id=str(self.id.value),
+            logged_out_at=logged_out_at,
+            token_used=token_used
+        ))
+
+    def record_login(self, logged_in_at: datetime, ip_address: Optional[str] = None, 
+                    user_agent: Optional[str] = None, session_id: Optional[str] = None) -> None:
+        """
+        Registra un evento de login exitoso para este usuario.
+        
+        Args:
+            logged_in_at: Timestamp del login exitoso
+            ip_address: Dirección IP desde donde se hizo login (opcional)
+            user_agent: User agent del browser/app (opcional)
+            session_id: ID de la sesión creada (opcional)
+        """
+        from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEvent
+        
+        self._add_domain_event(UserLoggedInEvent(
+            user_id=str(self.id.value),
+            logged_in_at=logged_in_at,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            session_id=session_id,
+            login_method="email"  # Por ahora solo email, preparado para OAuth
+        ))
     
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

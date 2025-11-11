@@ -14,25 +14,27 @@ class TestUserRoutes:
         """
         Verifica que se puede buscar un usuario por email y se devuelve su información.
         """
-        # Primero registramos un usuario
-        register_data = {
-            "email": "test_user@example.com",
-            "password": "securePassword123",
-            "first_name": "Test",
-            "last_name": "User"
-        }
-        
-        register_response = await client.post("/api/v1/auth/register", json=register_data)
-        assert register_response.status_code == status.HTTP_201_CREATED
-        
+        # Primero registramos un usuario y obtenemos su token
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "test_user@example.com",
+            "securePassword123",
+            "Test",
+            "User"
+        )
+        token = auth_data["token"]
+
         # Ahora buscamos el usuario por email
         search_response = await client.get(
             "/api/v1/users/search",
-            params={"email": "test_user@example.com"}
+            params={"email": "test_user@example.com"},
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_200_OK
-        
+
         response_data = search_response.json()
         assert "user_id" in response_data
         assert response_data["email"] == "test_user@example.com"
@@ -43,24 +45,26 @@ class TestUserRoutes:
         Verifica que se puede buscar un usuario por nombre completo.
         """
         # Primero registramos un usuario
-        register_data = {
-            "email": "john.doe@example.com",
-            "password": "securePassword123",
-            "first_name": "John",
-            "last_name": "Doe"
-        }
-        
-        register_response = await client.post("/api/v1/auth/register", json=register_data)
-        assert register_response.status_code == status.HTTP_201_CREATED
-        
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "john.doe@example.com",
+            "securePassword123",
+            "John",
+            "Doe"
+        )
+        token = auth_data["token"]
+
         # Ahora buscamos el usuario por nombre completo
         search_response = await client.get(
             "/api/v1/users/search",
-            params={"full_name": "John Doe"}
+            params={"full_name": "John Doe"},
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_200_OK
-        
+
         response_data = search_response.json()
         assert "user_id" in response_data
         assert response_data["email"] == "john.doe@example.com"
@@ -71,34 +75,38 @@ class TestUserRoutes:
         Verifica que se puede buscar con ambos parámetros y prioriza por email.
         """
         # Registramos dos usuarios
-        user1_data = {
-            "email": "user1@example.com",
-            "password": "securePassword123",
-            "first_name": "Jane",
-            "last_name": "Smith"
-        }
-        
+        from tests.conftest import create_authenticated_user
+
+        auth_data1 = await create_authenticated_user(
+            client,
+            "user1@example.com",
+            "securePassword123",
+            "Jane",
+            "Smith"
+        )
+        token = auth_data1["token"]
+
         user2_data = {
             "email": "user2@example.com",
             "password": "securePassword123",
             "first_name": "John",
             "last_name": "Smith"
         }
-        
-        await client.post("/api/v1/auth/register", json=user1_data)
+
         await client.post("/api/v1/auth/register", json=user2_data)
-        
+
         # Buscamos con email de user1 pero nombre de user2
         search_response = await client.get(
             "/api/v1/users/search",
             params={
                 "email": "user1@example.com",
                 "full_name": "John Smith"
-            }
+            },
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_200_OK
-        
+
         response_data = search_response.json()
         # Debe devolver user1 porque se prioriza la búsqueda por email
         assert response_data["email"] == "user1@example.com"
@@ -108,13 +116,26 @@ class TestUserRoutes:
         """
         Verifica que devuelve 404 cuando no se encuentra un usuario por email.
         """
+        # Crear usuario autenticado para hacer la búsqueda
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "searcher@example.com",
+            "securePassword123",
+            "Searcher",
+            "User"
+        )
+        token = auth_data["token"]
+
         search_response = await client.get(
             "/api/v1/users/search",
-            params={"email": "nonexistent@example.com"}
+            params={"email": "nonexistent@example.com"},
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
-        
+
         response_data = search_response.json()
         assert "detail" in response_data
         assert "nonexistent@example.com" in response_data["detail"]
@@ -123,9 +144,22 @@ class TestUserRoutes:
         """
         Verifica que devuelve 404 cuando no se encuentra un usuario por nombre.
         """
+        # Crear usuario autenticado para hacer la búsqueda
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "searcher2@example.com",
+            "securePassword123",
+            "Searcher2",
+            "User"
+        )
+        token = auth_data["token"]
+
         search_response = await client.get(
             "/api/v1/users/search",
-            params={"full_name": "Nonexistent User"}
+            params={"full_name": "Nonexistent User"},
+            headers={"Authorization": f"Bearer {token}"}
         )
         
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
@@ -138,7 +172,22 @@ class TestUserRoutes:
         """
         Verifica que se requiere al menos un parámetro de búsqueda.
         """
-        search_response = await client.get("/api/v1/users/search")
+        # Crear usuario autenticado para hacer la búsqueda
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "searcher3@example.com",
+            "securePassword123",
+            "Searcher3",
+            "User"
+        )
+        token = auth_data["token"]
+
+        search_response = await client.get(
+            "/api/v1/users/search",
+            headers={"Authorization": f"Bearer {token}"}
+        )
         
         assert search_response.status_code == status.HTTP_400_BAD_REQUEST
         
@@ -150,16 +199,17 @@ class TestUserRoutes:
         """
         Verifica que la búsqueda por nombre es insensible a mayúsculas/minúsculas.
         """
-        # Registramos un usuario
-        register_data = {
-            "email": "case.test@example.com",
-            "password": "securePassword123",
-            "first_name": "Case",
-            "last_name": "Test"
-        }
-        
-        register_response = await client.post("/api/v1/auth/register", json=register_data)
-        assert register_response.status_code == status.HTTP_201_CREATED
+        # Registramos un usuario y obtenemos su token
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "case.test@example.com",
+            "securePassword123",
+            "Case",
+            "Test"
+        )
+        token = auth_data["token"]
         
         # Buscamos con diferentes casos
         search_cases = ["case test", "CASE TEST", "Case Test", "CaSe TeSt"]
@@ -167,7 +217,8 @@ class TestUserRoutes:
         for search_name in search_cases:
             search_response = await client.get(
                 "/api/v1/users/search",
-                params={"full_name": search_name}
+                params={"full_name": search_name},
+                headers={"Authorization": f"Bearer {token}"}
             )
             
             assert search_response.status_code == status.HTTP_200_OK
@@ -179,21 +230,23 @@ class TestUserRoutes:
         """
         Verifica que se puede buscar a Rafael Nadal que ya está registrado en el sistema.
         """
-        # Primero registramos a Rafael Nadal
-        register_data = {
-            "email": "rafa_nadal@prueba.com",
-            "password": "securePassword123",
-            "first_name": "Rafael",
-            "last_name": "Nadal Parera"
-        }
-        
-        register_response = await client.post("/api/v1/auth/register", json=register_data)
-        assert register_response.status_code == status.HTTP_201_CREATED
+        # Registramos a Rafael Nadal y obtenemos su token
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "rafa_nadal@prueba.com",
+            "securePassword123",
+            "Rafael",
+            "Nadal Parera"
+        )
+        token = auth_data["token"]
         
         # Buscamos por email
         search_by_email = await client.get(
             "/api/v1/users/search",
-            params={"email": "rafa_nadal@prueba.com"}
+            params={"email": "rafa_nadal@prueba.com"},
+            headers={"Authorization": f"Bearer {token}"}
         )
         
         assert search_by_email.status_code == status.HTTP_200_OK
@@ -203,7 +256,8 @@ class TestUserRoutes:
         # Buscamos por nombre completo
         search_by_name = await client.get(
             "/api/v1/users/search",
-            params={"full_name": "Rafael Nadal Parera"}
+            params={"full_name": "Rafael Nadal Parera"},
+            headers={"Authorization": f"Bearer {token}"}
         )
         
         assert search_by_name.status_code == status.HTTP_200_OK

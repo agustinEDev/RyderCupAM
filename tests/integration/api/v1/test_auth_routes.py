@@ -53,3 +53,59 @@ class TestAuthRoutes:
         # Assert
         assert second_response.status_code == status.HTTP_409_CONFLICT
         assert "ya está registrado" in second_response.json()["detail"]
+
+    async def test_logout_user_successfully(self, client: AsyncClient):
+        """
+        Verifica que un usuario autenticado puede hacer logout correctamente.
+        """
+        # Arrange: Crear y autenticar un usuario
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "logout.test@example.com",
+            "ValidPass123",
+            "Logout",
+            "Test"
+        )
+        token = auth_data["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Act: Hacer logout
+        logout_data = {}  # LogoutRequestDTO está vacío en Fase 1
+        response = await client.post("/api/v1/auth/logout", json=logout_data, headers=headers)
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data["message"] == "Logout exitoso"
+        assert "logged_out_at" in response_data
+
+    async def test_logout_fails_without_authentication(self, client: AsyncClient):
+        """
+        Verifica que el logout falla si no se proporciona token de autenticación.
+        """
+        # Arrange
+        logout_data = {}
+
+        # Act: Intentar logout sin autenticación
+        response = await client.post("/api/v1/auth/logout", json=logout_data)
+
+        # Assert
+        # FastAPI devuelve 403 cuando falta completamente el header Authorization
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    async def test_logout_fails_with_invalid_token(self, client: AsyncClient):
+        """
+        Verifica que el logout falla con un token inválido.
+        """
+        # Arrange
+        invalid_token = "invalid-jwt-token"
+        headers = {"Authorization": f"Bearer {invalid_token}"}
+        logout_data = {}
+
+        # Act: Intentar logout con token inválido
+        response = await client.post("/api/v1/auth/logout", json=logout_data, headers=headers)
+
+        # Assert
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

@@ -73,6 +73,7 @@ class UserResponseDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
     handicap: Optional[float] = Field(None, description="Handicap de golf del usuario.")
+    handicap_updated_at: Optional[datetime] = Field(None, description="Fecha y hora de la última actualización del handicap.")
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
     updated_at: datetime = Field(..., description="Fecha y hora de la última actualización.")
 
@@ -91,3 +92,49 @@ class UserResponseDTO(BaseModel):
         if hasattr(v, "value"):
             return v.value
         return v
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Login
+# ======================================================================================
+
+class LoginRequestDTO(BaseModel):
+    """
+    DTO de entrada para el caso de uso de login.
+    Define las credenciales necesarias para autenticar un usuario.
+    """
+    email: EmailStr = Field(..., description="Correo electrónico del usuario.")
+    password: str = Field(..., min_length=8, description="Contraseña del usuario.")
+
+
+class LoginResponseDTO(BaseModel):
+    """
+    DTO de salida para el caso de uso de login.
+    Devuelve el token de acceso y la información básica del usuario.
+    """
+    access_token: str = Field(..., description="Token JWT de acceso.")
+    token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
+    user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Logout
+# ======================================================================================
+
+class LogoutRequestDTO(BaseModel):
+    """
+    DTO de entrada para el caso de uso de logout.
+    Define el token que se quiere invalidar.
+    """
+    # Nota: El token se obtiene del header Authorization, no del body
+    # Este DTO queda preparado para futuras extensiones
+    pass
+
+
+class LogoutResponseDTO(BaseModel):
+    """
+    DTO de salida para el caso de uso de logout.
+    Confirma que el logout se realizó correctamente.
+    """
+    message: str = Field(default="Logout exitoso", description="Mensaje de confirmación.")
+    logged_out_at: datetime = Field(..., description="Timestamp del logout.")
