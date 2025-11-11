@@ -52,7 +52,9 @@ class TestUpdateUserHandicapUseCase:
 
     @pytest.mark.asyncio
     async def test_update_handicap_when_service_returns_none(self):
-        """Test: No actualiza cuando el servicio devuelve None."""
+        """Test: Lanza HandicapNotFoundError cuando el servicio devuelve None y no hay manual_handicap."""
+        from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
+
         # Arrange
         uow = InMemoryUnitOfWork()
         user = User.create("Unknown", "Player", "unknown@test.com", "Pass123!")
@@ -62,12 +64,9 @@ class TestUpdateUserHandicapUseCase:
         handicap_service = MockHandicapService(default=None)
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
-        # Act
-        result = await use_case.execute(user.id)
-
-        # Assert
-        assert result is not None
-        assert result.handicap is None
+        # Act & Assert
+        with pytest.raises(HandicapNotFoundError, match="No se encontró hándicap en RFEG"):
+            await use_case.execute(user.id)
 
     @pytest.mark.asyncio
     async def test_update_handicap_persists_change(self):
@@ -134,7 +133,9 @@ class TestUpdateUserHandicapUseCase:
 
     @pytest.mark.asyncio
     async def test_update_handicap_no_change_when_both_none(self):
-        """Test: No actualiza cuando RFEG devuelve None y no hay hándicap manual."""
+        """Test: Lanza HandicapNotFoundError cuando RFEG devuelve None y no hay hándicap manual."""
+        from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
+
         # Arrange
         uow = InMemoryUnitOfWork()
         user = User.create("Test", "User", "test@test.com", "Pass123!")
@@ -145,12 +146,9 @@ class TestUpdateUserHandicapUseCase:
         handicap_service = MockHandicapService(default=None)
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
-        # Act - sin hándicap manual
-        result = await use_case.execute(user.id, manual_handicap=None)
-
-        # Assert - debe mantenerse en None
-        assert result is not None
-        assert result.handicap is None
+        # Act & Assert - debe lanzar error porque no hay hándicap en RFEG ni manual
+        with pytest.raises(HandicapNotFoundError, match="No se encontró hándicap en RFEG"):
+            await use_case.execute(user.id, manual_handicap=None)
 
 
 class TestUpdateMultipleHandicapsUseCase:

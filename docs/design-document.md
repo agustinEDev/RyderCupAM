@@ -45,12 +45,12 @@ Domain (Entities, VOs, Events, Repos)
 **Domain**:
 - Entity: `User`
 - VOs: `UserId`, `Email`, `Password`, `Handicap`
-- Events: `UserRegistered`, `HandicapUpdated`
+- Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`
 - Repos: `UserRepositoryInterface`
 - Services: `HandicapService` (interface)
 
 **Application**:
-- Use Cases: `RegisterUser`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
+- Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
 - DTOs: Request/Response
 - Handlers: `UserRegisteredEventHandler`
 
@@ -140,6 +140,8 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Fallback**: Si RFEG falla, usar `manual_handicap` (opcional)
 
+**Error Handling**: Si jugador no encontrado en RFEG y no hay `manual_handicap`, lanzar `HandicapNotFoundError` (404)
+
 > ADR: [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
 ---
@@ -193,6 +195,8 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ### Users
 - `GET /api/v1/users/search` - Buscar por email o nombre
+- `PATCH /api/v1/users/profile` - Actualizar nombre/apellido (sin password)
+- `PATCH /api/v1/users/security` - Actualizar email/password (con password)
 
 > Detalle: [API.md](API.md)
 
@@ -203,16 +207,16 @@ API → UseCase → HandicapService.search(name) → RFEG
 **Estrategia**: Test Pyramid (87% unit, 13% integration)
 
 ```
-360 tests (100% passing)
-├── Unit: 313 (24 archivos)
+395 tests (100% passing)
+├── Unit: 341 (26 archivos)
 │   ├── Domain: ~220
-│   ├── Application: ~50
+│   ├── Application: ~78
 │   └── Infrastructure: ~40
-└── Integration: 47 (7 archivos)
+└── Integration: 54 (8 archivos)
 ```
 
 **Cobertura**: >90% en lógica de negocio
-**Performance**: ~12s (paralelización con pytest-xdist)
+**Performance**: ~13s (paralelización con pytest-xdist)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
@@ -238,17 +242,17 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Métrica | Valor |
 |---------|-------|
-| Tests totales | 360 (100% passing) |
-| Tests unitarios | 313 (24 archivos) |
-| Tests integración | 47 (7 archivos) |
+| Tests totales | 395 (100% passing) |
+| Tests unitarios | 341 (26 archivos) |
+| Tests integración | 54 (8 archivos) |
 | Cobertura | >90% |
-| Tiempo ejecución | ~12s (paralelo) |
+| Tiempo ejecución | ~13s (paralelo) |
 
 ### Progreso de Módulos
 
 | Módulo | Estado | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Completo + Auth | 313+ | 7 |
+| User | ✅ Completo + Auth | 341+ | 9 |
 | Tournament | 🚧 En desarrollo | 0 | 0 |
 | Team | ⏳ Pendiente | 0 | 0 |
 
@@ -259,35 +263,42 @@ API → UseCase → HandicapService.search(name) → RFEG
 - **Password** (23 tests) - Contraseña bcrypt hasheada
 - **Handicap** (20 tests) - Rango -10.0 a 54.0 (RFEG/EGA)
 
-### Domain Events Implementados (38 tests)
+### Domain Events Implementados (59 tests)
 
 - **UserRegisteredEvent** (9 tests) - Usuario registrado
 - **HandicapUpdatedEvent** (16 tests) - Handicap actualizado con delta
 - **UserLoggedOutEvent** (7 tests) - Usuario cerró sesión (auditoría)
 - **UserLoggedInEvent** (7 tests) - Usuario inició sesión (auditoría completa)
+- **UserProfileUpdatedEvent** (7 tests) - Perfil de usuario actualizado
+- **UserEmailChangedEvent** (7 tests) - Email cambiado
+- **UserPasswordChangedEvent** (6 tests) - Password cambiado
 
-### Use Cases Implementados (40 tests)
+### Use Cases Implementados (68 tests)
 
-**User Module (7 use cases)**:
+**User Module (9 use cases)**:
 - `RegisterUserUseCase` (5 tests) - Registro de usuario
 - `LoginUserUseCase` (5 tests) - Autenticación JWT + eventos
 - `LogoutUserUseCase` (5 tests) - Logout con auditoría completa
+- `UpdateProfileUseCase` (7 tests) - Actualización de nombre/apellido sin password
+- `UpdateSecurityUseCase` (9 tests) - Actualización de email/password con verificación
 - `UpdateUserHandicapUseCase` (10 tests) - Actualización desde RFEG con fallback
 - `UpdateUserHandicapManuallyUseCase` (6 tests) - Actualización manual directa
 - `UpdateMultipleHandicapsUseCase` - Batch update con estadísticas
 - `FindUserUseCase` (10 tests) - Búsqueda por email o nombre
 
-### API Endpoints Activos (7)
+### API Endpoints Activos (9)
 
 | Endpoint | Método | Auth | Status |
 |----------|--------|------|--------|
 | `/api/v1/auth/register` | POST | No | ✅ Activo |
 | `/api/v1/auth/login` | POST | No | ✅ Activo |
 | `/api/v1/auth/logout` | POST | JWT | ✅ Activo |
-| `/api/v1/handicaps/update` | POST | ⏳ Pendiente | ✅ Activo |
-| `/api/v1/handicaps/update-manual` | POST | ⏳ Pendiente | ✅ Activo |
-| `/api/v1/handicaps/update-multiple` | POST | ⏳ Pendiente | ✅ Activo |
-| `/api/v1/users/search` | GET | ⏳ Pendiente | ✅ Activo |
+| `/api/v1/users/profile` | PATCH | JWT | ✅ Activo |
+| `/api/v1/users/security` | PATCH | JWT | ✅ Activo |
+| `/api/v1/users/search` | GET | JWT | ✅ Activo |
+| `/api/v1/handicaps/update` | POST | JWT | ✅ Activo |
+| `/api/v1/handicaps/update-manual` | POST | JWT | ✅ Activo |
+| `/api/v1/handicaps/update-multiple` | POST | JWT | ✅ Activo |
 
 ### External Services Implementados (18 tests)
 

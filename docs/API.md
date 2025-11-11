@@ -2,23 +2,25 @@
 
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
-**Total Endpoints**: 7 active
+**Total Endpoints**: 9 active
 
 ## Quick Reference
 
 ```
 Authentication
-├── POST /api/v1/auth/register    # User registration
-├── POST /api/v1/auth/login       # JWT authentication  
-└── POST /api/v1/auth/logout      # Session logout
+├── POST /api/v1/auth/register     # User registration
+├── POST /api/v1/auth/login        # JWT authentication
+└── POST /api/v1/auth/logout       # Session logout
 
-Handicap Management  
-├── POST /api/v1/handicaps/update          # RFEG lookup + fallback
+User Profile Management
+├── PATCH /api/v1/users/profile    # Update name/surname (no password required)
+├── PATCH /api/v1/users/security   # Update email/password (password required)
+└── GET   /api/v1/users/search     # Search by email/name
+
+Handicap Management
+├── POST /api/v1/handicaps/update          # RFEG lookup + optional fallback
 ├── POST /api/v1/handicaps/update-manual   # Manual update
 └── POST /api/v1/handicaps/update-multiple # Batch processing
-
-User Management
-└── GET /api/v1/users/search      # Search by email/name
 ```
 
 ## Authentication
@@ -105,11 +107,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Update Handicap (RFEG)
 ```http
 POST /api/v1/handicaps/update
+Authorization: Bearer {token}
 
 Request:
 {
   "user_id": "uuid",
-  "manual_handicap": 15.5  // Optional fallback
+  "manual_handicap": 15.5  // Optional fallback if RFEG returns no data
 }
 
 Response: 200 OK
@@ -119,7 +122,17 @@ Response: 200 OK
   "handicap_updated_at": "2025-11-09T10:00:00Z",
   ...
 }
+
+Errors:
+404 Not Found - User not found OR Player not found in RFEG (without manual_handicap)
+503 Service Unavailable - RFEG service is down
 ```
+
+**Behavior:**
+- Searches player in RFEG database by full name
+- If found: Updates handicap with RFEG value
+- If NOT found and `manual_handicap` provided: Uses manual value
+- If NOT found and NO `manual_handicap`: Returns 404 with clear error message
 
 ### Update Handicap (Manual)
 ```http
@@ -153,10 +166,78 @@ Response: 200 OK
 
 ## User Management
 
+### Update Profile
+```http
+PATCH /api/v1/users/profile
+Authorization: Bearer {token}
+
+Request:
+{
+  "first_name": "Jane",      // Optional - only if changing
+  "last_name": "Smith"        // Optional - only if changing
+}
+
+Response: 200 OK
+{
+  "user": {
+    "id": "uuid",
+    "email": "john@example.com",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "handicap": 15.5
+  },
+  "message": "Profile updated successfully"
+}
+
+Errors:
+401 Unauthorized - Missing or invalid token
+404 Not Found - User not found
+422 Unprocessable Entity - Validation error (name too short)
+```
+
+### Update Security Settings
+```http
+PATCH /api/v1/users/security
+Authorization: Bearer {token}
+
+Request:
+{
+  "current_password": "OldPass123!",     // Required
+  "new_email": "newemail@example.com",   // Optional - only if changing email
+  "new_password": "NewPass456!",         // Optional - only if changing password
+  "confirm_password": "NewPass456!"      // Required if new_password provided
+}
+
+Response: 200 OK
+{
+  "user": {
+    "id": "uuid",
+    "email": "newemail@example.com",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "handicap": 15.5
+  },
+  "message": "Security settings updated successfully"
+}
+
+Errors:
+401 Unauthorized - Missing or invalid token / Current password incorrect
+404 Not Found - User not found
+409 Conflict - Email already in use
+422 Unprocessable Entity - Validation error (password too short, etc.)
+```
+
+**Notes:**
+- **Profile Update**: Does NOT require password - only JWT authentication
+- **Security Update**: Requires current password for verification
+- Both endpoints can update single or multiple fields
+- Leave fields as `null` or omit them to keep current values
+
 ### Find User
 ```http
 GET /api/v1/users/search?email=john@example.com
 GET /api/v1/users/search?full_name=John Doe
+Authorization: Bearer {token}
 
 Response: 200 OK
 {
@@ -166,14 +247,20 @@ Response: 200 OK
   "last_name": "Doe",
   "handicap": 15.5
 }
+
+Errors:
+401 Unauthorized - Missing or invalid token
+404 Not Found - User not found
 ```
 
 ## Error Codes
 
 - `400`: Bad Request (validación)
 - `401`: Unauthorized (credenciales inválidas o token missing)
-- `404`: Not Found
-- `422`: Unprocessable Entity
+- `404`: Not Found (usuario no existe, jugador no en RFEG, etc.)
+- `409`: Conflict (email duplicado)
+- `422`: Unprocessable Entity (validación Pydantic: formato email inválido, password muy corto, etc.)
+- `503`: Service Unavailable (servicio externo RFEG caído)
 - `500`: Internal Server Error
 
 ## Session Management

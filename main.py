@@ -108,6 +108,8 @@ if ENV != "production":
     allowed_origins.extend([
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ])
 
 # Eliminar duplicados conservando orden
@@ -119,6 +121,21 @@ if not allowed_origins:
 
 # Debug: imprimir allowed_origins al iniciar
 print(f"🔒 CORS allowed_origins: {allowed_origins}")
+
+# Debug middleware para ver requests OPTIONS (solo en desarrollo)
+if ENV != "production":
+    @app.middleware("http")
+    async def debug_options_requests(request, call_next):
+        if request.method == "OPTIONS":
+            print(f"🔍 OPTIONS request to: {request.url.path}")
+            print(f"   Origin: {request.headers.get('origin', 'N/A')}")
+            print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
+            print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
+            print(f"   All headers: {dict(request.headers)}")
+        response = await call_next(request)
+        if request.method == "OPTIONS":
+            print(f"   Response status: {response.status_code}")
+        return response
 
 app.add_middleware(
     CORSMiddleware,

@@ -22,20 +22,23 @@ src/
 │       ├── domain/
 │       │   ├── entities/        # User (with login/logout methods)
 │       │   ├── value_objects/   # UserId, Email, Password, Handicap
-│       │   ├── events/          # UserRegistered, HandicapUpdated, 
-│       │   │                    # UserLoggedIn, UserLoggedOut
+│       │   ├── events/          # UserRegistered, HandicapUpdated,
+│       │   │                    # UserLoggedIn, UserLoggedOut,
+│       │   │                    # UserProfileUpdated, UserEmailChanged, UserPasswordChanged
 │       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork)
 │       │   ├── services/        # Domain services (interfaces)
 │       │   └── errors/          # Domain exceptions
 │       │
 │       ├── application/
 │       │   ├── use_cases/       # RegisterUser, LoginUser, LogoutUser,
+│       │   │                    # UpdateProfile, UpdateSecurity,
 │       │   │                    # UpdateHandicap, FindUser
-│       │   ├── dto/             # Request/Response DTOs (Login, Logout)
+│       │   ├── dto/             # Request/Response DTOs (Login, Logout,
+│       │   │                    # UpdateProfile, UpdateSecurity)
 │       │   └── handlers/        # Event handlers
 │       │
 │       └── infrastructure/
-│           ├── api/v1/          # FastAPI routes (auth_routes, handicap_routes)
+│           ├── api/v1/          # FastAPI routes (auth_routes, user_routes, handicap_routes)
 │           ├── persistence/     # SQLAlchemy repos + UnitOfWork impl
 │           └── external/        # RFEG service, mocks
 │

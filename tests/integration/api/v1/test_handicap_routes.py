@@ -180,7 +180,7 @@ class TestHandicapEndpoints:
 
     @pytest.mark.asyncio
     async def test_update_handicap_player_not_in_mock(self, client: AsyncClient):
-        """Test: Jugador no configurado en el mock devuelve handicap None."""
+        """Test: Jugador no configurado en el mock devuelve 404 HandicapNotFoundError."""
         # Arrange - Crear un usuario que no está en el mock
         from tests.conftest import create_authenticated_user
 
@@ -194,19 +194,47 @@ class TestHandicapEndpoints:
         user_id = auth_data["user_id"]
         token = auth_data["token"]
 
-        # Act - Llamar al endpoint
+        # Act - Llamar al endpoint sin manual_handicap
         response = await client.post(
             "/api/v1/handicaps/update",
             json={"user_id": user_id},
             headers={"Authorization": f"Bearer {token}"}
         )
 
-        # Assert
+        # Assert - Debe devolver 404 con mensaje descriptivo
+        assert response.status_code == 404
+        data = response.json()
+        assert "No se encontró hándicap en RFEG" in data["detail"]
+        assert "Jugador Desconocido" in data["detail"]
+
+    @pytest.mark.asyncio
+    async def test_update_handicap_player_not_in_mock_with_manual_fallback(self, client: AsyncClient):
+        """Test: Jugador no en mock pero con manual_handicap funciona correctamente."""
+        # Arrange - Crear un usuario que no está en el mock
+        from tests.conftest import create_authenticated_user
+
+        auth_data = await create_authenticated_user(
+            client,
+            "manual@test.com",
+            "Pass123!",
+            "Manual",
+            "Handicap"
+        )
+        user_id = auth_data["user_id"]
+        token = auth_data["token"]
+
+        # Act - Llamar al endpoint CON manual_handicap
+        response = await client.post(
+            "/api/v1/handicaps/update",
+            json={"user_id": user_id, "manual_handicap": 18.5},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        # Assert - Debe funcionar usando el manual_handicap
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == user_id
-        # El hándicap debería ser None porque el jugador no está en el mock
-        assert data["handicap"] is None
+        assert abs(data["handicap"] - 18.5) < 0.01
 
     @pytest.mark.asyncio
     async def test_update_handicap_invalid_uuid(self, client: AsyncClient):
