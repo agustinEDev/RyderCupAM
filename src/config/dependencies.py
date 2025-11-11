@@ -166,19 +166,6 @@ def get_logout_user_use_case(
     """
     return LogoutUserUseCase(uow)
 
-def get_logout_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
-) -> LogoutUserUseCase:
-    """
-    Proveedor del caso de uso LogoutUserUseCase.
-
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `LogoutUserUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
-    """
-    return LogoutUserUseCase(uow)
-
 # Esquema de seguridad HTTP Bearer para Swagger
 security = HTTPBearer()
 
