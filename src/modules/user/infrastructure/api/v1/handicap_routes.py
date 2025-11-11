@@ -14,6 +14,7 @@ from src.modules.user.application.use_cases.update_multiple_handicaps_use_case i
 from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError, HandicapServiceUnavailableError
 from src.config.dependencies import (
     get_update_handicap_use_case,
     get_update_multiple_handicaps_use_case,
@@ -135,18 +136,31 @@ async def update_user_handicap(
         Usuario actualizado con su hándicap
 
     Raises:
-        404: Si el usuario no existe
+        404: Si el usuario no existe o no se encuentra su hándicap en RFEG
+        503: Si el servicio RFEG no está disponible
     """
-    user_id = UserId(request.user_id)
-    result = await use_case.execute(user_id, request.manual_handicap)
+    try:
+        user_id = UserId(request.user_id)
+        result = await use_case.execute(user_id, request.manual_handicap)
 
-    if result is None:
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Usuario con ID {request.user_id} no encontrado"
+            )
+
+        return result
+
+    except HandicapNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Usuario con ID {request.user_id} no encontrado"
+            detail=str(e)
         )
-
-    return result
+    except HandicapServiceUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"El servicio de hándicap no está disponible: {str(e)}"
+        )
 
 
 @router.post(

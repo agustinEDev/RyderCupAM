@@ -9,7 +9,7 @@ from typing import Optional
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
+from src.modules.user.domain.errors.handicap_errors import HandicapServiceError, HandicapNotFoundError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
 
@@ -58,11 +58,11 @@ class UpdateUserHandicapUseCase:
             manual_handicap: Hándicap manual opcional. Se usa si RFEG no devuelve resultado.
 
         Returns:
-            DTO del usuario actualizado o None si no existe
+            DTO del usuario actualizado o None si el usuario no existe
 
-        Note:
-            No lanza excepciones si el servicio de hándicap falla.
-            Registra el error y devuelve el usuario sin cambios.
+        Raises:
+            HandicapNotFoundError: Si no se encuentra el hándicap en RFEG y no se proporciona manual_handicap
+            HandicapServiceUnavailableError: Si el servicio RFEG no está disponible
         """
         async with self._uow:
             # 1. Obtener el usuario
@@ -71,26 +71,26 @@ class UpdateUserHandicapUseCase:
                 return None
 
             # 2. Buscar hándicap usando el servicio
-            handicap_value = None
-            try:
-                handicap_value = await self._handicap_service.search_handicap(
-                    user.get_full_name()
-                )
-            except HandicapServiceError as e:
-                # Log del error pero no falla
-                # TODO: Agregar logging apropiado cuando esté configurado
-                print(f"Error buscando hándicap para {user.get_full_name()}: {e}")
+            handicap_value = await self._handicap_service.search_handicap(
+                user.get_full_name()
+            )
 
             # 3. Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
-            if handicap_value is None and manual_handicap is not None:
-                handicap_value = manual_handicap
+            if handicap_value is None:
+                if manual_handicap is not None:
+                    handicap_value = manual_handicap
+                else:
+                    # Si no se encontró y no hay manual_handicap, lanzar error
+                    raise HandicapNotFoundError(
+                        f"No se encontró hándicap en RFEG para '{user.get_full_name()}'. "
+                        f"Verifica que el nombre esté correcto o proporciona un hándicap manual."
+                    )
 
-            # 4. Actualizar si se obtuvo un hándicap (de RFEG o manual)
-            if handicap_value is not None:
-                user.update_handicap(handicap_value)
+            # 4. Actualizar el hándicap
+            user.update_handicap(handicap_value)
 
-                # 5. Persistir cambios
-                await self._uow.users.save(user)
-                await self._uow.commit()
+            # 5. Persistir cambios
+            await self._uow.users.save(user)
+            await self._uow.commit()
 
             return UserResponseDTO.model_validate(user)

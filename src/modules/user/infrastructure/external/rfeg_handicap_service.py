@@ -7,6 +7,7 @@ Real Federación Española de Golf.
 """
 
 import re
+import unicodedata
 import httpx
 from typing import Optional
 
@@ -52,9 +53,31 @@ class RFEGHandicapService(HandicapService):
         """
         self._timeout = timeout
 
+    @staticmethod
+    def _normalizar_texto(texto: str) -> str:
+        """
+        Normaliza un texto eliminando acentos y caracteres diacríticos.
+
+        Útil para búsquedas donde el servicio RFEG puede no encontrar nombres
+        con acentos (ej: "Agustín" → "Agustin").
+
+        Args:
+            texto: Texto a normalizar
+
+        Returns:
+            Texto sin acentos ni diacríticos
+        """
+        # NFD descompone caracteres acentuados en base + acento
+        # Luego filtramos los caracteres de categoría Mn (Nonspacing_Mark)
+        nfd = unicodedata.normalize('NFD', texto)
+        return ''.join(char for char in nfd if unicodedata.category(char) != 'Mn')
+
     async def search_handicap(self, full_name: str) -> Optional[float]:
         """
         Busca el hándicap de un jugador en la RFEG.
+
+        Intenta primero con el nombre original y si no encuentra resultados,
+        reintenta con el nombre normalizado (sin acentos).
 
         Args:
             full_name: Nombre completo del jugador (ej: "Juan Pérez García")
@@ -73,8 +96,17 @@ class RFEGHandicapService(HandicapService):
                     "No se pudo obtener el token de autenticación de la RFEG"
                 )
 
-            # 2. Buscar jugador en la API usando el token
-            return await self._buscar_en_api(full_name, bearer_token)
+            # 2. Buscar jugador primero con nombre original
+            handicap = await self._buscar_en_api(full_name, bearer_token)
+            if handicap is not None:
+                return handicap
+
+            # 3. Si no se encontró, reintentar con nombre normalizado (sin acentos)
+            nombre_normalizado = self._normalizar_texto(full_name)
+            if nombre_normalizado != full_name:
+                return await self._buscar_en_api(nombre_normalizado, bearer_token)
+
+            return None
 
         except httpx.HTTPError as e:
             raise HandicapServiceUnavailableError(
