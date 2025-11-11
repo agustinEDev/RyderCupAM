@@ -98,7 +98,6 @@ class TestDomainEventsIntegration:
         )
         
         # Mock de métodos para todos los handlers
-        handlers = [welcome_handler, audit_handler, notification_handler]
         with patch.object(UserRegisteredEventHandler, '_send_welcome_email') as mock_email, \
              patch.object(UserRegisteredEventHandler, '_log_registration') as mock_log, \
              patch.object(UserRegisteredEventHandler, '_notify_external_systems') as mock_notify:

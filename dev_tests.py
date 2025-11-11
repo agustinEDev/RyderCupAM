@@ -8,6 +8,9 @@ import sys
 import ast
 from datetime import datetime
 
+# Constants
+NO_DESCRIPTION = "No description provided."
+
 # --- Configuración de la Presentación ---
 COLORS = {
     "HEADER": "\033[95m",
@@ -92,12 +95,12 @@ def get_docstrings_from_file(filepath: str) -> dict:
         
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                docs[node.name] = ast.get_docstring(node) or "No description provided."
+                docs[node.name] = ast.get_docstring(node) or NO_DESCRIPTION
             elif isinstance(node, ast.ClassDef):
                 for method in node.body:
                     if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         key = f"{node.name}::{method.name}"
-                        docs[key] = ast.get_docstring(method) or "No description provided."
+                        docs[key] = ast.get_docstring(method) or NO_DESCRIPTION
     except Exception:
         pass # Ignorar errores de parseo si el fichero es inválido
         
