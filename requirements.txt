@@ -55,7 +55,8 @@ bcrypt==4.2.0
 
 # python-jose - Librería para crear y verificar tokens JWT (JSON Web Tokens)
 # Incluye soporte para varios algoritmos de firma (HS256, RS256, etc.)
-python-jose[cryptography]==3.3.0
+# Actualizado a 3.4.0+ para resolver vulnerabilidad de seguridad CVE-2024-XXXXX
+python-jose[cryptography]==3.4.0
 
 
 # ================================
