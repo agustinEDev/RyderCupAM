@@ -12,8 +12,10 @@ Este archivo contiene tests que verifican:
 import pytest
 from fastapi.testclient import TestClient
 import httpx
+import base64
 
 from main import app
+from src.config.settings import settings
 
 
 # ================================
@@ -130,11 +132,16 @@ class TestAPIDocumentation:
         """
         Test: Endpoint de documentación Swagger accesible
         Given: API de FastAPI con docs habilitados
-        When: Se hace GET request a /docs
+        When: Se hace GET request a /docs con HTTP Basic Auth
         Then: Responde con código 200 y HTML
         """
+        # Arrange
+        credentials = f"{settings.DOCS_USERNAME}:{settings.DOCS_PASSWORD}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
+        
         # Act
-        response = client.get("/docs")
+        response = client.get("/docs", headers=headers)
         
         # Assert
         assert response.status_code == 200
@@ -144,11 +151,16 @@ class TestAPIDocumentation:
         """
         Test: Endpoint de documentación ReDoc accesible
         Given: API de FastAPI con redoc habilitado
-        When: Se hace GET request a /redoc
+        When: Se hace GET request a /redoc con HTTP Basic Auth
         Then: Responde con código 200 y HTML
         """
+        # Arrange
+        credentials = f"{settings.DOCS_USERNAME}:{settings.DOCS_PASSWORD}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {"Authorization": f"Basic {encoded_credentials}"}
+        
         # Act
-        response = client.get("/redoc")
+        response = client.get("/redoc", headers=headers)
         
         # Assert
         assert response.status_code == 200

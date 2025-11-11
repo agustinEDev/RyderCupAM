@@ -1,4 +1,4 @@
-Crea los prioritarios, pero sigue el formato de los que hay. Tienen que# 🚀 Deployment Guide - Ryder Cup Manager API
+# 🚀 Deployment Guide - Ryder Cup Manager API
 
 Este documento explica cómo desplegar la aplicación en diferentes entornos.
 

@@ -14,10 +14,15 @@ from src.modules.user.application.use_cases.update_multiple_handicaps_use_case i
 from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.config.dependencies import get_update_handicap_use_case, get_update_multiple_handicaps_use_case, get_update_handicap_manually_use_case
+from src.config.dependencies import (
+    get_update_handicap_use_case,
+    get_update_multiple_handicaps_use_case,
+    get_update_handicap_manually_use_case,
+    get_current_user,
+)
 
 
-router = APIRouter(prefix="/handicaps", tags=["handicaps"])
+router = APIRouter(prefix="/handicaps")
 
 
 # === Request/Response DTOs ===
@@ -116,7 +121,8 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
 )
 async def update_user_handicap(
     request: UpdateHandicapRequestDTO,
-    use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case)
+    use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user)
 ):
     """
     Actualiza el hándicap de un usuario buscándolo en la RFEG.
@@ -155,7 +161,8 @@ async def update_user_handicap(
 )
 async def update_multiple_handicaps(
     request: UpdateMultipleHandicapsRequestDTO,
-    use_case: UpdateMultipleHandicapsUseCase = Depends(get_update_multiple_handicaps_use_case)
+    use_case: UpdateMultipleHandicapsUseCase = Depends(get_update_multiple_handicaps_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user)
 ):
     """
     Actualiza los hándicaps de múltiples usuarios.
@@ -203,7 +210,8 @@ async def update_multiple_handicaps(
 )
 async def update_user_handicap_manually(
     request: UpdateHandicapManuallyRequestDTO,
-    use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case)
+    use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user)
 ):
     """
     Actualiza el hándicap de un usuario manualmente (sin consultar RFEG).

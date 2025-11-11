@@ -11,7 +11,7 @@ Con la capa de dominio y la de infraestructura de persistencia ya establecidas, 
 
 Se ha decidido implementar una **Capa de Aplicación** explícita, cuyo principal componente serán los **Casos de Uso (Use Cases)**.
 
-Cada caso de uso representará una única acción o funcionalidad que el sistema puede realizar, como `RegisterUserUseCase` o `CreateTournamentUseCase`.
+Cada caso de uso representará una única acción o funcionalidad que el sistema puede realizar, como `RegisterUserUseCase`, `UpdateUserHandicapUseCase` o `CreateTournamentUseCase`.
 
 ### Responsabilidades de un Caso de Uso:
 
@@ -42,3 +42,54 @@ Cada caso de uso representará una única acción o funcionalidad que el sistema
 ### Negativas:
 
 -   **Verbosity**: Puede parecer que añade más ficheros (DTOs, Use Cases), pero esta "verbosidad" es en realidad una organización explícita que se agradece a medida que el proyecto crece.
+
+## Patrones en Casos de Uso
+
+### Gestión Transaccional Consistente
+```python
+async with self._uow:
+    # Operaciones de dominio
+    user = await self._uow.users.find_by_id(user_id)
+    user.update_handicap(new_handicap)
+
+    # Persistencia
+    await self._uow.users.update(user)
+
+    # Commit (publica eventos automáticamente)
+    await self._uow.commit()
+```
+
+### Integración con Servicios Externos
+```python
+class UpdateUserHandicapUseCase:
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        handicap_service: HandicapService  # ← Inyección de abstracción
+    ):
+        self._uow = uow
+        self._handicap_service = handicap_service
+```
+
+### Manejo de Errores
+```python
+# Retornar None para "not found"
+if not user:
+    return None
+
+# ValueError para validaciones de negocio
+try:
+    user.update_handicap(handicap)
+except ValueError as e:
+    raise  # Se maneja en el endpoint HTTP
+```
+
+## Referencias
+
+- [ADR-001: Clean Architecture](./ADR-001-clean-architecture.md)
+- [ADR-006: Unit of Work](./ADR-006-unit-of-work-pattern.md)
+- [ADR-007: Domain Events](./ADR-007-domain-events-pattern.md)
+- [ADR-012: Composition Root](./ADR-012-composition-root.md)
+- [ADR-013: External Services Pattern](./ADR-013-external-services-pattern.md)
+- [ADR-014: Handicap Management System](./ADR-014-handicap-management-system.md)
+- [Design Document](../design-document.md) - Ver sección Métricas para Use Cases implementados

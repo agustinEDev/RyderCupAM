@@ -4,13 +4,21 @@ Ryder Cup Manager - Main Application
 
 Punto de entrada de la aplicación FastAPI.
 """
+import os
+from dotenv import load_dotenv
+load_dotenv()  # Cargar variables de entorno desde .env
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from pydantic import BaseModel
+import secrets
 import uvicorn
 
 from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
+from src.config.settings import settings
 
 
 @asynccontextmanager
@@ -26,6 +34,50 @@ async def lifespan(app: FastAPI):
     print("INFO:     Apagando aplicación...")
 
 
+# HTTP Basic Security para proteger /docs
+security = HTTPBasic()
+
+def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Verifica las credenciales HTTP Basic para acceder a /docs y /redoc.
+
+    Las credenciales se configuran en variables de entorno:
+    - DOCS_USERNAME
+    - DOCS_PASSWORD
+
+    Raises:
+        HTTPException 401: Si las credenciales son incorrectas o no están configuradas
+    """
+    # Si no están configuradas las credenciales, denegar acceso
+    if not settings.DOCS_USERNAME or not settings.DOCS_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Documentación no disponible - credenciales no configuradas",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verificar username
+    correct_username = secrets.compare_digest(
+        credentials.username.encode("utf8"),
+        settings.DOCS_USERNAME.encode("utf8")
+    )
+
+    # Verificar password
+    correct_password = secrets.compare_digest(
+        credentials.password.encode("utf8"),
+        settings.DOCS_PASSWORD.encode("utf8")
+    )
+
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales incorrectas",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    return credentials.username
+
+
 class HealthResponse(BaseModel):
     """Response model para el health check."""
     message: str
@@ -35,13 +87,46 @@ class HealthResponse(BaseModel):
     description: str
 
 # Crear la app, registrando el gestor de ciclo de vida 'lifespan'
+# Deshabilitamos docs_url y redoc_url para crear endpoints protegidos manualmente
 app = FastAPI(
     title="Ryder Cup Manager",
     description="API para gestion de torneos tipo Ryder Cup entre amigos",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan  # <-- Forma moderna de manejar eventos de startup/shutdown
+    docs_url=None,  # Deshabilitado - usaremos endpoint protegido
+    redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
+    lifespan=lifespan
+)
+
+# Configurar CORS para permitir peticiones desde el frontend
+# Leemos orígenes desde la variable de entorno FRONTEND_ORIGINS
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
+allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
+
+# Incluir localhost en desarrollo (no en producción)
+ENV = os.getenv("ENVIRONMENT", "development").lower()
+if ENV != "production":
+    allowed_origins.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ])
+
+# Eliminar duplicados conservando orden
+allowed_origins = list(dict.fromkeys(allowed_origins))
+
+# Si no hay orígenes configurados, dejar solo localhost (modo seguro por defecto)
+if not allowed_origins:
+    allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+# Debug: imprimir allowed_origins al iniciar
+print(f"🔒 CORS allowed_origins: {allowed_origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=3600,
 )
 
 # Incluir los routers de la API
@@ -62,6 +147,19 @@ app.include_router(
     prefix="/api/v1/users",
     tags=["Users"],
 )
+
+# Endpoints protegidos de documentación con HTTP Basic Auth
+@app.get("/docs", include_in_schema=False)
+async def get_documentation(username: str = Depends(verify_docs_credentials)):
+    """Swagger UI protegido con HTTP Basic Auth."""
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
+
+
+@app.get("/redoc", include_in_schema=False)
+async def get_redoc_documentation(username: str = Depends(verify_docs_credentials)):
+    """ReDoc UI protegido con HTTP Basic Auth."""
+    return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
+
 
 # Endpoint raíz para health check y metadata básica
 @app.get("/", response_model=HealthResponse)
