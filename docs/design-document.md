@@ -12,6 +12,7 @@ Sistema de torneos de golf amateur formato Ryder Cup.
 
 **Features**:
 - User management + JWT auth
+- Email verification (Mailgun, UUID tokens, bilingüe)
 - Handicap system (RFEG integration)
 - Tournament management (planeado)
 - Real-time scoring (planeado)
@@ -48,16 +49,24 @@ Domain (Entities, VOs, Events, Repos)
 - Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`
 - Repos: `UserRepositoryInterface`
 - Services: `HandicapService` (interface)
+- Email Verification: Campo `email_verified`, `verification_token`, evento `EmailVerifiedEvent`
 
 **Application**:
 - Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
 - DTOs: Request/Response
 - Handlers: `UserRegisteredEventHandler`
+- Email Verification: `VerifyEmailUseCase`, integración en registro
 
 **Infrastructure**:
 - Routes: `/auth/*`, `/handicaps/*`, `/users/*`
 - Repos: `SQLAlchemyUserRepository`
 - External: `RFEGHandicapService`, `MockHandicapService`
+- Email Verification: Servicio `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
+
+**Email Verification**:
+- Domain: Campo `email_verified`, `verification_token`, evento `EmailVerifiedEvent`
+- Application: Use case `VerifyEmailUseCase`, integración en registro
+- Infrastructure: Servicio `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 > ADRs: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
@@ -83,6 +92,8 @@ User:
     handicap_updated_at: datetime?
     created_at: datetime
     updated_at: datetime
+    email_verified: bool
+    verification_token: str?
 ```
 
 **Schema**:
@@ -96,7 +107,9 @@ CREATE TABLE users (
     handicap FLOAT,
     handicap_updated_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+    email_verified BOOLEAN DEFAULT FALSE,
+    verification_token VARCHAR(255)
 );
 CREATE INDEX idx_users_email ON users(email);
 ```
@@ -187,6 +200,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `POST /api/v1/auth/register` - Registro de usuario
 - `POST /api/v1/auth/login` - Autenticación JWT + UserLoggedInEvent
 - `POST /api/v1/auth/logout` - Logout con auditoría + UserLoggedOutEvent
+- `POST /api/v1/auth/verify-email` - Verificación de email (token por correo)
 
 ### Handicaps
 - `POST /api/v1/handicaps/update` - RFEG lookup + fallback

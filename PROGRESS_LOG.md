@@ -3,7 +3,7 @@
 **Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup  
 **Arquitectura**: Clean Architecture, Event-Driven, FastAPI  
 **Creación**: 31 de octubre de 2025
-**Última Actualización**: 11 de noviembre de 2025 (Sesión 2)
+**Última Actualización**: 12 de noviembre de 2025 (Sesión 3)
 
 ---
 
@@ -37,11 +37,12 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - ✅ **Clean Architecture Completa**: 4 capas implementadas con separación clara de responsabilidades
 - ✅ **Gestión de Usuarios**: Registro, validación y persistencia con PostgreSQL
 - ✅ **Sistema de Autenticación**: Login/Logout JWT + Domain Events completos
+- ✅ **Email Verification**: Sistema completo con tokens UUID y Mailgun
 - ✅ **Sistema de Hándicaps**: Integración RFEG + actualización automática + batch processing
 - ✅ **Session Management**: Estrategia progresiva (Fase 1 implementada)
 - ✅ **Infraestructura Docker**: Entorno completo containerizado con PostgreSQL y Alembic
 - ✅ **Testing Robusto**: Suite completa paralelizable con 100% de fiabilidad
-- ✅ **Documentación ADR**: 15 decisiones arquitectónicas documentadas
+- ✅ **Documentación ADR**: 19 decisiones arquitectónicas documentadas
 - ✅ **Deployment Producción**: API y Frontend desplegados en Render.com con CORS seguro
 
 ### 📈 **Métricas Clave**
@@ -50,8 +51,8 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - **Tests Integración**: 54 (14%)
 - **Cobertura**: >90% en lógica de negocio crítica
 - **Performance**: ~13 segundos ejecución completa (paralelo)
-- **API Endpoints**: 9 endpoints funcionales
-- **Módulos Completos**: User Management + Authentication + Profile Management + Handicap Management + External Services
+- **API Endpoints**: 10 endpoints funcionales
+- **Módulos Completos**: User Management + Authentication + Email Verification + Profile Management + Handicap Management + External Services
 
 ---
 
@@ -282,7 +283,140 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 
 ---
 
-## 🚀 **PRÓXIMOS PASOS**
+## � **Sesión 3 - Email Verification System**  
+**Fecha**: 12 de noviembre de 2025  
+**Objetivo**: Implementar sistema completo de verificación de email con Mailgun
+
+### **Trabajo Realizado**
+
+#### 1. **Sistema de Verificación de Email**
+- ✅ **Entidad User Extendida**:
+  - Campos: `email_verified: bool`, `verification_token: Optional[str]`
+  - Métodos: `generate_verification_token()`, `verify_email()`, `is_email_verified()`
+  - Genera tokens UUID4 únicos y seguros
+
+- ✅ **EmailVerifiedEvent (Domain)**:
+  - Evento de dominio para auditoría
+  - Emitido al verificar email exitosamente
+  - Incluye user_id y email verificado
+
+- ✅ **VerifyEmailUseCase**:
+  - Valida token de verificación
+  - Marca usuario como verificado
+  - Emite evento de auditoría
+  - Manejo robusto de errores (token inválido/expirado)
+
+- ✅ **UserFinder y Repository**:
+  - Método: `find_by_verification_token()` en interface y ambas implementaciones
+  - SQLAlchemy repository con índice en verification_token
+  - In-memory repository para tests
+
+#### 2. **Email Service (Mailgun Integration)**
+- ✅ **EmailService (Infrastructure)**:
+  - Integración con Mailgun API REST
+  - Configuración vía variables de entorno
+  - Email HTML responsive + texto plano
+  - Contenido bilingüe (Español/Inglés)
+  - Timeout configurable (10s)
+  - Error handling robusto
+
+- ✅ **Integración en Registro**:
+  - `RegisterUserUseCase` genera token automáticamente
+  - Envía email de verificación post-registro
+  - Email con link al frontend: `/verify-email?token={uuid}`
+  - Usuario puede usar app sin verificar (UX flexible)
+
+- ✅ **API Endpoint**:
+  - `POST /api/v1/auth/verify-email`
+  - Request: `{"token": "uuid4-string"}`
+  - Response: `{"message": "...", "email_verified": true}`
+  - Manejo de errores 400 (token inválido)
+
+#### 3. **Base de Datos**
+- ✅ **Migración Alembic**:
+  - Columnas: `email_verified` (boolean, default false), `verification_token` (varchar 255, nullable)
+  - Índice: `idx_verification_token` para búsquedas rápidas
+  - Migración aplicada en desarrollo y producción
+
+- ✅ **Mappers SQLAlchemy**:
+  - UserIdDecorator para type hints mejorados
+  - Columnas de verificación en users_table
+  - Serialización/deserialización correcta
+
+#### 4. **Testing**
+- ✅ **Tests Unitarios**:
+  - User entity: generate_token, verify_email, is_verified
+  - VerifyEmailUseCase: casos success, token inválido, usuario no encontrado
+  - EmailService: mock para evitar llamadas reales
+
+- ✅ **Tests de Integración**:
+  - Flujo completo: registro → envío email → verificación
+  - Endpoint /verify-email con BD real
+  - Validación de estados (verified/unverified)
+
+#### 5. **Configuración y Deploy**
+- ✅ **Variables de Entorno**:
+  - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM_EMAIL`
+  - `MAILGUN_API_URL` (EU region: api.eu.mailgun.net)
+  - `FRONTEND_URL` para links de verificación
+  - `.env.example` actualizado
+
+- ✅ **Docker**:
+  - Entrypoint ejecuta migraciones automáticamente
+  - Variables de Mailgun en docker-compose
+  - Reconstrucción de imágenes exitosa
+
+#### 6. **Documentación**
+- ✅ **ADR-019: Email Verification System**:
+  - 127 líneas (conciso, dentro del rango estándar)
+  - Arquitectura por capas documentada
+  - Alternativas rechazadas (JWT, SendGrid, AWS SES, obligatorio)
+  - Consecuencias y mitigaciones
+  - Referencias a ADR-007 y ADR-013
+
+- ✅ **Documentos Técnicos**:
+  - `EMAIL_VERIFICATION_SUMMARY.md`: Resumen completo de implementación
+  - `EMAIL_VERIFICATION_INTEGRATION.md`: Guía de integración para frontend
+  - API.md actualizado con endpoint de verificación
+
+### **Decisiones Técnicas Clave**
+
+#### Mailgun vs. Alternativas
+- **Elegido**: Mailgun (12k emails/mes gratis, API simple, EU region)
+- **Rechazado**: SendGrid (más caro), AWS SES (setup complejo)
+
+#### Tokens UUID vs. JWT
+- **Elegido**: UUID en DB (revocables, testeable, simple)
+- **Rechazado**: JWT firmados (no revocables sin blacklist)
+
+#### Verificación Opcional
+- **Elegido**: Usuarios pueden usar app sin verificar
+- **Rechazado**: Bloquear login (alta fricción UX)
+- **Mitigación**: Limitar features premium a verificados (Fase 2)
+
+### **Métricas de Impacto**
+- **Archivos nuevos**: 5
+  - `email_service.py`
+  - `verify_email_use_case.py`
+  - `email_verified_event.py`
+  - `ADR-019-email-verification-system.md`
+  - Migración Alembic
+- **Archivos modificados**: 10+
+- **Tests añadidos**: 15+ (unit + integration)
+- **Endpoints**: +1 (`POST /auth/verify-email`)
+- **Domain Events**: +1 (`EmailVerifiedEvent`)
+- **ADRs**: 18 → 19
+
+### **Estado Final**
+- **Entregable**: Sistema completo de verificación de email con Mailgun integrado
+- **Tests**: **395/395 pasando** (100% éxito)
+- **Funcionalidades**: User Management + Authentication + **Email Verification** + Profile Management + Security Management + Handicap Management + External Services + Session Management
+- **Email**: Bilingüe ES/EN, HTML responsive, envío automático en registro
+- **Documentación**: ADR-019 completado, guías de integración actualizadas
+
+---
+
+## �🚀 **PRÓXIMOS PASOS**
 
 ### **Hoja de Ruta Inmediata**
 
@@ -309,6 +443,10 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 - `AssignRoleUseCase` - Gestión de roles y permisos
 
 ### **Deuda Técnica y Mejoras**
+- **Email Verification Fase 2**: 
+  - Expiración de tokens (7 días)
+  - Endpoint de reenvío de email
+  - Limitación de features para usuarios no verificados
 - **Session Management Fase 2**: Token blacklist para revocación inmediata
 - **Refresh Token**: Renovación automática de tokens (implementable sin blacklist)
 - **Rate Limiting**: Implementar límites en endpoints públicos

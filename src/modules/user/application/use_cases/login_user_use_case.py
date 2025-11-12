@@ -90,5 +90,6 @@ class LoginUserUseCase:
         return LoginResponseDTO(
             access_token=access_token,
             token_type="bearer",
-            user=user_dto
+            user=user_dto,
+            email_verification_required=not user.is_email_verified()
         )

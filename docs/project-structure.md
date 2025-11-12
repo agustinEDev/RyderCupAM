@@ -25,6 +25,7 @@ src/
 │       │   ├── events/          # UserRegistered, HandicapUpdated,
 │       │   │                    # UserLoggedIn, UserLoggedOut,
 │       │   │                    # UserProfileUpdated, UserEmailChanged, UserPasswordChanged
+│       │   │                    # EmailVerifiedEvent
 │       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork)
 │       │   ├── services/        # Domain services (interfaces)
 │       │   └── errors/          # Domain exceptions
@@ -32,9 +33,9 @@ src/
 │       ├── application/
 │       │   ├── use_cases/       # RegisterUser, LoginUser, LogoutUser,
 │       │   │                    # UpdateProfile, UpdateSecurity,
-│       │   │                    # UpdateHandicap, FindUser
+│       │   │                    # UpdateHandicap, FindUser, VerifyEmail
 │       │   ├── dto/             # Request/Response DTOs (Login, Logout,
-│       │   │                    # UpdateProfile, UpdateSecurity)
+│       │   │                    # UpdateProfile, UpdateSecurity, VerifyEmail)
 │       │   └── handlers/        # Event handlers
 │       │
 │       └── infrastructure/
@@ -44,7 +45,7 @@ src/
 │
 └── shared/
     ├── domain/         # Base classes (DomainEvent, Entity)
-    └── infrastructure/ # Shared utilities (JWT handler, EventBus)
+    └── infrastructure/ # Shared utilities (JWT handler, EventBus, EmailService)
 
 tests/
 ├── unit/               # Tests aislados

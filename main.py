@@ -106,10 +106,12 @@ allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if o
 ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
     allowed_origins.extend([
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
+        "http://localhost:3000",   # React/Next.js
+        "http://127.0.0.1:3000",   # React/Next.js
+        "http://localhost:5173",   # Vite
+        "http://127.0.0.1:5173",   # Vite
+        "http://localhost:5174",   # Vite (fallback)
+        "http://127.0.0.1:5174",   # Vite (fallback)
     ])
 
 # Eliminar duplicados conservando orden
@@ -117,7 +119,12 @@ allowed_origins = list(dict.fromkeys(allowed_origins))
 
 # Si no hay orígenes configurados, dejar solo localhost (modo seguro por defecto)
 if not allowed_origins:
-    allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ]
 
 # Debug: imprimir allowed_origins al iniciar
 print(f"🔒 CORS allowed_origins: {allowed_origins}")
