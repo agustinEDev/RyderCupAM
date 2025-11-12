@@ -87,28 +87,27 @@ class RegisterUserUseCase:
             # 3. Guardar el usuario en el repositorio
             await self._uow.users.save(new_user)
 
-            # 4. Confirmar la transacción
-            await self._uow.commit()
+            # El context manager (__aexit__) hace commit automático y publica eventos
 
-            # 5. Enviar email de verificación
-            try:
-                email_sent = email_service.send_verification_email(
-                    to_email=request.email,
-                    user_name=new_user.first_name,
-                    verification_token=verification_token
-                )
-                if not email_sent:
-                    logger.warning(
-                        "No se pudo enviar el email de verificación para el usuario %s",
-                        new_user.id.value
-                    )
-            except (requests.RequestException, ValueError, ConnectionError) as e:
-                # Capturar excepciones específicas de red y validación
-                logger.exception(
-                    "Error al enviar email de verificación para el usuario %s",
+        # 4. Enviar email de verificación
+        try:
+            email_sent = email_service.send_verification_email(
+                to_email=request.email,
+                user_name=new_user.first_name,
+                verification_token=verification_token
+            )
+            if not email_sent:
+                logger.warning(
+                    "No se pudo enviar el email de verificación para el usuario %s",
                     new_user.id.value
                 )
-                # No fallar el registro si el email no se pudo enviar
+        except (requests.RequestException, ValueError, ConnectionError) as e:
+            # Capturar excepciones específicas de red y validación
+            logger.exception(
+                "Error al enviar email de verificación para el usuario %s",
+                new_user.id.value
+            )
+            # No fallar el registro si el email no se pudo enviar
 
-            # 6. Devolver la respuesta como DTO
-            return UserResponseDTO.model_validate(new_user)
+        # 5. Devolver la respuesta como DTO
+        return UserResponseDTO.model_validate(new_user)

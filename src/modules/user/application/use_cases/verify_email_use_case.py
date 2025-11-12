@@ -58,8 +58,9 @@ class VerifyEmailUseCase:
 
             # Guardar los cambios
             await self._uow.users.save(user)
-            await self._uow.commit()
 
-            logger.info(f"Email verificado correctamente para el usuario {user.id}")
+            # El context manager (__aexit__) hace commit automático y publica eventos
 
-            return True
+        logger.info("Email verificado correctamente para el usuario %s", user.id.value)
+
+        return True
