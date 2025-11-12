@@ -98,7 +98,7 @@ MAILGUN_API_KEY=...
 MAILGUN_DOMAIN=rydercupfriends.com
 MAILGUN_FROM_EMAIL=noreply@rydercupfriends.com
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:5173  # Vite default port
 ```
 
 ### Migración de Base de Datos
@@ -110,13 +110,46 @@ CREATE INDEX idx_verification_token ON users(verification_token);
 
 ---
 
+## Integración Frontend
+
+**Componentes Nuevos**:
+- `VerifyEmailPage` (`src/pages/VerifyEmail.jsx`): Página de destino del enlace de verificación
+- `EmailVerificationBanner` (`src/components/EmailVerificationBanner.jsx`): Warning para usuarios no verificados
+
+**Timing UX Optimizado**:
+- 1.5s spinner después de verificación exitosa (feedback visual)
+- 3s mensaje de confirmación antes de redirect (tiempo de lectura)
+- Prevención de ejecución doble (React Strict Mode guard)
+- Actualización automática de localStorage
+
+**Estados Manejados**:
+- `verifying`: Spinner visible durante llamada API
+- `success`: Email verificado → auto-redirect a dashboard
+- `error`: Token inválido/expirado → botones de navegación
+- `invalid`: Token missing → mensaje de error
+
+**Indicadores Visuales**:
+- Dashboard: Banner amarillo si `email_verified === false`
+- Profile: Badge verde/amarillo según estado de verificación
+- Login: Log en consola si `email_verification_required === true`
+
+**Referencias**: Ver `RyderCupWeb/CLAUDE.md` para detalles completos de implementación frontend.
+
+---
+
 ## Métricas
 
+**Backend**:
 - **Archivos nuevos**: 3 (EmailService, VerifyEmailUseCase, EmailVerifiedEvent)
-- **Archivos modificados**: 8
+- **Archivos modificados**: 8 (User entity, DTOs, repositories, routes, mappers)
 - **Tests añadidos**: 15+ (unit + integration)
 - **Endpoints**: +1 (`POST /auth/verify-email`)
 - **Domain Events**: +1 (`EmailVerifiedEvent`)
+
+**Frontend**:
+- **Componentes nuevos**: 2 (VerifyEmailPage, EmailVerificationBanner)
+- **Páginas modificadas**: 4 (App, Dashboard, Login, Profile, EditProfile)
+- **Rutas añadidas**: 1 (`/verify-email`)
 
 ---
 

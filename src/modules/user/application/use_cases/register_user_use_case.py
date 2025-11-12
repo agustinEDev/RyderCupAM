@@ -97,9 +97,17 @@ class RegisterUserUseCase:
                     verification_token=verification_token
                 )
                 if not email_sent:
-                    logger.warning(f"No se pudo enviar el email de verificación a {request.email}")
+                    logger.warning(
+                        "No se pudo enviar el email de verificación a %s",
+                        request.email
+                    )
             except Exception as e:
-                logger.error(f"Error al enviar email de verificación: {str(e)}")
+                logger.error(
+                    "Error al enviar email de verificación a %s: %s",
+                    request.email,
+                    str(e),
+                    exc_info=True
+                )
                 # No fallar el registro si el email no se pudo enviar
 
             # 6. Devolver la respuesta como DTO

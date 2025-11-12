@@ -43,13 +43,17 @@ class EmailVerifiedEvent(DomainEvent):
         Serialización específica para EmailVerifiedEvent.
 
         Extiende la serialización base con campos específicos del evento.
+        Asegura que verified_at se serialice correctamente en formato ISO.
         """
         base_dict = super().to_dict()
-        base_dict.update({
+        # Actualizar el diccionario 'data' para que todo sea JSON-serializable
+        data = base_dict.get('data', {})
+        data.update({
             'user_id': self.user_id,
             'email': self.email,
             'verified_at': self.verified_at.isoformat() if self.verified_at else None,
         })
+        base_dict['data'] = data
         return base_dict
 
     def __str__(self) -> str:

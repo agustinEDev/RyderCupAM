@@ -43,9 +43,9 @@ FRONTEND_ORIGINS=https://www.rydercupfriends.com
 # Variables de entorno para Mailgun (Email Verification)
 MAILGUN_API_KEY=tu-api-key
 MAILGUN_DOMAIN=tu-dominio-mailgun
-MAILGUN_FROM_EMAIL=noreply@rydercupfriends.com
+MAILGUN_FROM_EMAIL="Ryder Cup Friends <noreply@rydercupfriends.com>"
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=https://www.rydercupfriends.com
 ```
 Ver guía completa en [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md)
 

@@ -17,11 +17,16 @@ export const EmailVerificationBanner = ({ userEmail, onResend }) => {
     setMessage('');
 
     try {
-      // TODO: Implementar cuando el backend tenga el endpoint
-      // await authApi.resendVerificationEmail(userEmail);
+      // Si se proporciona un callback onResend, usarlo
+      if (onResend) {
+        await onResend();
+      } else {
+        // TODO: Implementar cuando el backend tenga el endpoint
+        // await authApi.resendVerificationEmail(userEmail);
 
-      // Por ahora, simular
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        // Por ahora, simular
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
 
       setMessage('✓ Email de verificación enviado');
     } catch (error) {

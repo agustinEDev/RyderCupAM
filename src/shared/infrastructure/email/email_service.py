@@ -44,12 +44,16 @@ class EmailService:
         Returns:
             bool: True si el email se envió correctamente, False en caso contrario
         """
+        # Sanitizar user_name para prevenir inyección de headers
+        # Eliminar saltos de línea y caracteres de control
+        safe_user_name = user_name.replace('\n', '').replace('\r', '').strip()
+
         verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
-        subject = f"Bienvenido a Ryder Cup Friends, {user_name}! | Welcome to Ryder Cup Friends!"
+        subject = f"Bienvenido a Ryder Cup Friends, {safe_user_name}! | Welcome to Ryder Cup Friends!"
 
         text_body = f"""
-Hola {user_name},
+Hola {safe_user_name},
 
 ¡Bienvenido a Ryder Cup Friends!
 
@@ -64,7 +68,7 @@ El equipo de Ryder Cup Friends
 
 ---
 
-Hello {user_name},
+Hello {safe_user_name},
 
 Welcome to Ryder Cup Friends!
 
@@ -121,17 +125,17 @@ The Ryder Cup Friends Team
     <div class="container">
         <!-- Español -->
         <div class="section">
-            <h2>¡Bienvenido a Ryder Cup Friends, {user_name}!</h2>
+            <h2>¡Bienvenido a Ryder Cup Friends, {safe_user_name}!</h2>
             <p>Gracias por registrarte en Ryder Cup Friends.</p>
             <p>Para completar tu registro y activar tu cuenta, por favor confirma tu dirección de correo electrónico:</p>
             <a href="{verification_link}" class="button">Verificar mi email</a>
             <p>O copia y pega este enlace en tu navegador:</p>
             <p style="word-break: break-all; color: #0066cc;">{verification_link}</p>
         </div>
-        
+
         <!-- English -->
         <div class="section">
-            <h2>Welcome to Ryder Cup Friends, {user_name}!</h2>
+            <h2>Welcome to Ryder Cup Friends, {safe_user_name}!</h2>
             <p>Thank you for signing up for Ryder Cup Friends.</p>
             <p>To complete your registration and activate your account, please confirm your email address:</p>
             <a href="{verification_link}" class="button">Verify my email</a>
@@ -150,7 +154,7 @@ The Ryder Cup Friends Team
         """
 
         return self._send_email(
-            to=f"{user_name} <{to_email}>",
+            to=f"{safe_user_name} <{to_email}>",
             subject=subject,
             text=text_body,
             html=html_body

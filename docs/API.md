@@ -123,9 +123,10 @@ Response: 200 OK
 }
 
 Errors:
-400 Bad Request - Token inválido o expirado
+400 Bad Request - Token inválido o no encontrado
 
 Notes:
+- Los tokens no expiran actualmente (sin TTL implementado)
 - El email enviado es bilingüe (Español/Inglés)
 - El usuario puede usar la app sin verificar, pero algunas funcionalidades estarán limitadas en el futuro
 ```

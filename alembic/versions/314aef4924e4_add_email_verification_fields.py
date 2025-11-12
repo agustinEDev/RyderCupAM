@@ -20,11 +20,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Añadir columnas para verificación de email
-    op.add_column('users', sa.Column('email_verified', sa.Boolean(), nullable=False, server_default='false'))
+    op.add_column('users', sa.Column('email_verified', sa.Boolean(), nullable=False, server_default=sa.false()))
     op.add_column('users', sa.Column('verification_token', sa.String(length=255), nullable=True))
+    # Crear índice para búsquedas rápidas por token
+    op.create_index('idx_verification_token', 'users', ['verification_token'])
 
 
 def downgrade() -> None:
-    # Eliminar columnas de verificación de email
+    # Eliminar índice y columnas de verificación de email
+    op.drop_index('idx_verification_token', table_name='users')
     op.drop_column('users', 'verification_token')
     op.drop_column('users', 'email_verified')

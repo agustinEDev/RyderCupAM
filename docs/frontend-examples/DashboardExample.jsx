@@ -5,8 +5,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { EmailVerificationBanner } from '../components/EmailVerificationBanner';
-import { authApi } from '../services/api';
+import { EmailVerificationBanner } from './EmailVerificationBanner';
+import { authApi } from './api';
 
 export const Dashboard = () => {
   const [user, setUser] = useState(null);

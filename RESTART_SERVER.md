@@ -7,7 +7,7 @@ Si tienes uvicorn corriendo, presiona **Ctrl + C** en esa terminal.
 ## Paso 2: Iniciar el servidor de nuevo
 
 ```bash
-cd /Users/agustinestevezdominguez/Documents/RyderCupAm
+cd /path/to/RyderCupAm
 source .venv/bin/activate  # Activar entorno virtual
 uvicorn main:app --reload --log-level info
 ```
