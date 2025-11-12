@@ -66,6 +66,7 @@ class UpdateUserHandicapManuallyUseCase:
 
             # 3. Persistir cambios
             await self._uow.users.save(user)
-            await self._uow.commit()
 
-            return UserResponseDTO.model_validate(user)
+            # El context manager (__aexit__) hace commit automático y publica eventos
+
+        return UserResponseDTO.model_validate(user)

@@ -100,7 +100,6 @@ class UpdateMultipleHandicapsUseCase:
                     stats['errors'] += 1
                     logger.error("Error actualizando hándicap para %s: %s", user.get_full_name(), e)
 
-            # 3. Commit una sola vez al final (transacción única)
-            await self._uow.commit()
+            # El context manager (__aexit__) hace commit automático al final (transacción única)
 
         return stats
