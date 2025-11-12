@@ -80,6 +80,7 @@ class UserResponseDTO(BaseModel):
     handicap_updated_at: Optional[datetime] = Field(None, description="Fecha y hora de la última actualización del handicap.")
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
     updated_at: datetime = Field(..., description="Fecha y hora de la última actualización.")
+    email_verified: bool = Field(default=False, description="Indica si el email del usuario ha sido verificado.")
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
@@ -119,6 +120,7 @@ class LoginResponseDTO(BaseModel):
     access_token: str = Field(..., description="Token JWT de acceso.")
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
+    email_verification_required: bool = Field(default=False, description="Indica si el usuario necesita verificar su email.")
 
 
 # ======================================================================================
@@ -195,3 +197,20 @@ class UpdateSecurityResponseDTO(BaseModel):
     """DTO de salida para actualización de seguridad."""
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
     message: str = Field(default="Datos de seguridad actualizados", description="Mensaje de confirmación.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Verify Email
+# ======================================================================================
+
+class VerifyEmailRequestDTO(BaseModel):
+    """
+    DTO de entrada para verificación de email.
+    """
+    token: str = Field(..., min_length=1, description="Token de verificación de email.")
+
+
+class VerifyEmailResponseDTO(BaseModel):
+    """DTO de salida para verificación de email."""
+    message: str = Field(default="Email verificado exitosamente", description="Mensaje de confirmación.")
+    email_verified: bool = Field(default=True, description="Confirmación de que el email fue verificado.")

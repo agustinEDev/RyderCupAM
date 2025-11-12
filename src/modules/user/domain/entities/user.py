@@ -1,6 +1,7 @@
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Optional, List
+import secrets
 
 from ..value_objects.user_id import UserId
 from ..value_objects.email import Email
@@ -27,6 +28,8 @@ class User:
         handicap_updated_at: Optional[datetime] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
+        email_verified: bool = False,
+        verification_token: Optional[str] = None,
         domain_events: Optional[List[DomainEvent]] = None
     ):
         self.id = id
@@ -38,6 +41,8 @@ class User:
         self.handicap_updated_at = handicap_updated_at
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
+        self.email_verified = email_verified
+        self.verification_token = verification_token
         self._domain_events: List[DomainEvent] = domain_events or []
     
     def get_full_name(self) -> str:
@@ -265,7 +270,12 @@ class User:
 
     def change_email(self, new_email: str) -> None:
         """
-        Cambia el email del usuario.
+        Cambia el email del usuario y resetea la verificación.
+
+        Cuando se cambia el email, el usuario debe verificar el nuevo correo:
+        - Marca email_verified como False
+        - Genera un nuevo token de verificación
+        - Emite evento de cambio de email
 
         Args:
             new_email: Nuevo email (ya validado por el use case)
@@ -282,6 +292,7 @@ class User:
             return  # No cambió nada
 
         self.email = new_email_vo
+        self.email_verified = False  # Requiere nueva verificación
         self.updated_at = datetime.now()
 
         self._add_domain_event(UserEmailChangedEvent(
@@ -312,6 +323,62 @@ class User:
             changed_at=self.updated_at,
             changed_from_ip=None
         ))
+
+    def generate_verification_token(self) -> str:
+        """
+        Genera un token de verificación seguro para confirmar el email.
+
+        Returns:
+            str: Token de verificación único
+        """
+        token = secrets.token_urlsafe(32)
+        self.verification_token = token
+        self.updated_at = datetime.now()
+        return token
+
+    def verify_email(self, token: str) -> bool:
+        """
+        Verifica el email del usuario usando el token proporcionado.
+
+        Args:
+            token: Token de verificación
+
+        Returns:
+            bool: True si la verificación fue exitosa
+
+        Raises:
+            ValueError: Si el email ya está verificado o el token es inválido
+        """
+        from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
+
+        if self.email_verified:
+            raise ValueError("El email ya está verificado")
+
+        if self.verification_token != token:
+            raise ValueError("Token de verificación inválido")
+
+        # Token válido - proceder con verificación
+        self.email_verified = True
+        self.verification_token = None
+        self.updated_at = datetime.now()
+
+        # Emitir evento de dominio
+        self._add_domain_event(EmailVerifiedEvent(
+            user_id=str(self.id.value),
+            email=str(self.email.value),
+            verified_at=self.updated_at
+        ))
+
+        return True
+
+    def is_email_verified(self) -> bool:
+        """
+        Verifica si el email del usuario ha sido confirmado.
+
+        Returns:
+            bool: True si el email está verificado
+        """
+        return self.email_verified
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

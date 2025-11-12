@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.shared.infrastructure.email.email_service import email_service
 
 
 class RegisterUserUseCase:
@@ -79,11 +81,34 @@ class RegisterUserUseCase:
             if handicap_value is not None:
                 new_user.update_handicap(handicap_value)
 
+            # 2.8 Generar token de verificación de email
+            verification_token = new_user.generate_verification_token()
+
             # 3. Guardar el usuario en el repositorio
             await self._uow.users.save(new_user)
 
             # 4. Confirmar la transacción
             await self._uow.commit()
 
-            # 5. Devolver la respuesta como DTO
+            # 5. Enviar email de verificación
+            try:
+                email_sent = email_service.send_verification_email(
+                    to_email=request.email,
+                    user_name=new_user.first_name,
+                    verification_token=verification_token
+                )
+                if not email_sent:
+                    logger.warning(
+                        "No se pudo enviar el email de verificación para el usuario %s",
+                        new_user.id.value
+                    )
+            except (requests.RequestException, ValueError, ConnectionError) as e:
+                # Capturar excepciones específicas de red y validación
+                logger.exception(
+                    "Error al enviar email de verificación para el usuario %s",
+                    new_user.id.value
+                )
+                # No fallar el registro si el email no se pudo enviar
+
+            # 6. Devolver la respuesta como DTO
             return UserResponseDTO.model_validate(new_user)

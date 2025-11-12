@@ -9,10 +9,13 @@ project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
 # 2. Cargar las variables de entorno desde el fichero .env de la raíz del proyecto.
-#    'override=True' asegura que los valores del fichero .env siempre tengan prioridad,
-#    evitando problemas con variables de entorno preexistentes en el sistema.
+#    'override=False' significa que las variables YA EXISTENTES en el entorno tienen prioridad
+#    sobre las del fichero .env. Esto permite:
+#    - Docker Compose: Las variables del docker-compose.yml prevalecen sobre .env
+#    - Desarrollo local: Se usan las del fichero .env (si no hay otras definidas)
+#    - CI/CD: Variables del pipeline tienen precedencia sobre .env
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=project_root / '.env', override=True)
+load_dotenv(dotenv_path=project_root / '.env', override=False)
 # --- Fin de la Configuración del Entorno ---
 
 from logging.config import fileConfig

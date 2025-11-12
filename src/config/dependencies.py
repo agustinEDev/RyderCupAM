@@ -12,6 +12,7 @@ from src.modules.user.application.use_cases.update_multiple_handicaps_use_case i
 from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
 from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
 from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
+from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -254,3 +255,16 @@ async def get_current_user(
         )
 
     return user
+
+def get_verify_email_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow)
+) -> VerifyEmailUseCase:
+    """
+    Proveedor del caso de uso VerifyEmailUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `VerifyEmailUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return VerifyEmailUseCase(uow)

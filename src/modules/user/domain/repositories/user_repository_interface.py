@@ -154,10 +154,26 @@ class UserRepositoryInterface(ABC):
     async def count_all(self) -> int:
         """
         Cuenta el total de usuarios en el repositorio.
-        
+
         Returns:
             int: Número total de usuarios
-            
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
+    async def find_by_verification_token(self, token: str) -> Optional[User]:
+        """
+        Busca un usuario por su token de verificación de email.
+
+        Args:
+            token (str): El token de verificación
+
+        Returns:
+            Optional[User]: El usuario encontrado o None si no existe
+
         Raises:
             RepositoryError: Si ocurre un error de consulta
         """

@@ -34,5 +34,12 @@ class Settings:
         "postgresql+asyncpg://postgres:postgres@localhost:5432/ryderclub"
     )
 
+    # Mailgun Configuration
+    MAILGUN_API_KEY: str = os.getenv("MAILGUN_API_KEY", "")
+    MAILGUN_DOMAIN: str = os.getenv("MAILGUN_DOMAIN", "rydercupfriends.com")
+    MAILGUN_FROM_EMAIL: str = os.getenv("MAILGUN_FROM_EMAIL", "Ryder Cup Friends <noreply@rydercupfriends.com>")
+    MAILGUN_API_URL: str = os.getenv("MAILGUN_API_URL", "https://api.eu.mailgun.net/v3")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
 
 settings = Settings()

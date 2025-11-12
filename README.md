@@ -39,16 +39,23 @@ SECRET_KEY=<random-32-chars>
 ENVIRONMENT=production
 FRONTEND_ORIGINS=https://www.rydercupfriends.com
 # 4. Push a GitHub → Auto-deploy
-```
 
+# Variables de entorno para Mailgun (Email Verification)
+MAILGUN_API_KEY=tu-api-key
+MAILGUN_DOMAIN=tu-dominio-mailgun
+MAILGUN_FROM_EMAIL="Ryder Cup Friends <noreply@rydercupfriends.com>"
+MAILGUN_API_URL=https://api.eu.mailgun.net/v3
+FRONTEND_URL=https://www.rydercupfriends.com
+```
 Ver guía completa en [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md)
+
 
 ## 📚 Documentación
 
 - **[Comandos](CLAUDE.md)** - Desarrollo diario
 - **[Estructura](docs/project-structure.md)** - Organización del código
 - **[Design Doc](docs/design-document.md)** - Especificación técnica
-- **[ADRs](docs/architecture/decisions/)** - Decisiones arquitectónicas
+- **[ADRs - Decisiones Arquitectónicas](docs/architecture/decisions/)** - Registro de decisiones técnicas y cambios relevantes
 - **[API](docs/API.md)** - Endpoints
 - **[Deploy](docs/RUNBOOK.md)** - Operaciones
 
@@ -60,6 +67,7 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 
 - ✅ **User Management** - Registro, autenticación JWT, gestión de perfil
 - ✅ **Authentication** - Login/Logout con tokens JWT + Domain Events
+- ✅ **Email Verification** - Confirmación de email con Mailgun (bilingüe ES/EN)
 - ✅ **Handicap System** - Integración RFEG, actualización automática y batch
 - ✅ **Session Management** - Estrategia progresiva (Fase 1 implementada)
 - 🚧 **Tournament Management** - Creación y gestión de torneos (próximamente)
@@ -91,6 +99,7 @@ pytest --cov=src             # Con cobertura
 # Authentication
 POST   /api/v1/auth/register         # User registration
 POST   /api/v1/auth/login            # JWT authentication
+POST   /api/v1/auth/verify-email     # Email verification
 POST   /api/v1/auth/logout           # Logout with audit
 
 # Handicap Management
@@ -102,7 +111,10 @@ POST   /api/v1/handicaps/update-multiple     # Batch processing
 GET    /api/v1/users/search          # Search by email/name
 ```
 
-**Documentación completa**: `http://localhost:8000/docs` (Swagger UI)
+**Documentación completa**:
+- Swagger UI: `http://localhost:8000/docs`
+- Frontend Integration: [docs/EMAIL_VERIFICATION_INTEGRATION.md](docs/EMAIL_VERIFICATION_INTEGRATION.md)
+- Frontend Examples: [docs/frontend-examples/](docs/frontend-examples/)
 
 ## 💻 Desarrollo
 

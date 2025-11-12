@@ -85,3 +85,9 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         statement = select(func.count()).select_from(User)
         result = await self._session.execute(statement)
         return result.scalar_one()
+
+    async def find_by_verification_token(self, token: str) -> Optional[User]:
+        """Busca un usuario por su token de verificación."""
+        statement = select(User).filter_by(verification_token=token)
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()

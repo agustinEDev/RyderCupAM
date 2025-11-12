@@ -1,7 +1,7 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 from sqlalchemy import (
-    Table, MetaData, Column, String, DateTime, Float
+    Table, MetaData, Column, String, DateTime, Float, Boolean
 )
 from sqlalchemy.orm import registry, composite
 from sqlalchemy.types import TypeDecorator, CHAR
@@ -47,6 +47,8 @@ users_table = Table(
     Column('handicap_updated_at', DateTime, nullable=True),
     Column('created_at', DateTime, nullable=False),
     Column('updated_at', DateTime, nullable=False),
+    Column('email_verified', Boolean, nullable=False, default=False),
+    Column('verification_token', String(255), nullable=True),
 )
 
 def start_mappers():

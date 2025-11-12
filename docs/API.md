@@ -2,15 +2,16 @@
 
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
-**Total Endpoints**: 9 active
+**Total Endpoints**: 10 active
 
 ## Quick Reference
 
 ```
 Authentication
-├── POST /api/v1/auth/register     # User registration
-├── POST /api/v1/auth/login        # JWT authentication
-└── POST /api/v1/auth/logout       # Session logout
+├── POST /api/v1/auth/register       # User registration
+├── POST /api/v1/auth/login          # JWT authentication
+├── POST /api/v1/auth/verify-email   # Email verification
+└── POST /api/v1/auth/logout         # Session logout
 
 User Profile Management
 ├── PATCH /api/v1/users/profile    # Update name/surname (no password required)
@@ -44,8 +45,15 @@ Response: 201 Created
   "first_name": "John",
   "last_name": "Doe",
   "handicap": null,
-  "created_at": "2025-11-09T10:00:00Z"
+  "email_verified": false,
+  "created_at": "2025-11-09T10:00:00Z",
+  "updated_at": "2025-11-09T10:00:00Z"
 }
+
+Notes:
+- A verification email is automatically sent to the user's email
+- The user must verify their email by clicking the link in the email
+- email_verified will be false until verification is completed
 ```
 
 ### Login User
@@ -68,7 +76,9 @@ Response: 200 OK
     "first_name": "John",
     "last_name": "Doe",
     "handicap": 15.5,
-    "created_at": "2025-11-09T10:00:00Z"
+    "email_verified": true,
+    "created_at": "2025-11-09T10:00:00Z",
+    "updated_at": "2025-11-09T10:00:00Z"
   }
 }
 
@@ -96,6 +106,37 @@ Errors:
 401 Unauthorized - Invalid or missing token
 404 Not Found - User not found
 ```
+
+### Verify Email
+```http
+POST /api/v1/auth/verify-email
+
+Request:
+{
+  "token": "verification-token-from-email"
+}
+
+Response: 200 OK
+{
+  "message": "Email verificado exitosamente",
+  "email_verified": true
+}
+
+Errors:
+400 Bad Request - Token inválido o no encontrado
+
+Notes:
+- Los tokens no expiran actualmente (sin TTL implementado)
+- El email enviado es bilingüe (Español/Inglés)
+- El usuario puede usar la app sin verificar, pero algunas funcionalidades estarán limitadas en el futuro
+```
+
+**Flow:**
+1. User registers → Receives verification email
+2. User clicks link in email → Frontend extracts token from URL
+3. Frontend calls this endpoint with token → Email verified
+
+**Link format**: `{FRONTEND_URL}/verify-email?token={token}`
 
 ### Using Authenticated Endpoints
 ```http
@@ -215,7 +256,8 @@ Response: 200 OK
     "email": "newemail@example.com",
     "first_name": "Jane",
     "last_name": "Smith",
-    "handicap": 15.5
+    "handicap": 15.5,
+    "email_verified": false  // Will be false if email was changed
   },
   "message": "Security settings updated successfully"
 }
@@ -230,6 +272,11 @@ Errors:
 **Notes:**
 - **Profile Update**: Does NOT require password - only JWT authentication
 - **Security Update**: Requires current password for verification
+- **Email Change**: When email is updated:
+  - `email_verified` is set to `false`
+  - Verification email is sent to the NEW email address
+  - User must verify the new email to restore full access
+  - Frontend will show verification banner until email is verified
 - Both endpoints can update single or multiple fields
 - Leave fields as `null` or omit them to keep current values
 

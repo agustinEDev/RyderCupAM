@@ -5,6 +5,7 @@ from src.config.dependencies import (
     get_login_user_use_case,
     get_current_user,
     get_logout_user_use_case,
+    get_verify_email_use_case,
 )
 from src.modules.user.application.dto.user_dto import (
     RegisterUserRequestDTO,
@@ -13,10 +14,13 @@ from src.modules.user.application.dto.user_dto import (
     LoginResponseDTO,
     LogoutRequestDTO,
     LogoutResponseDTO,
+    VerifyEmailRequestDTO,
+    VerifyEmailResponseDTO,
 )
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 
 router = APIRouter()
@@ -145,3 +149,44 @@ async def logout_user(
         )
 
     return response
+
+
+@router.post(
+    "/verify-email",
+    response_model=VerifyEmailResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Verificar email",
+    description="Verifica el email del usuario usando el token recibido por correo.",
+    tags=["Authentication"],
+)
+async def verify_email(
+    request: VerifyEmailRequestDTO,
+    use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
+):
+    """
+    Endpoint para verificar el email del usuario.
+
+    El usuario recibe un email con un link que contiene un token.
+    Este endpoint valida el token y marca el email como verificado.
+
+    Args:
+        request: DTO con el token de verificación
+        use_case: Caso de uso de verificación de email
+
+    Returns:
+        VerifyEmailResponseDTO con confirmación de la verificación
+
+    Raises:
+        HTTPException 400: Si el token es inválido o ha expirado
+    """
+    try:
+        await use_case.execute(request.token)
+        return VerifyEmailResponseDTO(
+            message="Email verificado exitosamente",
+            email_verified=True
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

@@ -25,3 +25,7 @@ class UserFinder:
     async def by_full_name(self, full_name: str) -> Optional[User]:
         """Encuentra un usuario por su nombre completo."""
         return await self._user_repository.find_by_full_name(full_name)
+
+    async def by_verification_token(self, token: str) -> Optional[User]:
+        """Encuentra un usuario por su token de verificación."""
+        return await self._user_repository.find_by_verification_token(token)

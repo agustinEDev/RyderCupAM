@@ -52,3 +52,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def count_all(self) -> int:
         return len(self._users)
+
+    async def find_by_verification_token(self, token: str) -> Optional[User]:
+        """Busca un usuario por su token de verificación."""
+        for user in self._users.values():
+            if user.verification_token == token:
+                return user
+        return None
