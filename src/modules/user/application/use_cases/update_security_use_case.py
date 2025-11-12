@@ -6,6 +6,7 @@ Requiere validación de contraseña actual para autorizar los cambios.
 """
 
 import logging
+import requests
 
 from src.modules.user.application.dto.user_dto import (
     UpdateSecurityRequestDTO,
