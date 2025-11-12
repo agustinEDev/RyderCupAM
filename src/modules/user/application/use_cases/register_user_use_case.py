@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +102,11 @@ class RegisterUserUseCase:
                         "No se pudo enviar el email de verificación a %s",
                         request.email
                     )
-            except Exception as e:
-                logger.error(
-                    "Error al enviar email de verificación a %s: %s",
-                    request.email,
-                    str(e),
-                    exc_info=True
+            except (requests.RequestException, ValueError, ConnectionError) as e:
+                # Capturar excepciones específicas de red y validación
+                logger.exception(
+                    "Error al enviar email de verificación a %s",
+                    request.email
                 )
                 # No fallar el registro si el email no se pudo enviar
 

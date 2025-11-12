@@ -44,9 +44,17 @@ class EmailService:
         Returns:
             bool: True si el email se envió correctamente, False en caso contrario
         """
-        # Sanitizar user_name para prevenir inyección de headers
-        # Eliminar saltos de línea y caracteres de control
-        safe_user_name = user_name.replace('\n', '').replace('\r', '').strip()
+        # Sanitizar user_name para prevenir inyección de headers (RFC 5322)
+        # Eliminar caracteres especiales que podrían romper el formato de email headers
+        safe_user_name = (
+            user_name
+            .replace('\n', '')
+            .replace('\r', '')
+            .replace('"', '')
+            .replace('<', '')
+            .replace('>', '')
+            .strip()
+        )
 
         verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
@@ -154,7 +162,7 @@ The Ryder Cup Friends Team
         """
 
         return self._send_email(
-            to=f"{safe_user_name} <{to_email}>",
+            to=f'"{safe_user_name}" <{to_email}>',  # RFC 5322 format with quotes
             subject=subject,
             text=text_body,
             html=html_body

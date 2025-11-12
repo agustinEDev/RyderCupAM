@@ -79,7 +79,20 @@ DOCS_PASSWORD=<contraseña-segura>
 # Aplicación
 PORT=8000
 ENVIRONMENT=production
+
+# Mailgun (Email Verification) - REQUERIDO desde v1.1
+MAILGUN_API_KEY=<tu-api-key-de-mailgun>
+MAILGUN_DOMAIN=rydercupfriends.com
+MAILGUN_FROM_EMAIL=Ryder Cup Friends <noreply@rydercupfriends.com>
+MAILGUN_API_URL=https://api.eu.mailgun.net/v3
+FRONTEND_URL=https://www.rydercupfriends.com
 ```
+
+**⚠️ IMPORTANTE - Email Verification:**
+- Las variables `MAILGUN_*` son **obligatorias** para el sistema de verificación de email
+- `FRONTEND_URL` debe apuntar a tu dominio frontend de producción
+- Sin estas variables, el registro de usuarios funcionará pero no se enviarán emails de verificación
+
 
 ### 🔑 **Generar SECRET_KEY segura:**
 
@@ -234,6 +247,9 @@ Antes de usar en producción:
 - [ ] `DOCS_PASSWORD` cambiada del default
 - [ ] `DATABASE_URL` usando **Internal URL** (no External)
 - [ ] `ENVIRONMENT=production`
+- [ ] `MAILGUN_API_KEY` configurada con tu API key real
+- [ ] `MAILGUN_FROM_EMAIL` con formato correcto (entre comillas si tiene espacios)
+- [ ] `FRONTEND_URL` apuntando a tu dominio de producción (no localhost)
 - [ ] CORS configurado solo para tu dominio frontend
 - [ ] SSL/HTTPS activado (Render lo hace automáticamente)
 
