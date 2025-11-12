@@ -94,8 +94,7 @@ class UpdateSecurityUseCase:
             # Guardar cambios
             await self._uow.users.save(user)
 
-            # Context manager hace commit automático y publica eventos
-            await self._uow.commit()
+            # El context manager (__aexit__) hace commit automático y publica eventos
 
         # Si se cambió el email, enviar email de verificación al NUEVO correo
         if email_changed and verification_token:
