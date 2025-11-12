@@ -270,7 +270,12 @@ class User:
 
     def change_email(self, new_email: str) -> None:
         """
-        Cambia el email del usuario.
+        Cambia el email del usuario y resetea la verificación.
+
+        Cuando se cambia el email, el usuario debe verificar el nuevo correo:
+        - Marca email_verified como False
+        - Genera un nuevo token de verificación
+        - Emite evento de cambio de email
 
         Args:
             new_email: Nuevo email (ya validado por el use case)
@@ -287,6 +292,7 @@ class User:
             return  # No cambió nada
 
         self.email = new_email_vo
+        self.email_verified = False  # Requiere nueva verificación
         self.updated_at = datetime.now()
 
         self._add_domain_event(UserEmailChangedEvent(

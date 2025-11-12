@@ -256,7 +256,8 @@ Response: 200 OK
     "email": "newemail@example.com",
     "first_name": "Jane",
     "last_name": "Smith",
-    "handicap": 15.5
+    "handicap": 15.5,
+    "email_verified": false  // Will be false if email was changed
   },
   "message": "Security settings updated successfully"
 }
@@ -271,6 +272,11 @@ Errors:
 **Notes:**
 - **Profile Update**: Does NOT require password - only JWT authentication
 - **Security Update**: Requires current password for verification
+- **Email Change**: When email is updated:
+  - `email_verified` is set to `false`
+  - Verification email is sent to the NEW email address
+  - User must verify the new email to restore full access
+  - Frontend will show verification banner until email is verified
 - Both endpoints can update single or multiple fields
 - Leave fields as `null` or omit them to keep current values
 
