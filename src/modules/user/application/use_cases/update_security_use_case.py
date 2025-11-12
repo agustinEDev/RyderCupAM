@@ -106,15 +106,13 @@ class UpdateSecurityUseCase:
                 )
                 if not email_sent:
                     logger.warning(
-                        "No se pudo enviar el email de verificación a %s",
-                        request.new_email
+                        "No se pudo enviar el email de verificación para el usuario %s",
+                        user.id.value
                     )
-            except Exception as e:
-                logger.error(
-                    "Error al enviar email de verificación a %s: %s",
-                    request.new_email,
-                    str(e),
-                    exc_info=True
+            except (requests.RequestException, ValueError, ConnectionError) as e:
+                logger.exception(
+                    "Error al enviar email de verificación para el usuario %s",
+                    user.id.value
                 )
                 # No fallar la actualización si el email no se pudo enviar
 

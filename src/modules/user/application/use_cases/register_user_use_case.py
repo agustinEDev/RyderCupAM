@@ -99,14 +99,14 @@ class RegisterUserUseCase:
                 )
                 if not email_sent:
                     logger.warning(
-                        "No se pudo enviar el email de verificación a %s",
-                        request.email
+                        "No se pudo enviar el email de verificación para el usuario %s",
+                        new_user.id.value
                     )
             except (requests.RequestException, ValueError, ConnectionError) as e:
                 # Capturar excepciones específicas de red y validación
                 logger.exception(
-                    "Error al enviar email de verificación a %s",
-                    request.email
+                    "Error al enviar email de verificación para el usuario %s",
+                    new_user.id.value
                 )
                 # No fallar el registro si el email no se pudo enviar
 

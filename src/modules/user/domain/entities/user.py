@@ -344,30 +344,32 @@ class User:
             token: Token de verificación
 
         Returns:
-            bool: True si la verificación fue exitosa, False si el token no coincide
+            bool: True si la verificación fue exitosa
 
         Raises:
-            ValueError: Si el email ya está verificado
+            ValueError: Si el email ya está verificado o el token es inválido
         """
         from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
 
         if self.email_verified:
             raise ValueError("El email ya está verificado")
 
-        if self.verification_token == token:
-            self.email_verified = True
-            self.verification_token = None
-            self.updated_at = datetime.now()
+        if self.verification_token != token:
+            raise ValueError("Token de verificación inválido")
 
-            # Emitir evento de dominio
-            self._add_domain_event(EmailVerifiedEvent(
-                user_id=str(self.id.value),
-                email=str(self.email.value),
-                verified_at=self.updated_at
-            ))
+        # Token válido - proceder con verificación
+        self.email_verified = True
+        self.verification_token = None
+        self.updated_at = datetime.now()
 
-            return True
-        return False
+        # Emitir evento de dominio
+        self._add_domain_event(EmailVerifiedEvent(
+            user_id=str(self.id.value),
+            email=str(self.email.value),
+            verified_at=self.updated_at
+        ))
+
+        return True
 
     def is_email_verified(self) -> bool:
         """

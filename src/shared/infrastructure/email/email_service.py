@@ -212,17 +212,17 @@ The Ryder Cup Friends Team
             )
 
             if response.status_code == 200:
-                logger.info(f"Email enviado correctamente a {to}")
+                logger.info("Email de verificación enviado correctamente")
                 return True
             else:
-                logger.error(f"Error al enviar email: {response.status_code} - {response.text}")
+                logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
                 return False
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error de red al enviar email: {str(e)}")
+            logger.error("Error de red al enviar email: %s", str(e))
             return False
         except Exception as e:
-            logger.error(f"Error inesperado al enviar email: {str(e)}")
+            logger.error("Error inesperado al enviar email: %s", str(e))
             return False
 
 
