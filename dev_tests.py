@@ -28,6 +28,7 @@ ICONS = {
     "FAILED": "❌",
     "SKIPPED": "⚠️ ",
     "ERROR": "🔥",
+    "WARNING": "⚠️ ",
     "SUMMARY": "📊",
     "TIME": "⏱️ ",
     "SLOW": "🐢",
@@ -60,8 +61,8 @@ def discover_tests() -> dict:
             test_structure[scope][module][layer].append(test_file)
     return test_structure
 
-def run_tests() -> str:
-    """Ejecuta pytest, guarda el reporte JSON y luego lo formatea."""
+def run_tests() -> tuple[str, int]:
+    """Ejecuta pytest, guarda el reporte JSON y captura warnings de stderr."""
     REPORTS_DIR.mkdir(exist_ok=True)
     report_file = REPORTS_DIR / "test_report.json"
     command = [
@@ -70,7 +71,24 @@ def run_tests() -> str:
         "-n", "auto"
     ]
     print(f"{ICONS['ROCKET']} Ejecutando pytest con paralelización automática...")
-    subprocess.run(command, check=False, capture_output=True, text=True)
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+
+    # Contar warnings en stderr
+    warning_count = 0
+    warning_lines = []
+    for line in result.stderr.split('\n'):
+        if 'warning' in line.lower() or 'Warning' in line:
+            # Filtrar warnings reales, no mensajes informativos
+            if any(keyword in line for keyword in ['PytestWarning', 'DeprecationWarning', 'PytestCollectionWarning', 'PytestDeprecationWarning']):
+                warning_count += 1
+                warning_lines.append(line.strip())
+
+    # Guardar warnings en un archivo separado
+    warnings_file = REPORTS_DIR / "warnings.txt"
+    with open(warnings_file, 'w') as f:
+        f.write(f"Total Warnings: {warning_count}\n\n")
+        for line in warning_lines:
+            f.write(f"{line}\n")
 
     try:
         with open(report_file, 'r') as f:
@@ -81,7 +99,8 @@ def run_tests() -> str:
         print(COLORS["RED"] + "Error: No se pudo leer o formatear el reporte JSON." + COLORS["ENDC"])
         with open(report_file, 'w') as f:
             f.write("{}")
-    return str(report_file)
+
+    return str(report_file), warning_count
 
 def get_docstrings_from_file(filepath: str) -> dict:
     """Extrae todos los docstrings de un fichero de test usando AST."""
@@ -107,20 +126,20 @@ def get_docstrings_from_file(filepath: str) -> dict:
     DOCSTRING_CACHE[filepath] = docs
     return docs
 
-def process_results(report_file: str) -> dict:
+def process_results(report_file: str, warning_count: int) -> dict:
     """Procesa el reporte JSON y extrae las estadísticas."""
     try:
         with open(report_file) as f:
             report = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"summary": {}, "tests": [], "by_file": defaultdict(list)}
+        return {"summary": {}, "tests": [], "by_file": defaultdict(list), "warning_count": 0, "warning_lines": []}
 
     results_by_file = defaultdict(list)
     for test in report.get("tests", []):
         filepath, *rest = test["nodeid"].split("::")
         test_name = "::".join(rest)
         duration = test.get("call", {}).get("duration", 0.0)
-        
+
         results_by_file[filepath].append({
             "name": test_name,
             "nodeid": test["nodeid"],  # Guardamos el nodeid original
@@ -128,10 +147,21 @@ def process_results(report_file: str) -> dict:
             "duration": duration
         })
 
+    # Leer warnings del archivo generado
+    warnings_file = Path("tests/reports/warnings.txt")
+    warning_lines = []
+    if warnings_file.exists():
+        with open(warnings_file) as f:
+            lines = f.readlines()
+            if len(lines) > 2:  # Skip header lines
+                warning_lines = [line.strip() for line in lines[2:] if line.strip()]
+
     return {
         "summary": report.get("summary", {}),
         "tests": report.get("tests", []),
-        "by_file": results_by_file
+        "by_file": results_by_file,
+        "warning_count": warning_count,
+        "warning_lines": warning_lines
     }
 
 def display_results(test_structure: dict, results_by_file: dict):
@@ -176,13 +206,24 @@ def generate_markdown_report(results: dict, total_time: float):
         result_status = '✅ ÉXITO' if (success_rate == 100 and failed == 0) else '❌ FALLIDO'
         f.write(f"- **Resultado General**: {result_status}\n\n")
 
-    def _write_global_stats(f, summary: dict, success_rate: float, total_time: float) -> None:
+    def _write_warnings_section(f, warning_count: int, warning_lines: list) -> None:
+        """Escribe la sección de warnings si las hay."""
+        if warning_count > 0:
+            f.write("## ⚠️ Warnings\n\n")
+            f.write(f"Se encontraron **{warning_count}** warnings durante la ejecución:\n\n")
+            if warning_lines:
+                for warning_line in warning_lines:
+                    f.write(f"- `{warning_line}`\n")
+            f.write("\n")
+
+    def _write_global_stats(f, summary: dict, success_rate: float, total_time: float, warning_count: int) -> None:
         """Escribe la tabla de estadísticas globales."""
         f.write("## 📊 Estadísticas Globales\n\n")
         f.write("| Métrica | Valor |\n|---|---|\n")
         f.write(f"| ✅ **Tests Pasados** | {summary.get('passed', 0)} |\n")
         f.write(f"| ❌ **Tests Fallados** | {summary.get('failed', 0)} |\n")
         f.write(f"| ⚠️ **Tests Omitidos** | {summary.get('skipped', 0)} |\n")
+        f.write(f"| ⚠️ **Warnings** | {warning_count} |\n")
         f.write(f"| **Total de Tests** | {summary.get('total', 0)} |\n")
         f.write(f"| **Tasa de Éxito** | {success_rate:.2f}% |\n")
         f.write(f"| ⏱️ **Duración Total** | {total_time:.2f} segundos |\n\n")
@@ -217,27 +258,30 @@ def generate_markdown_report(results: dict, total_time: float):
     passed = summary.get("passed", 0)
     failed = summary.get("failed", 0)
     total = summary.get("total", 0)
+    warning_count = results.get("warning_count", 0)
+    warning_lines = results.get("warning_lines", [])
     success_rate = (passed / total * 100) if total > 0 else 0
-    
+
     report_path = REPORTS_DIR / "test_summary.md"
-    slowest_tests = sorted([t for t in results['tests'] if t.get('outcome') == 'passed'], 
-                           key=lambda x: x.get('call', {}).get('duration', 0.0), 
+    slowest_tests = sorted([t for t in results['tests'] if t.get('outcome') == 'passed'],
+                           key=lambda x: x.get('call', {}).get('duration', 0.0),
                            reverse=True)
-    
+
     # Crear lookup optimizado y set para búsquedas rápidas
     test_lookup = {test['nodeid']: test for test in results['tests']}
     slowest_test_nodeids = {test['nodeid'] for test in slowest_tests[:5]}
-    
+
     with open(report_path, "w") as f:
         _write_markdown_header(f, success_rate, failed)
-        _write_global_stats(f, summary, success_rate, total_time)
-        
+        _write_global_stats(f, summary, success_rate, total_time, warning_count)
+        _write_warnings_section(f, warning_count, warning_lines)
+
         for filepath, tests in sorted(results["by_file"].items()):
             _write_test_details(f, filepath, tests, slowest_test_nodeids, test_lookup)
 
     print(f"\n{ICONS['DOC']} Reporte Markdown generado en: {report_path}")
 
-def display_summary(summary: dict, tests: list, total_time: float):
+def display_summary(summary: dict, tests: list, warning_count: int, total_time: float):
     """Muestra un resumen final elegante y detallado."""
     passed = summary.get("passed", 0)
     failed = summary.get("failed", 0)
@@ -253,6 +297,7 @@ def display_summary(summary: dict, tests: list, total_time: float):
     print(f"  - {ICONS['FAILED']} Fallaron: {failed}")
     print(f"  - {ICONS['ERROR']} Errores: {error}")
     print(f"  - {ICONS['SKIPPED']} Omitidos: {skipped}")
+    print(f"  - {ICONS['WARNING']} Warnings: {warning_count}")
     print(f"  - Total: {total} tests")
     print("-" * 40)
     print(f"  - {COLORS['GREEN']}{COLORS['BOLD']}Tasa de Éxito: {success_rate:.2f}%{COLORS['ENDC']}")
@@ -272,19 +317,19 @@ def display_summary(summary: dict, tests: list, total_time: float):
 def main():
     """Función principal del script."""
     start_time = time.time()
-    
+
     test_structure = discover_tests()
-    report_file = run_tests()
-    results = process_results(report_file)
-    
+    report_file, warning_count = run_tests()
+    results = process_results(report_file, warning_count)
+
     display_results(test_structure, results["by_file"])
-    
+
     total_time = time.time() - start_time
-    display_summary(results["summary"], results["tests"], total_time)
-    
+    display_summary(results["summary"], results["tests"], results.get("warning_count", 0), total_time)
+
     # Generar el nuevo reporte en Markdown
     generate_markdown_report(results, total_time)
-    
+
     if results["summary"].get("failed", 0) > 0 or results["summary"].get("error", 0) > 0:
         sys.exit(1)
 

@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**v2.0** · 9 Nov 2025 · En desarrollo
+**v2.1** · 14 Nov 2025 · En desarrollo
 
 ---
 
@@ -218,19 +218,20 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ## Testing
 
-**Estrategia**: Test Pyramid (87% unit, 13% integration)
+**Estrategia**: Test Pyramid (85.7% unit, 14.3% integration)
 
 ```
-395 tests (100% passing)
-├── Unit: 341 (26 archivos)
-│   ├── Domain: ~220
-│   ├── Application: ~78
-│   └── Infrastructure: ~40
-└── Integration: 54 (8 archivos)
+420 tests (100% passing, 0 warnings)
+├── Unit: 360 (27 archivos)
+│   ├── Domain: ~240
+│   ├── Application: ~85
+│   └── Infrastructure: ~35
+└── Integration: 60 (8 archivos)
 ```
 
 **Cobertura**: >90% en lógica de negocio
-**Performance**: ~13s (paralelización con pytest-xdist)
+**Email Verification**: 100% (24 tests en 3 niveles)
+**Performance**: ~25s (paralelización con pytest-xdist)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
@@ -250,23 +251,25 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ## 📊 Métricas del Proyecto
 
-**Última actualización**: 9 Nov 2025
+**Última actualización**: 14 Nov 2025
 
 ### Testing
 
 | Métrica | Valor |
 |---------|-------|
-| Tests totales | 395 (100% passing) |
-| Tests unitarios | 341 (26 archivos) |
-| Tests integración | 54 (8 archivos) |
+| Tests totales | 420 (100% passing) |
+| Warnings | 0 (todos corregidos) |
+| Tests unitarios | 360 (27 archivos) |
+| Tests integración | 60 (8 archivos) |
 | Cobertura | >90% |
-| Tiempo ejecución | ~13s (paralelo) |
+| Email Verification | 100% (24 tests) |
+| Tiempo ejecución | ~25s (paralelo) |
 
 ### Progreso de Módulos
 
 | Módulo | Estado | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Completo + Auth | 341+ | 9 |
+| User | ✅ Completo + Auth + Email Verification | 360+ | 8 |
 | Tournament | 🚧 En desarrollo | 0 | 0 |
 | Team | ⏳ Pendiente | 0 | 0 |
 
