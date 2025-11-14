@@ -269,7 +269,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Módulo | Estado | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Completo + Auth + Email Verification | 360+ | 8 |
+| User | ✅ Completo + Auth + Email Verification | 360+ | 10 |
 | Tournament | 🚧 En desarrollo | 0 | 0 |
 | Team | ⏳ Pendiente | 0 | 0 |
 
@@ -303,13 +303,14 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `UpdateMultipleHandicapsUseCase` - Batch update con estadísticas
 - `FindUserUseCase` (10 tests) - Búsqueda por email o nombre
 
-### API Endpoints Activos (9)
+### API Endpoints Activos (10)
 
 | Endpoint | Método | Auth | Status |
 |----------|--------|------|--------|
 | `/api/v1/auth/register` | POST | No | ✅ Activo |
 | `/api/v1/auth/login` | POST | No | ✅ Activo |
 | `/api/v1/auth/logout` | POST | JWT | ✅ Activo |
+| `/api/v1/auth/verify-email` | POST | No | ✅ Activo |
 | `/api/v1/users/profile` | PATCH | JWT | ✅ Activo |
 | `/api/v1/users/security` | PATCH | JWT | ✅ Activo |
 | `/api/v1/users/search` | GET | JWT | ✅ Activo |
