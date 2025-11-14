@@ -18,32 +18,32 @@ from src.shared.domain.events.exceptions import EventHandlerError
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 
 
-class TestEvent(DomainEvent):
+class SampleEvent(DomainEvent):
     """Evento de prueba para tests."""
-    
+
     def __init__(self, test_data: str):
         super().__init__()
         self.test_data = test_data
 
 
-class MockEventHandler(EventHandler[TestEvent]):
+class MockEventHandler(EventHandler[SampleEvent]):
     """Handler mock para tests."""
-    
+
     def __init__(self, should_fail: bool = False):
         self.handle_mock = AsyncMock()
         self.should_fail = should_fail
         self.handled_events = []
-        
+
         if should_fail:
             self.handle_mock.side_effect = Exception("Handler error")
-    
-    async def handle(self, event: TestEvent) -> None:
+
+    async def handle(self, event: SampleEvent) -> None:
         self.handled_events.append(event)
         await self.handle_mock(event)
-    
+
     @property
-    def event_type(self) -> type[TestEvent]:
-        return TestEvent
+    def event_type(self) -> type[SampleEvent]:
+        return SampleEvent
 
 
 class MockUserRegisteredHandler(EventHandler[UserRegisteredEvent]):
@@ -115,7 +115,7 @@ class TestInMemoryEventBusBasicOperations:
         event_bus.register(handler)
         
         # Assert
-        handlers = event_bus.get_handlers(TestEvent)
+        handlers = event_bus.get_handlers(SampleEvent)
         assert len(handlers) == 1
         assert handlers[0] == handler
     
@@ -136,7 +136,7 @@ class TestInMemoryEventBusBasicOperations:
         event_bus.register(handler2)
         
         # Assert
-        handlers = event_bus.get_handlers(TestEvent)
+        handlers = event_bus.get_handlers(SampleEvent)
         assert len(handlers) == 2
         assert handler1 in handlers
         assert handler2 in handlers
@@ -158,7 +158,7 @@ class TestInMemoryEventBusBasicOperations:
         event_bus.register(user_handler)
         
         # Assert
-        test_handlers = event_bus.get_handlers(TestEvent)
+        test_handlers = event_bus.get_handlers(SampleEvent)
         user_handlers = event_bus.get_handlers(UserRegisteredEvent)
         
         assert len(test_handlers) == 1
@@ -182,7 +182,7 @@ class TestInMemoryEventBusBasicOperations:
         event_bus.unregister(handler)
         
         # Assert
-        handlers = event_bus.get_handlers(TestEvent)
+        handlers = event_bus.get_handlers(SampleEvent)
         assert len(handlers) == 0
     
     def test_clear_handlers(self):
@@ -221,7 +221,7 @@ class TestInMemoryEventBusPublishing:
         event_bus = InMemoryEventBus()
         handler = MockEventHandler()
         event_bus.register(handler)
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act
         await event_bus.publish(event)
@@ -245,7 +245,7 @@ class TestInMemoryEventBusPublishing:
         handler2 = MockEventHandler()
         event_bus.register(handler1)
         event_bus.register(handler2)
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act
         await event_bus.publish(event)
@@ -266,7 +266,7 @@ class TestInMemoryEventBusPublishing:
         """
         # Arrange
         event_bus = InMemoryEventBus()
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act & Assert (no debe lanzar excepción)
         await event_bus.publish(event)
@@ -285,9 +285,9 @@ class TestInMemoryEventBusPublishing:
         event_bus.register(handler)
         
         events = [
-            TestEvent("event 1"),
-            TestEvent("event 2"),
-            TestEvent("event 3")
+            SampleEvent("event 1"),
+            SampleEvent("event 2"),
+            SampleEvent("event 3")
         ]
         
         # Act
@@ -313,7 +313,7 @@ class TestInMemoryEventBusPublishing:
         event_bus.register(failing_handler)
         event_bus.register(working_handler)
         
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act
         await event_bus.publish(event)
@@ -368,5 +368,5 @@ class TestInMemoryEventBusStatistics:
         # Assert
         assert stats["total_event_types"] == 2
         assert stats["total_handlers"] == 3
-        assert stats["handlers_by_event_type"]["TestEvent"] == 2
+        assert stats["handlers_by_event_type"]["SampleEvent"] == 2
         assert stats["handlers_by_event_type"]["UserRegisteredEvent"] == 1

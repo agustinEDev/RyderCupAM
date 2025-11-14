@@ -15,26 +15,26 @@ from src.shared.domain.events.domain_event import DomainEvent
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 
 
-class TestEvent(DomainEvent):
+class SampleEvent(DomainEvent):
     """Evento de prueba para tests."""
-    
+
     def __init__(self, test_data: str):
         super().__init__()
         self.test_data = test_data
 
 
-class ConcreteEventHandler(EventHandler[TestEvent]):
+class ConcreteEventHandler(EventHandler[SampleEvent]):
     """Handler concreto para tests."""
-    
+
     def __init__(self):
         self.handled_events = []
-    
-    async def handle(self, event: TestEvent) -> None:
+
+    async def handle(self, event: SampleEvent) -> None:
         self.handled_events.append(event)
-    
+
     @property
-    def event_type(self) -> type[TestEvent]:
-        return TestEvent
+    def event_type(self) -> type[SampleEvent]:
+        return SampleEvent
 
 
 class TestEventHandlerInterface:
@@ -80,7 +80,7 @@ class TestEventHandlerInterface:
         """
         # Arrange
         handler = ConcreteEventHandler()
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act
         await handler.handle(event)
@@ -98,7 +98,7 @@ class TestEventHandlerInterface:
         """
         # Arrange
         handler = ConcreteEventHandler()
-        event = TestEvent("test data")
+        event = SampleEvent("test data")
         
         # Act
         result = handler.can_handle(event)
@@ -142,7 +142,7 @@ class TestEventHandlerInterface:
         event_type = handler.event_type
         
         # Assert
-        assert event_type == TestEvent
+        assert event_type == SampleEvent
         assert issubclass(event_type, DomainEvent)
 
 
@@ -165,18 +165,18 @@ class TestEventHandlerValidation:
             IncompleteEventHandler()
 
 
-class AsyncConcreteEventHandler(EventHandler[TestEvent]):
+class AsyncConcreteEventHandler(EventHandler[SampleEvent]):
     """Handler asíncrono para tests."""
-    
+
     def __init__(self):
         self.handle_mock = AsyncMock()
-    
-    async def handle(self, event: TestEvent) -> None:
+
+    async def handle(self, event: SampleEvent) -> None:
         await self.handle_mock(event)
-    
+
     @property
-    def event_type(self) -> type[TestEvent]:
-        return TestEvent
+    def event_type(self) -> type[SampleEvent]:
+        return SampleEvent
 
 
 class TestEventHandlerAsyncBehavior:
@@ -192,7 +192,7 @@ class TestEventHandlerAsyncBehavior:
         """
         # Arrange
         handler = AsyncConcreteEventHandler()
-        event = TestEvent("async test")
+        event = SampleEvent("async test")
         
         # Act
         await handler.handle(event)

@@ -31,13 +31,14 @@ class TestUserRepositoryInterface:
         """Verifica que la interfaz define todos los métodos requeridos."""
         required_methods = {
             'save',
-            'find_by_id', 
+            'find_by_id',
             'find_by_email',
             'exists_by_email',
             'update',
             'delete_by_id',
             'find_all',
-            'count_all'
+            'count_all',
+            'find_by_verification_token'
         }
         
         interface_methods = {
@@ -113,14 +114,23 @@ class TestUserRepositoryInterface:
         """Verifica la signatura del método count_all."""
         method = getattr(UserRepositoryInterface, 'count_all')
         type_hints = get_type_hints(method)
-        
+
         assert type_hints['return'] == int
+
+    def test_find_by_verification_token_method_signature(self):
+        """Verifica la signatura del método find_by_verification_token."""
+        method = getattr(UserRepositoryInterface, 'find_by_verification_token')
+        type_hints = get_type_hints(method)
+
+        assert 'token' in type_hints
+        assert type_hints['token'] == str
 
     def test_all_methods_are_async(self):
         """Verifica que todos los métodos públicos son async."""
         methods_to_check = [
             'save', 'find_by_id', 'find_by_email', 'exists_by_email',
-            'update', 'delete_by_id', 'find_all', 'count_all'
+            'update', 'delete_by_id', 'find_all', 'count_all',
+            'find_by_verification_token'
         ]
         
         for method_name in methods_to_check:
@@ -162,7 +172,11 @@ class TestUserRepositoryInterface:
             
             async def count_all(self) -> int:
                 return 0
-        
+
+            async def find_by_verification_token(self, token: str):
+                # Mock implementation - returns None for test
+                return None
+
         # Debe poder instanciarse sin problemas
         mock_repo = MockUserRepository()
         assert isinstance(mock_repo, UserRepositoryInterface)

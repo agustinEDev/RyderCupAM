@@ -197,17 +197,17 @@ class TestFindUserUseCase:
         assert "notfound@example.com" in error_message
         assert "Nonexistent User" in error_message
 
-    def test_find_user_validates_dto_constraints(self):
+    async def test_find_user_validates_dto_constraints(self):
         """
         Verifica que el DTO valida correctamente las restricciones.
         """
         # Act & Assert - Sin ningún campo debe fallar
         with pytest.raises(ValueError) as exc_info:
             FindUserRequestDTO(email=None, full_name=None)
-        
+
         assert "al menos" in str(exc_info.value).lower()
 
-    def test_find_user_response_dto_structure(self, sample_user):
+    async def test_find_user_response_dto_structure(self, sample_user):
         """
         Verifica que el DTO de respuesta tiene la estructura correcta.
         """
@@ -217,7 +217,7 @@ class TestFindUserUseCase:
             email=sample_user.email.value,
             full_name=sample_user.get_full_name()
         )
-        
+
         # Assert
         assert hasattr(response, 'user_id')
         assert hasattr(response, 'email')
