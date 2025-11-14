@@ -1,9 +1,9 @@
 # 📋 Ryder Cup Manager API - Progress Log
 
-**Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup  
-**Arquitectura**: Clean Architecture, Event-Driven, FastAPI  
+**Proyecto**: API REST para la gestión de torneos de golf estilo Ryder Cup
+**Arquitectura**: Clean Architecture, Event-Driven, FastAPI
 **Creación**: 31 de octubre de 2025
-**Última Actualización**: 12 de noviembre de 2025 (Sesión 3)
+**Última Actualización**: 14 de noviembre de 2025 (Sesión 4)
 
 ---
 
@@ -46,12 +46,13 @@ Estas son las directrices para nuestra forma de trabajar en este proyecto:
 - ✅ **Deployment Producción**: API y Frontend desplegados en Render.com con CORS seguro
 
 ### 📈 **Métricas Clave**
-- **Tests Totales**: **395/395** pasando (100% éxito)
-- **Tests Unitarios**: 341 (86%)
-- **Tests Integración**: 54 (14%)
+- **Tests Totales**: **420/420** pasando (100% éxito) ✅
+- **Warnings**: **0** (todos corregidos) 🎉
+- **Tests Unitarios**: 360 (85.7%)
+- **Tests Integración**: 60 (14.3%)
 - **Cobertura**: >90% en lógica de negocio crítica
-- **Performance**: ~13 segundos ejecución completa (paralelo)
-- **API Endpoints**: 10 endpoints funcionales
+- **Performance**: ~25 segundos ejecución completa (paralelo)
+- **API Endpoints**: 8 endpoints funcionales
 - **Módulos Completos**: User Management + Authentication + Email Verification + Profile Management + Handicap Management + External Services
 
 ---
@@ -413,6 +414,52 @@ Las decisiones importantes están registradas en **ADRs** (`docs/architecture/de
 - **Funcionalidades**: User Management + Authentication + **Email Verification** + Profile Management + Security Management + Handicap Management + External Services + Session Management
 - **Email**: Bilingüe ES/EN, HTML responsive, envío automático en registro
 - **Documentación**: ADR-019 completado, guías de integración actualizadas
+
+---
+
+## 📊 **Sesión 4 - Test Coverage & Quality Improvement**
+**Fecha**: 14 de noviembre de 2025
+**Objetivo**: Completar cobertura de tests para Email Verification y eliminar warnings
+
+### **Trabajo Realizado**
+
+#### 1. **Tests para Email Verification (24 tests nuevos)**
+- ✅ **Tests Unitarios Entidad User (12 tests)**:
+  - Generación correcta de token, tokens únicos, actualización timestamp
+  - Verificación exitosa, rechazo token inválido, no permite re-verificar
+  - Limpieza de token, emisión de EmailVerifiedEvent
+  - Estado inicial y verificado
+
+- ✅ **Tests Unitarios VerifyEmailUseCase (8 tests)**:
+  - Archivo creado: `test_verify_email_use_case.py`
+  - Casos: exitoso, token inválido, entrada vacía, usuario no encontrado
+  - Persistencia, email ya verificado, token incorrecto, limpieza
+
+- ✅ **Tests Integración API (4 tests)**:
+  - Agregados a `test_auth_routes.py`
+  - Endpoint 200 OK, 400 token inválido, 422 token vacío, re-verificación
+
+#### 2. **Corrección de Warnings de Pytest (5 warnings → 0)**
+- ✅ **Warnings de Naming**: `TestEvent` → `SampleEvent` (3 archivos)
+- ✅ **Warnings de pytestmark**: Tests síncronos → async (2 tests)
+
+#### 3. **Mejoras en dev_tests.py**
+- ✅ Captura de warnings desde stderr
+- ✅ Nuevo reporte: warnings.txt
+- ✅ Display mejorado con conteo de warnings
+
+#### 4. **Helper Functions**
+- ✅ `get_user_by_email()` en conftest.py para tests de integración
+
+### **Métricas de la Sesión**
+- **Tests Totales**: 395 → **420** (+25, +6.3%)
+- **Warnings**: 5 → **0** (100% eliminados)
+- **Cobertura Email Verification**: 0% → 100% (3 niveles)
+
+### **Estado Final**
+- **Tests**: **420/420 pasando** (100% éxito, 0 warnings) ✅
+- **Quality**: Código limpio, cero warnings
+- **Documentación**: CLAUDE.md, README.md, tests/README.md actualizados
 
 ---
 

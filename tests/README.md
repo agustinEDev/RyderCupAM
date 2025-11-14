@@ -19,9 +19,10 @@ La carpeta `tests/` refleja la estructura de `src/` y los principios de la Clean
 tests/
 ├── reports/          # 📊 Reportes generados por el script de tests
 │   ├── test_report.json
-│   └── test_summary.md
+│   ├── test_summary.md
+│   └── warnings.txt
 │
-├── unit/             # 🔬 Tests Unitarios (rápidos y aislados)
+├── unit/             # 🔬 Tests Unitarios (360 tests - rápidos y aislados)
 │   ├── modules/
 │   │   └── user/
 │   │       └── domain/
@@ -34,7 +35,7 @@ tests/
 │           ├── events/
 │           └── repositories/ (interfaces)
 │
-└── integration/      # 🔗 Tests de Integración (requieren entorno Docker)
+└── integration/      # 🔗 Tests de Integración (60 tests - requieren entorno Docker)
     ├── api/          # -> Prueban los endpoints de FastAPI
     ├── domain_events/ # -> Prueban el flujo completo de eventos
     └── modules/
@@ -115,7 +116,7 @@ Este es el corazón de nuestra configuración de `pytest`. Define fixtures y hoo
 
 ## �📊 Interpretación de los Reportes
 
-Después de cada ejecución de `dev_tests.py`, encontrarás dos reportes en la carpeta `tests/reports/`:
+Después de cada ejecución de `dev_tests.py`, encontrarás tres reportes en la carpeta `tests/reports/`:
 
 1.  **`test_report.json`**:
     -   **Propósito**: Fichero de datos crudos generado por `pytest-json-report`.
@@ -124,7 +125,13 @@ Después de cada ejecución de `dev_tests.py`, encontrarás dos reportes en la c
 2.  **`test_summary.md`**:
     -   **Propósito**: Un reporte en formato Markdown, legible para humanos, generado por nuestro script.
     -   **Contenido**:
-        -   Resumen global con estadísticas (tests pasados, fallados, tasa de éxito).
+        -   Resumen global con estadísticas (tests pasados, fallados, tasa de éxito, **warnings**).
+        -   Sección dedicada de warnings con detalles completos.
         -   Lista de los 3 tests más lentos para identificar cuellos de botella.
         -   Detalle de cada test fallado, incluyendo el `traceback` completo del error.
     -   **Uso**: Es la forma más rápida de analizar los resultados de una ejecución y entender por qué ha fallado un test.
+
+3.  **`warnings.txt`**:
+    -   **Propósito**: Captura todos los warnings emitidos por pytest durante la ejecución.
+    -   **Contenido**: Lista completa de warnings con ubicación del archivo y línea.
+    -   **Uso**: Identificar deprecaciones, configuraciones faltantes o problemas potenciales en el código o dependencias.

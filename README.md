@@ -2,10 +2,11 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-395%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-420%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
+[![Warnings](https://img.shields.io/badge/warnings-0-brightgreen)](.)
 
 ## 🌐 Frontend
 
@@ -85,13 +86,17 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (360 tests, ~12s)
-pytest tests/unit/           # Unit tests (313)
-pytest tests/integration/    # Integration tests (47)
+python dev_tests.py          # Full suite (420 tests, ~25s con paralelización)
+pytest tests/unit/           # Unit tests (360 tests)
+pytest tests/integration/    # Integration tests (60 tests)
 pytest --cov=src             # Con cobertura
 ```
 
-**Cobertura**: >90% en lógica de negocio
+**Estadísticas**:
+- **420 tests** pasando (100% ✅)
+- **0 warnings** (todos corregidos)
+- **Cobertura**: >90% en lógica de negocio
+- **Cobertura Email Verification**: 100% (24 tests en 3 niveles)
 
 ### Endpoints API Disponibles
 
@@ -133,14 +138,15 @@ mypy src/
 
 ## 📊 Estado del Proyecto
 
-**Fase 1: Foundation** ✅ Completado (9 Nov 2025)
+**Fase 1: Foundation** ✅ Completado (14 Nov 2025)
 - Clean Architecture + DDD completo
 - User management + JWT authentication
+- **Email Verification** con Mailgun (bilingüe)
 - Login/Logout con Domain Events
 - Session Management (Fase 1)
 - Handicap system (RFEG integration + batch)
-- 360 tests (100% passing)
-- 7 endpoints API funcionales
+- **420 tests** (100% passing, 0 warnings)
+- 8 endpoints API funcionales
 
 **Fase 2: Core Features** 🚧 En desarrollo
 - Tournament CRUD operations
