@@ -19,7 +19,7 @@ from src.shared.domain.events.domain_event import DomainEvent
 
 # Clase concreta para testing (no se puede testear clase abstracta directamente)
 @dataclass(frozen=True)
-class TestEvent(DomainEvent):
+class SampleEvent(DomainEvent):
     """Evento de prueba para testear DomainEvent base."""
     user_id: str
     action: str
@@ -32,7 +32,7 @@ class TestDomainEvent:
         """DomainEvent se puede instanciar pero es para uso de subclases."""
         # DomainEvent ahora no es realmente abstracta porque no tiene métodos abstractos
         # Se puede instanciar pero solo para casos especiales
-        # Normalmente se usan subclases como TestEvent
+        # Normalmente se usan subclases como SampleEvent
         try:
             # Intentar crear DomainEvent() sin argumentos debe fallar porque no tiene campos
             event = DomainEvent()
@@ -46,7 +46,7 @@ class TestDomainEvent:
     def test_creates_event_with_automatic_metadata(self):
         """Evento se crea con metadata automática (ID, timestamp, versión)."""
         # Act - Solo campos específicos, metadatos se generan automáticamente
-        event = TestEvent(
+        event = SampleEvent(
             user_id="user-123", 
             action="registered"
         )
@@ -70,7 +70,7 @@ class TestDomainEvent:
     def test_event_is_immutable(self):
         """Los eventos son inmutables (no se pueden modificar después de crear)."""
         # Arrange
-        event = TestEvent(
+        event = SampleEvent(
             
             user_id="user-123",
             action="registered"
@@ -89,8 +89,8 @@ class TestDomainEvent:
     def test_each_event_has_unique_id(self):
         """Cada evento generado tiene un ID único."""
         # Act
-        event1 = TestEvent(user_id="user-1", action="login")
-        event2 = TestEvent(user_id="user-2", action="logout")
+        event1 = SampleEvent(user_id="user-1", action="login")
+        event2 = SampleEvent(user_id="user-2", action="logout")
         
         # Assert
         assert event1.event_id != event2.event_id
@@ -103,7 +103,7 @@ class TestDomainEvent:
         before = datetime.now()
         
         # Act
-        event = TestEvent(user_id="user-123", action="created")
+        event = SampleEvent(user_id="user-123", action="created")
         
         # Assert
         after = datetime.now()
@@ -116,7 +116,7 @@ class TestDomainEvent:
     def test_to_dict_serialization(self):
         """El método to_dict() serializa correctamente el evento."""
         # Arrange
-        event = TestEvent(
+        event = SampleEvent(
             
             user_id="user-456", 
             action="profile_updated"
@@ -130,7 +130,7 @@ class TestDomainEvent:
         
         # Metadata
         assert event_dict['event_id'] == event.event_id
-        assert event_dict['event_type'] == 'TestEvent'
+        assert event_dict['event_type'] == 'SampleEvent'
         assert event_dict['aggregate_id'] == event.aggregate_id  # Generado automáticamente
         assert event_dict['occurred_on'] == event.occurred_on.isoformat()
         assert event_dict['event_version'] == 1
@@ -147,7 +147,7 @@ class TestDomainEvent:
     def test_string_representation(self):
         """Representación string es clara y contiene info clave."""
         # Arrange
-        event = TestEvent(
+        event = SampleEvent(
             
             user_id="user-123",
             action="registered"
@@ -158,12 +158,12 @@ class TestDomainEvent:
         repr_repr = repr(event)
         
         # Assert - __str__ usa nuestro método personalizado
-        assert "TestEvent" in str_repr
+        assert "SampleEvent" in str_repr
         assert "user-123" in str_repr
         assert event.event_id[:8] in str_repr  # Primeros 8 chars del ID
         
         # __repr__ usa el generado por dataclass (comportamiento correcto)
-        assert "TestEvent" in repr_repr
+        assert "SampleEvent" in repr_repr
         assert "user-123" in repr_repr
         # Con la nueva implementación, los metadatos son properties, no campos del dataclass
         # por lo que el repr automático solo muestra los campos definidos (user_id, action)
@@ -171,8 +171,8 @@ class TestDomainEvent:
     def test_events_with_same_data_are_different_objects(self):
         """Eventos con mismos datos son objetos diferentes (por ID y timestamp)."""
         # Act
-        event1 = TestEvent(user_id="user-123", action="login")
-        event2 = TestEvent(user_id="user-123", action="login")
+        event1 = SampleEvent(user_id="user-123", action="login")
+        event2 = SampleEvent(user_id="user-123", action="login")
         
         # Assert - Los eventos son diferentes objetos aunque tengan mismos datos
         assert event1 is not event2  # Diferentes objetos en memoria
@@ -187,7 +187,7 @@ class TestDomainEvent:
     def test_event_version_defaults_to_one(self):
         """La versión del evento por defecto es 1."""
         # Act
-        event = TestEvent(user_id="user-123", action="test")
+        event = SampleEvent(user_id="user-123", action="test")
         
         # Assert
         assert event.event_version == 1

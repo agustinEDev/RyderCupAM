@@ -304,3 +304,48 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
         "user_id": user_id,
         "user_data": user_data
     }
+
+
+async def get_user_by_email(client: AsyncClient, email: str):
+    """
+    Helper para obtener un usuario desde la base de datos por email.
+    Útil para tests que necesitan acceder al usuario completo con su estado interno.
+
+    Args:
+        client: Cliente HTTP de testing
+        email: Email del usuario a buscar
+
+    Returns:
+        User: Entidad de usuario encontrada
+
+    Raises:
+        AssertionError: Si el usuario no existe
+    """
+    from src.modules.user.domain.value_objects.email import Email
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
+        SQLAlchemyUserRepository,
+    )
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+    # Obtener la URL de la BD del cliente (está en la app state)
+    # Como no podemos acceder directamente, usamos la variable de entorno
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    db_name = f"test_db_{worker_id}"
+    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    if db_url_base.startswith(POSTGRESQL_PREFIX):
+        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
+    test_db_url = f"{db_url_base}/{db_name}"
+
+    # Crear engine y session
+    engine = create_async_engine(test_db_url, echo=False)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with session_factory() as session:
+        repo = SQLAlchemyUserRepository(session)
+        email_vo = Email(email)
+        user = await repo.find_by_email(email_vo)
+
+    await engine.dispose()
+
+    assert user is not None, f"Usuario con email {email} no encontrado"
+    return user

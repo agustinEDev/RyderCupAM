@@ -677,7 +677,226 @@ class TestUserUpdateHandicap:
     def test_update_handicap_maximum_valid_value(self):
         """Test: Actualizar con valor máximo válido (54.0)."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
-        
+
         user.update_handicap(54.0)
-        
+
         assert user.handicap == 54.0
+
+
+class TestUserEmailVerification:
+    """Tests para la verificación de email de usuarios"""
+
+    def test_generate_verification_token_creates_token(self):
+        """
+        Test: Generar token de verificación
+        Given: Un usuario recién creado
+        When: Se llama a generate_verification_token()
+        Then: Se genera un token y se asigna al usuario
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        assert user.verification_token is None
+
+        # Act
+        token = user.generate_verification_token()
+
+        # Assert
+        assert token is not None
+        assert len(token) > 0
+        assert user.verification_token == token
+        assert isinstance(token, str)
+
+    def test_generate_verification_token_returns_unique_tokens(self):
+        """
+        Test: Tokens generados son únicos
+        Given: Un usuario
+        When: Se genera un token múltiples veces
+        Then: Cada token es diferente
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+
+        # Act
+        token1 = user.generate_verification_token()
+        token2 = user.generate_verification_token()
+        token3 = user.generate_verification_token()
+
+        # Assert
+        assert token1 != token2
+        assert token2 != token3
+        assert token1 != token3
+
+    def test_generate_verification_token_updates_updated_at(self):
+        """
+        Test: Generar token actualiza updated_at
+        Given: Un usuario con updated_at inicial
+        When: Se genera un token de verificación
+        Then: updated_at se actualiza
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        original_updated_at = user.updated_at
+
+        # Act
+        user.generate_verification_token()
+
+        # Assert
+        assert user.updated_at > original_updated_at
+
+    def test_verify_email_with_valid_token_success(self):
+        """
+        Test: Verificar email con token válido
+        Given: Un usuario con token de verificación generado
+        When: Se llama a verify_email() con el token correcto
+        Then: El email se marca como verificado
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+
+        # Act
+        result = user.verify_email(token)
+
+        # Assert
+        assert result is True
+        assert user.email_verified is True
+        assert user.verification_token is None
+
+    def test_verify_email_with_invalid_token_raises_error(self):
+        """
+        Test: Verificar email con token inválido
+        Given: Un usuario con token de verificación
+        When: Se llama a verify_email() con token incorrecto
+        Then: Se lanza ValueError
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user.generate_verification_token()
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Token de verificación inválido"):
+            user.verify_email("invalid_token_12345")
+
+    def test_verify_email_when_already_verified_raises_error(self):
+        """
+        Test: No se puede verificar un email ya verificado
+        Given: Un usuario con email ya verificado
+        When: Se intenta verificar nuevamente
+        Then: Se lanza ValueError
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+        user.verify_email(token)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="El email ya está verificado"):
+            new_token = "any_token"
+            user.verify_email(new_token)
+
+    def test_verify_email_clears_verification_token(self):
+        """
+        Test: Verificación limpia el token
+        Given: Un usuario con token de verificación
+        When: Se verifica el email exitosamente
+        Then: El token se elimina (se pone en None)
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+        assert user.verification_token is not None
+
+        # Act
+        user.verify_email(token)
+
+        # Assert
+        assert user.verification_token is None
+
+    def test_verify_email_updates_updated_at(self):
+        """
+        Test: Verificación actualiza updated_at
+        Given: Un usuario con updated_at inicial
+        When: Se verifica el email
+        Then: updated_at se actualiza
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+        original_updated_at = user.updated_at
+
+        # Act
+        user.verify_email(token)
+
+        # Assert
+        assert user.updated_at > original_updated_at
+
+    def test_verify_email_emits_domain_event(self):
+        """
+        Test: Verificación emite evento de dominio
+        Given: Un usuario con token de verificación
+        When: Se verifica el email exitosamente
+        Then: Se emite un EmailVerifiedEvent
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+        user.clear_domain_events()  # Limpiar eventos anteriores
+
+        # Act
+        user.verify_email(token)
+
+        # Assert
+        events = user.get_domain_events()
+        assert len(events) > 0
+
+        # Verificar que hay un EmailVerifiedEvent
+        from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
+        email_verified_events = [e for e in events if isinstance(e, EmailVerifiedEvent)]
+        assert len(email_verified_events) == 1
+
+        event = email_verified_events[0]
+        assert event.user_id == str(user.id.value)
+        assert event.email == str(user.email.value)
+        assert event.verified_at is not None
+
+    def test_is_email_verified_returns_false_initially(self):
+        """
+        Test: Email no verificado inicialmente
+        Given: Un usuario recién creado
+        When: Se verifica el estado de verificación
+        Then: Retorna False
+        """
+        # Arrange & Act
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+
+        # Assert
+        assert user.is_email_verified() is False
+
+    def test_is_email_verified_returns_true_after_verification(self):
+        """
+        Test: Email verificado retorna True
+        Given: Un usuario con email verificado
+        When: Se verifica el estado
+        Then: Retorna True
+        """
+        # Arrange
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        token = user.generate_verification_token()
+        user.verify_email(token)
+
+        # Act & Assert
+        assert user.is_email_verified() is True
+
+    def test_user_created_with_email_not_verified(self):
+        """
+        Test: Usuario creado con email no verificado por defecto
+        Given: Datos válidos de usuario
+        When: Se crea un usuario
+        Then: email_verified es False y verification_token es None
+        """
+        # Act
+        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+
+        # Assert
+        assert user.email_verified is False
+        assert user.verification_token is None

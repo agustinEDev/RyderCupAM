@@ -109,3 +109,103 @@ class TestAuthRoutes:
 
         # Assert
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    async def test_verify_email_endpoint_success(self, client: AsyncClient):
+        """
+        Test: Verificar email exitosamente
+        Given: Un usuario registrado con token de verificación
+        When: Se llama al endpoint con el token correcto
+        Then: Retorna 200 OK y el email se verifica
+        """
+        # Arrange - Registrar usuario
+        user_data = {
+            "email": "verify.success@example.com",
+            "password": "ValidPass123",
+            "first_name": "Verify",
+            "last_name": "Success",
+        }
+        register_response = await client.post("/api/v1/auth/register", json=user_data)
+        assert register_response.status_code == status.HTTP_201_CREATED
+
+        # Obtener el token de verificación desde la BD (en un escenario real vendría por email)
+        # Para tests, necesitamos acceder directamente al repositorio
+        from tests.conftest import get_user_by_email
+        user = await get_user_by_email(client, user_data["email"])
+        verification_token = user.verification_token
+
+        # Act - Verificar email
+        verify_data = {"token": verification_token}
+        response = await client.post("/api/v1/auth/verify-email", json=verify_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data["email_verified"] is True
+        assert "verificado" in response_data["message"].lower()
+
+    async def test_verify_email_endpoint_invalid_token(self, client: AsyncClient):
+        """
+        Test: Verificar email con token inválido
+        Given: Un token que no existe
+        When: Se llama al endpoint
+        Then: Retorna 400 Bad Request
+        """
+        # Arrange
+        verify_data = {"token": "invalid_token_that_does_not_exist"}
+
+        # Act
+        response = await client.post("/api/v1/auth/verify-email", json=verify_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "inválido" in response.json()["detail"].lower()
+
+    async def test_verify_email_endpoint_empty_token(self, client: AsyncClient):
+        """
+        Test: Verificar email con token vacío
+        Given: Un token vacío
+        When: Se llama al endpoint
+        Then: Retorna 422 Unprocessable Entity (error de validación de Pydantic)
+        """
+        # Arrange
+        verify_data = {"token": ""}
+
+        # Act
+        response = await client.post("/api/v1/auth/verify-email", json=verify_data)
+
+        # Assert
+        # FastAPI retorna 422 para errores de validación de Pydantic
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_verify_email_endpoint_already_verified(self, client: AsyncClient):
+        """
+        Test: Intentar verificar email ya verificado
+        Given: Un usuario con email ya verificado
+        When: Se intenta verificar de nuevo
+        Then: Retorna 400 Bad Request
+        """
+        # Arrange - Registrar y verificar usuario
+        user_data = {
+            "email": "already.verified@example.com",
+            "password": "ValidPass123",
+            "first_name": "Already",
+            "last_name": "Verified",
+        }
+        register_response = await client.post("/api/v1/auth/register", json=user_data)
+        assert register_response.status_code == status.HTTP_201_CREATED
+
+        # Obtener token y verificar primera vez
+        from tests.conftest import get_user_by_email
+        user = await get_user_by_email(client, user_data["email"])
+        verification_token = user.verification_token
+
+        verify_data = {"token": verification_token}
+        first_verify = await client.post("/api/v1/auth/verify-email", json=verify_data)
+        assert first_verify.status_code == status.HTTP_200_OK
+
+        # Act - Intentar verificar de nuevo con cualquier token
+        verify_data_again = {"token": "any_token"}
+        response = await client.post("/api/v1/auth/verify-email", json=verify_data_again)
+
+        # Assert
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
