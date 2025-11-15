@@ -203,17 +203,17 @@ class TestResendVerificationEmailUseCase:
         uow: InMemoryUnitOfWork
     ):
         """
-        Test: Error al enviar email lanza excepción
+        Test: Error al enviar email lanza excepción y NO guarda token
         Given: Un usuario válido pero el servicio de email falla
         When: Se intenta reenviar la verificación
-        Then: Se lanza ValueError
+        Then: Se lanza ValueError y no se guarda ningún token en BD
         """
         # Arrange - Mock del servicio de email para que falle
         mock_email_service.send_verification_email.return_value = False
 
         async with uow:
             user = User.create("Carlos", "Ruiz", "carlos@test.com", "Password123!")
-            user.generate_verification_token()
+            original_token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
 
@@ -221,6 +221,14 @@ class TestResendVerificationEmailUseCase:
         use_case = ResendVerificationEmailUseCase(uow)
         with pytest.raises(ValueError, match="Error al enviar el email de verificación"):
             await use_case.execute("carlos@test.com")
+
+        # Verificar que NO se guardó ningún token nuevo en la BD
+        async with uow:
+            from src.modules.user.domain.value_objects.email import Email
+            email = Email("carlos@test.com")
+            user_after = await uow.users.find_by_email(email)
+            assert user_after is not None
+            assert user_after.verification_token == original_token  # Token no cambió
 
     @patch('src.modules.user.application.use_cases.resend_verification_email_use_case.email_service')
     async def test_execute_calls_email_service_with_correct_params(

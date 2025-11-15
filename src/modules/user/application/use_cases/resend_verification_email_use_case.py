@@ -5,6 +5,7 @@ Caso de uso para reenviar el email de verificación a un usuario.
 """
 
 import logging
+import secrets
 from typing import Optional
 
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -45,7 +46,7 @@ class ResendVerificationEmailUseCase:
         if not email or email.strip() == "":
             raise ValueError("El email es requerido")
 
-        # Primera transacción: buscar usuario y validar
+        # Primera transacción: SOLO LECTURA - buscar usuario y validar
         async with self._uow:
             # Buscar el usuario por email (convertir a Value Object)
             email_vo = Email(email)
@@ -58,20 +59,20 @@ class ResendVerificationEmailUseCase:
             if user.is_email_verified():
                 raise ValueError("Si el email existe y no está verificado, se enviará un email de verificación")
 
-            # Generar nuevo token de verificación (solo en memoria, NO guardamos aún)
-            new_token = user.generate_verification_token()
-
             # Extraer datos necesarios ANTES de salir del contexto
             # para evitar detached entity errors
             user_id = user.id.value
             user_name = user.get_full_name()
+
+        # FUERA DE TRANSACCIÓN: Generar token sin mutar entidad
+        verification_token = secrets.token_urlsafe(32)
 
         # PRIMERO: Enviar email (fuera de transacción porque es síncrono)
         # Si esto falla, no se ha guardado nada en BD (no hay inconsistencia)
         email_sent = email_service.send_verification_email(
             to_email=email,
             user_name=user_name,
-            verification_token=new_token
+            verification_token=verification_token
         )
 
         if not email_sent:
@@ -80,14 +81,17 @@ class ResendVerificationEmailUseCase:
 
         # SEGUNDO: Solo si el email se envió correctamente, guardar el token en BD
         async with self._uow:
-            # Re-buscar el usuario para tener una entidad attached
+            # Re-buscar el usuario para tener una entidad attached y evitar race conditions
             user = await self._user_finder.by_email(email_vo)
             if not user:
                 raise ValueError("Usuario no encontrado")
 
-            # Regenerar el mismo token (es determinista si no ha pasado tiempo)
-            # O mejor: guardamos el token que ya generamos
-            user.verification_token = new_token
+            # Verificar nuevamente que no esté verificado (evitar race conditions)
+            if user.is_email_verified():
+                raise ValueError("El email ya fue verificado")
+
+            # Asignar el token generado fuera de transacción
+            user.verification_token = verification_token
 
             await self._uow.users.save(user)
             # El context manager (__aexit__) hace commit automático
