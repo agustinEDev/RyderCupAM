@@ -14,7 +14,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
-    ResendVerificationEmailUseCase
+    ResendVerificationEmailUseCase,
+    ResendVerificationError
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -86,7 +87,7 @@ class TestResendVerificationEmailUseCase:
         use_case = ResendVerificationEmailUseCase(uow)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
+        with pytest.raises(ResendVerificationError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
             await use_case.execute("noexiste@test.com")
 
     async def test_execute_with_empty_email_raises_error(self, uow: InMemoryUnitOfWork):
@@ -100,11 +101,11 @@ class TestResendVerificationEmailUseCase:
         use_case = ResendVerificationEmailUseCase(uow)
 
         # Act & Assert - Email vacío
-        with pytest.raises(ValueError, match="El email es requerido"):
+        with pytest.raises(ResendVerificationError, match="El email es requerido"):
             await use_case.execute("")
 
         # Act & Assert - Email solo con espacios
-        with pytest.raises(ValueError, match="El email es requerido"):
+        with pytest.raises(ResendVerificationError, match="El email es requerido"):
             await use_case.execute("   ")
 
     async def test_execute_with_verified_email_raises_error(self, uow: InMemoryUnitOfWork):
@@ -124,7 +125,7 @@ class TestResendVerificationEmailUseCase:
 
         # Act & Assert
         use_case = ResendVerificationEmailUseCase(uow)
-        with pytest.raises(ValueError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
+        with pytest.raises(ResendVerificationError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
             await use_case.execute("maria@test.com")
 
     @patch('src.modules.user.application.use_cases.resend_verification_email_use_case.email_service')
@@ -219,7 +220,7 @@ class TestResendVerificationEmailUseCase:
 
         # Act & Assert
         use_case = ResendVerificationEmailUseCase(uow)
-        with pytest.raises(ValueError, match="Error al enviar el email de verificación"):
+        with pytest.raises(ResendVerificationError, match="Error al enviar el email de verificación"):
             await use_case.execute("carlos@test.com")
 
         # Verificar que NO se guardó ningún token nuevo en la BD

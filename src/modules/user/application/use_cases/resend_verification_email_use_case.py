@@ -18,6 +18,15 @@ from src.shared.infrastructure.email.email_service import email_service
 logger = logging.getLogger(__name__)
 
 
+class ResendVerificationError(ValueError):
+    """Exception raised when resend verification fails due to security constraints."""
+    pass
+
+
+# Generic error message to prevent user enumeration
+GENERIC_ERROR_MESSAGE = "Si el email existe y no está verificado, se enviará un email de verificación"
+
+
 class ResendVerificationEmailUseCase:
     """
     Caso de uso para reenviar el email de verificación a un usuario.
@@ -41,10 +50,10 @@ class ResendVerificationEmailUseCase:
             bool: True si el email se envió exitosamente
 
         Raises:
-            ValueError: Si el email no existe o ya está verificado
+            ResendVerificationError: Si el email no existe o ya está verificado
         """
         if not email or email.strip() == "":
-            raise ValueError("El email es requerido")
+            raise ResendVerificationError("El email es requerido")
 
         # Primera transacción: SOLO LECTURA - buscar usuario y validar
         async with self._uow:
@@ -53,11 +62,11 @@ class ResendVerificationEmailUseCase:
             user = await self._user_finder.by_email(email_vo)
 
             if not user:
-                raise ValueError("Si el email existe y no está verificado, se enviará un email de verificación")
+                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
 
             # Verificar si el email ya está verificado
             if user.is_email_verified():
-                raise ValueError("Si el email existe y no está verificado, se enviará un email de verificación")
+                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
 
             # Extraer datos necesarios ANTES de salir del contexto
             # para evitar detached entity errors
@@ -77,18 +86,18 @@ class ResendVerificationEmailUseCase:
 
         if not email_sent:
             logger.error("No se pudo enviar el email de verificación al usuario %s", user_id)
-            raise ValueError("Error al enviar el email de verificación")
+            raise ResendVerificationError("Error al enviar el email de verificación")
 
         # SEGUNDO: Solo si el email se envió correctamente, guardar el token en BD
         async with self._uow:
             # Re-buscar el usuario para tener una entidad attached y evitar race conditions
             user = await self._user_finder.by_email(email_vo)
             if not user:
-                raise ValueError("Usuario no encontrado")
+                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
 
             # Verificar nuevamente que no esté verificado (evitar race conditions)
             if user.is_email_verified():
-                raise ValueError("El email ya fue verificado")
+                raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
 
             # Asignar el token generado fuera de transacción
             user.verification_token = verification_token
