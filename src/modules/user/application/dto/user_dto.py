@@ -214,3 +214,20 @@ class VerifyEmailResponseDTO(BaseModel):
     """DTO de salida para verificación de email."""
     message: str = Field(default="Email verificado exitosamente", description="Mensaje de confirmación.")
     email_verified: bool = Field(default=True, description="Confirmación de que el email fue verificado.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Resend Verification Email
+# ======================================================================================
+
+class ResendVerificationEmailRequestDTO(BaseModel):
+    """
+    DTO de entrada para reenvío de email de verificación.
+    """
+    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
+
+
+class ResendVerificationEmailResponseDTO(BaseModel):
+    """DTO de salida para reenvío de email de verificación."""
+    message: str = Field(default="Email de verificación enviado exitosamente", description="Mensaje de confirmación.")
+    email: EmailStr = Field(..., description="Email al que se envió el mensaje de verificación.")

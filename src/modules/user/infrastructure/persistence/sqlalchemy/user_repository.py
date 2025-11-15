@@ -28,7 +28,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def find_by_email(self, email: Email) -> Optional[User]:
         """Busca un usuario por su email."""
-        statement = select(User).filter_by(email=email)
+        # Para composites, necesitamos usar where() y comparar con el atributo privado
+        statement = select(User).where(User._email == email.value)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -76,7 +77,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""
-        statement = select(func.count()).select_from(User).filter_by(email=email)
+        # Para composites, necesitamos usar where() y comparar con el atributo privado
+        statement = select(func.count()).select_from(User).where(User._email == email.value)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 

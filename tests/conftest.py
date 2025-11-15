@@ -349,3 +349,31 @@ async def get_user_by_email(client: AsyncClient, email: str):
 
     assert user is not None, f"Usuario con email {email} no encontrado"
     return user
+
+
+# ======================================================================================
+# MOCK AUTOMÁTICO DEL SERVICIO DE EMAIL
+# ======================================================================================
+
+@pytest.fixture(autouse=True)
+def mock_email_service():
+    """
+    Mock automático del servicio de email para todos los tests.
+    Esto evita enviar emails reales a Mailgun y gastar la cuota diaria.
+
+    El mock siempre retorna True (éxito) para simular que el email se envió correctamente.
+    """
+    from unittest.mock import patch, MagicMock
+
+    # Crear un mock que siempre retorna True
+    mock_send = MagicMock(return_value=True)
+
+    # Parchear el método send_verification_email
+    with patch.object(
+        type(  # Obtenemos la clase EmailService
+            __import__('src.shared.infrastructure.email.email_service', fromlist=['email_service']).email_service
+        ),
+        'send_verification_email',
+        mock_send
+    ):
+        yield mock_send
