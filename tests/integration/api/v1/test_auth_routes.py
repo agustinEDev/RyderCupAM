@@ -148,7 +148,7 @@ class TestAuthRoutes:
         Test: Verificar email con token inválido
         Given: Un token que no existe
         When: Se llama al endpoint
-        Then: Retorna 400 Bad Request
+        Then: Retorna 400 Bad Request con mensaje genérico (seguridad)
         """
         # Arrange
         verify_data = {"token": "invalid_token_that_does_not_exist"}
@@ -158,7 +158,8 @@ class TestAuthRoutes:
 
         # Assert
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "inválido" in response.json()["detail"].lower()
+        # Verificar mensaje genérico (no revela información específica)
+        assert "unable to verify email" in response.json()["detail"].lower()
 
     async def test_verify_email_endpoint_empty_token(self, client: AsyncClient):
         """
@@ -209,3 +210,112 @@ class TestAuthRoutes:
 
         # Assert
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    async def test_resend_verification_email_endpoint_success(self, client: AsyncClient):
+        """
+        Test: Reenviar email de verificación exitosamente
+        Given: Un usuario registrado sin verificar
+        When: Se llama al endpoint con el email correcto
+        Then: Retorna 200 OK y se genera nuevo token
+        """
+        # Arrange - Registrar usuario
+        user_data = {
+            "email": "resend.success@example.com",
+            "password": "ValidPass123",
+            "first_name": "Resend",
+            "last_name": "Success",
+        }
+        register_response = await client.post("/api/v1/auth/register", json=user_data)
+        assert register_response.status_code == status.HTTP_201_CREATED
+
+        # Obtener el token original
+        from tests.conftest import get_user_by_email
+        user_before = await get_user_by_email(client, user_data["email"])
+        original_token = user_before.verification_token
+
+        # Act - Reenviar email de verificación (el mock de email está en conftest.py)
+        resend_data = {"email": user_data["email"]}
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data["email"] == user_data["email"]
+        # Mensaje genérico por seguridad
+        assert "if the email address exists" in response_data["message"].lower()
+
+        # Verificar que se generó un nuevo token
+        user_after = await get_user_by_email(client, user_data["email"])
+        assert user_after.verification_token != original_token
+        assert user_after.email_verified is False
+
+    async def test_resend_verification_email_endpoint_nonexistent_email(self, client: AsyncClient):
+        """
+        Test: Reenviar verificación con email no existente
+        Given: Un email que no existe en la BD
+        When: Se llama al endpoint
+        Then: Retorna 200 OK con mensaje genérico (por seguridad, no revela que no existe)
+        """
+        # Arrange
+        resend_data = {"email": "noexiste@example.com"}
+
+        # Act
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+
+        # Assert
+        # Por seguridad, siempre retorna 200 OK con mensaje genérico
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert "if the email address exists" in response_data["message"].lower()
+
+    async def test_resend_verification_email_endpoint_already_verified(self, client: AsyncClient):
+        """
+        Test: Reenviar verificación a email ya verificado
+        Given: Un usuario con email ya verificado
+        When: Se intenta reenviar verificación
+        Then: Retorna 200 OK con mensaje genérico (por seguridad, no revela que ya está verificado)
+        """
+        # Arrange - Registrar y verificar usuario
+        user_data = {
+            "email": "verified.resend@example.com",
+            "password": "ValidPass123",
+            "first_name": "Verified",
+            "last_name": "Resend",
+        }
+        register_response = await client.post("/api/v1/auth/register", json=user_data)
+        assert register_response.status_code == status.HTTP_201_CREATED
+
+        # Verificar el email
+        from tests.conftest import get_user_by_email
+        user = await get_user_by_email(client, user_data["email"])
+        verification_token = user.verification_token
+
+        verify_data = {"token": verification_token}
+        verify_response = await client.post("/api/v1/auth/verify-email", json=verify_data)
+        assert verify_response.status_code == status.HTTP_200_OK
+
+        # Act - Intentar reenviar verificación
+        resend_data = {"email": user_data["email"]}
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+
+        # Assert
+        # Por seguridad, siempre retorna 200 OK con mensaje genérico
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert "if the email address exists" in response_data["message"].lower()
+
+    async def test_resend_verification_email_endpoint_invalid_email_format(self, client: AsyncClient):
+        """
+        Test: Reenviar verificación con formato de email inválido
+        Given: Un email con formato inválido
+        When: Se llama al endpoint
+        Then: Retorna 422 Unprocessable Entity
+        """
+        # Arrange
+        resend_data = {"email": "invalid-email-format"}
+
+        # Act
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
