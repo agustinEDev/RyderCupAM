@@ -352,28 +352,27 @@ async def get_user_by_email(client: AsyncClient, email: str):
 
 
 # ======================================================================================
-# MOCK AUTOMÁTICO DEL SERVICIO DE EMAIL
+# MOCK AUTOMÁTICO DE SERVICIOS EXTERNOS (EMAIL Y TOKEN)
 # ======================================================================================
+# Para tests de integración, mockeamos los servicios en dependencies.py para evitar
+# llamadas reales a Mailgun y mantener los tests rápidos y sin límites de API.
 
 @pytest.fixture(autouse=True)
-def mock_email_service():
+def mock_external_services():
     """
-    Mock automático del servicio de email para todos los tests.
-    Esto evita enviar emails reales a Mailgun y gastar la cuota diaria.
+    Mock automático de servicios externos para todos los tests.
 
-    El mock siempre retorna True (éxito) para simular que el email se envió correctamente.
+    Mockea:
+    - EmailService: Para evitar envíos reales a Mailgun
+    - Los tests unitarios usan sus propios mocks
+    - Los tests de integración usan estos mocks via dependencies.py
     """
     from unittest.mock import patch, MagicMock
 
-    # Crear un mock que siempre retorna True
-    mock_send = MagicMock(return_value=True)
+    # Mock para EmailService
+    mock_email = MagicMock()
+    mock_email.send_verification_email.return_value = True
 
-    # Parchear el método send_verification_email
-    with patch.object(
-        type(  # Obtenemos la clase EmailService
-            __import__('src.shared.infrastructure.email.email_service', fromlist=['email_service']).email_service
-        ),
-        'send_verification_email',
-        mock_send
-    ):
-        yield mock_send
+    # Patchear el factory en dependencies.py
+    with patch('src.config.dependencies.EmailService', return_value=mock_email):
+        yield mock_email
