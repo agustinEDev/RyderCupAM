@@ -7,6 +7,7 @@ Requiere validación de contraseña actual para autorizar los cambios.
 
 import logging
 import requests
+from typing import Optional
 
 from src.modules.user.application.dto.user_dto import (
     UpdateSecurityRequestDTO,
@@ -21,7 +22,7 @@ from src.modules.user.domain.errors.user_errors import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
-from src.shared.infrastructure.email.email_service import email_service
+from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +35,20 @@ class UpdateSecurityUseCase:
     requiriendo verificación de la contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: Optional[IEmailService] = None
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
         Args:
             uow: Unit of Work para manejar transacciones
+            email_service: Servicio para envío de emails de verificación
         """
         self._uow = uow
+        self._email_service = email_service
 
     async def execute(self, user_id: str, request: UpdateSecurityRequestDTO) -> UpdateSecurityResponseDTO:
         """
@@ -97,9 +104,9 @@ class UpdateSecurityUseCase:
             # El context manager (__aexit__) hace commit automático y publica eventos
 
         # Si se cambió el email, enviar email de verificación al NUEVO correo
-        if email_changed and verification_token:
+        if email_changed and verification_token and self._email_service:
             try:
-                email_sent = email_service.send_verification_email(
+                email_sent = self._email_service.send_verification_email(
                     to_email=request.new_email,
                     user_name=user.first_name,
                     verification_token=verification_token
