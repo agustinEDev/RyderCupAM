@@ -13,7 +13,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
-from src.shared.infrastructure.email.email_service import email_service
+from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,14 @@ class ResendVerificationEmailUseCase:
     y reenviar el email al usuario que lo solicite.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: Optional[IEmailService] = None
+    ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
+        self._email_service = email_service
 
     async def execute(self, email: str) -> bool:
         """
@@ -78,7 +83,11 @@ class ResendVerificationEmailUseCase:
 
         # PRIMERO: Enviar email (fuera de transacción porque es síncrono)
         # Si esto falla, no se ha guardado nada en BD (no hay inconsistencia)
-        email_sent = email_service.send_verification_email(
+        if not self._email_service:
+            logger.error("Email service no está disponible")
+            raise ResendVerificationError("Servicio de email no disponible")
+
+        email_sent = self._email_service.send_verification_email(
             to_email=email,
             user_name=user_name,
             verification_token=verification_token

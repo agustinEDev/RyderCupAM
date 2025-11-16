@@ -14,7 +14,7 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.shared.infrastructure.email.email_service import email_service
+from src.modules.user.application.ports.email_service_interface import IEmailService
 
 
 class RegisterUserUseCase:
@@ -29,11 +29,13 @@ class RegisterUserUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        handicap_service: Optional[HandicapService] = None
+        handicap_service: Optional[HandicapService] = None,
+        email_service: Optional[IEmailService] = None
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._handicap_service = handicap_service
+        self._email_service = email_service
 
     async def execute(self, request: RegisterUserRequestDTO) -> UserResponseDTO:
         """
@@ -90,24 +92,25 @@ class RegisterUserUseCase:
             # El context manager (__aexit__) hace commit automático y publica eventos
 
         # 4. Enviar email de verificación
-        try:
-            email_sent = email_service.send_verification_email(
-                to_email=request.email,
-                user_name=new_user.first_name,
-                verification_token=verification_token
-            )
-            if not email_sent:
-                logger.warning(
-                    "No se pudo enviar el email de verificación para el usuario %s",
+        if self._email_service:
+            try:
+                email_sent = self._email_service.send_verification_email(
+                    to_email=request.email,
+                    user_name=new_user.first_name,
+                    verification_token=verification_token
+                )
+                if not email_sent:
+                    logger.warning(
+                        "No se pudo enviar el email de verificación para el usuario %s",
+                        new_user.id.value
+                    )
+            except (requests.RequestException, ValueError, ConnectionError) as e:
+                # Capturar excepciones específicas de red y validación
+                logger.exception(
+                    "Error al enviar email de verificación para el usuario %s",
                     new_user.id.value
                 )
-        except (requests.RequestException, ValueError, ConnectionError) as e:
-            # Capturar excepciones específicas de red y validación
-            logger.exception(
-                "Error al enviar email de verificación para el usuario %s",
-                new_user.id.value
-            )
-            # No fallar el registro si el email no se pudo enviar
+                # No fallar el registro si el email no se pudo enviar
 
         # 5. Devolver la respuesta como DTO
         return UserResponseDTO.model_validate(new_user)

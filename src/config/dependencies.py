@@ -23,7 +23,10 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import 
     SQLAlchemyUnitOfWork,
 )
 from src.modules.user.infrastructure.external.rfeg_handicap_service import RFEGHandicapService
-from src.shared.infrastructure.security.jwt_handler import verify_access_token
+from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.shared.infrastructure.email.email_service import EmailService
+from src.shared.infrastructure.security.jwt_handler import JWTTokenService, verify_access_token
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -67,9 +70,36 @@ def get_handicap_service() -> HandicapService:
     """
     return RFEGHandicapService(timeout=10)
 
+def get_email_service() -> IEmailService:
+    """
+    Proveedor del servicio de email.
+
+    Esta función:
+    1. Crea una instancia de EmailService (Mailgun).
+    2. Devuelve la instancia que implementa IEmailService.
+
+    Returns:
+        Implementación concreta del servicio de email (Mailgun)
+    """
+    return EmailService()
+
+def get_token_service() -> ITokenService:
+    """
+    Proveedor del servicio de tokens.
+
+    Esta función:
+    1. Crea una instancia de JWTTokenService.
+    2. Devuelve la instancia que implementa ITokenService.
+
+    Returns:
+        Implementación concreta del servicio de tokens (JWT)
+    """
+    return JWTTokenService()
+
 def get_register_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    handicap_service: HandicapService = Depends(get_handicap_service)
+    handicap_service: HandicapService = Depends(get_handicap_service),
+    email_service: IEmailService = Depends(get_email_service)
 ) -> RegisterUserUseCase:
     """
     Proveedor del caso de uso RegisterUserUseCase.
@@ -77,12 +107,14 @@ def get_register_user_use_case(
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
     2. Depende de `get_handicap_service` para buscar hándicaps.
-    3. Crea una instancia de `RegisterUserUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    3. Depende de `get_email_service` para envío de emails de verificación.
+    4. Crea una instancia de `RegisterUserUseCase` con esas dependencias.
+    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return RegisterUserUseCase(
-        uow=uow, 
-        handicap_service=handicap_service
+        uow=uow,
+        handicap_service=handicap_service,
+        email_service=email_service
     )
 
 def get_find_user_use_case(
@@ -145,17 +177,19 @@ def get_update_handicap_manually_use_case(
     return UpdateUserHandicapManuallyUseCase(uow)
 
 def get_login_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    token_service: ITokenService = Depends(get_token_service)
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
 
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `LoginUserUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_token_service` para generación de tokens JWT.
+    3. Crea una instancia de `LoginUserUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LoginUserUseCase(uow)
+    return LoginUserUseCase(uow, token_service)
 
 def get_logout_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow)
@@ -184,17 +218,19 @@ def get_update_profile_use_case(
     return UpdateProfileUseCase(uow)
 
 def get_update_security_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service)
 ) -> UpdateSecurityUseCase:
     """
     Proveedor del caso de uso UpdateSecurityUseCase.
 
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `UpdateSecurityUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_email_service` para envío de emails de verificación.
+    3. Crea una instancia de `UpdateSecurityUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateSecurityUseCase(uow)
+    return UpdateSecurityUseCase(uow, email_service)
 
 # Esquema de seguridad HTTP Bearer para Swagger
 security = HTTPBearer()
@@ -271,14 +307,16 @@ def get_verify_email_use_case(
     return VerifyEmailUseCase(uow)
 
 def get_resend_verification_email_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service)
 ) -> ResendVerificationEmailUseCase:
     """
     Proveedor del caso de uso ResendVerificationEmailUseCase.
 
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `ResendVerificationEmailUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_email_service` para envío de emails de verificación.
+    3. Crea una instancia de `ResendVerificationEmailUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ResendVerificationEmailUseCase(uow)
+    return ResendVerificationEmailUseCase(uow, email_service)
