@@ -2,7 +2,7 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-420%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-440%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
@@ -86,14 +86,14 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (420 tests, ~25s con paralelización)
-pytest tests/unit/           # Unit tests (360 tests)
+python dev_tests.py          # Full suite (440 tests, ~25s con paralelización)
+pytest tests/unit/           # Unit tests (380 tests)
 pytest tests/integration/    # Integration tests (60 tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **420 tests** pasando (100% ✅)
+- **440 tests** pasando (100% ✅)
 - **0 warnings** (todos corregidos)
 - **Cobertura**: >90% en lógica de negocio
 - **Cobertura Email Verification**: 100% (24 tests en 3 niveles)
@@ -118,7 +118,6 @@ GET    /api/v1/users/search          # Search by email/name
 
 **Documentación completa**:
 - Swagger UI: `http://localhost:8000/docs`
-- Frontend Integration: [docs/EMAIL_VERIFICATION_INTEGRATION.md](docs/EMAIL_VERIFICATION_INTEGRATION.md)
 - Frontend Examples: [docs/frontend-examples/](docs/frontend-examples/)
 
 ## 💻 Desarrollo
@@ -138,14 +137,15 @@ mypy src/
 
 ## 📊 Estado del Proyecto
 
-**Fase 1: Foundation** ✅ Completado (14 Nov 2025)
+**Fase 1: Foundation** ✅ Completado (16 Nov 2025)
 - Clean Architecture + DDD completo
 - User management + JWT authentication
 - **Email Verification** con Mailgun (bilingüe)
 - Login/Logout con Domain Events
 - Session Management (Fase 1)
 - Handicap system (RFEG integration + batch)
-- **420 tests** (100% passing, 0 warnings)
+- **Dependency Injection refactoring** (DIP compliance)
+- **440 tests** (100% passing, 0 warnings)
 - 8 endpoints API funcionales
 
 **Fase 2: Core Features** 🚧 En desarrollo
