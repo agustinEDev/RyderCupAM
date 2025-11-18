@@ -8,6 +8,12 @@ from pydantic import ValidationError
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     UpdateCompetitionRequestDTO,
+    ActivateCompetitionRequestDTO,
+    CloseEnrollmentsRequestDTO,
+    StartCompetitionRequestDTO,
+    CompleteCompetitionRequestDTO,
+    DeleteCompetitionRequestDTO,
+    CancelCompetitionRequestDTO,
 )
 
 
@@ -225,3 +231,142 @@ class TestUpdateCompetitionRequestDTO:
         assert dto.main_country == "FR"
         assert dto.handicap_type == "PERCENTAGE"
         assert dto.team_assignment == "AUTOMATIC"
+
+
+# ======================================================================================
+# Tests para DTOs de Transiciones de Estado
+# ======================================================================================
+
+class TestActivateCompetitionRequestDTO:
+    """Tests para ActivateCompetitionRequestDTO."""
+
+    def test_create_with_valid_competition_id(self):
+        """Debe crear DTO con competition_id válido."""
+        comp_id = uuid4()
+        dto = ActivateCompetitionRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            ActivateCompetitionRequestDTO()
+
+
+class TestCloseEnrollmentsRequestDTO:
+    """Tests para CloseEnrollmentsRequestDTO."""
+
+    def test_create_with_valid_competition_id(self):
+        """Debe crear DTO con competition_id válido."""
+        comp_id = uuid4()
+        dto = CloseEnrollmentsRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            CloseEnrollmentsRequestDTO()
+
+
+class TestStartCompetitionRequestDTO:
+    """Tests para StartCompetitionRequestDTO."""
+
+    def test_create_with_valid_competition_id(self):
+        """Debe crear DTO con competition_id válido."""
+        comp_id = uuid4()
+        dto = StartCompetitionRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            StartCompetitionRequestDTO()
+
+
+class TestCompleteCompetitionRequestDTO:
+    """Tests para CompleteCompetitionRequestDTO."""
+
+    def test_create_with_valid_competition_id(self):
+        """Debe crear DTO con competition_id válido."""
+        comp_id = uuid4()
+        dto = CompleteCompetitionRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            CompleteCompetitionRequestDTO()
+
+
+# ======================================================================================
+# Tests para DTOs de Delete y Cancel
+# ======================================================================================
+
+class TestDeleteCompetitionRequestDTO:
+    """Tests para DeleteCompetitionRequestDTO."""
+
+    def test_create_with_valid_competition_id(self):
+        """Debe crear DTO con competition_id válido."""
+        comp_id = uuid4()
+        dto = DeleteCompetitionRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            DeleteCompetitionRequestDTO()
+
+
+class TestCancelCompetitionRequestDTO:
+    """Tests para CancelCompetitionRequestDTO."""
+
+    def test_create_with_competition_id_only(self):
+        """Debe crear DTO solo con competition_id (reason opcional)."""
+        comp_id = uuid4()
+        dto = CancelCompetitionRequestDTO(competition_id=comp_id)
+
+        assert dto.competition_id == comp_id
+        assert dto.reason is None
+
+    def test_create_with_reason(self):
+        """Debe crear DTO con reason opcional."""
+        comp_id = uuid4()
+        dto = CancelCompetitionRequestDTO(
+            competition_id=comp_id,
+            reason="Mal tiempo"
+        )
+
+        assert dto.competition_id == comp_id
+        assert dto.reason == "Mal tiempo"
+
+    def test_reason_max_length(self):
+        """reason debe tener un máximo de 500 caracteres."""
+        comp_id = uuid4()
+        long_reason = "x" * 501
+
+        with pytest.raises(ValidationError):
+            CancelCompetitionRequestDTO(
+                competition_id=comp_id,
+                reason=long_reason
+            )
+
+    def test_reason_accepts_500_characters(self):
+        """reason debe aceptar exactamente 500 caracteres."""
+        comp_id = uuid4()
+        valid_reason = "x" * 500
+
+        dto = CancelCompetitionRequestDTO(
+            competition_id=comp_id,
+            reason=valid_reason
+        )
+
+        assert len(dto.reason) == 500
+
+    def test_competition_id_is_required(self):
+        """competition_id es requerido."""
+        with pytest.raises(ValidationError):
+            CancelCompetitionRequestDTO(reason="Test")

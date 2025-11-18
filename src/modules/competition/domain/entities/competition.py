@@ -77,6 +77,8 @@ class Competition:
         team_1_name: str,
         team_2_name: str,
         handicap_settings: HandicapSettings,
+        max_players: int = 24,
+        team_assignment: str = "MANUAL",
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
@@ -111,6 +113,8 @@ class Competition:
         self.team_1_name = team_1_name
         self.team_2_name = team_2_name
         self.handicap_settings = handicap_settings
+        self.max_players = max_players
+        self.team_assignment = team_assignment
         self.status = status
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
@@ -126,7 +130,9 @@ class Competition:
         location: Location,
         team_1_name: str,
         team_2_name: str,
-        handicap_settings: HandicapSettings
+        handicap_settings: HandicapSettings,
+        max_players: int = 24,
+        team_assignment: str = "MANUAL"
     ) -> 'Competition':
         """
         Factory method para crear una nueva competición.
@@ -148,6 +154,8 @@ class Competition:
             team_1_name=team_1_name,
             team_2_name=team_2_name,
             handicap_settings=handicap_settings,
+            max_players=max_players,
+            team_assignment=team_assignment,
             status=CompetitionStatus.DRAFT
         )
 

@@ -2,7 +2,7 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import datetime, date
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from decimal import Decimal
@@ -182,7 +182,8 @@ class CompetitionResponseDTO(BaseModel):
     location: Dict[str, Optional[str]] = Field(..., description="Ubicación con países.")
 
     # Handicap Settings (serializado como dict)
-    handicap_settings: Dict[str, Optional[int]] = Field(..., description="Configuración de hándicaps.")
+    # type: str ("SCRATCH" | "PERCENTAGE"), percentage: int | None (90, 95, 100 o None)
+    handicap_settings: Dict[str, Any] = Field(..., description="Configuración de hándicaps.")
 
     # Config
     max_players: int = Field(..., description="Número máximo de jugadores.")
@@ -217,3 +218,179 @@ class CompetitionResponseDTO(BaseModel):
         if hasattr(v, "value"):
             return v.value
         return v
+
+
+# ======================================================================================
+# DTOs para Transiciones de Estado del Ciclo de Vida
+# ======================================================================================
+
+# --------------------------------------------------------------------------------------
+# Activate Competition (DRAFT → ACTIVE)
+# --------------------------------------------------------------------------------------
+
+class ActivateCompetitionRequestDTO(BaseModel):
+    """
+    DTO de entrada para activar una competición.
+    Transición: DRAFT → ACTIVE (abre inscripciones).
+
+    Solo el creador puede activar la competición.
+    """
+    competition_id: UUID = Field(..., description="ID de la competición a activar.")
+
+
+class ActivateCompetitionResponseDTO(BaseModel):
+    """
+    DTO de salida para activación de competición.
+    """
+    id: UUID = Field(..., description="ID de la competición.")
+    status: str = Field(..., description="Nuevo estado (ACTIVE).")
+    activated_at: datetime = Field(..., description="Fecha y hora de activación.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Close Enrollments (ACTIVE → CLOSED)
+# --------------------------------------------------------------------------------------
+
+class CloseEnrollmentsRequestDTO(BaseModel):
+    """
+    DTO de entrada para cerrar inscripciones de una competición.
+    Transición: ACTIVE → CLOSED (cierra inscripciones).
+
+    Solo el creador puede cerrar las inscripciones.
+    """
+    competition_id: UUID = Field(..., description="ID de la competición.")
+
+
+class CloseEnrollmentsResponseDTO(BaseModel):
+    """
+    DTO de salida para cierre de inscripciones.
+    """
+    id: UUID = Field(..., description="ID de la competición.")
+    status: str = Field(..., description="Nuevo estado (CLOSED).")
+    total_enrollments: int = Field(..., description="Número total de inscripciones aprobadas.")
+    closed_at: datetime = Field(..., description="Fecha y hora de cierre.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Start Competition (CLOSED → IN_PROGRESS)
+# --------------------------------------------------------------------------------------
+
+class StartCompetitionRequestDTO(BaseModel):
+    """
+    DTO de entrada para iniciar una competición.
+    Transición: CLOSED → IN_PROGRESS (inicia el torneo).
+
+    Solo el creador puede iniciar la competición.
+    """
+    competition_id: UUID = Field(..., description="ID de la competición a iniciar.")
+
+
+class StartCompetitionResponseDTO(BaseModel):
+    """
+    DTO de salida para inicio de competición.
+    """
+    id: UUID = Field(..., description="ID de la competición.")
+    status: str = Field(..., description="Nuevo estado (IN_PROGRESS).")
+    started_at: datetime = Field(..., description="Fecha y hora de inicio.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Complete Competition (IN_PROGRESS → COMPLETED)
+# --------------------------------------------------------------------------------------
+
+class CompleteCompetitionRequestDTO(BaseModel):
+    """
+    DTO de entrada para completar/finalizar una competición.
+    Transición: IN_PROGRESS → COMPLETED (finaliza el torneo).
+
+    Solo el creador puede completar la competición.
+    """
+    competition_id: UUID = Field(..., description="ID de la competición a completar.")
+
+
+class CompleteCompetitionResponseDTO(BaseModel):
+    """
+    DTO de salida para completar competición.
+    """
+    id: UUID = Field(..., description="ID de la competición.")
+    status: str = Field(..., description="Nuevo estado (COMPLETED).")
+    completed_at: datetime = Field(..., description="Fecha y hora de finalización.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
+# DTOs para Delete y Cancel Competition
+# ======================================================================================
+
+# --------------------------------------------------------------------------------------
+# Delete Competition (eliminación física - solo DRAFT)
+# --------------------------------------------------------------------------------------
+
+class DeleteCompetitionRequestDTO(BaseModel):
+    """
+    DTO de entrada para eliminar físicamente una competición.
+
+    Restricciones:
+    - Solo se puede eliminar en estado DRAFT (antes de activar)
+    - Solo el creador puede eliminar
+    - Se elimina permanentemente de la BD (incluyendo enrollments)
+    """
+    competition_id: UUID = Field(..., description="ID de la competición a eliminar.")
+
+
+class DeleteCompetitionResponseDTO(BaseModel):
+    """
+    DTO de salida para eliminación de competición.
+    """
+    id: UUID = Field(..., description="ID de la competición eliminada.")
+    name: str = Field(..., description="Nombre de la competición eliminada.")
+    deleted: bool = Field(default=True, description="Confirmación de eliminación.")
+    deleted_at: datetime = Field(..., description="Fecha y hora de eliminación.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Cancel Competition (cancelación lógica - cualquier estado no final)
+# --------------------------------------------------------------------------------------
+
+class CancelCompetitionRequestDTO(BaseModel):
+    """
+    DTO de entrada para cancelar una competición.
+    Transición: cualquier estado → CANCELLED (cancelación lógica).
+
+    Restricciones:
+    - No se puede cancelar si ya está en estado final (COMPLETED/CANCELLED)
+    - Solo el creador puede cancelar
+    - Se mantiene el registro histórico (no se elimina)
+
+    Use cases:
+    - Cancelar por mal tiempo
+    - Cancelar por falta de participantes
+    - Cancelar por razones organizativas
+    """
+    competition_id: UUID = Field(..., description="ID de la competición a cancelar.")
+    reason: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Razón de la cancelación (opcional)."
+    )
+
+
+class CancelCompetitionResponseDTO(BaseModel):
+    """
+    DTO de salida para cancelación de competición.
+    """
+    id: UUID = Field(..., description="ID de la competición.")
+    status: str = Field(..., description="Nuevo estado (CANCELLED).")
+    reason: Optional[str] = Field(None, description="Razón de la cancelación.")
+    cancelled_at: datetime = Field(..., description="Fecha y hora de cancelación.")
+
+    model_config = ConfigDict(from_attributes=True)
