@@ -17,7 +17,11 @@ import secrets
 import uvicorn
 
 from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
+from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
+from src.shared.infrastructure.api.v1 import country_routes
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import start_mappers as start_competition_mappers
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import start_mappers as start_country_mappers
 from src.config.settings import settings
 
 
@@ -29,7 +33,9 @@ async def lifespan(app: FastAPI):
     - (Aquí se podrían añadir otras tareas de inicio/apagado, como conectar a Redis).
     """
     print("INFO:     Iniciando aplicación y configurando mappers...")
-    start_mappers()
+    start_mappers()  # User module mappers
+    start_country_mappers()  # Shared domain (Country) mappers
+    start_competition_mappers()  # Competition module mappers
     yield
     print("INFO:     Apagando aplicación...")
 
@@ -170,6 +176,24 @@ app.include_router(
     user_routes.router,
     prefix="/api/v1/users",
     tags=["Users"],
+)
+
+app.include_router(
+    competition_routes.router,
+    prefix="/api/v1/competitions",
+    tags=["Competitions"],
+)
+
+app.include_router(
+    country_routes.router,
+    prefix="/api/v1/countries",
+    tags=["Countries"],
+)
+
+app.include_router(
+    enrollment_routes.router,
+    prefix="/api/v1",
+    tags=["Enrollments"],
 )
 
 # Endpoints protegidos de documentación con HTTP Basic Auth

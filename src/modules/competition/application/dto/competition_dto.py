@@ -84,15 +84,38 @@ class CreateCompetitionRequestDTO(BaseModel):
 class CreateCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para el caso de uso de creación de competición.
-    Devuelve los datos básicos de la competición creada.
+    Devuelve la competición completa recién creada (mismo formato que CompetitionResponseDTO).
     """
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     name: str = Field(..., description="Nombre de la competición.")
     status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
+
+    # Dates
     start_date: date = Field(..., description="Fecha de inicio.")
     end_date: date = Field(..., description="Fecha de fin.")
+
+    # Location
+    country_code: str = Field(..., description="Código ISO del país principal.")
+    secondary_country_code: Optional[str] = Field(None, description="Código ISO del país secundario.")
+    tertiary_country_code: Optional[str] = Field(None, description="Código ISO del país terciario.")
+    location: str = Field(..., description="Ubicación formateada legible.")
+
+    # Handicap
+    handicap_type: str = Field(..., description="Tipo de hándicap.")
+    handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap.")
+
+    # Config
+    max_players: int = Field(..., description="Número máximo de jugadores.")
+    team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
+
+    # Campos calculados
+    is_creator: bool = Field(default=True, description="Siempre True para el creador.")
+    enrolled_count: int = Field(default=0, description="Siempre 0 al crear.")
+
+    # Timestamps
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
+    updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -168,6 +191,10 @@ class CompetitionResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una competición.
     Se utiliza para listar competiciones y consultas detalladas.
+
+    NOTA: Este DTO incluye campos calculados dinámicamente que NO existen
+    en la entidad de dominio (is_creator, enrolled_count, location_formatted).
+    Estos se deben calcular en la capa de aplicación antes de construir el DTO.
     """
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
@@ -178,16 +205,25 @@ class CompetitionResponseDTO(BaseModel):
     start_date: date = Field(..., description="Fecha de inicio.")
     end_date: date = Field(..., description="Fecha de fin.")
 
-    # Location (serializado como dict)
-    location: Dict[str, Optional[str]] = Field(..., description="Ubicación con países.")
+    # Location - Raw country codes (para backward compatibility con tests)
+    country_code: str = Field(..., description="Código ISO del país principal.")
+    secondary_country_code: Optional[str] = Field(None, description="Código ISO del país secundario.")
+    tertiary_country_code: Optional[str] = Field(None, description="Código ISO del país terciario.")
 
-    # Handicap Settings (serializado como dict)
-    # type: str ("SCRATCH" | "PERCENTAGE"), percentage: int | None (90, 95, 100 o None)
-    handicap_settings: Dict[str, Any] = Field(..., description="Configuración de hándicaps.")
+    # Location - Formatted string (NUEVO - requerido por frontend)
+    location: str = Field(..., description="Ubicación formateada legible (ej: 'Spain, France, Italy').")
+
+    # Handicap Settings
+    handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
+    handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap (90-100) si es PERCENTAGE.")
 
     # Config
     max_players: int = Field(..., description="Número máximo de jugadores.")
     team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
+
+    # Campos calculados (NUEVO - requeridos por frontend)
+    is_creator: bool = Field(..., description="True si el usuario autenticado es el creador de esta competición.")
+    enrolled_count: int = Field(default=0, description="Número de jugadores con enrollment status APPROVED.")
 
     # Timestamps
     created_at: datetime = Field(..., description="Fecha y hora de creación.")

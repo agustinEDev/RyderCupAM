@@ -1,0 +1,1 @@
+# Competition Module - API Infrastructure

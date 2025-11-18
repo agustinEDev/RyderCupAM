@@ -26,6 +26,8 @@ from main import app as fastapi_app
 from src.config.database import DATABASE_URL as APP_DATABASE_URL # Renombramos para evitar conflicto
 from src.config.dependencies import get_db_session
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metadata, start_mappers
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import start_mappers as start_competition_mappers
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import start_mappers as start_country_mappers
 
 # Usamos la URL de la app como base, pero la sobreescribimos si es necesario
 DATABASE_URL = APP_DATABASE_URL
@@ -53,7 +55,9 @@ def pytest_configure(config):
     if worker_id is None or worker_id == "master":
         print(f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("🚀 Inicializando mappers de SQLAlchemy...")
-        start_mappers()
+        start_mappers()  # User module
+        start_country_mappers()  # Shared domain (Country)
+        start_competition_mappers()  # Competition module
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
 
@@ -66,6 +70,8 @@ def pytest_configure(config):
     else:
         try:
             start_mappers()
+            start_country_mappers()
+            start_competition_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
             pass
@@ -377,3 +383,80 @@ def mock_email_service():
         mock_send
     ):
         yield mock_send
+
+
+# ======================================================================================
+# COMPETITION MODULE FIXTURES
+# ======================================================================================
+
+@pytest.fixture(scope="session")
+def sample_competition_data() -> dict:
+    """Fixture con datos de ejemplo para una competición."""
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=30)
+    end = start + timedelta(days=3)
+
+    return {
+        "name": "Ryder Cup Test 2025",
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "main_country": "ES",
+        "adjacent_country_1": None,
+        "adjacent_country_2": None,
+        "handicap_type": "PERCENTAGE",
+        "handicap_percentage": 95,
+        "max_players": 24,
+        "team_assignment": "MANUAL"
+    }
+
+
+async def create_competition(
+    client: AsyncClient,
+    token: str,
+    competition_data: dict = None
+) -> dict:
+    """
+    Helper para crear una competición.
+
+    Args:
+        client: Cliente HTTP de testing
+        token: Token JWT de autenticación
+        competition_data: Datos de la competición (opcional)
+
+    Returns:
+        Dict con los datos de la competición creada
+    """
+    from datetime import date, timedelta
+
+    if competition_data is None:
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        competition_data = {
+            "name": f"Test Competition {start.isoformat()}",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "main_country": "ES",
+            "handicap_type": "PERCENTAGE",
+            "handicap_percentage": 95,
+            "max_players": 24,
+            "team_assignment": "MANUAL"
+        }
+
+    response = await client.post(
+        "/api/v1/competitions",
+        json=competition_data,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 201, f"Failed to create competition: {response.text}"
+    return response.json()
+
+
+async def activate_competition(client: AsyncClient, token: str, competition_id: str) -> dict:
+    """Helper para activar una competición (DRAFT -> ACTIVE)."""
+    response = await client.post(
+        f"/api/v1/competitions/{competition_id}/activate",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200, f"Failed to activate competition: {response.text}"
+    return response.json()

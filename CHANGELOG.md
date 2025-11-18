@@ -7,6 +7,131 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.6.0] - 2025-11-18
+
+### Added - Competition Module COMPLETO (FASE 2 - Enrollment API)
+
+**Módulo Competition 100% Funcional** - API REST completa para gestión de competiciones e inscripciones.
+
+**Use Cases de Enrollment (7 nuevos):**
+- ✅ `RequestEnrollmentUseCase` - Jugador solicita inscripción (REQUESTED)
+- ✅ `DirectEnrollPlayerUseCase` - Creador inscribe directamente (APPROVED)
+- ✅ `HandleEnrollmentUseCase` - Creador aprueba/rechaza (APPROVE/REJECT)
+- ✅ `CancelEnrollmentUseCase` - Jugador cancela solicitud (CANCELLED)
+- ✅ `WithdrawEnrollmentUseCase` - Jugador se retira (WITHDRAWN)
+- ✅ `SetCustomHandicapUseCase` - Creador establece handicap personalizado
+- ✅ `ListEnrollmentsUseCase` - Lista inscripciones con filtros
+
+**API REST Endpoints - Enrollments (8 nuevos):**
+1. `POST /api/v1/competitions/{id}/enrollments` - Solicitar inscripción
+2. `POST /api/v1/competitions/{id}/enrollments/direct` - Inscripción directa por creador
+3. `GET /api/v1/competitions/{id}/enrollments` - Listar inscripciones (?status=X)
+4. `POST /api/v1/enrollments/{id}/approve` - Aprobar solicitud
+5. `POST /api/v1/enrollments/{id}/reject` - Rechazar solicitud
+6. `POST /api/v1/enrollments/{id}/cancel` - Cancelar solicitud/invitación
+7. `POST /api/v1/enrollments/{id}/withdraw` - Retirarse de competición
+8. `PUT /api/v1/enrollments/{id}/handicap` - Establecer handicap personalizado
+
+**Dependency Injection:**
+- ✅ 7 providers para Enrollment use cases en `dependencies.py`
+
+**Archivos Creados:**
+- 7 use cases en `src/modules/competition/application/use_cases/`
+- `src/modules/competition/infrastructure/api/v1/enrollment_routes.py` (~400 líneas)
+
+**Archivos Modificados:**
+- `src/config/dependencies.py` - 7 imports + 7 providers
+- `main.py` - Router de enrollments registrado
+
+**Reglas de Negocio Implementadas:**
+- Solo el creador puede aprobar/rechazar/inscribir directamente
+- Solo el dueño puede cancelar/retirarse de su inscripción
+- Competición debe estar ACTIVE para inscripciones
+- No se permiten inscripciones duplicadas
+- Transiciones de estado validadas (REQUESTED→APPROVED, APPROVED→WITHDRAWN, etc.)
+
+**Total Endpoints API:**
+- Competition: 10 endpoints
+- Enrollment: 8 endpoints
+- Countries: 2 endpoints
+- **Total módulo Competition: 20 endpoints**
+
+---
+
+## [1.5.1] - 2025-11-18
+
+### Added - Country Endpoints (Shared Domain API)
+
+**Endpoints de Países (2 nuevos):**
+- ✅ `GET /api/v1/countries` - Lista 166 países activos para selectores
+- ✅ `GET /api/v1/countries/{code}/adjacent` - Lista países adyacentes a un código dado
+
+**DTO:**
+- ✅ `CountryResponseDTO` con campos: `code`, `name_en`, `name_es`
+
+**Archivos Creados:**
+- `src/shared/infrastructure/api/v1/country_routes.py` (~110 líneas)
+- `src/shared/infrastructure/api/__init__.py`
+- `src/shared/infrastructure/api/v1/__init__.py`
+
+**Integración:**
+- ✅ Router registrado en `main.py` con prefix `/api/v1/countries`
+- ✅ Tag `Countries` en Swagger UI
+- ✅ Usa `CompetitionUnitOfWork` para acceso al `CountryRepository`
+
+**Uso en Frontend:**
+- Selector de país principal en formulario de crear/editar competición
+- Selectores de países secundario/terciario (filtrados por adyacencia)
+
+---
+
+## [1.5.0] - 2025-11-18
+
+### Added - Competition Module API REST Layer (FASE 1 COMPLETA)
+
+**10 Endpoints de Competition:**
+1. `POST /api/v1/competitions` - Crear competición (estado DRAFT)
+2. `GET /api/v1/competitions` - Listar competiciones (con filtros status, creator_id)
+3. `GET /api/v1/competitions/{id}` - Obtener competición por ID
+4. `PUT /api/v1/competitions/{id}` - Actualizar competición (solo DRAFT)
+5. `DELETE /api/v1/competitions/{id}` - Eliminar competición (solo DRAFT)
+6. `POST /api/v1/competitions/{id}/activate` - DRAFT → ACTIVE
+7. `POST /api/v1/competitions/{id}/close-enrollments` - ACTIVE → CLOSED
+8. `POST /api/v1/competitions/{id}/start` - CLOSED → IN_PROGRESS
+9. `POST /api/v1/competitions/{id}/complete` - IN_PROGRESS → COMPLETED
+10. `POST /api/v1/competitions/{id}/cancel` - Cualquier estado → CANCELLED
+
+**Arquitectura:**
+- ✅ `CompetitionDTOMapper` en API Layer para campos calculados
+- ✅ Use cases retornan entidades, NO DTOs (Clean Architecture)
+- ✅ 11 providers de Dependency Injection configurados
+- ✅ JWT authentication en todos los endpoints
+- ✅ Autorización: solo creador puede modificar
+
+**DTOs Enriquecidos:**
+- `is_creator` (boolean calculado)
+- `enrolled_count` (count de APPROVED)
+- `location` (string formateado: "Spain, France, Italy")
+
+**Total Código Nuevo:** ~1,422 líneas
+
+---
+
+## [1.4.0] - 2025-11-18
+
+### Added - Competition Module Infrastructure Layer
+
+**Persistencia SQLAlchemy:**
+- ✅ 2 migraciones Alembic (4 tablas + seed data)
+- ✅ 3 repositorios async (Competition, Enrollment, Country)
+- ✅ Imperative Mapping con TypeDecorators y Composites
+- ✅ 166 países + 614 fronteras cargadas
+
+**Unit of Work:**
+- ✅ `SQLAlchemyCompetitionUnitOfWork` con 3 repositorios
+
+---
+
 ## [1.3.0] - 2025-11-18
 
 ### Added - Competition Module (Domain + Application Layer COMPLETO)
@@ -170,4 +295,4 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-**Última actualización:** 18 de Noviembre de 2025
+**Última actualización:** 18 de Noviembre de 2025 (v1.6.0 - Competition Module COMPLETO)

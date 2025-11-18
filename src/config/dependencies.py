@@ -282,3 +282,246 @@ def get_resend_verification_email_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return ResendVerificationEmailUseCase(uow)
+
+
+# ============================================================================
+# COMPETITION MODULE - Dependency Injection
+# ============================================================================
+
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
+    SQLAlchemyCompetitionUnitOfWork,
+)
+from src.modules.competition.application.use_cases.create_competition_use_case import CreateCompetitionUseCase
+from src.modules.competition.application.use_cases.list_competitions_use_case import ListCompetitionsUseCase
+from src.modules.competition.application.use_cases.update_competition_use_case import UpdateCompetitionUseCase
+from src.modules.competition.application.use_cases.get_competition_use_case import GetCompetitionUseCase
+from src.modules.competition.application.use_cases.delete_competition_use_case import DeleteCompetitionUseCase
+from src.modules.competition.application.use_cases.activate_competition_use_case import ActivateCompetitionUseCase
+from src.modules.competition.application.use_cases.close_enrollments_use_case import CloseEnrollmentsUseCase
+from src.modules.competition.application.use_cases.start_competition_use_case import StartCompetitionUseCase
+from src.modules.competition.application.use_cases.complete_competition_use_case import CompleteCompetitionUseCase
+from src.modules.competition.application.use_cases.cancel_competition_use_case import CancelCompetitionUseCase
+
+# Enrollment Use Cases
+from src.modules.competition.application.use_cases.request_enrollment_use_case import RequestEnrollmentUseCase
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import DirectEnrollPlayerUseCase
+from src.modules.competition.application.use_cases.handle_enrollment_use_case import HandleEnrollmentUseCase
+from src.modules.competition.application.use_cases.cancel_enrollment_use_case import CancelEnrollmentUseCase
+from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import WithdrawEnrollmentUseCase
+from src.modules.competition.application.use_cases.set_custom_handicap_use_case import SetCustomHandicapUseCase
+from src.modules.competition.application.use_cases.list_enrollments_use_case import ListEnrollmentsUseCase
+
+
+def get_competition_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> CompetitionUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo Competition.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemyCompetitionUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `CompetitionUnitOfWorkInterface`.
+
+    La UoW de Competition coordina 3 repositorios:
+    - competitions: Repositorio de competiciones
+    - enrollments: Repositorio de inscripciones
+    - countries: Repositorio de países (shared domain)
+    """
+    return SQLAlchemyCompetitionUnitOfWork(session)
+
+
+def get_create_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CreateCompetitionUseCase:
+    """
+    Proveedor del caso de uso CreateCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `CreateCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return CreateCompetitionUseCase(uow)
+
+
+def get_list_competitions_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ListCompetitionsUseCase:
+    """
+    Proveedor del caso de uso ListCompetitionsUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ListCompetitionsUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return ListCompetitionsUseCase(uow)
+
+
+def get_update_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UpdateCompetitionUseCase:
+    """
+    Proveedor del caso de uso UpdateCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `UpdateCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return UpdateCompetitionUseCase(uow)
+
+
+def get_get_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetCompetitionUseCase:
+    """
+    Proveedor del caso de uso GetCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `GetCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return GetCompetitionUseCase(uow)
+
+
+def get_delete_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> DeleteCompetitionUseCase:
+    """
+    Proveedor del caso de uso DeleteCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `DeleteCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return DeleteCompetitionUseCase(uow)
+
+
+def get_activate_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ActivateCompetitionUseCase:
+    """
+    Proveedor del caso de uso ActivateCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ActivateCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return ActivateCompetitionUseCase(uow)
+
+
+def get_close_enrollments_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CloseEnrollmentsUseCase:
+    """
+    Proveedor del caso de uso CloseEnrollmentsUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `CloseEnrollmentsUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return CloseEnrollmentsUseCase(uow)
+
+
+def get_start_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> StartCompetitionUseCase:
+    """
+    Proveedor del caso de uso StartCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `StartCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return StartCompetitionUseCase(uow)
+
+
+def get_complete_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CompleteCompetitionUseCase:
+    """
+    Proveedor del caso de uso CompleteCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `CompleteCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return CompleteCompetitionUseCase(uow)
+
+
+def get_cancel_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CancelCompetitionUseCase:
+    """
+    Proveedor del caso de uso CancelCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `CancelCompetitionUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return CancelCompetitionUseCase(uow)
+
+
+# ======================================================================================
+# ENROLLMENT USE CASE PROVIDERS
+# ======================================================================================
+
+def get_request_enrollment_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RequestEnrollmentUseCase:
+    """Proveedor del caso de uso RequestEnrollmentUseCase."""
+    return RequestEnrollmentUseCase(uow)
+
+
+def get_direct_enroll_player_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> DirectEnrollPlayerUseCase:
+    """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
+    return DirectEnrollPlayerUseCase(uow)
+
+
+def get_handle_enrollment_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> HandleEnrollmentUseCase:
+    """Proveedor del caso de uso HandleEnrollmentUseCase."""
+    return HandleEnrollmentUseCase(uow)
+
+
+def get_cancel_enrollment_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CancelEnrollmentUseCase:
+    """Proveedor del caso de uso CancelEnrollmentUseCase."""
+    return CancelEnrollmentUseCase(uow)
+
+
+def get_withdraw_enrollment_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> WithdrawEnrollmentUseCase:
+    """Proveedor del caso de uso WithdrawEnrollmentUseCase."""
+    return WithdrawEnrollmentUseCase(uow)
+
+
+def get_set_custom_handicap_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> SetCustomHandicapUseCase:
+    """Proveedor del caso de uso SetCustomHandicapUseCase."""
+    return SetCustomHandicapUseCase(uow)
+
+
+def get_list_enrollments_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ListEnrollmentsUseCase:
+    """Proveedor del caso de uso ListEnrollmentsUseCase."""
+    return ListEnrollmentsUseCase(uow)
