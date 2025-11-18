@@ -5,7 +5,7 @@ Seed data for countries and country_adjacencies tables.
 Source: Wikipedia - List of countries and territories by land borders
 Date: 2025-11-18 (updated with additional countries and relations)
 
-Total: 182 countries/territories
+Total: 202 countries/territories
 Total adjacencies: ~750 bidirectional pairs (stored both directions for query performance)
 """
 
@@ -29,6 +29,7 @@ def seed_countries():
         ('AR', 'Argentina', 'Argentina'),
         ('AM', 'Armenia', 'Armenia'),
         ('AT', 'Austria', 'Austria'),
+        ('AU', 'Australia', 'Australia'),
         ('AZ', 'Azerbaijan', 'Azerbaiyán'),
         ('BD', 'Bangladesh', 'Bangladés'),
         ('BY', 'Belarus', 'Bielorrusia'),
@@ -199,7 +200,25 @@ def seed_countries():
         ('EH', 'Western Sahara', 'Sáhara Occidental'),
         ('YE', 'Yemen', 'Yemen'),
         ('ZM', 'Zambia', 'Zambia'),
-        ('ZW', 'Zimbabwe', 'Zimbabue')
+        ('ZW', 'Zimbabwe', 'Zimbabue'),
+        ('GF', 'French Guiana', 'Guayana Francesa'),
+        ('DM', 'Dominica', 'Dominica'),
+        ('MQ', 'Martinique', 'Martinica'),
+        ('RE', 'Réunion', 'Reunión'),
+        ('PM', 'Saint Pierre and Miquelon', 'San Pedro y Miquelón'),
+        ('GG', 'Guernsey', 'Guernsey'),
+        ('IM', 'Isle of Man', 'Isla de Man'),
+        ('JE', 'Jersey', 'Jersey'),
+        ('FK', 'Falkland Islands', 'Islas Malvinas'),
+        ('SJ', 'Svalbard', 'Svalbard'),
+        ('BN', 'Brunei', 'Brunéi'),
+        ('SG', 'Singapore', 'Singapur'),
+        ('JM', 'Jamaica', 'Jamaica'),
+        ('PS', 'Palestine', 'Palestina'),
+        ('HK', 'Hong Kong', 'Hong Kong'),
+        ('TW', 'Taiwan', 'Taiwán'),
+        ('FO', 'Faroe Islands', 'Islas Feroe'),
+        ('GL', 'Greenland', 'Groenlandia')
         ON CONFLICT (code) DO NOTHING;
     """)
 
@@ -346,7 +365,7 @@ def seed_country_adjacencies():
         ('CM', 'GA'), ('GA', 'CM'),
         ('CM', 'NG'), ('NG', 'CM'),
         -- Canada (CA)
-        ('CA', 'GL'), ('GL', 'CA'),
+        -- ADDITION: CA-GL (ya presente en su lista, pero reordenado aquí para claridad)
         ('CA', 'US'), ('US', 'CA'),
         -- Central African Republic (CF)
         ('CF', 'TD'), ('TD', 'CF'),
@@ -354,11 +373,13 @@ def seed_country_adjacencies():
         ('CF', 'NG'), ('NG', 'CF'),
         ('CF', 'SS'), ('SS', 'CF'),
         ('CF', 'SD'), ('SD', 'CF'),
-        -- Chad (TD)('TD', 'LY'), ('LY', 'TD'),
+        -- Chad (TD)
+        ('TD', 'LY'), ('LY', 'TD'),
         ('TD', 'NE'), ('NE', 'TD'),
         ('TD', 'NG'), ('NG', 'TD'),
-('TD', 'SS'), ('SS', 'TD'),
-        ('TD', 'SD'), ('SD', 'TD'),-- Chile (CL)
+        ('TD', 'SS'), ('SS', 'TD'),
+        ('TD', 'SD'), ('SD', 'TD'),
+        -- Chile (CL)
         ('CL', 'PE'), ('PE', 'CL'),
         -- China (CN)
         ('CN', 'HK'), ('HK', 'CN'),
@@ -420,8 +441,10 @@ def seed_country_adjacencies():
         ('CD', 'UG'), ('UG', 'CD'),
         ('CD', 'ZM'), ('ZM', 'CD'),
         ('CD', 'ZW'), ('ZW', 'CD'),
-        -- Denmark (DK)('DK', 'FO'), ('FO', 'DK'),
-('DK', 'DE'), ('DE', 'DK'),-- Djibouti (DJ)
+        -- Denmark (DK)
+        ('DK', 'FO'), ('FO', 'DK'),
+        ('DK', 'DE'), ('DE', 'DK'),
+        -- Djibouti (DJ)
         ('DJ', 'ER'), ('ER', 'DJ'),
         ('DJ', 'ET'), ('ET', 'DJ'),
         ('DJ', 'SO'), ('SO', 'DJ'),
@@ -526,44 +549,52 @@ def seed_country_adjacencies():
         ('IN', 'MM'), ('MM', 'IN'),
         ('IN', 'NP'), ('NP', 'IN'),
         ('IN', 'PK'), ('PK', 'IN'),
-        -- Iran (IR)('IR', 'IQ'), ('IQ', 'IR'),
+        -- Iran (IR)
+        ('IR', 'IQ'), ('IQ', 'IR'),
         ('IR', 'PK'), ('PK', 'IR'),
         ('IR', 'TR'), ('TR', 'IR'),
-('IR', 'JO'), ('JO', 'IR'),
+        ('IR', 'JO'), ('JO', 'IR'),
         ('IR', 'KW'), ('KW', 'IR'),
         ('IR', 'SA'), ('SA', 'IR'),
         ('IR', 'SY'), ('SY', 'IR'),
-        ('IR', 'TM'), ('TM', 'IR'),-- Iraq (IQ)
+        ('IR', 'TM'), ('TM', 'IR'),
+        -- Iraq (IQ)
         ('IQ', 'JO'), ('JO', 'IQ'),
         ('IQ', 'KW'), ('KW', 'IQ'),
         ('IQ', 'SA'), ('SA', 'IQ'),
         ('IQ', 'SY'), ('SY', 'IQ'),
         ('IQ', 'TR'), ('TR', 'IQ'),
-        -- Israel (IL)('IL', 'JO'), ('JO', 'IL'),
+        -- Israel (IL)
+        ('IL', 'JO'), ('JO', 'IL'),
         ('IL', 'LB'), ('LB', 'IL'),
-('IL', 'PS'), ('PS', 'IL'),
-        ('IL', 'SY'), ('SY', 'IL'),-- Italy (IT)
+        ('IL', 'PS'), ('PS', 'IL'),
+        ('IL', 'SY'), ('SY', 'IL'),
+        -- Italy (IT)
         ('IT', 'SM'), ('SM', 'IT'),
         ('IT', 'SI'), ('SI', 'IT'),
         ('IT', 'CH'), ('CH', 'IT'),
         ('IT', 'VA'), ('VA', 'IT'),
-        -- Jordan (JO)('JO', 'SA'), ('SA', 'JO'),
-('JO', 'EG'), ('EG', 'JO'),
+        -- Jordan (JO)
+        ('JO', 'SA'), ('SA', 'JO'),
+        ('JO', 'EG'), ('EG', 'JO'),
         ('JO', 'IR'), ('IR', 'JO'),
         ('JO', 'PS'), ('PS', 'JO'),
-        ('JO', 'SY'), ('SY', 'JO'),-- Kazakhstan (KZ)
+        ('JO', 'SY'), ('SY', 'JO'),
+        -- Kazakhstan (KZ)
         ('KZ', 'KG'), ('KG', 'KZ'),
         ('KZ', 'RU'), ('RU', 'KZ'),
         ('KZ', 'TM'), ('TM', 'KZ'),
         ('KZ', 'UZ'), ('UZ', 'KZ'),
-        -- Kenya (KE)('KE', 'SO'), ('SO', 'KE'),
+        -- Kenya (KE)
+        ('KE', 'SO'), ('SO', 'KE'),
         ('KE', 'SS'), ('SS', 'KE'),
         ('KE', 'TZ'), ('TZ', 'KE'),
         ('KE', 'UG'), ('UG', 'KE'),
+        ('KE', 'SD'), ('SD', 'KE'),
         -- North Korea (KP)
         ('KP', 'KR'), ('KR', 'KP'),
-('KE', 'SD'), ('SD', 'KE'),
-        ('KP', 'RU'), ('RU', 'KP'),-- Kyrgyzstan (KG)
+        ('KP', 'RU'), ('RU', 'KP'),
+        -- Kyrgyzstan (KG)
         ('KG', 'TJ'), ('TJ', 'KG'),
         ('KG', 'UZ'), ('UZ', 'KG'),
         -- Laos (LA)
@@ -594,10 +625,12 @@ def seed_country_adjacencies():
         ('MW', 'MZ'), ('MZ', 'MW'),
         ('MW', 'TZ'), ('TZ', 'MW'),
         ('MW', 'ZM'), ('ZM', 'MW'),
-        -- Malaysia (MY)('MY', 'ID'), ('ID', 'MY'),
-('MY', 'BN'), ('BN', 'MY'),
+        -- Malaysia (MY)
+        ('MY', 'ID'), ('ID', 'MY'),
+        ('MY', 'BN'), ('BN', 'MY'),
         ('MY', 'SG'), ('SG', 'MY'),
-        ('MY', 'TH'), ('TH', 'MY'),-- Mali (ML)
+        ('MY', 'TH'), ('TH', 'MY'),
+        -- Mali (ML)
         ('ML', 'MR'), ('MR', 'ML'),
         ('ML', 'NE'), ('NE', 'ML'),
         ('ML', 'SN'), ('SN', 'ML'),
@@ -615,19 +648,25 @@ def seed_country_adjacencies():
         ('ME', 'XK'), ('XK', 'ME'),
         -- Morocco (MA)
         ('MA', 'EH'), ('EH', 'MA'),
-        -- Mozambique (MZ)('MZ', 'ZA'), ('ZA', 'MZ'),
+        -- Mozambique (MZ)
+        ('MZ', 'ZA'), ('ZA', 'MZ'),
         ('MZ', 'SZ'), ('SZ', 'MZ'),
         ('MZ', 'TZ'), ('TZ', 'MZ'),
-('MZ', 'MG'), ('MG', 'MZ'),
-        ('MZ', 'ZW'), ('ZW', 'MZ'),-- Myanmar (MM)
+        ('MZ', 'MG'), ('MG', 'MZ'),
+        ('MZ', 'ZW'), ('ZW', 'MZ'),
+        -- Myanmar (MM)
         ('MM', 'TH'), ('TH', 'MM'),
         -- Namibia (NA)
         ('NA', 'ZA'), ('ZA', 'NA'),
         ('NA', 'ZM'), ('ZM', 'NA'),
-        -- Niger (NE)('NE', 'TG'), ('TG', 'NE'),
-('NE', 'NG'), ('NG', 'NE'),-- Norway (NO)('NO', 'SE'), ('SE', 'NO'),
-('NO', 'SJ'), ('SJ', 'NO'),
-        ('NO', 'RU'), ('RU', 'NO'),-- Oman (OM)
+        -- Niger (NE)
+        ('NE', 'TG'), ('TG', 'NE'),
+        ('NE', 'NG'), ('NG', 'NE'),
+        -- Norway (NO)
+        ('NO', 'SE'), ('SE', 'NO'),
+        ('NO', 'SJ'), ('SJ', 'NO'),
+        ('NO', 'RU'), ('RU', 'NO'),
+        -- Oman (OM)
         ('OM', 'SA'), ('SA', 'OM'),
         ('OM', 'YE'), ('YE', 'OM'),
         -- Papua New Guinea (PG)
@@ -643,35 +682,44 @@ def seed_country_adjacencies():
         -- Romania (RO)
         ('RO', 'RS'), ('RS', 'RO'),
         ('RO', 'UA'), ('UA', 'RO'),
-        -- Russia (RU)('RU', 'JP'), ('JP', 'RU'),
-('RU', 'UA'), ('UA', 'RU'),-- Rwanda (RW)
+        -- Russia (RU)
+        ('RU', 'JP'), ('JP', 'RU'),
+        ('RU', 'UA'), ('UA', 'RU'),
+        -- Rwanda (RW)
         ('RW', 'TZ'), ('TZ', 'RW'),
         ('RW', 'UG'), ('UG', 'RW'),
-        -- Saudi Arabia (SA)('SA', 'EG'), ('EG', 'SA'),
+        -- Saudi Arabia (SA)
+        ('SA', 'EG'), ('EG', 'SA'),
         ('SA', 'IR'), ('IR', 'SA'),
         ('SA', 'KW'), ('KW', 'SA'),
-('SA', 'YE'), ('YE', 'SA'),-- Serbia (RS)
+        ('SA', 'YE'), ('YE', 'SA'),
+        -- Serbia (RS)
         -- Slovakia (SK)
         ('SK', 'UA'), ('UA', 'SK'),
         -- South Africa (ZA)
         ('ZA', 'SZ'), ('SZ', 'ZA'),
         ('ZA', 'ZW'), ('ZW', 'ZA'),
-        -- South Sudan (SS)('SS', 'SD'), ('SD', 'SS'),
-('SS', 'TD'), ('TD', 'SS'),
-        ('SS', 'UG'), ('UG', 'SS'),-- Spain (ES)
+        -- South Sudan (SS)
+        ('SS', 'SD'), ('SD', 'SS'),
+        ('SS', 'TD'), ('TD', 'SS'),
+        ('SS', 'UG'), ('UG', 'SS'),
+        -- Spain (ES)
         ('ES', 'FR'), ('FR', 'ES'),
         ('ES', 'GI'), ('GI', 'ES'),
         -- Tajikistan (TJ)
         ('TJ', 'UZ'), ('UZ', 'TJ'),
-        -- Tanzania (TZ)('TZ', 'UG'), ('UG', 'TZ'),
-('TZ', 'ZW'), ('ZW', 'TZ'),
-        ('TZ', 'ZM'), ('ZM', 'TZ'),-- Turkmenistan (TM)
+        -- Tanzania (TZ)
+        ('TZ', 'UG'), ('UG', 'TZ'),
+        ('TZ', 'ZW'), ('ZW', 'TZ'),
+        ('TZ', 'ZM'), ('ZM', 'TZ'),
+        -- Turkmenistan (TM)
         ('TM', 'UZ'), ('UZ', 'TM'),
-        -- Uganda (UG)('UG', 'ET'), ('ET', 'UG'),
+        -- Uganda (UG)
+        ('UG', 'ET'), ('ET', 'UG'),
         ('UG', 'SD'), ('SD', 'UG'),
--- Zambia (ZM)
+        -- Zambia (ZM)
         ('ZM', 'ZW'), ('ZW', 'ZM'),
--- Additional relations
+        -- Additional relations
         ('CK', 'NZ'), ('NZ', 'CK'),
         ('FJ', 'VU'), ('VU', 'FJ'),
         ('GL', 'IS'), ('IS', 'GL'),
@@ -685,6 +733,14 @@ def seed_country_adjacencies():
         ('NZ', 'TK'), ('TK', 'NZ'),
         ('SY', 'TR'), ('TR', 'SY'),
         ('SZ', 'ZW'), ('ZW', 'SZ'),
-        ('TO', 'WS'), ('WS', 'TO')
+        ('TO', 'WS'), ('WS', 'TO'),
+        ('ES', 'MA'), ('MA', 'ES'),
+        ('FR', 'SR'), ('SR', 'FR'),
+        ('IL', 'PS'), ('PS', 'IL'),
+        ('CA', 'GL'), ('GL', 'CA'),
+        ('CY', 'TR'), ('TR', 'CY'),
+        ('AU', 'NZ'), ('NZ', 'AU'),
+        ('IT', 'HR'), ('HR', 'IT'),
+        ('VN', 'PH'), ('PH', 'VN')
         ON CONFLICT (country_code_1, country_code_2) DO NOTHING;
     """)
