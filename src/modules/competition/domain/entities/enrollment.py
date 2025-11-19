@@ -126,7 +126,7 @@ class Enrollment:
             competition_id=str(enrollment.competition_id),
             user_id=str(enrollment.user_id)
         )
-        enrollment._domain_events.append(event)
+        enrollment._add_domain_event(event)
 
         return enrollment
 
@@ -197,7 +197,7 @@ class Enrollment:
             competition_id=str(enrollment.competition_id),
             user_id=str(enrollment.user_id)
         )
-        enrollment._domain_events.append(event)
+        enrollment._add_domain_event(event)
 
         return enrollment
 
@@ -277,7 +277,7 @@ class Enrollment:
             competition_id=str(self.competition_id),
             user_id=str(self.user_id)
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def reject(self) -> None:
         """
@@ -328,7 +328,7 @@ class Enrollment:
             user_id=str(self.user_id),
             reason=reason
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def cancel(self, reason: Optional[str] = None) -> None:
         """
@@ -370,7 +370,7 @@ class Enrollment:
             user_id=str(self.user_id),
             reason=reason
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
@@ -436,13 +436,24 @@ class Enrollment:
     # DOMAIN EVENTS
     # ===========================================
 
+    def _add_domain_event(self, event: DomainEvent) -> None:
+        """
+        Añade un evento de dominio a la lista, inicializándola si es necesario.
+        """
+        if not hasattr(self, '_domain_events') or self._domain_events is None:
+            self._domain_events: List[DomainEvent] = []
+        self._domain_events.append(event)
+
     def get_domain_events(self) -> List[DomainEvent]:
         """Obtiene los eventos de dominio pendientes."""
+        if not hasattr(self, '_domain_events') or self._domain_events is None:
+            self._domain_events: List[DomainEvent] = []
         return self._domain_events.copy()
 
     def clear_domain_events(self) -> None:
         """Limpia los eventos de dominio después de procesarlos."""
-        self._domain_events.clear()
+        if hasattr(self, '_domain_events') and self._domain_events is not None:
+            self._domain_events.clear()
 
     # ===========================================
     # MÉTODOS ESPECIALES

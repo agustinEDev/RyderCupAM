@@ -45,26 +45,18 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 **Endpoint de Countries:**
 - ✅ Corregido manejo de `InvalidCountryCodeError` en list_adjacent_countries
 
-### Pending - Próximos Pasos
+### Fixed - Corrección de Enrollment Endpoints
 
-**Enrollment Endpoints (11 tests fallando - Prioridad ALTA):**
-Los siguientes tests fallan con error 422 (validación) y requieren investigación:
-- `test_direct_enroll_success`
-- `test_direct_enroll_not_creator_returns_403`
-- `test_approve_enrollment_success`
-- `test_cancel_enrollment_success`
-- `test_withdraw_enrollment_success`
-- `test_set_custom_handicap_success`
-- `test_approve_already_approved_returns_400`
-- `test_cancel_approved_returns_400`
-- `test_set_handicap_not_creator_returns_403`
-- `test_list_enrollments_filter_by_status`
-- `test_direct_enroll_with_custom_handicap`
+**Tests (Módulo Enrollment):**
+- ✅ Corregidos los 11 tests fallidos de los endpoints de `enrollment`.
+- ✅ Todos los tests en `tests/integration/api/v1/test_enrollment_endpoints.py` (20/20) ahora pasan.
 
-**Posibles causas a investigar:**
-1. Validación de DTOs en enrollment_routes.py
-2. Formato de request body en tests
-3. Mapeo incompleto de campos en Enrollment entity
+**Correcciones en Entidad `Enrollment` (Dominio):**
+- ✅ Solucionado `AttributeError` al registrar eventos de dominio en objetos cargados por SQLAlchemy.
+- ✅ Añadido método `_add_domain_event` para asegurar la inicialización de la lista de eventos, siguiendo el patrón de la entidad `Competition`.
+
+**Correcciones en Tests de API (Infraestructura):**
+- ✅ Corregido el `payload` en 5 tests de inscripción directa (`direct_enroll`) para incluir el `competition_id`, solucionando los errores de validación `422 Unprocessable Entity`.
 
 ---
 
