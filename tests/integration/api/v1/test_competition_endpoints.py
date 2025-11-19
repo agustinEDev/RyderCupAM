@@ -70,7 +70,8 @@ class TestCreateCompetition:
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
-        assert response.status_code == 401
+        # FastAPI retorna 403 cuando falta el token de autenticación
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_competition_invalid_dates_returns_400(self, client: AsyncClient):

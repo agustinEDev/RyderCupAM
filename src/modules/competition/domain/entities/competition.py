@@ -166,7 +166,7 @@ class Competition:
             creator_id=str(competition.creator_id),
             name=str(competition.name)
         )
-        competition._domain_events.append(event)
+        competition._add_domain_event(event)
 
         return competition
 
@@ -271,7 +271,7 @@ class Competition:
             name=str(self.name),
             start_date=self.dates.start_date.isoformat()
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def close_enrollments(self, total_enrollments: int = 0) -> None:
         """
@@ -298,7 +298,7 @@ class Competition:
             competition_id=str(self.id),
             total_enrollments=total_enrollments
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def start(self) -> None:
         """
@@ -322,7 +322,7 @@ class Competition:
             competition_id=str(self.id),
             name=str(self.name)
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def complete(self) -> None:
         """
@@ -346,7 +346,7 @@ class Competition:
             competition_id=str(self.id),
             name=str(self.name)
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     def cancel(self, reason: Optional[str] = None) -> None:
         """
@@ -377,7 +377,7 @@ class Competition:
             name=str(self.name),
             reason=reason
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
@@ -446,18 +446,30 @@ class Competition:
             competition_id=str(self.id),
             name=str(self.name)
         )
-        self._domain_events.append(event)
+        self._add_domain_event(event)
 
     # ===========================================
     # DOMAIN EVENTS
     # ===========================================
 
+    def _ensure_domain_events(self) -> None:
+        """Asegura que _domain_events existe (para compatibilidad con SQLAlchemy)."""
+        if not hasattr(self, '_domain_events'):
+            self._domain_events = []
+
+    def _add_domain_event(self, event: DomainEvent) -> None:
+        """Añade un evento de dominio de forma segura."""
+        self._ensure_domain_events()
+        self._domain_events.append(event)
+
     def get_domain_events(self) -> List[DomainEvent]:
         """Obtiene los eventos de dominio pendientes."""
+        self._ensure_domain_events()
         return self._domain_events.copy()
 
     def clear_domain_events(self) -> None:
         """Limpia los eventos de dominio después de procesarlos."""
+        self._ensure_domain_events()
         self._domain_events.clear()
 
     # ===========================================

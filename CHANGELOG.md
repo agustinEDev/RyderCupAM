@@ -7,6 +7,67 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.6.1] - 2025-11-19
+
+### Fixed - Correcciones de Integración y Arquitectura
+
+**Mejoras de Tests:**
+- ✅ Tests pasando: de 618 a 651 (+33 tests arreglados)
+- ✅ Tasa de éxito: de 93.35% a 98.34%
+- ✅ Fallos reducidos: de 44 a 11
+
+**Correcciones en Competition Routes:**
+- ✅ Corregidas llamadas a use cases de state transitions (activate, close, start, complete, cancel)
+- ✅ Use cases ahora reciben DTOs + user_id correctamente
+- ✅ Importadas excepciones específicas de cada use case
+- ✅ Manejo apropiado de excepciones HTTP (404, 403, 400)
+- ✅ Añadido manejo de `InvalidCountryError` en create_competition
+
+**Correcciones en Entidades de Dominio:**
+- ✅ Competition entity: añadidos métodos `_ensure_domain_events()` y `_add_domain_event()`
+- ✅ Compatibilidad con SQLAlchemy que no inicializa `_domain_events` al cargar desde BD
+- ✅ EnrollmentStatus: añadido `__composite_values__()` para SQLAlchemy composite
+
+**Correcciones en Mappers SQLAlchemy:**
+- ✅ Location composite usa named parameters
+- ✅ Añadido mapeo explícito de `max_players`
+- ✅ Enrollment mapper usa pattern `_status_value` (mismo que Competition)
+
+**Correcciones en Tests:**
+- ✅ conftest.py: extraída lógica de seed a función helper `seed_countries_and_adjacencies()`
+- ✅ Añadido país JP al seed para tests de adyacencia
+- ✅ Corregido assert de 401 a 403 en test sin auth
+
+**Código Limpiado:**
+- ✅ Eliminado código muerto en GetCompetitionUseCase (clase CompetitionResponse no usada)
+- ✅ Actualizado docstring de GetCompetitionUseCase
+
+**Endpoint de Countries:**
+- ✅ Corregido manejo de `InvalidCountryCodeError` en list_adjacent_countries
+
+### Pending - Próximos Pasos
+
+**Enrollment Endpoints (11 tests fallando - Prioridad ALTA):**
+Los siguientes tests fallan con error 422 (validación) y requieren investigación:
+- `test_direct_enroll_success`
+- `test_direct_enroll_not_creator_returns_403`
+- `test_approve_enrollment_success`
+- `test_cancel_enrollment_success`
+- `test_withdraw_enrollment_success`
+- `test_set_custom_handicap_success`
+- `test_approve_already_approved_returns_400`
+- `test_cancel_approved_returns_400`
+- `test_set_handicap_not_creator_returns_403`
+- `test_list_enrollments_filter_by_status`
+- `test_direct_enroll_with_custom_handicap`
+
+**Posibles causas a investigar:**
+1. Validación de DTOs en enrollment_routes.py
+2. Formato de request body en tests
+3. Mapeo incompleto de campos en Enrollment entity
+
+---
+
 ## [1.6.0] - 2025-11-18
 
 ### Added - Competition Module COMPLETO (FASE 2 - Enrollment API)

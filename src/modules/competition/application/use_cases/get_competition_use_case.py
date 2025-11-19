@@ -27,7 +27,7 @@ class GetCompetitionUseCase:
 
     Orquesta:
     1. Buscar la competición por ID
-    2. Convertir a DTO y retornar
+    2. Retornar la entidad (la conversión a DTO es responsabilidad de la capa de presentación)
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -46,15 +46,24 @@ class GetCompetitionUseCase:
         """
         Ejecuta el caso de uso de consulta de competición.
 
-        CLEAN ARCHITECTURE: Retorna la entidad de dominio, NO el DTO.
-        La conversión a DTO es responsabilidad de la capa de presentación.
+        Retorna la entidad Competition directamente.
 
         Args:
             competition_id: ID de la competición a consultar
 
         Returns:
-            Competition: Entidad de dominio o None si no existe
+            Competition: Entidad de la competición
+
+        Raises:
+            CompetitionNotFoundError: Si la competición no existe
         """
         async with self._uow:
-            # Buscar y retornar la competición (o None)
-            return await self._uow.competitions.find_by_id(competition_id)
+            # Buscar la competición
+            competition = await self._uow.competitions.find_by_id(competition_id)
+            
+            if not competition:
+                raise CompetitionNotFoundError(
+                    f"No existe competición con ID {competition_id.value}"
+                )
+
+            return competition

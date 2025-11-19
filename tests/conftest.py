@@ -40,6 +40,45 @@ if not DATABASE_URL:
     DATABASE_URL = f"{POSTGRESQL_PREFIX}{user}:{password}@{host}:{port}/{db}"
 
 # ======================================================================================
+# HELPER FUNCTIONS
+# ======================================================================================
+
+async def seed_countries_and_adjacencies(conn) -> None:
+    """
+    Inserta países y adyacencias básicas para tests de integración.
+
+    Args:
+        conn: Conexión de SQLAlchemy (dentro de un bloque begin())
+    """
+    # Insertar países esenciales para tests
+    await conn.execute(text("""
+        INSERT INTO countries (code, name_en, name_es, active) VALUES
+        ('ES', 'Spain', 'España', true),
+        ('PT', 'Portugal', 'Portugal', true),
+        ('FR', 'France', 'Francia', true),
+        ('IT', 'Italy', 'Italia', true),
+        ('DE', 'Germany', 'Alemania', true),
+        ('GB', 'United Kingdom', 'Reino Unido', true),
+        ('US', 'United States', 'Estados Unidos', true),
+        ('AD', 'Andorra', 'Andorra', true),
+        ('JP', 'Japan', 'Japón', true)
+        ON CONFLICT (code) DO NOTHING;
+    """))
+
+    # Insertar adyacencias básicas
+    await conn.execute(text("""
+        INSERT INTO country_adjacencies (country_code_1, country_code_2) VALUES
+        ('ES', 'PT'), ('PT', 'ES'),
+        ('ES', 'FR'), ('FR', 'ES'),
+        ('ES', 'AD'), ('AD', 'ES'),
+        ('FR', 'IT'), ('IT', 'FR'),
+        ('FR', 'DE'), ('DE', 'FR'),
+        ('FR', 'AD'), ('AD', 'FR')
+        ON CONFLICT (country_code_1, country_code_2) DO NOTHING;
+    """))
+
+
+# ======================================================================================
 # HOOKS DE CONFIGURACIÓN GLOBAL DE PYTEST
 # ======================================================================================
 
@@ -116,6 +155,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     test_engine = create_async_engine(test_db_url)
     async with test_engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
+        await seed_countries_and_adjacencies(conn)
 
     test_session_local = async_sessionmaker(
         autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession, expire_on_commit=False
@@ -203,11 +243,12 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
+        await seed_countries_and_adjacencies(conn)
 
     test_session_local = async_sessionmaker(
-        autocommit=False, 
-        autoflush=False, 
-        bind=engine, 
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
         class_=AsyncSession,
         expire_on_commit=False
     )

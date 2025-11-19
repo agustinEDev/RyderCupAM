@@ -65,19 +65,19 @@ class TestGetCompetitionUseCase:
 
         # Act: Obtener competición
         get_use_case = GetCompetitionUseCase(uow)
-        response = await get_use_case.execute(CompetitionId(created.id))
+        competition = await get_use_case.execute(CompetitionId(created.id))
 
         # Assert
-        assert response.id == created.id
-        assert response.name == "Ryder Cup 2025"
-        assert response.status == "DRAFT"
-        assert response.creator_id == creator_id.value
-        assert response.start_date == date(2025, 6, 1)
-        assert response.end_date == date(2025, 6, 3)
-        assert response.location["main_country"] == "ES"
-        assert response.location["adjacent_country_1"] == "PT"
-        assert response.handicap_settings["type"] == "PERCENTAGE"
-        assert response.handicap_settings["percentage"] == 90
+        assert competition.id.value == created.id
+        assert str(competition.name) == "Ryder Cup 2025"
+        assert competition.status.value == "DRAFT"
+        assert competition.creator_id.value == creator_id.value
+        assert competition.dates.start_date == date(2025, 6, 1)
+        assert competition.dates.end_date == date(2025, 6, 3)
+        assert competition.location.main_country.value == "ES"
+        assert competition.location.adjacent_country_1.value == "PT"
+        assert competition.handicap_settings.type.value == "PERCENTAGE"
+        assert competition.handicap_settings.percentage == 90
 
     async def test_should_get_competition_with_scratch_handicap(
         self,
@@ -104,11 +104,11 @@ class TestGetCompetitionUseCase:
 
         # Act
         get_use_case = GetCompetitionUseCase(uow)
-        response = await get_use_case.execute(CompetitionId(created.id))
+        competition = await get_use_case.execute(CompetitionId(created.id))
 
         # Assert
-        assert response.handicap_settings["type"] == "SCRATCH"
-        assert response.handicap_settings["percentage"] is None
+        assert competition.handicap_settings.type.value == "SCRATCH"
+        assert competition.handicap_settings.percentage is None
 
     async def test_should_raise_error_when_competition_not_found(
         self,
@@ -156,9 +156,9 @@ class TestGetCompetitionUseCase:
 
         # Act
         get_use_case = GetCompetitionUseCase(uow)
-        response = await get_use_case.execute(CompetitionId(created.id))
+        competition = await get_use_case.execute(CompetitionId(created.id))
 
         # Assert
-        assert response.location["main_country"] == "IT"
-        assert response.location["adjacent_country_1"] is None
-        assert response.location["adjacent_country_2"] is None
+        assert competition.location.main_country.value == "IT"
+        assert competition.location.adjacent_country_1 is None
+        assert competition.location.adjacent_country_2 is None

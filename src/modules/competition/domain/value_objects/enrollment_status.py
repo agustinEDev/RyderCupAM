@@ -112,3 +112,12 @@ class EnrollmentStatus(str, Enum):
         }
 
         return new_status in valid_transitions.get(self, set())
+
+    def __composite_values__(self):
+        """
+        Método requerido por SQLAlchemy composite().
+
+        Returns:
+            tuple: Valores para persistir en la base de datos
+        """
+        return (self.value,)

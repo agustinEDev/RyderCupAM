@@ -408,7 +408,7 @@ def start_competition_mappers():
                 '_secondary_country_code': competitions_table.c.secondary_country_code,
                 '_tertiary_country_code': competitions_table.c.tertiary_country_code,
                 'location': composite(
-                    lambda c1, c2, c3: Location(c1, c2, c3) if c1 else None,
+                    lambda c1, c2, c3: Location(main_country=c1, adjacent_country_1=c2, adjacent_country_2=c3) if c1 else None,
                     '_country_code',
                     '_secondary_country_code',
                     '_tertiary_country_code'
@@ -436,6 +436,9 @@ def start_competition_mappers():
                     lambda t: TeamAssignment(t) if t else TeamAssignment.MANUAL,
                     '_team_assignment_value'
                 ),
+
+                # 7. max_players - Mapeo directo (mismo nombre)
+                'max_players': competitions_table.c.max_players,
             }
         )
 
@@ -445,10 +448,10 @@ def start_competition_mappers():
             Enrollment,
             enrollments_table,
             properties={
-                # 1. EnrollmentStatus (enum)
+                # 1. EnrollmentStatus (enum) - mismo patrón que Competition
                 '_status_value': enrollments_table.c.status,
                 'status': composite(
-                    lambda s: EnrollmentStatus(s) if s else EnrollmentStatus.REQUESTED,
+                    EnrollmentStatus,
                     '_status_value'
                 ),
 

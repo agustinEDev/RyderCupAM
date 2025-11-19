@@ -30,6 +30,12 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
     UpdateCompetitionRequestDTO,
     CompetitionResponseDTO,
+    DeleteCompetitionRequestDTO,
+    ActivateCompetitionRequestDTO,
+    CloseEnrollmentsRequestDTO,
+    StartCompetitionRequestDTO,
+    CompleteCompetitionRequestDTO,
+    CancelCompetitionRequestDTO,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
@@ -40,29 +46,47 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
+    CompetitionNotFoundError as GetNotFoundError,
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
+    CompetitionNotFoundError as UpdateNotFoundError,
+    NotCompetitionCreatorError as UpdateNotCreatorError,
+    CompetitionNotEditableError,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
+    CompetitionNotFoundError as DeleteNotFoundError,
+    NotCompetitionCreatorError as DeleteNotCreatorError,
+    CompetitionNotDeletableError,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
+    CompetitionNotFoundError as ActivateNotFoundError,
+    NotCompetitionCreatorError as ActivateNotCreatorError,
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
+    CompetitionNotFoundError as CloseNotFoundError,
+    NotCompetitionCreatorError as CloseNotCreatorError,
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
+    CompetitionNotFoundError as StartNotFoundError,
+    NotCompetitionCreatorError as StartNotCreatorError,
 )
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
+    CompetitionNotFoundError as CompleteNotFoundError,
+    NotCompetitionCreatorError as CompleteNotCreatorError,
 )
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
+    CompetitionNotFoundError as CancelNotFoundError,
+    NotCompetitionCreatorError as CancelNotCreatorError,
 )
-from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition import Competition, CompetitionStateError
+from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -289,6 +313,11 @@ async def create_competition(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
+    except InvalidCountryError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -383,14 +412,8 @@ async def get_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        # Ejecutar use case (retorna entidad)
+        # Ejecutar use case (retorna entidad o lanza excepción)
         competition = await use_case.execute(competition_vo_id)
-
-        if not competition:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Competition with ID {competition_id} not found",
-            )
 
         # Convertir a DTO enriquecido
         async with uow:
@@ -400,6 +423,11 @@ async def get_competition(
 
         return dto
 
+    except GetNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -443,33 +471,29 @@ async def update_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
+        # Ejecutar use case
+        await use_case.execute(competition_vo_id, request, current_user_id)
+
+        # Obtener la competición actualizada para el DTO de respuesta
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can update this competition",
-                )
-
-        # Ejecutar use case
-        updated_competition = await use_case.execute(competition_vo_id, request)
-
-        # Convertir a DTO enriquecido
-        async with uow:
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except UpdateNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except UpdateNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionNotEditableError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -502,29 +526,26 @@ async def delete_competition(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
-        async with uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can delete this competition",
-                )
+        # Crear DTO de request
+        request_dto = DeleteCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        await use_case.execute(competition_vo_id)
+        await use_case.execute(request_dto, current_user_id)
 
         return None
 
-    except ValueError as e:
+    except DeleteNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except DeleteNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionNotDeletableError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -561,35 +582,34 @@ async def activate_competition(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
+        # Crear DTO de request
+        request_dto = ActivateCompetitionRequestDTO(competition_id=competition_id)
+
+        # Ejecutar use case (valida existencia, autorización y estado)
+        response = await use_case.execute(request_dto, current_user_id)
+
+        # Obtener la competición actualizada para el DTO de respuesta
+        competition_vo_id = CompetitionId(competition_id)
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can activate this competition",
-                )
-
-        # Ejecutar use case
-        updated_competition = await use_case.execute(competition_vo_id)
-
-        # Convertir a DTO
-        async with uow:
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except ActivateNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ActivateNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -622,35 +642,34 @@ async def close_enrollments(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
-        async with uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can close enrollments",
-                )
+        # Crear DTO de request
+        request_dto = CloseEnrollmentsRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        updated_competition = await use_case.execute(competition_vo_id)
+        response = await use_case.execute(request_dto, current_user_id)
 
-        # Convertir a DTO
+        # Obtener la competición actualizada para el DTO de respuesta
+        competition_vo_id = CompetitionId(competition_id)
         async with uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except CloseNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except CloseNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -683,35 +702,34 @@ async def start_competition(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
-        async with uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can start this competition",
-                )
+        # Crear DTO de request
+        request_dto = StartCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        updated_competition = await use_case.execute(competition_vo_id)
+        response = await use_case.execute(request_dto, current_user_id)
 
-        # Convertir a DTO
+        # Obtener la competición actualizada para el DTO de respuesta
+        competition_vo_id = CompetitionId(competition_id)
         async with uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except StartNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except StartNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -744,35 +762,34 @@ async def complete_competition(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
-        async with uow:
-            competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can complete this competition",
-                )
+        # Crear DTO de request
+        request_dto = CompleteCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        updated_competition = await use_case.execute(competition_vo_id)
+        response = await use_case.execute(request_dto, current_user_id)
 
-        # Convertir a DTO
+        # Obtener la competición actualizada para el DTO de respuesta
+        competition_vo_id = CompetitionId(competition_id)
         async with uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except CompleteNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except CompleteNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -805,35 +822,34 @@ async def cancel_competition(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-        competition_vo_id = CompetitionId(competition_id)
 
-        # Verificar autorización
+        # Crear DTO de request (reason es opcional)
+        request_dto = CancelCompetitionRequestDTO(competition_id=competition_id)
+
+        # Ejecutar use case
+        response = await use_case.execute(request_dto, current_user_id)
+
+        # Obtener la competición actualizada para el DTO de respuesta
+        competition_vo_id = CompetitionId(competition_id)
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
-            if not competition:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Competition with ID {competition_id} not found",
-                )
-
-            if competition.creator_id != current_user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the creator can cancel this competition",
-                )
-
-        # Ejecutar use case (puede recibir reason opcional)
-        updated_competition = await use_case.execute(competition_vo_id, reason=None)
-
-        # Convertir a DTO
-        async with uow:
             dto = await CompetitionDTOMapper.to_response_dto(
-                updated_competition, current_user_id, uow
+                competition, current_user_id, uow
             )
 
         return dto
 
-    except ValueError as e:
+    except CancelNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except CancelNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
