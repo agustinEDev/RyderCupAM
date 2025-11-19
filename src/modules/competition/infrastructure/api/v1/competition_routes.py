@@ -145,7 +145,7 @@ class CompetitionDTOMapper:
             handicap_percentage=competition.handicap_settings.percentage,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value,
+            team_assignment=competition.team_assignment.value if hasattr(competition.team_assignment, 'value') else competition.team_assignment,
             # Campos calculados
             is_creator=(competition.creator_id == current_user_id),
             enrolled_count=enrolled_count,
@@ -327,10 +327,15 @@ async def list_competitions(
     try:
         current_user_id = UserId(str(current_user.id))
 
+        # Sanitizar creator_id: tratar "undefined", "null", strings vacíos como None
+        sanitized_creator_id = None
+        if creator_id and creator_id not in ("undefined", "null", ""):
+            sanitized_creator_id = creator_id
+
         # Ejecutar use case (retorna entidades)
         competitions = await use_case.execute(
             status=status_filter,
-            creator_id=creator_id,
+            creator_id=sanitized_creator_id,
         )
 
         # Convertir entidades a DTOs enriquecidos

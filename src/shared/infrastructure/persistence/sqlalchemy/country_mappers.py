@@ -5,12 +5,17 @@ Country Mappers - SQLAlchemy Imperative Mapping for Country entity (Shared Domai
 Este mapper es parte del shared domain y se usa en múltiples módulos.
 """
 
-from sqlalchemy import Table, MetaData, Column, String, Boolean
-from sqlalchemy.orm import registry
+from sqlalchemy import Table, Column, String, Boolean
 from sqlalchemy.types import TypeDecorator, CHAR
 
 from src.shared.domain.entities.country import Country
 from src.shared.domain.value_objects.country_code import CountryCode
+
+# Importar registry y metadata centralizados
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata
+)
 
 
 # --- TypeDecorator para CountryCode ---
@@ -57,8 +62,7 @@ class CountryCodeDecorator(TypeDecorator):
 
 
 # --- Registro y Metadatos ---
-mapper_registry = registry()
-metadata = mapper_registry.metadata
+# (Importados de base.py - ver imports arriba)
 
 
 # --- Definición de Tabla countries ---

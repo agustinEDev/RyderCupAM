@@ -103,7 +103,5 @@ class ListCompetitionsUseCase:
             creator_user_id = UserId(creator_id)
             return await self._uow.competitions.find_by_creator(creator_user_id)
 
-        # Sin filtros: retornar todas (podría ser paginado en el futuro)
-        # Por ahora retornamos lista vacía para evitar sobrecarga
-        # TODO: Implementar paginación o limitar a últimas N competiciones
-        return []
+        # Sin filtros: retornar todas las competiciones
+        return await self._uow.competitions.find_all()

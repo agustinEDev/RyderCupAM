@@ -1,14 +1,20 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 from sqlalchemy import (
-    Table, MetaData, Column, String, DateTime, Float, Boolean
+    Table, Column, String, DateTime, Float, Boolean
 )
-from sqlalchemy.orm import registry, composite
+from sqlalchemy.orm import composite
 from sqlalchemy.types import TypeDecorator, CHAR
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
+
+# Importar registry y metadata centralizados
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata
+)
 
 # --- TypeDecorator para UserId ---
 # Le enseña a SQLAlchemy a manejar nuestro ValueObject UserId.
@@ -31,8 +37,7 @@ class UserIdDecorator(TypeDecorator):
         return UserId(uuid.UUID(value)) 
 
 # --- Registro y Metadatos ---
-mapper_registry = registry()
-metadata = mapper_registry.metadata
+# (Importados de base.py - ver imports arriba)
 
 # --- Definición de la Tabla ---
 users_table = Table(

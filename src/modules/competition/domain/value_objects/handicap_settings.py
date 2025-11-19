@@ -168,3 +168,11 @@ class HandicapSettings:
     def __hash__(self) -> int:
         """Hash del objeto - Permite usar en sets y como keys de dict."""
         return hash((self.type, self.percentage))
+
+    def __composite_values__(self):
+        """
+        Retorna los valores para SQLAlchemy composite mapping.
+
+        Requerido para que SQLAlchemy pueda persistir el Value Object.
+        """
+        return (self.type.value, self.percentage)

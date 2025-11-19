@@ -17,6 +17,7 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
     HandicapType,
 )
+from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -79,9 +80,9 @@ class CreateCompetitionUseCase:
             ValueError: Si los Value Objects no son válidos
         """
         async with self._uow:
-            # 1. Validar que el nombre no exista
+            # 1. Validar que el nombre no exista para este creador
             name_vo = CompetitionName(request.name)
-            existing = await self._uow.competitions.exists_with_name(name_vo)
+            existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
             if existing:
                 raise CompetitionAlreadyExistsError(
                     f"Ya existe una competición con el nombre '{request.name}'"
@@ -106,7 +107,10 @@ class CreateCompetitionUseCase:
                 end_date=request.end_date
             )
 
-            # 5. Crear la entidad Competition usando factory method
+            # 5. Construir TeamAssignment desde string
+            team_assignment_vo = TeamAssignment(request.team_assignment)
+
+            # 6. Crear la entidad Competition usando factory method
             competition = Competition.create(
                 id=CompetitionId.generate(),
                 creator_id=creator_id,
@@ -117,11 +121,11 @@ class CreateCompetitionUseCase:
                 team_2_name="Team 2",  # Default, se puede cambiar con UpdateCompetition
                 handicap_settings=handicap_settings,
                 max_players=request.max_players,
-                team_assignment=request.team_assignment
+                team_assignment=team_assignment_vo
             )
 
             # 6. Persistir la competición
-            await self._uow.competitions.save(competition)
+            await self._uow.competitions.add(competition)
 
             # 7. Commit de la transacción
             await self._uow.commit()
@@ -134,7 +138,20 @@ class CreateCompetitionUseCase:
             status=competition.status.value,
             start_date=competition.dates.start_date,
             end_date=competition.dates.end_date,
-            created_at=competition.created_at
+            # Location
+            country_code=competition.location.main_country.value,
+            secondary_country_code=competition.location.adjacent_country_1.value if competition.location.adjacent_country_1 else None,
+            tertiary_country_code=competition.location.adjacent_country_2.value if competition.location.adjacent_country_2 else None,
+            location=str(competition.location),
+            # Handicap
+            handicap_type=competition.handicap_settings.type.value,
+            handicap_percentage=competition.handicap_settings.percentage,
+            # Config
+            max_players=competition.max_players,
+            team_assignment=competition.team_assignment.value,
+            # Timestamps
+            created_at=competition.created_at,
+            updated_at=competition.updated_at
         )
 
     def _build_handicap_settings(

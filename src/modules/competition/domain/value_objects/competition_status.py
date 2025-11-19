@@ -83,3 +83,11 @@ class CompetitionStatus(str, Enum):
     def allows_modifications(self) -> bool:
         """Verifica si el estado permite modificar la configuración."""
         return self == CompetitionStatus.DRAFT
+
+    def __composite_values__(self):
+        """
+        Retorna los valores para SQLAlchemy composite mapping.
+
+        Requerido para que SQLAlchemy pueda persistir el Value Object.
+        """
+        return (self.value,)

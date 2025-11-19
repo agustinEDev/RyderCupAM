@@ -186,6 +186,25 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_all(self, limit: int = 100, offset: int = 0) -> List[Competition]:
+        """
+        Obtiene todas las competiciones con paginación.
+
+        Útil para: Listado general de torneos.
+
+        Args:
+            limit: Número máximo de competiciones a retornar (default: 100)
+            offset: Número de competiciones a saltar (default: 0)
+
+        Returns:
+            List[Competition]: Lista de todas las competiciones
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def count_by_creator(self, creator_id: UserId) -> int:
         """
         Cuenta el total de competiciones creadas por un usuario.

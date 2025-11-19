@@ -10,10 +10,16 @@ import uuid
 from decimal import Decimal
 from datetime import date
 from sqlalchemy import (
-    Table, MetaData, Column, String, DateTime, Integer, Date, Numeric, ForeignKey
+    Table, Column, String, DateTime, Integer, Date, Numeric, ForeignKey
 )
-from sqlalchemy.orm import registry, composite
+from sqlalchemy.orm import composite
 from sqlalchemy.types import TypeDecorator, CHAR
+
+# Importar registry y metadata centralizados
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata
+)
 
 # Domain Entities
 from src.modules.competition.domain.entities.competition import Competition
@@ -31,6 +37,7 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -305,8 +312,7 @@ class EnrollmentStatusComposite:
 # REGISTRY Y METADATA
 # =============================================================================
 
-mapper_registry = registry()
-metadata = mapper_registry.metadata
+# (Importados de base.py - ver imports arriba)
 
 
 # =============================================================================
@@ -422,6 +428,13 @@ def start_competition_mappers():
                 'status': composite(
                     lambda s: CompetitionStatus(s) if s else CompetitionStatus.DRAFT,
                     '_status_value'
+                ),
+
+                # 6. TeamAssignment (enum)
+                '_team_assignment_value': competitions_table.c.team_assignment,
+                'team_assignment': composite(
+                    lambda t: TeamAssignment(t) if t else TeamAssignment.MANUAL,
+                    '_team_assignment_value'
                 ),
             }
         )

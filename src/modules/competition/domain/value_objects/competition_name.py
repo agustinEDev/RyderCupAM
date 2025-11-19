@@ -88,3 +88,11 @@ class CompetitionName:
         Requerido porque definimos __eq__ en un frozen dataclass.
         """
         return hash(self.value)
+
+    def __composite_values__(self):
+        """
+        Retorna los valores para SQLAlchemy composite mapping.
+
+        Requerido para que SQLAlchemy pueda persistir el Value Object.
+        """
+        return (self.value,)

@@ -224,6 +224,30 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Competition]:
+        """
+        Obtiene todas las competiciones con paginación.
+
+        Args:
+            limit: Número máximo de resultados (paginación)
+            offset: Número de resultados a saltar (paginación)
+
+        Returns:
+            List[Competition]: Lista de todas las competiciones
+        """
+        statement = (
+            select(Competition)
+            .order_by(Competition.created_at.desc())  # Más recientes primero
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def count_by_creator(self, creator_id: UserId) -> int:
         """
         Cuenta el total de competiciones creadas por un usuario.

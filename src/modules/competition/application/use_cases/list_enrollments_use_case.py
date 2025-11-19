@@ -64,7 +64,7 @@ class ListEnrollmentsUseCase:
             CompetitionNotFoundError: Si la competición no existe
         """
         async with self._uow:
-            comp_id = CompetitionId.from_string(competition_id)
+            comp_id = CompetitionId(competition_id)
 
             # 1. Verificar que la competición existe
             competition = await self._uow.competitions.find_by_id(comp_id)

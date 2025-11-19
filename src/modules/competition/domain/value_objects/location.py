@@ -186,3 +186,11 @@ class Location:
     def __hash__(self) -> int:
         """Hash del objeto - Permite usar en sets y como keys de dict."""
         return hash((self.main_country, self.adjacent_country_1, self.adjacent_country_2))
+
+    def __composite_values__(self):
+        """
+        Retorna los valores para SQLAlchemy composite mapping.
+
+        Requerido para que SQLAlchemy pueda persistir el Value Object.
+        """
+        return (self.main_country, self.adjacent_country_1, self.adjacent_country_2)

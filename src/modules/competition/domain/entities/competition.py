@@ -16,6 +16,7 @@ from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.handicap_settings import HandicapSettings
 from ..value_objects.competition_status import CompetitionStatus
+from ..value_objects.team_assignment import TeamAssignment
 from ..events.competition_created_event import CompetitionCreatedEvent
 from ..events.competition_activated_event import CompetitionActivatedEvent
 from ..events.competition_enrollments_closed_event import CompetitionEnrollmentsClosedEvent
@@ -78,7 +79,7 @@ class Competition:
         team_2_name: str,
         handicap_settings: HandicapSettings,
         max_players: int = 24,
-        team_assignment: str = "MANUAL",
+        team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
@@ -132,7 +133,7 @@ class Competition:
         team_2_name: str,
         handicap_settings: HandicapSettings,
         max_players: int = 24,
-        team_assignment: str = "MANUAL"
+        team_assignment: TeamAssignment = TeamAssignment.MANUAL
     ) -> 'Competition':
         """
         Factory method para crear una nueva competición.

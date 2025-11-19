@@ -5,9 +5,8 @@ Caso de Uso: Obtener Competition.
 Permite obtener los detalles de una competición por su ID.
 """
 
-from src.modules.competition.application.dto.competition_dto import (
-    CompetitionResponseDTO,
-)
+from typing import Optional
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -43,55 +42,19 @@ class GetCompetitionUseCase:
     async def execute(
         self,
         competition_id: CompetitionId
-    ) -> CompetitionResponseDTO:
+    ) -> Optional[Competition]:
         """
         Ejecuta el caso de uso de consulta de competición.
+
+        CLEAN ARCHITECTURE: Retorna la entidad de dominio, NO el DTO.
+        La conversión a DTO es responsabilidad de la capa de presentación.
 
         Args:
             competition_id: ID de la competición a consultar
 
         Returns:
-            DTO con los datos completos de la competición
-
-        Raises:
-            CompetitionNotFoundError: Si la competición no existe
+            Competition: Entidad de dominio o None si no existe
         """
         async with self._uow:
-            # 1. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(competition_id)
-            if not competition:
-                raise CompetitionNotFoundError(
-                    f"No existe competición con ID {competition_id.value}"
-                )
-
-            # 2. Convertir a DTO
-            # El DTO tiene validadores que convierten los Value Objects
-            return CompetitionResponseDTO(
-                id=competition.id,
-                creator_id=competition.creator_id,
-                name=competition.name,
-                status=competition.status,
-                start_date=competition.dates.start_date,
-                end_date=competition.dates.end_date,
-                location={
-                    "main_country": competition.location.main_country.value,
-                    "adjacent_country_1": (
-                        competition.location.adjacent_country_1.value
-                        if competition.location.adjacent_country_1
-                        else None
-                    ),
-                    "adjacent_country_2": (
-                        competition.location.adjacent_country_2.value
-                        if competition.location.adjacent_country_2
-                        else None
-                    ),
-                },
-                handicap_settings={
-                    "type": competition.handicap_settings.type.value,
-                    "percentage": competition.handicap_settings.percentage,
-                },
-                max_players=competition.max_players,
-                team_assignment=competition.team_assignment,
-                created_at=competition.created_at,
-                updated_at=competition.updated_at,
-            )
+            # Buscar y retornar la competición (o None)
+            return await self._uow.competitions.find_by_id(competition_id)
