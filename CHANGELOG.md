@@ -30,8 +30,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [1.6.2] - 2025-11-19
 
-## [1.6.2] - 2025-11-19
-
 ### Fixed
 - **Update Competition Endpoint**: Corregido el endpoint `PUT /api/v1/competitions/{id}` para que actualice correctamente todos los campos de negocio en estado DRAFT, incluyendo `max_players`, `team_assignment` y los nombres de los equipos. El caso de uso, la entidad de dominio y los DTOs fueron actualizados para soportar esta funcionalidad.
 
