@@ -109,7 +109,7 @@ class LoginRequestDTO(BaseModel):
     Define las credenciales necesarias para autenticar un usuario.
     """
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
-    password: str = Field(..., min_length=8, description="Contraseña del usuario.")
+    password: str = Field(..., description="Contraseña del usuario.")
 
 
 class LoginResponseDTO(BaseModel):

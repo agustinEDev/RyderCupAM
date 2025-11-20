@@ -16,6 +16,7 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
     HandicapType,
 )
+from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -109,12 +110,14 @@ class UpdateCompetitionUseCase:
                     f"Solo se permite en estado DRAFT."
                 )
 
-            # 4. Construir los Value Objects opcionales
+            # 4. Construir los Value Objects y obtener valores opcionales
             name = CompetitionName(request.name) if request.name else None
 
             dates = None
             if request.start_date and request.end_date:
                 dates = DateRange(request.start_date, request.end_date)
+            elif request.start_date or request.end_date:
+                raise ValueError("Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas.")
 
             location = None
             if request.main_country:
@@ -130,17 +133,19 @@ class UpdateCompetitionUseCase:
                     request.handicap_type,
                     request.handicap_percentage
                 )
+            
+            team_assignment = TeamAssignment(request.team_assignment) if request.team_assignment else None
 
             # 5. Actualizar la competición usando el método de dominio
-            # Nota: team_1_name y team_2_name no están en UpdateCompetitionRequestDTO
-            # por ahora. Se pueden agregar en el futuro si es necesario.
             competition.update_info(
                 name=name,
                 dates=dates,
                 location=location,
-                team_1_name=None,  # No se actualiza por ahora
-                team_2_name=None,  # No se actualiza por ahora
-                handicap_settings=handicap_settings
+                handicap_settings=handicap_settings,
+                max_players=request.max_players,
+                team_assignment=team_assignment,
+                team_1_name=request.team_1_name,
+                team_2_name=request.team_2_name
             )
 
             # 6. Persistir cambios

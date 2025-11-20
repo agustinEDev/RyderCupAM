@@ -390,7 +390,9 @@ class Competition:
         location: Optional[Location] = None,
         team_1_name: Optional[str] = None,
         team_2_name: Optional[str] = None,
-        handicap_settings: Optional[HandicapSettings] = None
+        handicap_settings: Optional[HandicapSettings] = None,
+        max_players: Optional[int] = None,
+        team_assignment: Optional[TeamAssignment] = None
     ) -> None:
         """
         Actualiza la información del torneo.
@@ -404,6 +406,8 @@ class Competition:
             team_1_name: Nuevo nombre equipo 1 (opcional)
             team_2_name: Nuevo nombre equipo 2 (opcional)
             handicap_settings: Nueva configuración hándicap (opcional)
+            max_players: Nuevo máximo de jugadores (opcional)
+            team_assignment: Nueva asignación de equipos (opcional)
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -427,6 +431,14 @@ class Competition:
 
         if handicap_settings is not None:
             self.handicap_settings = handicap_settings
+
+        if max_players is not None:
+            if not 2 <= max_players <= 100:
+                raise ValueError("max_players debe estar entre 2 y 100")
+            self.max_players = max_players
+
+        if team_assignment is not None:
+            self.team_assignment = team_assignment
 
         # Validar y actualizar nombres de equipos
         updated_team_1 = team_1_name if team_1_name is not None else self.team_1_name

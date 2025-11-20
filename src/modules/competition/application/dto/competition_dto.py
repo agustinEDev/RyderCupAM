@@ -146,6 +146,8 @@ class UpdateCompetitionRequestDTO(BaseModel):
     # Competition Config
     max_players: Optional[int] = Field(None, ge=2, le=100, description="Nuevo máximo de jugadores.")
     team_assignment: Optional[str] = Field(None, description="Nueva asignación de equipos.")
+    team_1_name: Optional[str] = Field(None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1.")
+    team_2_name: Optional[str] = Field(None, min_length=3, max_length=50, description="Nuevo nombre del equipo 2.")
 
     @field_validator('main_country', 'adjacent_country_1', 'adjacent_country_2', mode='before')
     @classmethod

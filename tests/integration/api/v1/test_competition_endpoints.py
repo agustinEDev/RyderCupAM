@@ -240,8 +240,10 @@ class TestUpdateCompetition:
         comp = await create_competition(client, user["token"])
 
         update_data = {
-            "name": "Updated Name",
-            "max_players": 16
+            "name": "Updated Ryder Cup Name",
+            "max_players": 50,
+            "team_assignment": "AUTOMATIC",
+            "team_1_name": "Team Europe Updated"
         }
 
         response = await client.put(
@@ -252,7 +254,13 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["name"] == "Updated Name"
+        assert data["name"] == "Updated Ryder Cup Name"
+        assert data["max_players"] == 50
+        assert data["team_assignment"] == "AUTOMATIC"
+        # team_1_name no está en el response DTO, así que no podemos verificarlo directamente
+        # Para verificarlo, necesitaríamos un GET y que el DTO de GET lo incluyera.
+        # Por ahora, confiamos en que el cambio se aplicó si el resto funciona.
+
 
     @pytest.mark.asyncio
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):

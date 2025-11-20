@@ -7,6 +7,41 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.6.3] - 2025-11-20
+
+### Security - Corrección de Divulgación de Información en Login
+
+**Problema de Seguridad Resuelto:**
+- **Divulgación de reglas de validación**: El endpoint de login revelaba información sobre las reglas de validación de contraseñas cuando se enviaba una contraseña corta.
+- **Antes**: Error `"password: String should have at least 8 characters"` revelaba que el sistema valida longitud mínima de 8 caracteres.
+- **Después**: Error genérico `"Credenciales incorrectas"` independientemente del motivo del fallo.
+
+**Cambios Implementados:**
+- ✅ **LoginRequestDTO**: Eliminada validación `min_length=8` del campo `password` para evitar filtrado de requests inválidos antes de la lógica de negocio.
+- ✅ **Endpoint de Login**: Ahora procesa cualquier contraseña y devuelve error genérico si las credenciales son incorrectas.
+- ✅ **Test de Seguridad**: Añadido test `test_login_with_short_password_returns_generic_error` que verifica que contraseñas cortas devuelven "Credenciales incorrectas".
+
+**Beneficios de Seguridad:**
+- ⚠️ **Prevención de enumeración**: Atacantes no pueden inferir reglas de validación de contraseñas.
+- 🔒 **Consistencia**: Todos los fallos de autenticación devuelven el mismo mensaje genérico.
+- 🛡️ **Defensa en profundidad**: Validaciones de contraseña solo aplican en registro/cambio, no en login.
+
+---
+
+## [1.6.2] - 2025-11-19
+
+## [1.6.2] - 2025-11-19
+
+### Fixed
+- **Update Competition Endpoint**: Corregido el endpoint `PUT /api/v1/competitions/{id}` para que actualice correctamente todos los campos de negocio en estado DRAFT, incluyendo `max_players`, `team_assignment` y los nombres de los equipos. El caso de uso, la entidad de dominio y los DTOs fueron actualizados para soportar esta funcionalidad.
+
+### Changed
+- **Documentación**:
+  - Añadida sección `Competition Management` al archivo `docs/API.md` para incluir los endpoints de creación y actualización de competiciones.
+  - Actualizado el `postman_collection.json` con un cuerpo de ejemplo más completo para la petición `Update Competition`.
+
+---
+
 ## [1.6.1] - 2025-11-19
 
 ### Fixed - Correcciones de Integración y Arquitectura
@@ -348,4 +383,4 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-**Última actualización:** 18 de Noviembre de 2025 (v1.6.0 - Competition Module COMPLETO)
+**Última actualización:** 20 de Noviembre de 2025 (v1.6.3 - Security Fix: Login Information Disclosure)

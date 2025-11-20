@@ -319,3 +319,29 @@ class TestAuthRoutes:
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_login_with_short_password_returns_generic_error(self, client: AsyncClient):
+        """
+        Verifica que el login con contraseña corta devuelve "Credenciales incorrectas"
+        en lugar de revelar información sobre validaciones de contraseña.
+
+        Esto es importante por seguridad: no debemos revelar reglas de validación
+        de contraseñas en el endpoint de login.
+        """
+        # Arrange
+        login_data = {
+            "email": "any@example.com",
+            "password": "short"  # Contraseña de solo 5 caracteres (< 8 requeridos)
+        }
+
+        # Act
+        response = await client.post("/api/v1/auth/login", json=login_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        response_data = response.json()
+        assert response_data["detail"] == "Credenciales incorrectas"
+        # NO debe contener información sobre validación de longitud
+        assert "8 characters" not in response_data["detail"]
+        assert "min_length" not in response_data["detail"]
+        assert "password" not in response_data["detail"].lower()
