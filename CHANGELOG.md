@@ -7,6 +7,39 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.6.4] - 2025-11-22
+
+### Added - Soporte Dual de Formatos para Creación de Competiciones
+
+**Nueva Funcionalidad:**
+- ✅ **Campo Alias**: Añadido alias `number_of_players` → `max_players` para compatibilidad con frontend
+- ✅ **Array de Países**: Soporte para campo `countries` (array) en requests de creación de competiciones
+- ✅ **Conversión Automática**: Validador que convierte array `countries` a campos `adjacent_country_1/2`
+- ✅ **Respuestas Enriquecidas**: Todos los endpoints de competiciones ahora devuelven array `countries` con detalles completos (código, nombre_en, nombre_es)
+- ✅ **CountryResponseDTO**: Nuevo DTO para representar países con información completa
+- ✅ **Compatibilidad Backward**: Los formatos legacy (`adjacent_country_1/2`) siguen siendo soportados
+
+**Cambios Técnicos:**
+- 🔧 **Pydantic Config**: Añadido `ConfigDict(populate_by_name=True)` para soporte de aliases
+- 🔧 **Model Validators**: Validador automático para conversión de formatos de países
+- 🔧 **Serialización**: Corregida serialización de `CountryCode` value objects extrayendo `.value`
+- 🔧 **Mapeo de Respuestas**: Método `_get_countries_list()` para obtener detalles completos de países
+
+**Documentación Actualizada:**
+- 📚 **API Reference**: Actualizada a v1.6.4 con nuevos campos y ejemplos
+- 📚 **Postman Collection**: Añadidos ejemplos para formato legacy y frontend
+- 📚 **CHANGELOG**: Documentados todos los cambios y beneficios
+
+**Beneficios:**
+- 🔄 **Compatibilidad**: Frontend puede enviar `number_of_players` y `countries` array
+- 📊 **Respuestas Ricas**: API devuelve información completa de países en lugar de solo códigos
+- 🔒 **Backward Compatible**: Formatos antiguos siguen funcionando sin cambios
+- 🧪 **Testeado**: Validación de serialización y conversión de formatos verificada
+
+**BREAKING CHANGE:** Las respuestas de competiciones ahora incluyen campo `countries` (array) además de los campos `adjacent_country_1/2` existentes.
+
+---
+
 ## [1.6.3] - 2025-11-20
 
 ### Security - Corrección de Divulgación de Información en Login
