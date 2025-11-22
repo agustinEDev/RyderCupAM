@@ -2,10 +2,18 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import datetime, date
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, model_validator
 from decimal import Decimal
+
+# Import shared DTOs
+# CountryResponseDTO definido aquí para evitar importación circular
+class CountryResponseDTO(BaseModel):
+    """DTO de respuesta para un país."""
+    code: str = Field(..., description="Código ISO 3166-1 alpha-2 del país")
+    name_en: str = Field(..., description="Nombre en inglés")
+    name_es: str = Field(..., description="Nombre en español")
 
 
 # ======================================================================================
@@ -17,6 +25,10 @@ class CreateCompetitionRequestDTO(BaseModel):
     DTO de entrada para el caso de uso de creación de competición.
     Define los datos necesarios para crear un nuevo torneo.
     """
+    model_config = ConfigDict(
+        populate_by_name=True,  # Permite usar aliases
+    )
+
     name: str = Field(..., min_length=3, max_length=100, description="Nombre de la competición.")
     start_date: date = Field(..., description="Fecha de inicio del torneo.")
     end_date: date = Field(..., description="Fecha de fin del torneo.")
@@ -25,13 +37,15 @@ class CreateCompetitionRequestDTO(BaseModel):
     main_country: str = Field(..., min_length=2, max_length=2, description="Código ISO del país principal (ej: 'ES').")
     adjacent_country_1: Optional[str] = Field(None, min_length=2, max_length=2, description="Código ISO del país adyacente 1 (opcional).")
     adjacent_country_2: Optional[str] = Field(None, min_length=2, max_length=2, description="Código ISO del país adyacente 2 (opcional).")
+    # Campo adicional para compatibilidad con frontend (se convierte automáticamente)
+    countries: Optional[List[str]] = Field(None, description="Lista de países adyacentes (formato frontend).")
 
     # Handicap Settings
     handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
     handicap_percentage: Optional[int] = Field(None, ge=90, le=100, description="Porcentaje de hándicap (90, 95 o 100). Requerido si type='PERCENTAGE'.")
 
-    # Competition Config
-    max_players: int = Field(default=24, ge=2, le=100, description="Número máximo de jugadores.")
+    # Competition Config - con alias para compatibilidad con frontend
+    max_players: int = Field(default=24, ge=2, le=100, description="Número máximo de jugadores.", alias="number_of_players")
     team_assignment: str = Field(default="MANUAL", description="Asignación de equipos: 'MANUAL' o 'AUTOMATIC'.")
 
     @field_validator('main_country', 'adjacent_country_1', 'adjacent_country_2', mode='before')
@@ -58,7 +72,28 @@ class CreateCompetitionRequestDTO(BaseModel):
             return v.upper().strip()
         return v
 
-    def model_post_init(self, __context) -> None:
+    @field_validator('countries', mode='before')
+    @classmethod
+    def uppercase_countries(cls, v):
+        """Convierte códigos de países adyacentes a mayúsculas."""
+        if v and isinstance(v, list):
+            return [country.upper().strip() for country in v]
+        return v
+
+    @model_validator(mode='after')
+    def validate_and_convert_countries(self) -> 'CreateCompetitionRequestDTO':
+        """Convierte el campo countries del frontend a adjacent_country_1/2 si es necesario."""
+        # Si se proporcionó countries pero no adjacent_country_1/2, convertir
+        if self.countries and not self.adjacent_country_1 and not self.adjacent_country_2:
+            if len(self.countries) > 0:
+                self.adjacent_country_1 = self.countries[0]
+            if len(self.countries) > 1:
+                self.adjacent_country_2 = self.countries[1]
+
+        return self
+
+    @model_validator(mode='after')
+    def validate_handicap_config(self) -> 'CreateCompetitionRequestDTO':
         """Validaciones post-inicialización."""
         # Validar fechas
         if self.start_date >= self.end_date:
@@ -80,6 +115,8 @@ class CreateCompetitionRequestDTO(BaseModel):
         if self.team_assignment not in ["MANUAL", "AUTOMATIC"]:
             raise ValueError("team_assignment debe ser 'MANUAL' o 'AUTOMATIC'")
 
+        return self
+
 
 class CreateCompetitionResponseDTO(BaseModel):
     """
@@ -100,6 +137,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     secondary_country_code: Optional[str] = Field(None, description="Código ISO del país secundario.")
     tertiary_country_code: Optional[str] = Field(None, description="Código ISO del país terciario.")
     location: str = Field(..., description="Ubicación formateada legible.")
+    countries: List[CountryResponseDTO] = Field(default_factory=list, description="Lista de países participantes con códigos y nombres.")
 
     # Handicap
     handicap_type: str = Field(..., description="Tipo de hándicap.")
@@ -214,6 +252,9 @@ class CompetitionResponseDTO(BaseModel):
 
     # Location - Formatted string (NUEVO - requerido por frontend)
     location: str = Field(..., description="Ubicación formateada legible (ej: 'Spain, France, Italy').")
+
+    # Location - Countries array (NUEVO - requerido por frontend)
+    countries: List[CountryResponseDTO] = Field(default_factory=list, description="Lista de países participantes con códigos y nombres.")
 
     # Handicap Settings
     handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")

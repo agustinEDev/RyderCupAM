@@ -3,8 +3,8 @@
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
 **Total Endpoints**: 32 active
-**Version**: v1.6.3
-**Last Updated**: 20 Nov 2025
+**Version**: v1.6.4
+**Last Updated**: 22 Nov 2025
 
 ## Quick Reference
 
@@ -380,35 +380,74 @@ Authorization: Bearer {token}
 Request:
 {
   "name": "Ryder Cup 2025",
-  "description": "Annual golf tournament",
-  "start_date": "2025-12-01",
-  "end_date": "2025-12-03",
-  "max_players": 16,
-  "country_code": "ES",
-  "adjacent_country_codes": ["FR", "PT"],
-  "team_assignment": "AUTO",
-  "team_1_name": "Europe",
-  "team_2_name": "America"
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "main_country": "ES",
+  "adjacent_country_1": "FR",
+  "adjacent_country_2": "PT",
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL"
+}
+
+Alternative Request Format (Frontend Compatible):
+{
+  "name": "Ryder Cup 2025",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "main_country": "ES",
+  "countries": ["FR", "PT"],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "number_of_players": 24,
+  "team_assignment": "manual"
 }
 
 Response: 201 Created
 {
   "id": "uuid",
+  "creator_id": "uuid",
   "name": "Ryder Cup 2025",
-  "description": "Annual golf tournament",
   "status": "DRAFT",
-  "start_date": "2025-12-01",
-  "end_date": "2025-12-03",
-  "max_players": 16,
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
   "country_code": "ES",
-  "adjacent_country_codes": ["FR", "PT"],
-  "team_assignment": "AUTO",
-  "team_1_name": "Europe",
-  "team_2_name": "America",
-  "created_by": "uuid",
-  "created_at": "2025-11-09T10:00:00Z",
-  "updated_at": "2025-11-09T10:00:00Z"
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 0,
+  "created_at": "2025-11-19T10:00:00.000Z",
+  "updated_at": "2025-11-19T10:00:00.000Z"
 }
+
+Notes:
+- Competition is created in DRAFT state.
+- Only the creator can modify a DRAFT competition.
+- The API accepts both legacy format (adjacent_country_1/2) and frontend format (countries array, number_of_players alias).
+- Countries are automatically validated for existence and adjacency.
 ```
 
 ### List Competitions
@@ -420,13 +459,40 @@ Response: 200 OK
 [
   {
     "id": "uuid",
+    "creator_id": "uuid",
     "name": "Ryder Cup 2025",
     "status": "DRAFT",
     "start_date": "2025-12-01",
     "end_date": "2025-12-03",
-    "max_players": 16,
-    "created_by": "uuid",
-    "created_at": "2025-11-09T10:00:00Z"
+    "country_code": "ES",
+    "secondary_country_code": "FR",
+    "tertiary_country_code": "PT",
+    "location": "Spain, France, Portugal",
+    "countries": [
+      {
+        "code": "ES",
+        "name_en": "Spain",
+        "name_es": "España"
+      },
+      {
+        "code": "FR",
+        "name_en": "France",
+        "name_es": "Francia"
+      },
+      {
+        "code": "PT",
+        "name_en": "Portugal",
+        "name_es": "Portugal"
+      }
+    ],
+    "handicap_type": "PERCENTAGE",
+    "handicap_percentage": 95,
+    "max_players": 24,
+    "team_assignment": "MANUAL",
+    "is_creator": false,
+    "enrolled_count": 0,
+    "created_at": "2025-11-09T10:00:00Z",
+    "updated_at": "2025-11-09T10:00:00Z"
   }
 ]
 
@@ -444,18 +510,38 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
   "name": "Ryder Cup 2025",
-  "description": "Annual golf tournament",
   "status": "DRAFT",
   "start_date": "2025-12-01",
   "end_date": "2025-12-03",
-  "max_players": 16,
   "country_code": "ES",
-  "adjacent_country_codes": ["FR", "PT"],
-  "team_assignment": "AUTO",
-  "team_1_name": "Europe",
-  "team_2_name": "America",
-  "created_by": "uuid",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": false,
+  "enrolled_count": 0,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
@@ -469,26 +555,60 @@ Authorization: Bearer {token}
 Request:
 {
   "name": "Updated Ryder Cup 2025",
+  "start_date": "2025-12-01",
+  "end_date": "2025-12-03",
+  "main_country": "ES",
+  "adjacent_country_1": "FR",
+  "adjacent_country_2": "PT",
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
   "max_players": 20,
-  "team_1_name": "Team Europe",
-  "team_2_name": "Team America"
+  "team_assignment": "MANUAL"
 }
 
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
   "name": "Updated Ryder Cup 2025",
   "status": "DRAFT",
+  "start_date": "2025-12-01",
+  "end_date": "2025-12-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
   "max_players": 20,
-  "team_1_name": "Team Europe",
-  "team_2_name": "Team America",
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 0,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
 Notes:
 - Only competitions in DRAFT status can be updated
 - Only the creator can update the competition
-- All business fields can be updated
+- Updatable fields: name, dates, countries, handicap settings, max_players, team_assignment
 ```
 
 ### Delete Competition

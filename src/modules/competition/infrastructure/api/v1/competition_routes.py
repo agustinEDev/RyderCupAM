@@ -28,14 +28,22 @@ from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
-    UpdateCompetitionRequestDTO,
     CompetitionResponseDTO,
+    UpdateCompetitionRequestDTO,
+    UpdateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
     ActivateCompetitionRequestDTO,
     CloseEnrollmentsRequestDTO,
     StartCompetitionRequestDTO,
     CompleteCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
+    ActivateCompetitionResponseDTO,
+    CloseEnrollmentsResponseDTO,
+    StartCompetitionResponseDTO,
+    CompleteCompetitionResponseDTO,
+    DeleteCompetitionResponseDTO,
+    CancelCompetitionResponseDTO,
+    CountryResponseDTO,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
@@ -141,6 +149,9 @@ class CompetitionDTOMapper:
         # Formatear location
         location_str = await CompetitionDTOMapper._format_location(competition, uow)
 
+        # Obtener lista de países con detalles
+        countries_list = await CompetitionDTOMapper._get_countries_list(competition, uow)
+
         # Construir DTO
         return CompetitionResponseDTO(
             id=competition.id.value,
@@ -164,6 +175,8 @@ class CompetitionDTOMapper:
             ),
             # Location - formatted
             location=location_str,
+            # Location - countries array
+            countries=countries_list,
             # Handicap
             handicap_type=competition.handicap_settings.type.value,
             handicap_percentage=competition.handicap_settings.percentage,
@@ -219,6 +232,55 @@ class CompetitionDTOMapper:
                 country_names.append(country.name_en)
 
         return ", ".join(country_names) if country_names else "Unknown"
+
+    @staticmethod
+    async def _get_countries_list(
+        competition: Competition,
+        uow: CompetitionUnitOfWorkInterface,
+    ) -> List[CountryResponseDTO]:
+        """
+        Obtiene la lista completa de países participantes con códigos y nombres.
+
+        Args:
+            competition: Entidad Competition
+            uow: Unit of Work para consultar países
+
+        Returns:
+            Lista de CountryResponseDTO
+        """
+        location = competition.location
+        countries = []
+
+        # País principal
+        main_country = await uow.countries.find_by_code(location.main_country)
+        if main_country:
+            countries.append(CountryResponseDTO(
+                code=main_country.code.value,  # Extraer valor primitivo del value object
+                name_en=main_country.name_en,
+                name_es=main_country.name_es
+            ))
+
+        # País adyacente 1
+        if location.adjacent_country_1:
+            country = await uow.countries.find_by_code(location.adjacent_country_1)
+            if country:
+                countries.append(CountryResponseDTO(
+                    code=country.code.value,  # Extraer valor primitivo del value object
+                    name_en=country.name_en,
+                    name_es=country.name_es
+                ))
+
+        # País adyacente 2
+        if location.adjacent_country_2:
+            country = await uow.countries.find_by_code(location.adjacent_country_2)
+            if country:
+                countries.append(CountryResponseDTO(
+                    code=country.code.value,  # Extraer valor primitivo del value object
+                    name_en=country.name_en,
+                    name_es=country.name_es
+                ))
+
+        return countries
 
 
 # ======================================================================================
@@ -298,6 +360,7 @@ async def create_competition(
                 secondary_country_code=enriched_dto.secondary_country_code,
                 tertiary_country_code=enriched_dto.tertiary_country_code,
                 location=enriched_dto.location,
+                countries=enriched_dto.countries,
                 handicap_type=enriched_dto.handicap_type,
                 handicap_percentage=enriched_dto.handicap_percentage,
                 max_players=enriched_dto.max_players,
