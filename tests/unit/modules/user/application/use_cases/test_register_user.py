@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock
 
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
@@ -22,13 +23,21 @@ class TestRegisterUserUseCase:
         """Fixture que proporciona una Unit of Work en memoria para cada test."""
         return InMemoryUnitOfWork()
 
-    async def test_should_register_user_successfully(self, uow: InMemoryUnitOfWork):
+    @pytest.fixture
+    def country_repository(self):
+        """Fixture que proporciona un mock de CountryRepository."""
+        mock_repo = AsyncMock()
+        # Por defecto, todos los country codes son válidos
+        mock_repo.exists.return_value = True
+        return mock_repo
+
+    async def test_should_register_user_successfully(self, uow: InMemoryUnitOfWork, country_repository):
         """
         Verifica que un usuario se registra correctamente cuando los datos son válidos
         y el email no existe previamente.
         """
         # Arrange
-        use_case = RegisterUserUseCase(uow)
+        use_case = RegisterUserUseCase(uow, country_repository)
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
             password="ValidPass123",
@@ -53,14 +62,14 @@ class TestRegisterUserUseCase:
             assert str(saved_user.email) == request_dto.email
 
     async def test_should_raise_error_when_email_already_exists(
-        self, uow: InMemoryUnitOfWork
+        self, uow: InMemoryUnitOfWork, country_repository
     ):
         """
         Verifica que se lanza la excepción UserAlreadyExistsError si se intenta
         registrar un usuario con un email que ya existe.
         """
         # Arrange: Primero, creamos un usuario existente
-        use_case = RegisterUserUseCase(uow)
+        use_case = RegisterUserUseCase(uow, country_repository)
         existing_user_request = RegisterUserRequestDTO(
             email="existing.user@example.com",
             password="ValidPass123",
@@ -82,7 +91,7 @@ class TestRegisterUserUseCase:
             await use_case.execute(new_request_dto)
 
     async def test_should_register_user_with_manual_handicap_when_rfeg_returns_none(
-        self, uow: InMemoryUnitOfWork
+        self, uow: InMemoryUnitOfWork, country_repository
     ):
         """
         Verifica que se puede registrar un usuario con hándicap manual
@@ -93,7 +102,7 @@ class TestRegisterUserUseCase:
 
         # Servicio que siempre devuelve None (usuario no encontrado en RFEG)
         handicap_service = MockHandicapService(default=None)
-        use_case = RegisterUserUseCase(uow, handicap_service)
+        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
@@ -110,7 +119,7 @@ class TestRegisterUserUseCase:
         assert user_response.handicap == 15.5
 
     async def test_should_prefer_rfeg_handicap_over_manual(
-        self, uow: InMemoryUnitOfWork
+        self, uow: InMemoryUnitOfWork, country_repository
     ):
         """
         Verifica que se prefiere el hándicap de RFEG sobre el manual
@@ -123,7 +132,7 @@ class TestRegisterUserUseCase:
         handicap_service = MockHandicapService(
             handicaps={"Test User": 3.5}
         )
-        use_case = RegisterUserUseCase(uow, handicap_service)
+        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
@@ -140,7 +149,7 @@ class TestRegisterUserUseCase:
         assert user_response.handicap == 3.5
 
     async def test_should_register_without_handicap_when_none_available(
-        self, uow: InMemoryUnitOfWork
+        self, uow: InMemoryUnitOfWork, country_repository
     ):
         """
         Verifica que se puede registrar un usuario sin hándicap
@@ -151,7 +160,7 @@ class TestRegisterUserUseCase:
 
         # Servicio que devuelve None
         handicap_service = MockHandicapService(default=None)
-        use_case = RegisterUserUseCase(uow, handicap_service)
+        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",

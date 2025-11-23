@@ -5,6 +5,7 @@ Tests unitarios para el caso de uso de actualización de perfil del usuario.
 """
 
 import pytest
+from unittest.mock import AsyncMock
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateProfileRequestDTO
@@ -21,6 +22,15 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 def uow():
     """Fixture que proporciona un Unit of Work en memoria."""
     return InMemoryUnitOfWork()
+
+
+@pytest.fixture
+def country_repository():
+    """Fixture que proporciona un mock de CountryRepository."""
+    mock_repo = AsyncMock()
+    # Por defecto, todos los country codes son válidos
+    mock_repo.exists.return_value = True
+    return mock_repo
 
 
 @pytest.fixture
@@ -46,10 +56,10 @@ async def existing_user(uow):
 class TestUpdateProfileUseCase:
     """Tests para el caso de uso de actualización de perfil."""
 
-    async def test_update_first_name_only(self, uow, existing_user):
+    async def test_update_first_name_only(self, uow, country_repository, existing_user):
         """Debe actualizar solo el nombre cuando se proporciona."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name="Jane",
@@ -69,10 +79,10 @@ class TestUpdateProfileUseCase:
         updated_user = await uow.users.find_by_id(UserId(user_id))
         assert updated_user.first_name == "Jane"
 
-    async def test_update_last_name_only(self, uow, existing_user):
+    async def test_update_last_name_only(self, uow, country_repository, existing_user):
         """Debe actualizar solo el apellido cuando se proporciona."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name=None,
@@ -88,10 +98,10 @@ class TestUpdateProfileUseCase:
         assert response.user.last_name == "Smith"
         assert response.message == "Profile updated successfully"
 
-    async def test_update_both_names(self, uow, existing_user):
+    async def test_update_both_names(self, uow, country_repository, existing_user):
         """Debe actualizar ambos campos cuando se proporcionan."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name="Jane",
@@ -106,10 +116,10 @@ class TestUpdateProfileUseCase:
         assert response.user.first_name == "Jane"
         assert response.user.last_name == "Smith"
 
-    async def test_update_fails_when_user_not_found(self, uow):
+    async def test_update_fails_when_user_not_found(self, uow, country_repository):
         """Debe lanzar UserNotFoundError cuando el usuario no existe."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         non_existent_id = "00000000-0000-0000-0000-000000000000"
         request = UpdateProfileRequestDTO(
             first_name="Jane",
@@ -120,10 +130,10 @@ class TestUpdateProfileUseCase:
         with pytest.raises(UserNotFoundError):
             await use_case.execute(non_existent_id, request)
 
-    async def test_update_rejects_too_short_names(self, uow, existing_user):
+    async def test_update_rejects_too_short_names(self, uow, country_repository, existing_user):
         """Debe rechazar nombres muy cortos (validación Pydantic)."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
 
         # Act & Assert - Pydantic valida min_length=2
@@ -133,10 +143,10 @@ class TestUpdateProfileUseCase:
                 last_name=None
             )
 
-    async def test_no_update_when_values_are_same(self, uow, existing_user):
+    async def test_no_update_when_values_are_same(self, uow, country_repository, existing_user):
         """Debe retornar sin cambios cuando los valores son los mismos."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name="John",  # Mismo valor
@@ -151,10 +161,10 @@ class TestUpdateProfileUseCase:
         assert response.user.first_name == "John"
         assert response.user.last_name == "Doe"
 
-    async def test_update_emits_domain_event(self, uow, existing_user):
+    async def test_update_emits_domain_event(self, uow, country_repository, existing_user):
         """Debe emitir UserProfileUpdatedEvent cuando se actualiza."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow)
+        use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name="Jane",
