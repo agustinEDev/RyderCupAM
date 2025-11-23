@@ -48,10 +48,68 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 **Benefits:**
 - 🚀 ~60% reducción de llamadas API en pantalla "Discover Competitions"
+
+#### 3. My Competitions Filter
+
+**Infrastructure Layer:**
+- ✅ Nuevo query parameter `my_competitions` en GET /api/v1/competitions
+- ✅ Lógica para filtrar competiciones donde el usuario es creador O está inscrito
+- ✅ Compatible con filtros existentes (status, creator_id)
+
+**Features:**
+- `my_competitions=false` (default): Devuelve todas las competiciones
+- `my_competitions=true`: Solo competiciones creadas o con enrollment del usuario
+- Combina resultados de competiciones creadas + inscripciones del usuario
+- Aplica filtro de status sobre resultados combinados
+
+**Benefits:**
+- 🎯 Vista "My Competitions" ahora muestra solo competiciones relevantes
+- 📊 Mejora UX al separar "Discover" vs "My Competitions"
+
+#### 4. Search Parameters for Competitions
+
+**Domain Layer:**
+- ✅ CompetitionRepositoryInterface: Nuevo método `find_by_filters()` con parámetros de búsqueda
+- ✅ Soporte para search_name y search_creator como filtros opcionales
+
+**Infrastructure Layer:**
+- ✅ SQLAlchemyCompetitionRepository: Implementación con ILIKE para case-insensitive search
+- ✅ InMemoryCompetitionRepository: Implementación para tests
+- ✅ Nuevos query parameters en GET /api/v1/competitions:
+  - `search_name`: Búsqueda parcial en nombre de competición
+  - `search_creator`: Búsqueda parcial en nombre (first_name o last_name) del creador
+
+**Application Layer:**
+- ✅ ListCompetitionsUseCase: Actualizado para soportar search_name y search_creator
+- ✅ Método `_fetch_with_search()` que usa find_by_filters del repositorio
+
+**Features:**
+- Búsqueda case-insensitive usando ILIKE en PostgreSQL
+- Búsqueda independiente por nombre y por creador
+- Combinable con filtros existentes (status, creator_id, my_competitions)
+- JOIN con tabla User solo cuando se usa search_creator (optimización)
+
+**Examples:**
+- `GET /competitions?search_name=ryder` - Busca "ryder" en nombre
+- `GET /competitions?search_creator=john` - Busca "john" en first_name o last_name del creador
+- `GET /competitions?search_name=cup&search_creator=doe` - Búsqueda combinada
+
+**Benefits:**
+- 🔍 Permite búsqueda rápida de competiciones sin cargar todas
+- 🎯 Mejora la experiencia de usuario en pantalla "Discover Competitions"
+- ⚡ Optimizado con índices en base de datos
+
+### Fixed
+
+#### Competition Routes
+- 🐛 Fixed AttributeError en serialización de handicap del creador
+  - Problema: `creator.handicap.value` cuando handicap ya es float
+  - Solución: Cambiado a `creator.handicap` directamente
+  - Afecta: GET /api/v1/competitions y todos los endpoints que devuelven creator nested
 - 🎯 Frontend ya no necesita llamar GET /users/{id} por cada competición
 - 🌍 Incluye country_code del creador para mostrar nacionalidad
 
-#### 3. User Nested Object in Enrollment Responses
+#### 4. User Nested Object in Enrollment Responses
 
 **Application Layer:**
 - ✅ Nuevo `EnrolledUserDTO`: Campos id, first_name, last_name, email, handicap, country_code, avatar_url
