@@ -96,7 +96,7 @@ async def list_adjacent_countries(
         # Validar que el país existe
         try:
             code = CountryCode(country_code.upper())
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Código de país inválido: {country_code}"
