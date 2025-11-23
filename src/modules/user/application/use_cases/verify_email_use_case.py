@@ -27,7 +27,7 @@ class VerifyEmailUseCase:
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
 
-    async def execute(self, token: str) -> bool:
+    async def execute(self, token: str):
         """
         Ejecuta el caso de uso de verificación de email.
 
@@ -35,7 +35,7 @@ class VerifyEmailUseCase:
             token: Token de verificación del email
 
         Returns:
-            bool: True si la verificación fue exitosa, False en caso contrario
+            user: Usuario verificado (entidad de dominio)
 
         Raises:
             ValueError: Si el token es inválido o el usuario no existe
@@ -62,5 +62,4 @@ class VerifyEmailUseCase:
             # El context manager (__aexit__) hace commit automático y publica eventos
 
         logger.info("Email verificado correctamente para el usuario %s", user.id.value)
-
-        return True
+        return user
