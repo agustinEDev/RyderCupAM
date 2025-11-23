@@ -172,14 +172,29 @@ Request:
 
 Response: 200 OK
 {
-  "message": "Email verificado exitosamente",
-  "email_verified": true
+  "access_token": "jwt-token-string",
+  "token_type": "bearer",
+  "user": {
+    "id": "uuid",
+    "email": "verify.success@example.com",
+    "first_name": "Verify",
+    "last_name": "Success",
+    "country_code": "ES",
+    "handicap": null,
+    "handicap_updated_at": null,
+    "created_at": "2025-11-23T10:00:00Z",
+    "updated_at": "2025-11-23T10:00:00Z",
+    "email_verified": true
+  },
+  "email_verification_required": false
 }
 
 Errors:
 400 Bad Request - Token inválido o no encontrado
 
 Notes:
+- Si la verificación es exitosa, el usuario queda autenticado automáticamente y recibe un JWT de acceso.
+- El formato de respuesta es idéntico al login.
 - Los tokens no expiran actualmente (sin TTL implementado)
 - El email enviado es bilingüe (Español/Inglés)
 - El usuario puede usar la app sin verificar, pero algunas funcionalidades estarán limitadas en el futuro
@@ -521,8 +536,21 @@ Response: 200 OK
 
 Query Parameters:
 - status: Filter by competition status (DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED, CANCELLED)
+- creator_id: Filter by creator user ID (UUID)
+- my_competitions: Boolean (default: false). If true, returns only competitions where the user is creator or enrolled
+- search_name: Search in competition name (partial match, case-insensitive)
+- search_creator: Search in creator's first name or last name (partial match, case-insensitive)
 - limit: Maximum number of results (default: 50)
 - offset: Pagination offset (default: 0)
+
+Examples:
+- GET /api/v1/competitions - All competitions
+- GET /api/v1/competitions?status=ACTIVE - Only active competitions
+- GET /api/v1/competitions?my_competitions=true - My created/enrolled competitions
+- GET /api/v1/competitions?my_competitions=true&status=ACTIVE - My active competitions
+- GET /api/v1/competitions?search_name=ryder - Competitions with "ryder" in name
+- GET /api/v1/competitions?search_creator=john - Competitions created by someone named "john"
+- GET /api/v1/competitions?search_name=cup&search_creator=doe - Combined search
 ```
 
 ### Get Competition
