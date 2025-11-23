@@ -115,7 +115,7 @@ class TestAuthRoutes:
         Test: Verificar email exitosamente
         Given: Un usuario registrado con token de verificación
         When: Se llama al endpoint con el token correcto
-        Then: Retorna 200 OK y el email se verifica
+        Then: Retorna 200 OK, un JWT y el usuario autenticado con email verificado
         """
         # Arrange - Registrar usuario
         user_data = {
@@ -128,7 +128,6 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener el token de verificación desde la BD (en un escenario real vendría por email)
-        # Para tests, necesitamos acceder directamente al repositorio
         from tests.conftest import get_user_by_email
         user = await get_user_by_email(client, user_data["email"])
         verification_token = user.verification_token
@@ -140,8 +139,13 @@ class TestAuthRoutes:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["email_verified"] is True
-        assert "verificado" in response_data["message"].lower()
+        # Nuevo contrato: LoginResponseDTO
+        assert "access_token" in response_data
+        assert response_data["token_type"] == "bearer"
+        assert "user" in response_data
+        assert response_data["user"]["email_verified"] is True
+        # El mensaje de éxito está en el DTO original, pero ahora solo validamos el JWT y el usuario
+        # Si quieres validar el mensaje, puedes agregarlo como campo extra en el DTO o en user
 
     async def test_verify_email_endpoint_invalid_token(self, client: AsyncClient):
         """
