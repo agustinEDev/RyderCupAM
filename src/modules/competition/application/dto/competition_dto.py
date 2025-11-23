@@ -1,3 +1,7 @@
+# Descripciones reutilizables para campos
+COMPETITION_NAME_DESC = "Nombre de la competición."
+MAX_PLAYERS_DESC = "Número máximo de jugadores."
+COMPETITION_ID_DESC = "ID de la competición."
 # -*- coding: utf-8 -*-
 """DTOs para el módulo Competition - Application Layer."""
 
@@ -50,7 +54,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         populate_by_name=True,  # Permite usar aliases
     )
 
-    name: str = Field(..., min_length=3, max_length=100, description="Nombre de la competición.")
+    name: str = Field(..., min_length=3, max_length=100, description=COMPETITION_NAME_DESC)
     start_date: date = Field(..., description="Fecha de inicio del torneo.")
     end_date: date = Field(..., description="Fecha de fin del torneo.")
 
@@ -66,7 +70,7 @@ class CreateCompetitionRequestDTO(BaseModel):
     handicap_percentage: Optional[int] = Field(None, ge=90, le=100, description="Porcentaje de hándicap (90, 95 o 100). Requerido si type='PERCENTAGE'.")
 
     # Competition Config - con alias para compatibilidad con frontend
-    max_players: int = Field(default=24, ge=2, le=100, description="Número máximo de jugadores.", alias="number_of_players")
+    max_players: int = Field(default=24, ge=2, le=100, description=MAX_PLAYERS_DESC, alias="number_of_players")
     team_assignment: str = Field(default="MANUAL", description="Asignación de equipos: 'MANUAL' o 'AUTOMATIC'.")
 
     @field_validator('main_country', 'adjacent_country_1', 'adjacent_country_2', mode='before')
@@ -147,7 +151,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     creator: Optional[CreatorDTO] = Field(None, description="Información completa del creador.")
-    name: str = Field(..., description="Nombre de la competición.")
+    name: str = Field(..., description=COMPETITION_NAME_DESC)
     status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
 
     # Dates
@@ -166,7 +170,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap.")
 
     # Config
-    max_players: int = Field(..., description="Número máximo de jugadores.")
+    max_players: int = Field(..., description=MAX_PLAYERS_DESC)
     team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
 
     # Campos calculados
@@ -238,7 +242,7 @@ class UpdateCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para el caso de uso de actualización de competición.
     """
-    id: UUID = Field(..., description="ID de la competición actualizada.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     name: str = Field(..., description="Nombre actualizado.")
     updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
 
@@ -258,10 +262,10 @@ class CompetitionResponseDTO(BaseModel):
     en la entidad de dominio (is_creator, enrolled_count, location_formatted, creator).
     Estos se deben calcular en la capa de aplicación antes de construir el DTO.
     """
-    id: UUID = Field(..., description="ID único de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     creator: Optional[CreatorDTO] = Field(None, description="Información completa del creador.")
-    name: str = Field(..., description="Nombre de la competición.")
+    name: str = Field(..., description=COMPETITION_NAME_DESC)
     status: str = Field(..., description="Estado actual (DRAFT, ACTIVE, CLOSED, etc.).")
 
     # Dates
@@ -284,7 +288,7 @@ class CompetitionResponseDTO(BaseModel):
     handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap (90-100) si es PERCENTAGE.")
 
     # Config
-    max_players: int = Field(..., description="Número máximo de jugadores.")
+    max_players: int = Field(..., description=MAX_PLAYERS_DESC)
     team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
 
     # Campos calculados (NUEVO - requeridos por frontend)
@@ -337,14 +341,14 @@ class ActivateCompetitionRequestDTO(BaseModel):
 
     Solo el creador puede activar la competición.
     """
-    competition_id: UUID = Field(..., description="ID de la competición a activar.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
 
 
 class ActivateCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para activación de competición.
     """
-    id: UUID = Field(..., description="ID de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (ACTIVE).")
     activated_at: datetime = Field(..., description="Fecha y hora de activación.")
 
@@ -362,14 +366,14 @@ class CloseEnrollmentsRequestDTO(BaseModel):
 
     Solo el creador puede cerrar las inscripciones.
     """
-    competition_id: UUID = Field(..., description="ID de la competición.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
 
 
 class CloseEnrollmentsResponseDTO(BaseModel):
     """
     DTO de salida para cierre de inscripciones.
     """
-    id: UUID = Field(..., description="ID de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (CLOSED).")
     total_enrollments: int = Field(..., description="Número total de inscripciones aprobadas.")
     closed_at: datetime = Field(..., description="Fecha y hora de cierre.")
@@ -388,14 +392,14 @@ class StartCompetitionRequestDTO(BaseModel):
 
     Solo el creador puede iniciar la competición.
     """
-    competition_id: UUID = Field(..., description="ID de la competición a iniciar.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
 
 
 class StartCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para inicio de competición.
     """
-    id: UUID = Field(..., description="ID de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (IN_PROGRESS).")
     started_at: datetime = Field(..., description="Fecha y hora de inicio.")
 
@@ -413,14 +417,14 @@ class CompleteCompetitionRequestDTO(BaseModel):
 
     Solo el creador puede completar la competición.
     """
-    competition_id: UUID = Field(..., description="ID de la competición a completar.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
 
 
 class CompleteCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para completar competición.
     """
-    id: UUID = Field(..., description="ID de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (COMPLETED).")
     completed_at: datetime = Field(..., description="Fecha y hora de finalización.")
 
@@ -444,15 +448,15 @@ class DeleteCompetitionRequestDTO(BaseModel):
     - Solo el creador puede eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """
-    competition_id: UUID = Field(..., description="ID de la competición a eliminar.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
 
 
 class DeleteCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para eliminación de competición.
     """
-    id: UUID = Field(..., description="ID de la competición eliminada.")
-    name: str = Field(..., description="Nombre de la competición eliminada.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    name: str = Field(..., description=COMPETITION_NAME_DESC)
     deleted: bool = Field(default=True, description="Confirmación de eliminación.")
     deleted_at: datetime = Field(..., description="Fecha y hora de eliminación.")
 
@@ -478,7 +482,7 @@ class CancelCompetitionRequestDTO(BaseModel):
     - Cancelar por falta de participantes
     - Cancelar por razones organizativas
     """
-    competition_id: UUID = Field(..., description="ID de la competición a cancelar.")
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
     reason: Optional[str] = Field(
         None,
         max_length=500,
@@ -490,7 +494,7 @@ class CancelCompetitionResponseDTO(BaseModel):
     """
     DTO de salida para cancelación de competición.
     """
-    id: UUID = Field(..., description="ID de la competición.")
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (CANCELLED).")
     reason: Optional[str] = Field(None, description="Razón de la cancelación.")
     cancelled_at: datetime = Field(..., description="Fecha y hora de cancelación.")

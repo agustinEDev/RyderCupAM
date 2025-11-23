@@ -99,6 +99,48 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
             if comp.creator_id == creator_id
         )
 
+    async def find_by_filters(
+        self,
+        search_name: Optional[str] = None,
+        search_creator: Optional[str] = None,
+        status: Optional[CompetitionStatus] = None,
+        creator_id: Optional[UserId] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Competition]:
+        """
+        Busca competiciones aplicando múltiples filtros opcionales.
+        
+        Esta implementación in-memory simula el comportamiento de la búsqueda
+        case-insensitive que se hace en la base de datos con ILIKE.
+        
+        Note: search_creator requiere acceso a User data, que en memoria no está
+        disponible. Esta implementación solo filtra por los campos de Competition.
+        """
+        results = list(self._competitions.values())
+        
+        # Filtro: search_name (case-insensitive)
+        if search_name:
+            search_lower = search_name.lower()
+            results = [
+                comp for comp in results
+                if search_lower in str(comp.name).lower()
+            ]
+        
+        # Filtro: status
+        if status:
+            results = [comp for comp in results if comp.status == status]
+        
+        # Filtro: creator_id
+        if creator_id:
+            results = [comp for comp in results if comp.creator_id == creator_id]
+        
+        # Ordenar por created_at descendente (más recientes primero)
+        results.sort(key=lambda c: c.created_at, reverse=True)
+        
+        # Paginar
+        return results[offset:offset + limit]
+
     def _date_ranges_overlap(
         self,
         start1: date,

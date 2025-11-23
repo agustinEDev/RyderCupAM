@@ -1,3 +1,42 @@
+
+# Helpers privados para modularidad y menor complejidad
+from typing import Optional
+
+def _sanitize_creator_id(creator_id: Optional[str]) -> Optional[str]:
+    if creator_id and creator_id not in ("undefined", "null", ""):
+        return creator_id
+    return None
+
+async def _get_user_competitions(uow, use_case, current_user_id, status_filter, search_name, search_creator):
+    async with uow:
+        created_competitions = await use_case.execute(
+            status=status_filter,
+            creator_id=str(current_user_id.value),
+            search_name=search_name,
+            search_creator=search_creator,
+        )
+        enrollments = await uow.enrollments.find_by_user(current_user_id)
+        enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
+        enrolled_competitions = []
+        for comp_id in enrolled_competition_ids:
+            competition = await uow.competitions.find_by_id(comp_id)
+            if competition and competition.id not in [c.id for c in created_competitions]:
+                if status_filter:
+                    if competition.status.value == status_filter.upper():
+                        enrolled_competitions.append(competition)
+                else:
+                    enrolled_competitions.append(competition)
+        return created_competitions + enrolled_competitions
+
+async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
+    result = []
+    async with uow:
+        for competition in competitions:
+            dto = await CompetitionDTOMapper.to_response_dto(
+                competition, current_user_id, uow, user_uow
+            )
+            result.append(dto)
+    return result
 # -*- coding: utf-8 -*-
 """
 Competition Routes - API REST Layer (Infrastructure).
@@ -321,7 +360,7 @@ class CompetitionDTOMapper:
                 first_name=creator.first_name,
                 last_name=creator.last_name,
                 email=str(creator.email),
-                handicap=creator.handicap.value if creator.handicap else None,
+                handicap=creator.handicap,  # handicap ya es float, no tiene .value
                 country_code=creator.country_code.value if creator.country_code else None,
             )
 
@@ -448,6 +487,9 @@ async def list_competitions(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por estado (DRAFT, ACTIVE, etc.)"),
     creator_id: Optional[str] = Query(None, description="Filtrar por creador (UUID)"),
+    my_competitions: bool = Query(False, description="Si es True, solo devuelve competiciones donde el usuario es creador o está inscrito"),
+    search_name: Optional[str] = Query(None, description="Buscar por nombre de competición (parcial, case-insensitive)"),
+    search_creator: Optional[str] = Query(None, description="Buscar por nombre del creador (parcial, case-insensitive)"),
 ):
     """
     Endpoint para listar competiciones con filtros opcionales.
@@ -455,6 +497,9 @@ async def list_competitions(
     **Query Parameters:**
     - status: Filtrar por estado (ej: ACTIVE, DRAFT, CLOSED)
     - creator_id: Filtrar por creador (UUID del usuario)
+    - my_competitions: Si es True, solo muestra competiciones del usuario (creadas o inscritas)
+    - search_name: Búsqueda parcial en el nombre de la competición
+    - search_creator: Búsqueda parcial en el nombre del creador
 
     **Returns:**
     - Lista de competiciones con campos calculados:
@@ -464,29 +509,20 @@ async def list_competitions(
     """
     try:
         current_user_id = UserId(str(current_user.id))
-
-        # Sanitizar creator_id: tratar "undefined", "null", strings vacíos como None
-        sanitized_creator_id = None
-        if creator_id and creator_id not in ("undefined", "null", ""):
-            sanitized_creator_id = creator_id
-
-        # Ejecutar use case (retorna entidades)
-        competitions = await use_case.execute(
-            status=status_filter,
-            creator_id=sanitized_creator_id,
-        )
-
-        # Convertir entidades a DTOs enriquecidos
-        result = []
-        async with uow:
-            for competition in competitions:
-                dto = await CompetitionDTOMapper.to_response_dto(
-                    competition, current_user_id, uow, user_uow
-                )
-                result.append(dto)
-
+        sanitized_creator_id = _sanitize_creator_id(creator_id)
+        if my_competitions:
+            competitions = await _get_user_competitions(
+                uow, use_case, current_user_id, status_filter, search_name, search_creator
+            )
+        else:
+            competitions = await use_case.execute(
+                status=status_filter,
+                creator_id=sanitized_creator_id,
+                search_name=search_name,
+                search_creator=search_creator,
+            )
+        result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
         return result
-
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -700,7 +736,7 @@ async def activate_competition(
         request_dto = ActivateCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case (valida existencia, autorización y estado)
-        response = await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id)
 
         # Obtener la competición actualizada para el DTO de respuesta
         competition_vo_id = CompetitionId(competition_id)
@@ -761,7 +797,7 @@ async def close_enrollments(
         request_dto = CloseEnrollmentsRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        response = await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id)
 
         # Obtener la competición actualizada para el DTO de respuesta
         competition_vo_id = CompetitionId(competition_id)
@@ -822,7 +858,7 @@ async def start_competition(
         request_dto = StartCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        response = await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id)
 
         # Obtener la competición actualizada para el DTO de respuesta
         competition_vo_id = CompetitionId(competition_id)
@@ -883,7 +919,7 @@ async def complete_competition(
         request_dto = CompleteCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        response = await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id)
 
         # Obtener la competición actualizada para el DTO de respuesta
         competition_vo_id = CompetitionId(competition_id)
@@ -944,7 +980,7 @@ async def cancel_competition(
         request_dto = CancelCompetitionRequestDTO(competition_id=competition_id)
 
         # Ejecutar use case
-        response = await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id)
 
         # Obtener la competición actualizada para el DTO de respuesta
         competition_vo_id = CompetitionId(competition_id)

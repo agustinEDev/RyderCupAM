@@ -50,6 +50,8 @@ class ListCompetitionsUseCase:
         self,
         status: Optional[str] = None,
         creator_id: Optional[str] = None,
+        search_name: Optional[str] = None,
+        search_creator: Optional[str] = None,
     ) -> List[Competition]:
         """
         Ejecuta el caso de uso de listado de competiciones.
@@ -57,6 +59,8 @@ class ListCompetitionsUseCase:
         Args:
             status: Filtro opcional por estado (ej: "ACTIVE", "DRAFT")
             creator_id: Filtro opcional por creador (UUID string)
+            search_name: Búsqueda parcial case-insensitive en nombre de competición
+            search_creator: Búsqueda parcial case-insensitive en nombre del creador
 
         Returns:
             Lista de entidades Competition
@@ -65,7 +69,16 @@ class ListCompetitionsUseCase:
             ValueError: Si los parámetros de filtro son inválidos
         """
         async with self._uow:
-            # Obtener competiciones según filtros
+            # Si hay parámetros de búsqueda, usar el método find_by_filters
+            if search_name or search_creator:
+                return await self._fetch_with_search(
+                    search_name=search_name,
+                    search_creator=search_creator,
+                    status=status,
+                    creator_id=creator_id
+                )
+            
+            # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
             return competitions
 
@@ -105,3 +118,36 @@ class ListCompetitionsUseCase:
 
         # Sin filtros: retornar todas las competiciones
         return await self._uow.competitions.find_all()
+
+    async def _fetch_with_search(
+        self,
+        search_name: Optional[str],
+        search_creator: Optional[str],
+        status: Optional[str],
+        creator_id: Optional[str],
+    ) -> List[Competition]:
+        """
+        Obtiene competiciones usando búsqueda avanzada.
+
+        Args:
+            search_name: Búsqueda en nombre de competición
+            search_creator: Búsqueda en nombre del creador
+            status: Filtro por estado (opcional)
+            creator_id: Filtro por creador (opcional)
+
+        Returns:
+            Lista de entidades Competition
+        """
+        # Convertir status string a enum si existe
+        status_enum = CompetitionStatus(status.upper()) if status else None
+        
+        # Convertir creator_id string a UserId si existe
+        creator_user_id = UserId(creator_id) if creator_id else None
+        
+        # Usar el método find_by_filters del repositorio
+        return await self._uow.competitions.find_by_filters(
+            search_name=search_name,
+            search_creator=search_creator,
+            status=status_enum,
+            creator_id=creator_user_id
+        )

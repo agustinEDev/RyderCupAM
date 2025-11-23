@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+
+
 """
 Competition and Enrollment Mappers - SQLAlchemy Imperative Mapping.
 
@@ -41,6 +43,9 @@ from src.modules.competition.domain.value_objects.team_assignment import TeamAss
 
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
+
+
+COUNTRIES_CODE_FK = 'countries.code'
 
 # User Value Object (FK)
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -327,9 +332,9 @@ competitions_table = Table(
     Column('name', String(200), nullable=False),
     Column('start_date', Date, nullable=False),
     Column('end_date', Date, nullable=False),
-    Column('country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='RESTRICT'), nullable=False),
-    Column('secondary_country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='RESTRICT'), nullable=True),
-    Column('tertiary_country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='RESTRICT'), nullable=True),
+    Column('country_code', CountryCodeDecorator, ForeignKey(COUNTRIES_CODE_FK, ondelete='RESTRICT'), nullable=False),
+    Column('secondary_country_code', CountryCodeDecorator, ForeignKey(COUNTRIES_CODE_FK, ondelete='RESTRICT'), nullable=True),
+    Column('tertiary_country_code', CountryCodeDecorator, ForeignKey(COUNTRIES_CODE_FK, ondelete='RESTRICT'), nullable=True),
     Column('team_1_name', String(100), nullable=False),
     Column('team_2_name', String(100), nullable=False),
     Column('handicap_type', String(20), nullable=False),

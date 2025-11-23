@@ -265,3 +265,79 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return result.scalar_one()
+
+    async def find_by_filters(
+        self,
+        search_name: Optional[str] = None,
+        search_creator: Optional[str] = None,
+        status: Optional[CompetitionStatus] = None,
+        creator_id: Optional[UserId] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Competition]:
+        """
+        Busca competiciones aplicando múltiples filtros opcionales.
+
+        Implementa búsqueda case-insensitive con ILIKE:
+        - search_name: Busca en competition.name
+        - search_creator: Busca en creator.first_name OR creator.last_name
+
+        Args:
+            search_name: Texto a buscar en nombre de competición
+            search_creator: Texto a buscar en nombre del creador
+            status: Filtrar por estado
+            creator_id: Filtrar por creador específico
+            limit: Máximo de resultados
+            offset: Saltar N resultados
+
+        Returns:
+            List[Competition]: Competiciones que cumplen los criterios
+        """
+        from src.modules.user.domain.entities.user import User
+        
+        # Construir query base
+        query = select(Competition)
+        
+        # Si hay búsqueda por creador, necesitamos hacer JOIN con User
+        if search_creator:
+            query = query.join(User, Competition.creator_id == User.id)
+        
+        # Lista de condiciones WHERE
+        conditions = []
+        
+        # Filtro: search_name (búsqueda parcial case-insensitive)
+        if search_name:
+            conditions.append(Competition._name_value.ilike(f"%{search_name}%"))
+        
+        # Filtro: search_creator (búsqueda en first_name OR last_name)
+        if search_creator:
+            conditions.append(
+                or_(
+                    User.first_name.ilike(f"%{search_creator}%"),
+                    User.last_name.ilike(f"%{search_creator}%")
+                )
+            )
+        
+        # Filtro: status
+        if status:
+            conditions.append(Competition._status_value == status.value)
+        
+        # Filtro: creator_id
+        if creator_id:
+            conditions.append(Competition.creator_id == creator_id)
+        
+        # Aplicar condiciones si existen
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        # Ordenar y paginar
+        query = (
+            query
+            .order_by(Competition.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        
+        # Ejecutar query
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

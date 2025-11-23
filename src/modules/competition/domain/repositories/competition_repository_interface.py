@@ -221,3 +221,34 @@ class CompetitionRepositoryInterface(ABC):
             RepositoryError: Si ocurre un error de consulta
         """
         pass
+
+    @abstractmethod
+    async def find_by_filters(
+        self,
+        search_name: Optional[str] = None,
+        search_creator: Optional[str] = None,
+        status: Optional[CompetitionStatus] = None,
+        creator_id: Optional[UserId] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Competition]:
+        """
+        Busca competiciones aplicando múltiples filtros opcionales.
+
+        Útil para: Búsqueda avanzada con múltiples criterios.
+
+        Args:
+            search_name: Búsqueda parcial case-insensitive en nombre de competición
+            search_creator: Búsqueda parcial case-insensitive en nombre del creador (first_name o last_name)
+            status: Filtrar por estado específico
+            creator_id: Filtrar por creador específico
+            limit: Número máximo de resultados (default: 100)
+            offset: Número de resultados a saltar (default: 0)
+
+        Returns:
+            List[Competition]: Lista de competiciones que cumplen los criterios
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
