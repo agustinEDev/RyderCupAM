@@ -22,8 +22,17 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# Importar los metadatos de los modelos de la aplicación
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metadata as user_metadata
+# Importar TODOS los mappers para que Alembic detecte todas las tablas
+# IMPORTANTE: Importar los mappers (no solo metadata) para registrar las tablas
+from src.shared.infrastructure.persistence.sqlalchemy.base import metadata
+from src.shared.infrastructure.persistence.sqlalchemy import country_mappers
+from src.modules.user.infrastructure.persistence.sqlalchemy import mappers as user_mappers
+from src.modules.competition.infrastructure.persistence.sqlalchemy import mappers as competition_mappers
+
+# Iniciar todos los mappers para registrar las tablas en el metadata
+country_mappers.start_mappers()
+user_mappers.start_mappers()
+competition_mappers.start_mappers()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -36,7 +45,8 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = user_metadata
+# Usamos el metadata centralizado que ahora contiene TODAS las tablas
+target_metadata = metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
