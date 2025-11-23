@@ -16,6 +16,27 @@ class CountryResponseDTO(BaseModel):
     name_es: str = Field(..., description="Nombre en español")
 
 
+class CreatorDTO(BaseModel):
+    """
+    DTO para representar información básica del creador de una competición.
+
+    Se utiliza como objeto nested dentro de CompetitionResponseDTO
+    para evitar múltiples llamadas API desde el frontend.
+
+    Campos incluidos:
+    - Datos personales: id, first_name, last_name, email
+    - Datos de juego: handicap, country_code
+    """
+    id: UUID = Field(..., description="ID único del usuario creador")
+    first_name: str = Field(..., description="Nombre del creador")
+    last_name: str = Field(..., description="Apellido del creador")
+    email: str = Field(..., description="Email del creador")
+    handicap: Optional[Decimal] = Field(None, description="Handicap actual del creador")
+    country_code: Optional[str] = Field(None, description="Código ISO del país del creador")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ======================================================================================
 # DTO para el Caso de Uso: Crear Competition
 # ======================================================================================
@@ -125,6 +146,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     """
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
+    creator: Optional[CreatorDTO] = Field(None, description="Información completa del creador.")
     name: str = Field(..., description="Nombre de la competición.")
     status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
 
@@ -233,11 +255,12 @@ class CompetitionResponseDTO(BaseModel):
     Se utiliza para listar competiciones y consultas detalladas.
 
     NOTA: Este DTO incluye campos calculados dinámicamente que NO existen
-    en la entidad de dominio (is_creator, enrolled_count, location_formatted).
+    en la entidad de dominio (is_creator, enrolled_count, location_formatted, creator).
     Estos se deben calcular en la capa de aplicación antes de construir el DTO.
     """
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
+    creator: Optional[CreatorDTO] = Field(None, description="Información completa del creador.")
     name: str = Field(..., description="Nombre de la competición.")
     status: str = Field(..., description="Estado actual (DRAFT, ACTIVE, CLOSED, etc.).")
 

@@ -13,6 +13,7 @@ from uuid import UUID
 from src.config.dependencies import (
     get_current_user,
     get_competition_uow,
+    get_uow,  # User Unit of Work para obtener datos del creador
     get_create_competition_use_case,
     get_list_competitions_use_case,
     get_get_competition_use_case,
@@ -100,6 +101,8 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.competition.application.dto.competition_dto import CreatorDTO
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -126,6 +129,7 @@ class CompetitionDTOMapper:
         competition: Competition,
         current_user_id: UserId,
         uow: CompetitionUnitOfWorkInterface,
+        user_uow: Optional[UserUnitOfWorkInterface] = None,
     ) -> CompetitionResponseDTO:
         """
         Convierte una entidad Competition a CompetitionResponseDTO.
@@ -134,11 +138,13 @@ class CompetitionDTOMapper:
         - is_creator: si el usuario actual es el creador
         - enrolled_count: número de enrollments APPROVED
         - location: string formateado con nombres de países
+        - creator: información completa del creador (si user_uow es provisto)
 
         Args:
             competition: Entidad de dominio
             current_user_id: ID del usuario autenticado
             uow: Unit of Work para consultas adicionales (enrollments, countries)
+            user_uow: Unit of Work de usuarios para obtener datos del creador (opcional)
 
         Returns:
             CompetitionResponseDTO enriquecido
@@ -152,10 +158,16 @@ class CompetitionDTOMapper:
         # Obtener lista de países con detalles
         countries_list = await CompetitionDTOMapper._get_countries_list(competition, uow)
 
+        # Obtener información del creador (si user_uow es provisto)
+        creator_dto = None
+        if user_uow:
+            creator_dto = await CompetitionDTOMapper._get_creator_dto(competition.creator_id, user_uow)
+
         # Construir DTO
         return CompetitionResponseDTO(
             id=competition.id.value,
             creator_id=competition.creator_id.value,
+            creator=creator_dto,
             name=str(competition.name),
             status=competition.status.value,
             # Dates
@@ -282,6 +294,37 @@ class CompetitionDTOMapper:
 
         return countries
 
+    @staticmethod
+    async def _get_creator_dto(
+        creator_id: UserId,
+        user_uow: UserUnitOfWorkInterface,
+    ) -> Optional[CreatorDTO]:
+        """
+        Obtiene la información del creador de una competición.
+
+        Args:
+            creator_id: ID del usuario creador
+            user_uow: Unit of Work de usuarios
+
+        Returns:
+            CreatorDTO con los datos del creador, o None si no se encuentra
+        """
+        async with user_uow:
+            creator = await user_uow.users.find_by_id(creator_id)
+
+            if not creator:
+                logger.warning(f"Creator with id {creator_id.value} not found")
+                return None
+
+            return CreatorDTO(
+                id=creator.id.value,
+                first_name=creator.first_name,
+                last_name=creator.last_name,
+                email=str(creator.email),
+                handicap=creator.handicap.value if creator.handicap else None,
+                country_code=creator.country_code.value if creator.country_code else None,
+            )
+
 
 # ======================================================================================
 # CRUD ENDPOINTS
@@ -300,6 +343,7 @@ async def create_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Endpoint para crear una nueva competición.
@@ -345,13 +389,14 @@ async def create_competition(
 
             # Convertir a DTO enriquecido
             enriched_dto = await CompetitionDTOMapper.to_response_dto(
-                competition, creator_id, uow
+                competition, creator_id, uow, user_uow
             )
 
             # Construir CreateCompetitionResponseDTO con todos los campos
             return CreateCompetitionResponseDTO(
                 id=enriched_dto.id,
                 creator_id=enriched_dto.creator_id,
+                creator=enriched_dto.creator,
                 name=enriched_dto.name,
                 status=enriched_dto.status,
                 start_date=enriched_dto.start_date,
@@ -400,6 +445,7 @@ async def list_competitions(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListCompetitionsUseCase = Depends(get_list_competitions_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por estado (DRAFT, ACTIVE, etc.)"),
     creator_id: Optional[str] = Query(None, description="Filtrar por creador (UUID)"),
 ):
@@ -435,7 +481,7 @@ async def list_competitions(
         async with uow:
             for competition in competitions:
                 dto = await CompetitionDTOMapper.to_response_dto(
-                    competition, current_user_id, uow
+                    competition, current_user_id, uow, user_uow
                 )
                 result.append(dto)
 
@@ -461,6 +507,7 @@ async def get_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetCompetitionUseCase = Depends(get_get_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Endpoint para obtener el detalle de una competición.
@@ -481,7 +528,7 @@ async def get_competition(
         # Convertir a DTO enriquecido
         async with uow:
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -512,6 +559,7 @@ async def update_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UpdateCompetitionUseCase = Depends(get_update_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Endpoint para actualizar una competición.
@@ -541,7 +589,7 @@ async def update_competition(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -575,6 +623,7 @@ async def delete_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Endpoint para eliminar físicamente una competición.
@@ -632,6 +681,7 @@ async def activate_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ActivateCompetitionUseCase = Depends(get_activate_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Transición de estado: DRAFT → ACTIVE
@@ -657,7 +707,7 @@ async def activate_competition(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -692,6 +742,7 @@ async def close_enrollments(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CloseEnrollmentsUseCase = Depends(get_close_enrollments_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Transición de estado: ACTIVE → CLOSED
@@ -717,7 +768,7 @@ async def close_enrollments(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -752,6 +803,7 @@ async def start_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: StartCompetitionUseCase = Depends(get_start_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Transición de estado: CLOSED → IN_PROGRESS
@@ -777,7 +829,7 @@ async def start_competition(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -812,6 +864,7 @@ async def complete_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CompleteCompetitionUseCase = Depends(get_complete_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Transición de estado: IN_PROGRESS → COMPLETED
@@ -837,7 +890,7 @@ async def complete_competition(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
@@ -872,6 +925,7 @@ async def cancel_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CancelCompetitionUseCase = Depends(get_cancel_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
     """
     Transición de estado: cualquier estado → CANCELLED
@@ -897,7 +951,7 @@ async def cancel_competition(
         async with uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow
+                competition, current_user_id, uow, user_uow
             )
 
         return dto
