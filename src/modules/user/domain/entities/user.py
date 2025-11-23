@@ -17,6 +17,27 @@ class User:
     Un usuario es alguien que puede registrarse, hacer login
     y participar en torneos Ryder Cup.
     """
+
+    def _validate_profile_update(self, first_name, last_name, country_code_str):
+        if first_name is None and last_name is None and country_code_str is None:
+            raise ValueError("At least one field (first_name, last_name, or country_code) must be provided")
+        if first_name is not None and first_name.strip() == "":
+            raise ValueError("first_name cannot be empty")
+        if last_name is not None and last_name.strip() == "":
+            raise ValueError("last_name cannot be empty")
+
+    def _detect_profile_changes(self, first_name, last_name, country_code_str):
+        old_first_name = self.first_name
+        old_last_name = self.last_name
+        old_country_code = self.country_code
+        first_name_changed = first_name is not None and first_name != old_first_name
+        last_name_changed = last_name is not None and last_name != old_last_name
+        new_country_code = old_country_code
+        country_code_changed = False
+        if country_code_str is not None:
+            new_country_code = CountryCode(country_code_str) if country_code_str else None
+            country_code_changed = new_country_code != old_country_code
+        return (first_name_changed, last_name_changed, country_code_changed, new_country_code, old_first_name, old_last_name, old_country_code)
     
     def __init__(
         self,
@@ -46,7 +67,7 @@ class User:
         self.email_verified = email_verified
         self.verification_token = verification_token
         self.country_code = country_code
-        self._domain_events: List[DomainEvent] = domain_events or []
+        self._domain_events = domain_events or []
     
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
@@ -225,60 +246,34 @@ class User:
                        country_code_str: Optional[str] = None) -> None:
         """
         Actualiza la información personal del usuario (nombre, apellidos y país).
-
         Solo emite evento si al menos uno de los campos cambió.
-
-        Args:
-            first_name: Nuevo nombre (None = no cambiar)
-            last_name: Nuevo apellido (None = no cambiar)
-            country_code_str: Nuevo código de país (None = no cambiar)
-
-        Raises:
-            ValueError: Si todos los parámetros son None o si los valores son strings vacíos
+        El evento ahora incluye el cambio de country_code (old/new) si aplica.
         """
         from src.modules.user.domain.events.user_profile_updated_event import UserProfileUpdatedEvent
 
-        # Validar que al menos un campo se quiera actualizar
-        if first_name is None and last_name is None and country_code_str is None:
-            raise ValueError("At least one field (first_name, last_name, or country_code) must be provided")
+        self._validate_profile_update(first_name, last_name, country_code_str)
+        (
+            first_name_changed,
+            last_name_changed,
+            country_code_changed,
+            new_country_code,
+            old_first_name,
+            old_last_name,
+            old_country_code
+        ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
-        # Validar que los campos no sean strings vacíos
-        if first_name is not None and first_name.strip() == "":
-            raise ValueError("first_name cannot be empty")
-        if last_name is not None and last_name.strip() == "":
-            raise ValueError("last_name cannot be empty")
-
-        # Guardar valores anteriores
-        old_first_name = self.first_name
-        old_last_name = self.last_name
-        old_country_code = self.country_code
-
-        # Determinar qué cambió
-        first_name_changed = first_name is not None and first_name != old_first_name
-        last_name_changed = last_name is not None and last_name != old_last_name
-
-        # Para country_code, convertir a CountryCode si es necesario
-        country_code_changed = False
-        if country_code_str is not None:
-            new_country_code = CountryCode(country_code_str) if country_code_str else None
-            country_code_changed = new_country_code != old_country_code
-            if country_code_changed:
-                self.country_code = new_country_code
-
-        # Si nada cambió realmente, no hacer nada
         if not first_name_changed and not last_name_changed and not country_code_changed:
             return
 
-        # Aplicar cambios
         if first_name_changed:
             self.first_name = first_name
         if last_name_changed:
             self.last_name = last_name
+        if country_code_changed:
+            self.country_code = new_country_code
 
-        # Actualizar timestamp
         self.updated_at = datetime.now()
 
-        # Emitir evento
         self._add_domain_event(UserProfileUpdatedEvent(
             user_id=str(self.id.value),
             old_first_name=old_first_name if first_name_changed else None,

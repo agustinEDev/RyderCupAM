@@ -3,6 +3,9 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
+# Literales reutilizados
+CONFIRMATION_MESSAGE_DESCRIPTION = "Mensaje de confirmación."
+
 
 # Constants
 EMAIL_DESCRIPTION = "Correo electrónico del usuario."
@@ -150,7 +153,7 @@ class LogoutResponseDTO(BaseModel):
     DTO de salida para el caso de uso de logout.
     Confirma que el logout se realizó correctamente.
     """
-    message: str = Field(default="Logout exitoso", description="Mensaje de confirmación.")
+    message: str = Field(default="Logout exitoso", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     logged_out_at: datetime = Field(..., description="Timestamp del logout.")
 
 
@@ -182,7 +185,7 @@ class UpdateProfileRequestDTO(BaseModel):
 class UpdateProfileResponseDTO(BaseModel):
     """DTO de salida para actualización de perfil."""
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Perfil actualizado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Perfil actualizado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
 
 
 # ======================================================================================
@@ -211,7 +214,7 @@ class UpdateSecurityRequestDTO(BaseModel):
 class UpdateSecurityResponseDTO(BaseModel):
     """DTO de salida para actualización de seguridad."""
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Datos de seguridad actualizados", description="Mensaje de confirmación.")
+    message: str = Field(default="Datos de seguridad actualizados", description=CONFIRMATION_MESSAGE_DESCRIPTION)
 
 
 # ======================================================================================
@@ -227,7 +230,7 @@ class VerifyEmailRequestDTO(BaseModel):
 
 class VerifyEmailResponseDTO(BaseModel):
     """DTO de salida para verificación de email."""
-    message: str = Field(default="Email verificado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Email verificado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     email_verified: bool = Field(default=True, description="Confirmación de que el email fue verificado.")
 
 
@@ -244,5 +247,5 @@ class ResendVerificationEmailRequestDTO(BaseModel):
 
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
-    message: str = Field(default="Email de verificación enviado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Email de verificación enviado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     email: EmailStr = Field(..., description="Email al que se envió el mensaje de verificación.")

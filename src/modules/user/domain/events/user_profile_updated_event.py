@@ -38,6 +38,8 @@ class UserProfileUpdatedEvent(DomainEvent):
     new_first_name: Optional[str] = None
     old_last_name: Optional[str] = None
     new_last_name: Optional[str] = None
+    old_country_code: Optional[str] = None
+    new_country_code: Optional[str] = None
 
     @property
     def aggregate_id(self) -> str:
