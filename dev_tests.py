@@ -197,63 +197,57 @@ def display_results(test_structure: dict, results_by_file: dict):
                     tests_in_file = results_by_file.get(str_path, [])
                     _print_file_result(file_path, tests_in_file)
 
+def _write_markdown_header(f, success_rate: float, failed: int) -> None:
+    """Escribe el encabezado del reporte Markdown."""
+    f.write("# 🚀 Resumen de Ejecución de Tests\n\n")
+    f.write(f"- **Fecha**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    result_status = '✅ ÉXITO' if (success_rate == 100 and failed == 0) else '❌ FALLIDO'
+    f.write(f"- **Resultado General**: {result_status}\n\n")
+
+def _write_warnings_section(f, warning_count: int, warning_lines: list) -> None:
+    """Escribe la sección de warnings si las hay."""
+    if warning_count > 0:
+        f.write("## ⚠️ Warnings\n\n")
+        f.write(f"Se encontraron **{warning_count}** warnings durante la ejecución:\n\n")
+        if warning_lines:
+            for warning_line in warning_lines:
+                f.write(f"- `{warning_line}`\n")
+        f.write("\n")
+
+def _write_global_stats(f, summary: dict, success_rate: float, total_time: float, warning_count: int) -> None:
+    """Escribe la tabla de estadísticas globales."""
+    f.write("## 📊 Estadísticas Globales\n\n")
+    f.write("| Métrica | Valor |\n|---|---|\n")
+    f.write(f"| ✅ **Tests Pasados** | {summary.get('passed', 0)} |\n")
+    f.write(f"| ❌ **Tests Fallados** | {summary.get('failed', 0)} |\n")
+    f.write(f"| ⚠️ **Tests Omitidos** | {summary.get('skipped', 0)} |\n")
+    f.write(f"| ⚠️ **Warnings** | {warning_count} |\n")
+    f.write(f"| **Total de Tests** | {summary.get('total', 0)} |\n")
+    f.write(f"| **Tasa de Éxito** | {success_rate:.2f}% |\n")
+    f.write(f"| ⏱️ **Duración Total** | {total_time:.2f} segundos |\n\n")
+
+def _write_test_details(f, filepath: str, tests: list, slowest_test_nodeids: set, test_lookup: dict) -> None:
+    """Escribe los detalles de los tests de un archivo."""
+    f.write(f"---\n\n### {ICONS['FOLDER']} `{filepath}`\n\n")
+    docstrings = get_docstrings_from_file(filepath)
+    for test in sorted(tests, key=lambda x: x['name']):
+        status_icon = ICONS.get(test['outcome'].upper(), "❓")
+        description = ' '.join(docstrings.get(test['name'], "No description provided.").split())
+        test_nodeid = test['nodeid']
+        full_test_data = test_lookup.get(test_nodeid)
+        slow_icon = f" {ICONS['SLOW']}" if test_nodeid in slowest_test_nodeids else ""
+        f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
+        f.write(f"  > _{description}_\n")
+        if test['outcome'] == 'failed' and full_test_data:
+            longrepr = full_test_data.get("call", {}).get("longrepr")
+            if longrepr:
+                f.write("\n  ```text\n")
+                f.write(longrepr)
+                f.write("\n  ```\n")
+        f.write("\n")
+
 def generate_markdown_report(results: dict, total_time: float):
     """Genera un fichero Markdown con el resumen de los tests."""
-    def _write_markdown_header(f, success_rate: float, failed: int) -> None:
-        """Escribe el encabezado del reporte Markdown."""
-        f.write("# 🚀 Resumen de Ejecución de Tests\n\n")
-        f.write(f"- **Fecha**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        result_status = '✅ ÉXITO' if (success_rate == 100 and failed == 0) else '❌ FALLIDO'
-        f.write(f"- **Resultado General**: {result_status}\n\n")
-
-    def _write_warnings_section(f, warning_count: int, warning_lines: list) -> None:
-        """Escribe la sección de warnings si las hay."""
-        if warning_count > 0:
-            f.write("## ⚠️ Warnings\n\n")
-            f.write(f"Se encontraron **{warning_count}** warnings durante la ejecución:\n\n")
-            if warning_lines:
-                for warning_line in warning_lines:
-                    f.write(f"- `{warning_line}`\n")
-            f.write("\n")
-
-    def _write_global_stats(f, summary: dict, success_rate: float, total_time: float, warning_count: int) -> None:
-        """Escribe la tabla de estadísticas globales."""
-        f.write("## 📊 Estadísticas Globales\n\n")
-        f.write("| Métrica | Valor |\n|---|---|\n")
-        f.write(f"| ✅ **Tests Pasados** | {summary.get('passed', 0)} |\n")
-        f.write(f"| ❌ **Tests Fallados** | {summary.get('failed', 0)} |\n")
-        f.write(f"| ⚠️ **Tests Omitidos** | {summary.get('skipped', 0)} |\n")
-        f.write(f"| ⚠️ **Warnings** | {warning_count} |\n")
-        f.write(f"| **Total de Tests** | {summary.get('total', 0)} |\n")
-        f.write(f"| **Tasa de Éxito** | {success_rate:.2f}% |\n")
-        f.write(f"| ⏱️ **Duración Total** | {total_time:.2f} segundos |\n\n")
-
-    def _write_test_details(f, filepath: str, tests: list, slowest_test_nodeids: set, test_lookup: dict) -> None:
-        """Escribe los detalles de los tests de un archivo."""
-        f.write(f"---\n\n### {ICONS['FOLDER']} `{filepath}`\n\n")
-        docstrings = get_docstrings_from_file(filepath)
-        
-        for test in sorted(tests, key=lambda x: x['name']):
-            status_icon = ICONS.get(test['outcome'].upper(), "❓")
-            description = ' '.join(docstrings.get(test['name'], "No description provided.").split())
-            
-            # Usar el nodeid original guardado en el test
-            test_nodeid = test['nodeid']
-            full_test_data = test_lookup.get(test_nodeid)
-            slow_icon = f" {ICONS['SLOW']}" if test_nodeid in slowest_test_nodeids else ""
-            
-            f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
-            f.write(f"  > _{description}_\n")
-
-            # Agregar error details si el test falló
-            if test['outcome'] == 'failed' and full_test_data:
-                longrepr = full_test_data.get("call", {}).get("longrepr")
-                if longrepr:
-                    f.write("\n  ```text\n")
-                    f.write(longrepr)
-                    f.write("\n  ```\n")
-            f.write("\n")
-
     summary = results["summary"]
     passed = summary.get("passed", 0)
     failed = summary.get("failed", 0)
