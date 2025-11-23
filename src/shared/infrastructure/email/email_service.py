@@ -9,16 +9,18 @@ import requests
 from typing import Optional
 
 from src.config.settings import settings
+from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
 
-class EmailService:
+class EmailService(IEmailService):
     """
-    Servicio para envío de emails usando Mailgun.
+    Implementación de IEmailService usando Mailgun.
 
-    Este servicio es una implementación específica (detalle de infraestructura)
-    que puede ser reemplazada por otro proveedor de email en el futuro.
+    Esta es una implementación concreta del puerto IEmailService.
+    Puede ser reemplazada por otras implementaciones (SendGrid, AWS SES, etc.)
+    sin afectar a la capa de aplicación.
     """
 
     def __init__(self):
@@ -224,7 +226,3 @@ The Ryder Cup Friends Team
         except Exception as e:
             logger.error("Error inesperado al enviar email: %s", str(e))
             return False
-
-
-# Instancia global del servicio de email
-email_service = EmailService()

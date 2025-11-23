@@ -119,7 +119,6 @@ GET    /api/v1/users/search          # Search by email/name
 
 **Documentación completa**:
 - Swagger UI: `http://localhost:8000/docs`
-- Frontend Integration: [docs/EMAIL_VERIFICATION_INTEGRATION.md](docs/EMAIL_VERIFICATION_INTEGRATION.md)
 - Frontend Examples: [docs/frontend-examples/](docs/frontend-examples/)
 
 ## 💻 Desarrollo
@@ -139,14 +138,15 @@ mypy src/
 
 ## 📊 Estado del Proyecto
 
-**Fase 1: Foundation** ✅ Completado (14 Nov 2025)
+**Fase 1: Foundation** ✅ Completado (16 Nov 2025)
 - Clean Architecture + DDD completo
 - User management + JWT authentication
 - **Email Verification** con Mailgun (bilingüe)
 - Login/Logout con Domain Events
 - Session Management (Fase 1)
 - Handicap system (RFEG integration + batch)
-- **420 tests** (100% passing, 0 warnings)
+- **Dependency Injection refactoring** (DIP compliance)
+- **440 tests** (100% passing, 0 warnings)
 - 8 endpoints API funcionales
 
 **Fase 2: Core Features** 🚧 En desarrollo (17 Nov 2025)

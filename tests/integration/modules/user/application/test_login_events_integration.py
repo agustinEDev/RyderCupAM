@@ -15,6 +15,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEvent
+from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
 @pytest.mark.asyncio
@@ -47,8 +48,9 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.users.save = AsyncMock()
         mock_uow.__aenter__ = AsyncMock(return_value=mock_uow)
         mock_uow.__aexit__ = AsyncMock(return_value=None)
-        
-        use_case = LoginUserUseCase(mock_uow)
+
+        token_service = JWTTokenService()
+        use_case = LoginUserUseCase(mock_uow, token_service)
         
         request = LoginRequestDTO(
             email="test@example.com",
@@ -91,8 +93,9 @@ class TestLoginUserUseCaseEventIntegration:
         # Arrange - Usuario no existe
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = None
-        
-        use_case = LoginUserUseCase(mock_uow)
+
+        token_service = JWTTokenService()
+        use_case = LoginUserUseCase(mock_uow, token_service)
         
         request = LoginRequestDTO(
             email="noexiste@example.com",
@@ -130,8 +133,9 @@ class TestLoginUserUseCaseEventIntegration:
         
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
-        
-        use_case = LoginUserUseCase(mock_uow)
+
+        token_service = JWTTokenService()
+        use_case = LoginUserUseCase(mock_uow, token_service)
         
         request = LoginRequestDTO(
             email="test@example.com",

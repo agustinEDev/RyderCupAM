@@ -399,16 +399,20 @@ async def get_user_by_email(client: AsyncClient, email: str):
 
 
 # ======================================================================================
-# MOCK AUTOMÁTICO DEL SERVICIO DE EMAIL
+# MOCK AUTOMÁTICO DE SERVICIOS EXTERNOS (EMAIL Y TOKEN)
 # ======================================================================================
+# Para tests de integración, mockeamos los servicios en dependencies.py para evitar
+# llamadas reales a Mailgun y mantener los tests rápidos y sin límites de API.
 
 @pytest.fixture(autouse=True)
-def mock_email_service():
+def mock_external_services():
     """
-    Mock automático del servicio de email para todos los tests.
-    Esto evita enviar emails reales a Mailgun y gastar la cuota diaria.
+    Mock automático de servicios externos para todos los tests.
 
-    El mock siempre retorna True (éxito) para simular que el email se envió correctamente.
+    Mockea:
+    - EmailService: Para evitar envíos reales a Mailgun
+    - Los tests unitarios usan sus propios mocks
+    - Los tests de integración usan estos mocks via dependencies.py
     """
     from unittest.mock import patch, MagicMock
 

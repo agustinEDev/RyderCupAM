@@ -15,7 +15,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
-from src.shared.infrastructure.security.jwt_handler import create_access_token
+from src.modules.user.application.ports.token_service_interface import ITokenService
 
 
 class LoginUserUseCase:
@@ -29,14 +29,20 @@ class LoginUserUseCase:
     - Devolver token y datos de usuario
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        token_service: ITokenService
+    ):
         """
         Inicializa el caso de uso.
 
         Args:
             uow: Unit of Work para acceso a repositorio de usuarios
+            token_service: Servicio para generación de tokens de autenticación
         """
         self._uow = uow
+        self._token_service = token_service
 
     async def execute(self, request: LoginRequestDTO) -> Optional[LoginResponseDTO]:
         """
@@ -80,7 +86,7 @@ class LoginUserUseCase:
             await self._uow.users.save(user)
 
         # Generar token JWT con user_id en el subject
-        access_token = create_access_token(
+        access_token = self._token_service.create_access_token(
             data={"sub": str(user.id.value)}
         )
 
