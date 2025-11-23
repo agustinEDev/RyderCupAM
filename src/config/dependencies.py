@@ -27,6 +27,8 @@ from src.modules.user.application.ports.email_service_interface import IEmailSer
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService, verify_access_token
+from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.infrastructure.persistence.sqlalchemy.country_repository import SQLAlchemyCountryRepository
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -96,8 +98,25 @@ def get_token_service() -> ITokenService:
     """
     return JWTTokenService()
 
+def get_country_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> CountryRepositoryInterface:
+    """
+    Proveedor del repositorio de países.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemyCountryRepository`.
+    3. Devuelve la instancia que implementa CountryRepositoryInterface.
+
+    Returns:
+        Implementación concreta del repositorio de países (SQLAlchemy)
+    """
+    return SQLAlchemyCountryRepository(session)
+
 def get_register_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    country_repository: CountryRepositoryInterface = Depends(get_country_repository),
     handicap_service: HandicapService = Depends(get_handicap_service),
     email_service: IEmailService = Depends(get_email_service)
 ) -> RegisterUserUseCase:
@@ -106,13 +125,15 @@ def get_register_user_use_case(
 
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Depende de `get_handicap_service` para buscar hándicaps.
-    3. Depende de `get_email_service` para envío de emails de verificación.
-    4. Crea una instancia de `RegisterUserUseCase` con esas dependencias.
-    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_country_repository` para validar códigos de país.
+    3. Depende de `get_handicap_service` para buscar hándicaps.
+    4. Depende de `get_email_service` para envío de emails de verificación.
+    5. Crea una instancia de `RegisterUserUseCase` con esas dependencias.
+    6. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return RegisterUserUseCase(
         uow=uow,
+        country_repository=country_repository,
         handicap_service=handicap_service,
         email_service=email_service
     )
@@ -205,17 +226,19 @@ def get_logout_user_use_case(
     return LogoutUserUseCase(uow)
 
 def get_update_profile_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    country_repository: CountryRepositoryInterface = Depends(get_country_repository)
 ) -> UpdateProfileUseCase:
     """
     Proveedor del caso de uso UpdateProfileUseCase.
 
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `UpdateProfileUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_country_repository` para validar códigos de país.
+    3. Crea una instancia de `UpdateProfileUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateProfileUseCase(uow)
+    return UpdateProfileUseCase(uow, country_repository)
 
 def get_update_security_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
