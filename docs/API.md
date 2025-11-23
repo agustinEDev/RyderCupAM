@@ -3,8 +3,8 @@
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
 **Total Endpoints**: 32 active
-**Version**: v1.6.4
-**Last Updated**: 22 Nov 2025
+**Version**: v1.7.0
+**Last Updated**: 23 Nov 2025
 
 ## Quick Reference
 
@@ -75,6 +75,7 @@ Response: 201 Created
   "first_name": "John",
   "last_name": "Doe",
   "handicap": null,
+  "country_code": null,
   "email_verified": false,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -106,6 +107,7 @@ Response: 200 OK
     "first_name": "John",
     "last_name": "Doe",
     "handicap": 15.5,
+    "country_code": "ES",
     "email_verified": true,
     "created_at": "2025-11-09T10:00:00Z",
     "updated_at": "2025-11-09T10:00:00Z"
@@ -128,6 +130,7 @@ Response: 200 OK
   "first_name": "John",
   "last_name": "Doe",
   "handicap": 15.5,
+  "country_code": "ES",
   "email_verified": true,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -214,7 +217,9 @@ Response: 200 OK
   "id": "uuid",
   "email": "john@example.com",
   "first_name": "John",
-  "last_name": "Doe"
+  "last_name": "Doe",
+  "handicap": 15.5,
+  "country_code": "ES"
 }
 
 Errors:
@@ -239,6 +244,7 @@ Response: 200 OK
   "first_name": "John",
   "last_name": "Doe",
   "handicap": 15.5,
+  "country_code": "ES",
   "email_verified": true,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -269,6 +275,7 @@ Response: 200 OK
   "first_name": "John",
   "last_name": "Doe",
   "handicap": 15.5,
+  "country_code": "ES",
   "email_verified": false,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -408,6 +415,14 @@ Response: 201 Created
 {
   "id": "uuid",
   "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "DRAFT",
   "start_date": "2025-10-01",
@@ -460,6 +475,14 @@ Response: 200 OK
   {
     "id": "uuid",
     "creator_id": "uuid",
+    "creator": {
+      "id": "uuid",
+      "first_name": "John",
+      "last_name": "Doe",
+      "email": "john@example.com",
+      "handicap": 15.5,
+      "country_code": "ES"
+    },
     "name": "Ryder Cup 2025",
     "status": "DRAFT",
     "start_date": "2025-12-01",
@@ -511,6 +534,14 @@ Response: 200 OK
 {
   "id": "uuid",
   "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "DRAFT",
   "start_date": "2025-12-01",
@@ -570,6 +601,14 @@ Response: 200 OK
 {
   "id": "uuid",
   "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Updated Ryder Cup 2025",
   "status": "DRAFT",
   "start_date": "2025-12-01",
@@ -634,9 +673,48 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "ACTIVE",
-  "updated_at": "2025-11-09T10:00:00Z"
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 0,
+  "created_at": "2025-11-19T10:00:00.000Z",
+  "updated_at": "2025-11-19T10:00:00Z"
 }
 
 Notes:
@@ -653,8 +731,47 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "CLOSED",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 5,
+  "created_at": "2025-11-19T10:00:00.000Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -672,8 +789,47 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "IN_PROGRESS",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 5,
+  "created_at": "2025-11-19T10:00:00.000Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -691,8 +847,47 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "COMPLETED",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 5,
+  "created_at": "2025-11-19T10:00:00.000Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -710,8 +905,47 @@ Authorization: Bearer {token}
 Response: 200 OK
 {
   "id": "uuid",
+  "creator_id": "uuid",
+  "creator": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES"
+  },
   "name": "Ryder Cup 2025",
   "status": "CANCELLED",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-03",
+  "country_code": "ES",
+  "secondary_country_code": "FR",
+  "tertiary_country_code": "PT",
+  "location": "Spain, France, Portugal",
+  "countries": [
+    {
+      "code": "ES",
+      "name_en": "Spain",
+      "name_es": "España"
+    },
+    {
+      "code": "FR",
+      "name_en": "France",
+      "name_es": "Francia"
+    },
+    {
+      "code": "PT",
+      "name_en": "Portugal",
+      "name_es": "Portugal"
+    }
+  ],
+  "handicap_type": "PERCENTAGE",
+  "handicap_percentage": 95,
+  "max_players": 24,
+  "team_assignment": "MANUAL",
+  "is_creator": true,
+  "enrolled_count": 0,
+  "created_at": "2025-11-19T10:00:00.000Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -733,6 +967,15 @@ Response: 201 Created
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "REQUESTED",
   "custom_handicap": null,
   "created_at": "2025-11-09T10:00:00Z",
@@ -760,6 +1003,15 @@ Response: 201 Created
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "handicap": 15.5,
+    "country_code": "ES",
+    "avatar_url": null
+  },
   "status": "APPROVED",
   "custom_handicap": null,
   "created_at": "2025-11-09T10:00:00Z",
@@ -782,12 +1034,15 @@ Response: 200 OK
   {
     "id": "uuid",
     "competition_id": "uuid",
+    "user_id": "uuid",
     "user": {
       "id": "uuid",
-      "email": "john@example.com",
       "first_name": "John",
       "last_name": "Doe",
-      "handicap": 15.5
+      "email": "john@example.com",
+      "handicap": 15.5,
+      "country_code": "ES",
+      "avatar_url": null
     },
     "status": "APPROVED",
     "custom_handicap": null,
@@ -810,7 +1065,18 @@ Response: 200 OK
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "APPROVED",
+  "custom_handicap": null,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -829,7 +1095,18 @@ Response: 200 OK
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "REJECTED",
+  "custom_handicap": null,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -848,7 +1125,18 @@ Response: 200 OK
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "CANCELLED",
+  "custom_handicap": null,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -868,7 +1156,18 @@ Response: 200 OK
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "WITHDRAWN",
+  "custom_handicap": null,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -893,8 +1192,18 @@ Response: 200 OK
   "id": "uuid",
   "competition_id": "uuid",
   "user_id": "uuid",
+  "user": {
+    "id": "uuid",
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane@example.com",
+    "handicap": 12.3,
+    "country_code": "FR",
+    "avatar_url": null
+  },
   "status": "APPROVED",
   "custom_handicap": 18.5,
+  "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
 }
 
@@ -965,464 +1274,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - `409`: Conflict (duplicate email, invalid state transition, etc.)
 - `422`: Unprocessable Entity (Pydantic validation: invalid email format, etc.)
 - `503`: Service Unavailable (external service down, e.g., RFEG API)
-- `500`: Internal Server Error
-
-## Session Management
-
-**Current Implementation**: Phase 1 - Client-side logout
-- JWT tokens remain valid until expiration (24h)
-- Client should remove token locally on logout
-- Server registers logout events for auditing
-
-**Future Implementation**: Phase 2 - Token blacklist
-- Immediate token invalidation
-- "Logout from all devices" functionality
-- See [ADR-015](architecture/decisions/ADR-015-session-management-progressive-strategy.md)
-
-## Authentication
-
-### Register User
-```http
-POST /api/v1/auth/register
-
-Request:
-{
-  "first_name": "John",
-  "last_name": "Doe",
-  "email": "john@example.com",
-  "password": "SecurePass123!"
-}
-
-Response: 201 Created
-{
-  "id": "uuid",
-  "email": "john@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "handicap": null,
-  "email_verified": false,
-  "created_at": "2025-11-09T10:00:00Z",
-  "updated_at": "2025-11-09T10:00:00Z"
-}
-
-Notes:
-- A verification email is automatically sent to the user's email
-- The user must verify their email by clicking the link in the email
-- email_verified will be false until verification is completed
-```
-
-### Login User
-```http
-POST /api/v1/auth/login
-
-Request:
-{
-  "email": "john@example.com",
-  "password": "SecurePass123!"
-}
-
-Response: 200 OK
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "user": {
-    "id": "uuid",
-    "email": "john@example.com",
-    "first_name": "John",
-    "last_name": "Doe",
-    "handicap": 15.5,
-    "email_verified": true,
-    "created_at": "2025-11-09T10:00:00Z",
-    "updated_at": "2025-11-09T10:00:00Z"
-  }
-}
-
-Errors:
-401 Unauthorized - Invalid credentials
-```
-
-### Logout User
-```http
-POST /api/v1/auth/logout
-Authorization: Bearer {token}
-
-Request:
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  // Optional
-}
-
-Response: 200 OK
-{
-  "message": "Logout exitoso",
-  "logged_out_at": "2025-11-09T10:00:00Z"
-}
-
-Errors:
-401 Unauthorized - Invalid or missing token
-404 Not Found - User not found
-```
-
-### Verify Email
-```http
-POST /api/v1/auth/verify-email
-
-Request:
-{
-  "token": "verification-token-from-email"
-}
-
-Response: 200 OK
-{
-  "message": "Email verificado exitosamente",
-  "email_verified": true
-}
-
-Errors:
-400 Bad Request - Token inválido o no encontrado
-
-Notes:
-- Los tokens no expiran actualmente (sin TTL implementado)
-- El email enviado es bilingüe (Español/Inglés)
-- El usuario puede usar la app sin verificar, pero algunas funcionalidades estarán limitadas en el futuro
-```
-
-**Flow:**
-1. User registers → Receives verification email
-2. User clicks link in email → Frontend extracts token from URL
-3. Frontend calls this endpoint with token → Email verified
-
-**Link format**: `{FRONTEND_URL}/verify-email?token={token}`
-
-### Using Authenticated Endpoints
-```http
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-## Handicap Management
-
-### Update Handicap (RFEG)
-```http
-POST /api/v1/handicaps/update
-Authorization: Bearer {token}
-
-Request:
-{
-  "user_id": "uuid",
-  "manual_handicap": 15.5  // Optional fallback if RFEG returns no data
-}
-
-Response: 200 OK
-{
-  "id": "uuid",
-  "handicap": 15.5,
-  "handicap_updated_at": "2025-11-09T10:00:00Z",
-  ...
-}
-
-Errors:
-404 Not Found - User not found OR Player not found in RFEG (without manual_handicap)
-503 Service Unavailable - RFEG service is down
-```
-
-**Behavior:**
-- Searches player in RFEG database by full name
-- If found: Updates handicap with RFEG value
-- If NOT found and `manual_handicap` provided: Uses manual value
-- If NOT found and NO `manual_handicap`: Returns 404 with clear error message
-
-### Update Handicap (Manual)
-```http
-POST /api/v1/handicaps/update-manual
-
-Request:
-{
-  "user_id": "uuid",
-  "handicap": 15.5
-}
-```
-
-### Batch Update
-```http
-POST /api/v1/handicaps/update-multiple
-
-Request:
-{
-  "user_ids": ["uuid1", "uuid2", ...]
-}
-
-Response: 200 OK
-{
-  "total": 10,
-  "updated": 7,
-  "not_found": 1,
-  "no_handicap_found": 1,
-  "errors": 1
-}
-```
-
-## Handicap Management
-
-### Update Handicap (RFEG)
-```http
-POST /api/v1/handicaps/update
-Authorization: Bearer {token}
-
-Request:
-{
-  "user_id": "uuid",
-  "manual_handicap": 15.5  // Optional fallback if RFEG returns no data
-}
-
-Response: 200 OK
-{
-  "id": "uuid",
-  "handicap": 15.5,
-  "handicap_updated_at": "2025-11-09T10:00:00Z",
-  ...
-}
-
-Errors:
-404 Not Found - User not found OR Player not found in RFEG (without manual_handicap)
-503 Service Unavailable - RFEG service is down
-```
-
-**Behavior:**
-- Searches player in RFEG database by full name
-- If found: Updates handicap with RFEG value
-- If NOT found and `manual_handicap` provided: Uses manual value
-- If NOT found and NO `manual_handicap`: Returns 404 with clear error message
-
-### Update Handicap (Manual)
-```http
-POST /api/v1/handicaps/update-manual
-
-Request:
-{
-  "user_id": "uuid",
-  "handicap": 15.5
-}
-```
-
-### Batch Update
-```http
-POST /api/v1/handicaps/update-multiple
-
-Request:
-{
-  "user_ids": ["uuid1", "uuid2", ...]
-}
-
-Response: 200 OK
-{
-  "total": 10,
-  "updated": 7,
-  "not_found": 1,
-  "no_handicap_found": 1,
-  "errors": 1
-}
-```
-
-## Competition Management
-
-### Create Competition
-```http
-POST /api/v1/competitions
-Authorization: Bearer {token}
-
-Request:
-{
-  "name": "Ryder Cup 2025",
-  "start_date": "2025-10-01",
-  "end_date": "2025-10-03",
-  "main_country": "ES",
-  "adjacent_country_1": "FR",
-  "handicap_type": "PERCENTAGE",
-  "handicap_percentage": 95,
-  "max_players": 24,
-  "team_assignment": "MANUAL"
-}
-
-Response: 201 Created
-{
-  "id": "uuid",
-  "creator_id": "uuid",
-  "name": "Ryder Cup 2025",
-  "status": "DRAFT",
-  "start_date": "2025-10-01",
-  "end_date": "2025-10-03",
-  "country_code": "ES",
-  "secondary_country_code": "FR",
-  "tertiary_country_code": null,
-  "location": "Spain, France",
-  "handicap_type": "PERCENTAGE",
-  "handicap_percentage": 95,
-  "max_players": 24,
-  "team_assignment": "MANUAL",
-  "is_creator": true,
-  "enrolled_count": 0,
-  "created_at": "2025-11-19T10:00:00.000Z",
-  "updated_at": "2025-11-19T10:00:00.000Z"
-}
-
-Notes:
-- Competition is created in DRAFT state.
-- Only the creator can modify a DRAFT competition.
-```
-
-### Update Competition
-```http
-PUT /api/v1/competitions/{competition_id}
-Authorization: Bearer {token}
-
-Request:
-{
-  "name": "Updated Ryder Cup Name",
-  "start_date": "2026-01-01",
-  "end_date": "2026-01-03",
-  "main_country": "US",
-  "adjacent_country_1": null,
-  "adjacent_country_2": null,
-  "handicap_type": "SCRATCH",
-  "handicap_percentage": null,
-  "max_players": 50,
-  "team_assignment": "AUTOMATIC",
-  "team_1_name": "Team USA",
-  "team_2_name": "Team World"
-}
-
-Response: 200 OK
-{
-  "id": "uuid",
-  "creator_id": "uuid",
-  "name": "Updated Ryder Cup Name",
-  "status": "DRAFT",
-  "start_date": "2026-01-01",
-  "end_date": "2026-01-03",
-  "country_code": "US",
-  "secondary_country_code": null,
-  "tertiary_country_code": null,
-  "location": "United States",
-  "handicap_type": "SCRATCH",
-  "handicap_percentage": null,
-  "max_players": 50,
-  "team_assignment": "AUTOMATIC",
-  "is_creator": true,
-  "enrolled_count": 0,
-  "created_at": "2025-11-19T10:00:00.000Z",
-  "updated_at": "2025-11-19T10:00:00.000Z"
-}
-
-Notes:
-- Only DRAFT competitions can be updated.
-- Only the creator can update the competition.
-- All fields in the request body are optional for partial updates.
-- If updating dates, both `start_date` and `end_date` must be provided.
-- If updating `handicap_type` to PERCENTAGE, `handicap_percentage` is required. If to SCRATCH, `handicap_percentage` must be null.
-```
-
-## User Management
-
-### Update Profile
-```http
-PATCH /api/v1/users/profile
-Authorization: Bearer {token}
-
-Request:
-{
-  "first_name": "Jane",      // Optional - only if changing
-  "last_name": "Smith"        // Optional - only if changing
-}
-
-Response: 200 OK
-{
-  "user": {
-    "id": "uuid",
-    "email": "john@example.com",
-    "first_name": "Jane",
-    "last_name": "Smith",
-    "handicap": 15.5
-  },
-  "message": "Profile updated successfully"
-}
-
-Errors:
-401 Unauthorized - Missing or invalid token
-404 Not Found - User not found
-422 Unprocessable Entity - Validation error (name too short)
-```
-
-### Update Security Settings
-```http
-PATCH /api/v1/users/security
-Authorization: Bearer {token}
-
-Request:
-{
-  "current_password": "OldPass123!",     // Required
-  "new_email": "newemail@example.com",   // Optional - only if changing email
-  "new_password": "NewPass456!",         // Optional - only if changing password
-  "confirm_password": "NewPass456!"      // Required if new_password provided
-}
-
-Response: 200 OK
-{
-  "user": {
-    "id": "uuid",
-    "email": "newemail@example.com",
-    "first_name": "Jane",
-    "last_name": "Smith",
-    "handicap": 15.5,
-    "email_verified": false  // Will be false if email was changed
-  },
-  "message": "Security settings updated successfully"
-}
-
-Errors:
-401 Unauthorized - Missing or invalid token / Current password incorrect
-404 Not Found - User not found
-409 Conflict - Email already in use
-422 Unprocessable Entity - Validation error (password too short, etc.)
-```
-
-**Notes:**
-- **Profile Update**: Does NOT require password - only JWT authentication
-- **Security Update**: Requires current password for verification
-- **Email Change**: When email is updated:
-  - `email_verified` is set to `false`
-  - Verification email is sent to the NEW email address
-  - User must verify the new email to restore full access
-  - Frontend will show verification banner until email is verified
-- Both endpoints can update single or multiple fields
-- Leave fields as `null` or omit them to keep current values
-
-### Find User
-```http
-GET /api/v1/users/search?email=john@example.com
-GET /api/v1/users/search?full_name=John Doe
-Authorization: Bearer {token}
-
-Response: 200 OK
-{
-  "id": "uuid",
-  "email": "john@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "handicap": 15.5
-}
-
-Errors:
-401 Unauthorized - Missing or invalid token
-404 Not Found - User not found
-```
-
-## Error Codes
-
-- `400`: Bad Request (validación)
-- `401`: Unauthorized (credenciales inválidas o token missing)
-- `404`: Not Found (usuario no existe, jugador no en RFEG, etc.)
-- `409`: Conflict (email duplicado)
-- `422`: Unprocessable Entity (validación Pydantic: formato email inválido, password muy corto, etc.)
-- `503`: Service Unavailable (servicio externo RFEG caído)
 - `500`: Internal Server Error
 
 ## Session Management
