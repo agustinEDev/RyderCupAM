@@ -124,8 +124,8 @@ class LoggerFactory:
             FileNotFoundError: Si el archivo no existe
             ValueError: Si el formato no es válido
         """
-        config_path = Path(config_path)
-        
+        if not isinstance(config_path, Path):
+            config_path = Path(config_path)
         if not config_path.exists():
             raise FileNotFoundError(f"Archivo de configuración no encontrado: {config_path}")
         
