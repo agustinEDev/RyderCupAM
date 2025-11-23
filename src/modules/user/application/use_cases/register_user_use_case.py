@@ -15,6 +15,8 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.value_objects.country_code import CountryCode
 
 
 class RegisterUserUseCase:
@@ -29,11 +31,13 @@ class RegisterUserUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
+        country_repository: CountryRepositoryInterface,
         handicap_service: Optional[HandicapService] = None,
-        email_service: Optional[IEmailService] = None
+        email_service: Optional[IEmailService] = None,
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
+        self._country_repository = country_repository
         self._handicap_service = handicap_service
         self._email_service = email_service
 
@@ -56,12 +60,20 @@ class RegisterUserUseCase:
             if await self._user_finder.by_email(email_vo):
                 raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
 
+            # 1.5 Validar que el country_code existe (si se proporcionó)
+            if request.country_code:
+                country_code_vo = CountryCode(request.country_code)
+                country_exists = await self._country_repository.exists(country_code_vo)
+                if not country_exists:
+                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
+
             # 2. Crear la entidad de dominio User
             new_user = User.create(
                 email_str=request.email,
                 plain_password=request.password,
                 first_name=request.first_name,
                 last_name=request.last_name,
+                country_code_str=request.country_code,
             )
 
             # 2.5 Intentar buscar hándicap inicial (no bloquea el registro)

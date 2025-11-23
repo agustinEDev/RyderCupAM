@@ -36,7 +36,7 @@ router = APIRouter()
     response_model=UserResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un nuevo usuario",
-    description="Crea un nuevo usuario en el sistema y devuelve su información.",
+    description="Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y opcionalmente código de país (ISO 3166-1 alpha-2).",
     tags=["Authentication"],
 )
 async def register_user(
@@ -52,6 +52,11 @@ async def register_user(
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 

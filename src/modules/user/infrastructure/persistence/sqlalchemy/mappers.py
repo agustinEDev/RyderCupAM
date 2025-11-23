@@ -1,7 +1,7 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 from sqlalchemy import (
-    Table, Column, String, DateTime, Float, Boolean
+    Table, Column, String, DateTime, Float, Boolean, ForeignKey
 )
 from sqlalchemy.orm import composite
 from sqlalchemy.types import TypeDecorator, CHAR
@@ -9,6 +9,9 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
+
+# Importar CountryCodeDecorator del shared domain
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import CountryCodeDecorator
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
@@ -54,6 +57,7 @@ users_table = Table(
     Column('updated_at', DateTime, nullable=False),
     Column('email_verified', Boolean, nullable=False, default=False),
     Column('verification_token', String(255), nullable=True),
+    Column('country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='SET NULL'), nullable=True),
 )
 
 def start_mappers():
@@ -73,4 +77,5 @@ def start_mappers():
             # a los atributos privados que acabamos de definir.
             'email': composite(Email, '_email'),
             'password': composite(Password, '_password'),
+            # country_code se mapea directamente - el TypeDecorator maneja la conversión
         })
