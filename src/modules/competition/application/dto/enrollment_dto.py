@@ -9,6 +9,33 @@ from decimal import Decimal
 
 
 # ======================================================================================
+# Nested DTO para representar datos de usuario
+# ======================================================================================
+
+class EnrolledUserDTO(BaseModel):
+    """
+    DTO para representar información básica de un usuario inscrito.
+
+    Se utiliza como objeto nested dentro de EnrollmentResponseDTO
+    para evitar múltiples llamadas API desde el frontend.
+
+    Campos incluidos:
+    - Datos personales: id, first_name, last_name, email
+    - Datos de juego: handicap, country_code
+    - Personalización: avatar_url (null por ahora)
+    """
+    id: UUID = Field(..., description="ID único del usuario")
+    first_name: str = Field(..., description="Nombre del usuario")
+    last_name: str = Field(..., description="Apellido del usuario")
+    email: str = Field(..., description="Email del usuario")
+    handicap: Optional[Decimal] = Field(None, description="Handicap oficial del usuario")
+    country_code: Optional[str] = Field(None, description="Código ISO del país del usuario")
+    avatar_url: Optional[str] = Field(None, description="URL del avatar del usuario (futuro)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
 # DTO para el Caso de Uso: Solicitar Inscripción (Request Enrollment)
 # ======================================================================================
 
@@ -189,10 +216,14 @@ class EnrollmentResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una inscripción.
     Se utiliza para listar inscripciones y consultas detalladas.
+
+    NOTA: El campo 'user' es calculado dinámicamente en la capa de presentación
+    y NO existe en la entidad de dominio.
     """
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
+    user: Optional[EnrolledUserDTO] = Field(None, description="Información completa del usuario inscrito.")
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
     team_id: Optional[str] = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Optional[Decimal] = Field(None, description="Hándicap personalizado (si aplica).")

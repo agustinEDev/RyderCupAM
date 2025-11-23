@@ -13,6 +13,7 @@ from uuid import UUID
 from src.config.dependencies import (
     get_current_user,
     get_competition_uow,
+    get_uow,  # User Unit of Work para obtener datos del usuario
     get_request_enrollment_use_case,
     get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
@@ -36,6 +37,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     SetCustomHandicapRequestDTO,
     SetCustomHandicapResponseDTO,
     EnrollmentResponseDTO,
+    EnrolledUserDTO,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
@@ -82,6 +84,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,23 +97,76 @@ router = APIRouter()
 class EnrollmentDTOMapper:
     """
     Mapper para convertir entidades Enrollment a DTOs de presentación.
+
+    RESPONSABILIDAD: Capa de presentación (API Layer)
+    - Convertir entidades de dominio a DTOs
+    - Calcular campos derivados para UI (user nested)
+    - Formatear datos para el frontend
     """
 
     @staticmethod
-    def to_response_dto(enrollment) -> EnrollmentResponseDTO:
+    async def to_response_dto(
+        enrollment,
+        user_uow: Optional[UserUnitOfWorkInterface] = None
+    ) -> EnrollmentResponseDTO:
         """
         Convierte una entidad Enrollment a EnrollmentResponseDTO.
+
+        Args:
+            enrollment: Entidad de dominio
+            user_uow: Unit of Work de usuarios para obtener datos del usuario (opcional)
+
+        Returns:
+            EnrollmentResponseDTO enriquecido con datos del usuario
         """
+        # Obtener información del usuario (si user_uow es provisto)
+        user_dto = None
+        if user_uow:
+            user_dto = await EnrollmentDTOMapper._get_user_dto(enrollment.user_id, user_uow)
+
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
+            user=user_dto,
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
             created_at=enrollment.created_at,
             updated_at=enrollment.updated_at
         )
+
+    @staticmethod
+    async def _get_user_dto(
+        user_id: UserId,
+        user_uow: UserUnitOfWorkInterface,
+    ) -> Optional[EnrolledUserDTO]:
+        """
+        Obtiene la información de un usuario inscrito.
+
+        Args:
+            user_id: ID del usuario
+            user_uow: Unit of Work de usuarios
+
+        Returns:
+            EnrolledUserDTO con los datos del usuario, o None si no se encuentra
+        """
+        async with user_uow:
+            user = await user_uow.users.find_by_id(user_id)
+
+            if not user:
+                logger.warning(f"User with id {user_id.value} not found")
+                return None
+
+            return EnrolledUserDTO(
+                id=user.id.value,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=str(user.email),
+                handicap=user.handicap.value if user.handicap else None,
+                country_code=user.country_code.value if user.country_code else None,
+                avatar_url=None  # TODO: Implementar cuando tengamos sistema de avatares
+            )
 
 
 # ======================================================================================
@@ -199,6 +255,7 @@ async def list_enrollments(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListEnrollmentsUseCase = Depends(get_list_enrollments_use_case),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por estado"),
 ):
     """
@@ -206,6 +263,11 @@ async def list_enrollments(
 
     Filtros disponibles:
     - status: REQUESTED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
+
+    **Returns:**
+    - Lista de enrollments con objeto `user` nested incluyendo:
+      - id, first_name, last_name, email
+      - handicap, country_code, avatar_url
     """
     try:
         enrollments = await use_case.execute(
@@ -213,7 +275,13 @@ async def list_enrollments(
             status=status_filter
         )
 
-        return [EnrollmentDTOMapper.to_response_dto(e) for e in enrollments]
+        # Convertir entidades a DTOs enriquecidos con datos de usuario
+        result = []
+        for enrollment in enrollments:
+            dto = await EnrollmentDTOMapper.to_response_dto(enrollment, user_uow)
+            result.append(dto)
+
+        return result
 
     except ListCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
