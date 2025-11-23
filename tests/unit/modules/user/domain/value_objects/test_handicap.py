@@ -12,7 +12,7 @@ class TestHandicapCreation:
     def test_create_valid_handicap_positive(self):
         """Test: Crear hándicap con valor positivo válido."""
         handicap = Handicap(15.5)
-        assert handicap.value == 15.5
+        assert handicap.value == pytest.approx(15.5)
 
     def test_create_valid_handicap_negative(self):
         """Test: Crear hándicap con valor negativo válido."""
@@ -22,7 +22,7 @@ class TestHandicapCreation:
     def test_create_handicap_zero(self):
         """Test: Crear hándicap con valor cero."""
         handicap = Handicap(0.0)
-        assert handicap.value == 0.0
+        assert handicap.value == pytest.approx(0.0)
 
     def test_create_handicap_minimum_valid(self):
         """Test: Crear hándicap con valor mínimo válido (-10.0)."""
@@ -32,7 +32,7 @@ class TestHandicapCreation:
     def test_create_handicap_maximum_valid(self):
         """Test: Crear hándicap con valor máximo válido (54.0)."""
         handicap = Handicap(54.0)
-        assert handicap.value == 54.0
+        assert handicap.value == pytest.approx(54.0)
 
     def test_create_handicap_with_integer(self):
         """Test: Crear hándicap con valor entero (se convierte a float)."""
@@ -87,7 +87,7 @@ class TestHandicapBehavior:
     def test_handicap_float_conversion(self):
         """Test: Conversión a float del hándicap."""
         handicap = Handicap(15.5)
-        assert float(handicap) == 15.5
+        assert float(handicap) == pytest.approx(15.5)
 
     def test_handicap_equality(self):
         """Test: Dos hándicaps con el mismo valor son iguales."""
@@ -109,7 +109,7 @@ class TestHandicapFromOptional:
         """Test: Crear hándicap desde valor opcional (no None)."""
         handicap = Handicap.from_optional(15.5)
         assert handicap is not None
-        assert handicap.value == 15.5
+        assert handicap.value == pytest.approx(15.5)
 
     def test_from_optional_with_none(self):
         """Test: Crear hándicap desde None devuelve None."""
@@ -120,7 +120,7 @@ class TestHandicapFromOptional:
         """Test: Crear hándicap desde cero (valor válido)."""
         handicap = Handicap.from_optional(0.0)
         assert handicap is not None
-        assert handicap.value == 0.0
+        assert handicap.value == pytest.approx(0.0)
 
     def test_from_optional_with_invalid_value_raises_error(self):
         """Test: from_optional con valor inválido lanza ValueError."""

@@ -32,7 +32,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Assert
         assert result is not None
-        assert result.handicap == 2.5
+        assert result.handicap == pytest.approx(2.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_for_non_existent_user(self):
@@ -87,7 +87,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Assert - verificar que se guardó en el repositorio
         saved_user = await uow.users.find_by_id(user.id)
-        assert saved_user.handicap == 5.0
+        assert saved_user.handicap == pytest.approx(5.0)
 
     @pytest.mark.asyncio
     async def test_update_handicap_uses_manual_when_rfeg_returns_none(self):
@@ -107,7 +107,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Assert
         assert result is not None
-        assert result.handicap == 18.5
+        assert result.handicap == pytest.approx(18.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_prefers_rfeg_over_manual(self):
@@ -129,7 +129,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Assert - debe usar el de RFEG (2.5), no el manual (20.0)
         assert result is not None
-        assert result.handicap == 2.5
+        assert result.handicap == pytest.approx(2.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_no_change_when_both_none(self):

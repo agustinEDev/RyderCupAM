@@ -28,7 +28,7 @@ class TestUpdateUserHandicapManuallyUseCase:
 
         # Assert
         assert result is not None
-        assert result.handicap == 12.5
+        assert result.handicap == pytest.approx(12.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_manually_for_non_existent_user(self):
@@ -76,7 +76,7 @@ class TestUpdateUserHandicapManuallyUseCase:
 
         # Assert - verificar que se guardó en el repositorio
         saved_user = await uow.users.find_by_id(user.id)
-        assert saved_user.handicap == 8.5
+        assert saved_user.handicap == pytest.approx(8.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_manually_changes_updated_at(self):
@@ -114,4 +114,4 @@ class TestUpdateUserHandicapManuallyUseCase:
 
         # Assert
         assert result is not None
-        assert result.handicap == -5.0
+        assert result.handicap == pytest.approx(-5.0)

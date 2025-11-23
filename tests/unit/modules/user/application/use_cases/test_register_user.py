@@ -116,7 +116,7 @@ class TestRegisterUserUseCase:
         user_response = await use_case.execute(request_dto)
 
         # Assert
-        assert user_response.handicap == 15.5
+        assert user_response.handicap == pytest.approx(15.5)
 
     async def test_should_prefer_rfeg_handicap_over_manual(
         self, uow: InMemoryUnitOfWork, country_repository
@@ -146,7 +146,7 @@ class TestRegisterUserUseCase:
         user_response = await use_case.execute(request_dto)
 
         # Assert - debe usar el de RFEG (3.5), no el manual (20.0)
-        assert user_response.handicap == 3.5
+        assert user_response.handicap == pytest.approx(3.5)
 
     async def test_should_register_without_handicap_when_none_available(
         self, uow: InMemoryUnitOfWork, country_repository

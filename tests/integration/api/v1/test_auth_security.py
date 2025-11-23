@@ -373,8 +373,8 @@ class TestAuthSecurityLogging:
 
         print("\n✅ Error handling structure verified:")
         print(f"  - Logger configured: {auth_routes.logger.name}")
-        print(f"  - Edge cases handled gracefully")
-        print(f"  - Generic messages maintained")
+        print("  - Edge cases handled gracefully")
+        print("  - Generic messages maintained")
         print(f"  - Logging active: {len(caplog.records)} log entries")
 
     async def test_security_monitoring_capabilities(self, client: AsyncClient, caplog):

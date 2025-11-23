@@ -563,7 +563,7 @@ class TestUserUpdateHandicap:
         
         user.update_handicap(15.5)
         
-        assert user.handicap == 15.5
+        assert user.handicap == pytest.approx(15.5)
 
     def test_update_handicap_emits_domain_event(self):
         """Test: Actualizar hándicap emite un evento de dominio."""
@@ -586,7 +586,7 @@ class TestUserUpdateHandicap:
         event = user.get_domain_events()[0]
         assert event.user_id == str(user.id.value)
         assert event.old_handicap is None
-        assert event.new_handicap == 15.5
+        assert event.new_handicap == pytest.approx(15.5)
 
     def test_update_handicap_from_existing_value(self):
         """Test: Actualizar hándicap cuando ya tiene un valor previo."""
@@ -597,8 +597,8 @@ class TestUserUpdateHandicap:
         user.update_handicap(20.0)
         
         event = user.get_domain_events()[0]
-        assert event.old_handicap == 15.5
-        assert event.new_handicap == 20.0
+        assert event.old_handicap == pytest.approx(15.5)
+        assert event.new_handicap == pytest.approx(20.0)
 
     def test_update_handicap_to_none(self):
         """Test: Actualizar hándicap a None (eliminar hándicap)."""
@@ -610,7 +610,7 @@ class TestUserUpdateHandicap:
         
         assert user.handicap is None
         event = user.get_domain_events()[0]
-        assert event.old_handicap == 15.5
+        assert event.old_handicap == pytest.approx(15.5)
         assert event.new_handicap is None
 
     def test_update_handicap_does_not_emit_event_if_same_value(self):
@@ -664,7 +664,7 @@ class TestUserUpdateHandicap:
         
         user.update_handicap(0.0)
         
-        assert user.handicap == 0.0
+        assert user.handicap == pytest.approx(0.0)
 
     def test_update_handicap_minimum_valid_value(self):
         """Test: Actualizar con valor mínimo válido (-10.0)."""
@@ -680,7 +680,7 @@ class TestUserUpdateHandicap:
 
         user.update_handicap(54.0)
 
-        assert user.handicap == 54.0
+        assert user.handicap == pytest.approx(54.0)
 
 
 class TestUserEmailVerification:
