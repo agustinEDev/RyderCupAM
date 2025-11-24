@@ -503,7 +503,7 @@ def seed_country_adjacencies():
         -- France (FR)
         ('FR', 'DE'), ('DE', 'FR'),
         ('FR', 'DM'), ('DM', 'FR'),
-        ('FR', 'GF'), ('GF', 'FR'),
+        -- ('FR', 'GF'), ('GF', 'FR'),
         ('FR', 'IT'), ('IT', 'FR'),
         ('FR', 'LU'), ('LU', 'FR'),
         ('FR', 'MC'), ('MC', 'FR'),
