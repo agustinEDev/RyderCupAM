@@ -1,4 +1,4 @@
--- -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Seed data for countries and country_adjacencies tables.
 
