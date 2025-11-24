@@ -56,7 +56,9 @@ class TestCreateCompetitionUseCase:
             main_country="ES",
             handicap_type="SCRATCH",
             max_players=24,
-            team_assignment="MANUAL"
+            team_assignment="MANUAL",
+            team_1_name="Europa",
+            team_2_name="USA"
         )
 
         # Act
@@ -70,11 +72,15 @@ class TestCreateCompetitionUseCase:
         assert response.start_date == date(2025, 6, 1)
         assert response.end_date == date(2025, 6, 3)
         assert response.id is not None
+        assert response.team_1_name == "Europa"
+        assert response.team_2_name == "USA"
 
         # 2. Verificar que se guardó en la BD
         competitions = await uow.competitions.find_all()
         assert len(competitions) == 1
         assert competitions[0].name.value == "Ryder Cup 2025"
+        assert competitions[0].team_1_name == "Europa"
+        assert competitions[0].team_2_name == "USA"
 
     async def test_should_create_competition_with_adjacent_countries(
         self,

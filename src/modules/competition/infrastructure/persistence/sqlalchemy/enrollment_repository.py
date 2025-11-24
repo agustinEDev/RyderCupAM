@@ -209,6 +209,29 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one()
 
+    async def count_pending(self, competition_id: CompetitionId) -> int:
+        """
+        Cuenta el total de inscripciones pendientes (REQUESTED) en una competición.
+
+        Args:
+            competition_id: ID de la competición
+
+        Returns:
+            int: Número total de inscripciones con estado REQUESTED
+        """
+        statement = (
+            select(func.count())
+            .select_from(Enrollment)
+            .where(
+                and_(
+                    Enrollment.competition_id == competition_id,
+                    Enrollment._status_value == EnrollmentStatus.REQUESTED.value
+                )
+            )
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one()
+
     async def find_by_competition_and_team(
         self,
         competition_id: CompetitionId,

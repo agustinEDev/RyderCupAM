@@ -105,6 +105,14 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
             enr.status == EnrollmentStatus.APPROVED
         )
 
+    async def count_pending(self, competition_id: CompetitionId) -> int:
+        """Cuenta el número de inscripciones pendientes (REQUESTED)."""
+        return sum(
+            1 for enr in self._enrollments.values()
+            if enr.competition_id == competition_id and
+            enr.status == EnrollmentStatus.REQUESTED
+        )
+
     async def count_approved_enrollments(
         self,
         competition_id: CompetitionId

@@ -399,6 +399,7 @@ Notes:
 POST /api/v1/competitions
 Authorization: Bearer {token}
 
+
 Request:
 {
   "name": "Ryder Cup 2025",
@@ -427,6 +428,7 @@ Alternative Request Format (Frontend Compatible):
   "number_of_players": 24,
   "team_assignment": "manual"
 }
+
 
 Response: 201 Created
 {

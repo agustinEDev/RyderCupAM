@@ -191,6 +191,24 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def count_pending(self, competition_id: CompetitionId) -> int:
+        """
+        Cuenta el total de inscripciones pendientes (REQUESTED) en una competición.
+
+        Útil para: Mostrar notificaciones al creador sobre solicitudes pendientes.
+
+        Args:
+            competition_id: El ID de la competición
+
+        Returns:
+            int: Número total de inscripciones con estado REQUESTED
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def find_by_competition_and_team(
         self,
         competition_id: CompetitionId,

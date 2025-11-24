@@ -309,6 +309,8 @@ class CompetitionResponseDTO(BaseModel):
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(..., description="True si el usuario autenticado es el creador de esta competición.")
     enrolled_count: int = Field(default=0, description="Número de jugadores con enrollment status APPROVED.")
+    pending_enrollments_count: int = Field(default=0, description="Número de solicitudes con enrollment status PENDING (solo visible para el creador).")
+    user_enrollment_status: Optional[str] = Field(None, description="Estado de inscripción del usuario actual (REQUESTED, APPROVED, REJECTED, etc.). None si no está inscrito.")
 
     # Timestamps
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
