@@ -410,7 +410,9 @@ Request:
   "handicap_type": "PERCENTAGE",
   "handicap_percentage": 95,
   "max_players": 24,
-  "team_assignment": "MANUAL"
+  "team_assignment": "MANUAL",
+  "team_1_name": "Europa",
+  "team_2_name": "USA"
 }
 
 Alternative Request Format (Frontend Compatible):
@@ -467,6 +469,8 @@ Response: 201 Created
   "handicap_percentage": 95,
   "max_players": 24,
   "team_assignment": "MANUAL",
+  "team_1_name": "Europa",
+  "team_2_name": "USA",
   "is_creator": true,
   "enrolled_count": 0,
   "created_at": "2025-11-19T10:00:00.000Z",
@@ -527,6 +531,8 @@ Response: 200 OK
     "handicap_percentage": 95,
     "max_players": 24,
     "team_assignment": "MANUAL",
+    "team_1_name": "Europa",
+    "team_2_name": "USA",
     "is_creator": false,
     "enrolled_count": 0,
     "created_at": "2025-11-09T10:00:00Z",
@@ -622,7 +628,9 @@ Request:
   "handicap_type": "PERCENTAGE",
   "handicap_percentage": 95,
   "max_players": 20,
-  "team_assignment": "MANUAL"
+  "team_assignment": "MANUAL",
+  "team_1_name": "Europa",
+  "team_2_name": "USA"
 }
 
 Response: 200 OK
@@ -666,6 +674,8 @@ Response: 200 OK
   "handicap_percentage": 95,
   "max_players": 20,
   "team_assignment": "MANUAL",
+  "team_1_name": "Europa",
+  "team_2_name": "USA",
   "is_creator": true,
   "enrolled_count": 0,
   "created_at": "2025-11-09T10:00:00Z",
@@ -675,7 +685,7 @@ Response: 200 OK
 Notes:
 - Only competitions in DRAFT status can be updated
 - Only the creator can update the competition
-- Updatable fields: name, dates, countries, handicap settings, max_players, team_assignment
+- Updatable fields: name, dates, countries, handicap settings, max_players, team_assignment, team_1_name, team_2_name
 ```
 
 ### Delete Competition

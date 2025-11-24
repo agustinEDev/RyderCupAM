@@ -2,6 +2,9 @@
 COMPETITION_NAME_DESC = "Nombre de la competición."
 MAX_PLAYERS_DESC = "Número máximo de jugadores."
 COMPETITION_ID_DESC = "ID de la competición."
+# Descripciones para nombres de equipos
+TEAM_1_NAME_DESC = "Nombre del equipo 1."
+TEAM_2_NAME_DESC = "Nombre del equipo 2."
 # -*- coding: utf-8 -*-
 """DTOs para el módulo Competition - Application Layer."""
 
@@ -72,6 +75,10 @@ class CreateCompetitionRequestDTO(BaseModel):
     # Competition Config - con alias para compatibilidad con frontend
     max_players: int = Field(default=24, ge=2, le=100, description=MAX_PLAYERS_DESC, alias="number_of_players")
     team_assignment: str = Field(default="MANUAL", description="Asignación de equipos: 'MANUAL' o 'AUTOMATIC'.")
+
+    # Nombres de equipos (opcional, pero recomendado)
+    team_1_name: str = Field(default="Team 1", min_length=3, max_length=50, description=TEAM_1_NAME_DESC)
+    team_2_name: str = Field(default="Team 2", min_length=3, max_length=50, description=TEAM_2_NAME_DESC)
 
     @field_validator('main_country', 'adjacent_country_1', 'adjacent_country_2', mode='before')
     @classmethod
@@ -168,6 +175,10 @@ class CreateCompetitionResponseDTO(BaseModel):
     # Handicap
     handicap_type: str = Field(..., description="Tipo de hándicap.")
     handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap.")
+
+    # Nombres de equipos
+    team_1_name: str = Field(..., description=TEAM_1_NAME_DESC)
+    team_2_name: str = Field(..., description=TEAM_2_NAME_DESC)
 
     # Config
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)
@@ -286,6 +297,10 @@ class CompetitionResponseDTO(BaseModel):
     # Handicap Settings
     handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
     handicap_percentage: Optional[int] = Field(None, description="Porcentaje de hándicap (90-100) si es PERCENTAGE.")
+
+    # Nombres de equipos
+    team_1_name: str = Field(default="Team 1", description=TEAM_1_NAME_DESC)
+    team_2_name: str = Field(default="Team 2", description=TEAM_2_NAME_DESC)
 
     # Config
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)

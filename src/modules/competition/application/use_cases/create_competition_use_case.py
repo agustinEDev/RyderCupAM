@@ -117,8 +117,8 @@ class CreateCompetitionUseCase:
                 name=name_vo,
                 dates=date_range,
                 location=location,
-                team_1_name="Team 1",  # Default, se puede cambiar con UpdateCompetition
-                team_2_name="Team 2",  # Default, se puede cambiar con UpdateCompetition
+                team_1_name=request.team_1_name,
+                team_2_name=request.team_2_name,
                 handicap_settings=handicap_settings,
                 max_players=request.max_players,
                 team_assignment=team_assignment_vo
@@ -146,6 +146,9 @@ class CreateCompetitionUseCase:
             # Handicap
             handicap_type=competition.handicap_settings.type.value,
             handicap_percentage=competition.handicap_settings.percentage,
+            # Nombres de equipos
+            team_1_name=competition.team_1_name,
+            team_2_name=competition.team_2_name,
             # Config
             max_players=competition.max_players,
             team_assignment=competition.team_assignment.value,
