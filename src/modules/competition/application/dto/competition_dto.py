@@ -35,7 +35,7 @@ class CreatorDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del creador")
     last_name: str = Field(..., description="Apellido del creador")
     email: str = Field(..., description="Email del creador")
-    handicap: Optional[Decimal] = Field(None, description="Handicap actual del creador")
+    handicap: Optional[float] = Field(None, description="Handicap actual del creador")
     country_code: Optional[str] = Field(None, description="Código ISO del país del creador")
 
     model_config = ConfigDict(from_attributes=True)

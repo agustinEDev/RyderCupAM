@@ -76,7 +76,7 @@ class TestUpdateUserHandicapManuallyUseCase:
 
         # Assert - verificar que se guardó en el repositorio
         saved_user = await uow.users.find_by_id(user.id)
-        assert saved_user.handicap == pytest.approx(8.5)
+        assert saved_user.handicap.value == pytest.approx(8.5)
 
     @pytest.mark.asyncio
     async def test_update_handicap_manually_changes_updated_at(self):

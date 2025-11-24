@@ -7,6 +7,100 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.8.0] - 2025-11-24
+
+### Fixed - Critical: Handicap Value Object Architecture Fix
+
+**🐛 CRITICAL BUG FIX: AttributeError en serialización de Handicap**
+
+#### Problema Identificado
+- ❌ Error: `AttributeError: 'float' object has no attribute 'value'`
+- ❌ Frontend recibiendo HTTP 400 Bad Request al listar competiciones
+- ❌ Tests fallando: 558/663 pasando (84.16%)
+- ❌ Causa: Mapeo incorrecto de Handicap Value Object con SQLAlchemy
+
+#### Solución Implementada
+
+**Infrastructure Layer - User Module:**
+- ✅ **Nuevo `HandicapDecorator` (TypeDecorator)**: Reemplaza composite mapping
+  - Convierte `Handicap` VO ↔ `float` automáticamente
+  - Maneja correctamente valores `NULL` (retorna `None`)
+  - Valida rango -10.0 a 54.0 al cargar desde BD
+- ✅ **User mapper actualizado**: Usa `HandicapDecorator` en lugar de `composite()`
+  - `Column('handicap', HandicapDecorator, nullable=True)`
+  - Elimina mapping privado `_handicap_value`
+
+**Domain Layer - User Module:**
+- ✅ **User.update_handicap()**: Corregido para asignar objeto `Handicap` completo
+  - `self.handicap = validated` (no `validated.value`)
+  - Extrae `.value` solo al emitir eventos de dominio
+- ✅ **HandicapUpdatedEvent**: Recibe `float` en lugar de objeto `Handicap`
+
+**Application Layer:**
+- ✅ **UserResponseDTO**: Añadido validator para convertir `Handicap` → `float`
+  - `@field_validator("id", "email", "country_code", "handicap", mode="before")`
+- ✅ **RegisterUserRequestDTO**: Eliminados campos duplicados (country_code, manual_handicap)
+- ✅ **CreatorDTO**: Cambiado de `Decimal` a `float` para serialización JSON correcta
+
+**API Layer:**
+- ✅ **competition_routes.py**: Extrae `.value` al crear CreatorDTO
+  - `handicap=creator.handicap.value if creator.handicap else None`
+
+**Tests:**
+- ✅ **7 tests corregidos**: Actualizados para acceder a `handicap.value`
+  - `test_user.py`: 5 assertions
+  - `test_update_user_handicap_manually_use_case.py`: 1 assertion
+  - `test_update_user_handicap_use_case.py`: 1 assertion
+
+#### Resultados
+
+**Tests:**
+- ✅ **663/663 tests pasando (100.00%)** - Mejora del 15.84%
+- ✅ User Module: 100% tests pasando
+- ✅ Competition Module: 100% tests pasando
+- ✅ Integration tests: 100% tests pasando
+
+**API End-to-End:**
+- ✅ Registro de usuario sin handicap: OK
+- ✅ Registro de usuario con handicap: OK
+- ✅ Listar competiciones (my_competitions=true): OK
+- ✅ Detalle de competición con creator: OK
+- ✅ Listar enrollments: OK
+- ✅ Serialización JSON: `handicap` como `float` (no string)
+
+**Docker:**
+- ✅ Sin errores `AttributeError` en logs
+- ✅ Aplicación estable y funcional
+
+#### Lecciones Aprendidas
+
+**TypeDecorator vs Composite en SQLAlchemy:**
+
+**✅ Usar TypeDecorator cuando:**
+- Value Object de **una sola columna**
+- Campo **puede ser NULL**
+- Conversión simple entre tipo primitivo y VO
+
+**❌ NO usar Composite cuando:**
+- Campo puede ser NULL (causa `TypeError` en VO constructor)
+- Value Object no permite `None` como valor válido
+
+**✅ Usar Composite cuando:**
+- Value Object abarca **múltiples columnas**
+- Campo **nunca es NULL**
+- Lógica compleja en el VO
+
+#### Archivos Modificados
+- `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py`
+- `src/modules/user/domain/entities/user.py`
+- `src/modules/user/application/dto/user_dto.py`
+- `src/modules/competition/infrastructure/api/v1/competition_routes.py`
+- `src/modules/competition/application/dto/competition_dto.py`
+- `tests/unit/modules/user/domain/entities/test_user.py`
+- `tests/unit/modules/user/application/use_cases/test_update_user_handicap_*.py`
+
+---
+
 ## [1.7.0] - 2025-11-23
 
 ### Added - Sprint 1 Complete: Nationality Support & Nested Objects

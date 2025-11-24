@@ -560,10 +560,10 @@ class TestUserUpdateHandicap:
     def test_update_handicap_with_valid_value(self):
         """Test: Actualizar hándicap con un valor válido."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
-        
+
         user.update_handicap(15.5)
-        
-        assert user.handicap == pytest.approx(15.5)
+
+        assert user.handicap.value == pytest.approx(15.5)
 
     def test_update_handicap_emits_domain_event(self):
         """Test: Actualizar hándicap emite un evento de dominio."""
@@ -653,26 +653,26 @@ class TestUserUpdateHandicap:
     def test_update_handicap_with_negative_value(self):
         """Test: Actualizar con hándicap negativo válido."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
-        
+
         user.update_handicap(-5.0)
-        
-        assert user.handicap == -5.0
+
+        assert user.handicap.value == -5.0
 
     def test_update_handicap_with_zero(self):
         """Test: Actualizar con hándicap cero."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
-        
+
         user.update_handicap(0.0)
-        
-        assert user.handicap == pytest.approx(0.0)
+
+        assert user.handicap.value == pytest.approx(0.0)
 
     def test_update_handicap_minimum_valid_value(self):
         """Test: Actualizar con valor mínimo válido (-10.0)."""
         user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
-        
+
         user.update_handicap(-10.0)
-        
-        assert user.handicap == -10.0
+
+        assert user.handicap.value == -10.0
 
     def test_update_handicap_maximum_valid_value(self):
         """Test: Actualizar con valor máximo válido (54.0)."""
@@ -680,7 +680,7 @@ class TestUserUpdateHandicap:
 
         user.update_handicap(54.0)
 
-        assert user.handicap == pytest.approx(54.0)
+        assert user.handicap.value == pytest.approx(54.0)
 
 
 class TestUserEmailVerification:

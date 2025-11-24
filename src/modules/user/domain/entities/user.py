@@ -113,7 +113,7 @@ class User:
         # Validar si es un Handicap válido usando el Value Object
         if new_handicap is not None:
             validated = Handicap(new_handicap)  # Valida el rango
-            self.handicap = validated.value
+            self.handicap = validated
         else:
             self.handicap = None
 
@@ -126,8 +126,8 @@ class User:
         if old_handicap != self.handicap:
             self._add_domain_event(HandicapUpdatedEvent(
                 user_id=str(self.id.value),
-                old_handicap=old_handicap,
-                new_handicap=self.handicap,
+                old_handicap=old_handicap.value if old_handicap else None,
+                new_handicap=self.handicap.value if self.handicap else None,
                 updated_at=self.updated_at
             ))
 

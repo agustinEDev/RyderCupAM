@@ -360,7 +360,7 @@ class CompetitionDTOMapper:
                 first_name=creator.first_name,
                 last_name=creator.last_name,
                 email=str(creator.email),
-                handicap=creator.handicap,  # handicap ya es float, no tiene .value
+                handicap=creator.handicap.value if creator.handicap else None,
                 country_code=creator.country_code.value if creator.country_code else None,
             )
 

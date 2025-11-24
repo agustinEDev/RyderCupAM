@@ -96,7 +96,7 @@ class UserResponseDTO(BaseModel):
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("id", "email", "country_code", mode="before")
+    @field_validator("id", "email", "country_code", "handicap", mode="before")
     @classmethod
     def convert_value_objects(cls, v):
         """
@@ -104,7 +104,7 @@ class UserResponseDTO(BaseModel):
         Se ejecuta ANTES de la validación estándar de Pydantic.
         """
         # Si el valor 'v' tiene un atributo 'value', usamos ese valor.
-        # Esto funciona para UserId, Email y CountryCode.
+        # Esto funciona para UserId, Email, CountryCode y Handicap.
         if hasattr(v, "value"):
             return v.value
         return v
