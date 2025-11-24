@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+-- -*- coding: utf-8 -*-
 """
 Seed data for countries and country_adjacencies tables.
 
@@ -68,7 +68,7 @@ def seed_countries():
         ('KI', 'Kiribati', 'Kiribati'),
         ('CM', 'Cameroon', 'Camerún'),
         ('CA', 'Canada', 'Canadá'),
-        # ('CK', 'Cook Islands', 'Islas Cook'),
+        -- ('CK', 'Cook Islands', 'Islas Cook'),
         ('CF', 'Central African Republic', 'República Centroafricana'),
         ('TD', 'Chad', 'Chad'),
         ('CL', 'Chile', 'Chile'),
@@ -100,13 +100,13 @@ def seed_countries():
         ('GE', 'Georgia', 'Georgia'),
         ('DE', 'Germany', 'Alemania'),
         ('GH', 'Ghana', 'Ghana'),
-        # ('GI', 'Gibraltar', 'Gibraltar'),
+        -- ('GI', 'Gibraltar', 'Gibraltar'),
         ('GR', 'Greece', 'Grecia'),
         ('GT', 'Guatemala', 'Guatemala'),
         ('GN', 'Guinea', 'Guinea'),
         ('GW', 'Guinea-Bissau', 'Guinea-Bissau'),
         ('GY', 'Guyana', 'Guyana'),
-        # ('GZ', 'Gaza Strip', 'Franja de Gaza'),
+        -- ('GZ', 'Gaza Strip', 'Franja de Gaza'),
         ('HT', 'Haiti', 'Haití'),
         ('HN', 'Honduras', 'Honduras'),
         ('HU', 'Hungary', 'Hungría'),
@@ -154,7 +154,7 @@ def seed_countries():
         ('MM', 'Myanmar', 'Myanmar'),
         ('NA', 'Namibia', 'Namibia'),
         ('NP', 'Nepal', 'Nepal'),
-        # ('NU', 'Niue', 'Niue'),
+        -- ('NU', 'Niue', 'Niue'),
         ('NL', 'Netherlands', 'Países Bajos'),
         ('NZ', 'New Zealand', 'Nueva Zelanda'),
         ('NI', 'Nicaragua', 'Nicaragua'),
@@ -217,28 +217,28 @@ def seed_countries():
         ('VN', 'Vietnam', 'Vietnam'),
         ('WF', 'Wallis and Futuna', 'Wallis y Futuna'),
         ('WS', 'Samoa', 'Samoa'),
-        # ('EH', 'Western Sahara', 'Sáhara Occidental'),
+        -- ('EH', 'Western Sahara', 'Sáhara Occidental'),
         ('YE', 'Yemen', 'Yemen'),
         ('ZM', 'Zambia', 'Zambia'),
         ('ZW', 'Zimbabwe', 'Zimbabue'),
-        # ('GF', 'French Guiana', 'Guayana Francesa'),
+        -- ('GF', 'French Guiana', 'Guayana Francesa'),
         ('DM', 'Dominica', 'Dominica'),
-        # ('MQ', 'Martinique', 'Martinica'),
-        # ('RE', 'Réunion', 'Reunión'),
-        # ('PM', 'Saint Pierre and Miquelon', 'San Pedro y Miquelón'),
-        # ('GG', 'Guernsey', 'Guernsey'),
-        # ('IM', 'Isle of Man', 'Isla de Man'),
-        # ('JE', 'Jersey', 'Jersey'),
-        # ('FK', 'Falkland Islands', 'Islas Malvinas'),
-        # ('SJ', 'Svalbard', 'Svalbard'),
+        -- ('MQ', 'Martinique', 'Martinica'),
+        -- ('RE', 'Réunion', 'Reunión'),
+        -- ('PM', 'Saint Pierre and Miquelon', 'San Pedro y Miquelón'),
+        -- ('GG', 'Guernsey', 'Guernsey'),
+        -- ('IM', 'Isle of Man', 'Isla de Man'),
+        -- ('JE', 'Jersey', 'Jersey'),
+        -- ('FK', 'Falkland Islands', 'Islas Malvinas'),
+        -- ('SJ', 'Svalbard', 'Svalbard'),
         ('BN', 'Brunei', 'Brunéi'),
         ('SG', 'Singapore', 'Singapur'),
         ('JM', 'Jamaica', 'Jamaica'),
         ('PS', 'Palestine', 'Palestina'),
-        # ('HK', 'Hong Kong', 'Hong Kong'),
-        ('TW', 'Taiwan', 'Taiwán'),
-        # ('FO', 'Faroe Islands', 'Islas Feroe'),
-        # ('GL', 'Greenland', 'Groenlandia')
+        -- ('HK', 'Hong Kong', 'Hong Kong'),
+        ('TW', 'Taiwan', 'Taiwán')
+        -- ('FO', 'Faroe Islands', 'Islas Feroe'),
+        -- ('GL', 'Greenland', 'Groenlandia')
         ON CONFLICT (code) DO NOTHING;
     """)
 
@@ -277,7 +277,7 @@ def seed_country_adjacencies():
         ('DZ', 'MA'), ('MA', 'DZ'),
         ('DZ', 'NE'), ('NE', 'DZ'),
         ('DZ', 'TN'), ('TN', 'DZ'),
-        # ('DZ', 'EH'), ('EH', 'DZ'),
+        -- ('DZ', 'EH'), ('EH', 'DZ'),
         -- Andorra (AD)
         ('AD', 'FR'), ('FR', 'AD'),
         ('AD', 'ES'), ('ES', 'AD'),
@@ -304,9 +304,9 @@ def seed_country_adjacencies():
         ('AT', 'LI'), ('LI', 'AT'),
         ('AT', 'SK'), ('SK', 'AT'),
         ('AT', 'SI'), ('SI', 'AT'),
-            # ('FR', 'MQ'), ('MQ', 'FR'),
-            # ('FR', 'PM'), ('PM', 'FR'),
-            # ('FR', 'RE'), ('RE', 'FR'),
+            -- ('FR', 'MQ'), ('MQ', 'FR'),
+            -- ('FR', 'PM'), ('PM', 'FR'),
+            -- ('FR', 'RE'), ('RE', 'FR'),
         ('AZ', 'IR'), ('IR', 'AZ'),
         ('AZ', 'RU'), ('RU', 'AZ'),
         ('AZ', 'TR'), ('TR', 'AZ'),
@@ -351,7 +351,7 @@ def seed_country_adjacencies():
         -- Brazil (BR)
         ('BR', 'CO'), ('CO', 'BR'),
         ('BR', 'FR'), ('FR', 'BR'),
-        # ('BR', 'GF'), ('GF', 'BR'),
+        -- ('BR', 'GF'), ('GF', 'BR'),
         ('BR', 'GY'), ('GY', 'BR'),
         ('BR', 'PE'), ('PE', 'BR'),
         ('BR', 'PY'), ('PY', 'BR'),
@@ -402,7 +402,7 @@ def seed_country_adjacencies():
         -- Chile (CL)
         ('CL', 'PE'), ('PE', 'CL'),
         -- China (CN)
-        # ('CN', 'HK'), ('HK', 'CN'),
+        -- ('CN', 'HK'), ('HK', 'CN'),
         ('CN', 'IN'), ('IN', 'CN'),
         ('CN', 'JP'), ('JP', 'CN'),
         ('CN', 'KR'), ('KR', 'CN'),
@@ -462,7 +462,7 @@ def seed_country_adjacencies():
         ('CD', 'ZM'), ('ZM', 'CD'),
         ('CD', 'ZW'), ('ZW', 'CD'),
         -- Denmark (DK)
-        # ('DK', 'FO'), ('FO', 'DK'),
+        -- ('DK', 'FO'), ('FO', 'DK'),
         ('DK', 'DE'), ('DE', 'DK'),
         -- Djibouti (DJ)
         ('DJ', 'ER'), ('ER', 'DJ'),
@@ -519,13 +519,13 @@ def seed_country_adjacencies():
         ('GA', 'NG'), ('NG', 'GA'),
         -- United Kingdom (GB)
         ('GB', 'CY'), ('CY', 'GB'),
-        # ('GB', 'FK'), ('FK', 'GB'),
+        -- ('GB', 'FK'), ('FK', 'GB'),
         ('GB', 'FR'), ('FR', 'GB'),
-        # ('GB', 'GG'), ('GG', 'GB'),
-        # ('GB', 'GI'), ('GI', 'GB'),
+        -- ('GB', 'GG'), ('GG', 'GB'),
+        -- ('GB', 'GI'), ('GI', 'GB'),
         ('GB', 'IE'), ('IE', 'GB'),
-        # ('GB', 'IM'), ('IM', 'GB'),
-        # ('GB', 'JE'), ('JE', 'GB'),
+        -- ('GB', 'IM'), ('IM', 'GB'),
+        -- ('GB', 'JE'), ('JE', 'GB'),
         -- Gambia (GM)
         ('GM', 'SN'), ('SN', 'GM'),
         -- Georgia (GE)
@@ -725,7 +725,7 @@ def seed_country_adjacencies():
         ('SS', 'UG'), ('UG', 'SS'),
         -- Spain (ES)
         ('ES', 'FR'), ('FR', 'ES'),
-        # ('ES', 'GI'), ('GI', 'ES'),
+        -- ('ES', 'GI'), ('GI', 'ES'),
         -- Tajikistan (TJ)
         ('TJ', 'UZ'), ('UZ', 'TJ'),
         -- Tanzania (TZ)
@@ -740,16 +740,16 @@ def seed_country_adjacencies():
         -- Zambia (ZM)
         ('ZM', 'ZW'), ('ZW', 'ZM'),
         -- Additional relations
-        # ('CK', 'NZ'), ('NZ', 'CK'),
+        -- ('CK', 'NZ'), ('NZ', 'CK'),
         ('FJ', 'VU'), ('VU', 'FJ'),
-        # ('GL', 'IS'), ('IS', 'GL'),
+        -- ('GL', 'IS'), ('IS', 'GL'),
         ('GQ', 'NG'), ('NG', 'GQ'),
         ('ID', 'SR'), ('SR', 'ID'),
         ('ID', 'TL'), ('TL', 'ID'),
         ('JP', 'KR'), ('KR', 'JP'),
         ('KA', 'UZ'), ('UZ', 'KA'),
         ('KI', 'TV'), ('TV', 'KI'),
-        # ('NU', 'NZ'), ('NZ', 'NU'),
+        -- ('NU', 'NZ'), ('NZ', 'NU'),
         ('NZ', 'TK'), ('TK', 'NZ'),
         ('SY', 'TR'), ('TR', 'SY'),
         ('SZ', 'ZW'), ('ZW', 'SZ'),
@@ -757,7 +757,7 @@ def seed_country_adjacencies():
         ('ES', 'MA'), ('MA', 'ES'),
         ('FR', 'SR'), ('SR', 'FR'),
         ('IL', 'PS'), ('PS', 'IL'),
-        # ('CA', 'GL'), ('GL', 'CA'),
+        -- ('CA', 'GL'), ('GL', 'CA'),
         ('CY', 'TR'), ('TR', 'CY'),
         ('AU', 'NZ'), ('NZ', 'AU'),
         ('IT', 'HR'), ('HR', 'IT'),
