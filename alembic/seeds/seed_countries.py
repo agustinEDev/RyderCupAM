@@ -509,8 +509,8 @@ def seed_country_adjacencies():
         ('FR', 'MC'), ('MC', 'FR'),
         -- ('FR', 'MQ'), ('MQ', 'FR'),  -- MQ (Martinique) no existe en countries
         ('FR', 'NL'), ('NL', 'FR'),
-        ('FR', 'PM'), ('PM', 'FR'),
-        ('FR', 'RE'), ('RE', 'FR'),
+        -- ('FR', 'PM'), ('PM', 'FR'),  -- PM (Saint Pierre and Miquelon) no existe en countries
+        -- ('FR', 'RE'), ('RE', 'FR'),
         ('FR', 'SM'), ('SM', 'FR'),
         ('FR', 'CH'), ('CH', 'FR'),
         ('FR', 'WF'), ('WF', 'FR'),
@@ -667,7 +667,7 @@ def seed_country_adjacencies():
         ('ME', 'RS'), ('RS', 'ME'),
         ('ME', 'XK'), ('XK', 'ME'),
         -- Morocco (MA)
-        ('MA', 'EH'), ('EH', 'MA'),
+        -- ('MA', 'EH'), ('EH', 'MA'),
         -- Mozambique (MZ)
         ('MZ', 'ZA'), ('ZA', 'MZ'),
         ('MZ', 'SZ'), ('SZ', 'MZ'),
