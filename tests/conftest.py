@@ -416,18 +416,13 @@ def mock_external_services():
     """
     from unittest.mock import patch, MagicMock
 
-    # Crear un mock que siempre retorna True
-    mock_send = MagicMock(return_value=True)
+    # Mock para EmailService
+    mock_email = MagicMock()
+    mock_email.send_verification_email.return_value = True
 
-    # Parchear el método send_verification_email
-    with patch.object(
-        type(  # Obtenemos la clase EmailService
-            __import__('src.shared.infrastructure.email.email_service', fromlist=['email_service']).email_service
-        ),
-        'send_verification_email',
-        mock_send
-    ):
-        yield mock_send
+    # Patchear el factory en dependencies.py
+    with patch('src.config.dependencies.EmailService', return_value=mock_email):
+        yield mock_email
 
 
 # ======================================================================================

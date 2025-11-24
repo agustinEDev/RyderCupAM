@@ -342,7 +342,7 @@ def get_resend_verification_email_use_case(
     3. Crea una instancia de `ResendVerificationEmailUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ResendVerificationEmailUseCase(uow)
+    return ResendVerificationEmailUseCase(uow, email_service)
 
 
 # ============================================================================
