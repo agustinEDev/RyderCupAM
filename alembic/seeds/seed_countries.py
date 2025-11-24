@@ -507,7 +507,7 @@ def seed_country_adjacencies():
         ('FR', 'IT'), ('IT', 'FR'),
         ('FR', 'LU'), ('LU', 'FR'),
         ('FR', 'MC'), ('MC', 'FR'),
-        ('FR', 'MQ'), ('MQ', 'FR'),
+        -- ('FR', 'MQ'), ('MQ', 'FR'),  -- MQ (Martinique) no existe en countries
         ('FR', 'NL'), ('NL', 'FR'),
         ('FR', 'PM'), ('PM', 'FR'),
         ('FR', 'RE'), ('RE', 'FR'),
