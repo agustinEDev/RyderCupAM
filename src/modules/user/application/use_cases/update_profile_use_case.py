@@ -13,6 +13,8 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.value_objects.country_code import CountryCode
 
 
 class UpdateProfileUseCase:
@@ -23,14 +25,16 @@ class UpdateProfileUseCase:
     sin necesidad de proporcionar su contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, country_repository: CountryRepositoryInterface):
         """
         Inicializa el caso de uso con sus dependencias.
 
         Args:
             uow: Unit of Work para manejar transacciones
+            country_repository: Repositorio de países para validar country_code
         """
         self._uow = uow
+        self._country_repository = country_repository
 
     async def execute(self, user_id: str, request: UpdateProfileRequestDTO) -> UpdateProfileResponseDTO:
         """
@@ -54,10 +58,18 @@ class UpdateProfileUseCase:
             if not user:
                 raise UserNotFoundError(f"User with id {user_id} not found")
 
+            # Validar que el country_code existe (si se proporcionó)
+            if request.country_code:
+                country_code_vo = CountryCode(request.country_code)
+                country_exists = await self._country_repository.exists(country_code_vo)
+                if not country_exists:
+                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
+
             # Actualizar perfil (entity valida y emite eventos)
             user.update_profile(
                 first_name=request.first_name,
-                last_name=request.last_name
+                last_name=request.last_name,
+                country_code_str=request.country_code
             )
 
             # Guardar cambios

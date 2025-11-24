@@ -1,14 +1,24 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 from sqlalchemy import (
-    Table, MetaData, Column, String, DateTime, Float, Boolean
+    Table, Column, String, DateTime, Float, Boolean, ForeignKey
 )
-from sqlalchemy.orm import registry, composite
+from sqlalchemy.orm import composite
 from sqlalchemy.types import TypeDecorator, CHAR
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
+from src.modules.user.domain.value_objects.handicap import Handicap
+
+# Importar CountryCodeDecorator del shared domain
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import CountryCodeDecorator
+
+# Importar registry y metadata centralizados
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata
+)
 
 # --- TypeDecorator para UserId ---
 # Le enseña a SQLAlchemy a manejar nuestro ValueObject UserId.
@@ -28,11 +38,35 @@ class UserIdDecorator(TypeDecorator):
         """Convierte el string de la BD de vuelta a un objeto UserId."""
         if value is None:
             return None
-        return UserId(uuid.UUID(value)) 
+        return UserId(uuid.UUID(value))
+
+
+# --- TypeDecorator para Handicap ---
+# Le enseña a SQLAlchemy a manejar nuestro ValueObject Handicap.
+class HandicapDecorator(TypeDecorator):
+    impl = Float
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect) -> float | None:
+        """Convierte el objeto Handicap a float para guardarlo en la BD."""
+        from src.modules.user.domain.value_objects.handicap import Handicap
+
+        if isinstance(value, Handicap):
+            return value.value
+        if isinstance(value, (int, float)):
+            return float(value)
+        return None
+
+    def process_result_value(self, value: float, dialect):
+        """Convierte el float de la BD de vuelta a un objeto Handicap."""
+        from src.modules.user.domain.value_objects.handicap import Handicap
+
+        if value is None:
+            return None
+        return Handicap(value) 
 
 # --- Registro y Metadatos ---
-mapper_registry = registry()
-metadata = mapper_registry.metadata
+# (Importados de base.py - ver imports arriba)
 
 # --- Definición de la Tabla ---
 users_table = Table(
@@ -43,12 +77,13 @@ users_table = Table(
     Column('last_name', String(50), nullable=False),
     Column('email', String(255), nullable=False, unique=True),
     Column('password', String(255), nullable=False),
-    Column('handicap', Float, nullable=True),
+    Column('handicap', HandicapDecorator, nullable=True),
     Column('handicap_updated_at', DateTime, nullable=True),
     Column('created_at', DateTime, nullable=False),
     Column('updated_at', DateTime, nullable=False),
     Column('email_verified', Boolean, nullable=False, default=False),
     Column('verification_token', String(255), nullable=True),
+    Column('country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='SET NULL'), nullable=True),
 )
 
 def start_mappers():
@@ -68,4 +103,5 @@ def start_mappers():
             # a los atributos privados que acabamos de definir.
             'email': composite(Email, '_email'),
             'password': composite(Password, '_password'),
+            # handicap se mapea directamente - el HandicapDecorator maneja la conversión y None
         })

@@ -49,8 +49,9 @@ class TestVerifyEmailUseCase:
         use_case = VerifyEmailUseCase(uow)
         result = await use_case.execute(token)
 
-        # Assert
-        assert result is True
+        # Assert: ahora result es la entidad User
+        assert hasattr(result, "email_verified")
+        assert result.email_verified is True
 
         # Verificar que el usuario está verificado en la persistencia
         async with uow:

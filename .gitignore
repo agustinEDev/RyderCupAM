@@ -41,3 +41,5 @@ postman_collection.json
 # Postman environments
 postman_environment_DEV.json
 postman_environment_PRO.json
+prompt_next_steps.md
+sonar-project.properties

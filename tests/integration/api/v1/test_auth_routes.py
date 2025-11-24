@@ -115,7 +115,7 @@ class TestAuthRoutes:
         Test: Verificar email exitosamente
         Given: Un usuario registrado con token de verificación
         When: Se llama al endpoint con el token correcto
-        Then: Retorna 200 OK y el email se verifica
+        Then: Retorna 200 OK, un JWT y el usuario autenticado con email verificado
         """
         # Arrange - Registrar usuario
         user_data = {
@@ -128,7 +128,6 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener el token de verificación desde la BD (en un escenario real vendría por email)
-        # Para tests, necesitamos acceder directamente al repositorio
         from tests.conftest import get_user_by_email
         user = await get_user_by_email(client, user_data["email"])
         verification_token = user.verification_token
@@ -140,8 +139,13 @@ class TestAuthRoutes:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        assert response_data["email_verified"] is True
-        assert "verificado" in response_data["message"].lower()
+        # Nuevo contrato: LoginResponseDTO
+        assert "access_token" in response_data
+        assert response_data["token_type"] == "bearer"
+        assert "user" in response_data
+        assert response_data["user"]["email_verified"] is True
+        # El mensaje de éxito está en el DTO original, pero ahora solo validamos el JWT y el usuario
+        # Si quieres validar el mensaje, puedes agregarlo como campo extra en el DTO o en user
 
     async def test_verify_email_endpoint_invalid_token(self, client: AsyncClient):
         """
@@ -319,3 +323,29 @@ class TestAuthRoutes:
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_login_with_short_password_returns_generic_error(self, client: AsyncClient):
+        """
+        Verifica que el login con contraseña corta devuelve "Credenciales incorrectas"
+        en lugar de revelar información sobre validaciones de contraseña.
+
+        Esto es importante por seguridad: no debemos revelar reglas de validación
+        de contraseñas en el endpoint de login.
+        """
+        # Arrange
+        login_data = {
+            "email": "any@example.com",
+            "password": "short"  # Contraseña de solo 5 caracteres (< 8 requeridos)
+        }
+
+        # Act
+        response = await client.post("/api/v1/auth/login", json=login_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        response_data = response.json()
+        assert response_data["detail"] == "Credenciales incorrectas"
+        # NO debe contener información sobre validación de longitud
+        assert "8 characters" not in response_data["detail"]
+        assert "min_length" not in response_data["detail"]
+        assert "password" not in response_data["detail"].lower()

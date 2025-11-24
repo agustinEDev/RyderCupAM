@@ -7,6 +7,7 @@ from ..value_objects.user_id import UserId
 from ..value_objects.email import Email
 from ..value_objects.password import Password
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.value_objects.country_code import CountryCode
 
 
 class User:
@@ -16,6 +17,27 @@ class User:
     Un usuario es alguien que puede registrarse, hacer login
     y participar en torneos Ryder Cup.
     """
+
+    def _validate_profile_update(self, first_name, last_name, country_code_str):
+        if first_name is None and last_name is None and country_code_str is None:
+            raise ValueError("At least one field (first_name, last_name, or country_code) must be provided")
+        if first_name is not None and first_name.strip() == "":
+            raise ValueError("first_name cannot be empty")
+        if last_name is not None and last_name.strip() == "":
+            raise ValueError("last_name cannot be empty")
+
+    def _detect_profile_changes(self, first_name, last_name, country_code_str):
+        old_first_name = self.first_name
+        old_last_name = self.last_name
+        old_country_code = self.country_code
+        first_name_changed = first_name is not None and first_name != old_first_name
+        last_name_changed = last_name is not None and last_name != old_last_name
+        new_country_code = old_country_code
+        country_code_changed = False
+        if country_code_str is not None:
+            new_country_code = CountryCode(country_code_str) if country_code_str else None
+            country_code_changed = new_country_code != old_country_code
+        return (first_name_changed, last_name_changed, country_code_changed, new_country_code, old_first_name, old_last_name, old_country_code)
     
     def __init__(
         self,
@@ -30,6 +52,7 @@ class User:
         updated_at: Optional[datetime] = None,
         email_verified: bool = False,
         verification_token: Optional[str] = None,
+        country_code: Optional[CountryCode] = None,
         domain_events: Optional[List[DomainEvent]] = None
     ):
         self.id = id
@@ -43,7 +66,8 @@ class User:
         self.updated_at = updated_at or datetime.now()
         self.email_verified = email_verified
         self.verification_token = verification_token
-        self._domain_events: List[DomainEvent] = domain_events or []
+        self.country_code = country_code
+        self._domain_events = domain_events or []
     
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
@@ -89,7 +113,7 @@ class User:
         # Validar si es un Handicap válido usando el Value Object
         if new_handicap is not None:
             validated = Handicap(new_handicap)  # Valida el rango
-            self.handicap = validated.value
+            self.handicap = validated
         else:
             self.handicap = None
 
@@ -102,29 +126,34 @@ class User:
         if old_handicap != self.handicap:
             self._add_domain_event(HandicapUpdatedEvent(
                 user_id=str(self.id.value),
-                old_handicap=old_handicap,
-                new_handicap=self.handicap,
+                old_handicap=old_handicap.value if old_handicap else None,
+                new_handicap=self.handicap.value if self.handicap else None,
                 updated_at=self.updated_at
             ))
 
     @classmethod
-    def create(cls, first_name: str, last_name: str, email_str: str, plain_password: str) -> 'User':
+    def create(cls, first_name: str, last_name: str, email_str: str, plain_password: str,
+               country_code_str: Optional[str] = None) -> 'User':
         """
         Factory method para crear usuario con Value Objects.
-        
+
         Args:
             first_name: Nombre del usuario
-            last_name: Apellido del usuario  
+            last_name: Apellido del usuario
             email_str: Email en formato string
             plain_password: Password en texto plano
-            
+            country_code_str: Código ISO del país (opcional, ej: "ES", "FR")
+
         Returns:
             User: Nueva instancia con ID generado y Value Objects
         """
         user_id = UserId.generate()
         email = Email(email_str)
         password = Password.from_plain_text(plain_password)
-        
+
+        # Convertir country_code si existe
+        country_code = CountryCode(country_code_str) if country_code_str else None
+
         user = cls(
             id=user_id,
             email=email,
@@ -134,9 +163,10 @@ class User:
             handicap=None,
             handicap_updated_at=None,
             created_at=datetime.now(),
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
+            country_code=country_code
         )
-        
+
         # Generar evento de registro
         from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
         user._add_domain_event(UserRegisteredEvent(
@@ -145,7 +175,7 @@ class User:
             first_name=first_name,
             last_name=last_name
         ))
-        
+
         return user
     
     # === Métodos para manejo de eventos de dominio ===
@@ -212,53 +242,38 @@ class User:
             login_method="email"  # Por ahora solo email, preparado para OAuth
         ))
 
-    def update_profile(self, first_name: Optional[str] = None, last_name: Optional[str] = None) -> None:
+    def update_profile(self, first_name: Optional[str] = None, last_name: Optional[str] = None,
+                       country_code_str: Optional[str] = None) -> None:
         """
-        Actualiza la información personal del usuario (nombre y apellidos).
-
+        Actualiza la información personal del usuario (nombre, apellidos y país).
         Solo emite evento si al menos uno de los campos cambió.
-
-        Args:
-            first_name: Nuevo nombre (None = no cambiar)
-            last_name: Nuevo apellido (None = no cambiar)
-
-        Raises:
-            ValueError: Si ambos parámetros son None o si los valores son strings vacíos
+        El evento ahora incluye el cambio de country_code (old/new) si aplica.
         """
         from src.modules.user.domain.events.user_profile_updated_event import UserProfileUpdatedEvent
 
-        # Validar que al menos un campo se quiera actualizar
-        if first_name is None and last_name is None:
-            raise ValueError("At least one field (first_name or last_name) must be provided")
+        self._validate_profile_update(first_name, last_name, country_code_str)
+        (
+            first_name_changed,
+            last_name_changed,
+            country_code_changed,
+            new_country_code,
+            old_first_name,
+            old_last_name,
+            old_country_code
+        ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
-        # Validar que los campos no sean strings vacíos
-        if first_name is not None and first_name.strip() == "":
-            raise ValueError("first_name cannot be empty")
-        if last_name is not None and last_name.strip() == "":
-            raise ValueError("last_name cannot be empty")
-
-        # Guardar valores anteriores
-        old_first_name = self.first_name
-        old_last_name = self.last_name
-
-        # Determinar qué cambió
-        first_name_changed = first_name is not None and first_name != old_first_name
-        last_name_changed = last_name is not None and last_name != old_last_name
-
-        # Si nada cambió realmente, no hacer nada
-        if not first_name_changed and not last_name_changed:
+        if not first_name_changed and not last_name_changed and not country_code_changed:
             return
 
-        # Aplicar cambios
         if first_name_changed:
             self.first_name = first_name
         if last_name_changed:
             self.last_name = last_name
+        if country_code_changed:
+            self.country_code = new_country_code
 
-        # Actualizar timestamp
         self.updated_at = datetime.now()
 
-        # Emitir evento
         self._add_domain_event(UserProfileUpdatedEvent(
             user_id=str(self.id.value),
             old_first_name=old_first_name if first_name_changed else None,
@@ -379,6 +394,29 @@ class User:
             bool: True si el email está verificado
         """
         return self.email_verified
+
+    def is_spanish(self) -> bool:
+        """
+        Verifica si el usuario es español (España).
+
+        Esta información es relevante para determinar si el usuario puede
+        acceder a funcionalidades específicas de RFEG (Real Federación Española de Golf).
+
+        Returns:
+            bool: True si el usuario tiene nacionalidad española (ES), False en caso contrario
+
+        Ejemplos:
+            >>> user = User(..., country_code=CountryCode("ES"))
+            >>> user.is_spanish()
+            True
+            >>> user2 = User(..., country_code=CountryCode("FR"))
+            >>> user2.is_spanish()
+            False
+            >>> user3 = User(..., country_code=None)
+            >>> user3.is_spanish()
+            False
+        """
+        return self.country_code is not None and self.country_code.value == "ES"
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

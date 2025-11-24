@@ -84,7 +84,7 @@ async def find_user(
     response_model=UpdateProfileResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar perfil del usuario",
-    description="Actualiza la información personal del usuario autenticado (nombre y/o apellidos).",
+    description="Actualiza la información personal del usuario autenticado (nombre, apellidos y/o país).",
     tags=["Users"],
 )
 async def update_profile(
@@ -98,6 +98,7 @@ async def update_profile(
     Permite al usuario autenticado actualizar:
     - Nombre (first_name)
     - Apellidos (last_name)
+    - Código de país (country_code) - ISO 3166-1 alpha-2
 
     Al menos uno de los campos debe ser proporcionado.
     NO requiere contraseña actual (solo autenticación JWT).

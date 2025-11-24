@@ -3,6 +3,9 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
+# Literales reutilizados
+CONFIRMATION_MESSAGE_DESCRIPTION = "Mensaje de confirmación."
+
 
 # Constants
 EMAIL_DESCRIPTION = "Correo electrónico del usuario."
@@ -21,6 +24,13 @@ class RegisterUserRequestDTO(BaseModel):
     password: str = Field(..., min_length=8, description="Contraseña del usuario (mínimo 8 caracteres).")
     first_name: str = Field(..., min_length=2, description="Nombre del usuario.")
     last_name: str = Field(..., min_length=2, description="Apellido del usuario.")
+    country_code: Optional[str] = Field(
+        None,
+        min_length=2,
+        max_length=2,
+        pattern="^[A-Z]{2}$",
+        description="Código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR', 'PT'). Opcional."
+    )
     manual_handicap: Optional[float] = Field(
         None,
         ge=-10.0,
@@ -76,6 +86,7 @@ class UserResponseDTO(BaseModel):
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
+    country_code: Optional[str] = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
     handicap: Optional[float] = Field(None, description="Handicap de golf del usuario.")
     handicap_updated_at: Optional[datetime] = Field(None, description="Fecha y hora de la última actualización del handicap.")
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
@@ -85,7 +96,7 @@ class UserResponseDTO(BaseModel):
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("id", "email", mode="before")
+    @field_validator("id", "email", "country_code", "handicap", mode="before")
     @classmethod
     def convert_value_objects(cls, v):
         """
@@ -93,7 +104,7 @@ class UserResponseDTO(BaseModel):
         Se ejecuta ANTES de la validación estándar de Pydantic.
         """
         # Si el valor 'v' tiene un atributo 'value', usamos ese valor.
-        # Esto funciona para UserId y Email.
+        # Esto funciona para UserId, Email, CountryCode y Handicap.
         if hasattr(v, "value"):
             return v.value
         return v
@@ -109,7 +120,7 @@ class LoginRequestDTO(BaseModel):
     Define las credenciales necesarias para autenticar un usuario.
     """
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
-    password: str = Field(..., min_length=8, description="Contraseña del usuario.")
+    password: str = Field(..., description="Contraseña del usuario.")
 
 
 class LoginResponseDTO(BaseModel):
@@ -142,7 +153,7 @@ class LogoutResponseDTO(BaseModel):
     DTO de salida para el caso de uso de logout.
     Confirma que el logout se realizó correctamente.
     """
-    message: str = Field(default="Logout exitoso", description="Mensaje de confirmación.")
+    message: str = Field(default="Logout exitoso", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     logged_out_at: datetime = Field(..., description="Timestamp del logout.")
 
 
@@ -157,17 +168,24 @@ class UpdateProfileRequestDTO(BaseModel):
     """
     first_name: Optional[str] = Field(None, min_length=2, description="Nuevo nombre del usuario.")
     last_name: Optional[str] = Field(None, min_length=2, description="Nuevo apellido del usuario.")
+    country_code: Optional[str] = Field(
+        None,
+        min_length=2,
+        max_length=2,
+        pattern="^[A-Z]{2}$",
+        description="Nuevo código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR')."
+    )
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo."""
-        if not self.first_name and not self.last_name:
-            raise ValueError("Debe proporcionar al menos 'first_name' o 'last_name'.")
+        if not self.first_name and not self.last_name and not self.country_code:
+            raise ValueError("Debe proporcionar al menos 'first_name', 'last_name' o 'country_code'.")
 
 
 class UpdateProfileResponseDTO(BaseModel):
     """DTO de salida para actualización de perfil."""
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Perfil actualizado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Perfil actualizado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
 
 
 # ======================================================================================
@@ -196,7 +214,7 @@ class UpdateSecurityRequestDTO(BaseModel):
 class UpdateSecurityResponseDTO(BaseModel):
     """DTO de salida para actualización de seguridad."""
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Datos de seguridad actualizados", description="Mensaje de confirmación.")
+    message: str = Field(default="Datos de seguridad actualizados", description=CONFIRMATION_MESSAGE_DESCRIPTION)
 
 
 # ======================================================================================
@@ -212,7 +230,7 @@ class VerifyEmailRequestDTO(BaseModel):
 
 class VerifyEmailResponseDTO(BaseModel):
     """DTO de salida para verificación de email."""
-    message: str = Field(default="Email verificado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Email verificado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     email_verified: bool = Field(default=True, description="Confirmación de que el email fue verificado.")
 
 
@@ -229,5 +247,5 @@ class ResendVerificationEmailRequestDTO(BaseModel):
 
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
-    message: str = Field(default="Email de verificación enviado exitosamente", description="Mensaje de confirmación.")
+    message: str = Field(default="Email de verificación enviado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     email: EmailStr = Field(..., description="Email al que se envió el mensaje de verificación.")

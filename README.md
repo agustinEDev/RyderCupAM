@@ -2,7 +2,7 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-440%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-540%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
@@ -71,7 +71,7 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 - ✅ **Email Verification** - Confirmación de email con Mailgun (bilingüe ES/EN)
 - ✅ **Handicap System** - Integración RFEG, actualización automática y batch
 - ✅ **Session Management** - Estrategia progresiva (Fase 1 implementada)
-- 🚧 **Tournament Management** - Creación y gestión de torneos (próximamente)
+- 🚧 **Competition Module** - Domain layer completo (Use Cases en desarrollo)
 - ⏳ **Real-time Scoring** - Resultados en vivo (planeado)
 
 ## 🏗️ Arquitectura
@@ -86,17 +86,18 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (440 tests, ~25s con paralelización)
-pytest tests/unit/           # Unit tests (380 tests)
+python dev_tests.py          # Full suite (540 tests, ~30s con paralelización)
+pytest tests/unit/           # Unit tests (480 tests)
 pytest tests/integration/    # Integration tests (60 tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **440 tests** pasando (100% ✅)
+- **540 tests** pasando (100% ✅)
 - **0 warnings** (todos corregidos)
 - **Cobertura**: >90% en lógica de negocio
 - **Cobertura Email Verification**: 100% (24 tests en 3 niveles)
+- **Cobertura Competition Module**: 100% (100 tests: 38 domain + 29 interfaces + 33 DTOs)
 
 ### Endpoints API Disponibles
 
@@ -148,10 +149,25 @@ mypy src/
 - **440 tests** (100% passing, 0 warnings)
 - 8 endpoints API funcionales
 
-**Fase 2: Core Features** 🚧 En desarrollo
-- Tournament CRUD operations
-- Team formation algorithms
-- Basic scoring system
+**Fase 2: Core Features** 🚧 En desarrollo (17 Nov 2025)
+- **Competition Module - Domain Layer** ✅ Completado
+  - 2 entidades (Competition, Enrollment) con máquinas de estado
+  - 9 Value Objects con validaciones completas
+  - 11 Domain Events
+  - 38 tests unitarios (100% cobertura)
+- **Competition Module - Application Foundation** ✅ Completado
+  - 3 Repository Interfaces (Competition, Enrollment, Country)
+  - 18 DTOs con validaciones Pydantic (Request/Response pattern)
+  - 62 tests (29 interfaces + 33 DTOs)
+- **Competition Module - Application Layer** 🚧 Siguiente
+  - Use Cases: CreateCompetition, RequestEnrollment, etc.
+  - Unit of Work integration
+- **Competition Module - Infrastructure** ⏳ Pendiente
+  - Repositories SQLAlchemy
+  - Migraciones de base de datos
+  - Endpoints REST API
+- Team formation algorithms (planeado)
+- Basic scoring system (planeado)
 - **Frontend Web Application** → [RyderCupAm-Web](https://github.com/agustinEDev/RyderCupAm-Web)
 
 **Fase 3: Advanced** ⏳ Planeado

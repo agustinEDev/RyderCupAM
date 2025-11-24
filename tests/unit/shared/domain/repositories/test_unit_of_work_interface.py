@@ -243,7 +243,7 @@ class TestUnitOfWorkUsagePatterns:
             def __init__(self):
                 self.saved_items = []
             
-            async def save(self, item):
+            def save(self, item):
                 self.saved_items.append(item)
         
         class UseCaseUnitOfWork(UnitOfWorkInterface):
@@ -280,7 +280,7 @@ class TestUnitOfWorkUsagePatterns:
         
         async with uow:
             assert uow.is_active() is True
-            await uow.repository.save("test_item")
+            uow.repository.save("test_item")
         
         assert uow.is_active() is False
         assert uow._committed is True

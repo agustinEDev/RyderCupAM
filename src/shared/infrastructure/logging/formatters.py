@@ -76,38 +76,30 @@ class TextFormatter(BaseFormatter):
         level = record.levelname
         name = record.name
         message = record.getMessage()
-        
-        # Construir mensaje base
         base_msg = f"{timestamp} | {level} | {name} | {message}"
-        
-        # Agregar datos adicionales
         extra = self._extract_extra_data(record)
-        if extra:
-            extra_parts = []
-            
-            # Correlation ID primero si está presente
-            if 'correlation_id' in extra and self.include_correlation_id:
-                extra_parts.append(f"correlation_id={extra.pop('correlation_id')}")
-            
-            # Resto de campos
-            if self.include_context:
-                for key, value in extra.items():
-                    if key != 'context':  # Manejar contexto por separado
-                        extra_parts.append(f"{key}={value}")
-                
-                # Contexto como campos individuales
-                if 'context' in extra and isinstance(extra['context'], dict):
-                    for key, value in extra['context'].items():
-                        extra_parts.append(f"{key}={value}")
-            
-            if extra_parts:
-                base_msg += f" | {' '.join(extra_parts)}"
-        
-        # Manejar excepciones
+        extra_str = self._format_extras(extra)
+        if extra_str:
+            base_msg += f" | {extra_str}"
         if record.exc_info:
             base_msg += f"\n{logging.Formatter().formatException(record.exc_info)}"
-        
         return base_msg
+
+    def _format_extras(self, extra: dict) -> str:
+        extra_parts = []
+        # Correlation ID primero si está presente
+        if 'correlation_id' in extra and self.include_correlation_id:
+            extra_parts.append(f"correlation_id={extra.pop('correlation_id')}")
+        # Resto de campos
+        if self.include_context:
+            for key, value in extra.items():
+                if key != 'context':
+                    extra_parts.append(f"{key}={value}")
+            # Contexto como campos individuales
+            if 'context' in extra and isinstance(extra['context'], dict):
+                for key, value in extra['context'].items():
+                    extra_parts.append(f"{key}={value}")
+        return ' '.join(extra_parts) if extra_parts else ''
 
 
 class JsonFormatter(BaseFormatter):
@@ -178,45 +170,35 @@ class StructuredFormatter(BaseFormatter):
         level = record.levelname
         name = record.name
         message = record.getMessage()
-        
-        # Línea principal
         main_line = f"[{timestamp}] {level} {name}: {message}"
-        
-        # Datos adicionales estructurados
         extra = self._extract_extra_data(record)
         lines = [main_line]
-        
-        if extra:
-            extra_lines = []
-            
-            # Correlation ID primero
-            if 'correlation_id' in extra and self.include_correlation_id:
-                correlation_id = extra.pop('correlation_id')
-                extra_lines.append(f"├─ correlation_id: {correlation_id}")
-            
-            # Otros campos
-            if self.include_context:
-                for key, value in extra.items():
-                    if key == 'context' and isinstance(value, dict):
-                        context_json = json.dumps(value, ensure_ascii=False)
-                        extra_lines.append(f"├─ context: {context_json}")
-                    else:
-                        extra_lines.append(f"├─ {key}: {value}")
-            
-            # Cambiar último elemento a └─
-            if extra_lines:
-                extra_lines[-1] = extra_lines[-1].replace('├─', '└─')
-                lines.extend(extra_lines)
-        
-        # Manejar excepciones con indentación
+        extra_lines = self._format_structured_extras(extra)
+        if extra_lines:
+            lines.extend(extra_lines)
         if record.exc_info:
             exc_text = logging.Formatter().formatException(record.exc_info)
             exc_lines = exc_text.split('\n')
             for exc_line in exc_lines:
                 if exc_line.strip():
                     lines.append(f"   {exc_line}")
-        
         return '\n'.join(lines)
+
+    def _format_structured_extras(self, extra: dict) -> list:
+        extra_lines = []
+        if 'correlation_id' in extra and self.include_correlation_id:
+            correlation_id = extra.pop('correlation_id')
+            extra_lines.append(f"├─ correlation_id: {correlation_id}")
+        if self.include_context:
+            for key, value in extra.items():
+                if key == 'context' and isinstance(value, dict):
+                    context_json = json.dumps(value, ensure_ascii=False)
+                    extra_lines.append(f"├─ context: {context_json}")
+                else:
+                    extra_lines.append(f"├─ {key}: {value}")
+        if extra_lines:
+            extra_lines[-1] = extra_lines[-1].replace('├─', '└─')
+        return extra_lines
 
 
 class FormatterFactory:

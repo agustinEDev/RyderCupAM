@@ -197,7 +197,7 @@ class TestFindUserUseCase:
         assert "notfound@example.com" in error_message
         assert "Nonexistent User" in error_message
 
-    async def test_find_user_validates_dto_constraints(self):
+    def test_find_user_validates_dto_constraints(self):
         """
         Verifica que el DTO valida correctamente las restricciones.
         """
@@ -207,7 +207,7 @@ class TestFindUserUseCase:
 
         assert "al menos" in str(exc_info.value).lower()
 
-    async def test_find_user_response_dto_structure(self, sample_user):
+    def test_find_user_response_dto_structure(self, sample_user):
         """
         Verifica que el DTO de respuesta tiene la estructura correcta.
         """

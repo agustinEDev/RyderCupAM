@@ -36,7 +36,7 @@ router = APIRouter()
     response_model=UserResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un nuevo usuario",
-    description="Crea un nuevo usuario en el sistema y devuelve su información.",
+    description="Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y opcionalmente código de país (ISO 3166-1 alpha-2).",
     tags=["Authentication"],
 )
 async def register_user(
@@ -52,6 +52,11 @@ async def register_user(
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
@@ -157,12 +162,21 @@ async def logout_user(
     return response
 
 
+
+from src.shared.infrastructure.security.jwt_handler import create_access_token
+
 @router.post(
     "/verify-email",
-    response_model=VerifyEmailResponseDTO,
+    response_model=LoginResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Verificar email",
-    description="Verifica el email del usuario usando el token recibido por correo.",
+    summary="Verificar email y autenticar usuario",
+    description=(
+        "Verifica el email del usuario usando el token recibido por correo. "
+        "Si la verificación es exitosa, retorna un JWT de acceso y la información del usuario autenticado en el mismo formato que el login. "
+        "Esto permite que el usuario quede autenticado automáticamente tras verificar su email. "
+        "\n\n"
+        "Respuesta: LoginResponseDTO (access_token, token_type, user, email_verification_required)."
+    ),
     tags=["Authentication"],
 )
 async def verify_email(
@@ -170,10 +184,10 @@ async def verify_email(
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
 ):
     """
-    Endpoint para verificar el email del usuario.
+    Endpoint para verificar el email del usuario y autenticarlo automáticamente.
 
     El usuario recibe un email con un link que contiene un token.
-    Este endpoint valida el token y marca el email como verificado.
+    Este endpoint valida el token, marca el email como verificado y retorna un JWT y la información del usuario.
 
     Security Note:
     - Usa mensajes de error genéricos para prevenir user enumeration
@@ -184,40 +198,44 @@ async def verify_email(
         use_case: Caso de uso de verificación de email
 
     Returns:
-        VerifyEmailResponseDTO con confirmación de la verificación
+        LoginResponseDTO con token y datos del usuario
 
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    # Log intento de verificación (sin exponer el token completo)
     token_preview = f"{request.token[:8]}..." if len(request.token) > 8 else "***"
     logger.info(f"Email verification attempt with token: {token_preview}")
 
     try:
-        await use_case.execute(request.token)
+        user = await use_case.execute(request.token)
         logger.info(f"Email verification successful for token: {token_preview}")
-        return VerifyEmailResponseDTO(
-            message="Email verificado exitosamente",
-            email_verified=True
+
+        # Generar JWT
+        access_token = create_access_token({"sub": str(user.id.value)})
+
+        # Mapear a DTO
+        from src.modules.user.application.dto.user_dto import UserResponseDTO, LoginResponseDTO
+        user_dto = UserResponseDTO.model_validate(user)
+
+        return LoginResponseDTO(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_dto,
+            email_verification_required=False
         )
     except ValueError as e:
-        # Log para monitoreo de seguridad sin exponer en respuesta
         logger.warning(
             f"Email verification failed (expected): {type(e).__name__} - token: {token_preview}"
         )
-        # Mensaje genérico para prevenir user enumeration
-        # No revelamos si el token es inválido, expirado, o si el usuario no existe
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
         )
     except Exception as e:
-        # Log errores inesperados para monitoreo del sistema
         logger.error(
             f"Unexpected error in email verification: {type(e).__name__}",
             exc_info=True
         )
-        # Aún así retornamos mensaje genérico para no exponer detalles del sistema
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
