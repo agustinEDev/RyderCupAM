@@ -304,9 +304,9 @@ def seed_country_adjacencies():
         ('AT', 'LI'), ('LI', 'AT'),
         ('AT', 'SK'), ('SK', 'AT'),
         ('AT', 'SI'), ('SI', 'AT'),
-            -- ('FR', 'MQ'), ('MQ', 'FR'),
-            -- ('FR', 'PM'), ('PM', 'FR'),
-            -- ('FR', 'RE'), ('RE', 'FR'),
+        -- ('FR', 'MQ'), ('MQ', 'FR'),
+        -- ('FR', 'PM'), ('PM', 'FR'),
+        -- ('FR', 'RE'), ('RE', 'FR'),
         ('AZ', 'IR'), ('IR', 'AZ'),
         ('AZ', 'RU'), ('RU', 'AZ'),
         ('AZ', 'TR'), ('TR', 'AZ'),
@@ -684,7 +684,7 @@ def seed_country_adjacencies():
         ('NE', 'NG'), ('NG', 'NE'),
         -- Norway (NO)
         ('NO', 'SE'), ('SE', 'NO'),
-        ('NO', 'SJ'), ('SJ', 'NO'),
+        -- ('NO', 'SJ'), ('SJ', 'NO'),  
         ('NO', 'RU'), ('RU', 'NO'),
         -- Oman (OM)
         ('OM', 'SA'), ('SA', 'OM'),
@@ -725,7 +725,7 @@ def seed_country_adjacencies():
         ('SS', 'UG'), ('UG', 'SS'),
         -- Spain (ES)
         ('ES', 'FR'), ('FR', 'ES'),
-        -- ('ES', 'GI'), ('GI', 'ES'),
+        -- ('ES', 'GI'), ('GI', 'ES'),  
         -- Tajikistan (TJ)
         ('TJ', 'UZ'), ('UZ', 'TJ'),
         -- Tanzania (TZ)
