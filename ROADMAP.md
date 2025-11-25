@@ -23,9 +23,9 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
         8.  Verificar backward compatibility (campo opcional).
 
 2.  **Agregar búsqueda por nombre en competiciones:**
-    *   **Estado:** Pendiente
+    *   **Estado:** ✅ Completado
     *   **Objetivo:** Implementar parámetro `?search=` para filtrar competiciones por nombre desde el frontend.
-    *   **Prioridad:** 🟡 Media (Nice-to-have, frontend puede hacer client-side temporalmente)
+    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
     *   **Pasos:**
         1.  Modificar `CompetitionRepositoryInterface.find_by_filters()` para aceptar parámetro `search` opcional.
         2.  Implementar búsqueda case-insensitive y partial match en `competition.name` usando SQL LIKE/ILIKE.
@@ -176,7 +176,7 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
 
 ---
 
-*Última actualización: 23 Noviembre 2025*
+*Última actualización: 25 Noviembre 2025*
 *Sprint 1: ✅ COMPLETADO AL 100% - Todas las 4 tareas críticas implementadas*
 *- country_code en User module*
 *- creator nested en Competition responses*

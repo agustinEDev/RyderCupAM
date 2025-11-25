@@ -58,3 +58,11 @@ class TestRFEGHandicapServiceNormalizacion:
         
         # Assert
         assert resultado == "Guell"
+
+    def test_normalizar_texto_con_espacios_extra(self):
+        """Debe eliminar espacios extra al principio, al final y entre palabras"""
+        # Arrange & Act
+        resultado = RFEGHandicapService._normalizar_texto("  José   Buela  Fernández  ")
+        
+        # Assert
+        assert resultado == "Jose Buela Fernandez"
