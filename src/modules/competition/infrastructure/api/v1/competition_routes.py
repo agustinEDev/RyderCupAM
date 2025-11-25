@@ -7,65 +7,137 @@ def _sanitize_creator_id(creator_id: Optional[str]) -> Optional[str]:
         return creator_id
     return None
 
+async def _fetch_competitions_by_status(use_case, status_filter, creator_id, search_name, search_creator):
+    """
+    Obtiene competiciones aplicando filtros de status (soporte para lista o string único).
+
+    Args:
+        status_filter: None, string único, o lista de strings
+
+    Returns:
+        Lista de competiciones sin duplicados
+    """
+    if isinstance(status_filter, list) and len(status_filter) > 0:
+        all_competitions = []
+        for status in status_filter:
+            comps = await use_case.execute(
+                status=status,
+                creator_id=creator_id,
+                search_name=search_name,
+                search_creator=search_creator,
+            )
+            all_competitions.extend(comps)
+        # Eliminar duplicados basados en ID
+        return list({c.id: c for c in all_competitions}.values())
+
+    # status_filter es None o un solo string
+    return await use_case.execute(
+        status=status_filter if not isinstance(status_filter, list) else None,
+        creator_id=creator_id,
+        search_name=search_name,
+        search_creator=search_creator,
+    )
+
+def _should_exclude_enrollment(enrollment_status, competition_status):
+    """
+    Determina si una competición inscrita debe excluirse de los resultados.
+
+    LÓGICA DE EXCLUSIÓN: No mostrar competiciones rechazadas si no están ACTIVE.
+    """
+    return enrollment_status == EnrollmentStatus.REJECTED and competition_status != 'ACTIVE'
+
+def _matches_status_filter(competition_status, status_filter):
+    """
+    Verifica si una competición cumple con el filtro de status.
+
+    Args:
+        competition_status: Status actual de la competición (string)
+        status_filter: None, string único, o lista de strings
+
+    Returns:
+        True si la competición debe incluirse, False en caso contrario
+    """
+    if not status_filter:
+        return True
+
+    if isinstance(status_filter, list):
+        return competition_status in [s.upper() for s in status_filter]
+
+    return competition_status == status_filter.upper()
+
+async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids, status_filter, enrollment_status_map):
+    """
+    Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó).
+
+    Args:
+        uow: Unit of Work
+        enrollments: Lista de enrollments del usuario
+        created_competition_ids: IDs de competiciones ya creadas por el usuario
+        status_filter: Filtro de status
+        enrollment_status_map: Mapa de enrollment_status por competition_id
+
+    Returns:
+        Lista de competiciones inscritas que cumplen los criterios
+    """
+    enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
+    enrolled_competitions = []
+
+    for comp_id in enrolled_competition_ids:
+        competition = await uow.competitions.find_by_id(comp_id)
+
+        if not competition or competition.id in created_competition_ids:
+            continue
+
+        enrollment_status = enrollment_status_map.get(competition.id)
+
+        # Aplicar lógica de exclusión
+        if _should_exclude_enrollment(enrollment_status, competition.status.value):
+            continue
+
+        # Aplicar filtro de status
+        if _matches_status_filter(competition.status.value, status_filter):
+            enrolled_competitions.append(competition)
+
+    return enrolled_competitions
+
 async def _get_user_competitions(uow, use_case, current_user_id, status_filter, search_name, search_creator):
     """
     Obtiene competiciones donde el usuario es creador O está inscrito.
 
     Args:
         status_filter: Puede ser None, un string, o una lista de strings
+
+    Returns:
+        Lista combinada de competiciones creadas e inscritas
     """
     async with uow:
-        # Si status_filter es una lista, obtener competiciones para cada status y combinarlas
-        if isinstance(status_filter, list) and len(status_filter) > 0:
-            all_created = []
-            for status in status_filter:
-                comps = await use_case.execute(
-                    status=status,
-                    creator_id=str(current_user_id.value),
-                    search_name=search_name,
-                    search_creator=search_creator,
-                )
-                all_created.extend(comps)
-            # Eliminar duplicados basados en ID
-            created_competitions = list({c.id: c for c in all_created}.values())
-        else:
-            # status_filter es None o un solo string
-            created_competitions = await use_case.execute(
-                status=status_filter if not isinstance(status_filter, list) else None,
-                creator_id=str(current_user_id.value),
-                search_name=search_name,
-                search_creator=search_creator,
-            )
+        # Obtener competiciones creadas por el usuario
+        created_competitions = await _fetch_competitions_by_status(
+            use_case,
+            status_filter,
+            str(current_user_id.value),
+            search_name,
+            search_creator
+        )
 
-        # Obtener competiciones donde el usuario está inscrito
+        # Obtener enrollments del usuario
         enrollments = await uow.enrollments.find_by_user(current_user_id)
 
-        # Crear un mapa de enrollment_status por competition_id
+        # Crear mapa de enrollment_status por competition_id
         enrollment_status_map = {enrollment.competition_id: enrollment.status for enrollment in enrollments}
 
-        enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
-        enrolled_competitions = []
-        for comp_id in enrolled_competition_ids:
-            competition = await uow.competitions.find_by_id(comp_id)
-            if competition and competition.id not in [c.id for c in created_competitions]:
-                # LÓGICA DE EXCLUSIÓN: No mostrar competiciones rechazadas si no están ACTIVE
-                enrollment_status = enrollment_status_map.get(competition.id)
-                if enrollment_status == EnrollmentStatus.REJECTED and competition.status.value != 'ACTIVE':
-                    # Skip: Usuario rechazado y competición ya no está activa
-                    continue
+        # Obtener IDs de competiciones creadas para evitar duplicados
+        created_competition_ids = [c.id for c in created_competitions]
 
-                # Filtrar por status si se especificó
-                if status_filter:
-                    if isinstance(status_filter, list):
-                        # status_filter es lista: verificar si el status de la competición está en la lista
-                        if competition.status.value in [s.upper() for s in status_filter]:
-                            enrolled_competitions.append(competition)
-                    else:
-                        # status_filter es string: comparar directamente
-                        if competition.status.value == status_filter.upper():
-                            enrolled_competitions.append(competition)
-                else:
-                    enrolled_competitions.append(competition)
+        # Obtener competiciones donde el usuario está inscrito
+        enrolled_competitions = await _fetch_enrolled_competitions(
+            uow,
+            enrollments,
+            created_competition_ids,
+            status_filter,
+            enrollment_status_map
+        )
+
         return created_competitions + enrolled_competitions
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
@@ -541,6 +613,43 @@ async def create_competition(
         )
 
 
+async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
+    """
+    Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
+
+    Returns:
+        Lista de competiciones sin duplicados
+    """
+    return await _fetch_competitions_by_status(
+        use_case,
+        status_filter,
+        creator_id,
+        search_name,
+        search_creator
+    )
+
+async def _exclude_user_competitions(competitions, current_user_id, uow):
+    """
+    Excluye competiciones donde el usuario es creador o está inscrito.
+
+    Args:
+        competitions: Lista de competiciones a filtrar
+        current_user_id: ID del usuario actual
+        uow: Unit of Work
+
+    Returns:
+        Lista de competiciones filtrada
+    """
+    # Get user's enrollments to exclude competitions where user is enrolled
+    enrollments = await uow.enrollments.find_by_user(current_user_id)
+    enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
+
+    # Filter out: competitions created by user OR competitions where user has enrollment
+    return [
+        comp for comp in competitions
+        if comp.creator_id != current_user_id and comp.id not in enrolled_competition_ids
+    ]
+
 @router.get(
     "",
     response_model=List[CompetitionResponseDTO],
@@ -587,65 +696,18 @@ async def list_competitions(
             )
         elif my_competitions is False:
             # Explicitly exclude competitions where user is creator OR enrolled
-            # Get all competitions matching filters
-
-            # Si status_filter es una lista, obtener competiciones para cada status
-            if isinstance(status_filter, list) and len(status_filter) > 0:
-                all_competitions = []
-                for status in status_filter:
-                    comps = await use_case.execute(
-                        status=status,
-                        creator_id=sanitized_creator_id,
-                        search_name=search_name,
-                        search_creator=search_creator,
-                    )
-                    all_competitions.extend(comps)
-                # Eliminar duplicados
-                competitions = list({c.id: c for c in all_competitions}.values())
-            else:
-                # status_filter es None o un solo string
-                competitions = await use_case.execute(
-                    status=status_filter if not isinstance(status_filter, list) else None,
-                    creator_id=sanitized_creator_id,
-                    search_name=search_name,
-                    search_creator=search_creator,
-                )
+            competitions = await _get_all_competitions(
+                use_case, status_filter, sanitized_creator_id, search_name, search_creator
+            )
 
             # Filter out competitions where user is creator or has enrollment
             async with uow:
-                # Get user's enrollments to exclude competitions where user is enrolled
-                enrollments = await uow.enrollments.find_by_user(current_user_id)
-                enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
-
-                # Filter out: competitions created by user OR competitions where user has enrollment
-                competitions = [
-                    comp for comp in competitions
-                    if comp.creator_id != current_user_id and comp.id not in enrolled_competition_ids
-                ]
+                competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
         else:
             # my_competitions is None: return all competitions (no filtering by user relationship)
-
-            # Si status_filter es una lista, obtener competiciones para cada status
-            if isinstance(status_filter, list) and len(status_filter) > 0:
-                all_competitions = []
-                for status in status_filter:
-                    comps = await use_case.execute(
-                        status=status,
-                        creator_id=sanitized_creator_id,
-                        search_name=search_name,
-                        search_creator=search_creator,
-                    )
-                    all_competitions.extend(comps)
-                # Eliminar duplicados
-                competitions = list({c.id: c for c in all_competitions}.values())
-            else:
-                # status_filter es None o un solo string
-                competitions = await use_case.execute(
-                    status=status_filter if not isinstance(status_filter, list) else None,
-                    creator_id=sanitized_creator_id,
-                    search_name=search_name,
-                    search_creator=search_creator,
-                )
+            competitions = await _get_all_competitions(
+                use_case, status_filter, sanitized_creator_id, search_name, search_creator
+            )
 
         result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
         return result

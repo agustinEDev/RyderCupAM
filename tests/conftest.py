@@ -335,7 +335,6 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code == 201
-    user_id = register_response.json()["id"]
 
     # Login
     login_response = await client.post("/api/v1/auth/login", json={
