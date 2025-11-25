@@ -15,6 +15,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 
 
 class EnrollmentNotFoundError(Exception):
@@ -102,16 +103,22 @@ class SetCustomHandicapUseCase:
                     "Solo el creador de la competición puede establecer hándicaps personalizados"
                 )
 
-            # 4. Establecer hándicap (la entidad valida el rango)
+            # 4. Verificar que el enrollment está aprobado
+            if not enrollment.is_approved():
+                raise EnrollmentStateError(
+                    "Solo se puede establecer un hándicap personalizado en inscripciones aprobadas"
+                )
+
+            # 5. Establecer hándicap (la entidad valida el rango)
             enrollment.set_custom_handicap(request.custom_handicap)
 
-            # 5. Persistir cambios
+            # 6. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-            # 6. Commit
+            # 7. Commit
             await self._uow.commit()
 
-        # 7. Retornar DTO
+        # 8. Retornar DTO
         return SetCustomHandicapResponseDTO(
             id=enrollment.id.value,
             custom_handicap=enrollment.custom_handicap,

@@ -44,7 +44,7 @@ class TestRequestEnrollment:
         assert response.status_code == 201
         data = response.json()
         assert data["status"] == "REQUESTED"
-        assert data["user_id"] == player["user_id"]
+        assert data["user_id"] == player["user"]["id"]
 
     @pytest.mark.asyncio
     async def test_request_enrollment_draft_competition_returns_400(self, client: AsyncClient):
@@ -112,7 +112,7 @@ class TestDirectEnrollPlayer:
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user_id"]},
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
             headers={"Authorization": f"Bearer {creator['token']}"}
         )
 
@@ -138,7 +138,7 @@ class TestDirectEnrollPlayer:
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user_id"]},
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
             headers={"Authorization": f"Bearer {other['token']}"}
         )
 
@@ -373,7 +373,7 @@ class TestSetCustomHandicap:
         # Inscripción directa
         enroll_response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user_id"]},
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
             headers={"Authorization": f"Bearer {creator['token']}"}
         )
         enrollment_id = enroll_response.json()["id"]
@@ -500,7 +500,7 @@ class TestEnrollmentEdgeCases:
 
         enroll_response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user_id"]},
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
             headers={"Authorization": f"Bearer {creator['token']}"}
         )
         enrollment_id = enroll_response.json()["id"]
@@ -586,7 +586,7 @@ class TestEnrollmentEdgeCases:
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user_id"], "custom_handicap": 12.5},
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"], "custom_handicap": 12.5},
             headers={"Authorization": f"Bearer {creator['token']}"}
         )
 

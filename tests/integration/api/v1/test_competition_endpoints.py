@@ -126,7 +126,7 @@ class TestListCompetitions:
         )
 
         # Crear 2 competiciones
-        comp1 = await create_competition(client, user["token"])
+        await create_competition(client, user["token"])
 
         start = date.today() + timedelta(days=60)
         end = start + timedelta(days=3)
@@ -186,6 +186,118 @@ class TestListCompetitions:
         data = response.json()
         assert len(data) == 1
         assert data[0]["status"] == "ACTIVE"
+    
+    @pytest.mark.asyncio
+    async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
+        """Filtrar competiciones por nombre de búsqueda."""
+        user = await create_authenticated_user(
+            client, "searcher@test.com", "Pass123!", "Search", "User"
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+
+        # Crear competiciones
+        await create_competition(client, user["token"], {
+            "name": "Ryder Cup 2025",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "main_country": "ES",
+            "handicap_type": "SCRATCH",
+            "max_players": 24,
+            "team_assignment": "MANUAL"
+        })
+        await create_competition(client, user["token"], {
+            "name": "Open de España",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "main_country": "ES",
+            "handicap_type": "SCRATCH",
+            "max_players": 24,
+            "team_assignment": "MANUAL"
+        })
+        await create_competition(client, user["token"], {
+            "name": "Ryder Cup Friends",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "main_country": "ES",
+            "handicap_type": "SCRATCH",
+            "max_players": 24,
+            "team_assignment": "MANUAL"
+        })
+
+        # Filtrar por "Ryder"
+        response = await client.get(
+            "/api/v1/competitions?search_name=Ryder",
+            headers={"Authorization": f"Bearer {user['token']}"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert "Ryder Cup 2025" in [c["name"] for c in data]
+        assert "Ryder Cup Friends" in [c["name"] for c in data]
+
+class TestMyCompetitionsFilter:
+    """Tests para el filtro `my_competitions` en GET /api/v1/competitions"""
+
+    @pytest.mark.asyncio
+    async def test_list_my_competitions_as_creator(self, client: AsyncClient):
+        """`my_competitions=true` devuelve solo las competiciones creadas por el usuario."""
+        creator = await create_authenticated_user(
+            client, "my_creator@test.com", "Pass123!", "My", "Creator"
+        )
+        other_user = await create_authenticated_user(
+            client, "other_creator@test.com", "Pass123!", "Other", "Creator"
+        )
+
+        # Crear competiciones
+        await create_competition(client, creator["token"])  # Creada por el usuario
+        await create_competition(client, other_user["token"])  # Creada por otro
+
+        # Act
+        response = await client.get(
+            "/api/v1/competitions?my_competitions=true",
+            headers={"Authorization": f"Bearer {creator['token']}"}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["creator_id"] == creator["user"]["id"]
+
+    @pytest.mark.asyncio
+    async def test_list_my_competitions_as_enrolled(self, client: AsyncClient):
+        """`my_competitions=true` devuelve competiciones en las que el usuario está inscrito."""
+        creator = await create_authenticated_user(
+            client, "enrolled_creator@test.com", "Pass123!", "Enrolled", "Creator"
+        )
+        enrolled_user = await create_authenticated_user(
+            client, "enrolled_user@test.com", "Pass123!", "Enrolled", "User"
+        )
+
+        # Crear competición y activar
+        comp = await create_competition(client, creator["token"])
+        await activate_competition(client, creator["token"], comp["id"])
+
+        # Inscribir usuario
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments",
+            headers={"Authorization": f"Bearer {enrolled_user['token']}"}
+        )
+
+        # Act
+        response = await client.get(
+            "/api/v1/competitions?my_competitions=true",
+            headers={"Authorization": f"Bearer {enrolled_user['token']}"}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["id"] == comp["id"]
 
 
 class TestGetCompetition:
@@ -193,7 +305,7 @@ class TestGetCompetition:
 
     @pytest.mark.asyncio
     async def test_get_competition_success(self, client: AsyncClient):
-        """Obtener competición por ID retorna datos completos."""
+        """Obtener competición por ID retorna datos completos, incluyendo el creador."""
         user = await create_authenticated_user(
             client, "getter@test.com", "Pass123!", "Get", "User"
         )
@@ -210,6 +322,10 @@ class TestGetCompetition:
         assert data["id"] == comp["id"]
         assert "is_creator" in data
         assert data["is_creator"] is True
+        assert "creator" in data
+        assert data["creator"]["id"] == user["user"]["id"]
+        assert data["creator"]["first_name"] == "Get"
+        assert data["creator"]["last_name"] == "User"
 
     @pytest.mark.asyncio
     async def test_get_competition_not_found(self, client: AsyncClient):
