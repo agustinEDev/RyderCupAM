@@ -48,7 +48,7 @@ class TestHandicapEndpoints:
             "Nadal Parera"
         )
 
-        user_id = auth_data["user_id"]
+        user_id = auth_data["user"]["id"]
         token = auth_data["token"]
 
         # Act - Llamar al endpoint con autenticación
@@ -191,7 +191,7 @@ class TestHandicapEndpoints:
             "Jugador",
             "Desconocido"
         )
-        user_id = auth_data["user_id"]
+        user_id = auth_data["user"]["id"]
         token = auth_data["token"]
 
         # Act - Llamar al endpoint sin manual_handicap
@@ -220,7 +220,7 @@ class TestHandicapEndpoints:
             "Manual",
             "Handicap"
         )
-        user_id = auth_data["user_id"]
+        user_id = auth_data["user"]["id"]
         token = auth_data["token"]
 
         # Act - Llamar al endpoint CON manual_handicap

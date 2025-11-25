@@ -345,11 +345,11 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
     assert login_response.status_code == 200
 
     token = login_response.json()["access_token"]
+    user_info = login_response.json()["user"]
 
     return {
         "token": token,
-        "user_id": user_id,
-        "user_data": user_data
+        "user": user_info
     }
 
 

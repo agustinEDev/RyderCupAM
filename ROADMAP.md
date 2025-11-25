@@ -9,9 +9,9 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
 ### Tareas de Mejora de API (Backend Implementation)
 
 1.  **Agregar información del creador en respuestas de competiciones:**
-    *   **Estado:** Pendiente
+    *   **Estado:** ✅ Completado
     *   **Objetivo:** Incluir objeto `creator` nested en respuestas de competiciones para evitar múltiples llamadas API desde el frontend.
-    *   **Prioridad:** 🔴 Alta (Crítico para "Discover Competitions")
+    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
     *   **Pasos:**
         1.  Modificar `CompetitionResponseDTO` para incluir campo `creator` nested con campos `id`, `first_name`, `last_name`, `email`, `handicap`, `country_code`.
         2.  Actualizar `CompetitionDTOMapper._to_response_dto()` para poblar datos del creador desde la entidad `Competition`.
@@ -36,9 +36,9 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
         7.  Verificar performance con índices apropiados en base de datos.
 
 3.  **Confirmar datos de usuario en enrollments:**
-    *   **Estado:** Pendiente
+    *   **Estado:** ✅ Completado
     *   **Objetivo:** Verificar que `GET /api/v1/competitions/{id}/enrollments` incluye objeto `user` nested con datos completos.
-    *   **Prioridad:** 🔴 Alta (Confirmación requerida por frontend)
+    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
     *   **Pasos:**
         1.  Revisar implementación actual del endpoint `GET /api/v1/competitions/{id}/enrollments`.
         2.  Verificar que la respuesta incluye objeto `user` con campos requeridos: `id`, `email`, `first_name`, `last_name`, `handicap`, `country_code`, `avatar_url`.
@@ -53,9 +53,9 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
 ### Tareas de Mejora de API (Backend Implementation)
 
 1.  **Implementar nacionalidad de usuario (country_code):**
-    *   **Estado:** Pendiente
+    *   **Estado:** ✅ Completado
     *   **Objetivo:** Agregar campo de nacionalidad al registro de usuarios y controlar acceso a funcionalidad RFEG basada en nacionalidad española.
-    *   **Prioridad:** 🔴 Alta (Crítico para lógica de RFEG)
+    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
     *   **Pasos:**
         1.  **Modelo de datos:**
             - Agregar campo `country_code: Optional[str]` al modelo `User` (SQLAlchemy).
@@ -170,9 +170,9 @@ Este documento describe las tareas pendientes para implementar las mejoras de AP
    - ✅ Tests: 663/663 tests pasando (100%)
    - ✅ Frontend-ready: Incluye country_code y avatar_url (null por ahora)
 
-**Sprint 2 (Mejoras - Prioridad 🟡 Media):**
-5. ❌ Agregar parámetro `?search=` en `GET /api/v1/competitions`
-6. ❌ Implementar sistema de avatares (`avatar_url` en modelo User + endpoints upload/delete)
+**Sprint 2 (En progreso - Prioridad 🟡 Media):**
+1. ✅ Agregar parámetro `?search=` en `GET /api/v1/competitions` - **COMPLETADO (Sprint 1)**
+2. ❌ Implementar sistema de avatares (`avatar_url` en modelo User + endpoints upload/delete)
 
 ---
 

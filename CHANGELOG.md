@@ -5,6 +5,19 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+---
+
+## [1.8.1] - 2025-11-25
+
+### Changed
+**BREAKING CHANGE:** Las respuestas de competiciones ahora incluyen campo `countries` (array) además de los campos `adjacent_country_1/2` existentes.
+
+### Documentation
+- ✅ Actualizado `ROADMAP.md` para reflejar el estado real de las tareas.
+- ✅ Actualizado `API.md` a la versión `v1.8.0`, añadiendo el campo `country_code` en los endpoints de registro y actualización de perfiles, y una nota aclaratoria sobre el campo `avatar_url`.
+
 ---
 
 ## [1.8.0] - 2025-11-24
@@ -301,8 +314,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - 📊 **Respuestas Ricas**: API devuelve información completa de países en lugar de solo códigos
 - 🔒 **Backward Compatible**: Formatos antiguos siguen funcionando sin cambios
 - 🧪 **Testeado**: Validación de serialización y conversión de formatos verificada
-
-**BREAKING CHANGE:** Las respuestas de competiciones ahora incluyen campo `countries` (array) además de los campos `adjacent_country_1/2` existentes.
 
 ---
 

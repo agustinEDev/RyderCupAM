@@ -89,4 +89,4 @@ pytest-xdist==3.8.0
 
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
-pytest-asyncio==0.24.0
+pytest-asyncio==0.24.0pytest-cov

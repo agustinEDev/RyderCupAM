@@ -3,8 +3,8 @@
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
 **Total Endpoints**: 32 active
-**Version**: v1.7.0
-**Last Updated**: 23 Nov 2025
+**Version**: v1.8.0
+**Last Updated**: 25 Nov 2025
 
 ## Quick Reference
 
@@ -65,7 +65,8 @@ Request:
   "first_name": "John",
   "last_name": "Doe",
   "email": "john@example.com",
-  "password": "SecurePass123!"
+  "password": "SecurePass123!",
+  "country_code": "ES"
 }
 
 Response: 201 Created
@@ -75,7 +76,7 @@ Response: 201 Created
   "first_name": "John",
   "last_name": "Doe",
   "handicap": null,
-  "country_code": null,
+  "country_code": "ES",
   "email_verified": false,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -108,6 +109,7 @@ Response: 200 OK
     "last_name": "Doe",
     "handicap": 15.5,
     "country_code": "ES",
+    "avatar_url": null,
     "email_verified": true,
     "created_at": "2025-11-09T10:00:00Z",
     "updated_at": "2025-11-09T10:00:00Z"
@@ -131,6 +133,7 @@ Response: 200 OK
   "last_name": "Doe",
   "handicap": 15.5,
   "country_code": "ES",
+  "avatar_url": null,
   "email_verified": true,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
@@ -222,6 +225,8 @@ Notes:
 
 ## User Management
 
+**Note on `avatar_url`**: The `avatar_url` field is included in user-related responses in preparation for a future feature. It will be `null` until the avatar upload system is implemented in Sprint 2.
+
 ### Search Users
 ```http
 GET /api/v1/users/search?email=john@example.com&full_name=John%20Doe
@@ -249,7 +254,8 @@ Authorization: Bearer {token}
 Request:
 {
   "first_name": "John",
-  "last_name": "Doe"
+  "last_name": "Doe",
+  "country_code": "FR"
 }
 
 Response: 200 OK
@@ -259,7 +265,7 @@ Response: 200 OK
   "first_name": "John",
   "last_name": "Doe",
   "handicap": 15.5,
-  "country_code": "ES",
+  "country_code": "FR",
   "email_verified": true,
   "created_at": "2025-11-09T10:00:00Z",
   "updated_at": "2025-11-09T10:00:00Z"
