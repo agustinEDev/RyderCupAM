@@ -7,6 +7,10 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+---
+
+## [1.9.2] - 2025-11-25
+
 ### Fixed - Refactorización de Calidad de Código (SonarQube)
 
 **🔍 Corrección de Alertas de SonarQube - 4 Issues Resueltos**
