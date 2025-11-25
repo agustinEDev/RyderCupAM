@@ -9,6 +9,21 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.9.1] - 2025-11-25
+
+### Fixed
+- ✅ **Hotfix Deploy**: Corregidos problemas de dependencias en `requirements.txt` para asegurar despliegue correcto en producción.
+  - Separados `pytest-asyncio` y `pytest-cov` en líneas individuales para evitar conflictos de instalación
+  - Solución a error de despliegue causado por dependencias en la misma línea
+
+### Chore
+- ✅ **Organización del Proyecto**:
+  - Reorganizado `.gitignore` para mejor estructura
+  - Añadido `sonar-project.properties` para integración con SonarQube/SonarCloud
+  - Añadido `.coverage` (archivo de cobertura de tests) a `.gitignore`
+
+---
+
 ## [1.9.0] - 2025-11-25
 
 ### Added
