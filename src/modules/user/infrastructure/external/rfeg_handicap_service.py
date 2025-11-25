@@ -56,20 +56,29 @@ class RFEGHandicapService(HandicapService):
     @staticmethod
     def _normalizar_texto(texto: str) -> str:
         """
-        Normaliza un texto eliminando acentos y caracteres diacríticos.
+        Normaliza un texto eliminando acentos, caracteres diacríticos y espacios extra.
 
         Útil para búsquedas donde el servicio RFEG puede no encontrar nombres
-        con acentos (ej: "Agustín" → "Agustin").
+        con acentos o espacios irregulares (ej: "  José   Pérez  " → "Jose Perez").
 
         Args:
             texto: Texto a normalizar
 
         Returns:
-            Texto sin acentos ni diacríticos
+            Texto normalizado y limpio
         """
-        # NFD descompone caracteres acentuados en base + acento
-        # Luego filtramos los caracteres de categoría Mn (Nonspacing_Mark)
-        nfd = unicodedata.normalize('NFD', texto)
+        if not texto:
+            return ""
+
+        # 1. Eliminar espacios al principio y al final
+        texto_limpio = texto.strip()
+
+        # 2. Reemplazar múltiples espacios por uno solo
+        texto_limpio = re.sub(r'\s+', ' ', texto_limpio)
+
+        # 3. NFD descompone caracteres acentuados en base + acento
+        #    Luego filtramos los caracteres de categoría Mn (Nonspacing_Mark)
+        nfd = unicodedata.normalize('NFD', texto_limpio)
         return ''.join(char for char in nfd if unicodedata.category(char) != 'Mn')
 
     async def search_handicap(self, full_name: str) -> Optional[float]:
