@@ -1,45 +1,65 @@
-# Python bytecode and cache files
+# ==================================
+# Python & Build Artifacts
+# ==================================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Virtual environment directory
-.venv/
-
-# Environment variables and secrets
-.env
-
-# macOS system files
-.DS_Store
-
-# VSCode settings
-.vscode/
-
-# Test reports
-tests/reports/
-
-# Log files
-*.log
-
-# Build and distribution artifacts
+*.egg-info/
 build/
 dist/
-*.egg-info/
 
-# IA generated files
+# ==================================
+# Virtual Environments
+# ==================================
+.venv/
+
+# ==================================
+# Environment Variables & Secrets
+# ==================================
+.env
+
+# ==================================
+# Logs
+# ==================================
+*.log
+
+# ==================================
+# Test & Coverage Reports
+# ==================================
+tests/reports/
+.coverage
+
+# ==================================
+# OS-specific
+# ==================================
+.DS_Store
+
+# ==================================
+# IDE & Editor
+# ==================================
+.vscode/
+
+# ==================================
+# AI & Development Tools
+# ==================================
 *.code-workspace
 CLAUDE.md
 GEMINI.md
+prompt_next_steps.md
 
-# Postman collections (may contain local environment data)
+# ==================================
+# Postman
+# ==================================
 *.postman_collection.json
 *.postman_environment.json
 Ryder_Cup_API.postman_collection.json
 postman_collection.json
-
-# Postman environments
 postman_environment_DEV.json
 postman_environment_PRO.json
-prompt_next_steps.md
+
+# ==================================
+# Code Quality & Analysis
+# ==================================
 sonar-project.properties
+sonar-project.properties.coverage
