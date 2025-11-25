@@ -239,7 +239,7 @@ class TestCreateCompetitionUseCase:
         )
 
         # Act
-        response = await use_case.execute(request_dto, creator_id)
+        await use_case.execute(request_dto, creator_id)
 
         # Assert
         competitions = await uow.competitions.find_all()

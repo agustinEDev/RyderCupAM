@@ -7,6 +7,50 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed - Refactorización de Calidad de Código (SonarQube)
+
+**🔍 Corrección de Alertas de SonarQube - 4 Issues Resueltos**
+
+#### 1. Complejidad Cognitiva Excesiva (python:S3776)
+- **Archivo**: `src/modules/competition/infrastructure/api/v1/competition_routes.py`
+- **Problema**: Función `_get_user_competitions` con complejidad cognitiva de 34 (límite: 15)
+- **Solución**: Refactorización en 6 funciones más pequeñas y específicas:
+  - `_fetch_competitions_by_status()`: Obtención de competiciones con filtros de status
+  - `_should_exclude_enrollment()`: Lógica de exclusión de enrollments rechazados
+  - `_matches_status_filter()`: Validación de filtros de status
+  - `_fetch_enrolled_competitions()`: Obtención de competiciones inscritas
+  - `_get_all_competitions()`: Wrapper para obtención general
+  - `_exclude_user_competitions()`: Exclusión de competiciones del usuario
+- **Beneficios**:
+  - Código más mantenible y testeable
+  - Separación clara de responsabilidades (Single Responsibility Principle)
+  - Mayor legibilidad y comprensión del flujo de lógica
+
+#### 2. Uso Innecesario de `async` (python:S7503)
+- **Archivo**: `src/modules/competition/infrastructure/api/v1/competition_routes.py`
+- **Problema**: Funciones `_should_exclude_enrollment` y `_matches_status_filter` marcadas como `async` sin operaciones asíncronas
+- **Solución**: Removido `async` keyword y `await` en las llamadas
+- **Beneficios**:
+  - Eliminación de overhead innecesario de event loop
+  - Mejora en claridad del código (funciones síncronas no marcadas como async)
+
+#### 3. Variables No Utilizadas (python:S1481)
+- **Archivos**:
+  - `tests/conftest.py` (línea 338)
+  - `tests/unit/modules/competition/application/use_cases/test_create_competition_use_case.py` (línea 242)
+- **Problema**: Variables locales `user_id` y `response` declaradas pero no utilizadas
+- **Solución**: Eliminadas las asignaciones innecesarias
+- **Beneficios**:
+  - Código de tests más limpio
+  - Eliminación de ruido visual
+  - Cumplimiento con estándares de código limpio
+
+#### Resultados
+- ✅ **4 alertas de SonarQube resueltas**
+- ✅ **667/667 tests pasando (100%)** - Sin regresiones
+- ✅ **Complejidad cognitiva reducida**: 34 → <15 (mejora del 56%)
+- ✅ **0 warnings de pytest**
+
 ---
 
 ## [1.9.1] - 2025-11-25
