@@ -1,184 +1,512 @@
-# Roadmap - Evolución de la Arquitectura del Backend
+# 🗺️ Roadmap - RyderCupFriends Backend (API)
 
-Este documento describe las tareas pendientes para implementar las mejoras de API solicitadas por el frontend, organizadas por bounded contexts siguiendo principios de Clean Architecture y DDD.
-
----
-
-## 🎯 Módulo de Competiciones (Competition Bounded Context)
-
-### Tareas de Mejora de API (Backend Implementation)
-
-1.  **Agregar información del creador en respuestas de competiciones:**
-    *   **Estado:** ✅ Completado
-    *   **Objetivo:** Incluir objeto `creator` nested en respuestas de competiciones para evitar múltiples llamadas API desde el frontend.
-    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
-    *   **Pasos:**
-        1.  Modificar `CompetitionResponseDTO` para incluir campo `creator` nested con campos `id`, `first_name`, `last_name`, `email`, `handicap`, `country_code`.
-        2.  Actualizar `CompetitionDTOMapper._to_response_dto()` para poblar datos del creador desde la entidad `Competition`.
-        3.  Modificar queries en `CompetitionRepository` para hacer JOIN con tabla `users` y obtener datos del creador.
-        4.  Actualizar endpoint `GET /api/v1/competitions` (listado público).
-        5.  Actualizar endpoint `GET /api/v1/competitions/{id}` (detalle).
-        6.  Añadir tests unitarios para validación de datos del creador.
-        7.  Actualizar documentación API y ejemplos en Postman.
-        8.  Verificar backward compatibility (campo opcional).
-
-2.  **Agregar búsqueda por nombre en competiciones:**
-    *   **Estado:** ✅ Completado
-    *   **Objetivo:** Implementar parámetro `?search=` para filtrar competiciones por nombre desde el frontend.
-    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
-    *   **Pasos:**
-        1.  Modificar `CompetitionRepositoryInterface.find_by_filters()` para aceptar parámetro `search` opcional.
-        2.  Implementar búsqueda case-insensitive y partial match en `competition.name` usando SQL LIKE/ILIKE.
-        3.  Opcionalmente extender búsqueda a `location` y datos del creador (JOIN con users).
-        4.  Actualizar endpoint `GET /api/v1/competitions` para procesar parámetro `search` con validación.
-        5.  Añadir tests unitarios e integración para funcionalidad de búsqueda.
-        6.  Actualizar documentación API con ejemplos de uso del parámetro `?search=`.
-        7.  Verificar performance con índices apropiados en base de datos.
-
-3.  **Confirmar datos de usuario en enrollments:**
-    *   **Estado:** ✅ Completado
-    *   **Objetivo:** Verificar que `GET /api/v1/competitions/{id}/enrollments` incluye objeto `user` nested con datos completos.
-    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
-    *   **Pasos:**
-        1.  Revisar implementación actual del endpoint `GET /api/v1/competitions/{id}/enrollments`.
-        2.  Verificar que la respuesta incluye objeto `user` con campos requeridos: `id`, `email`, `first_name`, `last_name`, `handicap`, `country_code`, `avatar_url`.
-        3.  Si falta, actualizar `EnrollmentDTOMapper` para incluir datos del usuario.
-        4.  Confirmar formato de respuesta con frontend.
-        5.  Documentar estado actual en documentación API.
+> **Versión:** 1.7.0
+> **Última actualización:** 27 Nov 2025
+> **Estado general:** ✅ Producción
+> **Framework:** FastAPI + SQLAlchemy (Async)
+> **Arquitectura:** Clean Architecture + DDD
 
 ---
 
-## 👤 Módulo de Usuario (User Bounded Context)
+## 📊 Resumen Ejecutivo
 
-### Tareas de Mejora de API (Backend Implementation)
+### ✅ Completado (v1.0.0 - v1.7.0)
 
-1.  **Implementar nacionalidad de usuario (country_code):**
-    *   **Estado:** ✅ Completado
-    *   **Objetivo:** Agregar campo de nacionalidad al registro de usuarios y controlar acceso a funcionalidad RFEG basada en nacionalidad española.
-    *   **Prioridad:** ✅ Baja (Ya implementado en v1.7.0)
-    *   **Pasos:**
-        1.  **Modelo de datos:**
-            - Agregar campo `country_code: Optional[str]` al modelo `User` (SQLAlchemy).
-            - Crear migración Alembic para añadir columna `country_code` a tabla `users`.
-            - Usar códigos de país ISO 3166-1 alpha-2 (ej: "ES", "FR", "US").
-        2.  **DTOs de registro:**
-            - Actualizar `RegisterRequestDTO` para incluir campo `country_code` opcional.
-            - Actualizar `UserResponseDTO` para incluir `country_code` en respuestas.
-            - Validar que country_code sea un código de país válido si se proporciona (usar GET /api/v1/countries).
-        3.  **Lógica de negocio:**
-            - Crear método en dominio para verificar si usuario es español (`isSpanish()` basado en country_code == "ES").
-            - Modificar lógica de handicap para mostrar/ocultar opción RFEG solo para usuarios españoles.
-            - Actualizar `UpdateHandicapUseCase` para validar permisos basados en nacionalidad.
-        4.  **API Endpoints:**
-            - Actualizar `POST /api/v1/auth/register` para aceptar campo `country_code`.
-            - Actualizar `GET /api/v1/auth/current-user` para incluir `country_code`.
-            - Actualizar `PATCH /api/v1/users/profile` para permitir modificar `country_code`.
-            - Utilizar endpoint existente `GET /api/v1/countries` para lista de países disponibles.
-        5.  **Testing y documentación:**
-            - Añadir tests para validación de códigos de país.
-            - Añadir tests para lógica de permisos RFEG.
-            - Actualizar documentación API con ejemplos.
-            - Actualizar colección Postman con requests de ejemplo.
+| Componente | Estado | Descripción |
+|-----------|--------|-------------|
+| **Clean Architecture** | ✅ 100% | Bounded Contexts, Use Cases, Repositories |
+| **SQLAlchemy ORM** | ✅ Implementado | Async, parametrización automática |
+| **Autenticación** | ✅ JWT | Login, Register, Email Verification |
+| **Competiciones** | ✅ Completo | CRUD, Estados, Transiciones, Países adyacentes |
+| **Enrollments** | ✅ Completo | Solicitudes, Aprobaciones, Equipos, Custom Handicap |
+| **Handicaps** | ✅ Completo | Manual + RFEG (solo usuarios españoles) |
+| **Países** | ✅ Repository | 250+ países, códigos ISO, adyacencias geográficas |
 
-2.  **Implementar sistema de avatares de usuario:**
-    *   **Estado:** Pendiente
-    *   **Objetivo:** Sistema completo de gestión de fotos de perfil con upload, storage y eliminación.
-    *   **Prioridad:** 🟡 Media (Feature de personalización, no bloqueante)
-    *   **Pasos:**
-        1.  **Modelo de datos:**
-            - Agregar campo `avatar_url: Optional[str]` al modelo `User` (SQLAlchemy).
-            - Crear migración Alembic para añadir columna `avatar_url` a tabla `users`.
-            - Actualizar `UserDTO` y responses relacionadas para incluir `avatar_url`.
-        2.  **Servicio de storage:**
-            - Elegir proveedor: AWS S3 / Cloudinary / Local (recomendado: S3 por escalabilidad).
-            - Configurar dependencias y variables de entorno para storage service.
-            - Implementar `AvatarStorageService` con interface para upload/delete/validate.
-            - Implementar validaciones: tipos de archivo (JPG, PNG, WEBP), tamaño máximo (5MB), redimensionamiento automático a 200x200px.
-        3.  **Endpoints de avatar:**
-            - Crear `PUT /api/v1/users/avatar` para upload (multipart/form-data).
-            - Crear `DELETE /api/v1/users/avatar` para eliminación.
-            - Implementar validaciones de seguridad y tipos de archivo.
-            - Configurar CORS para uploads desde frontend (localhost:5173 y dominio producción).
-        4.  **Actualizar responses existentes:**
-            - `POST /api/v1/auth/login` - incluir `avatar_url` en respuesta.
-            - `GET /api/v1/auth/current-user` - incluir `avatar_url`.
-            - `PATCH /api/v1/users/profile` - incluir `avatar_url`.
-            - `GET /api/v1/competitions/{id}/enrollments` - incluir `avatar_url` en objeto `user` nested.
-        5.  **Testing y documentación:**
-            - Añadir tests unitarios para validaciones de archivo.
-            - Añadir tests de integración para upload/delete.
-            - Actualizar documentación API con ejemplos.
-            - Actualizar colección Postman con requests de ejemplo.
+### 📈 Métricas Clave
+
+- **Endpoints:** 45+ rutas API
+- **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
+- **Database:** PostgreSQL con migraciones Alembic
+- **Deployment:** Render.com (contenedor Docker)
 
 ---
 
-## 📋 Checklist de Validación
+## 🔐 SEGURIDAD - Mejoras Prioritarias
 
-### Pre-Implementación
-- [ ] **Revisar compatibilidad backward** - Todos los cambios deben ser backward compatible
-- [ ] **Planificar versionado** - Evaluar si crear `/api/v2/` para cambios breaking
-- [ ] **Configurar CORS** - Especialmente para uploads de avatares
-- [ ] **Elegir storage provider** - Decidir entre S3, Cloudinary o local para avatares
-- [ ] **Consideraciones de privacidad** - Datos del creador son públicos, confirmar con negocio
-- [ ] **Validar códigos de país** - Usar estándar ISO 3166-1 alpha-2 para nacionalidad
-- [ ] **Compliance RFEG** - Confirmar reglas de negocio para acceso a funcionalidad española
+### 🔴 Prioridad CRÍTICA
 
-### Post-Implementación
-- [ ] **Tests completos** - Cobertura >90% para nuevas funcionalidades
-- [ ] **Documentación actualizada** - API.md, Postman, CHANGELOG
-- [ ] **Testing end-to-end** - Validar integración con frontend
-- [ ] **Performance check** - Verificar que no impacta tiempos de respuesta
-- [ ] **Validar con frontend** - Confirmar que cumple requerimientos exactos
+#### 1. Migrar a httpOnly Cookies (JWT Tokens)
+**Problema Actual:**
+```python
+# ❌ VULNERABLE: Tokens en response body (JSON)
+return {
+    "access_token": token,
+    "token_type": "bearer",
+    "user": user_dto
+}
+```
 
----
+**Solución:**
+```python
+# ✅ SEGURO: Tokens en httpOnly cookies
+from fastapi import Response
 
-## 📊 Métricas de Éxito
+@app.post("/api/v1/auth/login")
+async def login(credentials: LoginRequest, response: Response):
+    token = create_access_token(user.id)
 
-- **Sprint 1 (Crítico):** Reducir llamadas API en "Discover Competitions" en ~60%, implementar country_code con control RFEG
-- **Sprint 2 (Mejoras):** Implementar búsqueda funcional y sistema de avatares completo
-- **General:** Mantener compatibilidad backward 100%
-- **Performance:** Sin degradación en tiempos de respuesta (<100ms impacto)
-- **Frontend Satisfaction:** Cumplir 100% de requerimientos especificados
-- **Compliance:** 100% de usuarios no españoles sin acceso a funcionalidad RFEG
+    # Set httpOnly cookie
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,   # ✅ No accesible desde JavaScript (anti-XSS)
+        secure=True,     # ✅ Solo HTTPS
+        samesite="lax",  # ✅ Protección CSRF básica
+        max_age=3600,    # 1 hora
+        path="/",
+        domain=None      # Automático
+    )
 
----
+    # NO enviar token en body
+    return {"user": user_dto}
+```
 
-## 🎯 Orden de Implementación Sugerido
+**Archivos a Modificar:**
+- `src/modules/auth/infrastructure/api/auth_routes.py`
+  - `login()` - Set cookie en lugar de return token
+  - `register()` - Set cookie en lugar de return token
+  - `verify_email()` - Set cookie en lugar de return token
+- `src/shared/infrastructure/middleware/auth_middleware.py`
+  - Leer token desde cookies en lugar de header `Authorization`
+- `src/shared/infrastructure/security/jwt_handler.py`
+  - Agregar helper `extract_token_from_cookies()`
 
-**Sprint 1 (Funcionalidades Críticas - Prioridad 🔴 Alta):**
-1. ✅ Agregar campo `country_code` al modelo User (opcional, nullable) - **COMPLETADO**
-   - ✅ Domain Layer: Entity User con CountryCode VO
-   - ✅ Infrastructure: Mapper SQLAlchemy con FK a countries
-   - ✅ Migration: Columna country_code en tabla users
-   - ✅ DTOs: RegisterUserRequestDTO, UserResponseDTO, UpdateProfileRequestDTO
-   - ✅ Use Cases: RegisterUserUseCase, UpdateProfileUseCase con validación
-   - ✅ API: Endpoints /register y /profile actualizados
-2. ✅ Incluir `country_code` en registro, login, current-user - **COMPLETADO**
-3. ✅ Agregar objeto `creator` nested en `GET /api/v1/competitions` y `GET /api/v1/competitions/{id}` (incluyendo `country_code`) - **COMPLETADO**
-   - ✅ Application Layer: Nuevo CreatorDTO con campos id, first_name, last_name, email, handicap, country_code
-   - ✅ DTOs actualizados: CompetitionResponseDTO y CreateCompetitionResponseDTO con campo creator
-   - ✅ Mapper enriquecido: CompetitionDTOMapper._get_creator_dto() para consultar datos del creador
-   - ✅ Inyección de dependencias: UserUnitOfWork en todos los endpoints de Competition
-   - ✅ 10 endpoints actualizados: Todos los endpoints de Competition ahora incluyen datos del creador
-   - ✅ Tests: 663/663 tests pasando (100%)
-   - ✅ Reducción de llamadas API: ~60% en pantalla "Discover Competitions"
-4. ✅ Confirmar que `GET /api/v1/competitions/{id}/enrollments` incluye datos de usuario (con `country_code` y `avatar_url`) - **COMPLETADO**
-   - ✅ Application Layer: Nuevo EnrolledUserDTO con campos id, first_name, last_name, email, handicap, country_code, avatar_url
-   - ✅ DTO actualizado: EnrollmentResponseDTO con campo user nested
-   - ✅ Mapper async: EnrollmentDTOMapper._get_user_dto() para consultar datos del usuario
-   - ✅ Endpoint actualizado: GET /api/v1/competitions/{id}/enrollments con UserUnitOfWork inyectado
-   - ✅ Tests: 663/663 tests pasando (100%)
-   - ✅ Frontend-ready: Incluye country_code y avatar_url (null por ahora)
+**Testing:**
+- Tests de login con validación de cookies
+- Tests de endpoints protegidos con cookies
+- Tests de logout (cookie deletion)
 
-**Sprint 2 (En progreso - Prioridad 🟡 Media):**
-1. ✅ Agregar parámetro `?search=` en `GET /api/v1/competitions` - **COMPLETADO (Sprint 1)**
-2. ❌ Implementar sistema de avatares (`avatar_url` en modelo User + endpoints upload/delete)
+**Impacto:** Elimina robo de tokens via XSS
 
 ---
 
-*Última actualización: 25 Noviembre 2025*
-*Sprint 1: ✅ COMPLETADO AL 100% - Todas las 4 tareas críticas implementadas*
-*- country_code en User module*
-*- creator nested en Competition responses*
-*- user nested en Enrollment responses*
-*Total: 663/663 tests pasando (100%)*
+#### 2. Implementar CSRF Tokens
+**Problema Actual:**
+- No hay validación CSRF en endpoints mutables
+- Solo CORS como protección (insuficiente)
+
+**Solución:**
+```python
+# Instalar dependencia
+pip install fastapi-csrf-protect
+
+# Configurar CSRF
+from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError
+
+@CsrfProtect.load_config
+def get_csrf_config():
+    return CsrfSettings(
+        secret_key="tu-secret-key-desde-env",
+        cookie_samesite="lax",
+        cookie_secure=True,
+        cookie_httponly=True
+    )
+
+# Aplicar a endpoints críticos
+@app.post("/api/v1/competitions/")
+async def create_competition(
+    competition: CompetitionCreate,
+    csrf_protect: CsrfProtect = Depends()
+):
+    await csrf_protect.validate_csrf(request)
+    # ... lógica de creación
+```
+
+**Endpoints Críticos a Proteger:**
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/competitions/`
+- `PATCH /api/v1/competitions/{id}`
+- `POST /api/v1/enrollments/`
+- `PATCH /api/v1/enrollments/{id}`
+- `PATCH /api/v1/users/security`
+
+**Archivos a Modificar:**
+- `src/shared/infrastructure/middleware/csrf_middleware.py` (crear)
+- Todos los endpoints con operaciones mutables (POST, PUT, PATCH, DELETE)
+
+**Impacto:** Protección contra ataques CSRF
+
+---
+
+#### 3. Rate Limiting
+**Problema Actual:**
+- Sin protección contra brute force attacks
+- Sin límites de requests por IP/usuario
+
+**Solución:**
+```python
+# Instalar dependencia
+pip install slowapi
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Aplicar rate limits
+@app.post("/api/v1/auth/login")
+@limiter.limit("5/minute")  # 5 intentos por minuto
+async def login(...):
+    # ...
+
+@app.post("/api/v1/auth/register")
+@limiter.limit("3/hour")  # 3 registros por hora
+async def register(...):
+    # ...
+```
+
+**Rate Limits Recomendados:**
+| Endpoint | Límite | Motivo |
+|----------|--------|--------|
+| `POST /api/v1/auth/login` | 5/minute | Anti brute-force |
+| `POST /api/v1/auth/register` | 3/hour | Anti spam |
+| `POST /api/v1/auth/verify-email` | 10/hour | Anti abuse |
+| `POST /api/v1/competitions/` | 10/hour | Anti spam |
+| `POST /api/v1/enrollments/` | 20/hour | Uso normal |
+| `GET /api/v1/competitions` | 100/minute | Lectura intensiva |
+
+**Archivos a Crear/Modificar:**
+- `src/shared/infrastructure/middleware/rate_limit_middleware.py` (crear)
+- Configuración en `main.py`
+- Todos los endpoints críticos
+
+**Impacto:** Prevención de brute force, DoS, spam
+
+---
+
+### 🟡 Prioridad ALTA
+
+#### 4. SQL Injection - Auditoría Adicional
+**Estado Actual:** ✅ **Bien Protegido** (SQLAlchemy ORM)
+
+**Verificar:**
+- ✅ No hay queries con SQL raw strings
+- ✅ Todos los repositorios usan ORM con parametrización
+- ⚠️ Revisar queries complejas con JOINs
+
+**Auditoría Recomendada:**
+```bash
+# Buscar SQL raw en el código
+grep -r "text(" src/
+grep -r "execute(" src/
+grep -r "raw_sql" src/
+```
+
+**Si se encuentran queries raw:**
+1. Reemplazar con ORM cuando sea posible
+2. Si es necesario usar raw SQL, usar siempre parametrización:
+   ```python
+   # ✅ CORRECTO
+   stmt = text("SELECT * FROM users WHERE email = :email")
+   result = await session.execute(stmt, {"email": email})
+
+   # ❌ INCORRECTO
+   stmt = text(f"SELECT * FROM users WHERE email = '{email}'")
+   ```
+
+**Impacto:** Mantener protección actual
+
+---
+
+#### 5. Validación de Inputs
+**Estado Actual:** ⚠️ **Parcialmente Implementado**
+
+**Mejoras Necesarias:**
+```python
+# Agregar validaciones estrictas en DTOs
+from pydantic import BaseModel, Field, validator
+
+class CompetitionCreate(BaseModel):
+    name: str = Field(..., min_length=3, max_length=100)
+    location: str = Field(..., min_length=3, max_length=200)
+    max_players: int = Field(..., ge=2, le=100)  # Entre 2 y 100
+
+    @validator('name')
+    def name_must_not_contain_html(cls, v):
+        # Anti-XSS: No permitir tags HTML
+        if '<' in v or '>' in v:
+            raise ValueError('Name cannot contain HTML tags')
+        return v.strip()
+```
+
+**Validaciones a Implementar:**
+1. **Longitudes máximas** en todos los strings
+2. **Rangos válidos** en números (handicaps, max_players)
+3. **Formatos válidos** (emails, country_codes, dates)
+4. **Sanitización** de inputs (strip whitespace, prevent HTML)
+
+**Archivos a Modificar:**
+- Todos los DTOs en `src/modules/*/application/dto/`
+
+**Impacto:** Defensa en profundidad contra inyecciones
+
+---
+
+#### 6. Logging y Auditoría
+**Estado Actual:** ⚠️ **Básico**
+
+**Implementar:**
+```python
+import logging
+from datetime import datetime
+
+# Configurar logging estructurado
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Logging de eventos de seguridad
+logger = logging.getLogger("security")
+
+# Eventos a loggear:
+# - Login attempts (success/failure)
+# - Password changes
+# - Email verification attempts
+# - Competition creation/deletion
+# - Enrollment status changes
+# - RFEG API calls
+
+@app.post("/api/v1/auth/login")
+async def login(credentials: LoginRequest, request: Request):
+    logger.info(f"Login attempt: email={credentials.email}, ip={request.client.host}")
+    try:
+        user = await authenticate_user(credentials)
+        logger.info(f"Login success: user_id={user.id}")
+        return {"user": user}
+    except AuthenticationError:
+        logger.warning(f"Login failed: email={credentials.email}, ip={request.client.host}")
+        raise
+```
+
+**Eventos Críticos:**
+| Evento | Nivel | Información |
+|--------|-------|-------------|
+| Login success | INFO | user_id, ip, timestamp |
+| Login failure | WARNING | email, ip, timestamp |
+| Register | INFO | user_id, ip, country_code |
+| Password change | INFO | user_id, ip |
+| Competition created | INFO | user_id, competition_id |
+| Enrollment approved/rejected | INFO | creator_id, user_id, competition_id |
+
+**Archivos a Crear/Modificar:**
+- `src/shared/infrastructure/logging/security_logger.py` (crear)
+- Todos los endpoints críticos
+
+**Impacto:** Detección de ataques, auditoría, debugging
+
+---
+
+### 🟢 Prioridad MEDIA
+
+#### 7. Configurar HSTS en Render
+**Acción:**
+- Configurar header `Strict-Transport-Security` en configuración de Render
+- Valor recomendado: `max-age=31536000; includeSubDomains; preload`
+
+**Pasos:**
+1. Render Dashboard → Service Settings
+2. Headers → Add Custom Header
+3. Key: `Strict-Transport-Security`
+4. Value: `max-age=31536000; includeSubDomains`
+
+**Impacto:** Forzar HTTPS en todas las conexiones
+
+---
+
+#### 8. Implementar Sentry
+**Estado:** ❌ No implementado
+
+**Acción:**
+```bash
+# Instalar Sentry SDK
+pip install sentry-sdk[fastapi]
+```
+
+```python
+# Configurar en main.py
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlAlchemyIntegration
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    environment=os.getenv("ENVIRONMENT", "production"),
+    release=f"rydercup-api@{VERSION}",
+    integrations=[
+        FastApiIntegration(),
+        SqlAlchemyIntegration(),
+    ],
+    traces_sample_rate=0.1,  # 10% en producción
+    before_send=filter_sensitive_data,
+)
+```
+
+**Eventos a Capturar:**
+- Errores de API (500, 400, etc.)
+- Errores de DB (queries fallidas, constraints)
+- Errores de RFEG integration
+- Performance de endpoints lentos
+
+**Impacto:** Monitoreo de errores y performance
+
+---
+
+#### 9. Secrets Management
+**Problema Actual:** Variables de entorno en Render
+
+**Mejora:**
+- Migrar a servicio dedicado (AWS Secrets Manager, HashiCorp Vault)
+- Rotación automática de secrets (JWT keys, DB passwords)
+
+**Impacto:** Mejor gestión de secretos, rotación automática
+
+---
+
+## 🛠️ Desarrollo - Tareas Pendientes
+
+### Módulo de Usuario
+
+#### Sistema de Avatares (Bloqueante para Frontend)
+**Estado:** ⏳ Pendiente
+**Prioridad:** 🟡 Media
+
+**Requiere:**
+1. Campo `avatar_url` en modelo User
+2. Migración Alembic
+3. Endpoint `PUT /api/v1/users/avatar` (multipart/form-data)
+4. Endpoint `DELETE /api/v1/users/avatar`
+5. Storage service (S3, Cloudinary, o local)
+
+**Estimación:** 4-6 horas
+
+---
+
+### Cross-Cutting Concerns
+
+#### Gestión de Errores Unificada
+**Estado:** ⏳ Pendiente
+
+**Objetivo:** Respuestas de error consistentes
+
+**Ejemplo:**
+```python
+{
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Competition name is required",
+        "details": {
+            "field": "name",
+            "constraint": "required"
+        }
+    }
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Estado Actual
+- ⏳ Tests unitarios pendientes (usar pytest)
+- ⏳ Tests de integración pendientes
+- ⏳ Tests de seguridad pendientes
+
+### Próximos Tests
+- Tests de authentication (JWT, cookies, CSRF)
+- Tests de rate limiting
+- Tests de SQL injection (intentar bypassear ORM)
+- Tests de validación de inputs
+- Tests de RFEG integration
+
+---
+
+## 📦 Infraestructura
+
+### Completado
+- ✅ Deploy en Render.com
+- ✅ PostgreSQL database
+- ✅ Docker containerization
+- ✅ Migraciones Alembic
+
+### Futuras Mejoras
+- CI/CD con GitHub Actions
+- Staging environment
+- Database backups automáticos
+- Monitoring (Prometheus + Grafana)
+
+---
+
+## 🚀 Roadmap de Versiones
+
+### v1.8.0 (Próxima - Seguridad)
+- 🔐 httpOnly cookies para JWT
+- 🔐 CSRF tokens
+- 🔐 Rate limiting global
+- 🔐 Sentry integration
+- 📝 Security logging
+- 🧪 Tests de seguridad
+
+### v1.9.0 (Funcionalidad)
+- 👤 Sistema de avatares
+- 📝 Gestión de errores unificada
+- 🧪 Suite de tests completa
+
+### v2.0.0 (Mayor - Futuro)
+- 🔐 Autenticación de dos factores (2FA)
+- 📊 Analytics y estadísticas de torneos
+- 🌍 Integración con más federaciones (no solo RFEG)
+- 📱 Push notifications
+- 🎮 Sistema de equipos mejorado
+
+---
+
+## 📝 Notas de Implementación
+
+### Prioridad de Implementación
+
+**Orden recomendado:**
+1. **httpOnly cookies** (crítico para seguridad)
+2. **CSRF tokens** (crítico para seguridad)
+3. **Rate limiting** (crítico para estabilidad)
+4. **Sentry** (importante para monitoreo)
+5. **Security logging** (importante para auditoría)
+6. **Validaciones mejoradas** (buena práctica)
+7. **Sistema de avatares** (funcionalidad, no bloqueante)
+
+### Coordinación Frontend-Backend
+
+**Para cambios de seguridad:**
+1. Backend implementa primero (httpOnly cookies, CSRF)
+2. Frontend adapta después (remove sessionStorage, add CSRF headers)
+3. Deploy coordinado (backend → frontend)
+4. Testing exhaustivo post-deploy
+
+---
+
+## 🔗 Referencias
+
+- [FastAPI Security Docs](https://fastapi.tiangolo.com/tutorial/security/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [SQLAlchemy Security](https://docs.sqlalchemy.org/en/14/faq/security.html)
+- Frontend ROADMAP: `../RyderCupWeb/ROADMAP.md`
+
+---
+
+**Última revisión:** 27 Nov 2025
+**Próxima revisión:** Después de v1.8.0 (Security Release)
