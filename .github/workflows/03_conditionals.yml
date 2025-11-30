@@ -20,7 +20,7 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      is-main-branch: ${{ steps.check-branch.outputs.is-main }}
+      is_main: ${{ steps.check_branch.outputs.is_main }}
 
     steps:
       - name: Checkout code
@@ -46,13 +46,13 @@ jobs:
 
     steps:
       - name: Run Tests
-      run: |
-        sleep 2
-        echo "Tests completed! ✅"
+        run: |
+          sleep 2
+          echo "Tests completed! ✅"
 
       # This step only runs in main branch
       - name: Run extra tests on main
-        if: ${{ needs.setup.outputs.is-main-branch == 'true' }}
+        if: ${{ needs.setup.outputs.is_main == 'true' }}
         run: |
           echo "Running additional tests for main branch..."
           echo "Extra tests completed! ✅"
@@ -61,7 +61,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: [setup, test]
-    # Run if tests oassed OR tests were skipped
+    # Run if tests passed OR tests were skipped
     if: ${{always() && needs.setup.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
 
     steps:
