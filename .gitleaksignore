@@ -1,0 +1,13 @@
+# Gitleaks Ignore File
+# Ignora falsos positivos en archivos de documentación
+
+# API.md - Ejemplos de documentación con tokens de ejemplo
+docs/API.md:generic-api-key:103
+docs/API.md:generic-api-key:153
+
+# user-management.md - Ejemplos de curl con Bearer tokens de ejemplo
+docs/modules/user-management.md:curl-auth-header:1109
+
+# Ignorar todos los archivos de documentación markdown
+# (son ejemplos educativos, no credenciales reales)
+docs/**/*.md:*
