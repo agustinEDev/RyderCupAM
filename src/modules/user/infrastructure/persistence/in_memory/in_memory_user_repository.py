@@ -27,8 +27,19 @@ class InMemoryUserRepository(UserRepositoryInterface):
                 return user
         return None
 
-    async def find_all(self) -> list[User]:
-        return list(self._users.values())
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[User]:
+        """
+        Obtiene una lista paginada de usuarios.
+
+        Args:
+            limit: Número máximo de usuarios a retornar
+            offset: Número de usuarios a saltar
+
+        Returns:
+            Lista de usuarios paginada
+        """
+        all_users = list(self._users.values())
+        return all_users[offset:offset + limit]
 
     async def delete_by_id(self, user_id: UserId) -> None:
         if user_id in self._users:
