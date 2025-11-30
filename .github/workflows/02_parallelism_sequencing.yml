@@ -24,7 +24,7 @@ jobs:
       # Output that other jobs can use
       timestamp: ${{ steps.set_timestamp.outputs.timestamp }}
       build_number: ${{ steps.set_build_number.outputs.build_number }}
-
+      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
