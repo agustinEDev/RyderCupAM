@@ -359,20 +359,21 @@ jobs:
 
       - name: Validate Alembic Migrations Syntax
         run: |
-          echo "🔍 Validating Alembic migrations syntax..."
+          echo "🔍 Validating Alembic migrations syntax (dry-run)..."
+
+          # Override entrypoint to run only Alembic (skip migrations execution)
           docker run --rm \
+            --entrypoint alembic \
             -e DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy \
             rydercupam:${{ github.sha }} \
-            alembic upgrade head --sql > /dev/null 2>&1
+            upgrade head --sql > alembic-output.sql
 
           if [ $? -eq 0 ]; then
             echo "✅ Alembic migrations syntax is valid"
+            echo "📄 Generated SQL (first 20 lines):"
+            head -20 alembic-output.sql
           else
             echo "❌ Alembic migrations have syntax errors"
-            docker run --rm \
-              -e DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy \
-              rydercupam:${{ github.sha }} \
-              alembic upgrade head --sql
             exit 1
           fi
 
