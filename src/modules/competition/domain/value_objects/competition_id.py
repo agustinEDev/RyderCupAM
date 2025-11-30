@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionId Value Object - Identificador único de competición.
 

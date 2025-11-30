@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionCancelledEvent - Se emite cuando se cancela el torneo.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 
@@ -27,4 +26,4 @@ class CompetitionCancelledEvent(DomainEvent):
 
     competition_id: str
     name: str
-    reason: Optional[str] = None
+    reason: str | None = None

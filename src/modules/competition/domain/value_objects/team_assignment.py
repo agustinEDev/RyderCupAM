@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 TeamAssignment Value Object - Tipo de asignación de equipos en una competición.
 

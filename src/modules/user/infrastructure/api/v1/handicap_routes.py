@@ -4,24 +4,32 @@ Handicap API Routes - Infrastructure Layer
 Endpoints HTTP para gestión de hándicaps de usuarios.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional
 from uuid import UUID
 
-from src.modules.user.application.use_cases.update_user_handicap_use_case import UpdateUserHandicapUseCase
-from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
-from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
-from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError, HandicapServiceUnavailableError
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+
 from src.config.dependencies import (
+    get_current_user,
+    get_update_handicap_manually_use_case,
     get_update_handicap_use_case,
     get_update_multiple_handicaps_use_case,
-    get_update_handicap_manually_use_case,
-    get_current_user,
 )
-
+from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+    UpdateMultipleHandicapsUseCase,
+)
+from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import (
+    UpdateUserHandicapManuallyUseCase,
+)
+from src.modules.user.application.use_cases.update_user_handicap_use_case import (
+    UpdateUserHandicapUseCase,
+)
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapNotFoundError,
+    HandicapServiceUnavailableError,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
 
 router = APIRouter(prefix="/handicaps")
 
@@ -31,7 +39,7 @@ router = APIRouter(prefix="/handicaps")
 class UpdateHandicapRequestDTO(BaseModel):
     """DTO para solicitud de actualización de hándicap individual."""
     user_id: UUID
-    manual_handicap: Optional[float] = Field(
+    manual_handicap: float | None = Field(
         None,
         ge=-10.0,
         le=54.0,
@@ -70,7 +78,7 @@ class UpdateHandicapManuallyRequestDTO(BaseModel):
 
 class UpdateMultipleHandicapsRequestDTO(BaseModel):
     """DTO para solicitud de actualización de múltiples hándicaps."""
-    user_ids: List[UUID]
+    user_ids: list[UUID]
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -159,7 +167,7 @@ async def update_user_handicap(
     except HandicapServiceUnavailableError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"El servicio de hándicap no está disponible: {str(e)}"
+            detail=f"El servicio de hándicap no está disponible: {e!s}"
         )
 
 

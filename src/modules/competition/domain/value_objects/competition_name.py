@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionName Value Object - Nombre válido y normalizado de una competición.
 

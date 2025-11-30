@@ -15,36 +15,36 @@ Características:
 
 import json
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional, Union
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any
 
-from .config import LogFormat, HandlerConfig
+from .config import HandlerConfig, LogFormat
 
 
 class BaseFormatter(ABC):
     """Formateador base abstracto"""
-    
+
     def __init__(self, config: HandlerConfig):
         self.config = config
         self.include_correlation_id = config.include_correlation_id
         self.include_context = config.include_context
         self.date_format = config.date_format
-    
+
     @abstractmethod
     def format(self, record: logging.LogRecord) -> str:
         """Formatea un registro de logging"""
         pass
-    
+
     def _get_timestamp(self, record: logging.LogRecord) -> str:
         """Obtiene timestamp formateado"""
         dt = datetime.fromtimestamp(record.created)
         return dt.strftime(self.date_format)
-    
-    def _extract_extra_data(self, record: logging.LogRecord) -> Dict[str, Any]:
+
+    def _extract_extra_data(self, record: logging.LogRecord) -> dict[str, Any]:
         """Extrae datos adicionales del record"""
         extra = {}
-        
+
         # Campos estándar que ignoramos
         standard_fields = {
             'name', 'msg', 'args', 'levelname', 'levelno', 'pathname',
@@ -53,23 +53,23 @@ class BaseFormatter(ABC):
             'processName', 'process', 'message', 'exc_info', 'exc_text',
             'stack_info', 'getMessage'
         }
-        
+
         # Extraer campos adicionales
         for key, value in record.__dict__.items():
             if key not in standard_fields:
                 extra[key] = value
-        
+
         return extra
 
 
 class TextFormatter(BaseFormatter):
     """
     Formateador de texto legible para desarrollo.
-    
+
     Produce salidas como:
     2024-11-03 15:30:45 | INFO | app.users | Usuario registrado | user_id=123 correlation_id=abc-def
     """
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatea como texto legible"""
         timestamp = self._get_timestamp(record)
@@ -105,7 +105,7 @@ class TextFormatter(BaseFormatter):
 class JsonFormatter(BaseFormatter):
     """
     Formateador JSON estructurado para producción.
-    
+
     Produce JSON con estructura consistente:
     {
         "timestamp": "2024-11-03T15:30:45.123Z",
@@ -117,7 +117,7 @@ class JsonFormatter(BaseFormatter):
         "extra": {...}
     }
     """
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatea como JSON estructurado"""
         # Estructura base
@@ -130,40 +130,40 @@ class JsonFormatter(BaseFormatter):
             'function': record.funcName,
             'line': record.lineno
         }
-        
+
         # Datos adicionales
         extra = self._extract_extra_data(record)
-        
+
         # Correlation ID
         if 'correlation_id' in extra and self.include_correlation_id:
             log_entry['correlation_id'] = extra.pop('correlation_id')
-        
+
         # Contexto
         if 'context' in extra and self.include_context:
             log_entry['context'] = extra.pop('context')
-        
+
         # Resto de campos extra
         if extra:
             log_entry['extra'] = extra
-        
+
         # Información de excepción
         if record.exc_info:
             log_entry['exception'] = logging.Formatter().formatException(record.exc_info)
-        
+
         return json.dumps(log_entry, ensure_ascii=False, separators=(',', ':'))
 
 
 class StructuredFormatter(BaseFormatter):
     """
     Formateador híbrido que combina legibilidad con estructura.
-    
+
     Produce salidas como:
     [2024-11-03 15:30:45] INFO app.users: Usuario registrado
     ├─ correlation_id: abc-def
     ├─ user_id: 123
     └─ context: {"action": "register"}
     """
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatea con estructura híbrida"""
         timestamp = self._get_timestamp(record)
@@ -203,29 +203,28 @@ class StructuredFormatter(BaseFormatter):
 
 class FormatterFactory:
     """Factory para crear formatters según configuración"""
-    
+
     @staticmethod
     def create_formatter(config: HandlerConfig) -> BaseFormatter:
         """
         Crea un formatter según la configuración.
-        
+
         Args:
             config: Configuración del handler
-            
+
         Returns:
             Instancia del formatter apropiado
-            
+
         Raises:
             ValueError: Si el formato no es soportado
         """
         if config.format == LogFormat.TEXT:
             return TextFormatter(config)
-        elif config.format == LogFormat.JSON:
+        if config.format == LogFormat.JSON:
             return JsonFormatter(config)
-        elif config.format == LogFormat.STRUCTURED:
+        if config.format == LogFormat.STRUCTURED:
             return StructuredFormatter(config)
-        else:
-            raise ValueError(f"Formato no soportado: {config.format}")
+        raise ValueError(f"Formato no soportado: {config.format}")
 
 
 # Clase para integración con logging estándar de Python
@@ -233,11 +232,11 @@ class PythonLoggingFormatter(logging.Formatter):
     """
     Adapter para usar nuestros formatters con el logging estándar de Python.
     """
-    
+
     def __init__(self, formatter: BaseFormatter):
         super().__init__()
         self.custom_formatter = formatter
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Delega el formateo a nuestro formatter personalizado"""
         return self.custom_formatter.format(record)

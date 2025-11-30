@@ -1,28 +1,28 @@
-# -*- coding: utf-8 -*-
 """Tests para ActivateCompetitionUseCase."""
 
-import pytest
 from datetime import date
 from uuid import uuid4
 
+import pytest
+
 from src.modules.competition.application.dto.competition_dto import (
-    CreateCompetitionRequestDTO,
     ActivateCompetitionRequestDTO,
-)
-from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CreateCompetitionUseCase,
+    CreateCompetitionRequestDTO,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.use_cases.create_competition_use_case import (
+    CreateCompetitionUseCase,
+)
 from src.modules.competition.domain.entities.competition import CompetitionStateError
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio

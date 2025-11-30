@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 EnrollmentId Value Object - Identificador único de inscripción.
 

@@ -1,9 +1,12 @@
 import pytest
-from httpx import AsyncClient
 from fastapi import status
+from httpx import AsyncClient
+
+from tests.conftest import create_authenticated_user, get_user_by_email
 
 # Marcar todos los tests para ejecutarse con asyncio
 pytestmark = pytest.mark.asyncio
+
 
 class TestAuthRoutes:
     """
@@ -59,7 +62,7 @@ class TestAuthRoutes:
         Verifica que un usuario autenticado puede hacer logout correctamente.
         """
         # Arrange: Crear y autenticar un usuario
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -128,7 +131,7 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener el token de verificación desde la BD (en un escenario real vendría por email)
-        from tests.conftest import get_user_by_email
+
         user = await get_user_by_email(client, user_data["email"])
         verification_token = user.verification_token
 
@@ -200,7 +203,7 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener token y verificar primera vez
-        from tests.conftest import get_user_by_email
+
         user = await get_user_by_email(client, user_data["email"])
         verification_token = user.verification_token
 
@@ -233,7 +236,7 @@ class TestAuthRoutes:
         assert register_response.status_code == status.HTTP_201_CREATED
 
         # Obtener el token original
-        from tests.conftest import get_user_by_email
+
         user_before = await get_user_by_email(client, user_data["email"])
         original_token = user_before.verification_token
 

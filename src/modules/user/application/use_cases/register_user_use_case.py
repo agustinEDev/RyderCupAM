@@ -1,22 +1,25 @@
 import logging
-from typing import Optional
+
 import requests
 
-logger = logging.getLogger(__name__)
-
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO, UserResponseDTO
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
-from src.modules.user.domain.services.user_finder import UserFinder
-from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
-from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.application.ports.email_service_interface import IEmailService
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.services.user_finder import UserFinder
+from src.modules.user.domain.value_objects.email import Email
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
+
+logger = logging.getLogger(__name__)
+
 
 
 class RegisterUserUseCase:
@@ -32,8 +35,8 @@ class RegisterUserUseCase:
         self,
         uow: UserUnitOfWorkInterface,
         country_repository: CountryRepositoryInterface,
-        handicap_service: Optional[HandicapService] = None,
-        email_service: Optional[IEmailService] = None,
+        handicap_service: HandicapService | None = None,
+        email_service: IEmailService | None = None,
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
@@ -116,7 +119,7 @@ class RegisterUserUseCase:
                         "No se pudo enviar el email de verificación para el usuario %s",
                         new_user.id.value
                     )
-            except (requests.RequestException, ValueError, ConnectionError) as e:
+            except (requests.RequestException, ValueError, ConnectionError):
                 # Capturar excepciones específicas de red y validación
                 logger.exception(
                     "Error al enviar email de verificación para el usuario %s",

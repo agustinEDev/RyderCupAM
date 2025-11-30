@@ -6,23 +6,23 @@ Requiere validación de contraseña actual para autorizar los cambios.
 """
 
 import logging
+
 import requests
-from typing import Optional
 
 from src.modules.user.application.dto.user_dto import (
     UpdateSecurityRequestDTO,
     UpdateSecurityResponseDTO,
-    UserResponseDTO
+    UserResponseDTO,
+)
+from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.errors.user_errors import (
+    DuplicateEmailError,
+    InvalidCredentialsError,
+    UserNotFoundError,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.user.domain.errors.user_errors import (
-    UserNotFoundError,
-    InvalidCredentialsError,
-    DuplicateEmailError
-)
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class UpdateSecurityUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        email_service: Optional[IEmailService] = None
+        email_service: IEmailService | None = None
     ):
         """
         Inicializa el caso de uso con sus dependencias.
@@ -116,7 +116,7 @@ class UpdateSecurityUseCase:
                         "No se pudo enviar el email de verificación para el usuario %s",
                         user.id.value
                     )
-            except (requests.RequestException, ValueError, ConnectionError) as e:
+            except (requests.RequestException, ValueError, ConnectionError):
                 logger.exception(
                     "Error al enviar email de verificación para el usuario %s",
                     user.id.value

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Enrollment Entity - Representa la inscripción de un jugador en una competición.
 
@@ -6,17 +5,18 @@ Esta entidad gestiona el estado de participación de un jugador en un torneo.
 """
 
 from datetime import datetime
-from typing import Optional, List
 from decimal import Decimal
+
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
-from ..value_objects.enrollment_id import EnrollmentId
-from ..value_objects.competition_id import CompetitionId
-from ..value_objects.enrollment_status import EnrollmentStatus
-from ..events.enrollment_requested_event import EnrollmentRequestedEvent
+
 from ..events.enrollment_approved_event import EnrollmentApprovedEvent
-from ..events.enrollment_withdrawn_event import EnrollmentWithdrawnEvent
 from ..events.enrollment_cancelled_event import EnrollmentCancelledEvent
+from ..events.enrollment_requested_event import EnrollmentRequestedEvent
+from ..events.enrollment_withdrawn_event import EnrollmentWithdrawnEvent
+from ..value_objects.competition_id import CompetitionId
+from ..value_objects.enrollment_id import EnrollmentId
+from ..value_objects.enrollment_status import EnrollmentStatus
 
 
 class EnrollmentStateError(Exception):
@@ -58,11 +58,11 @@ class Enrollment:
         competition_id: CompetitionId,
         user_id: UserId,
         status: EnrollmentStatus,
-        team_id: Optional[str] = None,
-        custom_handicap: Optional[Decimal] = None,
-        created_at: Optional[datetime] = None,
-        updated_at: Optional[datetime] = None,
-        domain_events: Optional[List[DomainEvent]] = None
+        team_id: str | None = None,
+        custom_handicap: Decimal | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        domain_events: list[DomainEvent] | None = None
     ):
         """
         Constructor de Enrollment.
@@ -91,7 +91,7 @@ class Enrollment:
         self.custom_handicap = custom_handicap
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
-        self._domain_events: List[DomainEvent] = domain_events or []
+        self._domain_events: list[DomainEvent] = domain_events or []
 
     @classmethod
     def request(
@@ -167,7 +167,7 @@ class Enrollment:
         id: EnrollmentId,
         competition_id: CompetitionId,
         user_id: UserId,
-        custom_handicap: Optional[Decimal] = None
+        custom_handicap: Decimal | None = None
     ) -> 'Enrollment':
         """
         Factory method para inscripción directa por el creador.
@@ -300,7 +300,7 @@ class Enrollment:
 
         # TODO: Emitir evento EnrollmentRejectedEvent (si se crea)
 
-    def withdraw(self, reason: Optional[str] = None) -> None:
+    def withdraw(self, reason: str | None = None) -> None:
         """
         Retira la inscripción voluntariamente.
 
@@ -330,7 +330,7 @@ class Enrollment:
         )
         self._add_domain_event(event)
 
-    def cancel(self, reason: Optional[str] = None) -> None:
+    def cancel(self, reason: str | None = None) -> None:
         """
         Cancela la solicitud o declina la invitación.
 
@@ -441,13 +441,13 @@ class Enrollment:
         Añade un evento de dominio a la lista, inicializándola si es necesario.
         """
         if not hasattr(self, '_domain_events') or self._domain_events is None:
-            self._domain_events: List[DomainEvent] = []
+            self._domain_events: list[DomainEvent] = []
         self._domain_events.append(event)
 
-    def get_domain_events(self) -> List[DomainEvent]:
+    def get_domain_events(self) -> list[DomainEvent]:
         """Obtiene los eventos de dominio pendientes."""
         if not hasattr(self, '_domain_events') or self._domain_events is None:
-            self._domain_events: List[DomainEvent] = []
+            self._domain_events: list[DomainEvent] = []
         return self._domain_events.copy()
 
     def clear_domain_events(self) -> None:

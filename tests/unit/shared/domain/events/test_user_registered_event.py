@@ -1,8 +1,10 @@
-import pytest
 from datetime import datetime
-from uuid import UUID
+
+import pytest
+
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 from src.shared.domain.events.domain_event import DomainEvent
+
 
 class TestUserRegisteredEvent:
     """Test suite para UserRegisteredEvent."""

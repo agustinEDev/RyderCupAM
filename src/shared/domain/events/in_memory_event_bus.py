@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Implementación en memoria del Event Bus.
 
@@ -8,12 +7,11 @@ los handlers en memoria y los ejecuta de forma asíncrona.
 
 import logging
 from collections import defaultdict
-from typing import List, Type, Dict
 
 from .domain_event import DomainEvent
-from .event_handler import EventHandler
 from .event_bus import EventBus
-from .exceptions import EventHandlerError, EventPublicationError
+from .event_handler import EventHandler
+from .exceptions import EventHandlerError
 
 logger = logging.getLogger(__name__)
 
@@ -21,29 +19,29 @@ logger = logging.getLogger(__name__)
 class InMemoryEventBus(EventBus):
     """
     Implementación en memoria del Event Bus.
-    
+
     Características:
     - Almacena handlers en memoria agrupados por tipo de evento
     - Ejecuta handlers de forma asíncrona
     - Maneja errores de handlers de forma aislada
     - Mantiene logging detallado para debugging
     """
-    
+
     def __init__(self):
         # Dict que mapea tipos de eventos a listas de handlers
-        self._handlers: Dict[Type[DomainEvent], List[EventHandler]] = defaultdict(list)
+        self._handlers: dict[type[DomainEvent], list[EventHandler]] = defaultdict(list)
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-    
+
     async def publish(self, event: DomainEvent) -> None:
         """
         Publica un evento a todos los handlers registrados.
-        
+
         Args:
             event: El evento de dominio a publicar
         """
         event_type = type(event)
         handlers = self._handlers.get(event_type, [])
-        
+
         self._logger.info(
             f"Publishing event {event_type.__name__} to {len(handlers)} handlers",
             extra={
@@ -53,11 +51,11 @@ class InMemoryEventBus(EventBus):
                 "handlers_count": len(handlers)
             }
         )
-        
+
         if not handlers:
             self._logger.debug(f"No handlers registered for event type {event_type.__name__}")
             return
-        
+
         # Ejecutar todos los handlers
         errors = []
         for handler in handlers:
@@ -78,7 +76,7 @@ class InMemoryEventBus(EventBus):
             except Exception as e:
                 error_msg = f"Handler {handler.__class__.__name__} failed to process event {event.event_id}"
                 self._logger.error(error_msg, exc_info=True)
-                
+
                 handler_error = EventHandlerError(
                     message=error_msg,
                     event_type=event_type.__name__,
@@ -86,21 +84,21 @@ class InMemoryEventBus(EventBus):
                     original_error=e
                 )
                 errors.append(handler_error)
-        
+
         # Si hay errores, los reportamos pero no interrumpimos el flujo
         if errors:
             self._logger.error(f"Event processing completed with {len(errors)} handler errors")
             # En producción podrías enviar estos errores a un sistema de monitoreo
-    
-    async def publish_all(self, events: List[DomainEvent]) -> None:
+
+    async def publish_all(self, events: list[DomainEvent]) -> None:
         """
         Publica múltiples eventos en secuencia.
-        
+
         Args:
             events: Lista de eventos a publicar
         """
         self._logger.info(f"Publishing batch of {len(events)} events")
-        
+
         for event in events:
             try:
                 await self.publish(event)
@@ -110,23 +108,23 @@ class InMemoryEventBus(EventBus):
                     exc_info=True
                 )
                 # Continuamos con los siguientes eventos
-    
+
     def register(self, handler: EventHandler) -> None:
         """
         Registra un handler para un tipo específico de evento.
-        
+
         Args:
             handler: El handler a registrar
         """
         event_type = handler.event_type
-        
+
         # Verificar que no esté ya registrado
         if handler in self._handlers[event_type]:
             self._logger.warning(
                 f"Handler {handler.__class__.__name__} already registered for {event_type.__name__}"
             )
             return
-        
+
         self._handlers[event_type].append(handler)
         self._logger.info(
             f"Registered handler {handler.__class__.__name__} for event {event_type.__name__}",
@@ -136,16 +134,16 @@ class InMemoryEventBus(EventBus):
                 "total_handlers": len(self._handlers[event_type])
             }
         )
-    
+
     def unregister(self, handler: EventHandler) -> None:
         """
         Desregistra un handler específico.
-        
+
         Args:
             handler: El handler a desregistrar
         """
         event_type = handler.event_type
-        
+
         if handler in self._handlers[event_type]:
             self._handlers[event_type].remove(handler)
             self._logger.info(
@@ -155,23 +153,23 @@ class InMemoryEventBus(EventBus):
             self._logger.warning(
                 f"Handler {handler.__class__.__name__} not found for event {event_type.__name__}"
             )
-        
+
         # Limpiar la lista si está vacía
         if not self._handlers[event_type]:
             del self._handlers[event_type]
-    
-    def get_handlers(self, event_type: Type[DomainEvent]) -> List[EventHandler]:
+
+    def get_handlers(self, event_type: type[DomainEvent]) -> list[EventHandler]:
         """
         Obtiene todos los handlers registrados para un tipo de evento.
-        
+
         Args:
             event_type: El tipo de evento
-            
+
         Returns:
             List[EventHandler]: Lista de handlers para ese tipo de evento
         """
         return self._handlers.get(event_type, []).copy()
-    
+
     def clear_handlers(self) -> None:
         """
         Limpia todos los handlers registrados.
@@ -179,11 +177,11 @@ class InMemoryEventBus(EventBus):
         handlers_count = sum(len(handlers) for handlers in self._handlers.values())
         self._handlers.clear()
         self._logger.info(f"Cleared all handlers ({handlers_count} total)")
-    
+
     def get_statistics(self) -> dict:
         """
         Obtiene estadísticas del Event Bus.
-        
+
         Returns:
             dict: Estadísticas de handlers registrados
         """

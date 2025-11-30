@@ -4,7 +4,6 @@ Get Current User Use Case
 Caso de uso para obtener el usuario actual desde un JWT token.
 """
 
-from typing import Optional
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -31,7 +30,7 @@ class GetCurrentUserUseCase:
         """
         self._uow = uow
 
-    async def execute(self, user_id_str: str) -> Optional[UserResponseDTO]:
+    async def execute(self, user_id_str: str) -> UserResponseDTO | None:
         """
         Ejecuta el caso de uso.
 

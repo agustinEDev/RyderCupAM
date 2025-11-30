@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests unitarios para EventHandler interface.
 
@@ -6,13 +5,14 @@ Verifica que la interface EventHandler funciona correctamente
 y que las implementaciones concretas cumplen el contrato.
 """
 
-import pytest
 from abc import ABC
 from unittest.mock import AsyncMock
 
-from src.shared.domain.events.event_handler import EventHandler
-from src.shared.domain.events.domain_event import DomainEvent
+import pytest
+
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.events.event_handler import EventHandler
 
 
 class SampleEvent(DomainEvent):
@@ -39,7 +39,7 @@ class ConcreteEventHandler(EventHandler[SampleEvent]):
 
 class TestEventHandlerInterface:
     """Tests para la interface EventHandler."""
-    
+
     def test_event_handler_is_abstract(self):
         """
         Test: EventHandler es una clase abstracta
@@ -49,7 +49,7 @@ class TestEventHandlerInterface:
         """
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
             EventHandler()
-    
+
     def test_event_handler_inherits_from_abc(self):
         """
         Test: EventHandler hereda de ABC
@@ -58,7 +58,7 @@ class TestEventHandlerInterface:
         Then: Debe heredar de ABC
         """
         assert issubclass(EventHandler, ABC)
-    
+
     def test_concrete_handler_can_be_instantiated(self):
         """
         Test: Handler concreto puede ser instanciado
@@ -69,7 +69,7 @@ class TestEventHandlerInterface:
         handler = ConcreteEventHandler()
         assert isinstance(handler, EventHandler)
         assert isinstance(handler, ConcreteEventHandler)
-    
+
     @pytest.mark.asyncio
     async def test_concrete_handler_can_handle_events(self):
         """
@@ -81,14 +81,14 @@ class TestEventHandlerInterface:
         # Arrange
         handler = ConcreteEventHandler()
         event = SampleEvent("test data")
-        
+
         # Act
         await handler.handle(event)
-        
+
         # Assert
         assert len(handler.handled_events) == 1
         assert handler.handled_events[0] == event
-    
+
     def test_can_handle_with_correct_event_type(self):
         """
         Test: can_handle retorna True para el tipo correcto
@@ -99,13 +99,13 @@ class TestEventHandlerInterface:
         # Arrange
         handler = ConcreteEventHandler()
         event = SampleEvent("test data")
-        
+
         # Act
         result = handler.can_handle(event)
-        
+
         # Assert
         assert result is True
-    
+
     def test_can_handle_with_incorrect_event_type(self):
         """
         Test: can_handle retorna False para tipo incorrecto
@@ -121,13 +121,13 @@ class TestEventHandlerInterface:
             first_name="Test",
             last_name="User"
         )
-        
+
         # Act
         result = handler.can_handle(event)
-        
+
         # Assert
         assert result is False
-    
+
     def test_event_type_property(self):
         """
         Test: La propiedad event_type retorna el tipo correcto
@@ -137,10 +137,10 @@ class TestEventHandlerInterface:
         """
         # Arrange
         handler = ConcreteEventHandler()
-        
+
         # Act
         event_type = handler.event_type
-        
+
         # Assert
         assert event_type == SampleEvent
         assert issubclass(event_type, DomainEvent)
@@ -153,7 +153,7 @@ class IncompleteEventHandler(EventHandler):
 
 class TestEventHandlerValidation:
     """Tests para validación de implementaciones de EventHandler."""
-    
+
     def test_incomplete_handler_cannot_be_instantiated(self):
         """
         Test: Handler incompleto no puede ser instanciado
@@ -181,7 +181,7 @@ class AsyncConcreteEventHandler(EventHandler[SampleEvent]):
 
 class TestEventHandlerAsyncBehavior:
     """Tests para comportamiento asíncrono de handlers."""
-    
+
     @pytest.mark.asyncio
     async def test_async_handler_execution(self):
         """
@@ -193,9 +193,9 @@ class TestEventHandlerAsyncBehavior:
         # Arrange
         handler = AsyncConcreteEventHandler()
         event = SampleEvent("async test")
-        
+
         # Act
         await handler.handle(event)
-        
+
         # Assert
         handler.handle_mock.assert_called_once_with(event)

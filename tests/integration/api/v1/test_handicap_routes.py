@@ -4,9 +4,13 @@ Integration tests for Handicap API endpoints
 
 import pytest
 from httpx import AsyncClient
-from src.modules.user.domain.entities.user import User
+
+from main import app
 from src.config.dependencies import get_handicap_service
-from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+from src.modules.user.infrastructure.external.mock_handicap_service import (
+    MockHandicapService,
+)
+from tests.conftest import create_authenticated_user
 
 
 @pytest.mark.integration
@@ -15,8 +19,8 @@ class TestHandicapEndpoints:
 
     def setup_method(self):
         """Configurar mocks para cada test."""
-        from main import app
-        
+
+
         # Mock del servicio de hándicap con datos de prueba
         mock_handicap_service = MockHandicapService(
             handicaps={
@@ -25,20 +29,19 @@ class TestHandicapEndpoints:
             },
             default=None  # Devuelve None para jugadores no configurados
         )
-        
+
         # Sobreescribir la dependencia para usar el mock
         app.dependency_overrides[get_handicap_service] = lambda: mock_handicap_service
 
     def teardown_method(self):
         """Limpiar sobreescrituras después de cada test."""
-        from main import app
         app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
     async def test_update_handicap_endpoint_success(self, client: AsyncClient):
         """Test: Endpoint de actualización de hándicap funciona correctamente."""
         # Arrange - Crear un usuario autenticado
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -69,7 +72,7 @@ class TestHandicapEndpoints:
     async def test_update_handicap_endpoint_user_not_found(self, client: AsyncClient):
         """Test: Actualizar hándicap de usuario inexistente devuelve 404."""
         # Arrange - Crear usuario autenticado primero
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -97,7 +100,7 @@ class TestHandicapEndpoints:
     async def test_update_multiple_handicaps_endpoint(self, client: AsyncClient):
         """Test: Endpoint de actualización múltiple funciona correctamente."""
         # Arrange - Crear varios usuarios mediante el endpoint de registro
-        from tests.conftest import create_authenticated_user
+
 
         # Crear usuario autenticado para hacer la petición
         auth_data = await create_authenticated_user(
@@ -154,7 +157,7 @@ class TestHandicapEndpoints:
     async def test_update_multiple_handicaps_empty_list(self, client: AsyncClient):
         """Test: Actualizar lista vacía devuelve estadísticas correctas."""
         # Arrange - Crear usuario autenticado
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -182,7 +185,7 @@ class TestHandicapEndpoints:
     async def test_update_handicap_player_not_in_mock(self, client: AsyncClient):
         """Test: Jugador no configurado en el mock devuelve 404 HandicapNotFoundError."""
         # Arrange - Crear un usuario que no está en el mock
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -211,7 +214,7 @@ class TestHandicapEndpoints:
     async def test_update_handicap_player_not_in_mock_with_manual_fallback(self, client: AsyncClient):
         """Test: Jugador no en mock pero con manual_handicap funciona correctamente."""
         # Arrange - Crear un usuario que no está en el mock
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,
@@ -240,7 +243,7 @@ class TestHandicapEndpoints:
     async def test_update_handicap_invalid_uuid(self, client: AsyncClient):
         """Test: UUID inválido devuelve error de validación."""
         # Arrange - Crear usuario autenticado
-        from tests.conftest import create_authenticated_user
+
 
         auth_data = await create_authenticated_user(
             client,

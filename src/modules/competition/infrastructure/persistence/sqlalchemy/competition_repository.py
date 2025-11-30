@@ -1,15 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 Competition Repository - SQLAlchemy Implementation.
 
 Implementación concreta del repositorio de competiciones usando SQLAlchemy async.
 """
 
-from typing import List, Optional
 from datetime import date
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
@@ -79,7 +77,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             return True
         return False
 
-    async def find_by_id(self, competition_id: CompetitionId) -> Optional[Competition]:
+    async def find_by_id(self, competition_id: CompetitionId) -> Competition | None:
         """
         Busca una competición por su ID único.
 
@@ -96,7 +94,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         creator_id: UserId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca todas las competiciones creadas por un usuario.
 
@@ -123,7 +121,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         status: CompetitionStatus,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca todas las competiciones con un estado específico.
 
@@ -152,7 +150,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         self,
         start_date: date,
         end_date: date
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca competiciones activas que se superpongan con un rango de fechas.
 
@@ -228,7 +226,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         self,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Obtiene todas las competiciones con paginación.
 
@@ -268,13 +266,13 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
     async def find_by_filters(
         self,
-        search_name: Optional[str] = None,
-        search_creator: Optional[str] = None,
-        status: Optional[CompetitionStatus] = None,
-        creator_id: Optional[UserId] = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        status: CompetitionStatus | None = None,
+        creator_id: UserId | None = None,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca competiciones aplicando múltiples filtros opcionales.
 
@@ -294,21 +292,21 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             List[Competition]: Competiciones que cumplen los criterios
         """
         from src.modules.user.domain.entities.user import User
-        
+
         # Construir query base
         query = select(Competition)
-        
+
         # Si hay búsqueda por creador, necesitamos hacer JOIN con User
         if search_creator:
             query = query.join(User, Competition.creator_id == User.id)
-        
+
         # Lista de condiciones WHERE
         conditions = []
-        
+
         # Filtro: search_name (búsqueda parcial case-insensitive)
         if search_name:
             conditions.append(Competition._name_value.ilike(f"%{search_name}%"))
-        
+
         # Filtro: search_creator (búsqueda en first_name OR last_name)
         if search_creator:
             conditions.append(
@@ -317,19 +315,19 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                     User.last_name.ilike(f"%{search_creator}%")
                 )
             )
-        
+
         # Filtro: status
         if status:
             conditions.append(Competition._status_value == status.value)
-        
+
         # Filtro: creator_id
         if creator_id:
             conditions.append(Competition.creator_id == creator_id)
-        
+
         # Aplicar condiciones si existen
         if conditions:
             query = query.where(and_(*conditions))
-        
+
         # Ordenar y paginar
         query = (
             query
@@ -337,7 +335,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .limit(limit)
             .offset(offset)
         )
-        
+
         # Ejecutar query
         result = await self._session.execute(query)
         return list(result.scalars().all())

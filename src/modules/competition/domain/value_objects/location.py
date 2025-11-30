@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Location Value Object - Ubicación geográfica de una competición.
 
@@ -10,7 +9,7 @@ no en este VO, para mantener la separación de responsabilidades.
 """
 
 from dataclasses import dataclass
-from typing import Optional, List
+
 from src.shared.domain.value_objects.country_code import CountryCode
 
 
@@ -65,8 +64,8 @@ class Location:
     """
 
     main_country: CountryCode
-    adjacent_country_1: Optional[CountryCode] = None
-    adjacent_country_2: Optional[CountryCode] = None
+    adjacent_country_1: CountryCode | None = None
+    adjacent_country_2: CountryCode | None = None
 
     def __post_init__(self):
         """
@@ -109,7 +108,7 @@ class Location:
         """
         return self.adjacent_country_1 is not None
 
-    def get_all_countries(self) -> List[CountryCode]:
+    def get_all_countries(self) -> list[CountryCode]:
         """
         Obtiene la lista de todos los códigos de países involucrados.
 

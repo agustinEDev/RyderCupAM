@@ -6,8 +6,6 @@ Este evento se dispara cuando un usuario se registra por primera vez.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -16,14 +14,14 @@ from src.shared.domain.events.domain_event import DomainEvent
 class UserRegisteredEvent(DomainEvent):
     """
     Evento que indica que un nuevo usuario se ha registrado en el sistema.
-    
+
     Este evento contiene toda la información relevante del usuario recién registrado
     y puede ser usado por otros bounded contexts para realizar acciones como:
     - Enviar email de bienvenida
     - Crear perfil inicial
     - Registrar analytics
     - Activar integraciones
-    
+
     Attributes:
         user_id: ID específico del usuario (se usa como aggregate_id automáticamente)
         email: Email del usuario registrado
@@ -33,18 +31,18 @@ class UserRegisteredEvent(DomainEvent):
         is_email_verified: Si el email fue verificado al registro
         registration_ip: IP desde donde se registró (opcional por privacidad)
     """
-    
+
     # Datos específicos del usuario registrado (CAMPOS OBLIGATORIOS)
     user_id: str
     email: str
     first_name: str
     last_name: str
-    
+
     # Metadatos del registro (CAMPOS OPCIONALES con defaults)
     registration_method: str = "email"  # email, google, facebook, etc.
     is_email_verified: bool = False
-    registration_ip: Optional[str] = None
-    
+    registration_ip: str | None = None
+
     @property
     def aggregate_id(self) -> str:
         """El ID del agregado es el ID del usuario."""
@@ -54,11 +52,11 @@ class UserRegisteredEvent(DomainEvent):
     def full_name(self) -> str:
         """Nombre completo del usuario registrado."""
         return f"{self.first_name} {self.last_name}".strip()
-    
+
     def to_dict(self) -> dict:
         """
         Serialización específica para UserRegisteredEvent.
-        
+
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
@@ -77,7 +75,7 @@ class UserRegisteredEvent(DomainEvent):
             }
         })
         return base_dict
-    
+
     def __str__(self) -> str:
         """Representación string legible del evento."""
         return f"UserRegisteredEvent(user={self.full_name}, email={self.email}, id={self.event_id[:8]}...)"

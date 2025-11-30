@@ -12,9 +12,9 @@ Características:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from .logger import LogLevel
 
@@ -41,29 +41,29 @@ class HandlerConfig:
     type: LogHandler
     level: LogLevel = LogLevel.INFO
     format: LogFormat = LogFormat.TEXT
-    
+
     # Configuración específica de archivo
-    filename: Optional[str] = None
+    filename: str | None = None
     max_bytes: int = 10 * 1024 * 1024  # 10MB
     backup_count: int = 5
-    
+
     # Configuración de formato
     date_format: str = "%Y-%m-%d %H:%M:%S"
     include_correlation_id: bool = True
     include_context: bool = True
-    
+
     # Configuración adicional
-    extra_config: Dict[str, Any] = field(default_factory=dict)
+    extra_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class LogConfig:
     """
     Configuración principal del sistema de logging.
-    
+
     Permite configurar múltiples handlers con diferentes niveles,
     formatos y destinos de salida.
-    
+
     Ejemplos:
         # Configuración básica
         config = LogConfig(
@@ -76,7 +76,7 @@ class LogConfig:
                 )
             ]
         )
-        
+
         # Configuración avanzada
         config = LogConfig.from_dict({
             "level": "DEBUG",
@@ -94,52 +94,52 @@ class LogConfig:
             ]
         })
     """
-    
+
     # Configuración global
     level: LogLevel = LogLevel.INFO
-    handlers: List[HandlerConfig] = field(default_factory=list)
-    
+    handlers: list[HandlerConfig] = field(default_factory=list)
+
     # Configuración de aplicación
     app_name: str = "ryder-cup-manager"
     version: str = "1.0.0"
     environment: str = "development"
-    
+
     # Configuración de contexto
-    default_context: Dict[str, Any] = field(default_factory=dict)
+    default_context: dict[str, Any] = field(default_factory=dict)
     correlation_id_header: str = "X-Correlation-ID"
-    
+
     # Configuración de formateo
     message_template: str = "{timestamp} | {level} | {name} | {message}"
-    json_indent: Optional[int] = None
-    
+    json_indent: int | None = None
+
     # Configuración de directorios
-    log_dir: Optional[Path] = None
-    
+    log_dir: Path | None = None
+
     def __post_init__(self):
         """Validación y configuración por defecto"""
         if not self.handlers:
             # Handler por defecto: consola
             self.handlers = [HandlerConfig(type=LogHandler.CONSOLE)]
-        
+
         if self.log_dir:
             self.log_dir = Path(self.log_dir)
             self.log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'LogConfig':
+    def from_dict(cls, config_dict: dict[str, Any]) -> 'LogConfig':
         """
         Crea configuración desde diccionario.
-        
+
         Args:
             config_dict: Diccionario de configuración
-            
+
         Returns:
             Instancia configurada
         """
         # Convertir level si es string
         if 'level' in config_dict and isinstance(config_dict['level'], str):
             config_dict['level'] = LogLevel(config_dict['level'].upper())
-        
+
         # Convertir handlers
         if 'handlers' in config_dict:
             handlers = []
@@ -147,24 +147,24 @@ class LogConfig:
                 handler_config = cls._handler_from_dict(handler_dict)
                 handlers.append(handler_config)
             config_dict['handlers'] = handlers
-        
+
         return cls(**config_dict)
-    
+
     @classmethod
-    def _handler_from_dict(cls, handler_dict: Dict[str, Any]) -> HandlerConfig:
+    def _handler_from_dict(cls, handler_dict: dict[str, Any]) -> HandlerConfig:
         """Convierte diccionario en HandlerConfig"""
         # Convertir enums si son strings
         if 'type' in handler_dict and isinstance(handler_dict['type'], str):
             handler_dict['type'] = LogHandler(handler_dict['type'].lower())
-        
+
         if 'level' in handler_dict and isinstance(handler_dict['level'], str):
             handler_dict['level'] = LogLevel(handler_dict['level'].upper())
-        
+
         if 'format' in handler_dict and isinstance(handler_dict['format'], str):
             handler_dict['format'] = LogFormat(handler_dict['format'].lower())
-        
+
         return HandlerConfig(**handler_dict)
-    
+
     @classmethod
     def development(cls) -> 'LogConfig':
         """Configuración optimizada para desarrollo"""
@@ -179,7 +179,7 @@ class LogConfig:
                 )
             ]
         )
-    
+
     @classmethod
     def production(cls) -> 'LogConfig':
         """Configuración optimizada para producción"""
@@ -202,7 +202,7 @@ class LogConfig:
                 )
             ]
         )
-    
+
     @classmethod
     def testing(cls) -> 'LogConfig':
         """Configuración optimizada para tests"""
@@ -216,8 +216,8 @@ class LogConfig:
                 )
             ]
         )
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convierte la configuración a diccionario"""
         result = {
             'level': self.level.value,
@@ -230,7 +230,7 @@ class LogConfig:
             'json_indent': self.json_indent,
             'handlers': []
         }
-        
+
         for handler in self.handlers:
             handler_dict = {
                 'type': handler.type.value,
@@ -245,8 +245,8 @@ class LogConfig:
                 'extra_config': handler.extra_config
             }
             result['handlers'].append(handler_dict)
-        
+
         if self.log_dir:
             result['log_dir'] = str(self.log_dir)
-        
+
         return result

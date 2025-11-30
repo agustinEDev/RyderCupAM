@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
 """In-Memory Country Repository para testing."""
 
-from typing import Dict, List, Optional, Set
 
 from src.shared.domain.entities.country import Country
 from src.shared.domain.repositories.country_repository_interface import (
@@ -18,9 +16,9 @@ class InMemoryCountryRepository(CountryRepositoryInterface):
     """
 
     def __init__(self):
-        self._countries: Dict[CountryCode, Country] = {}
+        self._countries: dict[CountryCode, Country] = {}
         # Definir adyacencias (países fronterizos)
-        self._adjacencies: Dict[CountryCode, Set[CountryCode]] = {}
+        self._adjacencies: dict[CountryCode, set[CountryCode]] = {}
         self._load_test_data()
 
     def _load_test_data(self):
@@ -47,11 +45,11 @@ class InMemoryCountryRepository(CountryRepositoryInterface):
             CountryCode("GB"): {CountryCode("FR")},  # Túnel del Canal
         }
 
-    async def find_by_code(self, code: CountryCode) -> Optional[Country]:
+    async def find_by_code(self, code: CountryCode) -> Country | None:
         """Busca un país por su código."""
         return self._countries.get(code)
 
-    async def find_all_active(self) -> List[Country]:
+    async def find_all_active(self) -> list[Country]:
         """Retorna todos los países activos."""
         return [
             country for country in self._countries.values()
@@ -72,7 +70,7 @@ class InMemoryCountryRepository(CountryRepositoryInterface):
     async def find_adjacent_countries(
         self,
         country_code: CountryCode
-    ) -> List[Country]:
+    ) -> list[Country]:
         """Busca todos los países adyacentes a un país dado."""
         if country_code not in self._adjacencies:
             return []

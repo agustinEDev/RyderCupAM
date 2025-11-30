@@ -1,36 +1,124 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.config.database import async_session_maker
-from fastapi import Depends
-from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
-from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
-from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
-from src.modules.user.application.use_cases.get_current_user_use_case import GetCurrentUserUseCase
-from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
-from src.modules.user.application.use_cases.update_user_handicap_use_case import UpdateUserHandicapUseCase
-from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
-from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
-from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
-from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
-from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
-from src.modules.user.application.use_cases.resend_verification_email_use_case import ResendVerificationEmailUseCase
+from src.modules.competition.application.use_cases.activate_competition_use_case import (
+    ActivateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.cancel_competition_use_case import (
+    CancelCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
+    CancelEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.close_enrollments_use_case import (
+    CloseEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.complete_competition_use_case import (
+    CompleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.create_competition_use_case import (
+    CreateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.delete_competition_use_case import (
+    DeleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
+)
+from src.modules.competition.application.use_cases.get_competition_use_case import (
+    GetCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
+    HandleEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.list_competitions_use_case import (
+    ListCompetitionsUseCase,
+)
+from src.modules.competition.application.use_cases.list_enrollments_use_case import (
+    ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.request_enrollment_use_case import (
+    RequestEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
+    SetCustomHandicapUseCase,
+)
+from src.modules.competition.application.use_cases.start_competition_use_case import (
+    StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.update_competition_use_case import (
+    UpdateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
+    WithdrawEnrollmentUseCase,
+)
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
+    SQLAlchemyCompetitionUnitOfWork,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_current_user_use_case import (
+    GetCurrentUserUseCase,
+)
+from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
+from src.modules.user.application.use_cases.logout_user_use_case import (
+    LogoutUserUseCase,
+)
+from src.modules.user.application.use_cases.register_user_use_case import (
+    RegisterUserUseCase,
+)
+from src.modules.user.application.use_cases.resend_verification_email_use_case import (
+    ResendVerificationEmailUseCase,
+)
+from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+    UpdateMultipleHandicapsUseCase,
+)
+from src.modules.user.application.use_cases.update_profile_use_case import (
+    UpdateProfileUseCase,
+)
+from src.modules.user.application.use_cases.update_security_use_case import (
+    UpdateSecurityUseCase,
+)
+from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import (
+    UpdateUserHandicapManuallyUseCase,
+)
+from src.modules.user.application.use_cases.update_user_handicap_use_case import (
+    UpdateUserHandicapUseCase,
+)
+from src.modules.user.application.use_cases.verify_email_use_case import (
+    VerifyEmailUseCase,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.infrastructure.external.rfeg_handicap_service import (
+    RFEGHandicapService,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
-from src.modules.user.infrastructure.external.rfeg_handicap_service import RFEGHandicapService
-from src.modules.user.application.ports.email_service_interface import IEmailService
-from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.infrastructure.email.email_service import EmailService
-from src.shared.infrastructure.security.jwt_handler import JWTTokenService, verify_access_token
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
-from src.shared.infrastructure.persistence.sqlalchemy.country_repository import SQLAlchemyCountryRepository
-from fastapi import HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
+    SQLAlchemyCountryRepository,
+)
+from src.shared.infrastructure.security.jwt_handler import (
+    JWTTokenService,
+    verify_access_token,
+)
+
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
@@ -349,31 +437,8 @@ def get_resend_verification_email_use_case(
 # COMPETITION MODULE - Dependency Injection
 # ============================================================================
 
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
-from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
-    SQLAlchemyCompetitionUnitOfWork,
-)
-from src.modules.competition.application.use_cases.create_competition_use_case import CreateCompetitionUseCase
-from src.modules.competition.application.use_cases.list_competitions_use_case import ListCompetitionsUseCase
-from src.modules.competition.application.use_cases.update_competition_use_case import UpdateCompetitionUseCase
-from src.modules.competition.application.use_cases.get_competition_use_case import GetCompetitionUseCase
-from src.modules.competition.application.use_cases.delete_competition_use_case import DeleteCompetitionUseCase
-from src.modules.competition.application.use_cases.activate_competition_use_case import ActivateCompetitionUseCase
-from src.modules.competition.application.use_cases.close_enrollments_use_case import CloseEnrollmentsUseCase
-from src.modules.competition.application.use_cases.start_competition_use_case import StartCompetitionUseCase
-from src.modules.competition.application.use_cases.complete_competition_use_case import CompleteCompetitionUseCase
-from src.modules.competition.application.use_cases.cancel_competition_use_case import CancelCompetitionUseCase
 
 # Enrollment Use Cases
-from src.modules.competition.application.use_cases.request_enrollment_use_case import RequestEnrollmentUseCase
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import DirectEnrollPlayerUseCase
-from src.modules.competition.application.use_cases.handle_enrollment_use_case import HandleEnrollmentUseCase
-from src.modules.competition.application.use_cases.cancel_enrollment_use_case import CancelEnrollmentUseCase
-from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import WithdrawEnrollmentUseCase
-from src.modules.competition.application.use_cases.set_custom_handicap_use_case import SetCustomHandicapUseCase
-from src.modules.competition.application.use_cases.list_enrollments_use_case import ListEnrollmentsUseCase
 
 
 def get_competition_uow(

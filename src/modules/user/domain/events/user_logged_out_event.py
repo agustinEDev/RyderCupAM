@@ -7,7 +7,6 @@ Este evento se dispara cuando un usuario hace logout del sistema.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -16,14 +15,14 @@ from src.shared.domain.events.domain_event import DomainEvent
 class UserLoggedOutEvent(DomainEvent):
     """
     Evento que indica que un usuario ha cerrado sesión en el sistema.
-    
-    Este evento contiene información relevante del logout y puede ser usado 
+
+    Este evento contiene información relevante del logout y puede ser usado
     por otros bounded contexts para realizar acciones como:
     - Auditoría de seguridad
     - Analytics de sesiones
     - Invalidación de caché
     - Notificaciones de seguridad
-    
+
     Attributes:
         user_id: ID específico del usuario (se usa como aggregate_id automáticamente)
         logged_out_at: Timestamp exacto del logout
@@ -31,12 +30,12 @@ class UserLoggedOutEvent(DomainEvent):
         ip_address: Dirección IP desde donde se hizo logout (opcional)
         user_agent: User agent del browser/app (opcional)
     """
-    
+
     user_id: str
     logged_out_at: datetime
-    token_used: Optional[str] = None
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    token_used: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
 
     def __post_init__(self):
         """
@@ -49,7 +48,7 @@ class UserLoggedOutEvent(DomainEvent):
     def __str__(self) -> str:
         """
         Representación string legible del evento.
-        
+
         Returns:
             String descriptivo del evento para logging y debugging
         """
@@ -63,9 +62,9 @@ class UserLoggedOutEvent(DomainEvent):
     def to_dict(self) -> dict:
         """
         Convierte el evento a diccionario para serialización.
-        
+
         Extiende el to_dict() de la clase base con campos específicos del logout.
-        
+
         Returns:
             Diccionario con todos los datos del evento
         """

@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -14,21 +13,21 @@ class InMemoryUserRepository(UserRepositoryInterface):
     """
 
     def __init__(self):
-        self._users: Dict[UserId, User] = {}
+        self._users: dict[UserId, User] = {}
 
     async def save(self, user: User) -> None:
         self._users[user.id] = user
 
-    async def find_by_id(self, user_id: UserId) -> Optional[User]:
+    async def find_by_id(self, user_id: UserId) -> User | None:
         return self._users.get(user_id)
 
-    async def find_by_email(self, email: Email) -> Optional[User]:
+    async def find_by_email(self, email: Email) -> User | None:
         for user in self._users.values():
             if user.email == email:
                 return user
         return None
 
-    async def find_all(self) -> List[User]:
+    async def find_all(self) -> list[User]:
         return list(self._users.values())
 
     async def delete_by_id(self, user_id: UserId) -> None:
@@ -39,7 +38,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
         if user.id in self._users:
             self._users[user.id] = user
 
-    async def find_by_full_name(self, full_name: str) -> Optional[User]:
+    async def find_by_full_name(self, full_name: str) -> User | None:
         full_name_lower = full_name.lower().strip()
         for user in self._users.values():
             user_full_name = f"{user.first_name} {user.last_name}".lower()
@@ -53,7 +52,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
     async def count_all(self) -> int:
         return len(self._users)
 
-    async def find_by_verification_token(self, token: str) -> Optional[User]:
+    async def find_by_verification_token(self, token: str) -> User | None:
         """Busca un usuario por su token de verificación."""
         for user in self._users.values():
             if user.verification_token == token:

@@ -1,28 +1,34 @@
-# -*- coding: utf-8 -*-
 """
 Ryder Cup Manager - Main Application
 
 Punto de entrada de la aplicación FastAPI.
 """
 import os
-from dotenv import load_dotenv
-load_dotenv()  # Cargar variables de entorno desde .env
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from pydantic import BaseModel
-import secrets
-import uvicorn
 
-from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
-from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
-from src.shared.infrastructure.api.v1 import country_routes
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import start_mappers as start_competition_mappers
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import start_mappers as start_country_mappers
+from dotenv import load_dotenv
+
+load_dotenv()  # Cargar variables de entorno desde .env
+import secrets
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel
+
 from src.config.settings import settings
+from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    start_mappers as start_competition_mappers,
+)
+from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
+from src.shared.infrastructure.api.v1 import country_routes
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+    start_mappers as start_country_mappers,
+)
 
 
 @asynccontextmanager

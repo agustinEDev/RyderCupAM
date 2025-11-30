@@ -5,7 +5,6 @@ Define el contrato para servicios de tokens de autenticación.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 from datetime import timedelta
 
 
@@ -25,7 +24,7 @@ class ITokenService(ABC):
     def create_access_token(
         self,
         data: dict,
-        expires_delta: Optional[timedelta] = None
+        expires_delta: timedelta | None = None
     ) -> str:
         """
         Crea un token de acceso.
@@ -40,7 +39,7 @@ class ITokenService(ABC):
         pass
 
     @abstractmethod
-    def verify_access_token(self, token: str) -> Optional[dict]:
+    def verify_access_token(self, token: str) -> dict | None:
         """
         Verifica y decodifica un token.
 

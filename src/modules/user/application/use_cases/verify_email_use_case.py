@@ -5,7 +5,6 @@ Caso de uso para verificar el email de un usuario usando un token.
 """
 
 import logging
-from typing import Optional
 
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,

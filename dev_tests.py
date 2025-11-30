@@ -1,12 +1,12 @@
 # dev_tests.py
-import subprocess
-import json
-import time
-from pathlib import Path
-from collections import defaultdict
-import sys
 import ast
+import json
+import subprocess
+import sys
+import time
+from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 # Constants
 NO_DESCRIPTION = "No description provided."
@@ -91,7 +91,7 @@ def run_tests() -> tuple[str, int]:
             f.write(f"{line}\n")
 
     try:
-        with open(report_file, 'r') as f:
+        with open(report_file) as f:
             report_data = json.load(f)
         with open(report_file, 'w') as f:
             json.dump(report_data, f, indent=2)
@@ -106,12 +106,12 @@ def get_docstrings_from_file(filepath: str) -> dict:
     """Extrae todos los docstrings de un fichero de test usando AST."""
     if filepath in DOCSTRING_CACHE:
         return DOCSTRING_CACHE[filepath]
-    
+
     docs = {}
     try:
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             tree = ast.parse(f.read())
-        
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 docs[node.name] = ast.get_docstring(node) or NO_DESCRIPTION
@@ -122,7 +122,7 @@ def get_docstrings_from_file(filepath: str) -> dict:
                         docs[key] = ast.get_docstring(method) or NO_DESCRIPTION
     except Exception:
         pass # Ignorar errores de parseo si el fichero es inválido
-        
+
     DOCSTRING_CACHE[filepath] = docs
     return docs
 

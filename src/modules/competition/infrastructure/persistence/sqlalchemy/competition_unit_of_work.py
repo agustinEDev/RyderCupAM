@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQLAlchemy Unit of Work - Competition Module Infrastructure Layer.
 
@@ -7,24 +6,23 @@ Coordina transacciones entre 3 repositorios: competitions, enrollments, countrie
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
-)
-from src.modules.competition.domain.repositories.enrollment_repository_interface import (
-    EnrollmentRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.shared.domain.repositories.country_repository_interface import (
-    CountryRepositoryInterface,
+from src.modules.competition.domain.repositories.enrollment_repository_interface import (
+    EnrollmentRepositoryInterface,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
     SQLAlchemyEnrollmentRepository,
+)
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
 )
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,

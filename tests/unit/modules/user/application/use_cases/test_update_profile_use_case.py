@@ -4,8 +4,9 @@ Tests para UpdateProfileUseCase
 Tests unitarios para el caso de uso de actualización de perfil del usuario.
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateProfileRequestDTO
@@ -133,8 +134,8 @@ class TestUpdateProfileUseCase:
     async def test_update_rejects_too_short_names(self, uow, country_repository, existing_user):
         """Debe rechazar nombres muy cortos (validación Pydantic)."""
         # Arrange
-        use_case = UpdateProfileUseCase(uow, country_repository)
-        user_id = str(existing_user.id.value)
+        UpdateProfileUseCase(uow, country_repository)
+        str(existing_user.id.value)
 
         # Act & Assert - Pydantic valida min_length=2
         with pytest.raises(ValidationError):

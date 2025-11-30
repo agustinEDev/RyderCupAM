@@ -4,8 +4,9 @@ Tests para LogoutUserUseCase
 Tests unitarios para el caso de uso de logout de usuario.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from src.modules.user.application.dto.user_dto import LogoutRequestDTO, LogoutResponseDTO
 from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
@@ -34,11 +35,11 @@ async def existing_user(uow):
         email_str="test@example.com",
         plain_password="ValidPass123"
     )
-    
+
     async with uow:
         await uow.users.save(user)
         await uow.commit()
-    
+
     return user
 
 
@@ -62,10 +63,10 @@ class TestLogoutUserUseCase:
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
         token = "sample-jwt-token"
-        
+
         # Act
         result = await use_case.execute(request, user_id, token)
-        
+
         # Assert
         assert result is not None
         assert isinstance(result, LogoutResponseDTO)
@@ -83,10 +84,10 @@ class TestLogoutUserUseCase:
         request = LogoutRequestDTO()
         non_existent_user_id = "12345678-1234-5678-1234-567812345678"  # UUID válido pero inexistente
         token = "sample-jwt-token"
-        
+
         # Act
         result = await use_case.execute(request, non_existent_user_id, token)
-        
+
         # Assert
         assert result is None
 
@@ -100,10 +101,10 @@ class TestLogoutUserUseCase:
         # Arrange
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
-        
+
         # Act
         result = await use_case.execute(request, user_id, token=None)
-        
+
         # Assert
         assert result is not None
         assert isinstance(result, LogoutResponseDTO)
@@ -120,10 +121,10 @@ class TestLogoutUserUseCase:
         request = LogoutRequestDTO()
         user_id = str(existing_user.id.value)
         token = "test-jwt-token"
-        
+
         # Act
         result = await use_case.execute(request, user_id, token)
-        
+
         # Assert
         assert result is not None
         assert hasattr(result, 'message')
@@ -143,10 +144,10 @@ class TestLogoutUserUseCase:
         user_id = str(existing_user.id.value)
         token = "test-jwt-token"
         before_logout = datetime.now()
-        
+
         # Act
         result = await use_case.execute(request, user_id, token)
-        
+
         # Assert
         after_logout = datetime.now()
         assert result is not None

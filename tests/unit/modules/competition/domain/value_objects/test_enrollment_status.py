@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
 """Tests para EnrollmentStatus Value Object."""
 
-import pytest
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 
 

@@ -1,14 +1,15 @@
-# -*- coding: utf-8 -*-
 """Tests para Enrollment DTOs."""
 
-import pytest
-from uuid import uuid4
 from decimal import Decimal
+from uuid import uuid4
+
+import pytest
 from pydantic import ValidationError
+
 from src.modules.competition.application.dto.enrollment_dto import (
-    RequestEnrollmentRequestDTO,
     DirectEnrollPlayerRequestDTO,
     HandleEnrollmentRequestDTO,
+    RequestEnrollmentRequestDTO,
     SetCustomHandicapRequestDTO,
 )
 

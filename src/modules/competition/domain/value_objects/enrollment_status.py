@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 EnrollmentStatus Value Object - Estado de una inscripción en una competición.
 

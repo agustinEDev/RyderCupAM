@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests de integración para los endpoints de la API principal.
 
@@ -9,14 +8,13 @@ Este archivo contiene tests que verifican:
 - Códigos de estado HTTP
 """
 
+import base64
+
 import pytest
 from fastapi.testclient import TestClient
-import httpx
-import base64
 
 from main import app
 from src.config.settings import settings
-
 
 # ================================
 # SETUP DE CLIENTE DE PRUEBAS
@@ -26,7 +24,7 @@ from src.config.settings import settings
 def client():
     """
     Fixture que proporciona un cliente de pruebas para FastAPI.
-    
+
     Returns:
         TestClient: Cliente configurado para hacer requests a la app
     """
@@ -49,7 +47,7 @@ class TestHealthEndpoint:
         """
         # Act
         response = client.get("/")
-        
+
         # Assert
         assert response.status_code == 200
 
@@ -62,7 +60,7 @@ class TestHealthEndpoint:
         """
         # Act
         response = client.get("/")
-        
+
         # Assert
         assert response.headers["content-type"] == "application/json"
 
@@ -76,7 +74,7 @@ class TestHealthEndpoint:
         # Act
         response = client.get("/")
         data = response.json()
-        
+
         # Assert - Verificar que tiene todos los campos esperados
         assert "message" in data
         assert "version" in data
@@ -94,7 +92,7 @@ class TestHealthEndpoint:
         # Act
         response = client.get("/")
         data = response.json()
-        
+
         # Assert - Verificar valores específicos
         assert data["message"] == "Ryder Cup Manager API"
         assert data["version"] == "1.0.0"
@@ -112,7 +110,7 @@ class TestHealthEndpoint:
         # Act
         response = client.get("/")
         data = response.json()
-        
+
         # Assert - Verificar tipos
         assert isinstance(data["message"], str)
         assert isinstance(data["version"], str)
@@ -139,10 +137,10 @@ class TestAPIDocumentation:
         credentials = f"{settings.DOCS_USERNAME}:{settings.DOCS_PASSWORD}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
         headers = {"Authorization": f"Basic {encoded_credentials}"}
-        
+
         # Act
         response = client.get("/docs", headers=headers)
-        
+
         # Assert
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -158,10 +156,10 @@ class TestAPIDocumentation:
         credentials = f"{settings.DOCS_USERNAME}:{settings.DOCS_PASSWORD}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
         headers = {"Authorization": f"Basic {encoded_credentials}"}
-        
+
         # Act
         response = client.get("/redoc", headers=headers)
-        
+
         # Assert
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -175,11 +173,11 @@ class TestAPIDocumentation:
         """
         # Act
         response = client.get("/openapi.json")
-        
+
         # Assert
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/json"
-        
+
         # Verificar que es un schema OpenAPI válido
         schema = response.json()
         assert "openapi" in schema
@@ -203,7 +201,7 @@ class TestErrorHandling:
         """
         # Act
         response = client.get("/endpoint-que-no-existe")
-        
+
         # Assert
         assert response.status_code == 404
 
@@ -216,7 +214,7 @@ class TestErrorHandling:
         """
         # Act
         response = client.post("/")
-        
+
         # Assert
         assert response.status_code == 405
 
@@ -232,7 +230,7 @@ class TestErrorHandling:
         for _ in range(5):
             response = client.get("/")
             responses.append(response)
-        
+
         # Assert - Todos deben ser exitosos
         for response in responses:
             assert response.status_code == 200
@@ -254,14 +252,14 @@ class TestBasicPerformance:
         Then: Responde en menos de 1 segundo
         """
         import time
-        
+
         # Act
         start_time = time.time()
         response = client.get("/")
         end_time = time.time()
-        
+
         response_time = end_time - start_time
-        
+
         # Assert
         assert response.status_code == 200
         assert response_time < 1.0  # Menos de 1 segundo
@@ -274,17 +272,17 @@ class TestBasicPerformance:
         Then: Todos responden en tiempo razonable
         """
         import time
-        
+
         # Act
         response_times = []
         for _ in range(10):
             start_time = time.time()
             response = client.get("/")
             end_time = time.time()
-            
+
             assert response.status_code == 200
             response_times.append(end_time - start_time)
-        
+
         # Assert
         average_time = sum(response_times) / len(response_times)
         assert average_time < 0.5  # Promedio menor a 0.5 segundos

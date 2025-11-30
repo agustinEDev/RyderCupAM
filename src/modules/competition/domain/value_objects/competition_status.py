@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionStatus Value Object - Estado del ciclo de vida de una competición.
 

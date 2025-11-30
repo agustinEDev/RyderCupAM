@@ -6,7 +6,6 @@ Implementación evolutiva: simple ahora, preparada para blacklist después.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from src.modules.user.application.dto.user_dto import (
     LogoutRequestDTO,
@@ -23,17 +22,17 @@ class LogoutUserUseCase:
     Caso de uso para logout de usuario.
 
     Esta implementación está diseñada para evolucionar:
-    
+
     Fase 1 (Actual): Logout simple con validación de usuario
     - Valida que el usuario existe
     - Registra el timestamp del logout
     - Retorna confirmación
-    
+
     Fase 2 (Futura): Con blacklist profesional
     - Misma interface pública
     - Internamente agregará tokens a blacklist
     - Sin cambios en controllers
-    
+
     Responsabilidades:
     - Validar que el usuario existe (del token JWT)
     - Gestionar la invalidación del token (preparado para blacklist)
@@ -50,11 +49,11 @@ class LogoutUserUseCase:
         self._uow = uow
 
     async def execute(
-        self, 
-        request: LogoutRequestDTO, 
+        self,
+        request: LogoutRequestDTO,
         user_id: str,
-        token: Optional[str] = None
-    ) -> Optional[LogoutResponseDTO]:
+        token: str | None = None
+    ) -> LogoutResponseDTO | None:
         """
         Ejecuta el caso de uso de logout.
 
@@ -96,23 +95,23 @@ class LogoutUserUseCase:
             logged_out_at=logout_time
         )
 
-    def _invalidate_token(self, token: Optional[str], _user_id: str) -> None:
+    def _invalidate_token(self, token: str | None, _user_id: str) -> None:
         """
         Invalida el token de acceso.
-        
+
         Fase 1 (Actual): No hace nada real - logout del lado cliente
         Fase 2 (Futura): Agregará el token a blacklist
-        
+
         Args:
             token: Token JWT a invalidar
             _user_id: ID del usuario para logging (preparado para Fase 2)
         """
         # Fase 1: Implementación simple - logout del lado cliente
         # El token permanece técnicamente válido hasta su expiración
-        
+
         # Preparado para Fase 2: Blacklist implementation
         # await self._blacklist_service.add_token(token)
-        
+
         if token:
             # Fase 1: Solo validación de que el token existe
             pass

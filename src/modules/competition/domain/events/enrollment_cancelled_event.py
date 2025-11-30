@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 EnrollmentCancelledEvent - Se emite cuando un jugador cancela su solicitud/invitación.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 
@@ -32,4 +31,4 @@ class EnrollmentCancelledEvent(DomainEvent):
     enrollment_id: str
     competition_id: str
     user_id: str
-    reason: Optional[str] = None
+    reason: str | None = None

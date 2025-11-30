@@ -1,8 +1,8 @@
 
 # Helpers privados para modularidad y menor complejidad
-from typing import Optional
 
-def _sanitize_creator_id(creator_id: Optional[str]) -> Optional[str]:
+
+def _sanitize_creator_id(creator_id: str | None) -> str | None:
     if creator_id and creator_id not in ("undefined", "null", ""):
         return creator_id
     return None
@@ -157,104 +157,97 @@ Endpoints FastAPI para el módulo Competition siguiendo Clean Architecture.
 """
 
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from src.config.dependencies import (
-    get_current_user,
-    get_competition_uow,
-    get_uow,  # User Unit of Work para obtener datos del creador
-    get_create_competition_use_case,
-    get_list_competitions_use_case,
-    get_get_competition_use_case,
-    get_update_competition_use_case,
-    get_delete_competition_use_case,
     get_activate_competition_use_case,
-    get_close_enrollments_use_case,
-    get_start_competition_use_case,
-    get_complete_competition_use_case,
     get_cancel_competition_use_case,
+    get_close_enrollments_use_case,
+    get_competition_uow,
+    get_complete_competition_use_case,
+    get_create_competition_use_case,
+    get_current_user,
+    get_delete_competition_use_case,
+    get_get_competition_use_case,
+    get_list_competitions_use_case,
+    get_start_competition_use_case,
+    get_uow,  # User Unit of Work para obtener datos del creador
+    get_update_competition_use_case,
 )
-from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.competition.application.dto.competition_dto import (
+    ActivateCompetitionRequestDTO,
+    CancelCompetitionRequestDTO,
+    CloseEnrollmentsRequestDTO,
+    CompetitionResponseDTO,
+    CompleteCompetitionRequestDTO,
+    CountryResponseDTO,
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
-    CompetitionResponseDTO,
-    UpdateCompetitionRequestDTO,
-    UpdateCompetitionResponseDTO,
+    CreatorDTO,
     DeleteCompetitionRequestDTO,
-    ActivateCompetitionRequestDTO,
-    CloseEnrollmentsRequestDTO,
     StartCompetitionRequestDTO,
-    CompleteCompetitionRequestDTO,
-    CancelCompetitionRequestDTO,
-    ActivateCompetitionResponseDTO,
-    CloseEnrollmentsResponseDTO,
-    StartCompetitionResponseDTO,
-    CompleteCompetitionResponseDTO,
-    DeleteCompetitionResponseDTO,
-    CancelCompetitionResponseDTO,
-    CountryResponseDTO,
-)
-from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CreateCompetitionUseCase,
-    CompetitionAlreadyExistsError,
-)
-from src.modules.competition.application.use_cases.list_competitions_use_case import (
-    ListCompetitionsUseCase,
-)
-from src.modules.competition.application.use_cases.get_competition_use_case import (
-    GetCompetitionUseCase,
-    CompetitionNotFoundError as GetNotFoundError,
-)
-from src.modules.competition.application.use_cases.update_competition_use_case import (
-    UpdateCompetitionUseCase,
-    CompetitionNotFoundError as UpdateNotFoundError,
-    NotCompetitionCreatorError as UpdateNotCreatorError,
-    CompetitionNotEditableError,
-)
-from src.modules.competition.application.use_cases.delete_competition_use_case import (
-    DeleteCompetitionUseCase,
-    CompetitionNotFoundError as DeleteNotFoundError,
-    NotCompetitionCreatorError as DeleteNotCreatorError,
-    CompetitionNotDeletableError,
+    UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
     CompetitionNotFoundError as ActivateNotFoundError,
     NotCompetitionCreatorError as ActivateNotCreatorError,
 )
-from src.modules.competition.application.use_cases.close_enrollments_use_case import (
-    CloseEnrollmentsUseCase,
-    CompetitionNotFoundError as CloseNotFoundError,
-    NotCompetitionCreatorError as CloseNotCreatorError,
-)
-from src.modules.competition.application.use_cases.start_competition_use_case import (
-    StartCompetitionUseCase,
-    CompetitionNotFoundError as StartNotFoundError,
-    NotCompetitionCreatorError as StartNotCreatorError,
-)
-from src.modules.competition.application.use_cases.complete_competition_use_case import (
-    CompleteCompetitionUseCase,
-    CompetitionNotFoundError as CompleteNotFoundError,
-    NotCompetitionCreatorError as CompleteNotCreatorError,
-)
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
     CompetitionNotFoundError as CancelNotFoundError,
     NotCompetitionCreatorError as CancelNotCreatorError,
 )
+from src.modules.competition.application.use_cases.close_enrollments_use_case import (
+    CloseEnrollmentsUseCase,
+    CompetitionNotFoundError as CloseNotFoundError,
+    NotCompetitionCreatorError as CloseNotCreatorError,
+)
+from src.modules.competition.application.use_cases.complete_competition_use_case import (
+    CompetitionNotFoundError as CompleteNotFoundError,
+    CompleteCompetitionUseCase,
+    NotCompetitionCreatorError as CompleteNotCreatorError,
+)
+from src.modules.competition.application.use_cases.create_competition_use_case import (
+    CompetitionAlreadyExistsError,
+    CreateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.delete_competition_use_case import (
+    CompetitionNotDeletableError,
+    CompetitionNotFoundError as DeleteNotFoundError,
+    DeleteCompetitionUseCase,
+    NotCompetitionCreatorError as DeleteNotCreatorError,
+)
+from src.modules.competition.application.use_cases.get_competition_use_case import (
+    CompetitionNotFoundError as GetNotFoundError,
+    GetCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.list_competitions_use_case import (
+    ListCompetitionsUseCase,
+)
+from src.modules.competition.application.use_cases.start_competition_use_case import (
+    CompetitionNotFoundError as StartNotFoundError,
+    NotCompetitionCreatorError as StartNotCreatorError,
+    StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.update_competition_use_case import (
+    CompetitionNotEditableError,
+    CompetitionNotFoundError as UpdateNotFoundError,
+    NotCompetitionCreatorError as UpdateNotCreatorError,
+    UpdateCompetitionUseCase,
+)
 from src.modules.competition.domain.entities.competition import Competition, CompetitionStateError
-from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.competition.application.dto.competition_dto import CreatorDTO
+from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -281,7 +274,7 @@ class CompetitionDTOMapper:
         competition: Competition,
         current_user_id: UserId,
         uow: CompetitionUnitOfWorkInterface,
-        user_uow: Optional[UserUnitOfWorkInterface] = None,
+        user_uow: UserUnitOfWorkInterface | None = None,
     ) -> CompetitionResponseDTO:
         """
         Convierte una entidad Competition a CompetitionResponseDTO.
@@ -427,7 +420,7 @@ class CompetitionDTOMapper:
     async def _get_countries_list(
         competition: Competition,
         uow: CompetitionUnitOfWorkInterface,
-    ) -> List[CountryResponseDTO]:
+    ) -> list[CountryResponseDTO]:
         """
         Obtiene la lista completa de países participantes con códigos y nombres.
 
@@ -476,7 +469,7 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
-    ) -> Optional[CreatorDTO]:
+    ) -> CreatorDTO | None:
         """
         Obtiene la información del creador de una competición.
 
@@ -600,17 +593,17 @@ async def create_competition(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
-        )
+        ) from e
     except InvalidCountryError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
@@ -652,7 +645,7 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
 
 @router.get(
     "",
-    response_model=List[CompetitionResponseDTO],
+    response_model=list[CompetitionResponseDTO],
     status_code=status.HTTP_200_OK,
     summary="Listar competiciones con filtros",
     description="Obtiene lista de competiciones con filtros opcionales.",
@@ -663,11 +656,11 @@ async def list_competitions(
     use_case: ListCompetitionsUseCase = Depends(get_list_competitions_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: Optional[List[str]] = Query(None, alias="status", description="Filtrar por estado (puede recibir múltiples valores: DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED)"),
-    creator_id: Optional[str] = Query(None, description="Filtrar por creador (UUID)"),
-    my_competitions: Optional[bool] = Query(None, description="Si es True, devuelve competiciones donde el usuario es creador o está inscrito. Si es False, excluye esas competiciones. Si es None (por defecto), devuelve todas."),
-    search_name: Optional[str] = Query(None, description="Buscar por nombre de competición (parcial, case-insensitive)"),
-    search_creator: Optional[str] = Query(None, description="Buscar por nombre del creador (parcial, case-insensitive)"),
+    status_filter: list[str] | None = Query(None, alias="status", description="Filtrar por estado (puede recibir múltiples valores: DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED)"),
+    creator_id: str | None = Query(None, description="Filtrar por creador (UUID)"),
+    my_competitions: bool | None = Query(None, description="Si es True, devuelve competiciones donde el usuario es creador o está inscrito. Si es False, excluye esas competiciones. Si es None (por defecto), devuelve todas."),
+    search_name: str | None = Query(None, description="Buscar por nombre de competición (parcial, case-insensitive)"),
+    search_creator: str | None = Query(None, description="Buscar por nombre del creador (parcial, case-insensitive)"),
 ):
     """
     Endpoint para listar competiciones con filtros opcionales.
@@ -715,7 +708,7 @@ async def list_competitions(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get(
@@ -761,12 +754,12 @@ async def get_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.put(
@@ -822,17 +815,17 @@ async def update_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except UpdateNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionNotEditableError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.delete(
@@ -869,23 +862,23 @@ async def delete_competition(
         # Ejecutar use case
         await use_case.execute(request_dto, current_user_id)
 
-        return None
+        return
 
     except DeleteNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except DeleteNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionNotDeletableError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 # ======================================================================================
@@ -940,17 +933,17 @@ async def activate_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except ActivateNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -1001,17 +994,17 @@ async def close_enrollments(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except CloseNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -1062,17 +1055,17 @@ async def start_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except StartNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -1123,17 +1116,17 @@ async def complete_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except CompleteNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -1184,14 +1177,14 @@ async def cancel_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
     except CancelNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e

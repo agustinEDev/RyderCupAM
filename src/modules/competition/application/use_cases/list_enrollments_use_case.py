@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Listar Inscripciones (List Enrollments).
 
@@ -6,13 +5,13 @@ Lista las inscripciones de una competición con filtros opcionales.
 Retorna entidades (NO DTOs) - siguiendo Clean Architecture.
 """
 
-from typing import List, Optional
+
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 
 
 class CompetitionNotFoundError(Exception):
@@ -48,8 +47,8 @@ class ListEnrollmentsUseCase:
     async def execute(
         self,
         competition_id: str,
-        status: Optional[str] = None
-    ) -> List[Enrollment]:
+        status: str | None = None
+    ) -> list[Enrollment]:
         """
         Ejecuta el caso de uso de listado de inscripciones.
 

@@ -5,11 +5,10 @@ Caso de uso para actualizar el hándicap de un usuario manualmente,
 sin consultar servicios externos.
 """
 
-from typing import Optional
 
-from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class UpdateUserHandicapManuallyUseCase:
@@ -41,7 +40,7 @@ class UpdateUserHandicapManuallyUseCase:
         self,
         user_id: UserId,
         handicap_value: float
-    ) -> Optional[UserResponseDTO]:
+    ) -> UserResponseDTO | None:
         """
         Actualiza el hándicap de un usuario con un valor manual.
 

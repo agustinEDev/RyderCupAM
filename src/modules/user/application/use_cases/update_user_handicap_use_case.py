@@ -4,13 +4,14 @@ Update User Handicap Use Case - Application Layer
 Caso de uso para actualizar el hándicap de un usuario individual.
 """
 
-from typing import Optional
 
-from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.domain.services.handicap_service import HandicapService
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.user.domain.errors.handicap_errors import HandicapServiceError, HandicapNotFoundError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapNotFoundError,
+)
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class UpdateUserHandicapUseCase:
@@ -48,8 +49,8 @@ class UpdateUserHandicapUseCase:
     async def execute(
         self,
         user_id: UserId,
-        manual_handicap: Optional[float] = None
-    ) -> Optional[UserResponseDTO]:
+        manual_handicap: float | None = None
+    ) -> UserResponseDTO | None:
         """
         Busca y actualiza el hándicap de un usuario.
 

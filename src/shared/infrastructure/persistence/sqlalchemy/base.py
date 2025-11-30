@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Base SQLAlchemy Configuration - Centralized Registry and Metadata.
 
@@ -23,7 +22,6 @@ Uso:
 """
 
 from sqlalchemy.orm import registry
-
 
 # Registry centralizado para toda la aplicación
 # Todos los módulos deben usar este registry para registrar sus mappers

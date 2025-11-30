@@ -1,16 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Obtener Competition.
 
 Permite obtener los detalles de una competición por su ID.
 """
 
-from typing import Optional
+
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 
 
 class CompetitionNotFoundError(Exception):
@@ -42,7 +41,7 @@ class GetCompetitionUseCase:
     async def execute(
         self,
         competition_id: CompetitionId
-    ) -> Optional[Competition]:
+    ) -> Competition | None:
         """
         Ejecuta el caso de uso de consulta de competición.
 
@@ -60,7 +59,7 @@ class GetCompetitionUseCase:
         async with self._uow:
             # Buscar la competición
             competition = await self._uow.competitions.find_by_id(competition_id)
-            
+
             if not competition:
                 raise CompetitionNotFoundError(
                     f"No existe competición con ID {competition_id.value}"

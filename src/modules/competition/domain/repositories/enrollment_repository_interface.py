@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Enrollment Repository Interface - Domain Layer
 
@@ -7,12 +6,13 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List
-from ..entities.enrollment import Enrollment
-from ..value_objects.enrollment_id import EnrollmentId
-from ..value_objects.competition_id import CompetitionId
-from ..value_objects.enrollment_status import EnrollmentStatus
+
 from src.modules.user.domain.value_objects.user_id import UserId
+
+from ..entities.enrollment import Enrollment
+from ..value_objects.competition_id import CompetitionId
+from ..value_objects.enrollment_id import EnrollmentId
+from ..value_objects.enrollment_status import EnrollmentStatus
 
 
 class EnrollmentRepositoryInterface(ABC):
@@ -57,7 +57,7 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, enrollment_id: EnrollmentId) -> Optional[Enrollment]:
+    async def find_by_id(self, enrollment_id: EnrollmentId) -> Enrollment | None:
         """
         Busca una inscripción por su ID único.
 
@@ -78,7 +78,7 @@ class EnrollmentRepositoryInterface(ABC):
         competition_id: CompetitionId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición específica.
 
@@ -104,7 +104,7 @@ class EnrollmentRepositoryInterface(ABC):
         status: EnrollmentStatus,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca inscripciones de una competición filtradas por estado.
 
@@ -130,7 +130,7 @@ class EnrollmentRepositoryInterface(ABC):
         user_id: UserId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario específico.
 
@@ -213,7 +213,7 @@ class EnrollmentRepositoryInterface(ABC):
         self,
         competition_id: CompetitionId,
         team_id: str
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones asignadas a un equipo específico.
 

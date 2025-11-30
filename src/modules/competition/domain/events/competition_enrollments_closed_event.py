@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionEnrollmentsClosedEvent - Se emite cuando se cierran las inscripciones.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

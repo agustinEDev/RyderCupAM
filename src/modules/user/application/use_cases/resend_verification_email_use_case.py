@@ -6,14 +6,13 @@ Caso de uso para reenviar el email de verificación a un usuario.
 
 import logging
 import secrets
-from typing import Optional
 
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class ResendVerificationEmailUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        email_service: Optional[IEmailService] = None
+        email_service: IEmailService | None = None
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)

@@ -7,7 +7,6 @@ pero se implementa en infraestructura.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class HandicapService(ABC):
@@ -24,7 +23,7 @@ class HandicapService(ABC):
     """
 
     @abstractmethod
-    async def search_handicap(self, full_name: str) -> Optional[float]:
+    async def search_handicap(self, full_name: str) -> float | None:
         """
         Busca el hándicap de un jugador por su nombre completo.
 

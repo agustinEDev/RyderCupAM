@@ -7,7 +7,6 @@ Este evento se dispara cuando el hándicap de un usuario es actualizado.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -33,8 +32,8 @@ class HandicapUpdatedEvent(DomainEvent):
 
     # Datos del cambio de hándicap
     user_id: str
-    old_handicap: Optional[float]
-    new_handicap: Optional[float]
+    old_handicap: float | None
+    new_handicap: float | None
     updated_at: datetime
 
     @property
@@ -48,7 +47,7 @@ class HandicapUpdatedEvent(DomainEvent):
         return self.old_handicap != self.new_handicap
 
     @property
-    def handicap_delta(self) -> Optional[float]:
+    def handicap_delta(self) -> float | None:
         """
         Calcula la diferencia entre el hándicap nuevo y el viejo.
 

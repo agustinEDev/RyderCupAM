@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionCompletedEvent - Se emite cuando el torneo finaliza.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

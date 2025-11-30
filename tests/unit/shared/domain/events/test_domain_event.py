@@ -9,10 +9,11 @@ Tests que validan:
 5. Clase abstracta no puede instanciarse directamente
 """
 
-import pytest
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
+
+import pytest
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -47,23 +48,23 @@ class TestDomainEvent:
         """Evento se crea con metadata automática (ID, timestamp, versión)."""
         # Act - Solo campos específicos, metadatos se generan automáticamente
         event = SampleEvent(
-            user_id="user-123", 
+            user_id="user-123",
             action="registered"
         )
-        
+
         # Assert - Datos específicos
         assert event.user_id == "user-123"
         assert event.action == "registered"
-        
+
         # Assert - Metadata automática generada por DomainEvent
         assert event.event_id is not None
         assert len(event.event_id) == 36  # UUID format
         assert isinstance(event.occurred_on, datetime)
         assert event.event_version == 1
-        
+
         # Assert - aggregate_id generado automáticamente desde user_id
         assert event.aggregate_id == "user-123"
-        
+
         # Verificar que event_id es UUID válido
         UUID(event.event_id)  # No debe lanzar excepción
 
@@ -71,18 +72,18 @@ class TestDomainEvent:
         """Los eventos son inmutables (no se pueden modificar después de crear)."""
         # Arrange
         event = SampleEvent(
-            
+
             user_id="user-123",
             action="registered"
         )
-        
+
         # Act & Assert - FrozenInstanceError para dataclasses frozen
         with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.user_id = "user-456"
-        
+
         with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.aggregate_id = "user-999"
-        
+
         with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.event_id = "new-id"
 
@@ -91,7 +92,7 @@ class TestDomainEvent:
         # Act
         event1 = SampleEvent(user_id="user-1", action="login")
         event2 = SampleEvent(user_id="user-2", action="logout")
-        
+
         # Assert
         assert event1.event_id != event2.event_id
         assert len(event1.event_id) == 36
@@ -101,14 +102,14 @@ class TestDomainEvent:
         """Los eventos tienen timestamp reciente (dentro de 1 segundo)."""
         # Arrange
         before = datetime.now()
-        
+
         # Act
         event = SampleEvent(user_id="user-123", action="created")
-        
+
         # Assert
         after = datetime.now()
         assert before <= event.occurred_on <= after
-        
+
         # Timestamp debe estar muy cerca del momento actual
         time_diff = (after - event.occurred_on).total_seconds()
         assert time_diff < 1.0  # Menos de 1 segundo
@@ -117,28 +118,28 @@ class TestDomainEvent:
         """El método to_dict() serializa correctamente el evento."""
         # Arrange
         event = SampleEvent(
-            
-            user_id="user-456", 
+
+            user_id="user-456",
             action="profile_updated"
         )
-        
+
         # Act
         event_dict = event.to_dict()
-        
+
         # Assert
         assert isinstance(event_dict, dict)
-        
+
         # Metadata
         assert event_dict['event_id'] == event.event_id
         assert event_dict['event_type'] == 'SampleEvent'
         assert event_dict['aggregate_id'] == event.aggregate_id  # Generado automáticamente
         assert event_dict['occurred_on'] == event.occurred_on.isoformat()
         assert event_dict['event_version'] == 1
-        
+
         # Datos específicos
         assert event_dict['data']['user_id'] == 'user-456'
         assert event_dict['data']['action'] == 'profile_updated'
-        
+
         # Los campos de metadata no deben estar duplicados en 'data'
         assert 'event_id' not in event_dict['data']
         assert 'aggregate_id' not in event_dict['data']
@@ -148,20 +149,20 @@ class TestDomainEvent:
         """Representación string es clara y contiene info clave."""
         # Arrange
         event = SampleEvent(
-            
+
             user_id="user-123",
             action="registered"
         )
-        
+
         # Act
         str_repr = str(event)
         repr_repr = repr(event)
-        
+
         # Assert - __str__ usa nuestro método personalizado
         assert "SampleEvent" in str_repr
         assert "user-123" in str_repr
         assert event.event_id[:8] in str_repr  # Primeros 8 chars del ID
-        
+
         # __repr__ usa el generado por dataclass (comportamiento correcto)
         assert "SampleEvent" in repr_repr
         assert "user-123" in repr_repr
@@ -173,14 +174,14 @@ class TestDomainEvent:
         # Act
         event1 = SampleEvent(user_id="user-123", action="login")
         event2 = SampleEvent(user_id="user-123", action="login")
-        
+
         # Assert - Los eventos son diferentes objetos aunque tengan mismos datos
         assert event1 is not event2  # Diferentes objetos en memoria
         assert event1.event_id != event2.event_id  # IDs únicos
         assert event1.aggregate_id == event2.aggregate_id  # Mismo aggregate_id
         assert event1.user_id == event2.user_id  # Mismos datos
         assert event1.action == event2.action
-        
+
         # Los dataclass frozen comparan por valor, pero tienen IDs diferentes
         # así que son conceptualmente diferentes eventos aunque tengan mismos datos
 
@@ -188,6 +189,6 @@ class TestDomainEvent:
         """La versión del evento por defecto es 1."""
         # Act
         event = SampleEvent(user_id="user-123", action="test")
-        
+
         # Assert
         assert event.event_version == 1

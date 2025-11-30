@@ -4,8 +4,9 @@ Tests para UserLoggedOutEvent
 Tests unitarios para el evento de dominio UserLoggedOutEvent.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from src.modules.user.domain.events.user_logged_out_event import UserLoggedOutEvent
 
@@ -175,13 +176,13 @@ class TestUserLoggedOutEvent:
         """
         # Arrange
         before_creation = datetime.now()
-        
+
         # Act
         event = UserLoggedOutEvent(
             user_id="test-user",
             logged_out_at=datetime.now()
         )
-        
+
         after_creation = datetime.now()
 
         # Assert

@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Listar Competitions con filtros.
 
 Permite obtener lista de competiciones con filtros opcionales.
 """
 
-from typing import List, Optional
+
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class ListCompetitionsUseCase:
@@ -48,11 +47,11 @@ class ListCompetitionsUseCase:
 
     async def execute(
         self,
-        status: Optional[str] = None,
-        creator_id: Optional[str] = None,
-        search_name: Optional[str] = None,
-        search_creator: Optional[str] = None,
-    ) -> List[Competition]:
+        status: str | None = None,
+        creator_id: str | None = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+    ) -> list[Competition]:
         """
         Ejecuta el caso de uso de listado de competiciones.
 
@@ -77,16 +76,16 @@ class ListCompetitionsUseCase:
                     status=status,
                     creator_id=creator_id
                 )
-            
+
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
             return competitions
 
     async def _fetch_filtered_competitions(
         self,
-        status: Optional[str],
-        creator_id: Optional[str],
-    ) -> List[Competition]:
+        status: str | None,
+        creator_id: str | None,
+    ) -> list[Competition]:
         """
         Obtiene competiciones aplicando filtros.
 
@@ -121,11 +120,11 @@ class ListCompetitionsUseCase:
 
     async def _fetch_with_search(
         self,
-        search_name: Optional[str],
-        search_creator: Optional[str],
-        status: Optional[str],
-        creator_id: Optional[str],
-    ) -> List[Competition]:
+        search_name: str | None,
+        search_creator: str | None,
+        status: str | None,
+        creator_id: str | None,
+    ) -> list[Competition]:
         """
         Obtiene competiciones usando búsqueda avanzada.
 
@@ -140,10 +139,10 @@ class ListCompetitionsUseCase:
         """
         # Convertir status string a enum si existe
         status_enum = CompetitionStatus(status.upper()) if status else None
-        
+
         # Convertir creator_id string a UserId si existe
         creator_user_id = UserId(creator_id) if creator_id else None
-        
+
         # Usar el método find_by_filters del repositorio
         return await self._uow.competitions.find_by_filters(
             search_name=search_name,

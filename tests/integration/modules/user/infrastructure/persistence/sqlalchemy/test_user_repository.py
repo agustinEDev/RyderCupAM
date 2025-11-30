@@ -1,4 +1,5 @@
 import pytest
+
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,

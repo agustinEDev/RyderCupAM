@@ -10,12 +10,13 @@ Este archivo contiene tests que verifican:
 - Persistencia de cambios
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
-    ResendVerificationError
+    ResendVerificationError,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (

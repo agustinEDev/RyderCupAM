@@ -1,21 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Retirar Inscripción (Withdraw Enrollment).
 
 Permite a un jugador aprobado retirarse de una competición.
 """
 
-from typing import Optional
 from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class EnrollmentNotFoundError(Exception):

@@ -2,6 +2,7 @@
 import uuid
 from dataclasses import dataclass
 
+
 class InvalidUserIdError(Exception):
     """Excepción lanzada cuando un UserId no es válido."""
     pass
@@ -25,8 +26,8 @@ class UserId:
         elif isinstance(value, str):
             try:
                 val = uuid.UUID(value)
-            except ValueError:
-                raise InvalidUserIdError(f"'{value}' no es un string UUID válido")
+            except ValueError as e:
+                raise InvalidUserIdError(f"'{value}' no es un string UUID válido") from e
         else:
             raise InvalidUserIdError(f"Se esperaba un UUID o un string, pero se recibió {type(value)}")
 

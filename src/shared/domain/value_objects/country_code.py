@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CountryCode Value Object - Código ISO 3166-1 alpha-2 de país.
 
@@ -45,6 +44,7 @@ class CountryCode:
         >>> CountryCode("E1")  # Lanza InvalidCountryCodeError (contiene número)
     """
 
+    CODE_LENGTH = 2
     value: str
 
     def __post_init__(self):
@@ -62,9 +62,9 @@ class CountryCode:
         normalized = self.value.strip().upper()
 
         # 2. Validar longitud (exactamente 2 caracteres)
-        if len(normalized) != 2:
+        if len(normalized) != self.CODE_LENGTH:
             raise InvalidCountryCodeError(
-                f"El código de país debe tener exactamente 2 caracteres. "
+                f"El código de país debe tener exactamente {self.CODE_LENGTH} caracteres. "
                 f"Se recibió: '{self.value}' (longitud: {len(normalized)})"
             )
 

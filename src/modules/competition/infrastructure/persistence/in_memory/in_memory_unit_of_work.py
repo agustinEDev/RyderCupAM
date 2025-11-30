@@ -1,23 +1,23 @@
-# -*- coding: utf-8 -*-
 """In-Memory Unit of Work para Competition Module (testing)."""
 
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
-from src.modules.competition.domain.repositories.enrollment_repository_interface import (
-    EnrollmentRepositoryInterface,
-)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.repositories.enrollment_repository_interface import (
+    EnrollmentRepositoryInterface,
 )
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
-from .in_memory_competition_repository import InMemoryCompetitionRepository
-from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
 from src.shared.infrastructure.persistence.in_memory.in_memory_country_repository import (
     InMemoryCountryRepository,
 )
+
+from .in_memory_competition_repository import InMemoryCompetitionRepository
+from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
 
 
 class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):

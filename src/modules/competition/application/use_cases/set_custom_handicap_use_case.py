@@ -1,21 +1,19 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Establecer Hándicap Personalizado (Set Custom Handicap).
 
 Permite al creador establecer un hándicap personalizado para un jugador inscrito.
 """
 
-from decimal import Decimal
 from src.modules.competition.application.dto.enrollment_dto import (
     SetCustomHandicapRequestDTO,
     SetCustomHandicapResponseDTO,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class EnrollmentNotFoundError(Exception):

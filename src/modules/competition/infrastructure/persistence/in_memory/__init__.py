@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """In-Memory Persistence para Competition Module."""
 
 from .in_memory_competition_repository import InMemoryCompetitionRepository

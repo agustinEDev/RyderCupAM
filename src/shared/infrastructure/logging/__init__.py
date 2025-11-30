@@ -21,39 +21,34 @@ Características:
 """
 
 # Re-exportaciones principales
+from .config import HandlerConfig, LogConfig, LogFormat, LogHandler
+from .event_handlers import AuditEventHandler, EventLoggingHandler
+from .factory import LoggerFactory, configure_logging, get_logger
+from .formatters import FormatterFactory, JsonFormatter, StructuredFormatter, TextFormatter
 from .logger import Logger, LogLevel
-from .config import LogConfig, LogFormat, LogHandler, HandlerConfig
-from .factory import LoggerFactory, get_logger, configure_logging
 from .python_logger import PythonLogger
-from .formatters import FormatterFactory, TextFormatter, JsonFormatter, StructuredFormatter
-from .event_handlers import EventLoggingHandler, AuditEventHandler
 
 __all__ = [
-    # Core interfaces
-    'Logger',
-    'LogLevel',
-    
+    'AuditEventHandler',
+    # Domain Events integration
+    'EventLoggingHandler',
+    # Formatters
+    'FormatterFactory',
+    'HandlerConfig',
+    'JsonFormatter',
     # Configuration
     'LogConfig',
     'LogFormat',
-    'LogHandler', 
-    'HandlerConfig',
-    
+    'LogHandler',
+    'LogLevel',
+    # Core interfaces
+    'Logger',
     # Factory and convenience functions
     'LoggerFactory',
-    'get_logger',
-    'configure_logging',
-    
     # Implementations
     'PythonLogger',
-    
-    # Formatters
-    'FormatterFactory',
-    'TextFormatter',
-    'JsonFormatter', 
     'StructuredFormatter',
-    
-    # Domain Events integration
-    'EventLoggingHandler',
-    'AuditEventHandler'
+    'TextFormatter',
+    'configure_logging',
+    'get_logger'
 ]

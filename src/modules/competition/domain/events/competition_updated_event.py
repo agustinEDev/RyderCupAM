@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionUpdatedEvent - Se emite cuando se actualiza la información del torneo.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 
