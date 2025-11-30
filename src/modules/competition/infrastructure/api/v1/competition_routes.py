@@ -318,7 +318,7 @@ class CompetitionDTOMapper:
                 user_enrollment_status = user_enrollment.status.value if hasattr(user_enrollment.status, 'value') else user_enrollment.status
                 logger.info(f"✅ Found enrollment for user {current_user_id.value} in competition {competition.id.value}: {user_enrollment_status}")
             else:
-                logger.info(f"ℹ️ No enrollment found for user {current_user_id.value} in competition {competition.id.value}")
+                logger.info(f"[INFO] No enrollment found for user {current_user_id.value} in competition {competition.id.value}")
         except Exception as e:
             logger.error(f"❌ Error fetching user enrollment: {e}")
             user_enrollment_status = None
@@ -844,8 +844,8 @@ async def delete_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),  # noqa: ARG001
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),  # noqa: ARG001
 ):
     """
     Endpoint para eliminar físicamente una competición.
