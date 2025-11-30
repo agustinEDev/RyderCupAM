@@ -25,6 +25,10 @@ from ..value_objects.handicap_settings import HandicapSettings
 from ..value_objects.location import Location
 from ..value_objects.team_assignment import TeamAssignment
 
+# Constantes de validación
+MIN_PLAYERS = 2
+MAX_PLAYERS = 100
+
 
 class CompetitionStateError(Exception):
     """Excepción lanzada cuando se intenta una operación en un estado inválido."""
@@ -433,8 +437,8 @@ class Competition:
             self.handicap_settings = handicap_settings
 
         if max_players is not None:
-            if not 2 <= max_players <= 100:
-                raise ValueError("max_players debe estar entre 2 y 100")
+            if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
+                raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
             self.max_players = max_players
 
         if team_assignment is not None:

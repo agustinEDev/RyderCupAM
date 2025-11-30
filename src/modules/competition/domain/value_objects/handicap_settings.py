@@ -47,8 +47,8 @@ class HandicapSettings:
     IMPORTANTE:
     Este VO solo define la configuración general del torneo.
     El cálculo real del Playing Handicap se hará en cada Match considerando:
-    - Course Handicap = (Handicap Index × Slope Rating / 113) + (Course Rating - Par)
-    - Playing Handicap = Course Handicap × Allowance Factor (según formato)
+    - Course Handicap = (Handicap Index x Slope Rating / 113) + (Course Rating - Par)
+    - Playing Handicap = Course Handicap x Allowance Factor (según formato)
 
     Ejemplos:
         >>> # Torneo scratch (sin hándicap) - Para jugadores de nivel similar

@@ -7,6 +7,9 @@ Aplica validaciones de negocio y normalización automática.
 
 from dataclasses import dataclass
 
+# Constantes de validación
+MAX_COMPETITION_NAME_LENGTH = 100
+
 
 class InvalidCompetitionNameError(Exception):
     """Excepción lanzada cuando el nombre de una competición no es válido."""
@@ -54,9 +57,9 @@ class CompetitionName:
             raise InvalidCompetitionNameError("El nombre de la competición no puede estar vacío")
 
         # 3. Validar longitud máxima
-        if len(normalized_name) > 100:
+        if len(normalized_name) > MAX_COMPETITION_NAME_LENGTH:
             raise InvalidCompetitionNameError(
-                f"El nombre de la competición no puede exceder 100 caracteres. "
+                f"El nombre de la competición no puede exceder {MAX_COMPETITION_NAME_LENGTH} caracteres. "
                 f"Longitud actual: {len(normalized_name)}"
             )
 

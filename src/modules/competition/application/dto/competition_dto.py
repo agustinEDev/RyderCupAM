@@ -1,10 +1,3 @@
-# Descripciones reutilizables para campos
-COMPETITION_NAME_DESC = "Nombre de la competición."
-MAX_PLAYERS_DESC = "Número máximo de jugadores."
-COMPETITION_ID_DESC = "ID de la competición."
-# Descripciones para nombres de equipos
-TEAM_1_NAME_DESC = "Nombre del equipo 1."
-TEAM_2_NAME_DESC = "Nombre del equipo 2."
 # -*- coding: utf-8 -*-
 """DTOs para el módulo Competition - Application Layer."""
 
@@ -12,6 +5,14 @@ from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# Descripciones reutilizables para campos
+COMPETITION_NAME_DESC = "Nombre de la competición."
+MAX_PLAYERS_DESC = "Número máximo de jugadores."
+COMPETITION_ID_DESC = "ID de la competición."
+# Descripciones para nombres de equipos
+TEAM_1_NAME_DESC = "Nombre del equipo 1."
+TEAM_2_NAME_DESC = "Nombre del equipo 2."
 
 
 # Import shared DTOs

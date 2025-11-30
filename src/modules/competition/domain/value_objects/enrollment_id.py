@@ -47,10 +47,10 @@ class EnrollmentId:
         elif isinstance(value, str):
             try:
                 val = uuid.UUID(value)
-            except ValueError:
+            except ValueError as e:
                 raise InvalidEnrollmentIdError(
                     f"'{value}' no es un string UUID válido"
-                )
+                ) from e
         else:
             raise InvalidEnrollmentIdError(
                 f"Se esperaba un UUID o un string, pero se recibió {type(value).__name__}"
