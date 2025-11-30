@@ -291,7 +291,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             List[Competition]: Competiciones que cumplen los criterios
         """
-        from src.modules.user.domain.entities.user import User
+        # Import here to avoid circular dependency with User module
+        from src.modules.user.domain.entities.user import User  # noqa: PLC0415
 
         # Construir query base
         query = select(Competition)
@@ -316,11 +317,11 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                 )
             )
 
-        # Filtro: status
+        # Apply filter: competition status
         if status:
             conditions.append(Competition._status_value == status.value)
 
-        # Filtro: creator_id
+        # Apply filter: creator user ID
         if creator_id:
             conditions.append(Competition.creator_id == creator_id)
 

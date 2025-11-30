@@ -1,3 +1,108 @@
+"""
+Competition Routes - API REST Layer (Infrastructure).
+
+Endpoints FastAPI para el módulo Competition siguiendo Clean Architecture.
+"""
+
+import logging
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from src.config.dependencies import (
+    get_activate_competition_use_case,
+    get_cancel_competition_use_case,
+    get_close_enrollments_use_case,
+    get_competition_uow,
+    get_complete_competition_use_case,
+    get_create_competition_use_case,
+    get_current_user,
+    get_delete_competition_use_case,
+    get_get_competition_use_case,
+    get_list_competitions_use_case,
+    get_start_competition_use_case,
+    get_uow,  # User Unit of Work para obtener datos del creador
+    get_update_competition_use_case,
+)
+from src.modules.competition.application.dto.competition_dto import (
+    ActivateCompetitionRequestDTO,
+    CancelCompetitionRequestDTO,
+    CloseEnrollmentsRequestDTO,
+    CompetitionResponseDTO,
+    CompleteCompetitionRequestDTO,
+    CountryResponseDTO,
+    CreateCompetitionRequestDTO,
+    CreateCompetitionResponseDTO,
+    CreatorDTO,
+    DeleteCompetitionRequestDTO,
+    StartCompetitionRequestDTO,
+    UpdateCompetitionRequestDTO,
+)
+from src.modules.competition.application.use_cases.activate_competition_use_case import (
+    ActivateCompetitionUseCase,
+    CompetitionNotFoundError as ActivateNotFoundError,
+    NotCompetitionCreatorError as ActivateNotCreatorError,
+)
+from src.modules.competition.application.use_cases.cancel_competition_use_case import (
+    CancelCompetitionUseCase,
+    CompetitionNotFoundError as CancelNotFoundError,
+    NotCompetitionCreatorError as CancelNotCreatorError,
+)
+from src.modules.competition.application.use_cases.close_enrollments_use_case import (
+    CloseEnrollmentsUseCase,
+    CompetitionNotFoundError as CloseNotFoundError,
+    NotCompetitionCreatorError as CloseNotCreatorError,
+)
+from src.modules.competition.application.use_cases.complete_competition_use_case import (
+    CompetitionNotFoundError as CompleteNotFoundError,
+    CompleteCompetitionUseCase,
+    NotCompetitionCreatorError as CompleteNotCreatorError,
+)
+from src.modules.competition.application.use_cases.create_competition_use_case import (
+    CompetitionAlreadyExistsError,
+    CreateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.delete_competition_use_case import (
+    CompetitionNotDeletableError,
+    CompetitionNotFoundError as DeleteNotFoundError,
+    DeleteCompetitionUseCase,
+    NotCompetitionCreatorError as DeleteNotCreatorError,
+)
+from src.modules.competition.application.use_cases.get_competition_use_case import (
+    CompetitionNotFoundError as GetNotFoundError,
+    GetCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.list_competitions_use_case import (
+    ListCompetitionsUseCase,
+)
+from src.modules.competition.application.use_cases.start_competition_use_case import (
+    CompetitionNotFoundError as StartNotFoundError,
+    NotCompetitionCreatorError as StartNotCreatorError,
+    StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.update_competition_use_case import (
+    CompetitionNotEditableError,
+    CompetitionNotFoundError as UpdateNotFoundError,
+    NotCompetitionCreatorError as UpdateNotCreatorError,
+    UpdateCompetitionUseCase,
+)
+from src.modules.competition.domain.entities.competition import Competition, CompetitionStateError
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.location_builder import InvalidCountryError
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
+
+# ======================================================================================
+# HELPER FUNCTIONS
+# ======================================================================================
+
 
 # Helpers privados para modularidad y menor complejidad
 
@@ -149,107 +254,7 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
             )
             result.append(dto)
     return result
-# -*- coding: utf-8 -*-
-"""
-Competition Routes - API REST Layer (Infrastructure).
 
-Endpoints FastAPI para el módulo Competition siguiendo Clean Architecture.
-"""
-
-import logging
-from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-
-from src.config.dependencies import (
-    get_activate_competition_use_case,
-    get_cancel_competition_use_case,
-    get_close_enrollments_use_case,
-    get_competition_uow,
-    get_complete_competition_use_case,
-    get_create_competition_use_case,
-    get_current_user,
-    get_delete_competition_use_case,
-    get_get_competition_use_case,
-    get_list_competitions_use_case,
-    get_start_competition_use_case,
-    get_uow,  # User Unit of Work para obtener datos del creador
-    get_update_competition_use_case,
-)
-from src.modules.competition.application.dto.competition_dto import (
-    ActivateCompetitionRequestDTO,
-    CancelCompetitionRequestDTO,
-    CloseEnrollmentsRequestDTO,
-    CompetitionResponseDTO,
-    CompleteCompetitionRequestDTO,
-    CountryResponseDTO,
-    CreateCompetitionRequestDTO,
-    CreateCompetitionResponseDTO,
-    CreatorDTO,
-    DeleteCompetitionRequestDTO,
-    StartCompetitionRequestDTO,
-    UpdateCompetitionRequestDTO,
-)
-from src.modules.competition.application.use_cases.activate_competition_use_case import (
-    ActivateCompetitionUseCase,
-    CompetitionNotFoundError as ActivateNotFoundError,
-    NotCompetitionCreatorError as ActivateNotCreatorError,
-)
-from src.modules.competition.application.use_cases.cancel_competition_use_case import (
-    CancelCompetitionUseCase,
-    CompetitionNotFoundError as CancelNotFoundError,
-    NotCompetitionCreatorError as CancelNotCreatorError,
-)
-from src.modules.competition.application.use_cases.close_enrollments_use_case import (
-    CloseEnrollmentsUseCase,
-    CompetitionNotFoundError as CloseNotFoundError,
-    NotCompetitionCreatorError as CloseNotCreatorError,
-)
-from src.modules.competition.application.use_cases.complete_competition_use_case import (
-    CompetitionNotFoundError as CompleteNotFoundError,
-    CompleteCompetitionUseCase,
-    NotCompetitionCreatorError as CompleteNotCreatorError,
-)
-from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CompetitionAlreadyExistsError,
-    CreateCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.delete_competition_use_case import (
-    CompetitionNotDeletableError,
-    CompetitionNotFoundError as DeleteNotFoundError,
-    DeleteCompetitionUseCase,
-    NotCompetitionCreatorError as DeleteNotCreatorError,
-)
-from src.modules.competition.application.use_cases.get_competition_use_case import (
-    CompetitionNotFoundError as GetNotFoundError,
-    GetCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.list_competitions_use_case import (
-    ListCompetitionsUseCase,
-)
-from src.modules.competition.application.use_cases.start_competition_use_case import (
-    CompetitionNotFoundError as StartNotFoundError,
-    NotCompetitionCreatorError as StartNotCreatorError,
-    StartCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.update_competition_use_case import (
-    CompetitionNotEditableError,
-    CompetitionNotFoundError as UpdateNotFoundError,
-    NotCompetitionCreatorError as UpdateNotCreatorError,
-    UpdateCompetitionUseCase,
-)
-from src.modules.competition.domain.entities.competition import Competition, CompetitionStateError
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
-from src.modules.competition.domain.services.location_builder import InvalidCountryError
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.user.domain.value_objects.user_id import UserId
-
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

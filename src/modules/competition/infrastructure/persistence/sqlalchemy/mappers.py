@@ -38,10 +38,10 @@ from src.shared.domain.value_objects.country_code import CountryCode
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
-COUNTRIES_CODE_FK = 'countries.code'
-
 # User Value Object (FK)
 from src.modules.user.domain.value_objects.user_id import UserId
+
+COUNTRIES_CODE_FK = 'countries.code'
 
 # =============================================================================
 # TYPE DECORATORS - Para Value Objects complejos (IDs)

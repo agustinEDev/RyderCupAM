@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime

@@ -117,7 +117,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """
         results = list(self._competitions.values())
 
-        # Filtro: search_name (case-insensitive)
+        # Apply filter: search by competition name (case-insensitive)
         if search_name:
             search_lower = search_name.lower()
             results = [
@@ -125,11 +125,11 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
                 if search_lower in str(comp.name).lower()
             ]
 
-        # Filtro: status
+        # Apply filter: filter by competition status
         if status:
             results = [comp for comp in results if comp.status == status]
 
-        # Filtro: creator_id
+        # Apply filter: filter by creator user ID
         if creator_id:
             results = [comp for comp in results if comp.creator_id == creator_id]
 
