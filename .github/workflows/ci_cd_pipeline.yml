@@ -26,7 +26,7 @@ jobs:
   # Configura el entorno, instala dependencias y cachea para los demás jobs
 
   preparation:
-    name: Setup & Install Dependencies
+    name: 🔧 Preparation
     runs-on: ubuntu-latest
     outputs:
       python-version: ${{ steps.setup-python.outputs.python-version }}
@@ -70,24 +70,32 @@ jobs:
   # Ejecuta 662 tests unitarios (sin base de datos)
 
   unit_tests:
-    name: Unit Tests (662 tests)
+    name: 🧪 Unit Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: preparation
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14']
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
       - name: Restore pip cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: |
@@ -96,10 +104,11 @@ jobs:
 
       - name: Run Unit Tests with Coverage
         run: |
-          echo "Running unit tests (without database)..."
+          echo "Running unit tests on Python ${{ matrix.python-version }}..."
           pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html
 
       - name: Upload Coverage Report (XML)
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-xml
@@ -107,6 +116,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Coverage Report (HTML)
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-html
@@ -119,7 +129,7 @@ jobs:
   # Ejecuta 72 tests de integración (con PostgreSQL)
 
   integration_tests:
-    name: Integration Tests (72 tests + PostgreSQL)
+    name: 🗄️ Integration Tests
     runs-on: ubuntu-latest
     needs: preparation
 
@@ -185,7 +195,7 @@ jobs:
   # Ejecuta múltiples herramientas de seguridad
 
   security_checks:
-    name: Security Scanning
+    name: 🔒 Security Checks
     runs-on: ubuntu-latest
     needs: preparation
 
@@ -243,7 +253,7 @@ jobs:
   # Verifica calidad de código con Ruff
 
   linting:
-    name: Code Quality (Ruff)
+    name: 📝 Code Quality
     runs-on: ubuntu-latest
     needs: preparation
 
@@ -285,7 +295,7 @@ jobs:
   # Verifica consistencia de tipos con Mypy
 
   type_checking:
-    name: Type Checking (Mypy)
+    name: 🔬 Type Checking
     runs-on: ubuntu-latest
     needs: preparation
 
@@ -321,7 +331,7 @@ jobs:
   # Construye la aplicación Docker SOLO si todos los checks pasan
 
   build:
-    name: Build Docker Image
+    name: 🐳 Build Docker
     runs-on: ubuntu-latest
     needs: [unit_tests, integration_tests, security_checks, linting, type_checking]
     # Solo ejecutar si todos los jobs críticos pasaron (success)
@@ -347,25 +357,48 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Test Docker Image
+      - name: Validate Alembic Migrations Syntax
         run: |
-          echo "🐳 Testing Docker image startup..."
+          echo "🔍 Validating Alembic migrations syntax..."
+          docker run --rm \
+            -e DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy \
+            rydercupam:${{ github.sha }} \
+            alembic upgrade head --sql > /dev/null 2>&1
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Alembic migrations syntax is valid"
+          else
+            echo "❌ Alembic migrations have syntax errors"
+            docker run --rm \
+              -e DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy \
+              rydercupam:${{ github.sha }} \
+              alembic upgrade head --sql
+            exit 1
+          fi
+
+      - name: Test Application Startup (without DB)
+        run: |
+          echo "🐳 Testing FastAPI application can start..."
+          # Override entrypoint to skip migrations and start app directly
           docker run --name test-container -d -p 8000:8000 \
             -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost/dummy \
-            rydercupam:${{ github.sha }}
+            --entrypoint uvicorn \
+            rydercupam:${{ github.sha }} \
+            main:app --host 0.0.0.0 --port 8000
 
-          echo "Waiting for container to start..."
-          sleep 10
+          echo "Waiting for FastAPI to start..."
+          sleep 5
 
           # Check if container is running
           if docker ps | grep test-container; then
-            echo "✅ Container started successfully"
-            docker logs test-container
+            echo "✅ FastAPI application started successfully"
+            docker logs test-container | head -20
             docker stop test-container
             docker rm test-container
           else
-            echo "❌ Container failed to start"
+            echo "❌ FastAPI failed to start"
             docker logs test-container
+            docker rm -f test-container || true
             exit 1
           fi
 
@@ -387,7 +420,7 @@ jobs:
   # Job final que depende de todos los anteriores
 
   pipeline_summary:
-    name: Pipeline Summary
+    name: 📊 Summary
     runs-on: ubuntu-latest
     needs: [unit_tests, integration_tests, security_checks, linting, type_checking, build]
     if: always()
