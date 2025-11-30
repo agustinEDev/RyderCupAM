@@ -32,14 +32,14 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 
+# User Value Object (FK)
+from src.modules.user.domain.value_objects.user_id import UserId
+
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
-
-# User Value Object (FK)
-from src.modules.user.domain.value_objects.user_id import UserId
 
 COUNTRIES_CODE_FK = 'countries.code'
 

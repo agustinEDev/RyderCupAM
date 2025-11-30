@@ -190,8 +190,8 @@ class LoggerFactory:
             import yaml
             with open(path, encoding='utf-8') as f:
                 return yaml.safe_load(f) or {}
-        except ImportError:
-            raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml")
+        except ImportError as e:
+            raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
 
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
