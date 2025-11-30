@@ -9,6 +9,72 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.10.0] - 2025-11-30
+
+### Added - CI/CD Pipeline con GitHub Actions
+
+**🔄 Pipeline de Integración y Despliegue Continuo**
+
+#### Implementación Completa de CI/CD
+- **GitHub Actions Workflow** configurado en `.github/workflows/ci_cd_pipeline.yml`
+- **7 jobs paralelos** ejecutándose en cada push y pull request:
+  1. Preparation (setup Python + cache)
+  2. Unit Tests (Python 3.11, 3.12 matrix)
+  3. Integration Tests (PostgreSQL service container)
+  4. Security Scan (Gitleaks)
+  5. Code Quality (Ruff)
+  6. Type Checking (Mypy)
+  7. Database Migrations (Alembic validation)
+
+#### Configuraciones Técnicas
+- **Mypy Configuration** (`mypy.ini`):
+  - Configuración pragmática para SQLAlchemy imperative mapping
+  - Balance entre strictness y productividad
+  - 173 archivos validados, 0 errores
+- **Gitleaks Configuration** (`.gitleaksignore`):
+  - Whitelist específico para false positives en documentación
+  - Prevención de commits con secretos reales
+- **Matrix Strategy**: Tests en Python 3.11 y 3.12
+- **Dependency Caching**: pip cache para reducir tiempo de build
+
+#### Métricas de Pipeline
+- **Duración total**: ~3 minutos
+- **Tests ejecutados**: 667 tests (97.6% passing)
+- **Paralelización**: 7 jobs independientes
+- **Cobertura**: Unit + Integration + E2E
+
+### Fixed - Code Quality Issues
+
+**Ruff Linting (B904, I001, ARG001)**
+- Añadido exception chaining (`from e`) a 20+ exception handlers
+- Fix import sorting en `mappers.py`
+- Suprimido warning ARG001 en parámetros de FastAPI Depends
+
+**Mypy Type Checking**
+- Reducción de errores: 127 → 0
+- Configuración por módulo (domain, application, infrastructure)
+- Ignora dynamic attributes esperados en SQLAlchemy ORM
+
+### Documentation
+
+**ADR-021**: GitHub Actions CI/CD Pipeline
+- Decisión técnica documentada
+- Comparación con alternativas (GitLab CI, CircleCI, Jenkins)
+- Justificación y consecuencias
+
+**README.md**
+- Badge de CI/CD añadido
+- Actualización de estadísticas (667 tests)
+- Sección de CI/CD Pipeline
+- Estado del proyecto actualizado (Fase 2 completada)
+
+**CLAUDE.md**
+- Nueva sección: CI/CD Pipeline
+- Configuraciones de Mypy y Gitleaks
+- Tiempos de ejecución del pipeline
+
+---
+
 ## [1.9.2] - 2025-11-25
 
 ### Fixed - Refactorización de Calidad de Código (SonarQube)
