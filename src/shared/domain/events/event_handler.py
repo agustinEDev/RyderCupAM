@@ -6,7 +6,7 @@ handlers de eventos de dominio, siguiendo principios de Clean Architecture.
 """
 
 from abc import ABC, abstractmethod
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 from .domain_event import DomainEvent
 
@@ -14,7 +14,7 @@ from .domain_event import DomainEvent
 EventType = TypeVar('EventType', bound=DomainEvent)
 
 
-class EventHandler[EventType: DomainEvent](ABC):
+class EventHandler(Generic[EventType], ABC):
     """
     Interfaz base para todos los handlers de eventos de dominio.
 
