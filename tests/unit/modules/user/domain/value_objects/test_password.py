@@ -41,12 +41,12 @@ class TestPasswordValidation:
     def test_empty_password_raises_error(self):
         """Password vacío debe lanzar InvalidPasswordError"""
         with pytest.raises(InvalidPasswordError, match="Password no cumple requisitos de seguridad"):
-            Password.from_plain_text("")
+            Password.from_plain_text("")  # type: ignore[arg-type]  # noqa: S5655
 
     def test_none_password_raises_error(self):
         """Password None debe lanzar InvalidPasswordError"""
         with pytest.raises(InvalidPasswordError, match="Password no cumple requisitos de seguridad"):
-            Password.from_plain_text(None)
+            Password.from_plain_text(None)  # type: ignore[arg-type]  # noqa: S5655
 
     def test_short_password_raises_error(self):
         """Password menor a 8 caracteres debe lanzar InvalidPasswordError"""
