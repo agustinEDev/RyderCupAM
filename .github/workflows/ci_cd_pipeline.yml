@@ -364,7 +364,7 @@ jobs:
           # Override entrypoint to run only Alembic (skip migrations execution)
           docker run --rm \
             --entrypoint alembic \
-            -e DATABASE_URL=postgresql://dummy:dummy@dummy:5432/dummy \
+            -e DATABASE_URL=postgresql+psycopg2://dummy:dummy@dummy:5432/dummy \
             rydercupam:${{ github.sha }} \
             upgrade head --sql > alembic-output.sql
 
