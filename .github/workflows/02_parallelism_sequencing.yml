@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate Timestamp
         id: set_timestamp
-        run : echo "timestamp=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        run: echo "timestamp=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
 
       - name: Generate Build Number
         id: set_build_number
