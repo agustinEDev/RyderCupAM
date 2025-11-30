@@ -173,6 +173,8 @@ jobs:
       - name: Run Integration Tests
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+          DOCS_USERNAME: admin
+          DOCS_PASSWORD: testpassword123
         run: |
           echo "Running integration tests (with database)..."
           pytest tests/integration/ -v --maxfail=5
