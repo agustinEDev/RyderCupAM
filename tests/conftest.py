@@ -1,16 +1,15 @@
 # tests/conftest.py
 import os
 import sys
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Constants
 POSTGRESQL_PREFIX = "postgresql://"
@@ -23,11 +22,17 @@ os.environ['TESTING'] = 'true'
 
 # --- Importaciones de la Aplicación ---
 from main import app as fastapi_app
-from src.config.database import DATABASE_URL as APP_DATABASE_URL # Renombramos para evitar conflicto
+from src.config.database import (
+    DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
+)
 from src.config.dependencies import get_db_session
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    start_mappers as start_competition_mappers,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metadata, start_mappers
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import start_mappers as start_competition_mappers
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import start_mappers as start_country_mappers
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+    start_mappers as start_country_mappers,
+)
 
 # Usamos la URL de la app como base, pero la sobreescribimos si es necesario
 DATABASE_URL = APP_DATABASE_URL
@@ -89,7 +94,7 @@ def pytest_configure(config):
     en el proceso principal cuando se usa pytest-xdist.
     """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER")
-    
+
     # Solo el proceso maestro (master) o una ejecución sin xdist inicializará los mappers
     if worker_id is None or worker_id == "master":
         print(f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -104,7 +109,7 @@ def pytest_configure(config):
     elif hasattr(config, 'mappers_initialized') and config.mappers_initialized:
         # Mappers already initialized by master process, skip initialization
         return
-        
+
     # Fallback por si un worker arranca sin que el maestro haya terminado
     else:
         try:
@@ -135,7 +140,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     db_name = f"test_db_{worker_id}"
-    
+
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
     if db_url_base.startswith(POSTGRESQL_PREFIX):
@@ -173,11 +178,11 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     # Limpieza
     await test_engine.dispose()
-    
+
     async with engine.connect() as conn:
         await conn.execute(text(f"DROP DATABASE {db_name}"))
     await engine.dispose()
-    
+
     fastapi_app.dependency_overrides.clear()
 
 # ======================================================================================
@@ -223,7 +228,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     test_id = str(uuid.uuid4())[:8]
     db_name = f"test_db_session_{worker_id}_{test_id}"
-    
+
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
     if db_url_base.startswith(POSTGRESQL_PREFIX):
@@ -240,7 +245,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Motor conectado a la base de datos de test
     engine = create_async_engine(test_db_url)
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
         await seed_countries_and_adjacencies(conn)
@@ -252,7 +257,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         class_=AsyncSession,
         expire_on_commit=False
     )
-    
+
     async with test_session_local() as session:
         yield session
 
@@ -367,11 +372,12 @@ async def get_user_by_email(client: AsyncClient, email: str):
     Raises:
         AssertionError: Si el usuario no existe
     """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
     from src.modules.user.domain.value_objects.email import Email
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
         SQLAlchemyUserRepository,
     )
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
     # Obtener la URL de la BD del cliente (está en la app state)
     # Como no podemos acceder directamente, usamos la variable de entorno
@@ -413,7 +419,7 @@ def mock_external_services():
     - Los tests unitarios usan sus propios mocks
     - Los tests de integración usan estos mocks via dependencies.py
     """
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     # Mock para EmailService
     mock_email = MagicMock()
@@ -453,7 +459,7 @@ def sample_competition_data() -> dict:
 async def create_competition(
     client: AsyncClient,
     token: str,
-    competition_data: dict = None
+    competition_data: dict | None = None
 ) -> dict:
     """
     Helper para crear una competición.

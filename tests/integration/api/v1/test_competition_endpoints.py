@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests E2E para Competition Endpoints.
 
@@ -6,14 +5,15 @@ Tests de integración que verifican el flujo completo de los endpoints
 de competiciones incluyendo autenticación, validaciones y persistencia.
 """
 
-import pytest
-from httpx import AsyncClient
 from datetime import date, timedelta
 
+import pytest
+from httpx import AsyncClient
+
 from tests.conftest import (
+    activate_competition,
     create_authenticated_user,
     create_competition,
-    activate_competition,
 )
 
 
@@ -186,7 +186,7 @@ class TestListCompetitions:
         data = response.json()
         assert len(data) == 1
         assert data[0]["status"] == "ACTIVE"
-    
+
     @pytest.mark.asyncio
     async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
         """Filtrar competiciones por nombre de búsqueda."""

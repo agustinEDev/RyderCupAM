@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 EnrollmentRequestedEvent - Se emite cuando un jugador solicita unirse.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

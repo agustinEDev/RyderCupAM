@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # Literales reutilizados
 CONFIRMATION_MESSAGE_DESCRIPTION = "Mensaje de confirmación."
@@ -24,14 +24,14 @@ class RegisterUserRequestDTO(BaseModel):
     password: str = Field(..., min_length=8, description="Contraseña del usuario (mínimo 8 caracteres).")
     first_name: str = Field(..., min_length=2, description="Nombre del usuario.")
     last_name: str = Field(..., min_length=2, description="Apellido del usuario.")
-    country_code: Optional[str] = Field(
+    country_code: str | None = Field(
         None,
         min_length=2,
         max_length=2,
         pattern="^[A-Z]{2}$",
         description="Código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR', 'PT'). Opcional."
     )
-    manual_handicap: Optional[float] = Field(
+    manual_handicap: float | None = Field(
         None,
         ge=-10.0,
         le=54.0,
@@ -47,11 +47,11 @@ class FindUserRequestDTO(BaseModel):
     DTO de entrada para el caso de uso de búsqueda de usuario.
     Permite buscar por email o nombre completo.
     """
-    email: Optional[EmailStr] = Field(None, description=EMAIL_DESCRIPTION)
-    full_name: Optional[str] = Field(None, min_length=3, description="Nombre completo del usuario.")
+    email: EmailStr | None = Field(None, description=EMAIL_DESCRIPTION)
+    full_name: str | None = Field(None, min_length=3, description="Nombre completo del usuario.")
 
     @field_validator('email', 'full_name', mode='before')
-    @classmethod 
+    @classmethod
     def check_at_least_one_field(cls, v, info):
         """Valida que se proporcione al menos un campo de búsqueda."""
         return v
@@ -86,9 +86,9 @@ class UserResponseDTO(BaseModel):
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
-    country_code: Optional[str] = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
-    handicap: Optional[float] = Field(None, description="Handicap de golf del usuario.")
-    handicap_updated_at: Optional[datetime] = Field(None, description="Fecha y hora de la última actualización del handicap.")
+    country_code: str | None = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
+    handicap: float | None = Field(None, description="Handicap de golf del usuario.")
+    handicap_updated_at: datetime | None = Field(None, description="Fecha y hora de la última actualización del handicap.")
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
     updated_at: datetime = Field(..., description="Fecha y hora de la última actualización.")
     email_verified: bool = Field(default=False, description="Indica si el email del usuario ha sido verificado.")
@@ -166,9 +166,9 @@ class UpdateProfileRequestDTO(BaseModel):
     DTO de entrada para actualización de información personal del usuario.
     Al menos uno de los campos debe ser proporcionado.
     """
-    first_name: Optional[str] = Field(None, min_length=2, description="Nuevo nombre del usuario.")
-    last_name: Optional[str] = Field(None, min_length=2, description="Nuevo apellido del usuario.")
-    country_code: Optional[str] = Field(
+    first_name: str | None = Field(None, min_length=2, description="Nuevo nombre del usuario.")
+    last_name: str | None = Field(None, min_length=2, description="Nuevo apellido del usuario.")
+    country_code: str | None = Field(
         None,
         min_length=2,
         max_length=2,
@@ -198,9 +198,9 @@ class UpdateSecurityRequestDTO(BaseModel):
     Requiere contraseña actual para verificación.
     """
     current_password: str = Field(..., min_length=8, description="Contraseña actual (requerida).")
-    new_email: Optional[EmailStr] = Field(None, description="Nuevo email.")
-    new_password: Optional[str] = Field(None, min_length=8, description="Nuevo password.")
-    confirm_password: Optional[str] = Field(None, description="Confirmación del nuevo password.")
+    new_email: EmailStr | None = Field(None, description="Nuevo email.")
+    new_password: str | None = Field(None, min_length=8, description="Nuevo password.")
+    confirm_password: str | None = Field(None, description="Confirmación del nuevo password.")
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo y confirma password si aplica."""

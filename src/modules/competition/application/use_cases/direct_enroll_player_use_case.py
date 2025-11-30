@@ -1,24 +1,21 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Inscripción Directa por Creador (Direct Enroll Player).
 
 Permite al creador de una competición inscribir directamente a un jugador.
 """
 
-from decimal import Decimal
-from typing import Optional
 from src.modules.competition.application.dto.enrollment_dto import (
     DirectEnrollPlayerRequestDTO,
     DirectEnrollPlayerResponseDTO,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionNotFoundError(Exception):
@@ -120,7 +117,7 @@ class DirectEnrollPlayerUseCase:
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(
-                    f"El jugador ya tiene una inscripción en esta competición"
+                    "El jugador ya tiene una inscripción en esta competición"
                 )
 
             # 5. Crear enrollment con factory method (directamente APPROVED)

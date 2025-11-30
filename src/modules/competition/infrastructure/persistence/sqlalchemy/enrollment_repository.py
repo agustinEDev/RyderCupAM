@@ -1,20 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Enrollment Repository - SQLAlchemy Implementation.
 
 Implementación concreta del repositorio de inscripciones usando SQLAlchemy async.
 """
 
-from typing import List, Optional
-from sqlalchemy import select, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -53,7 +51,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         self._session.add(enrollment)
 
-    async def find_by_id(self, enrollment_id: EnrollmentId) -> Optional[Enrollment]:
+    async def find_by_id(self, enrollment_id: EnrollmentId) -> Enrollment | None:
         """
         Busca una inscripción por su ID único.
 
@@ -70,7 +68,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         competition_id: CompetitionId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición.
 
@@ -98,7 +96,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         status: EnrollmentStatus,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca inscripciones de una competición filtradas por estado.
 
@@ -134,7 +132,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         user_id: UserId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario.
 
@@ -236,7 +234,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         self,
         competition_id: CompetitionId,
         team_id: str
-    ) -> List[Enrollment]:
+    ) -> list[Enrollment]:
         """
         Busca todas las inscripciones asignadas a un equipo específico.
 

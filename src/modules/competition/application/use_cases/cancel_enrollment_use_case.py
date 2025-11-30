@@ -1,21 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Cancelar Inscripción (Cancel Enrollment).
 
 Permite a un jugador cancelar su solicitud de inscripción o declinar una invitación.
 """
 
-from typing import Optional
 from src.modules.competition.application.dto.enrollment_dto import (
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class EnrollmentNotFoundError(Exception):

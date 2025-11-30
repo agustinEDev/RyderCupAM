@@ -8,13 +8,12 @@ Real Federación Española de Golf.
 
 import re
 import unicodedata
-import httpx
-from typing import Optional
+from typing import ClassVar
 
+import httpx
+
+from src.modules.user.domain.errors.handicap_errors import HandicapServiceUnavailableError
 from src.modules.user.domain.services.handicap_service import HandicapService
-from src.modules.user.domain.errors.handicap_errors import (
-    HandicapServiceUnavailableError
-)
 
 
 class RFEGHandicapService(HandicapService):
@@ -34,7 +33,7 @@ class RFEGHandicapService(HandicapService):
     URL_PAGINA_PRINCIPAL = "https://rfegolf.es"
     URL_API_HANDICAP = "https://api.rfeg.es/web/search/handicap"
 
-    HEADERS = {
+    HEADERS: ClassVar[dict[str, str]] = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) "
@@ -81,7 +80,7 @@ class RFEGHandicapService(HandicapService):
         nfd = unicodedata.normalize('NFD', texto_limpio)
         return ''.join(char for char in nfd if unicodedata.category(char) != 'Mn')
 
-    async def search_handicap(self, full_name: str) -> Optional[float]:
+    async def search_handicap(self, full_name: str) -> float | None:
         """
         Busca el hándicap de un jugador en la RFEG.
 
@@ -120,9 +119,9 @@ class RFEGHandicapService(HandicapService):
         except httpx.HTTPError as e:
             raise HandicapServiceUnavailableError(
                 f"Error de conexión con el servicio RFEG: {e}"
-            )
+            ) from e
 
-    async def _obtener_bearer_token(self) -> Optional[str]:
+    async def _obtener_bearer_token(self) -> str | None:
         """
         Obtiene el token Bearer extrayéndolo de la página principal.
 
@@ -153,7 +152,7 @@ class RFEGHandicapService(HandicapService):
         self,
         full_name: str,
         bearer_token: str
-    ) -> Optional[float]:
+    ) -> float | None:
         """
         Realiza la búsqueda en la API de la RFEG.
 

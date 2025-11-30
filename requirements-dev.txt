@@ -1,0 +1,50 @@
+# ================================
+# DEPENDENCIAS DE DESARROLLO
+# ================================
+# Este archivo contiene las dependencias necesarias solo para desarrollo,
+# testing, linting, type checking y CI/CD.
+# NO se incluyen en producción.
+
+# Primero, instalar todas las dependencias de producción
+-r requirements.txt
+
+# ================================
+# LINTING Y FORMATEO
+# ================================
+
+# Ruff - Linter y formateador ultra-rápido escrito en Rust
+# Reemplaza: flake8, isort, pydocstyle, pyupgrade, autoflake
+# Ventajas: 10-100x más rápido, configuración simple, todo-en-uno
+ruff>=0.6.0
+
+# ================================
+# TYPE CHECKING
+# ================================
+
+# Mypy - Verificador estático de tipos para Python
+# Analiza el código usando type hints para detectar errores antes de runtime
+# Esencial para proyectos grandes con arquitectura clean
+mypy>=1.11.0
+
+# Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
+sqlalchemy[mypy]>=2.0.31
+
+# ================================
+# SEGURIDAD
+# ================================
+
+# Bandit - Encuentra problemas de seguridad comunes en código Python
+# Detecta: SQL injection, uso de eval(), contraseñas hardcodeadas, etc.
+bandit[toml]>=1.7.9
+
+# Safety - Verifica vulnerabilidades conocidas en dependencias
+# Usa la base de datos de PyUp.io para detectar CVEs
+safety>=3.2.0
+
+# ================================
+# ANÁLISIS DE CÓDIGO
+# ================================
+
+# Radon - Calcula métricas de complejidad ciclomática y mantenibilidad
+# Ayuda a identificar código complejo que necesita refactorización
+radon>=6.0.1

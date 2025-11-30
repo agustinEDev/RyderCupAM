@@ -1,82 +1,80 @@
-# -*- coding: utf-8 -*-
 """Competition application DTOs."""
 
 from .competition_dto import (
-    # Create & Update
-    CreateCompetitionRequestDTO,
-    CreateCompetitionResponseDTO,
-    UpdateCompetitionRequestDTO,
-    UpdateCompetitionResponseDTO,
-    CompetitionResponseDTO,
     # Lifecycle Transitions
     ActivateCompetitionRequestDTO,
     ActivateCompetitionResponseDTO,
+    CancelCompetitionRequestDTO,
+    CancelCompetitionResponseDTO,
     CloseEnrollmentsRequestDTO,
     CloseEnrollmentsResponseDTO,
-    StartCompetitionRequestDTO,
-    StartCompetitionResponseDTO,
+    CompetitionResponseDTO,
     CompleteCompetitionRequestDTO,
     CompleteCompetitionResponseDTO,
+    # Create & Update
+    CreateCompetitionRequestDTO,
+    CreateCompetitionResponseDTO,
     # Delete & Cancel
     DeleteCompetitionRequestDTO,
     DeleteCompetitionResponseDTO,
-    CancelCompetitionRequestDTO,
-    CancelCompetitionResponseDTO,
+    StartCompetitionRequestDTO,
+    StartCompetitionResponseDTO,
+    UpdateCompetitionRequestDTO,
+    UpdateCompetitionResponseDTO,
 )
-
 from .enrollment_dto import (
-    # Request Enrollment
-    RequestEnrollmentRequestDTO,
-    RequestEnrollmentResponseDTO,
-    # Direct Enroll
-    DirectEnrollPlayerRequestDTO,
-    DirectEnrollPlayerResponseDTO,
-    # Handle Enrollment
-    HandleEnrollmentRequestDTO,
-    HandleEnrollmentResponseDTO,
     # Cancel & Withdraw
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
-    WithdrawEnrollmentRequestDTO,
-    WithdrawEnrollmentResponseDTO,
+    # Direct Enroll
+    DirectEnrollPlayerRequestDTO,
+    DirectEnrollPlayerResponseDTO,
+    # Generic
+    EnrollmentResponseDTO,
+    # Handle Enrollment
+    HandleEnrollmentRequestDTO,
+    HandleEnrollmentResponseDTO,
+    # Request Enrollment
+    RequestEnrollmentRequestDTO,
+    RequestEnrollmentResponseDTO,
     # Custom Handicap
     SetCustomHandicapRequestDTO,
     SetCustomHandicapResponseDTO,
-    # Generic
-    EnrollmentResponseDTO,
+    WithdrawEnrollmentRequestDTO,
+    WithdrawEnrollmentResponseDTO,
 )
 
 __all__ = [
+    "ActivateCompetitionRequestDTO",
+    "ActivateCompetitionResponseDTO",
+    "CancelCompetitionRequestDTO",
+    "CancelCompetitionResponseDTO",
+    "CancelEnrollmentRequestDTO",
+    "CancelEnrollmentResponseDTO",
+    "CloseEnrollmentsRequestDTO",
+    "CloseEnrollmentsResponseDTO",
+    "CompetitionResponseDTO",
+    "CompleteCompetitionRequestDTO",
+    "CompleteCompetitionResponseDTO",
     # Competition DTOs
     "CreateCompetitionRequestDTO",
     "CreateCompetitionResponseDTO",
-    "UpdateCompetitionRequestDTO",
-    "UpdateCompetitionResponseDTO",
-    "CompetitionResponseDTO",
-    "ActivateCompetitionRequestDTO",
-    "ActivateCompetitionResponseDTO",
-    "CloseEnrollmentsRequestDTO",
-    "CloseEnrollmentsResponseDTO",
-    "StartCompetitionRequestDTO",
-    "StartCompetitionResponseDTO",
-    "CompleteCompetitionRequestDTO",
-    "CompleteCompetitionResponseDTO",
     "DeleteCompetitionRequestDTO",
     "DeleteCompetitionResponseDTO",
-    "CancelCompetitionRequestDTO",
-    "CancelCompetitionResponseDTO",
+    "DirectEnrollPlayerRequestDTO",
+    "DirectEnrollPlayerResponseDTO",
+    "EnrollmentResponseDTO",
+    "HandleEnrollmentRequestDTO",
+    "HandleEnrollmentResponseDTO",
     # Enrollment DTOs
     "RequestEnrollmentRequestDTO",
     "RequestEnrollmentResponseDTO",
-    "DirectEnrollPlayerRequestDTO",
-    "DirectEnrollPlayerResponseDTO",
-    "HandleEnrollmentRequestDTO",
-    "HandleEnrollmentResponseDTO",
-    "CancelEnrollmentRequestDTO",
-    "CancelEnrollmentResponseDTO",
-    "WithdrawEnrollmentRequestDTO",
-    "WithdrawEnrollmentResponseDTO",
     "SetCustomHandicapRequestDTO",
     "SetCustomHandicapResponseDTO",
-    "EnrollmentResponseDTO",
+    "StartCompetitionRequestDTO",
+    "StartCompetitionResponseDTO",
+    "UpdateCompetitionRequestDTO",
+    "UpdateCompetitionResponseDTO",
+    "WithdrawEnrollmentRequestDTO",
+    "WithdrawEnrollmentResponseDTO",
 ]

@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
 """DTOs para Enrollment - Application Layer."""
 
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
-from pydantic import BaseModel, Field, field_validator, ConfigDict
 from decimal import Decimal
+from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ======================================================================================
 # Nested DTO para representar datos de usuario
@@ -28,9 +26,9 @@ class EnrolledUserDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del usuario")
     last_name: str = Field(..., description="Apellido del usuario")
     email: str = Field(..., description="Email del usuario")
-    handicap: Optional[Decimal] = Field(None, description="Handicap oficial del usuario")
-    country_code: Optional[str] = Field(None, description="Código ISO del país del usuario")
-    avatar_url: Optional[str] = Field(None, description="URL del avatar del usuario (futuro)")
+    handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
+    country_code: str | None = Field(None, description="Código ISO del país del usuario")
+    avatar_url: str | None = Field(None, description="URL del avatar del usuario (futuro)")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,7 +68,7 @@ class DirectEnrollPlayerRequestDTO(BaseModel):
     """
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del jugador a inscribir.")
-    custom_handicap: Optional[Decimal] = Field(
+    custom_handicap: Decimal | None = Field(
         None,
         ge=Decimal("-10.0"),
         le=Decimal("54.0"),
@@ -86,7 +84,7 @@ class DirectEnrollPlayerResponseDTO(BaseModel):
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del jugador.")
     status: str = Field(..., description="Estado de la inscripción (APPROVED).")
-    custom_handicap: Optional[Decimal] = Field(None, description="Hándicap personalizado si se especificó.")
+    custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado si se especificó.")
     created_at: datetime = Field(..., description="Fecha y hora de la inscripción.")
 
     model_config = ConfigDict(from_attributes=True)
@@ -139,7 +137,7 @@ class CancelEnrollmentRequestDTO(BaseModel):
     DTO de entrada para que un jugador cancele su solicitud o decline invitación.
     """
     enrollment_id: UUID = Field(..., description="ID de la inscripción a cancelar.")
-    reason: Optional[str] = Field(None, max_length=500, description="Razón de la cancelación (opcional).")
+    reason: str | None = Field(None, max_length=500, description="Razón de la cancelación (opcional).")
 
 
 class CancelEnrollmentResponseDTO(BaseModel):
@@ -164,7 +162,7 @@ class WithdrawEnrollmentRequestDTO(BaseModel):
     DTO de entrada para que un jugador se retire después de estar aprobado.
     """
     enrollment_id: UUID = Field(..., description="ID de la inscripción a retirar.")
-    reason: Optional[str] = Field(None, max_length=500, description="Razón del retiro (opcional).")
+    reason: str | None = Field(None, max_length=500, description="Razón del retiro (opcional).")
 
 
 class WithdrawEnrollmentResponseDTO(BaseModel):
@@ -223,10 +221,10 @@ class EnrollmentResponseDTO(BaseModel):
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
-    user: Optional[EnrolledUserDTO] = Field(None, description="Información completa del usuario inscrito.")
+    user: EnrolledUserDTO | None = Field(None, description="Información completa del usuario inscrito.")
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
-    team_id: Optional[str] = Field(None, description="ID del equipo asignado (si aplica).")
-    custom_handicap: Optional[Decimal] = Field(None, description="Hándicap personalizado (si aplica).")
+    team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
+    custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
     updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
 

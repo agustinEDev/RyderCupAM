@@ -4,18 +4,17 @@ Login User Use Case
 Caso de uso para autenticar un usuario y generar un token JWT.
 """
 
-from typing import Optional
 
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.application.ports.token_service_interface import ITokenService
 
 
 class LoginUserUseCase:
@@ -44,7 +43,7 @@ class LoginUserUseCase:
         self._uow = uow
         self._token_service = token_service
 
-    async def execute(self, request: LoginRequestDTO) -> Optional[LoginResponseDTO]:
+    async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         Ejecuta el caso de uso de login.
 

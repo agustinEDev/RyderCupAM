@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 
 """
@@ -9,19 +8,11 @@ Sigue el patrón Imperative Mapping establecido en el módulo User.
 """
 
 import uuid
-from decimal import Decimal
 from datetime import date
-from sqlalchemy import (
-    Table, Column, String, DateTime, Integer, Date, Numeric, ForeignKey
-)
-from sqlalchemy.orm import composite
-from sqlalchemy.types import TypeDecorator, CHAR
 
-# Importar registry y metadata centralizados
-from src.shared.infrastructure.persistence.sqlalchemy.base import (
-    mapper_registry,
-    metadata
-)
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Table
+from sqlalchemy.orm import composite
+from sqlalchemy.types import CHAR, TypeDecorator
 
 # Domain Entities
 from src.modules.competition.domain.entities.competition import Competition
@@ -29,27 +20,28 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 
 # Value Objects - Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.date_range import DateRange
-from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
-    HandicapType
+    HandicapType,
 )
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
-
-# Shared Value Objects
-from src.shared.domain.value_objects.country_code import CountryCode
-
-
-COUNTRIES_CODE_FK = 'countries.code'
 
 # User Value Object (FK)
 from src.modules.user.domain.value_objects.user_id import UserId
 
+# Shared Value Objects
+from src.shared.domain.value_objects.country_code import CountryCode
+
+# Importar registry y metadata centralizados
+from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+
+COUNTRIES_CODE_FK = 'countries.code'
 
 # =============================================================================
 # TYPE DECORATORS - Para Value Objects complejos (IDs)

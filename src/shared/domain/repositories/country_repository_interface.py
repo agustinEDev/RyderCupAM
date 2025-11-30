@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Country Repository Interface - Shared Domain Layer
 
@@ -10,7 +9,7 @@ es principalmente de solo lectura. No se espera que los usuarios creen/modifique
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List
+
 from ..entities.country import Country
 from ..value_objects.country_code import CountryCode
 
@@ -29,7 +28,7 @@ class CountryRepositoryInterface(ABC):
     """
 
     @abstractmethod
-    async def find_by_code(self, code: CountryCode) -> Optional[Country]:
+    async def find_by_code(self, code: CountryCode) -> Country | None:
         """
         Busca un país por su código ISO 3166-1 alpha-2.
 
@@ -45,7 +44,7 @@ class CountryRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_all_active(self) -> List[Country]:
+    async def find_all_active(self) -> list[Country]:
         """
         Obtiene todos los países activos.
 
@@ -89,7 +88,7 @@ class CountryRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_adjacent_countries(self, code: CountryCode) -> List[Country]:
+    async def find_adjacent_countries(self, code: CountryCode) -> list[Country]:
         """
         Obtiene todos los países adyacentes a un país dado.
 

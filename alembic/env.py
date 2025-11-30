@@ -29,6 +29,10 @@ from src.shared.infrastructure.persistence.sqlalchemy import country_mappers
 from src.modules.user.infrastructure.persistence.sqlalchemy import mappers as user_mappers
 from src.modules.competition.infrastructure.persistence.sqlalchemy import mappers as competition_mappers
 
+# Constantes para drivers de PostgreSQL
+ASYNCPG_DRIVER = "postgresql+asyncpg"
+PSYCOPG2_DRIVER = "postgresql+psycopg2"
+
 # Iniciar todos los mappers para registrar las tablas en el metadata
 country_mappers.start_mappers()
 user_mappers.start_mappers()
@@ -56,7 +60,15 @@ target_metadata = metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
+    # Priorizar DATABASE_URL de entorno sobre alembic.ini
+    url = os.getenv('DATABASE_URL')
+    if not url:
+        url = config.get_main_option("sqlalchemy.url")
+
+    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
+    if url and ASYNCPG_DRIVER in url:
+        url = url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER)
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -74,9 +86,9 @@ def run_migrations_online() -> None:
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
-    # Alembic necesita un driver síncrono. Reemplazamos asyncpg.
-    if "postgresql+asyncpg" in db_url:
-        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
+    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
+    if ASYNCPG_DRIVER in db_url:
+        db_url = db_url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER)
 
     config.set_main_option('sqlalchemy.url', db_url)
 

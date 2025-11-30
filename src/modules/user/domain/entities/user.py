@@ -1,19 +1,27 @@
-from datetime import datetime
-from dataclasses import dataclass, field
-from typing import Optional, List
 import secrets
+from datetime import datetime
 
-from ..value_objects.user_id import UserId
-from ..value_objects.email import Email
-from ..value_objects.password import Password
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
+
+from ..events.email_verified_event import EmailVerifiedEvent
+from ..events.handicap_updated_event import HandicapUpdatedEvent
+from ..events.user_email_changed_event import UserEmailChangedEvent
+from ..events.user_logged_in_event import UserLoggedInEvent
+from ..events.user_logged_out_event import UserLoggedOutEvent
+from ..events.user_password_changed_event import UserPasswordChangedEvent
+from ..events.user_profile_updated_event import UserProfileUpdatedEvent
+from ..events.user_registered_event import UserRegisteredEvent
+from ..value_objects.email import Email
+from ..value_objects.handicap import Handicap
+from ..value_objects.password import Password
+from ..value_objects.user_id import UserId
 
 
 class User:
     """
     Entidad User - Representa un usuario en el sistema.
-    
+
     Un usuario es alguien que puede registrarse, hacer login
     y participar en torneos Ryder Cup.
     """
@@ -38,22 +46,22 @@ class User:
             new_country_code = CountryCode(country_code_str) if country_code_str else None
             country_code_changed = new_country_code != old_country_code
         return (first_name_changed, last_name_changed, country_code_changed, new_country_code, old_first_name, old_last_name, old_country_code)
-    
+
     def __init__(
         self,
-        id: Optional[UserId],
-        email: Optional[Email],
-        password: Optional[Password],
+        id: UserId | None,
+        email: Email | None,
+        password: Password | None,
         first_name: str,
         last_name: str,
-        handicap: Optional[float] = None,
-        handicap_updated_at: Optional[datetime] = None,
-        created_at: Optional[datetime] = None,
-        updated_at: Optional[datetime] = None,
+        handicap: float | None = None,
+        handicap_updated_at: datetime | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
         email_verified: bool = False,
-        verification_token: Optional[str] = None,
-        country_code: Optional[CountryCode] = None,
-        domain_events: Optional[List[DomainEvent]] = None
+        verification_token: str | None = None,
+        country_code: CountryCode | None = None,
+        domain_events: list[DomainEvent] | None = None
     ):
         self.id = id
         self.email = email
@@ -68,15 +76,15 @@ class User:
         self.verification_token = verification_token
         self.country_code = country_code
         self._domain_events = domain_events or []
-    
+
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
         return f"{self.first_name} {self.last_name}".strip()
-    
+
     def has_valid_email(self) -> bool:
         """Verifica si el usuario tiene un email válido."""
         return self.email is not None
-    
+
     def is_valid(self) -> bool:
         """Verifica si el usuario es válido (todos los campos requeridos)."""
         return (
@@ -85,14 +93,14 @@ class User:
             self.last_name.strip() != "" and
             self.password is not None
         )
-    
+
     def verify_password(self, plain_password: str) -> bool:
         """Verifica si el password plano coincide con el hasheado."""
         if self.password is None:
             return False
         return self.password.verify(plain_password)
 
-    def update_handicap(self, new_handicap: Optional[float]) -> None:
+    def update_handicap(self, new_handicap: float | None) -> None:
         """
         Actualiza el hándicap del usuario y emite un evento de dominio.
 
@@ -105,9 +113,6 @@ class User:
         Raises:
             ValueError: Si el hándicap no está en el rango válido
         """
-        from ..value_objects.handicap import Handicap
-        from ..events.handicap_updated_event import HandicapUpdatedEvent
-
         old_handicap = getattr(self, 'handicap', None)
 
         # Validar si es un Handicap válido usando el Value Object
@@ -133,7 +138,7 @@ class User:
 
     @classmethod
     def create(cls, first_name: str, last_name: str, email_str: str, plain_password: str,
-               country_code_str: Optional[str] = None) -> 'User':
+               country_code_str: str | None = None) -> 'User':
         """
         Factory method para crear usuario con Value Objects.
 
@@ -168,7 +173,6 @@ class User:
         )
 
         # Generar evento de registro
-        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
         user._add_domain_event(UserRegisteredEvent(
             user_id=str(user_id.value),
             email=email_str,
@@ -177,21 +181,21 @@ class User:
         ))
 
         return user
-    
+
     # === Métodos para manejo de eventos de dominio ===
-    
+
     def _add_domain_event(self, event: DomainEvent) -> None:
         """Agrega un evento de dominio a la colección interna."""
         if not hasattr(self, '_domain_events'):
             self._domain_events = []
         self._domain_events.append(event)
-    
-    def get_domain_events(self) -> List[DomainEvent]:
+
+    def get_domain_events(self) -> list[DomainEvent]:
         """Obtiene una copia de todos los eventos de dominio pendientes."""
         if not hasattr(self, '_domain_events'):
             self._domain_events = []
         return self._domain_events.copy()
-    
+
     def clear_domain_events(self) -> None:
         """Limpia todos los eventos de dominio de la colección."""
         if not hasattr(self, '_domain_events'):
@@ -204,24 +208,22 @@ class User:
             self._domain_events = []
         return len(self._domain_events) > 0
 
-    def record_logout(self, logged_out_at: datetime, token_used: Optional[str] = None) -> None:
+    def record_logout(self, logged_out_at: datetime, token_used: str | None = None) -> None:
         """
         Registra un evento de logout para este usuario.
-        
+
         Args:
             logged_out_at: Timestamp del logout
             token_used: Token JWT utilizado (opcional)
         """
-        from src.modules.user.domain.events.user_logged_out_event import UserLoggedOutEvent
-        
         self._add_domain_event(UserLoggedOutEvent(
             user_id=str(self.id.value),
             logged_out_at=logged_out_at,
             token_used=token_used
         ))
 
-    def record_login(self, logged_in_at: datetime, ip_address: Optional[str] = None,
-                    user_agent: Optional[str] = None, session_id: Optional[str] = None) -> None:
+    def record_login(self, logged_in_at: datetime, ip_address: str | None = None,
+                    user_agent: str | None = None, session_id: str | None = None) -> None:
         """
         Registra un evento de login exitoso para este usuario.
 
@@ -231,8 +233,6 @@ class User:
             user_agent: User agent del browser/app (opcional)
             session_id: ID de la sesión creada (opcional)
         """
-        from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEvent
-
         self._add_domain_event(UserLoggedInEvent(
             user_id=str(self.id.value),
             logged_in_at=logged_in_at,
@@ -242,15 +242,13 @@ class User:
             login_method="email"  # Por ahora solo email, preparado para OAuth
         ))
 
-    def update_profile(self, first_name: Optional[str] = None, last_name: Optional[str] = None,
-                       country_code_str: Optional[str] = None) -> None:
+    def update_profile(self, first_name: str | None = None, last_name: str | None = None,
+                       country_code_str: str | None = None) -> None:
         """
         Actualiza la información personal del usuario (nombre, apellidos y país).
         Solo emite evento si al menos uno de los campos cambió.
         El evento ahora incluye el cambio de country_code (old/new) si aplica.
         """
-        from src.modules.user.domain.events.user_profile_updated_event import UserProfileUpdatedEvent
-
         self._validate_profile_update(first_name, last_name, country_code_str)
         (
             first_name_changed,
@@ -259,7 +257,7 @@ class User:
             new_country_code,
             old_first_name,
             old_last_name,
-            old_country_code
+            _old_country_code
         ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
         if not first_name_changed and not last_name_changed and not country_code_changed:
@@ -298,8 +296,6 @@ class User:
         Raises:
             ValueError: Si el email no es válido
         """
-        from src.modules.user.domain.events.user_email_changed_event import UserEmailChangedEvent
-
         new_email_vo = Email(new_email)
         old_email_str = str(self.email.value) if self.email else ""
 
@@ -327,8 +323,6 @@ class User:
         Raises:
             ValueError: Si el password no es válido
         """
-        from src.modules.user.domain.events.user_password_changed_event import UserPasswordChangedEvent
-
         new_password_vo = Password.from_plain_text(new_password)
         self.password = new_password_vo
         self.updated_at = datetime.now()
@@ -364,8 +358,6 @@ class User:
         Raises:
             ValueError: Si el email ya está verificado o el token es inválido
         """
-        from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
-
         if self.email_verified:
             raise ValueError("El email ya está verificado")
 

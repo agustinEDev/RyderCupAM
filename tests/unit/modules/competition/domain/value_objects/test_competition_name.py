@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
 """Tests para CompetitionName Value Object."""
 
 import pytest
+
 from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
-    InvalidCompetitionNameError
+    InvalidCompetitionNameError,
 )
 
 

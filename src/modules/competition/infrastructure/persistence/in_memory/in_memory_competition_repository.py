@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
 """In-Memory Competition Repository para testing."""
 
-from typing import Dict, List, Optional
 from datetime import date
 
 from src.modules.competition.domain.entities.competition import Competition
@@ -20,7 +18,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
     """
 
     def __init__(self):
-        self._competitions: Dict[CompetitionId, Competition] = {}
+        self._competitions: dict[CompetitionId, Competition] = {}
 
     async def add(self, competition: Competition) -> None:
         """Agrega una nueva competición."""
@@ -35,18 +33,18 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Guarda o actualiza una competición (alias para compatibilidad)."""
         self._competitions[competition.id] = competition
 
-    async def find_by_id(self, competition_id: CompetitionId) -> Optional[Competition]:
+    async def find_by_id(self, competition_id: CompetitionId) -> Competition | None:
         """Busca una competición por su ID."""
         return self._competitions.get(competition_id)
 
-    async def find_by_creator(self, creator_id: UserId) -> List[Competition]:
+    async def find_by_creator(self, creator_id: UserId) -> list[Competition]:
         """Busca todas las competiciones creadas por un usuario."""
         return [
             comp for comp in self._competitions.values()
             if comp.creator_id == creator_id
         ]
 
-    async def find_by_status(self, status: CompetitionStatus) -> List[Competition]:
+    async def find_by_status(self, status: CompetitionStatus) -> list[Competition]:
         """Busca todas las competiciones con un estado específico."""
         return [
             comp for comp in self._competitions.values()
@@ -57,7 +55,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         self,
         start_date: date,
         end_date: date
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """Busca competiciones activas que se solapen con un rango de fechas."""
         active_statuses = [
             CompetitionStatus.ACTIVE,
@@ -88,7 +86,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         if competition_id in self._competitions:
             del self._competitions[competition_id]
 
-    async def find_all(self) -> List[Competition]:
+    async def find_all(self) -> list[Competition]:
         """Retorna todas las competiciones."""
         return list(self._competitions.values())
 
@@ -101,43 +99,43 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
     async def find_by_filters(
         self,
-        search_name: Optional[str] = None,
-        search_creator: Optional[str] = None,
-        status: Optional[CompetitionStatus] = None,
-        creator_id: Optional[UserId] = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        status: CompetitionStatus | None = None,
+        creator_id: UserId | None = None,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca competiciones aplicando múltiples filtros opcionales.
-        
+
         Esta implementación in-memory simula el comportamiento de la búsqueda
         case-insensitive que se hace en la base de datos con ILIKE.
-        
+
         Note: search_creator requiere acceso a User data, que en memoria no está
         disponible. Esta implementación solo filtra por los campos de Competition.
         """
         results = list(self._competitions.values())
-        
-        # Filtro: search_name (case-insensitive)
+
+        # Apply filter: search by competition name (case-insensitive)
         if search_name:
             search_lower = search_name.lower()
             results = [
                 comp for comp in results
                 if search_lower in str(comp.name).lower()
             ]
-        
-        # Filtro: status
+
+        # Apply filter: filter by competition status
         if status:
             results = [comp for comp in results if comp.status == status]
-        
-        # Filtro: creator_id
+
+        # Apply filter: filter by creator user ID
         if creator_id:
             results = [comp for comp in results if comp.creator_id == creator_id]
-        
+
         # Ordenar por created_at descendente (más recientes primero)
         results.sort(key=lambda c: c.created_at, reverse=True)
-        
+
         # Paginar
         return results[offset:offset + limit]
 

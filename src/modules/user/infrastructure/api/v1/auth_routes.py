@@ -1,31 +1,34 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from src.config.dependencies import (
-    get_register_user_use_case,
-    get_login_user_use_case,
     get_current_user,
+    get_login_user_use_case,
     get_logout_user_use_case,
-    get_verify_email_use_case,
+    get_register_user_use_case,
     get_resend_verification_email_use_case,
+    get_verify_email_use_case,
 )
 from src.modules.user.application.dto.user_dto import (
-    RegisterUserRequestDTO,
-    UserResponseDTO,
     LoginRequestDTO,
     LoginResponseDTO,
     LogoutRequestDTO,
     LogoutResponseDTO,
-    VerifyEmailRequestDTO,
-    VerifyEmailResponseDTO,
+    RegisterUserRequestDTO,
     ResendVerificationEmailRequestDTO,
     ResendVerificationEmailResponseDTO,
+    UserResponseDTO,
+    VerifyEmailRequestDTO,
 )
-from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
+from src.modules.user.application.use_cases.resend_verification_email_use_case import (
+    ResendVerificationEmailUseCase,
+)
 from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
-from src.modules.user.application.use_cases.resend_verification_email_use_case import ResendVerificationEmailUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 
 logger = logging.getLogger(__name__)
@@ -53,12 +56,12 @@ async def register_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
-        )
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -165,6 +168,7 @@ async def logout_user(
 
 from src.shared.infrastructure.security.jwt_handler import create_access_token
 
+
 @router.post(
     "/verify-email",
     response_model=LoginResponseDTO,
@@ -214,7 +218,7 @@ async def verify_email(
         access_token = create_access_token({"sub": str(user.id.value)})
 
         # Mapear a DTO
-        from src.modules.user.application.dto.user_dto import UserResponseDTO, LoginResponseDTO
+        from src.modules.user.application.dto.user_dto import LoginResponseDTO, UserResponseDTO
         user_dto = UserResponseDTO.model_validate(user)
 
         return LoginResponseDTO(
@@ -230,7 +234,7 @@ async def verify_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
-        )
+        ) from e
     except Exception as e:
         logger.error(
             f"Unexpected error in email verification: {type(e).__name__}",
@@ -239,7 +243,7 @@ async def verify_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
-        )
+        ) from e
 
 
 @router.post(

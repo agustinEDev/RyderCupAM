@@ -5,16 +5,15 @@ Tests unitarios para el caso de uso de actualización de seguridad del usuario.
 """
 
 import pytest
-
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateSecurityRequestDTO
 from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
-    UserNotFoundError,
+    DuplicateEmailError,
     InvalidCredentialsError,
-    DuplicateEmailError
+    UserNotFoundError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (

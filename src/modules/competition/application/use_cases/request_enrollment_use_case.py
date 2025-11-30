@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Solicitar Inscripción (Request Enrollment).
 
@@ -10,13 +9,13 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentResponseDTO,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionNotFoundError(Exception):
@@ -102,7 +101,7 @@ class RequestEnrollmentUseCase:
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(
-                    f"El usuario ya tiene una inscripción en esta competición"
+                    "El usuario ya tiene una inscripción en esta competición"
                 )
 
             # 4. Crear enrollment con factory method

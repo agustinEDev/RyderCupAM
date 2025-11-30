@@ -5,8 +5,9 @@ Servicio para enviar emails usando Mailgun.
 """
 
 import logging
+
 import requests
-from typing import Optional
+from fastapi import status
 
 from src.config.settings import settings
 from src.modules.user.application.ports.email_service_interface import IEmailService
@@ -152,7 +153,7 @@ The Ryder Cup Friends Team
             <p>Or copy and paste this link into your browser:</p>
             <p style="word-break: break-all; color: #0066cc;">{verification_link}</p>
         </div>
-        
+
         <div class="footer">
             <p>Si no te has registrado en Ryder Cup Friends, puedes ignorar este mensaje.<br>
             If you did not sign up for Ryder Cup Friends, you can safely ignore this message.</p>
@@ -175,7 +176,7 @@ The Ryder Cup Friends Team
         to: str,
         subject: str,
         text: str,
-        html: Optional[str] = None
+        html: str | None = None
     ) -> bool:
         """
         Envía un email usando la API de Mailgun.
@@ -213,12 +214,11 @@ The Ryder Cup Friends Team
                 timeout=10
             )
 
-            if response.status_code == 200:
+            if response.status_code == status.HTTP_200_OK:
                 logger.info("Email de verificación enviado correctamente")
                 return True
-            else:
-                logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
-                return False
+            logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
+            return False
 
         except requests.exceptions.RequestException as e:
             logger.error("Error de red al enviar email: %s", str(e))

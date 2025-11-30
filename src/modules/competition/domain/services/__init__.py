@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """Competition Domain Services."""
 
-from .location_builder import LocationBuilder, InvalidCountryError
+from .location_builder import InvalidCountryError, LocationBuilder
 
 __all__ = [
-    "LocationBuilder",
     "InvalidCountryError",
+    "LocationBuilder",
 ]

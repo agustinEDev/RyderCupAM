@@ -1,7 +1,12 @@
 import os
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from collections.abc import AsyncGenerator
+
 from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 # Cargar las variables de entorno del fichero .env
 load_dotenv()
@@ -18,7 +23,9 @@ if not DATABASE_URL:
     DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 if not DATABASE_URL:
-    raise ValueError("No se ha definido la variable de entorno DATABASE_URL o sus componentes")
+    raise ValueError(
+        "No se ha definido la variable de entorno DATABASE_URL o sus componentes"
+    )
 
 # 1. Reemplazar 'postgresql://' por 'postgresql+asyncpg://' si es necesario
 # asyncpg es el driver que SQLAlchemy usa para operaciones asíncronas con PostgreSQL
@@ -26,7 +33,10 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # 2. Crear un motor (engine) asíncrono
-async_engine = create_async_engine(DATABASE_URL, echo=False) # echo=False para no llenar los logs
+async_engine = create_async_engine(
+    DATABASE_URL, echo=False
+)  # echo=False para no llenar los logs
+
 
 # 3. Crear un "sessionmaker" asíncrono
 # Esta es la fábrica que creará nuevas sesiones de base de datos
@@ -35,6 +45,7 @@ async_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
 
 async def get_db_session_for_scripts() -> AsyncGenerator[AsyncSession, None]:
     """

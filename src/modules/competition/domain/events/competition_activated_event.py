@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionActivatedEvent - Se emite cuando una competición pasa de DRAFT a ACTIVE.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

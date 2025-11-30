@@ -11,7 +11,6 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository impo
 )
 
 
-
 class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     """
     Implementación asíncrona de la Unit of Work con SQLAlchemy.
@@ -31,7 +30,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """
         Context manager exit - maneja commit/rollback automáticamente.
-        
+
         Clean Architecture: El Use Case no debe manejar transacciones explícitamente.
         El UoW se encarga automáticamente de persistir cambios y publicar eventos.
         """
@@ -41,7 +40,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         else:
             # Si todo fue exitoso, hacer commit automáticamente
             await self.commit()
-            
+
             # Los eventos de dominio se publican automáticamente
             # Nota: Para MVP, los eventos están registrados pero la publicación
             # real se implementará cuando se necesiten event handlers

@@ -7,9 +7,12 @@ información sensible que pueda ser usada para user enumeration.
 
 import logging
 import time
+
 import pytest
-from httpx import AsyncClient
 from fastapi import status
+from httpx import AsyncClient
+
+from src.modules.user.infrastructure.api.v1 import auth_routes
 from tests.conftest import get_user_by_email
 
 
@@ -175,7 +178,6 @@ class TestAuthSecurityUserEnumeration:
         Note: Este es un test básico. Para timing attacks reales,
         se necesitarían mediciones estadísticas más sofisticadas.
         """
-        import time
 
         # Registrar un usuario
         valid_user = {
@@ -234,7 +236,6 @@ class TestAuthSecurityLogging:
         - No se expone el token completo (solo preview)
         - Se loggean fallos sin exponer información sensible
         """
-        import logging
         caplog.set_level(logging.INFO)
 
         # Act - Intentar verificar con token inválido
@@ -264,7 +265,6 @@ class TestAuthSecurityLogging:
         - El email está parcialmente ofuscado (protección de privacidad)
         - Se distingue entre éxito y fallo en los logs
         """
-        import logging
         caplog.set_level(logging.INFO)
 
         # Registrar un usuario válido
@@ -314,12 +314,11 @@ class TestAuthSecurityLogging:
         2. Endpoints responden de forma consistente incluso con inputs extremos
         3. Mensajes genéricos se mantienen en todos los casos
         """
-        import logging
 
         caplog.set_level(logging.INFO)
 
         # 1. Verificar que el logger existe en el módulo
-        from src.modules.user.infrastructure.api.v1 import auth_routes
+
         assert hasattr(auth_routes, 'logger'), "Logger should be configured in auth_routes module"
         assert auth_routes.logger.name == "src.modules.user.infrastructure.api.v1.auth_routes"
 
@@ -386,7 +385,6 @@ class TestAuthSecurityLogging:
         - Enumeración de usuarios
         - Timing patterns
         """
-        import logging
         caplog.set_level(logging.INFO)
 
         # Simular múltiples intentos fallidos (posible ataque)

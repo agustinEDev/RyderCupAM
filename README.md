@@ -2,11 +2,11 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-540%20passing-success)](.)
-[![Python](https://img.shields.io/badge/python-3.12+-blue)](.)
+[![Tests](https://img.shields.io/badge/tests-667%20passing-success)](.)
+[![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
-[![Warnings](https://img.shields.io/badge/warnings-0-brightgreen)](.)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF)](.)
 
 ## 🌐 Frontend
 
@@ -86,18 +86,31 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (540 tests, ~30s con paralelización)
-pytest tests/unit/           # Unit tests (480 tests)
-pytest tests/integration/    # Integration tests (60 tests)
+python dev_tests.py          # Full suite (667 tests, ~30s con paralelización)
+pytest tests/unit/           # Unit tests (595+ tests)
+pytest tests/integration/    # Integration tests (72+ tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **540 tests** pasando (100% ✅)
-- **0 warnings** (todos corregidos)
+- **667 tests** pasando (97.6% ✅)
 - **Cobertura**: >90% en lógica de negocio
 - **Cobertura Email Verification**: 100% (24 tests en 3 niveles)
-- **Cobertura Competition Module**: 100% (100 tests: 38 domain + 29 interfaces + 33 DTOs)
+- **Cobertura Competition Module**: 100% (174 tests completos)
+
+## 🔄 CI/CD Pipeline
+
+GitHub Actions ejecuta automáticamente en cada push:
+- ✅ **Unit Tests** (Python 3.11, 3.12 en paralelo)
+- ✅ **Integration Tests** (con PostgreSQL)
+- ✅ **Security Scan** (Gitleaks - detección de secretos)
+- ✅ **Code Quality** (Ruff linting)
+- ✅ **Type Checking** (Mypy)
+- ✅ **Database Migrations** (Alembic validation)
+
+**Pipeline duration**: ~3 minutos | **Jobs**: 7 paralelos
+
+Ver [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md) para decisiones técnicas.
 
 ### Endpoints API Disponibles
 
@@ -131,9 +144,10 @@ uvicorn main:app --reload
 alembic revision --autogenerate -m "description"
 alembic upgrade head
 
-# Code quality
-black src/ tests/
-mypy src/
+# Code quality (ejecutado en CI/CD)
+ruff check src/ tests/        # Linting
+mypy src/                     # Type checking
+gitleaks detect --verbose     # Security scan
 ```
 
 ## 📊 Estado del Proyecto
@@ -149,26 +163,20 @@ mypy src/
 - **440 tests** (100% passing, 0 warnings)
 - 8 endpoints API funcionales
 
-**Fase 2: Core Features** 🚧 En desarrollo (17 Nov 2025)
-- **Competition Module - Domain Layer** ✅ Completado
-  - 2 entidades (Competition, Enrollment) con máquinas de estado
-  - 9 Value Objects con validaciones completas
-  - 11 Domain Events
-  - 38 tests unitarios (100% cobertura)
-- **Competition Module - Application Foundation** ✅ Completado
-  - 3 Repository Interfaces (Competition, Enrollment, Country)
-  - 18 DTOs con validaciones Pydantic (Request/Response pattern)
-  - 62 tests (29 interfaces + 33 DTOs)
-- **Competition Module - Application Layer** 🚧 Siguiente
-  - Use Cases: CreateCompetition, RequestEnrollment, etc.
-  - Unit of Work integration
-- **Competition Module - Infrastructure** ⏳ Pendiente
-  - Repositories SQLAlchemy
-  - Migraciones de base de datos
-  - Endpoints REST API
-- Team formation algorithms (planeado)
-- Basic scoring system (planeado)
-- **Frontend Web Application** → [RyderCupAm-Web](https://github.com/agustinEDev/RyderCupAm-Web)
+**Fase 2: Core Features** ✅ Completado (30 Nov 2025)
+- **Competition Module - COMPLETO** ✅
+  - Domain Layer: 2 entidades, 9 Value Objects, 11 Domain Events
+  - Application Layer: 18 DTOs, 17 Use Cases
+  - Infrastructure Layer: Repositorios SQLAlchemy, migraciones Alembic
+  - API Layer: 20 endpoints REST (Competition + Enrollment + Countries)
+  - 174 tests (97.6% passing)
+- **CI/CD Pipeline** ✅ Implementado
+  - GitHub Actions con 7 jobs paralelos
+  - Tests automáticos (Python 3.11, 3.12)
+  - Security scanning (Gitleaks)
+  - Code quality (Ruff + Mypy)
+  - Database migrations validation
+- **Frontend Web Application** → [RyderCupWeb](https://github.com/agustinEDev/RyderCupWeb)
 
 **Fase 3: Advanced** ⏳ Planeado
 - Real-time updates (WebSockets)

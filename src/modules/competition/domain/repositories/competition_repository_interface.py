@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Competition Repository Interface - Domain Layer
 
@@ -7,13 +6,14 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List
 from datetime import date
+
+from src.modules.user.domain.value_objects.user_id import UserId
+
 from ..entities.competition import Competition
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
-from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionRepositoryInterface(ABC):
@@ -74,7 +74,7 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, competition_id: CompetitionId) -> Optional[Competition]:
+    async def find_by_id(self, competition_id: CompetitionId) -> Competition | None:
         """
         Busca una competición por su ID único.
 
@@ -95,7 +95,7 @@ class CompetitionRepositoryInterface(ABC):
         creator_id: UserId,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca todas las competiciones creadas por un usuario específico.
 
@@ -120,7 +120,7 @@ class CompetitionRepositoryInterface(ABC):
         status: CompetitionStatus,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca todas las competiciones con un estado específico.
 
@@ -144,7 +144,7 @@ class CompetitionRepositoryInterface(ABC):
         self,
         start_date: date,
         end_date: date
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca competiciones activas que se superpongan con un rango de fechas.
 
@@ -186,7 +186,7 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_all(self, limit: int = 100, offset: int = 0) -> List[Competition]:
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
         """
         Obtiene todas las competiciones con paginación.
 
@@ -225,13 +225,13 @@ class CompetitionRepositoryInterface(ABC):
     @abstractmethod
     async def find_by_filters(
         self,
-        search_name: Optional[str] = None,
-        search_creator: Optional[str] = None,
-        status: Optional[CompetitionStatus] = None,
-        creator_id: Optional[UserId] = None,
+        search_name: str | None = None,
+        search_creator: str | None = None,
+        status: CompetitionStatus | None = None,
+        creator_id: UserId | None = None,
         limit: int = 100,
         offset: int = 0
-    ) -> List[Competition]:
+    ) -> list[Competition]:
         """
         Busca competiciones aplicando múltiples filtros opcionales.
 

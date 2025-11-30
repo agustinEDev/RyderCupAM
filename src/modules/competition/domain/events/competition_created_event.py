@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionCreatedEvent - Se emite cuando se crea una nueva competición.
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 CompetitionStartedEvent - Se emite cuando el torneo comienza (IN_PROGRESS).
 """
 
 from dataclasses import dataclass
+
 from src.shared.domain.events.domain_event import DomainEvent
 
 

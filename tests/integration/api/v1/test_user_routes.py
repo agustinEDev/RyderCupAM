@@ -1,9 +1,12 @@
 import pytest
-from httpx import AsyncClient
 from fastapi import status
+from httpx import AsyncClient
+
+from tests.conftest import create_authenticated_user
 
 # Marcar todos los tests para ejecutarse con asyncio
 pytestmark = pytest.mark.asyncio
+
 
 class TestUserRoutes:
     """
@@ -15,7 +18,6 @@ class TestUserRoutes:
         Verifica que se puede buscar un usuario por email y se devuelve su información.
         """
         # Primero registramos un usuario y obtenemos su token
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -45,7 +47,6 @@ class TestUserRoutes:
         Verifica que se puede buscar un usuario por nombre completo.
         """
         # Primero registramos un usuario
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -75,7 +76,6 @@ class TestUserRoutes:
         Verifica que se puede buscar con ambos parámetros y prioriza por email.
         """
         # Registramos dos usuarios
-        from tests.conftest import create_authenticated_user
 
         auth_data1 = await create_authenticated_user(
             client,
@@ -117,7 +117,6 @@ class TestUserRoutes:
         Verifica que devuelve 404 cuando no se encuentra un usuario por email.
         """
         # Crear usuario autenticado para hacer la búsqueda
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -145,7 +144,6 @@ class TestUserRoutes:
         Verifica que devuelve 404 cuando no se encuentra un usuario por nombre.
         """
         # Crear usuario autenticado para hacer la búsqueda
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -161,9 +159,9 @@ class TestUserRoutes:
             params={"full_name": "Nonexistent User"},
             headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
-        
+
         response_data = search_response.json()
         assert "detail" in response_data
         assert "Nonexistent User" in response_data["detail"]
@@ -173,7 +171,6 @@ class TestUserRoutes:
         Verifica que se requiere al menos un parámetro de búsqueda.
         """
         # Crear usuario autenticado para hacer la búsqueda
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -188,9 +185,9 @@ class TestUserRoutes:
             "/api/v1/users/search",
             headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_response.status_code == status.HTTP_400_BAD_REQUEST
-        
+
         response_data = search_response.json()
         assert "detail" in response_data
         assert "al menos" in response_data["detail"].lower()
@@ -200,7 +197,6 @@ class TestUserRoutes:
         Verifica que la búsqueda por nombre es insensible a mayúsculas/minúsculas.
         """
         # Registramos un usuario y obtenemos su token
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -210,17 +206,17 @@ class TestUserRoutes:
             "Test"
         )
         token = auth_data["token"]
-        
+
         # Buscamos con diferentes casos
         search_cases = ["case test", "CASE TEST", "Case Test", "CaSe TeSt"]
-        
+
         for search_name in search_cases:
             search_response = await client.get(
                 "/api/v1/users/search",
                 params={"full_name": search_name},
                 headers={"Authorization": f"Bearer {token}"}
             )
-            
+
             assert search_response.status_code == status.HTTP_200_OK
             response_data = search_response.json()
             assert response_data["email"] == "case.test@example.com"
@@ -231,7 +227,6 @@ class TestUserRoutes:
         Verifica que se puede buscar a Rafael Nadal que ya está registrado en el sistema.
         """
         # Registramos a Rafael Nadal y obtenemos su token
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -241,29 +236,29 @@ class TestUserRoutes:
             "Nadal Parera"
         )
         token = auth_data["token"]
-        
+
         # Buscamos por email
         search_by_email = await client.get(
             "/api/v1/users/search",
             params={"email": "rafa_nadal@prueba.com"},
             headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_by_email.status_code == status.HTTP_200_OK
         email_data = search_by_email.json()
         assert email_data["full_name"] == "Rafael Nadal Parera"
-        
+
         # Buscamos por nombre completo
         search_by_name = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Rafael Nadal Parera"},
             headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert search_by_name.status_code == status.HTTP_200_OK
         name_data = search_by_name.json()
         assert name_data["email"] == "rafa_nadal@prueba.com"
-        
+
         # Ambas búsquedas deben devolver el mismo user_id
         assert email_data["user_id"] == name_data["user_id"]
 
@@ -273,7 +268,6 @@ class TestUserRoutes:
 
     async def test_update_profile_first_name_only(self, client: AsyncClient):
         """Verifica que se puede actualizar solo el nombre."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -299,7 +293,6 @@ class TestUserRoutes:
 
     async def test_update_profile_last_name_only(self, client: AsyncClient):
         """Verifica que se puede actualizar solo el apellido."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -324,7 +317,6 @@ class TestUserRoutes:
 
     async def test_update_profile_both_names(self, client: AsyncClient):
         """Verifica que se pueden actualizar ambos campos."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -358,7 +350,6 @@ class TestUserRoutes:
 
     async def test_update_profile_rejects_empty_names(self, client: AsyncClient):
         """Verifica que no se aceptan strings vacíos (validación Pydantic)."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -385,7 +376,6 @@ class TestUserRoutes:
 
     async def test_update_security_email_only(self, client: AsyncClient):
         """Verifica que se puede actualizar solo el email."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -415,7 +405,6 @@ class TestUserRoutes:
 
     async def test_update_security_password_only(self, client: AsyncClient):
         """Verifica que se puede actualizar solo el password."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -452,7 +441,6 @@ class TestUserRoutes:
 
     async def test_update_security_both_email_and_password(self, client: AsyncClient):
         """Verifica que se pueden actualizar ambos."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -491,7 +479,6 @@ class TestUserRoutes:
 
     async def test_update_security_rejects_wrong_current_password(self, client: AsyncClient):
         """Verifica que rechaza password actual incorrecto."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,
@@ -519,7 +506,6 @@ class TestUserRoutes:
 
     async def test_update_security_rejects_duplicate_email(self, client: AsyncClient):
         """Verifica que rechaza email ya en uso."""
-        from tests.conftest import create_authenticated_user
 
         # Crear dos usuarios
         auth_data1 = await create_authenticated_user(
@@ -571,7 +557,6 @@ class TestUserRoutes:
 
     async def test_update_security_password_confirmation_must_match(self, client: AsyncClient):
         """Verifica que el password y su confirmación deben coincidir."""
-        from tests.conftest import create_authenticated_user
 
         auth_data = await create_authenticated_user(
             client,

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Completar Competition.
 
@@ -10,12 +9,11 @@ from src.modules.competition.application.dto.competition_dto import (
     CompleteCompetitionRequestDTO,
     CompleteCompetitionResponseDTO,
 )
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.entities.competition import CompetitionStateError
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionNotFoundError(Exception):

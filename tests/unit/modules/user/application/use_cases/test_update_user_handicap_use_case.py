@@ -3,11 +3,16 @@ Tests for UpdateUserHandicapUseCase
 """
 
 import pytest
+
+from src.modules.user.application.use_cases.update_user_handicap_use_case import (
+    UpdateUserHandicapUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.application.use_cases.update_user_handicap_use_case import UpdateUserHandicapUseCase
-from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 
 
 class TestUpdateUserHandicapUseCase:
@@ -157,7 +162,9 @@ class TestUpdateMultipleHandicapsUseCase:
     @pytest.mark.asyncio
     async def test_update_multiple_users_successfully(self):
         """Test: Actualizar hándicaps de múltiples usuarios exitosamente."""
-        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
+        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+            UpdateMultipleHandicapsUseCase,
+        )
 
         # Arrange
         uow = InMemoryUnitOfWork()
@@ -188,7 +195,9 @@ class TestUpdateMultipleHandicapsUseCase:
     @pytest.mark.asyncio
     async def test_update_multiple_with_non_existent_users(self):
         """Test: Estadísticas correctas cuando algunos usuarios no existen."""
-        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
+        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+            UpdateMultipleHandicapsUseCase,
+        )
 
         # Arrange
         uow = InMemoryUnitOfWork()
@@ -214,7 +223,9 @@ class TestUpdateMultipleHandicapsUseCase:
     @pytest.mark.asyncio
     async def test_update_multiple_empty_list(self):
         """Test: Actualizar lista vacía devuelve estadísticas correctas."""
-        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import UpdateMultipleHandicapsUseCase
+        from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
+            UpdateMultipleHandicapsUseCase,
+        )
 
         # Arrange
         uow = InMemoryUnitOfWork()

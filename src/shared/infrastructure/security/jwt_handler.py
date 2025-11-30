@@ -6,7 +6,6 @@ Implementa autenticación basada en tokens con algoritmo HS256.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 from jose import JWTError, jwt
 
@@ -28,7 +27,7 @@ class JWTTokenService(ITokenService):
     def create_access_token(
         self,
         data: dict,
-        expires_delta: Optional[timedelta] = None
+        expires_delta: timedelta | None = None
     ) -> str:
         """
         Crea un token JWT de acceso.
@@ -57,7 +56,7 @@ class JWTTokenService(ITokenService):
 
         return encoded_jwt
 
-    def verify_access_token(self, token: str) -> Optional[dict]:
+    def verify_access_token(self, token: str) -> dict | None:
         """
         Verifica y decodifica un token JWT.
 
@@ -83,7 +82,7 @@ class JWTTokenService(ITokenService):
 # ============================================================================
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """
     Crea un token JWT de acceso.
 
@@ -116,7 +115,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def verify_access_token(token: str) -> Optional[dict]:
+def verify_access_token(token: str) -> dict | None:
     """
     Verifica y decodifica un token JWT.
 

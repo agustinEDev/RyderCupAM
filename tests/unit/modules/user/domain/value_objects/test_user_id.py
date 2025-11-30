@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests unitarios para el Value Object UserId.
 
@@ -9,10 +8,11 @@ Este archivo contiene tests que verifican:
 - Comparación e igualdad
 """
 
-import pytest
 import uuid
 
-from src.modules.user.domain.value_objects.user_id import UserId, InvalidUserIdError
+import pytest
+
+from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 
 
 class TestUserIdGeneration:
@@ -27,7 +27,7 @@ class TestUserIdGeneration:
         """
         # Act
         user_id = UserId.generate()
-        
+
         # Assert
         assert user_id is not None
         assert isinstance(user_id.value, uuid.UUID)
@@ -41,7 +41,7 @@ class TestUserIdGeneration:
         """
         # Act
         ids = [UserId.generate() for _ in range(10)]
-        
+
         # Assert
         id_values = [str(user_id.value) for user_id in ids]
         assert len(set(id_values)) == 10  # Todos únicos
@@ -59,10 +59,10 @@ class TestUserIdValidation:
         """
         # Arrange
         valid_uuid = "550e8400-e29b-41d4-a716-446655440000"
-        
+
         # Act
         user_id = UserId(valid_uuid)
-        
+
         # Assert
         assert str(user_id.value) == valid_uuid
 
@@ -75,11 +75,11 @@ class TestUserIdValidation:
         """
         # Arrange
         invalid_uuid = "not-a-valid-uuid"
-        
+
         # Act & Assert
         with pytest.raises(InvalidUserIdError) as exc_info:
             UserId(invalid_uuid)
-        
+
         assert "no es un string UUID válido" in str(exc_info.value)
 
     def test_empty_string_rejected(self):
@@ -119,7 +119,7 @@ class TestUserIdComparison:
         uuid_str = "550e8400-e29b-41d4-a716-446655440000"
         user_id1 = UserId(uuid_str)
         user_id2 = UserId(uuid_str)
-        
+
         # Act & Assert
         assert user_id1 == user_id2
         assert user_id1.value == user_id2.value
@@ -134,7 +134,7 @@ class TestUserIdComparison:
         # Arrange
         user_id1 = UserId.generate()
         user_id2 = UserId.generate()
-        
+
         # Act & Assert
         assert user_id1 != user_id2
 
@@ -147,11 +147,11 @@ class TestUserIdComparison:
         """
         # Arrange
         user_id = UserId.generate()
-        
+
         # Act & Assert
         assert user_id != "some-string"
         assert user_id != 123
-        assert user_id != None
+        assert user_id is not None
 
 
 class TestUserIdImmutability:
@@ -167,11 +167,11 @@ class TestUserIdImmutability:
         # Arrange
         user_id = UserId.generate()
         original_value = user_id.value
-        
+
         # Act & Assert
         with pytest.raises(AttributeError):
             user_id.value = "new-value"
-        
+
         # Verificar que el valor no cambió
         assert user_id.value == original_value
 
@@ -188,10 +188,10 @@ class TestUserIdStringRepresentation:
         """
         # Arrange
         user_id = UserId.generate()
-        
+
         # Act
         str_representation = str(user_id)
-        
+
         # Assert
         assert str_representation == str(user_id.value)
 
@@ -204,10 +204,10 @@ class TestUserIdStringRepresentation:
         """
         # Arrange
         user_id = UserId.generate()
-        
+
         # Act
         repr_str = repr(user_id)
-        
+
         # Assert
         assert "UserId" in repr_str
         assert str(user_id.value) in repr_str

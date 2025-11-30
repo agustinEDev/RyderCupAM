@@ -3,10 +3,15 @@ Tests for UpdateUserHandicapManuallyUseCase
 """
 
 import pytest
+
+from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import (
+    UpdateUserHandicapManuallyUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.application.use_cases.update_user_handicap_manually_use_case import UpdateUserHandicapManuallyUseCase
-from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import InMemoryUnitOfWork
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 
 
 class TestUpdateUserHandicapManuallyUseCase:

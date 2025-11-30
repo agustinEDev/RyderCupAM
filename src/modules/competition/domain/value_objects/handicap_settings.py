@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 HandicapSettings Value Object - Configuración general de hándicap para una competición.
 
@@ -14,7 +13,6 @@ El cálculo completo del hándicap de juego se realizará en el módulo 'matches
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class HandicapType(str, Enum):
@@ -49,8 +47,8 @@ class HandicapSettings:
     IMPORTANTE:
     Este VO solo define la configuración general del torneo.
     El cálculo real del Playing Handicap se hará en cada Match considerando:
-    - Course Handicap = (Handicap Index × Slope Rating / 113) + (Course Rating - Par)
-    - Playing Handicap = Course Handicap × Allowance Factor (según formato)
+    - Course Handicap = (Handicap Index x Slope Rating / 113) + (Course Rating - Par)
+    - Playing Handicap = Course Handicap x Allowance Factor (según formato)
 
     Ejemplos:
         >>> # Torneo scratch (sin hándicap) - Para jugadores de nivel similar
@@ -70,7 +68,7 @@ class HandicapSettings:
     """
 
     type: HandicapType
-    percentage: Optional[int]
+    percentage: int | None
 
     def __post_init__(self):
         """
@@ -126,7 +124,7 @@ class HandicapSettings:
         """
         return self.type == HandicapType.PERCENTAGE
 
-    def get_allowance_percentage(self) -> Optional[int]:
+    def get_allowance_percentage(self) -> int | None:
         """
         Obtiene el porcentaje de allowance configurado.
 

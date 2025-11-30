@@ -1,18 +1,17 @@
-# -*- coding: utf-8 -*-
 """Tests para verificar la estructura de las interfaces de repositorio."""
 
-import pytest
 import inspect
 from abc import ABC
+
+import pytest
+
 from src.modules.competition.domain.repositories.competition_repository_interface import (
-    CompetitionRepositoryInterface
+    CompetitionRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
-    EnrollmentRepositoryInterface
+    EnrollmentRepositoryInterface,
 )
-from src.shared.domain.repositories.country_repository_interface import (
-    CountryRepositoryInterface
-)
+from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
 
 
 class TestCompetitionRepositoryInterface:

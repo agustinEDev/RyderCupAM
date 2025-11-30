@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests E2E para Enrollment Endpoints.
 
@@ -6,14 +5,14 @@ Tests de integración que verifican el flujo completo de los endpoints
 de inscripciones incluyendo autenticación, validaciones y persistencia.
 """
 
+
 import pytest
 from httpx import AsyncClient
-from datetime import date, timedelta
 
 from tests.conftest import (
+    activate_competition,
     create_authenticated_user,
     create_competition,
-    activate_competition,
 )
 
 

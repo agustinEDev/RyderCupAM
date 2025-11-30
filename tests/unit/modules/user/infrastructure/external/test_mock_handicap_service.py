@@ -3,6 +3,7 @@ Tests for MockHandicapService
 """
 
 import pytest
+
 from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
 
 
@@ -227,7 +228,7 @@ class TestMockHandicapServiceRealWorldScenarios:
         service = MockHandicapService(handicaps=tournament_players)
 
         # Verificar que todos los jugadores tienen hándicap
-        for player_name in tournament_players.keys():
+        for player_name in tournament_players:
             handicap = await service.search_handicap(player_name)
             assert handicap == tournament_players[player_name]
 

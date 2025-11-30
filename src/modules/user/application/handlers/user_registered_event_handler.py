@@ -1,14 +1,16 @@
 # src/modules/user/application/handlers/user_registered_event_handler.py
 import logging
-from src.shared.domain.events.event_handler import EventHandler
+
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+from src.shared.domain.events.event_handler import EventHandler
+
 
 class UserRegisteredEventHandler(EventHandler[UserRegisteredEvent]):
     """
     Manejador para el evento UserRegisteredEvent.
     Define las acciones a realizar cuando un usuario se registra.
     """
-    
+
     def __init__(self):
         self._logger = logging.getLogger(__name__)
 
@@ -21,12 +23,12 @@ class UserRegisteredEventHandler(EventHandler[UserRegisteredEvent]):
         self._logger.info(
             f"Processing user registration for {event.full_name} ({event.email})"
         )
-        
+
         # Aquí irían las acciones concretas:
         await self._send_welcome_email(event)
         await self._log_registration(event)
         await self._notify_external_systems(event)
-        
+
         self._logger.info(
             f"Successfully processed user registration for {event.email}"
         )

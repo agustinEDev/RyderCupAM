@@ -1,8 +1,13 @@
-import pytest
 from unittest.mock import patch
-from src.modules.user.application.handlers.user_registered_event_handler import UserRegisteredEventHandler
+
+import pytest
+
+from src.modules.user.application.handlers.user_registered_event_handler import (
+    UserRegisteredEventHandler,
+)
 from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
 from src.shared.domain.events.event_handler import EventHandler
+
 
 class TestUserRegisteredEventHandler:
     """Tests para UserRegisteredEventHandler."""

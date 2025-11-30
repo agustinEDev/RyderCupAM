@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Shared domain entities."""
 
 from .country import Country

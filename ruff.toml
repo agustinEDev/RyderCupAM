@@ -1,0 +1,84 @@
+# ================================
+# CONFIGURACIÓN DE RUFF
+# ================================
+# Ruff es un linter ultra-rápido para Python que reemplaza múltiples herramientas:
+# - flake8 (linting general)
+# - isort (ordenar imports)
+# - pydocstyle (documentación)
+# - pyupgrade (modernizar sintaxis)
+# - autoflake (remover imports sin usar)
+
+# Versión mínima de Python que soporta el proyecto
+target-version = "py312"
+
+# Longitud máxima de línea (PEP 8 recomienda 79, pero 100 es más práctico)
+line-length = 100
+
+# Directorios a excluir del análisis
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.egg-info",
+    ".pytest_cache",
+    ".mypy_cache",
+    "alembic/versions",  # Migraciones auto-generadas
+    "build",
+    "dist",
+]
+
+[lint]
+# Reglas activadas (códigos de ruff)
+# Ver: https://docs.astral.sh/ruff/rules/
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort (ordenar imports)
+    "N",      # pep8-naming
+    "UP",     # pyupgrade (modernizar sintaxis)
+    "B",      # flake8-bugbear (errores comunes)
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "RET",    # flake8-return
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate (código comentado)
+    "PL",     # pylint
+    "RUF",    # ruff-specific rules
+]
+
+# Reglas ignoradas (desactivadas)
+ignore = [
+    "E501",   # line-too-long (ya lo controlamos con line-length)
+    "B008",   # do-not-perform-function-calls-in-argument-defaults (común en FastAPI)
+    "PLR0913", # too-many-arguments (común en casos de uso)
+    "ARG002", # unused-method-argument (común en interfaces/protocolos)
+    "RET504", # unnecessary-assign (a veces mejora la legibilidad)
+]
+
+# Permitir autofix para estas reglas al ejecutar `ruff check --fix`
+fixable = ["ALL"]
+unfixable = []
+
+[lint.per-file-ignores]
+# Tests pueden tener imports sin usar, funciones largas, etc.
+"tests/**/*.py" = [
+    "ARG",     # unused arguments (fixtures)
+    "PLR2004", # magic-value-comparison
+    "S101",    # use of assert
+]
+
+# Archivos de configuración pueden tener imports no ordenados
+"alembic/env.py" = ["I"]
+
+[lint.isort]
+# Configuración de ordenamiento de imports (compatible con Black)
+combine-as-imports = true
+force-wrap-aliases = true
+known-first-party = ["src"]
+
+[lint.pydocstyle]
+# Estilo de docstrings (Google style)
+convention = "google"

@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**v2.1** · 14 Nov 2025 · En desarrollo
+**v3.0** · 30 Nov 2025 · Fase 2 Completa
 
 ---
 
@@ -8,14 +8,15 @@
 
 Sistema de torneos de golf amateur formato Ryder Cup.
 
-**Stack**: Python 3.12+, FastAPI, PostgreSQL, Clean Architecture + DDD
+**Stack**: Python 3.11-3.12, FastAPI, PostgreSQL, Clean Architecture + DDD
 
 **Features**:
-- User management + JWT auth
-- Email verification (Mailgun, UUID tokens, bilingüe)
-- Handicap system (RFEG integration)
-- Tournament management (planeado)
-- Real-time scoring (planeado)
+- ✅ User management + JWT auth
+- ✅ Email verification (Mailgun, UUID tokens, bilingüe)
+- ✅ Handicap system (RFEG integration)
+- ✅ Competition Module (torneos formato Ryder Cup)
+- ✅ CI/CD Pipeline (GitHub Actions)
+- ⏳ Real-time scoring (planeado)
 
 ---
 
@@ -70,10 +71,32 @@ Domain (Entities, VOs, Events, Repos)
 
 > ADRs: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
-### Tournament *(Planeado)*
+### Competition Management ✅
 
-**Domain**: Tournament, Team, Match, Score entities
-**Features**: Formación equipos, scoring, leaderboard
+**Domain**:
+- Entities: `Competition`, `Enrollment`, `Country`
+- VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `HandicapSettings`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
+- Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
+- Repos: `CompetitionRepositoryInterface`, `EnrollmentRepositoryInterface`, `CountryRepositoryInterface`
+
+**Application**:
+- Use Cases: 17 use cases (CreateCompetition, RequestEnrollment, HandleEnrollment, etc.)
+- DTOs: 19 DTOs (Request/Response pairs)
+
+**Infrastructure**:
+- Routes: `/competitions/*`, `/enrollments/*`, `/countries/*`
+- Repos: `SQLAlchemyCompetitionRepository`, `SQLAlchemyEnrollmentRepository`, `SQLAlchemyCountryRepository`
+- Database: Migraciones Alembic (competitions, enrollments, countries, country_adjacencies)
+- Seed Data: 166 países + 614 relaciones de fronteras
+
+**Features**:
+- Gestión completa de torneos (CRUD + state machine)
+- Sistema de inscripciones (solicitudes, invitaciones, aprobaciones)
+- Soporte multi-país (hasta 3 países adyacentes)
+- Custom handicaps por enrollment
+- 20 endpoints REST API
+
+> ADR: [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 
@@ -218,22 +241,55 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ## Testing
 
-**Estrategia**: Test Pyramid (85.7% unit, 14.3% integration)
+**Estrategia**: Test Pyramid (89% unit, 11% integration)
 
 ```
-420 tests (100% passing, 0 warnings)
-├── Unit: 360 (27 archivos)
-│   ├── Domain: ~240
-│   ├── Application: ~85
-│   └── Infrastructure: ~35
-└── Integration: 60 (8 archivos)
+667 tests (97.6% passing)
+├── Unit: 595+ tests
+│   ├── User Module: 308 tests
+│   ├── Competition Module: 173 tests
+│   ├── Shared: 60 tests
+│   └── Other: 54+ tests
+└── Integration: 72+ tests
+    ├── API: ~60 tests
+    └── Domain Events: ~12 tests
 ```
 
 **Cobertura**: >90% en lógica de negocio
 **Email Verification**: 100% (24 tests en 3 niveles)
-**Performance**: ~25s (paralelización con pytest-xdist)
+**Competition Module**: 97.6% (174 tests completos)
+**Performance**: ~30s (paralelización con pytest-xdist)
+
+**CI/CD**: Tests ejecutados automáticamente en GitHub Actions (Python 3.11, 3.12)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
+
+---
+
+## CI/CD Pipeline
+
+**Platform**: GitHub Actions
+
+**Jobs (7 paralelos)**:
+1. Preparation (Python 3.11/3.12 setup + cache)
+2. Unit Tests (matrix Python 3.11, 3.12)
+3. Integration Tests (PostgreSQL service container)
+4. Security Scan (Gitleaks)
+5. Code Quality (Ruff)
+6. Type Checking (Mypy)
+7. Database Migrations (Alembic validation)
+
+**Execution Time**: ~3 minutos
+**Trigger**: Push, Pull Request
+**Matrix**: Python 3.11, 3.12
+
+**Configurations**:
+- Mypy: Configuración pragmática para SQLAlchemy imperative mapping
+- Gitleaks: Whitelist para false positives en docs
+- PostgreSQL: Service container para integration tests
+- Caché: pip dependencies
+
+> ADR: [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
 ---
 
@@ -243,35 +299,37 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Patrones**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
-**Infra**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md)
+**Infra**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
-**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md)
+**Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 
 ## 📊 Métricas del Proyecto
 
-**Última actualización**: 14 Nov 2025
+**Última actualización**: 30 Nov 2025
 
 ### Testing
 
 | Métrica | Valor |
 |---------|-------|
-| Tests totales | 420 (100% passing) |
-| Warnings | 0 (todos corregidos) |
-| Tests unitarios | 360 (27 archivos) |
-| Tests integración | 60 (8 archivos) |
+| Tests totales | 667 (97.6% passing) |
+| Tests unitarios | 595+ tests |
+| Tests integración | 72+ tests |
 | Cobertura | >90% |
 | Email Verification | 100% (24 tests) |
-| Tiempo ejecución | ~25s (paralelo) |
+| Competition Module | 97.6% (174 tests) |
+| Tiempo ejecución | ~30s (paralelo) |
+| CI/CD Pipeline | ~3 min (7 jobs) |
 
 ### Progreso de Módulos
 
 | Módulo | Estado | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Completo + Auth + Email Verification | 360+ | 10 |
-| Tournament | 🚧 En desarrollo | 0 | 0 |
-| Team | ⏳ Pendiente | 0 | 0 |
+| User | ✅ Completo + Auth + Email | 308+ | 10 |
+| Competition | ✅ Completo + Enrollments | 174 | 20 |
+| CI/CD | ✅ GitHub Actions | - | - |
+| Real-time Scoring | ⏳ Pendiente | 0 | 0 |
 
 ### Value Objects Implementados (69 tests)
 
@@ -303,20 +361,26 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `UpdateMultipleHandicapsUseCase` - Batch update con estadísticas
 - `FindUserUseCase` (10 tests) - Búsqueda por email o nombre
 
-### API Endpoints Activos (10)
+### API Endpoints Activos (30)
 
-| Endpoint | Método | Auth | Status |
-|----------|--------|------|--------|
-| `/api/v1/auth/register` | POST | No | ✅ Activo |
-| `/api/v1/auth/login` | POST | No | ✅ Activo |
-| `/api/v1/auth/logout` | POST | JWT | ✅ Activo |
-| `/api/v1/auth/verify-email` | POST | No | ✅ Activo |
-| `/api/v1/users/profile` | PATCH | JWT | ✅ Activo |
-| `/api/v1/users/security` | PATCH | JWT | ✅ Activo |
-| `/api/v1/users/search` | GET | JWT | ✅ Activo |
-| `/api/v1/handicaps/update` | POST | JWT | ✅ Activo |
-| `/api/v1/handicaps/update-manual` | POST | JWT | ✅ Activo |
-| `/api/v1/handicaps/update-multiple` | POST | JWT | ✅ Activo |
+**Auth & Users (10)**:
+- `/api/v1/auth/register`, `/login`, `/logout`, `/verify-email`
+- `/api/v1/users/profile`, `/security`, `/search`
+- `/api/v1/handicaps/update`, `/update-manual`, `/update-multiple`
+
+**Competitions (10)**:
+- `/api/v1/competitions` (GET, POST)
+- `/api/v1/competitions/{id}` (GET, PUT, DELETE)
+- `/api/v1/competitions/{id}/activate`, `/close-enrollments`, `/start`, `/complete`, `/cancel`
+
+**Enrollments (8)**:
+- `/api/v1/competitions/{id}/enrollments` (GET, POST)
+- `/api/v1/competitions/{id}/enrollments/direct`
+- `/api/v1/enrollments/{id}/approve`, `/reject`, `/cancel`, `/withdraw`, `/handicap`
+
+**Countries (2)**:
+- `/api/v1/countries` (GET)
+- `/api/v1/countries/{code}/adjacent` (GET)
 
 ### External Services Implementados (18 tests)
 

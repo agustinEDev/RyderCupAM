@@ -1,5 +1,5 @@
-from typing import List, Optional
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user import User
@@ -14,6 +14,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     """
     Implementación asíncrona del repositorio de usuarios con SQLAlchemy.
     """
+    MIN_NAME_PARTS = 2
 
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -22,18 +23,18 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Guarda un usuario en la base de datos."""
         self._session.add(user)
 
-    async def find_by_id(self, user_id: UserId) -> Optional[User]:
+    async def find_by_id(self, user_id: UserId) -> User | None:
         """Busca un usuario por su ID."""
         return await self._session.get(User, user_id)
 
-    async def find_by_email(self, email: Email) -> Optional[User]:
+    async def find_by_email(self, email: Email) -> User | None:
         """Busca un usuario por su email."""
         # Para composites, necesitamos usar where() y comparar con el atributo privado
         statement = select(User).where(User._email == email.value)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def find_all(self) -> List[User]:
+    async def find_all(self) -> list[User]:
         """Devuelve todos los usuarios."""
         statement = select(User)
         result = await self._session.execute(statement)
@@ -52,18 +53,18 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """
         self._session.add(user)
 
-    async def find_by_full_name(self, full_name: str) -> Optional[User]:
+    async def find_by_full_name(self, full_name: str) -> User | None:
         """Busca un usuario por su nombre completo."""
         # Separar el nombre completo en palabras para buscar
         name_parts = full_name.strip().split()
-        if len(name_parts) < 2:
+        if len(name_parts) < self.MIN_NAME_PARTS:
             return None
-            
+
         # Buscar por primera coincidencia exacta de first_name + last_name
         for i in range(1, len(name_parts)):
             first_name = " ".join(name_parts[:i])
             last_name = " ".join(name_parts[i:])
-            
+
             statement = select(User).filter(
                 func.lower(User.first_name) == func.lower(first_name),
                 func.lower(User.last_name) == func.lower(last_name)
@@ -72,7 +73,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             user = result.scalar_one_or_none()
             if user:
                 return user
-                
+
         return None
 
     async def exists_by_email(self, email: Email) -> bool:
@@ -88,7 +89,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one()
 
-    async def find_by_verification_token(self, token: str) -> Optional[User]:
+    async def find_by_verification_token(self, token: str) -> User | None:
         """Busca un usuario por su token de verificación."""
         statement = select(User).filter_by(verification_token=token)
         result = await self._session.execute(statement)

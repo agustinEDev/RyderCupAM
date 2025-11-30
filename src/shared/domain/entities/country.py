@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Country Entity - Representa un país en el sistema.
 
@@ -6,6 +5,7 @@ Entidad de dominio compartida para gestión de países con soporte multilenguaje
 """
 
 from dataclasses import dataclass
+
 from ..value_objects.country_code import CountryCode
 
 

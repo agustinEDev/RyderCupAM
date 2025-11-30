@@ -3,6 +3,7 @@ Tests for Handicap Value Object
 """
 
 import pytest
+
 from src.modules.user.domain.value_objects.handicap import Handicap
 
 

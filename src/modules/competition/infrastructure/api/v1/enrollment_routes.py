@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Enrollment Routes - API REST Layer (Infrastructure).
 
@@ -6,85 +5,80 @@ Endpoints FastAPI para gestión de inscripciones siguiendo Clean Architecture.
 """
 
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from src.config.dependencies import (
+    get_cancel_enrollment_use_case,
     get_current_user,
-    get_competition_uow,
-    get_uow,  # User Unit of Work para obtener datos del usuario
-    get_request_enrollment_use_case,
     get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
-    get_cancel_enrollment_use_case,
-    get_withdraw_enrollment_use_case,
-    get_set_custom_handicap_use_case,
     get_list_enrollments_use_case,
+    get_request_enrollment_use_case,
+    get_set_custom_handicap_use_case,
+    get_uow,  # User Unit of Work para obtener datos del usuario
+    get_withdraw_enrollment_use_case,
 )
-from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.competition.application.dto.enrollment_dto import (
-    RequestEnrollmentRequestDTO,
-    RequestEnrollmentResponseDTO,
-    DirectEnrollPlayerRequestDTO,
-    DirectEnrollPlayerResponseDTO,
-    HandleEnrollmentRequestDTO,
-    HandleEnrollmentResponseDTO,
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
-    WithdrawEnrollmentRequestDTO,
-    WithdrawEnrollmentResponseDTO,
+    DirectEnrollPlayerRequestDTO,
+    DirectEnrollPlayerResponseDTO,
+    EnrolledUserDTO,
+    EnrollmentResponseDTO,
+    HandleEnrollmentRequestDTO,
+    HandleEnrollmentResponseDTO,
+    RequestEnrollmentRequestDTO,
+    RequestEnrollmentResponseDTO,
     SetCustomHandicapRequestDTO,
     SetCustomHandicapResponseDTO,
-    EnrollmentResponseDTO,
-    EnrolledUserDTO,
-)
-from src.modules.competition.application.use_cases.request_enrollment_use_case import (
-    RequestEnrollmentUseCase,
-    CompetitionNotFoundError as RequestCompetitionNotFoundError,
-    CompetitionNotActiveError,
-    AlreadyEnrolledError as RequestAlreadyEnrolledError,
-)
-from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
-    DirectEnrollPlayerUseCase,
-    CompetitionNotFoundError as DirectCompetitionNotFoundError,
-    NotCreatorError as DirectNotCreatorError,
-    CompetitionNotActiveError as DirectCompetitionNotActiveError,
-    AlreadyEnrolledError as DirectAlreadyEnrolledError,
-)
-from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
-    HandleEnrollmentUseCase,
-    EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
-    CompetitionNotFoundError as HandleCompetitionNotFoundError,
-    NotCreatorError as HandleNotCreatorError,
-    InvalidActionError,
+    WithdrawEnrollmentRequestDTO,
+    WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
     EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
     NotOwnerError as CancelNotOwnerError,
 )
-from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
-    WithdrawEnrollmentUseCase,
-    EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
-    NotOwnerError as WithdrawNotOwnerError,
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    AlreadyEnrolledError as DirectAlreadyEnrolledError,
+    CompetitionNotActiveError as DirectCompetitionNotActiveError,
+    CompetitionNotFoundError as DirectCompetitionNotFoundError,
+    DirectEnrollPlayerUseCase,
+    NotCreatorError as DirectNotCreatorError,
 )
-from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
-    SetCustomHandicapUseCase,
-    EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
-    CompetitionNotFoundError as HandicapCompetitionNotFoundError,
-    NotCreatorError as HandicapNotCreatorError,
+from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
+    CompetitionNotFoundError as HandleCompetitionNotFoundError,
+    EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
+    HandleEnrollmentUseCase,
+    NotCreatorError as HandleNotCreatorError,
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
-    ListEnrollmentsUseCase,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
+    ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.request_enrollment_use_case import (
+    AlreadyEnrolledError as RequestAlreadyEnrolledError,
+    CompetitionNotActiveError,
+    CompetitionNotFoundError as RequestCompetitionNotFoundError,
+    RequestEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
+    CompetitionNotFoundError as HandicapCompetitionNotFoundError,
+    EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
+    NotCreatorError as HandicapNotCreatorError,
+    SetCustomHandicapUseCase,
+)
+from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
+    EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
+    NotOwnerError as WithdrawNotOwnerError,
+    WithdrawEnrollmentUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,7 +101,7 @@ class EnrollmentDTOMapper:
     @staticmethod
     async def to_response_dto(
         enrollment,
-        user_uow: Optional[UserUnitOfWorkInterface] = None
+        user_uow: UserUnitOfWorkInterface | None = None
     ) -> EnrollmentResponseDTO:
         """
         Convierte una entidad Enrollment a EnrollmentResponseDTO.
@@ -140,7 +134,7 @@ class EnrollmentDTOMapper:
     async def _get_user_dto(
         user_id: UserId,
         user_uow: UserUnitOfWorkInterface,
-    ) -> Optional[EnrolledUserDTO]:
+    ) -> EnrolledUserDTO | None:
         """
         Obtiene la información de un usuario inscrito.
 
@@ -199,11 +193,11 @@ async def request_enrollment(
         return await use_case.execute(request_dto)
 
     except RequestCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CompetitionNotActiveError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RequestAlreadyEnrolledError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.post(
@@ -236,27 +230,27 @@ async def direct_enroll_player(
         return await use_case.execute(request_dto, creator_id)
 
     except DirectCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DirectNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DirectCompetitionNotActiveError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.get(
     "/competitions/{competition_id}/enrollments",
-    response_model=List[EnrollmentResponseDTO],
+    response_model=list[EnrollmentResponseDTO],
     summary="Listar inscripciones",
     description="Lista las inscripciones de una competición con filtros opcionales."
 )
 async def list_enrollments(
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
     use_case: ListEnrollmentsUseCase = Depends(get_list_enrollments_use_case),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por estado"),
+    status_filter: str | None = Query(None, alias="status", description="Filtrar por estado"),
 ):
     """
     Lista inscripciones de una competición.
@@ -284,9 +278,9 @@ async def list_enrollments(
         return result
 
     except ListCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -314,13 +308,13 @@ async def approve_enrollment(
         return await use_case.execute(request_dto, creator_id)
 
     except HandleEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -348,13 +342,13 @@ async def reject_enrollment(
         return await use_case.execute(request_dto, creator_id)
 
     except HandleEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -365,7 +359,7 @@ async def reject_enrollment(
 )
 async def cancel_enrollment(
     enrollment_id: UUID,
-    reason: Optional[str] = Query(None, description="Razón de la cancelación"),
+    reason: str | None = Query(None, description="Razón de la cancelación"),
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CancelEnrollmentUseCase = Depends(get_cancel_enrollment_use_case),
 ):
@@ -384,11 +378,11 @@ async def cancel_enrollment(
         return await use_case.execute(request_dto, user_id)
 
     except CancelEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CancelNotOwnerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -399,7 +393,7 @@ async def cancel_enrollment(
 )
 async def withdraw_enrollment(
     enrollment_id: UUID,
-    reason: Optional[str] = Query(None, description="Razón del retiro"),
+    reason: str | None = Query(None, description="Razón del retiro"),
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: WithdrawEnrollmentUseCase = Depends(get_withdraw_enrollment_use_case),
 ):
@@ -418,11 +412,11 @@ async def withdraw_enrollment(
         return await use_case.execute(request_dto, user_id)
 
     except WithdrawEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except WithdrawNotOwnerError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.put(
@@ -453,10 +447,10 @@ async def set_custom_handicap(
         return await use_case.execute(request_dto, creator_id)
 
     except HandicapEnrollmentNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandicapCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandicapNotCreatorError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

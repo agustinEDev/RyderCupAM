@@ -7,7 +7,6 @@ Este evento se dispara cuando un usuario actualiza su nombre o apellidos.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -34,12 +33,12 @@ class UserProfileUpdatedEvent(DomainEvent):
     updated_at: datetime
 
     # Datos del perfil (CAMPOS OPCIONALES - al menos uno debe cambiar)
-    old_first_name: Optional[str] = None
-    new_first_name: Optional[str] = None
-    old_last_name: Optional[str] = None
-    new_last_name: Optional[str] = None
-    old_country_code: Optional[str] = None
-    new_country_code: Optional[str] = None
+    old_first_name: str | None = None
+    new_first_name: str | None = None
+    old_last_name: str | None = None
+    new_last_name: str | None = None
+    old_country_code: str | None = None
+    new_country_code: str | None = None
 
     @property
     def aggregate_id(self) -> str:

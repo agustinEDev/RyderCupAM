@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Competition Unit of Work Interface - Competition Module Domain Layer.
 
@@ -7,10 +6,12 @@ Esta interfaz extiende la base añadiendo acceso a los repositorios de competici
 """
 
 from abc import abstractmethod
+
+from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
+
 from .competition_repository_interface import CompetitionRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
 
 
 class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):

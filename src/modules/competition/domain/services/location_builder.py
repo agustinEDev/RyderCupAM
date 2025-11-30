@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 LocationBuilder - Domain Service.
 
@@ -6,10 +5,10 @@ Servicio de dominio para construir y validar el Value Object Location.
 Encapsula la lógica de validación de países y adyacencias.
 """
 
-from typing import Optional
+
 from src.modules.competition.domain.value_objects.location import Location
-from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.value_objects.country_code import CountryCode
 
 
 class InvalidCountryError(Exception):
@@ -46,8 +45,8 @@ class LocationBuilder:
     async def build_from_codes(
         self,
         main_country: str,
-        adjacent_country_1: Optional[str] = None,
-        adjacent_country_2: Optional[str] = None
+        adjacent_country_1: str | None = None,
+        adjacent_country_2: str | None = None
     ) -> Location:
         """
         Construye un Location validando países y adyacencias.
@@ -86,10 +85,9 @@ class LocationBuilder:
         # 3. Construir Location según número de países adyacentes
         if len(adjacent_codes) == 0:
             return Location(main_code)
-        elif len(adjacent_codes) == 1:
+        if len(adjacent_codes) == 1:
             return Location(main_code, adjacent_codes[0])
-        else:
-            return Location(main_code, adjacent_codes[0], adjacent_codes[1])
+        return Location(main_code, adjacent_codes[0], adjacent_codes[1])
 
     async def _validate_country_exists(self, country_code: CountryCode) -> None:
         """

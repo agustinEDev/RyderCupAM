@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Manejar Solicitud de Inscripción (Handle Enrollment).
 
@@ -9,13 +8,11 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class EnrollmentNotFoundError(Exception):

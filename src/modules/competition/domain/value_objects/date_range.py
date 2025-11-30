@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 DateRange Value Object - Rango de fechas válido para una competición.
 
@@ -8,7 +7,6 @@ Garantiza que el rango sea lógicamente válido.
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Union
 
 
 class InvalidDateRangeError(Exception):
@@ -69,7 +67,7 @@ class DateRange:
         object.__setattr__(self, 'start_date', normalized_start)
         object.__setattr__(self, 'end_date', normalized_end)
 
-    def _normalize_date(self, value: Union[date, datetime], field_name: str) -> date:
+    def _normalize_date(self, value: date | datetime, field_name: str) -> date:
         """
         Normaliza un valor a tipo date.
 
@@ -85,13 +83,12 @@ class DateRange:
         """
         if isinstance(value, datetime):
             return value.date()
-        elif isinstance(value, date):
+        if isinstance(value, date):
             return value
-        else:
-            raise InvalidDateRangeError(
-                f"{field_name} debe ser de tipo date o datetime, "
-                f"se recibió {type(value).__name__}"
-            )
+        raise InvalidDateRangeError(
+            f"{field_name} debe ser de tipo date o datetime, "
+            f"se recibió {type(value).__name__}"
+        )
 
     def duration_days(self) -> int:
         """

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Competition Entity - Representa una competición/torneo de golf formato Ryder Cup.
 
@@ -7,23 +6,28 @@ Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
 from datetime import datetime
-from typing import Optional, List
+
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
-from ..value_objects.competition_id import CompetitionId
-from ..value_objects.competition_name import CompetitionName
-from ..value_objects.date_range import DateRange
-from ..value_objects.location import Location
-from ..value_objects.handicap_settings import HandicapSettings
-from ..value_objects.competition_status import CompetitionStatus
-from ..value_objects.team_assignment import TeamAssignment
-from ..events.competition_created_event import CompetitionCreatedEvent
+
 from ..events.competition_activated_event import CompetitionActivatedEvent
+from ..events.competition_cancelled_event import CompetitionCancelledEvent
+from ..events.competition_completed_event import CompetitionCompletedEvent
+from ..events.competition_created_event import CompetitionCreatedEvent
 from ..events.competition_enrollments_closed_event import CompetitionEnrollmentsClosedEvent
 from ..events.competition_started_event import CompetitionStartedEvent
-from ..events.competition_completed_event import CompetitionCompletedEvent
-from ..events.competition_cancelled_event import CompetitionCancelledEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
+from ..value_objects.competition_id import CompetitionId
+from ..value_objects.competition_name import CompetitionName
+from ..value_objects.competition_status import CompetitionStatus
+from ..value_objects.date_range import DateRange
+from ..value_objects.handicap_settings import HandicapSettings
+from ..value_objects.location import Location
+from ..value_objects.team_assignment import TeamAssignment
+
+# Constantes de validación
+MIN_PLAYERS = 2
+MAX_PLAYERS = 100
 
 
 class CompetitionStateError(Exception):
@@ -81,9 +85,9 @@ class Competition:
         max_players: int = 24,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
-        created_at: Optional[datetime] = None,
-        updated_at: Optional[datetime] = None,
-        domain_events: Optional[List[DomainEvent]] = None
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        domain_events: list[DomainEvent] | None = None
     ):
         """
         Constructor de Competition.
@@ -119,7 +123,7 @@ class Competition:
         self.status = status
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
-        self._domain_events: List[DomainEvent] = domain_events or []
+        self._domain_events: list[DomainEvent] = domain_events or []
 
     @classmethod
     def create(
@@ -348,7 +352,7 @@ class Competition:
         )
         self._add_domain_event(event)
 
-    def cancel(self, reason: Optional[str] = None) -> None:
+    def cancel(self, reason: str | None = None) -> None:
         """
         Cancela el torneo (cualquier estado → CANCELLED).
 
@@ -385,14 +389,14 @@ class Competition:
 
     def update_info(
         self,
-        name: Optional[CompetitionName] = None,
-        dates: Optional[DateRange] = None,
-        location: Optional[Location] = None,
-        team_1_name: Optional[str] = None,
-        team_2_name: Optional[str] = None,
-        handicap_settings: Optional[HandicapSettings] = None,
-        max_players: Optional[int] = None,
-        team_assignment: Optional[TeamAssignment] = None
+        name: CompetitionName | None = None,
+        dates: DateRange | None = None,
+        location: Location | None = None,
+        team_1_name: str | None = None,
+        team_2_name: str | None = None,
+        handicap_settings: HandicapSettings | None = None,
+        max_players: int | None = None,
+        team_assignment: TeamAssignment | None = None
     ) -> None:
         """
         Actualiza la información del torneo.
@@ -433,8 +437,8 @@ class Competition:
             self.handicap_settings = handicap_settings
 
         if max_players is not None:
-            if not 2 <= max_players <= 100:
-                raise ValueError("max_players debe estar entre 2 y 100")
+            if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
+                raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
             self.max_players = max_players
 
         if team_assignment is not None:
@@ -474,7 +478,7 @@ class Competition:
         self._ensure_domain_events()
         self._domain_events.append(event)
 
-    def get_domain_events(self) -> List[DomainEvent]:
+    def get_domain_events(self) -> list[DomainEvent]:
         """Obtiene los eventos de dominio pendientes."""
         self._ensure_domain_events()
         return self._domain_events.copy()

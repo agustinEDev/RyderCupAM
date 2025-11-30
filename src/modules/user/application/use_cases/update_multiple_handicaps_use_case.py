@@ -6,14 +6,16 @@ Caso de uso para actualizar hándicaps de múltiples usuarios.
 """
 
 import logging
-from typing import List, Dict
+
+from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
+from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
 
-from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.domain.services.handicap_service import HandicapService
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
-from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
 
 
 class UpdateMultipleHandicapsUseCase:
@@ -44,7 +46,7 @@ class UpdateMultipleHandicapsUseCase:
         self._uow = uow
         self._handicap_service = handicap_service
 
-    async def execute(self, user_ids: List[UserId]) -> Dict[str, int]:
+    async def execute(self, user_ids: list[UserId]) -> dict[str, int]:
         """
         Actualiza los hándicaps de múltiples usuarios.
 

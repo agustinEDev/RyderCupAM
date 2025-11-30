@@ -4,7 +4,6 @@ Tests unitarios para RFEGHandicapService
 Verifica la funcionalidad de normalización de texto para eliminar acentos.
 """
 
-import pytest
 from src.modules.user.infrastructure.external.rfeg_handicap_service import RFEGHandicapService
 
 
@@ -15,7 +14,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe eliminar acentos de caracteres españoles"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("Agustín")
-        
+
         # Assert
         assert resultado == "Agustin"
 
@@ -23,7 +22,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe eliminar todos los acentos de un nombre completo"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("José María López García")
-        
+
         # Assert
         assert resultado == "Jose Maria Lopez Garcia"
 
@@ -31,7 +30,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """No debe modificar texto que ya no tiene acentos"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("Juan Carlos Perez")
-        
+
         # Assert
         assert resultado == "Juan Carlos Perez"
 
@@ -39,7 +38,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe normalizar la ñ a n (NFD descompone todos los diacríticos)"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("Peña")
-        
+
         # Assert
         assert resultado == "Pena"
 
@@ -47,7 +46,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe manejar string vacío"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("")
-        
+
         # Assert
         assert resultado == ""
 
@@ -55,7 +54,7 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe eliminar diéresis"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("Güell")
-        
+
         # Assert
         assert resultado == "Guell"
 
@@ -63,6 +62,6 @@ class TestRFEGHandicapServiceNormalizacion:
         """Debe eliminar espacios extra al principio, al final y entre palabras"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("  José   Buela  Fernández  ")
-        
+
         # Assert
         assert resultado == "Jose Buela Fernandez"

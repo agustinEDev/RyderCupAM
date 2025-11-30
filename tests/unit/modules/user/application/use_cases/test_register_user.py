@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
@@ -98,7 +99,9 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve None.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+        from src.modules.user.infrastructure.external.mock_handicap_service import (
+            MockHandicapService,
+        )
 
         # Servicio que siempre devuelve None (usuario no encontrado en RFEG)
         handicap_service = MockHandicapService(default=None)
@@ -126,7 +129,9 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve un valor.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+        from src.modules.user.infrastructure.external.mock_handicap_service import (
+            MockHandicapService,
+        )
 
         # Servicio que devuelve un hándicap para este usuario
         handicap_service = MockHandicapService(
@@ -156,7 +161,9 @@ class TestRegisterUserUseCase:
         cuando RFEG devuelve None y no se proporciona hándicap manual.
         """
         # Arrange
-        from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+        from src.modules.user.infrastructure.external.mock_handicap_service import (
+            MockHandicapService,
+        )
 
         # Servicio que devuelve None
         handicap_service = MockHandicapService(default=None)

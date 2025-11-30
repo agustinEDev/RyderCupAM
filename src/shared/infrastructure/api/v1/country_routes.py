@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Country Routes - API REST Layer (Shared Infrastructure).
 
@@ -6,8 +5,8 @@ Endpoints FastAPI para consultar países y sus adyacencias.
 Endpoints de solo lectura (seed data).
 """
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.config.dependencies import get_competition_uow
@@ -15,7 +14,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.shared.domain.value_objects.country_code import CountryCode
-
 
 router = APIRouter()
 
@@ -40,14 +38,13 @@ class CountryResponseDTO(BaseModel):
 
 @router.get(
     "",
-    response_model=List[CountryResponseDTO],
+    response_model=list[CountryResponseDTO],
     summary="Listar países activos",
     description="Obtiene todos los países activos para poblar selectores en el frontend."
 )
 async def list_countries(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    language: str = Query("en", description="Idioma para ordenar (en/es)")
-) -> List[CountryResponseDTO]:
+) -> list[CountryResponseDTO]:
     """
     Lista todos los países activos.
 
@@ -69,14 +66,14 @@ async def list_countries(
 
 @router.get(
     "/{country_code}/adjacent",
-    response_model=List[CountryResponseDTO],
+    response_model=list[CountryResponseDTO],
     summary="Listar países adyacentes",
     description="Obtiene los países que comparten frontera con el país especificado."
 )
 async def list_adjacent_countries(
     country_code: str,
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-) -> List[CountryResponseDTO]:
+) -> list[CountryResponseDTO]:
     """
     Lista los países adyacentes a un país dado.
 
@@ -96,11 +93,11 @@ async def list_adjacent_countries(
         # Validar que el país existe
         try:
             code = CountryCode(country_code.upper())
-        except Exception:
+        except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Código de país inválido: {country_code}"
-            )
+            ) from e
 
         country = await uow.countries.find_by_code(code)
         if not country:

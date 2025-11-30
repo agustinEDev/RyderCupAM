@@ -2,8 +2,10 @@
 Tests for HandicapUpdatedEvent
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from src.modules.user.domain.events.handicap_updated_event import HandicapUpdatedEvent
 
 

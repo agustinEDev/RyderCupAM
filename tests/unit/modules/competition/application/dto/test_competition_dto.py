@@ -1,19 +1,20 @@
-# -*- coding: utf-8 -*-
 """Tests para Competition DTOs."""
 
-import pytest
-from datetime import date, datetime
+from datetime import date
 from uuid import uuid4
+
+import pytest
 from pydantic import ValidationError
+
 from src.modules.competition.application.dto.competition_dto import (
-    CreateCompetitionRequestDTO,
-    UpdateCompetitionRequestDTO,
     ActivateCompetitionRequestDTO,
-    CloseEnrollmentsRequestDTO,
-    StartCompetitionRequestDTO,
-    CompleteCompetitionRequestDTO,
-    DeleteCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
+    CloseEnrollmentsRequestDTO,
+    CompleteCompetitionRequestDTO,
+    CreateCompetitionRequestDTO,
+    DeleteCompetitionRequestDTO,
+    StartCompetitionRequestDTO,
+    UpdateCompetitionRequestDTO,
 )
 
 

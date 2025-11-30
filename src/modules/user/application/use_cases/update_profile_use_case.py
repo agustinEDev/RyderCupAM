@@ -8,10 +8,10 @@ NO requiere validación de contraseña, solo autenticación JWT.
 from src.modules.user.application.dto.user_dto import (
     UpdateProfileRequestDTO,
     UpdateProfileResponseDTO,
-    UserResponseDTO
+    UserResponseDTO,
 )
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
+from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
 from src.shared.domain.value_objects.country_code import CountryCode

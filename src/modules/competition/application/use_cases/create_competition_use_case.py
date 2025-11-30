@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Crear Competition.
 
@@ -10,6 +9,10 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
@@ -18,11 +21,7 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapType,
 )
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
-from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
 
 
 class CompetitionAlreadyExistsError(Exception):
@@ -179,6 +178,5 @@ class CreateCompetitionUseCase:
 
         if h_type == HandicapType.SCRATCH:
             return HandicapSettings(h_type, None)  # Scratch requiere None explícitamente
-        else:
-            # PERCENTAGE requiere porcentaje
-            return HandicapSettings(h_type, handicap_percentage)
+        # PERCENTAGE requiere porcentaje
+        return HandicapSettings(h_type, handicap_percentage)

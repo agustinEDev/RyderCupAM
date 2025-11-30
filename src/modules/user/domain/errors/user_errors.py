@@ -11,10 +11,10 @@ from typing import Any
 class UserDomainError(Exception):
     """
     Excepción base para todos los errores del dominio de usuarios.
-    
+
     Todas las excepciones específicas del dominio de usuarios deben heredar de esta clase.
     """
-    
+
     def __init__(self, message: str, details: Any = None) -> None:
         self.message = message
         self.details = details
@@ -24,7 +24,7 @@ class UserDomainError(Exception):
 class UserValidationError(UserDomainError):
     """
     Excepción lanzada cuando la validación de una entidad User falla.
-    
+
     Se utiliza para errores de validación en la construcción o modificación
     de entidades User que no están relacionados con Value Objects específicos.
     """
@@ -34,7 +34,7 @@ class UserValidationError(UserDomainError):
 class UserNotFoundError(UserDomainError):
     """
     Excepción lanzada cuando no se puede encontrar un usuario.
-    
+
     Se utiliza en operaciones de repositorio cuando se intenta acceder
     a un usuario que no existe en el sistema.
     """
@@ -74,7 +74,7 @@ class InvalidCredentialsError(UserDomainError):
 class RepositoryError(UserDomainError):
     """
     Excepción base para errores de repositorio.
-    
+
     Se utiliza para encapsular errores de persistencia, conexión a base de datos,
     o cualquier problema relacionado con la capa de infraestructura de datos.
     """
@@ -84,7 +84,7 @@ class RepositoryError(UserDomainError):
 class RepositoryConnectionError(RepositoryError):
     """
     Excepción lanzada cuando hay problemas de conexión con el repositorio.
-    
+
     Se utiliza cuando no se puede establecer o mantener una conexión
     con el sistema de persistencia (base de datos, etc.).
     """
@@ -94,7 +94,7 @@ class RepositoryConnectionError(RepositoryError):
 class RepositoryOperationError(RepositoryError):
     """
     Excepción lanzada cuando una operación de repositorio falla.
-    
+
     Se utiliza para errores durante operaciones CRUD como save, update, delete
     que fallan por problemas de integridad, constraints, etc.
     """
@@ -104,7 +104,7 @@ class RepositoryOperationError(RepositoryError):
 class RepositoryTimeoutError(RepositoryError):
     """
     Excepción lanzada cuando una operación de repositorio excede el timeout.
-    
+
     Se utiliza cuando las operaciones de base de datos tardan más tiempo
     del configurado como límite máximo.
     """

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Country Repository - SQLAlchemy Implementation (Shared Domain).
 
@@ -6,10 +5,12 @@ Implementación concreta del repositorio de países usando SQLAlchemy async.
 Este es un repositorio de solo lectura para datos de referencia (seed data).
 """
 
-from typing import List, Optional
-from sqlalchemy import select, func, exists as sql_exists, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import (
+    func,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.domain.entities.country import Country
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -18,7 +19,7 @@ from src.shared.domain.value_objects.country_code import CountryCode
 
 # Import de la tabla country_adjacencies para queries de adyacencia
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
-    country_adjacencies_table
+    country_adjacencies_table,
 )
 
 
@@ -39,7 +40,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         """
         self._session = session
 
-    async def find_by_code(self, code: CountryCode) -> Optional[Country]:
+    async def find_by_code(self, code: CountryCode) -> Country | None:
         """
         Busca un país por su código ISO.
 
@@ -51,7 +52,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         """
         return await self._session.get(Country, code)
 
-    async def find_all_active(self) -> List[Country]:
+    async def find_all_active(self) -> list[Country]:
         """
         Obtiene todos los países activos.
 
@@ -62,7 +63,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         """
         statement = (
             select(Country)
-            .where(Country.active == True)
+            .where(Country.active)
             .order_by(Country.name_en.asc())
         )
         result = await self._session.execute(statement)
@@ -106,7 +107,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
-    async def find_adjacent_countries(self, code: CountryCode) -> List[Country]:
+    async def find_adjacent_countries(self, code: CountryCode) -> list[Country]:
         """
         Obtiene todos los países adyacentes a un país dado.
 
@@ -133,7 +134,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
                 Country.code == country_adjacencies_table.c.country_code_2
             )
             .where(country_adjacencies_table.c.country_code_1 == code)
-            .where(Country.active == True)
+            .where(Country.active)
             .order_by(Country.name_en.asc())
         )
         result = await self._session.execute(statement)

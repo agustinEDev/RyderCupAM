@@ -5,6 +5,7 @@ Configuración centralizada de la aplicación usando variables de entorno.
 """
 
 import os
+
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env

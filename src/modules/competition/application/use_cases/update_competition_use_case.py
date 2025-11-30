@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Caso de Uso: Actualizar Competition.
 
@@ -9,6 +8,10 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
     UpdateCompetitionResponseDTO,
 )
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
@@ -17,11 +20,7 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapType,
 )
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
-from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
-    CompetitionUnitOfWorkInterface,
-)
 
 
 class CompetitionNotFoundError(Exception):
@@ -133,7 +132,7 @@ class UpdateCompetitionUseCase:
                     request.handicap_type,
                     request.handicap_percentage
                 )
-            
+
             team_assignment = TeamAssignment(request.team_assignment) if request.team_assignment else None
 
             # 5. Actualizar la competición usando el método de dominio
@@ -190,11 +189,10 @@ class UpdateCompetitionUseCase:
                     "handicap_percentage debe ser None cuando handicap_type es SCRATCH"
                 )
             return HandicapSettings(h_type, None)
-        else:
-            # PERCENTAGE requiere porcentaje obligatoriamente
-            if handicap_percentage is None:
-                raise ValueError(
-                    "handicap_percentage es requerido cuando handicap_type es PERCENTAGE"
-                )
-            # HandicapSettings validará que sea 90, 95 o 100
-            return HandicapSettings(h_type, handicap_percentage)
+        # PERCENTAGE requiere porcentaje obligatoriamente
+        if handicap_percentage is None:
+            raise ValueError(
+                "handicap_percentage es requerido cuando handicap_type es PERCENTAGE"
+            )
+        # HandicapSettings validará que sea 90, 95 o 100
+        return HandicapSettings(h_type, handicap_percentage)
