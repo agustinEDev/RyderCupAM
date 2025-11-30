@@ -33,7 +33,7 @@ jobs:
         run: |
           echo "Runner OS: $RUNNER_OS"
           echo "Runner Architecture: $RUNNER_ARCH"
-          echo "Githibub Workspace: $GITHUB_WORKSPACE"
+          echo "Github Workspace: $GITHUB_WORKSPACE"
           echo "GitHub Actor: $GITHUB_ACTOR"
           echo "GitHub Repository: $GITHUB_REPOSITORY"
 

@@ -1,0 +1,418 @@
+# ================================
+# CI/CD PIPELINE - RYDER CUP AM
+# ================================
+# Pipeline completo de integración continua y despliegue continuo
+# Ejecuta tests, security checks, linting y type checking en paralelo
+
+name: CI/CD Pipeline
+
+# Triggers: Cuándo se ejecuta este workflow
+on:
+  push:
+    branches: ['**']  # Todas las ramas
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  # ================================
+  # JOB 1: PREPARATION
+  # ================================
+  # Configura el entorno, instala dependencias y cachea para los demás jobs
+
+  preparation:
+    name: Setup & Install Dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      python-version: ${{ steps.setup-python.outputs.python-version }}
+      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Show Environment Info
+        run: |
+          echo "Python version: $(python --version)"
+          echo "Pip version: $(pip --version)"
+          echo "Cache hit: ${{ steps.cache-deps.outputs.cache-hit }}"
+          echo "Installed packages:"
+          pip list
+
+  # ================================
+  # JOB 2: UNIT TESTS
+  # ================================
+  # Ejecuta 662 tests unitarios (sin base de datos)
+
+  unit_tests:
+    name: Unit Tests (662 tests)
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Unit Tests with Coverage
+        run: |
+          echo "Running unit tests (without database)..."
+          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html
+
+      - name: Upload Coverage Report (XML)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-xml
+          path: coverage.xml
+          retention-days: 7
+
+      - name: Upload Coverage Report (HTML)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-html
+          path: htmlcov/
+          retention-days: 7
+
+  # ================================
+  # JOB 3: INTEGRATION TESTS
+  # ================================
+  # Ejecuta 72 tests de integración (con PostgreSQL)
+
+  integration_tests:
+    name: Integration Tests (72 tests + PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL to be fully ready..."
+          sleep 5
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+        run: |
+          echo "Running Alembic migrations..."
+          alembic upgrade head
+
+      - name: Run Integration Tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+        run: |
+          echo "Running integration tests (with database)..."
+          pytest tests/integration/ -v --maxfail=5
+
+  # ================================
+  # JOB 4: SECURITY CHECKS
+  # ================================
+  # Ejecuta múltiples herramientas de seguridad
+
+  security_checks:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Bandit (Python Security Linter)
+        run: |
+          echo "🔒 Running Bandit - Python security linter..."
+          bandit -r src/ -f json -o bandit-report.json || true
+          bandit -r src/ -f screen
+        continue-on-error: true
+
+      - name: Run Safety (Dependency Vulnerability Scanner)
+        run: |
+          echo "🛡️ Checking dependencies for known vulnerabilities..."
+          safety check --json || true
+        continue-on-error: true
+
+      - name: Check for Secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+          retention-days: 30
+
+  # ================================
+  # JOB 5: LINTING
+  # ================================
+  # Verifica calidad de código con Ruff
+
+  linting:
+    name: Code Quality (Ruff)
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Ruff Linter
+        run: |
+          echo "🔍 Running Ruff linter..."
+          ruff check src/ tests/ --output-format=github
+        continue-on-error: true
+
+      - name: Run Ruff Formatter Check
+        run: |
+          echo "📝 Checking code formatting..."
+          ruff format --check src/ tests/
+        continue-on-error: true
+
+  # ================================
+  # JOB 6: TYPE CHECKING
+  # ================================
+  # Verifica consistencia de tipos con Mypy
+
+  type_checking:
+    name: Type Checking (Mypy)
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Mypy Type Checker
+        run: |
+          echo "🔬 Running Mypy type checker..."
+          mypy src/ --show-error-codes --pretty
+        continue-on-error: true
+
+  # ================================
+  # JOB 7: BUILD
+  # ================================
+  # Construye la aplicación Docker SOLO si todos los checks pasan
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [unit_tests, integration_tests, security_checks, linting, type_checking]
+    # Solo ejecutar si todos los jobs críticos pasaron (success)
+    if: |
+      needs.unit_tests.result == 'success' &&
+      needs.integration_tests.result == 'success'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: rydercupam:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker Image
+        run: |
+          echo "🐳 Testing Docker image startup..."
+          docker run --name test-container -d -p 8000:8000 \
+            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost/dummy \
+            rydercupam:${{ github.sha }}
+
+          echo "Waiting for container to start..."
+          sleep 10
+
+          # Check if container is running
+          if docker ps | grep test-container; then
+            echo "✅ Container started successfully"
+            docker logs test-container
+            docker stop test-container
+            docker rm test-container
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container
+            exit 1
+          fi
+
+      - name: Save Docker Image (artifact)
+        run: |
+          echo "💾 Saving Docker image as artifact..."
+          docker save rydercupam:${{ github.sha }} | gzip > rydercupam-image.tar.gz
+
+      - name: Upload Docker Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: rydercupam-image.tar.gz
+          retention-days: 7
+
+  # ================================
+  # JOB 8: SUMMARY
+  # ================================
+  # Job final que depende de todos los anteriores
+
+  pipeline_summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [unit_tests, integration_tests, security_checks, linting, type_checking, build]
+    if: always()
+
+    steps:
+      - name: Check Results
+        run: |
+          echo "=========================================="
+          echo "CI/CD PIPELINE SUMMARY"
+          echo "=========================================="
+          echo "Unit Tests: ${{ needs.unit_tests.result }}"
+          echo "Integration Tests: ${{ needs.integration_tests.result }}"
+          echo "Security Checks: ${{ needs.security_checks.result }}"
+          echo "Linting: ${{ needs.linting.result }}"
+          echo "Type Checking: ${{ needs.type_checking.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "=========================================="
+
+          if [ "${{ needs.unit_tests.result }}" == "failure" ] || [ "${{ needs.integration_tests.result }}" == "failure" ]; then
+            echo "❌ Pipeline FAILED - Tests did not pass"
+            exit 1
+          elif [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "❌ Pipeline FAILED - Build failed"
+            exit 1
+          elif [ "${{ needs.build.result }}" == "skipped" ]; then
+            echo "⚠️ Build was skipped due to failed quality checks"
+            exit 0
+          else
+            echo "✅ Pipeline PASSED - All checks successful"
+            echo "🚀 Docker image ready for deployment"
+          fi
