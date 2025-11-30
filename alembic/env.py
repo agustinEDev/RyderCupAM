@@ -56,7 +56,15 @@ target_metadata = metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
+    # Priorizar DATABASE_URL de entorno sobre alembic.ini
+    url = os.getenv('DATABASE_URL')
+    if not url:
+        url = config.get_main_option("sqlalchemy.url")
+
+    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
+    if url and "postgresql+asyncpg" in url:
+        url = url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -74,9 +82,9 @@ def run_migrations_online() -> None:
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
-    # Alembic necesita un driver síncrono. Reemplazamos asyncpg.
+    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
     if "postgresql+asyncpg" in db_url:
-        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
+        db_url = db_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
 
     config.set_main_option('sqlalchemy.url', db_url)
 
