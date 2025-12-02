@@ -86,28 +86,313 @@ El contenedor ejecuta automáticamente estos pasos:
 
 ## ☁️ **Despliegue en Hosting (Render, Railway, etc.)**
 
-### **Opción 1: Render.com**
+### **Opción 1: Render.com** (Guía Completa Paso a Paso)
 
-1. **Crear nuevo Web Service**
-2. **Conectar repositorio GitHub**
-3. **Configuración**:
-   - **Build Command**: `docker build -t rydercup .`
-   - **Start Command**: `/entrypoint.sh`
-   - **Docker**: Activar
+> ⚠️ **IMPORTANTE**: En Render se despliegan **DOS servicios separados**:
+> 1. **PostgreSQL Database** (servicio de base de datos)
+> 2. **Web Service** (contenedor Docker con la API FastAPI)
+>
+> Debes crear PRIMERO la base de datos y DESPUÉS el backend.
 
-4. **Variables de Entorno** (en Render Dashboard):
+---
+
+#### **📋 Prerequisitos**
+- Cuenta en [Render.com](https://render.com)
+- Repositorio en GitHub con el código
+- Git push realizado (última versión en GitHub)
+
+---
+
+#### **🗄️ PASO 1: Crear Base de Datos PostgreSQL (PRIMERO)**
+
+> Este servicio es independiente del backend. Render lo gestiona por separado.
+
+1. **Ir a Render Dashboard** → `New` → `PostgreSQL`
+
+2. **Configuración:**
+   - **Name**: `rydercup-db` (o el nombre que prefieras)
+   - **Database**: `ryderclub`
+   - **User**: (auto-generado)
+   - **Region**: `Oregon (US West)` (o el más cercano)
+   - **PostgreSQL Version**: `15`
+   - **Plan**: `Free` (para desarrollo)
+
+3. **Crear** → Esperar a que esté disponible (1-2 minutos)
+
+4. **⚠️ CRUCIAL - Copiar credenciales:**
+   - En la página de la BD, ir a **"Connections"**
+   - Copiar **"Internal Database URL"** (empieza con `postgresql://...`)
+   - **Guardar este URL** - lo necesitarás en el PASO 3
+
    ```
-   DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db
-   SECRET_KEY=your-secret-key
-   DOCS_USERNAME=admin
-   DOCS_PASSWORD=secure-password
-   ENVIRONMENT=production
-   PORT=8000
+   Ejemplo:
+   postgresql://rydercup_db_user:XXXXX@dpg-xxxxx-a.oregon-postgres.render.com/rydercup_db
    ```
 
-5. **PostgreSQL Database** (crear aparte):
-   - Usar Render PostgreSQL o external DB
-   - Copiar DATABASE_URL al Web Service
+**✅ Base de datos lista. Ahora vamos al backend.**
+
+---
+
+#### **🌐 PASO 2: Crear Web Service (Backend API - SEGUNDO)**
+
+> Este es el contenedor Docker que ejecutará tu FastAPI. Se conectará a la BD del PASO 1.
+
+1. **Dashboard** → `New` → `Web Service`
+
+2. **Conectar GitHub:**
+   - `Build and deploy from a Git repository`
+   - Seleccionar tu repositorio `RyderCupAM`
+   - Branch: `main` o `develop`
+
+3. **Configuración Básica:**
+   - **Name**: `rydercup-api`
+   - **Region**: `Oregon (US West)` ⚠️ **MISMO que la BD**
+   - **Branch**: `main`
+   - **Runtime**: `Docker` ⚠️ **IMPORTANTE - Debe ser Docker**
+
+4. **Plan:**
+   - **Instance Type**: `Free` (para desarrollo)
+
+5. **ANTES DE CREAR** → Clic en `Advanced` (abajo) para configurar variables de entorno
+
+---
+
+#### **🔐 PASO 3: Configurar Variables de Entorno (CRÍTICO)**
+
+En la sección **Environment Variables**, añadir:
+
+```env
+# ====================================
+# Base de Datos - PEGAR URL DEL PASO 1
+# ====================================
+DATABASE_URL=postgresql+asyncpg://user:pass@host.oregon-postgres.render.com/db_name
+
+# ⚠️ IMPORTANTE: Cambiar 'postgresql://' por 'postgresql+asyncpg://'
+# Render te da: postgresql://...
+# Debes usar: postgresql+asyncpg://...
+
+# ====================================
+# JWT - Generar clave segura
+# ====================================
+SECRET_KEY=<generar-con-comando-abajo>
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# ====================================
+# Documentación API
+# ====================================
+DOCS_USERNAME=admin
+DOCS_PASSWORD=<contraseña-segura>
+
+# ====================================
+# Aplicación
+# ====================================
+PORT=8000
+ENVIRONMENT=production
+
+# ====================================
+# Mailgun (Email Verification) - REQUERIDO desde v1.1
+# ====================================
+MAILGUN_API_KEY=<tu-api-key-de-mailgun>
+MAILGUN_DOMAIN=rydercupfriends.com
+MAILGUN_FROM_EMAIL=Ryder Cup Friends <noreply@rydercupfriends.com>
+MAILGUN_API_URL=https://api.eu.mailgun.net/v3
+FRONTEND_URL=https://www.rydercupfriends.com
+```
+
+**⚠️ NOTAS IMPORTANTES:**
+- **DATABASE_URL**: Debe usar `postgresql+asyncpg://` (no `postgresql://`)
+- **MAILGUN variables**: Obligatorias para verificación de email
+- **FRONTEND_URL**: Tu dominio de producción (no localhost)
+
+**🔑 Generar SECRET_KEY segura:**
+
+```bash
+# Opción 1: Python
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Opción 2: OpenSSL
+openssl rand -base64 32
+```
+
+---
+
+#### **🎯 PASO 4: Deploy del Backend**
+
+1. **Crear Web Service** (botón abajo)
+
+2. **Render automáticamente:**
+   - ✅ Clona el repositorio
+   - ✅ Detecta el `Dockerfile`
+   - ✅ Construye la imagen Docker
+   - ✅ Ejecuta `entrypoint.sh` que:
+     - Espera a que PostgreSQL esté disponible
+     - Ejecuta migraciones (`alembic upgrade head`)
+     - Inicia la API FastAPI
+
+3. **Esperar deployment** (2-5 minutos primera vez)
+
+4. **Ver logs en tiempo real:**
+   - En la página del servicio → pestaña `Logs`
+   - Deberías ver:
+     ```
+     🚀 Iniciando Ryder Cup Manager API...
+     ⏳ Esperando a que PostgreSQL esté disponible...
+     ✅ PostgreSQL está disponible
+     🔄 Ejecutando migraciones de base de datos...
+     ✅ Migraciones completadas exitosamente
+     🎯 Iniciando aplicación FastAPI en puerto 8000...
+     INFO: Started server process
+     INFO: Uvicorn running on http://0.0.0.0:8000
+     ```
+
+---
+
+#### **✅ PASO 5: Verificar Deployment**
+
+**Obtener URL de tu API:**
+- Tu API estará en: `https://rydercup-api.onrender.com`
+
+**Probar endpoints:**
+
+```bash
+# Health check
+curl https://rydercup-api.onrender.com/
+
+# Respuesta esperada:
+{
+  "message": "Ryder Cup Manager API",
+  "version": "1.0.0",
+  "status": "running"
+}
+
+# Swagger UI (requiere autenticación HTTP Basic)
+https://rydercup-api.onrender.com/docs
+```
+
+---
+
+#### **🔄 Actualizaciones Futuras (Auto-Deploy)**
+
+Render hace **auto-deploy** cuando haces push a GitHub:
+
+```bash
+git add .
+git commit -m "feat: nueva funcionalidad"
+git push origin main
+```
+
+Render detecta el cambio y redeploya automáticamente.
+
+**Manual Re-deploy:**
+- Dashboard del servicio → `Manual Deploy` → `Deploy latest commit`
+
+---
+
+#### **🔍 Troubleshooting Específico de Render**
+
+**❌ Error: "Failed to connect to database"**
+
+**Causa:** DATABASE_URL incorrecta o no modificada
+
+**Solución:**
+1. Ir a PostgreSQL service → Connections
+2. Copiar **Internal Database URL** (NO External)
+3. **IMPORTANTE:** Cambiar `postgresql://` por `postgresql+asyncpg://`
+4. Actualizar variable de entorno en Web Service
+5. Re-deploy manual
+
+**❌ Error: "Alembic migrations failed"**
+
+**Causa:** Primera vez que se ejecutan las migraciones o error en conexión
+
+**Solución:**
+1. Verificar que la BD esté corriendo (PostgreSQL service debe estar "Available")
+2. Verificar DATABASE_URL
+3. Ir a Shell del Web Service (pestaña Shell)
+4. Ejecutar manualmente:
+   ```bash
+   alembic upgrade head
+   ```
+5. Re-deploy
+
+**❌ Error: "Port already in use"**
+
+**Causa:** Variable PORT incorrecta
+
+**Solución:**
+1. Asegurar que `PORT=8000` en variables de entorno
+2. Re-deploy
+
+**⚠️ Free Plan - Cold Starts**
+
+> El plan gratuito de Render "duerme" la app tras 15 minutos de inactividad.
+
+**Comportamiento:**
+- Primera petición después de sleep: 30-60 segundos
+- Luego funciona normal
+
+**Solución** (si es crítico):
+- Upgrade a plan Starter ($7/mes)
+- Mantiene app siempre activa
+
+---
+
+#### **💰 Costos de Render**
+
+**Free Tier:**
+- **PostgreSQL**: 1GB storage, expira tras 90 días de inactividad
+- **Web Service**: Duerme tras 15min inactividad, 750 horas/mes
+- **SSL**: Gratuito y automático
+- **Costo total: $0**
+
+**Starter Tier ($7/mes por servicio):**
+- Sin sleep (siempre activo)
+- Más recursos (CPU/RAM)
+- Backups automáticos de BD
+
+---
+
+#### **🔐 Seguridad - Checklist para Producción en Render**
+
+Antes de usar en producción, verificar:
+
+- [ ] `SECRET_KEY` generada aleatoriamente (32+ caracteres)
+- [ ] `DOCS_PASSWORD` cambiada del default
+- [ ] `DATABASE_URL` usando **Internal URL** (no External)
+- [ ] `DATABASE_URL` modificada a `postgresql+asyncpg://`
+- [ ] `ENVIRONMENT=production`
+- [ ] `MAILGUN_API_KEY` configurada con tu API key real
+- [ ] `MAILGUN_FROM_EMAIL` con formato correcto
+- [ ] `FRONTEND_URL` apuntando a tu dominio de producción
+- [ ] CORS configurado solo para tu dominio frontend (verificar `main.py`)
+- [ ] SSL/HTTPS activado (Render lo hace automáticamente)
+- [ ] Ambos servicios (BD y API) en la **misma región**
+
+---
+
+#### **📊 Monitoreo en Render**
+
+**Logs en Tiempo Real:**
+- Dashboard del servicio → `Logs` → Ver output de la aplicación
+
+**Métricas:**
+- Dashboard → `Metrics` → CPU, Memoria, Requests
+
+**Eventos:**
+- Dashboard → `Events` → Historial de deploys y errores
+
+**Shell Interactivo:**
+- Dashboard → `Shell` → Ejecutar comandos en el contenedor
+  ```bash
+  # Verificar migración actual
+  alembic current
+
+  # Ver status de BD
+  python -c "from src.config.settings import settings; print(settings.DATABASE_URL)"
+  ```
+
+---
 
 ### **Opción 2: Railway.app**
 
