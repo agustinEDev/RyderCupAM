@@ -1,0 +1,56 @@
+# ==========================================
+# SERVICE - PostgreSQL Database
+# ==========================================
+# Service para exponer PostgreSQL SOLO internamente
+# (NO accesible desde internet, solo desde otros Pods)
+# ==========================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service         # Nombre del Service (usado como DNS interno)
+  labels:
+    app: rydercup
+    component: database
+    tier: data
+
+spec:
+  # ==========================================
+  # TIPO DE SERVICE - ClusterIP (solo interno)
+  # ==========================================
+  type: ClusterIP                # Solo accesible DENTRO del cluster
+  # ⚠️ NUNCA usar LoadBalancer o NodePort para PostgreSQL (seguridad)
+
+  # ==========================================
+  # SELECTOR - Qué Pods gestionar
+  # ==========================================
+  selector:
+    app: rydercup
+    component: database
+
+  # ==========================================
+  # PUERTOS - Mapeo de puertos
+  # ==========================================
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432                 # Puerto EXTERNO (lo que ven otros Pods)
+      targetPort: 5432           # Puerto INTERNO (puerto de PostgreSQL)
+
+  # ==========================================
+  # CLUSTER IP (Opcional - Kubernetes lo asigna automáticamente)
+  # ==========================================
+  # clusterIP: 10.96.0.10      # IP fija dentro del cluster (opcional)
+  # Si no se especifica, Kubernetes asigna una IP automáticamente
+
+# ==========================================
+# DNS INTERNO
+# ==========================================
+# Otros Pods pueden conectarse con:
+# - postgres-service (short name)
+# - postgres-service.default (con namespace)
+# - postgres-service.default.svc.cluster.local (FQDN completo)
+#
+# Ejemplo desde FastAPI:
+# DATABASE_URL=postgresql://user:pass@postgres-service:5432/ryderclub
+# ==========================================

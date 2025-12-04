@@ -1,0 +1,43 @@
+# ==========================================
+# PERSISTENT VOLUME CLAIM - PostgreSQL
+# ==========================================
+# PVC solicita almacenamiento persistente para PostgreSQL
+# Kubernetes asigna automáticamente un PersistentVolume
+# ==========================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc             # Nombre del PVC
+  labels:
+    app: rydercup
+    component: database
+    tier: data
+
+# ==========================================
+# SPEC - Especificación del almacenamiento
+# ==========================================
+spec:
+  # ==========================================
+  # ACCESS MODES - Modos de acceso
+  # ==========================================
+  accessModes:
+    - ReadWriteOnce              # RWO: Solo un Pod puede montar para lectura/escritura
+  # Otros modos:
+  # - ReadOnlyMany (ROX): Múltiples Pods pueden leer, ninguno puede escribir
+  # - ReadWriteMany (RWX): Múltiples Pods pueden leer y escribir
+
+  # ==========================================
+  # RESOURCES - Capacidad solicitada
+  # ==========================================
+  resources:
+    requests:
+      storage: 10Gi              # Solicitar 10 Gigabytes de almacenamiento
+
+  # ==========================================
+  # STORAGE CLASS (Opcional)
+  # ==========================================
+  # storageClassName: standard   # Clase de almacenamiento (por cloud provider)
+  # - standard: HDD (lento, barato)
+  # - fast: SSD (rápido, caro)
+  # - Si no se especifica, usa la clase por defecto del cluster

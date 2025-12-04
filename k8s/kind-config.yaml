@@ -1,0 +1,70 @@
+# ==========================================
+# Kind Cluster Configuration
+# ==========================================
+# Configuración del cluster Kind con port mappings
+# Esto expone los puertos directamente en localhost
+# SIN necesidad de port-forward
+# ==========================================
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+# ==========================================
+# NODES - Nodos del cluster
+# ==========================================
+nodes:
+  # Control plane node (master)
+  - role: control-plane
+    # ==========================================
+    # PORT MAPPINGS - Exponer puertos en localhost
+    # ==========================================
+    # Mapea puertos del cluster a localhost
+    # Formato: hostPort:containerPort
+    # ==========================================
+    extraPortMappings:
+      # Backend API (FastAPI)
+      - containerPort: 30321        # NodePort del backend
+        hostPort: 8000              # Puerto en localhost
+        protocol: TCP
+        # Resultado: http://localhost:8000 → Backend
+
+      # Frontend Web (React + nginx)
+      - containerPort: 32315        # NodePort del frontend
+        hostPort: 8080              # Puerto en localhost
+        protocol: TCP
+        # Resultado: http://localhost:8080 → Frontend
+
+# ==========================================
+# NOTAS DE USO
+# ==========================================
+# 1. Crear cluster con esta configuración:
+#    kind create cluster --name rydercupam-cluster --config k8s/kind-config.yaml
+#
+# 2. Después de desplegar la app, acceder directamente:
+#    http://localhost:8000  → Backend
+#    http://localhost:8080  → Frontend
+#
+# 3. NO NECESITAS port-forward! Los puertos están mapeados automáticamente
+#
+# 4. Los NodePorts (30321 y 32315) se definen en los Services:
+#    - api-service.yaml (port 80 → NodePort 30321)
+#    - frontend-service.yaml (port 80 → NodePort 32315)
+# ==========================================
+
+# ==========================================
+# VENTAJAS de esta configuración
+# ==========================================
+# ✅ No necesitas ejecutar port-forward manualmente
+# ✅ Los puertos están disponibles automáticamente al arrancar el cluster
+# ✅ Más parecido a producción (acceso directo)
+# ✅ Puedes reiniciar pods sin perder conectividad
+# ✅ Funciona incluso si los Services están en <pending>
+# ==========================================
+
+# ==========================================
+# DESVENTAJAS de esta configuración
+# ==========================================
+# ⚠️ Los puertos deben estar libres en tu máquina
+# ⚠️ Si cambias los NodePorts, debes recrear el cluster
+# ⚠️ Solo funciona con Kind, no con clusters en cloud
+# ==========================================

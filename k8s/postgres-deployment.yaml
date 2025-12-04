@@ -1,0 +1,141 @@
+# ==========================================
+# DEPLOYMENT - PostgreSQL Database
+# ==========================================
+# Deployment de PostgreSQL con almacenamiento persistente
+# para la base de datos de RyderCupAm
+# ==========================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres                 # Nombre del Deployment
+  labels:
+    app: rydercup
+    component: database
+    tier: data
+
+spec:
+  # ==========================================
+  # RÉPLICAS - Solo 1 para PostgreSQL
+  # ==========================================
+  replicas: 1                    # Solo 1 réplica (PostgreSQL no es stateless)
+  # ⚠️ PostgreSQL requiere configuración especial para múltiples réplicas (replicación master-slave)
+
+  # ==========================================
+  # SELECTOR - Cómo encontrar los Pods
+  # ==========================================
+  selector:
+    matchLabels:
+      app: rydercup
+      component: database
+
+  # ==========================================
+  # ESTRATEGIA DE ACTUALIZACIÓN
+  # ==========================================
+  strategy:
+    type: Recreate               # Recreate: elimina el Pod viejo antes de crear el nuevo
+    # No usamos RollingUpdate porque PostgreSQL con 1 réplica no soporta múltiples instancias simultáneas
+
+  # ==========================================
+  # TEMPLATE - Plantilla del Pod
+  # ==========================================
+  template:
+    metadata:
+      labels:
+        app: rydercup
+        component: database
+        tier: data
+
+    spec:
+      # ==========================================
+      # CONTENEDORES - PostgreSQL
+      # ==========================================
+      containers:
+        - name: postgres                    # Nombre del contenedor
+          image: postgres:15                # Imagen oficial de PostgreSQL 15
+          imagePullPolicy: IfNotPresent     # Solo descargar si no existe localmente
+
+          # ==========================================
+          # PUERTOS
+          # ==========================================
+          ports:
+            - name: postgres
+              containerPort: 5432           # Puerto de PostgreSQL
+              protocol: TCP
+
+          # ==========================================
+          # VARIABLES DE ENTORNO - Desde Secret
+          # ==========================================
+          env:
+            # Usuario de PostgreSQL
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rydercup-api-secret
+                  key: POSTGRES_USER
+
+            # Password de PostgreSQL
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rydercup-api-secret
+                  key: POSTGRES_PASSWORD
+
+            # Nombre de la base de datos
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: rydercup-api-config
+                  key: POSTGRES_DB
+
+          # ==========================================
+          # VOLUMEN PERSISTENTE - Monte del PVC
+          # ==========================================
+          volumeMounts:
+            - name: postgres-storage        # Nombre del volumen (debe coincidir con volumes)
+              mountPath: /var/lib/postgresql/data   # Ruta donde PostgreSQL guarda datos
+              subPath: postgres             # Subdirectorio dentro del volumen (evita conflictos)
+
+          # ==========================================
+          # RECURSOS - CPU y Memoria
+          # ==========================================
+          resources:
+            requests:                       # Mínimo garantizado
+              memory: "512Mi"               # 512 Megabytes
+              cpu: "500m"                   # 0.5 CPU cores
+            limits:                         # Máximo permitido
+              memory: "1Gi"                 # 1 Gigabyte
+              cpu: "1000m"                  # 1 CPU core
+
+          # ==========================================
+          # HEALTH CHECKS - Verificación de salud
+          # ==========================================
+          livenessProbe:                    # ¿Está vivo PostgreSQL?
+            exec:
+              command:
+                - pg_isready                # Comando de PostgreSQL para verificar salud
+                - -U
+                - $(POSTGRES_USER)          # Usuario de PostgreSQL
+            initialDelaySeconds: 30         # Espera 30s antes de comenzar
+            periodSeconds: 10               # Comprueba cada 10s
+            timeoutSeconds: 5               # Timeout de 5s
+            failureThreshold: 3             # Reinicia después de 3 fallos
+
+          readinessProbe:                   # ¿Está listo para recibir conexiones?
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+            initialDelaySeconds: 10         # Espera 10s antes de comenzar
+            periodSeconds: 5                # Comprueba cada 5s
+            timeoutSeconds: 3               # Timeout de 3s
+            failureThreshold: 3             # Marca como "no listo" después de 3 fallos
+
+      # ==========================================
+      # VOLÚMENES - Declaración del PVC
+      # ==========================================
+      volumes:
+        - name: postgres-storage            # Nombre del volumen
+          persistentVolumeClaim:
+            claimName: postgres-pvc         # Referencia al PVC creado anteriormente
