@@ -189,7 +189,6 @@ app.include_router(
 app.include_router(
     competition_routes.router,
     prefix="/api/v1/competitions",
-    tags=["Competitions"],
 )
 
 app.include_router(

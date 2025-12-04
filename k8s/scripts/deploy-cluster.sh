@@ -4,8 +4,22 @@
 # Script de Deployment Automático - Ryder Cup Manager
 # ==========================================
 # Este script despliega la aplicación completa en Kubernetes
+#
+# ⚠️  IMPORTANTE: Ejecutar con ./deploy-cluster.sh
+#    NO uses: source deploy-cluster.sh
+#
 # Uso: ./scripts/deploy-cluster.sh
 # ==========================================
+
+# Detectar si fue ejecutado con 'source'
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Ejecutado correctamente con ./
+    :
+else
+    echo "❌ ERROR: No ejecutes este script con 'source'"
+    echo "✅ Usa: ./k8s/scripts/deploy-cluster.sh"
+    return 1 2>/dev/null || exit 1
+fi
 
 set -e  # Salir si algún comando falla
 
@@ -32,6 +46,9 @@ print_error() {
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
+
+# Manejo de interrupciones (Ctrl+C) - DESPUÉS de definir funciones
+trap 'echo ""; print_warning "Script interrumpido por el usuario"; exit 130' INT TERM
 
 # Banner
 echo ""
@@ -69,11 +86,24 @@ print_success "Todos los prerrequisitos están instalados"
 echo ""
 
 # ==========================================
+# Determinar rutas del proyecto
+# ==========================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+K8S_DIR="$PROJECT_ROOT/k8s"
+KIND_CONFIG="$K8S_DIR/kind-config.yaml"
+
+# ==========================================
 # PASO 2: Crear cluster Kind (si no existe)
 # ==========================================
 print_step "Verificando cluster Kind..."
 
 CLUSTER_NAME="rydercupam-cluster"
+
+if [ ! -f "$KIND_CONFIG" ]; then
+    print_error "No se encontró kind-config.yaml en: $KIND_CONFIG"
+    exit 1
+fi
 
 if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
     print_warning "Cluster '${CLUSTER_NAME}' ya existe"
@@ -84,14 +114,14 @@ if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
         kind delete cluster --name ${CLUSTER_NAME}
 
         print_step "Creando nuevo cluster con port mappings..."
-        kind create cluster --name ${CLUSTER_NAME} --config k8s/kind-config.yaml
+        kind create cluster --name ${CLUSTER_NAME} --config "$KIND_CONFIG"
         print_success "Cluster creado exitosamente"
     else
         print_warning "Usando cluster existente"
     fi
 else
     print_step "Creando cluster '${CLUSTER_NAME}' con port mappings..."
-    kind create cluster --name ${CLUSTER_NAME} --config k8s/kind-config.yaml
+    kind create cluster --name ${CLUSTER_NAME} --config "$KIND_CONFIG"
     print_success "Cluster creado exitosamente"
 fi
 
@@ -111,73 +141,83 @@ print_success "Conectado al cluster"
 echo ""
 
 # ==========================================
-# PASO 4: Aplicar ConfigMaps y Secrets
+# PASO 4: Verificar directorio de manifiestos
+# ==========================================
+if [ ! -d "$K8S_DIR" ]; then
+    print_error "No se encontró el directorio k8s en: $K8S_DIR"
+    print_error "Asegúrate de ejecutar este script desde el proyecto correcto"
+    exit 1
+fi
+
+print_step "Usando manifiestos de: $K8S_DIR"
+echo ""
+
+# ==========================================
+# PASO 5: Aplicar ConfigMaps y Secrets
 # ==========================================
 print_step "Aplicando ConfigMaps y Secrets..."
 
-cd k8s/
-
-kubectl apply -f api-configmap.yaml
-kubectl apply -f frontend-configmap.yaml
-kubectl apply -f api-secret.yaml
+kubectl apply -f "$K8S_DIR/api-configmap.yaml"
+kubectl apply -f "$K8S_DIR/frontend-configmap.yaml"
+kubectl apply -f "$K8S_DIR/api-secret.yaml"
 
 print_success "ConfigMaps y Secrets aplicados"
 echo ""
 
 # ==========================================
-# PASO 5: Crear almacenamiento persistente
+# PASO 6: Crear almacenamiento persistente
 # ==========================================
 print_step "Creando PersistentVolumeClaim para PostgreSQL..."
 
-kubectl apply -f postgres-pvc.yaml
+kubectl apply -f "$K8S_DIR/postgres-pvc.yaml"
 
 print_success "PVC creado"
 echo ""
 
 # ==========================================
-# PASO 6: Desplegar PostgreSQL
+# PASO 7: Desplegar PostgreSQL
 # ==========================================
 print_step "Desplegando PostgreSQL..."
 
-kubectl apply -f postgres-deployment.yaml
-kubectl apply -f postgres-service.yaml
+kubectl apply -f "$K8S_DIR/postgres-deployment.yaml"
+kubectl apply -f "$K8S_DIR/postgres-service.yaml"
 
 print_step "Esperando a que PostgreSQL esté listo..."
-kubectl wait --for=condition=ready pod -l component=database --timeout=120s
+kubectl rollout status deployment/postgres --timeout=120s
 
 print_success "PostgreSQL desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 7: Desplegar Backend (FastAPI)
+# PASO 8: Desplegar Backend (FastAPI)
 # ==========================================
 print_step "Desplegando Backend (FastAPI)..."
 
-kubectl apply -f api-deployment.yaml
-kubectl apply -f api-service.yaml
+kubectl apply -f "$K8S_DIR/api-deployment.yaml"
+kubectl apply -f "$K8S_DIR/api-service.yaml"
 
 print_step "Esperando a que el Backend esté listo..."
-kubectl wait --for=condition=ready pod -l component=api --timeout=120s
+kubectl rollout status deployment/rydercup-api --timeout=120s
 
 print_success "Backend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 8: Desplegar Frontend (React + nginx)
+# PASO 9: Desplegar Frontend (React + nginx)
 # ==========================================
 print_step "Desplegando Frontend (React + nginx)..."
 
-kubectl apply -f frontend-deployment.yaml
-kubectl apply -f frontend-service.yaml
+kubectl apply -f "$K8S_DIR/frontend-deployment.yaml"
+kubectl apply -f "$K8S_DIR/frontend-service.yaml"
 
 print_step "Esperando a que el Frontend esté listo..."
-kubectl wait --for=condition=ready pod -l component=frontend --timeout=120s
+kubectl rollout status deployment/rydercup-frontend --timeout=120s
 
 print_success "Frontend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 9: Verificar deployment
+# PASO 10: Verificar deployment
 # ==========================================
 print_step "Verificando deployment completo..."
 
@@ -204,28 +244,33 @@ fi
 echo ""
 
 # ==========================================
-# PASO 10: Instrucciones finales
+# PASO 11: Instrucciones finales
 # ==========================================
 print_success "🎉 ¡Deployment completado exitosamente!"
 echo ""
 echo "📋 Próximos pasos:"
 echo ""
-echo "✨ ${YELLOW}¡Los puertos ya están mapeados automáticamente!${NC}"
-echo "   ${GREEN}NO NECESITAS ejecutar port-forward${NC} 🎉"
+echo -e "✨ ${YELLOW}¡Los puertos están mapeados automáticamente gracias a kind-config.yaml!${NC}"
+echo -e "   ${GREEN}NO NECESITAS ejecutar port-forward${NC} 🎉"
 echo ""
-echo "1. Esperar unos segundos a que los pods estén listos"
+echo "1. Esperar unos segundos a que los pods estén completamente listos"
 echo ""
-echo "2. Abrir en el navegador:"
-echo "   ${GREEN}http://localhost:8080${NC}  → Frontend"
-echo "   ${GREEN}http://localhost:8000${NC}  → Backend API"
+echo "2. Verificar que los services tienen los NodePorts correctos:"
+echo "   kubectl get svc -l app=rydercup"
+echo "   Debe mostrar: 80:30321/TCP (backend) y 80:32315/TCP (frontend)"
+echo ""
+echo "3. Abrir en el navegador (port mappings automáticos):"
+echo -e "   ${GREEN}http://localhost:8080${NC}  → Frontend"
+echo -e "   ${GREEN}http://localhost:8000${NC}  → Backend API"
+echo -e "   ${GREEN}http://localhost:8000/docs${NC}  → API Documentation"
 echo ""
 echo "📚 Ver documentación completa:"
-echo "   ${GREEN}cat docs/KUBERNETES_DEPLOYMENT_GUIDE.md${NC}"
+echo -e "   ${GREEN}cat docs/KUBERNETES_DEPLOYMENT_GUIDE.md${NC}"
 echo ""
 echo "🔍 Ver logs:"
-echo "   ${GREEN}kubectl logs -f deployment/rydercup-frontend${NC}"
-echo "   ${GREEN}kubectl logs -f deployment/rydercup-api${NC}"
+echo -e "   ${GREEN}kubectl logs -f deployment/rydercup-frontend${NC}"
+echo -e "   ${GREEN}kubectl logs -f deployment/rydercup-api${NC}"
 echo ""
 echo "🗑️  Eliminar cluster:"
-echo "   ${GREEN}kind delete cluster --name ${CLUSTER_NAME}${NC}"
+echo -e "   ${GREEN}kind delete cluster --name ${CLUSTER_NAME}${NC}"
 echo ""

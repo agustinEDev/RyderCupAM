@@ -31,7 +31,7 @@ print_success() {
 # Banner
 echo ""
 echo "🔌 =============================================="
-echo "   Port-Forwards Automáticos"
+echo "   Port-Forwards Manuales"
 echo "   =============================================="
 echo ""
 
@@ -46,6 +46,48 @@ if ! kubectl cluster-info &> /dev/null; then
     echo ""
     exit 1
 fi
+
+# ==========================================
+# Verificar si port mappings automáticos funcionan
+# ==========================================
+print_step "Verificando configuración de port mappings..."
+
+API_NODEPORT=$(kubectl get svc rydercup-api-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+FRONTEND_NODEPORT=$(kubectl get svc rydercup-frontend-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+
+if [ "$API_NODEPORT" = "30321" ] && [ "$FRONTEND_NODEPORT" = "32315" ]; then
+    echo ""
+    print_warning "⚠️  Los port mappings automáticos YA están configurados"
+    echo ""
+    echo "Tus servicios están accesibles directamente en:"
+    echo -e "  ${GREEN}http://localhost:8080${NC}  → Frontend"
+    echo -e "  ${GREEN}http://localhost:8000${NC}  → Backend API"
+    echo ""
+    echo "NodePorts detectados:"
+    echo "  Backend:  $API_NODEPORT ✅"
+    echo "  Frontend: $FRONTEND_NODEPORT ✅"
+    echo ""
+    read -p "¿Aún así quieres iniciar port-forwards manuales? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_warning "Operación cancelada"
+        echo ""
+        echo "Para verificar el estado del cluster:"
+        echo -e "  ${GREEN}./k8s/scripts/cluster-status.sh${NC}"
+        echo ""
+        exit 0
+    fi
+    echo ""
+    print_warning "Continuando con port-forwards manuales (pueden entrar en conflicto)..."
+else
+    print_success "Port mappings automáticos NO configurados - port-forwards son necesarios"
+    echo ""
+    echo "NodePorts actuales:"
+    echo "  Backend:  $API_NODEPORT (esperado: 30321)"
+    echo "  Frontend: $FRONTEND_NODEPORT (esperado: 32315)"
+fi
+
+echo ""
 
 # ==========================================
 # Verificar que los Services existen

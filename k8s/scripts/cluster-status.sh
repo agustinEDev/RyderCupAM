@@ -204,22 +204,48 @@ else
 fi
 
 # ==========================================
-# 11. Port-forwards activos
+# 11. Acceso a la aplicación
 # ==========================================
-print_header "🔌 PORT-FORWARDS ACTIVOS"
+print_header "🌐 ACCESO A LA APLICACIÓN"
 
-PF_COUNT=$(ps aux | grep "kubectl port-forward" | grep -v grep | wc -l | tr -d ' ')
+# Verificar NodePorts configurados
+API_NODEPORT=$(kubectl get svc rydercup-api-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+FRONTEND_NODEPORT=$(kubectl get svc rydercup-frontend-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
 
-if [ "$PF_COUNT" -gt 0 ]; then
-    echo "Port-forwards detectados: ${GREEN}$PF_COUNT${NC}"
+# Verificar si los port mappings automáticos están configurados
+if [ "$API_NODEPORT" = "30321" ] && [ "$FRONTEND_NODEPORT" = "32315" ]; then
+    print_success "Port mappings automáticos configurados correctamente"
     echo ""
-    ps aux | grep "kubectl port-forward" | grep -v grep | awk '{print $11, $12, $13, $14}'
+    echo -e "${GREEN}✅ Los puertos están mapeados automáticamente gracias a kind-config.yaml${NC}"
+    echo ""
+    echo "Acceso directo (sin port-forward):"
+    echo -e "  ${GREEN}http://localhost:8080${NC}  → Frontend"
+    echo -e "  ${GREEN}http://localhost:8000${NC}  → Backend API"
+    echo -e "  ${GREEN}http://localhost:8000/docs${NC}  → API Documentation"
+    echo ""
+    echo "NodePorts configurados:"
+    echo "  Backend:  $API_NODEPORT ✅"
+    echo "  Frontend: $FRONTEND_NODEPORT ✅"
 else
-    print_warning "No hay port-forwards activos"
+    print_warning "Port mappings automáticos NO configurados"
     echo ""
-    echo "Para exponer la aplicación:"
-    echo "  Terminal 1: ${GREEN}kubectl port-forward svc/rydercup-api-service 8000:80${NC}"
-    echo "  Terminal 2: ${GREEN}kubectl port-forward svc/rydercup-frontend-service 8080:80${NC}"
+    echo "NodePorts actuales:"
+    echo "  Backend:  $API_NODEPORT (esperado: 30321)"
+    echo "  Frontend: $FRONTEND_NODEPORT (esperado: 32315)"
+    echo ""
+    echo "Usa port-forward para acceder:"
+    echo -e "  Terminal 1: ${GREEN}kubectl port-forward svc/rydercup-api-service 8000:80${NC}"
+    echo -e "  Terminal 2: ${GREEN}kubectl port-forward svc/rydercup-frontend-service 8080:80${NC}"
+    echo ""
+    echo "O ejecuta el script automático:"
+    echo -e "  ${GREEN}./k8s/scripts/start-port-forwards.sh${NC}"
+
+    # Verificar si hay port-forwards activos
+    PF_COUNT=$(ps aux | grep "kubectl port-forward" | grep -v grep | wc -l | tr -d ' ')
+    if [ "$PF_COUNT" -gt 0 ]; then
+        echo ""
+        echo "Port-forwards activos: ${GREEN}$PF_COUNT${NC}"
+    fi
 fi
 
 # ==========================================
@@ -237,18 +263,27 @@ if [ "$TOTAL_PODS" -eq "$RUNNING_PODS" ] && [ "$TOTAL_PODS" -gt 0 ]; then
     echo ""
     print_success "✨ ¡Cluster completamente funcional!"
     echo ""
-    echo "Acceder a la aplicación:"
-    echo "  ${GREEN}http://localhost:8080${NC} (después de port-forward)"
+
+    # Mostrar acceso según configuración
+    if [ "$API_NODEPORT" = "30321" ] && [ "$FRONTEND_NODEPORT" = "32315" ]; then
+        echo "Acceder a la aplicación (port mappings automáticos):"
+        echo -e "  ${GREEN}http://localhost:8080${NC}  → ¡Funciona directamente!"
+        echo -e "  ${GREEN}http://localhost:8000/docs${NC}  → Documentación API"
+    else
+        echo "Acceder a la aplicación:"
+        echo -e "  ${YELLOW}Requiere port-forward${NC}"
+        echo -e "  Ejecuta: ${GREEN}./k8s/scripts/start-port-forwards.sh${NC}"
+    fi
 else
     echo ""
     print_warning "⚠️  Algunos pods no están en Running"
     echo ""
     echo "Ver logs:"
-    echo "  ${YELLOW}kubectl logs -f deployment/rydercup-frontend${NC}"
-    echo "  ${YELLOW}kubectl logs -f deployment/rydercup-api${NC}"
-    echo "  ${YELLOW}kubectl logs -f deployment/postgres${NC}"
+    echo -e "  ${YELLOW}kubectl logs -f deployment/rydercup-frontend${NC}"
+    echo -e "  ${YELLOW}kubectl logs -f deployment/rydercup-api${NC}"
+    echo -e "  ${YELLOW}kubectl logs -f deployment/postgres${NC}"
 fi
 
 echo ""
-echo "📚 Documentación completa: ${GREEN}docs/KUBERNETES_DEPLOYMENT_GUIDE.md${NC}"
+echo -e "📚 Documentación completa: ${GREEN}docs/KUBERNETES_DEPLOYMENT_GUIDE.md${NC}"
 echo ""

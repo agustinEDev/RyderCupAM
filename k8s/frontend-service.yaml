@@ -37,6 +37,8 @@ spec:
       protocol: TCP
       port: 80                   # Puerto EXTERNO (lo que ven los usuarios)
       targetPort: 80             # Puerto INTERNO (puerto de nginx)
+      nodePort: 32315            # Puerto fijo en el Node (para kind-config.yaml)
+      # Con Kind: localhost:8080 → Node:32315 → Service:80 → Pod:80
 
   # ==========================================
   # SESSION AFFINITY (Opcional)

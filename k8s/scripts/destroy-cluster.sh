@@ -4,8 +4,22 @@
 # Script de Eliminación - Ryder Cup Manager
 # ==========================================
 # Este script elimina el cluster de Kubernetes completamente
+#
+# ⚠️  IMPORTANTE: Ejecutar con ./destroy-cluster.sh
+#    NO uses: source destroy-cluster.sh
+#
 # Uso: ./scripts/destroy-cluster.sh
 # ==========================================
+
+# Detectar si fue ejecutado con 'source'
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Ejecutado correctamente con ./
+    :
+else
+    echo "❌ ERROR: No ejecutes este script con 'source'"
+    echo "✅ Usa: ./k8s/scripts/destroy-cluster.sh"
+    return 1 2>/dev/null || exit 1
+fi
 
 set -e  # Salir si algún comando falla
 
@@ -32,6 +46,9 @@ print_success() {
 print_step() {
     echo -e "${BLUE}==>${NC} ${GREEN}$1${NC}"
 }
+
+# Manejo de interrupciones (Ctrl+C) - DESPUÉS de definir funciones
+trap 'echo ""; print_warning "Script interrumpido por el usuario"; exit 130' INT TERM
 
 # Banner
 echo ""
@@ -95,7 +112,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ -z "$IMAGES" ]; then
         print_warning "No se encontraron imágenes de Kind"
     else
-        echo "$IMAGES" | xargs -r docker rmi -f
+        # Compatibilidad macOS: xargs sin -r (GNU)
+        # En macOS, si IMAGES está vacío, xargs no ejecutará el comando
+        for img in $IMAGES; do
+            docker rmi -f "$img" 2>/dev/null || true
+        done
         print_success "Imágenes de Kind eliminadas"
     fi
 fi
@@ -104,5 +125,5 @@ echo ""
 print_success "🎉 ¡Cleanup completado!"
 echo ""
 echo "📋 Para volver a crear el cluster:"
-echo "   ${GREEN}./scripts/deploy-cluster.sh${NC}"
+echo -e "   ${GREEN}./scripts/deploy-cluster.sh${NC}"
 echo ""

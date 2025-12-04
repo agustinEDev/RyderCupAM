@@ -38,7 +38,9 @@ spec:
       protocol: TCP              # Protocolo: TCP o UDP
       port: 80                   # Puerto EXTERNO (lo que ven los usuarios)
       targetPort: 8000           # Puerto INTERNO (puerto del contenedor FastAPI)
+      nodePort: 30321            # Puerto fijo en el Node (para kind-config.yaml)
       # Flujo: Usuario → http://IP-EXTERNA:80 → Service:80 → Pod:8000
+      # Con Kind: localhost:8000 → Node:30321 → Service:80 → Pod:8000
 
   # ==========================================
   # SESSION AFFINITY (Opcional)
