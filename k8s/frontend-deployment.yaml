@@ -1,0 +1,113 @@
+# ==========================================
+# DEPLOYMENT - RyderCupWeb Frontend (React + Vite + nginx)
+# ==========================================
+# Deployment del frontend con 2 réplicas para alta disponibilidad
+# ==========================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rydercup-frontend        # Nombre del Deployment
+  labels:
+    app: rydercup
+    component: frontend
+    tier: presentation
+
+spec:
+  # ==========================================
+  # RÉPLICAS - Alta disponibilidad
+  # ==========================================
+  replicas: 2                    # 2 copias del frontend
+
+  # ==========================================
+  # SELECTOR - Cómo encontrar los Pods
+  # ==========================================
+  selector:
+    matchLabels:
+      app: rydercup
+      component: frontend
+
+  # ==========================================
+  # ESTRATEGIA DE ACTUALIZACIÓN
+  # ==========================================
+  strategy:
+    type: RollingUpdate          # Actualización sin downtime
+    rollingUpdate:
+      maxSurge: 1                # Máximo 1 Pod extra durante actualización
+      maxUnavailable: 0          # Siempre al menos 1 Pod corriendo
+
+  # ==========================================
+  # TEMPLATE - Plantilla del Pod
+  # ==========================================
+  template:
+    metadata:
+      labels:
+        app: rydercup
+        component: frontend
+        tier: presentation
+
+    spec:
+      # ==========================================
+      # CONTENEDORES - nginx + React app
+      # ==========================================
+      containers:
+        - name: nginx                           # Nombre del contenedor
+          image: agustinedev/rydercupam-web:latest  # Imagen Docker Hub
+          imagePullPolicy: Always               # Siempre descargar última versión
+
+          # ==========================================
+          # PUERTOS
+          # ==========================================
+          ports:
+            - name: http
+              containerPort: 80                 # Puerto donde nginx escucha
+              protocol: TCP
+
+          # ==========================================
+          # VARIABLES DE ENTORNO - Desde ConfigMap
+          # ==========================================
+          envFrom:
+            - configMapRef:
+                name: rydercup-frontend-config  # Inyectar todas las variables
+
+          # ==========================================
+          # RECURSOS - CPU y Memoria
+          # ==========================================
+          resources:
+            requests:                           # Mínimo garantizado
+              memory: "256Mi"                   # 256 Megabytes (frontend es ligero)
+              cpu: "250m"                       # 0.25 CPU cores
+            limits:                             # Máximo permitido
+              memory: "512Mi"                   # 512 Megabytes
+              cpu: "500m"                       # 0.5 CPU cores
+
+          # ==========================================
+          # HEALTH CHECKS - Verificación de salud
+          # ==========================================
+          livenessProbe:                        # ¿Está vivo nginx?
+            httpGet:
+              path: /health                     # Endpoint de health check (definido en nginx.conf)
+              port: 80
+            initialDelaySeconds: 10             # Esperar 10s antes de comenzar
+            periodSeconds: 10                   # Comprobar cada 10s
+            timeoutSeconds: 3                   # Timeout de 3s
+            failureThreshold: 3                 # Reiniciar después de 3 fallos
+
+          readinessProbe:                       # ¿Está listo para recibir tráfico?
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5              # Esperar 5s antes de comenzar
+            periodSeconds: 5                    # Comprobar cada 5s
+            timeoutSeconds: 2                   # Timeout de 2s
+            failureThreshold: 3                 # Marcar como "no listo" después de 3 fallos
+
+# ==========================================
+# NOTAS DE DEPLOYMENT
+# ==========================================
+# 1. La imagen debe existir en Docker Hub: agustinedev/rydercupam-web:latest
+# 2. El entrypoint.sh inyecta variables de ConfigMap en window.APP_CONFIG
+# 3. nginx.conf maneja SPA routing (/competitions/123 → index.html)
+# 4. Health check en /health (definido en nginx.conf)
+# 5. Recursos: 256Mi-512Mi RAM, 0.25-0.5 CPU (suficiente para nginx estático)
+# ==========================================

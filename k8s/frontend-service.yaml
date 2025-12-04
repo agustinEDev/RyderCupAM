@@ -1,0 +1,73 @@
+# ==========================================
+# SERVICE - RyderCupWeb Frontend
+# ==========================================
+# Service para exponer el frontend EXTERNAMENTE
+# (accesible desde internet o red local)
+# ==========================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: rydercup-frontend-service  # Nombre del Service
+  labels:
+    app: rydercup
+    component: frontend
+    tier: presentation
+
+spec:
+  # ==========================================
+  # TIPO DE SERVICE - LoadBalancer (acceso externo)
+  # ==========================================
+  type: LoadBalancer             # Exponer externamente
+  # En Kind, LoadBalancer se comporta como NodePort
+  # En cloud (GKE, EKS, AKS), obtiene IP pública automáticamente
+
+  # ==========================================
+  # SELECTOR - Qué Pods gestionar
+  # ==========================================
+  selector:
+    app: rydercup
+    component: frontend
+
+  # ==========================================
+  # PUERTOS - Mapeo de puertos
+  # ==========================================
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80                   # Puerto EXTERNO (lo que ven los usuarios)
+      targetPort: 80             # Puerto INTERNO (puerto de nginx)
+
+  # ==========================================
+  # SESSION AFFINITY (Opcional)
+  # ==========================================
+  # sessionAffinity: ClientIP  # Mantener usuario en mismo Pod
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 10800  # 3 horas
+
+# ==========================================
+# CÓMO ACCEDER AL FRONTEND
+# ==========================================
+# 1. Obtener IP externa:
+#    kubectl get svc rydercup-frontend-service
+#
+# 2. Esperar a que EXTERNAL-IP cambie de <pending> a una IP
+#
+# 3. En Kind (local), usar port-forward:
+#    kubectl port-forward svc/rydercup-frontend-service 8080:80
+#    Luego abrir: http://localhost:8080
+#
+# 4. En cloud, usar directamente la IP externa:
+#    http://<EXTERNAL-IP>
+# ==========================================
+
+# ==========================================
+# NOTAS DE SEGURIDAD
+# ==========================================
+# En producción, considera usar:
+# 1. Ingress con TLS/SSL (HTTPS)
+# 2. Cert-manager para certificados automáticos
+# 3. Firewall rules para restringir acceso
+# 4. Rate limiting en nginx
+# ==========================================

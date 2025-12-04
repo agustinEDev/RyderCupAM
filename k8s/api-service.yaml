@@ -1,0 +1,49 @@
+# ==========================================
+# SERVICE - RyderCupAm FastAPI API
+# ==========================================
+# Este Service expone la API al mundo exterior
+# y balancea carga entre los Pods del Deployment
+# ==========================================
+
+apiVersion: v1                   # API version para Services
+kind: Service                    # Tipo de recurso: Service
+metadata:
+  name: rydercup-api-service     # Nombre del Service (DNS name)
+  labels:
+    app: rydercup
+    component: api
+    tier: backend
+spec:
+  # ==========================================
+  # TIPO DE SERVICE
+  # ==========================================
+  type: LoadBalancer             # Tipo: LoadBalancer (acceso público)
+  # Alternativas:
+  # - ClusterIP: Solo acceso interno (no expone fuera del cluster)
+  # - NodePort: Expone en puerto del Node (30000-32767)
+  # - LoadBalancer: Crea balanceador externo (cloud provider)
+
+  # ==========================================
+  # SELECTOR - Qué Pods gestionar
+  # ==========================================
+  selector:
+    app: rydercup                # Busca Pods con estas labels
+    component: api               # (deben coincidir con las del Deployment)
+
+  # ==========================================
+  # PUERTOS - Mapeo de puertos
+  # ==========================================
+  ports:
+    - name: http                 # Nombre del puerto (opcional)
+      protocol: TCP              # Protocolo: TCP o UDP
+      port: 80                   # Puerto EXTERNO (lo que ven los usuarios)
+      targetPort: 8000           # Puerto INTERNO (puerto del contenedor FastAPI)
+      # Flujo: Usuario → http://IP-EXTERNA:80 → Service:80 → Pod:8000
+
+  # ==========================================
+  # SESSION AFFINITY (Opcional)
+  # ==========================================
+  # sessionAffinity: ClientIP    # Mismo cliente → mismo Pod (sticky sessions)
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 10800    # 3 horas

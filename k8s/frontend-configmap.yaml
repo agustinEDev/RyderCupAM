@@ -1,0 +1,55 @@
+# ==========================================
+# CONFIGMAP - RyderCupWeb Frontend (React + Vite)
+# ==========================================
+# Variables de entorno públicas para el frontend
+# Estas se inyectan en RUNTIME por entrypoint.sh
+# ==========================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rydercup-frontend-config  # Nombre del ConfigMap
+  labels:
+    app: rydercup
+    component: frontend
+    tier: presentation
+
+# ==========================================
+# DATA - Variables de entorno
+# ==========================================
+data:
+  # ==========================================
+  # API CONFIGURATION
+  # ==========================================
+  # URL del backend API accesible desde el NAVEGADOR
+  # IMPORTANTE: En Kind local, usar port-forward del backend
+  VITE_API_BASE_URL: "http://localhost:8000"
+
+  # INSTRUCCIONES:
+  # 1. Terminal 1: kubectl port-forward svc/rydercup-api-service 8000:80
+  # 2. Terminal 2: kubectl port-forward svc/rydercup-frontend-service 8080:80
+  # 3. Abrir navegador: http://localhost:8080
+
+  # NOTA: DNS interno solo funciona DENTRO del cluster (pod-to-pod):
+  # VITE_API_BASE_URL: "http://rydercup-api-service"  ❌ No funciona desde navegador
+
+  # ==========================================
+  # APP CONFIGURATION
+  # ==========================================
+  VITE_APP_NAME: "Ryder Cup Friends"
+  VITE_ENVIRONMENT: "production"
+
+  # ==========================================
+  # FEATURE FLAGS (Opcional)
+  # ==========================================
+  # VITE_ENABLE_ANALYTICS: "true"
+  # VITE_DEBUG_MODE: "false"
+
+# ==========================================
+# NOTAS DE USO
+# ==========================================
+# 1. Estas variables se inyectan en window.APP_CONFIG por entrypoint.sh
+# 2. El código React debe leer: window.APP_CONFIG.API_BASE_URL
+# 3. Para cambiar variables: kubectl edit configmap rydercup-frontend-config
+# 4. Después de editar: kubectl rollout restart deployment rydercup-frontend
+# ==========================================

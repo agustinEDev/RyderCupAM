@@ -1,0 +1,118 @@
+# ==========================================
+# DEPLOYMENT - RyderCupAm FastAPI API
+# ==========================================
+# Este Deployment gestiona los Pods de la API FastAPI
+# con auto-reinicio, réplicas y rolling updates
+# ==========================================
+
+apiVersion: apps/v1              # API version para Deployments
+kind: Deployment                 # Tipo de recurso: Deployment
+metadata:
+  name: rydercup-api             # Nombre del Deployment
+  labels:
+    app: rydercup                # Etiqueta de aplicación
+    component: api               # Componente: API
+    tier: backend                # Capa: Backend
+spec:
+  # ==========================================
+  # RÉPLICAS - Cuántos Pods queremos
+  # ==========================================
+  replicas: 2                    # 2 copias de la API (alta disponibilidad)
+
+  # ==========================================
+  # SELECTOR - Cómo encontrar los Pods
+  # ==========================================
+  selector:
+    matchLabels:
+      app: rydercup
+      component: api
+
+  # ==========================================
+  # ESTRATEGIA DE ACTUALIZACIÓN
+  # ==========================================
+  strategy:
+    type: RollingUpdate          # Actualización gradual (sin downtime)
+    rollingUpdate:
+      maxSurge: 1                # Máximo 1 Pod extra durante actualización
+      maxUnavailable: 0          # Mínimo 0 Pods no disponibles (siempre hay al menos 1 corriendo)
+
+  # ==========================================
+  # TEMPLATE - Plantilla del Pod
+  # ==========================================
+  template:
+    metadata:
+      labels:
+        app: rydercup
+        component: api
+        tier: backend
+    spec:
+      # ==========================================
+      # CONTENEDORES - Definición del contenedor FastAPI
+      # ==========================================
+      containers:
+        - name: fastapi                    # Nombre del contenedor
+          image: agustinedev/rydercupam-app:latest     # Imagen de Docker Hub
+          imagePullPolicy: Always          # Siempre descargar última versión
+
+          # ==========================================
+          # PUERTOS - Qué puertos expone
+          # ==========================================
+          ports:
+            - name: http
+              containerPort: 8000          # Puerto donde corre FastAPI
+              protocol: TCP
+
+          # ==========================================
+          # VARIABLES DE ENTORNO - Desde ConfigMap y Secret
+          # ==========================================
+          # Inyecta TODAS las variables de entorno desde ConfigMap y Secret
+          # ==========================================
+          envFrom:
+            # Inyectar variables públicas desde ConfigMap
+            - configMapRef:
+                name: rydercup-api-config      # Nombre del ConfigMap
+
+            # Inyectar variables sensibles desde Secret
+            - secretRef:
+                name: rydercup-api-secret     # Nombre del Secret
+
+          # ==========================================
+          # VARIABLES COMPUESTAS - Construidas a partir de otras
+          # ==========================================
+          env:
+            # DATABASE_URL compuesta a partir de otras variables
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(POSTGRES_DB)"
+              # Nota: Kubernetes resuelve automáticamente $(VAR_NAME) usando las variables inyectadas
+
+          # ==========================================
+          # RECURSOS - CPU y Memoria
+          # ==========================================
+          resources:
+            requests:                      # Mínimo garantizado
+              memory: "512Mi"              # 512 Megabytes
+              cpu: "500m"                  # 0.5 CPU cores (500 milicores)
+            limits:                        # Máximo permitido
+              memory: "1Gi"                # 1 Gigabyte
+              cpu: "1000m"                 # 1 CPU core (1000 milicores)
+
+          # ==========================================
+          # HEALTH CHECKS - Verificación de salud
+          # ==========================================
+          livenessProbe:                   # ¿Está vivo el contenedor?
+            httpGet:
+              path: /                      # Endpoint de salud
+              port: 8000
+            initialDelaySeconds: 30        # Espera 30s antes de comenzar
+            periodSeconds: 10              # Comprueba cada 10s
+            timeoutSeconds: 5              # Timeout de 5s
+            failureThreshold: 3            # Reinicia después de 3 fallos
+
+          readinessProbe:                  # ¿Está listo para recibir tráfico?
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10        # Espera 10s antes de comenzar
+            periodSeconds: 5               # Comprueba cada 5s
+            timeoutSeconds: 3              # Timeout de 3s
+            failureThreshold: 3            # Marca como "no listo" después de 3 fallos

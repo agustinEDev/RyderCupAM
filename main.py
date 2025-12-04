@@ -124,6 +124,8 @@ if ENV != "production":
         "http://127.0.0.1:5173",   # Vite
         "http://localhost:5174",   # Vite (fallback)
         "http://127.0.0.1:5174",   # Vite (fallback)
+        "http://localhost:8080",   # Kubernetes port-forward (frontend)
+        "http://127.0.0.1:8080",   # Kubernetes port-forward (frontend)
     ])
 
 # Eliminar duplicados conservando orden
