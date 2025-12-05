@@ -9,6 +9,7 @@ apiVersion: v1                   # API version para Services
 kind: Service                    # Tipo de recurso: Service
 metadata:
   name: rydercup-api-service     # Nombre del Service (DNS name)
+  namespace: rydercupfriends # Namespace donde se desplegará la API
   labels:
     app: rydercup
     component: api

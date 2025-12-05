@@ -1,4 +1,4 @@
-# 🛠️ Scripts de Kubernetes - Ryder Cup Manager
+# 🛠️ Scripts de Kubernetes - Ryder Cup Friends
 
 Scripts de automatización para gestionar el cluster de Kubernetes.
 

@@ -153,7 +153,18 @@ print_step "Usando manifiestos de: $K8S_DIR"
 echo ""
 
 # ==========================================
-# PASO 5: Aplicar ConfigMaps y Secrets
+# PASO 5: Crear Namespace
+# ==========================================
+print_step "Creando namespace rydercup..."
+
+kubectl apply -f "$K8S_DIR/namespace.yaml"
+kubectl config set-context --current --namespace=rydercupfriends
+
+print_success "Namespace creado y configurado"
+echo ""
+
+# ==========================================
+# PASO 6: Aplicar ConfigMaps y Secrets
 # ==========================================
 print_step "Aplicando ConfigMaps y Secrets..."
 
@@ -165,7 +176,7 @@ print_success "ConfigMaps y Secrets aplicados"
 echo ""
 
 # ==========================================
-# PASO 6: Crear almacenamiento persistente
+# PASO 7: Crear almacenamiento persistente
 # ==========================================
 print_step "Creando PersistentVolumeClaim para PostgreSQL..."
 
@@ -175,7 +186,70 @@ print_success "PVC creado"
 echo ""
 
 # ==========================================
-# PASO 7: Desplegar PostgreSQL
+# PASO 8: Construir imágenes Docker (OPCIONAL)
+# ==========================================
+print_step "¿Construir imágenes Docker localmente?"
+echo ""
+echo "Esto construirá las imágenes del backend y frontend con el código actual."
+echo "Recomendado si has hecho cambios en el código."
+echo ""
+read -p "¿Quieres construir las imágenes Docker localmente? (Y/n): " -n 1 -r
+echo
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+    print_step "Construyendo imágenes Docker..."
+
+    # Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
+    FRONTEND_DIR="$(cd "$PROJECT_ROOT/../RyderCupWeb" && pwd)"
+    BACKEND_DIR="$PROJECT_ROOT"
+
+    # Verificar que existen los Dockerfiles
+    if [ ! -f "$BACKEND_DIR/Dockerfile" ]; then
+        print_error "No se encontró Dockerfile en: $BACKEND_DIR"
+        exit 1
+    fi
+
+    if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
+        print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
+        exit 1
+    fi
+
+    # Construir imagen del Backend
+    print_step "Construyendo imagen del Backend (FastAPI)..."
+    docker build -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
+    print_success "Imagen del backend construida"
+
+    # Construir imagen del Frontend
+    print_step "Construyendo imagen del Frontend (React + Vite)..."
+    docker build -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
+    print_success "Imagen del frontend construida"
+
+    # Cargar imágenes en el cluster de Kind
+    print_step "Cargando imágenes en el cluster de Kind..."
+    kind load docker-image agustinedev/rydercupam-api:latest --name ${CLUSTER_NAME}
+    kind load docker-image agustinedev/rydercupam-web:latest --name ${CLUSTER_NAME}
+    print_success "Imágenes cargadas en el cluster"
+
+    echo ""
+else
+    print_warning "Saltando construcción de imágenes"
+    print_warning "Se usarán las imágenes existentes en el cluster"
+    echo ""
+fi
+
+# ==========================================
+# PASO 9: Crear almacenamiento persistente
+# ==========================================
+print_step "Creando PersistentVolumeClaim para PostgreSQL..."
+
+kubectl apply -f "$K8S_DIR/postgres-pvc.yaml"
+
+print_success "PVC creado"
+echo ""
+
+# ==========================================
+# PASO 10: Desplegar PostgreSQL
 # ==========================================
 print_step "Desplegando PostgreSQL..."
 
@@ -189,7 +263,7 @@ print_success "PostgreSQL desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 8: Desplegar Backend (FastAPI)
+# PASO 11: Desplegar Backend (FastAPI)
 # ==========================================
 print_step "Desplegando Backend (FastAPI)..."
 
@@ -203,7 +277,7 @@ print_success "Backend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 9: Desplegar Frontend (React + nginx)
+# PASO 12: Desplegar Frontend (React + nginx)
 # ==========================================
 print_step "Desplegando Frontend (React + nginx)..."
 
@@ -217,7 +291,7 @@ print_success "Frontend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 10: Verificar deployment
+# PASO 13: Verificar deployment
 # ==========================================
 print_step "Verificando deployment completo..."
 
@@ -244,7 +318,7 @@ fi
 echo ""
 
 # ==========================================
-# PASO 11: Instrucciones finales
+# PASO 14: Instrucciones finales
 # ==========================================
 print_success "🎉 ¡Deployment completado exitosamente!"
 echo ""

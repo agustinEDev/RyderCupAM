@@ -9,6 +9,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc             # Nombre del PVC
+  namespace: rydercupfriends     # Namespace donde se desplegará el PVC
   labels:
     app: rydercup
     component: database

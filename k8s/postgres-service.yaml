@@ -9,6 +9,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres-service         # Nombre del Service (usado como DNS interno)
+  namespace: rydercupfriends     # Namespace donde se desplegará el Service
   labels:
     app: rydercup
     component: database
@@ -16,10 +17,11 @@ metadata:
 
 spec:
   # ==========================================
-  # TIPO DE SERVICE - ClusterIP (solo interno)
+  # TIPO DE SERVICE - NodePort (acceso desde localhost con Kind)
   # ==========================================
-  type: ClusterIP                # Solo accesible DENTRO del cluster
-  # ⚠️ NUNCA usar LoadBalancer o NodePort para PostgreSQL (seguridad)
+  type: NodePort                 # Expuesto en NodePort para Kind port mapping
+  # En Kind con extraPortMappings, esto permite acceso directo desde localhost
+  # En producción, usar ClusterIP (solo acceso interno)
 
   # ==========================================
   # SELECTOR - Qué Pods gestionar
@@ -36,6 +38,8 @@ spec:
       protocol: TCP
       port: 5432                 # Puerto EXTERNO (lo que ven otros Pods)
       targetPort: 5432           # Puerto INTERNO (puerto de PostgreSQL)
+      nodePort: 30432            # Puerto fijo en el Node (para kind-config.yaml)
+      # Con Kind: localhost:5433 → Node:30432 → Service:5432 → Pod:5432
 
   # ==========================================
   # CLUSTER IP (Opcional - Kubernetes lo asigna automáticamente)
