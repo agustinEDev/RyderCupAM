@@ -9,6 +9,7 @@ apiVersion: apps/v1              # API version para Deployments
 kind: Deployment                 # Tipo de recurso: Deployment
 metadata:
   name: rydercup-api             # Nombre del Deployment
+  namespace: rydercupfriends # Namespace donde se desplegará la API
   labels:
     app: rydercup                # Etiqueta de aplicación
     component: api               # Componente: API

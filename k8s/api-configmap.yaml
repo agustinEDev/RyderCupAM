@@ -9,6 +9,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: rydercup-api-config      # Nombre del ConfigMap
+  namespace: rydercupfriends  # Namespace donde se desplegará la API
   labels:
     app: rydercup
     component: api
@@ -24,7 +25,7 @@ data:
   # Database connection (NO passwords)
   DATABASE_HOST: "postgres-service"      # Nombre del Service de PostgreSQL
   DATABASE_PORT: "5432"
-  POSTGRES_DB: "ryderclub"
+  POSTGRES_DB: "rcfdevdb"                # RyderCup Friends - Development Database
 
   # JWT settings (NO secret key)
   ALGORITHM: "HS256"
@@ -35,5 +36,16 @@ data:
   MAILGUN_FROM_EMAIL: "Ryder Cup Friends <noreply@rydercupfriends.com>"
   MAILGUN_API_URL: "https://api.eu.mailgun.net/v3"
 
-  # Frontend URL
-  FRONTEND_URL: "http://localhost:5173"      # Cambiar en producción
+  # ==========================================
+  # FRONTEND URL - IMPORTANTE
+  # ==========================================
+  # Esta URL se usa para generar enlaces de verificación de email
+  # Debe coincidir con cómo accedes al frontend desde tu navegador
+  #
+  # Para Kubernetes local (Kind):
+  # 1. Ejecuta: kubectl port-forward svc/rydercup-frontend-service 8080:80
+  # 2. Abre navegador: http://localhost:8080
+  # 3. Los enlaces de email apuntarán a: http://localhost:8080/verify-email?token=xxx
+  #
+  # Para producción, cambiar a: https://rydercupfriends.com
+  FRONTEND_URL: "http://localhost:8080"

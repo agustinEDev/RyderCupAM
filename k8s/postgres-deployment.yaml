@@ -9,6 +9,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres                 # Nombre del Deployment
+  namespace: rydercupfriends     # Namespace donde se desplegará PostgreSQL
   labels:
     app: rydercup
     component: database
@@ -113,9 +114,9 @@ spec:
           livenessProbe:                    # ¿Está vivo PostgreSQL?
             exec:
               command:
-                - pg_isready                # Comando de PostgreSQL para verificar salud
-                - -U
-                - $(POSTGRES_USER)          # Usuario de PostgreSQL
+                - /bin/sh                   # Shell wrapper para expandir variables
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB    # Especifica usuario Y base de datos
             initialDelaySeconds: 30         # Espera 30s antes de comenzar
             periodSeconds: 10               # Comprueba cada 10s
             timeoutSeconds: 5               # Timeout de 5s
@@ -124,9 +125,9 @@ spec:
           readinessProbe:                   # ¿Está listo para recibir conexiones?
             exec:
               command:
-                - pg_isready
-                - -U
-                - $(POSTGRES_USER)
+                - /bin/sh                   # Shell wrapper para expandir variables
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB    # Especifica usuario Y base de datos
             initialDelaySeconds: 10         # Espera 10s antes de comenzar
             periodSeconds: 5                # Comprueba cada 5s
             timeoutSeconds: 3               # Timeout de 3s

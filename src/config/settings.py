@@ -40,7 +40,11 @@ class Settings:
     MAILGUN_DOMAIN: str = os.getenv("MAILGUN_DOMAIN", "rydercupfriends.com")
     MAILGUN_FROM_EMAIL: str = os.getenv("MAILGUN_FROM_EMAIL", "Ryder Cup Friends <noreply@rydercupfriends.com>")
     MAILGUN_API_URL: str = os.getenv("MAILGUN_API_URL", "https://api.eu.mailgun.net/v3")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    # Frontend URL - Cambia según el entorno:
+    # - Local (directo): http://localhost:5173 (Vite default)
+    # - Local (K8s): http://localhost:8080 (port-forward)
+    # - Producción: https://rydercupfriends.com (Render.com)
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 settings = Settings()

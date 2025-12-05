@@ -34,6 +34,12 @@ nodes:
         protocol: TCP
         # Resultado: http://localhost:8080 → Frontend
 
+      # PostgreSQL Database
+      - containerPort: 30432        # NodePort de PostgreSQL
+        hostPort: 5433              # Puerto en localhost (5433 para evitar conflictos)
+        protocol: TCP
+        # Resultado: localhost:5433 → PostgreSQL (para DBeaver, etc.)
+
 # ==========================================
 # NOTAS DE USO
 # ==========================================
@@ -43,12 +49,14 @@ nodes:
 # 2. Después de desplegar la app, acceder directamente:
 #    http://localhost:8000  → Backend
 #    http://localhost:8080  → Frontend
+#    localhost:5433         → PostgreSQL (para DBeaver, pgAdmin, etc.)
 #
 # 3. NO NECESITAS port-forward! Los puertos están mapeados automáticamente
 #
-# 4. Los NodePorts (30321 y 32315) se definen en los Services:
+# 4. Los NodePorts (30321, 32315, 30432) se definen en los Services:
 #    - api-service.yaml (port 80 → NodePort 30321)
 #    - frontend-service.yaml (port 80 → NodePort 32315)
+#    - postgres-service.yaml (port 5432 → NodePort 30432)
 # ==========================================
 
 # ==========================================
