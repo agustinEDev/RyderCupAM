@@ -38,7 +38,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="ValidPass123"
+        plain_password="V@l1dP@ss123!"
     )
 
     async with uow:
@@ -58,7 +58,7 @@ class TestLoginUserUseCase:
         use_case = LoginUserUseCase(uow, token_service)
         request = LoginRequestDTO(
             email="test@example.com",
-            password="ValidPass123"
+            password="V@l1dP@ss123!"
         )
 
         # Act
@@ -80,7 +80,7 @@ class TestLoginUserUseCase:
         use_case = LoginUserUseCase(uow, token_service)
         request = LoginRequestDTO(
             email="test@example.com",
-            password="WrongPassword123"
+            password="Wr0ngP@ssw0rd!"
         )
 
         # Act
@@ -95,7 +95,7 @@ class TestLoginUserUseCase:
         use_case = LoginUserUseCase(uow, token_service)
         request = LoginRequestDTO(
             email="nonexistent@example.com",
-            password="SomePassword123"
+            password="S0m3P@ssw0rd!"
         )
 
         # Act
@@ -110,7 +110,7 @@ class TestLoginUserUseCase:
         use_case = LoginUserUseCase(uow, token_service)
         request = LoginRequestDTO(
             email="test@example.com",
-            password="ValidPass123"
+            password="V@l1dP@ss123!"
         )
 
         # Act
@@ -127,7 +127,7 @@ class TestLoginUserUseCase:
         use_case = LoginUserUseCase(uow, token_service)
         request = LoginRequestDTO(
             email="test@example.com",
-            password="ValidPass123"
+            password="V@l1dP@ss123!"
         )
 
         # Act

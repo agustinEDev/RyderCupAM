@@ -85,7 +85,7 @@ class TestAuthSecurityUserEnumeration:
         # Registrar un usuario para tener un caso válido
         valid_user_data = {
             "email": "security.test@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Security",
             "last_name": "Test",
         }
@@ -135,7 +135,7 @@ class TestAuthSecurityUserEnumeration:
         # Registrar y verificar usuario
         user_data = {
             "email": "verified.security@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Verified",
             "last_name": "Security",
         }
@@ -182,7 +182,7 @@ class TestAuthSecurityUserEnumeration:
         # Registrar un usuario
         valid_user = {
             "email": "timing.test@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Timing",
             "last_name": "Test",
         }
@@ -270,7 +270,7 @@ class TestAuthSecurityLogging:
         # Registrar un usuario válido
         valid_user = {
             "email": "logging.test@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Logging",
             "last_name": "Test",
         }

@@ -1,6 +1,7 @@
 # tests/conftest.py
 import os
 import sys
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
@@ -139,7 +140,9 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     limpia y aislada para CADA test, incluso en ejecuciones paralelas.
     """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    db_name = f"test_db_{worker_id}"
+    # Usar UUID único para cada test para evitar colisiones
+    unique_id = str(uuid.uuid4())[:8]
+    db_name = f"test_db_{worker_id}_{unique_id}"
 
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
@@ -172,8 +175,15 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
 
+    # Generar ID único para este test (evita colisiones con rate limiter)
+    test_client_id = f"test-{uuid.uuid4()}"
+
     transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Test-Client-ID": test_client_id}  # IP simulada única por test
+    ) as ac:
         yield ac
 
     # Limpieza
@@ -372,35 +382,33 @@ async def get_user_by_email(client: AsyncClient, email: str):
     Raises:
         AssertionError: Si el usuario no existe
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
     from src.modules.user.domain.value_objects.email import Email
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
         SQLAlchemyUserRepository,
     )
+    from src.config.dependencies import get_db_session
 
-    # Obtener la URL de la BD del cliente (está en la app state)
-    # Como no podemos acceder directamente, usamos la variable de entorno
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    db_name = f"test_db_{worker_id}"
-    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
-    if db_url_base.startswith(POSTGRESQL_PREFIX):
-        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
-    test_db_url = f"{db_url_base}/{db_name}"
+    # Obtener la sesión DB desde el override del cliente
+    # El override está configurado en el fixture client()
+    db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
+    if db_session_override is None:
+        raise RuntimeError("get_db_session no tiene override - el test debe usar el fixture client()")
 
-    # Crear engine y session
-    engine = create_async_engine(test_db_url, echo=False)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    # Usar la sesión overrideada
+    # IMPORTANTE: Usar async with para asegurar que la sesión se cierra correctamente
+    async for session in db_session_override():
+        try:
+            repo = SQLAlchemyUserRepository(session)
+            email_vo = Email(email)
+            user = await repo.find_by_email(email_vo)
+            assert user is not None, f"Usuario con email {email} no encontrado"
+            return user
+        finally:
+            # Cerrar la sesión explícitamente para liberar la conexión
+            await session.close()
 
-    async with session_factory() as session:
-        repo = SQLAlchemyUserRepository(session)
-        email_vo = Email(email)
-        user = await repo.find_by_email(email_vo)
-
-    await engine.dispose()
-
-    assert user is not None, f"Usuario con email {email} no encontrado"
-    return user
+    # Este punto nunca debería alcanzarse
+    raise RuntimeError("No se pudo obtener sesión DB")
 
 
 # ======================================================================================

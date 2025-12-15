@@ -2,13 +2,13 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-679%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-681%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF)](.)
-[![Security](https://img.shields.io/badge/security-8.0%2F10-success)](.)
-[![OWASP](https://img.shields.io/badge/OWASP-Top%2010%202021-blue)](https://owasp.org/Top10/)
+[![Security](https://img.shields.io/badge/security-8.2%2F10-success)](.)
+[![OWASP](https://img.shields.io/badge/OWASP-ASVS%20V2.1-blue)](https://owasp.org/www-project-application-security-verification-standard/)
 
 ## 🌐 Frontend
 
@@ -87,23 +87,30 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (679 tests, ~50s con paralelización)
-pytest tests/unit/           # Unit tests (553 tests)
-pytest tests/integration/    # Integration tests (126 tests)
+python dev_tests.py          # Full suite (681 tests, ~45s con paralelización)
+pytest tests/unit/           # Unit tests (544 tests)
+pytest tests/integration/    # Integration tests (137 tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **679 tests** pasando (100% ✅)
+- **681 tests** pasando (100% ✅) en 44.95 segundos
 - **Competition Module**: 174 tests completos (domain, application, infrastructure)
+- **User Module**: 507 tests (incluye password policy)
 - **Security Tests**: 12 tests (rate limiting + security headers)
 - **Cobertura**: >90% en lógica de negocio
+- **Fix de paralelización**: UUID único por BD de test (pytest-xdist)
 
 ## 🔐 Seguridad
 
-**Puntuación OWASP Top 10 2021**: 8.0/10 ✅
+**Puntuación OWASP Top 10 2021**: 8.2/10 ✅ (+0.2 tras Password Policy)
 
 **Protecciones Implementadas**:
+- ✅ **Password Policy** (OWASP ASVS V2.1) - Contraseñas robustas (A07)
+  - Mínimo 12 caracteres (ASVS V2.1.1)
+  - Complejidad completa: mayúsculas + minúsculas + dígitos + símbolos (ASVS V2.1.2)
+  - Blacklist de contraseñas comunes (ASVS V2.1.7)
+  - bcrypt con 12 rounds (4 rounds en tests)
 - ✅ **Rate Limiting** (SlowAPI) - Previene brute force, DoS (A04, A07)
   - Login: 5/min, Register: 3/hour, API externa: 5/hour
 - ✅ **Security Headers HTTP** (secure) - Previene XSS, clickjacking, MITM (A02, A03, A04, A05, A07)
@@ -112,12 +119,11 @@ pytest --cov=src             # Con cobertura
 - ✅ **SQL Injection Protection** (SQLAlchemy ORM parameterizado)
 - ✅ **JWT Authentication** con tokens seguros
 - ✅ **Input Validation** (Pydantic schemas)
-- ✅ **Password Hashing** (bcrypt)
 
-**Pendiente**:
-- ⏳ httpOnly Cookies (v1.8.0 próximo)
-- ⏳ Password Policy Enforcement
+**Pendiente (v1.8.0)**:
+- ⏳ httpOnly Cookies (próximo)
 - ⏳ Session Timeout + Refresh Tokens
+- ⏳ 2FA/MFA (v1.9.0)
 
 Ver [docs/SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) para detalles completos.
 

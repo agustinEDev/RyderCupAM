@@ -25,7 +25,7 @@ class TestCreateCompetition:
         """Crear competición exitosamente retorna 201."""
         # Arrange
         user = await create_authenticated_user(
-            client, "creator@test.com", "Pass123!", "Creator", "Test"
+            client, "creator@test.com", "P@ssw0rd123!", "Creator", "Test"
         )
 
         start = date.today() + timedelta(days=30)
@@ -77,7 +77,7 @@ class TestCreateCompetition:
     async def test_create_competition_invalid_dates_returns_400(self, client: AsyncClient):
         """Crear competición con fechas inválidas retorna 400."""
         user = await create_authenticated_user(
-            client, "creator2@test.com", "Pass123!", "Creator", "Two"
+            client, "creator2@test.com", "P@ssw0rd123!", "Creator", "Two"
         )
 
         # end_date antes de start_date
@@ -107,7 +107,7 @@ class TestListCompetitions:
     async def test_list_competitions_empty(self, client: AsyncClient):
         """Listar competiciones vacío retorna lista vacía."""
         user = await create_authenticated_user(
-            client, "lister@test.com", "Pass123!", "List", "User"
+            client, "lister@test.com", "P@ssw0rd123!", "List", "User"
         )
 
         response = await client.get(
@@ -122,7 +122,7 @@ class TestListCompetitions:
     async def test_list_competitions_with_data(self, client: AsyncClient):
         """Listar competiciones retorna las creadas."""
         user = await create_authenticated_user(
-            client, "lister2@test.com", "Pass123!", "List", "Two"
+            client, "lister2@test.com", "P@ssw0rd123!", "List", "Two"
         )
 
         # Crear 2 competiciones
@@ -156,7 +156,7 @@ class TestListCompetitions:
     async def test_list_competitions_filter_by_status(self, client: AsyncClient):
         """Filtrar competiciones por estado."""
         user = await create_authenticated_user(
-            client, "filterer@test.com", "Pass123!", "Filter", "User"
+            client, "filterer@test.com", "P@ssw0rd123!", "Filter", "User"
         )
 
         # Crear y activar una competición
@@ -191,7 +191,7 @@ class TestListCompetitions:
     async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
         """Filtrar competiciones por nombre de búsqueda."""
         user = await create_authenticated_user(
-            client, "searcher@test.com", "Pass123!", "Search", "User"
+            client, "searcher@test.com", "P@ssw0rd123!", "Search", "User"
         )
 
         start = date.today() + timedelta(days=30)
@@ -245,10 +245,10 @@ class TestMyCompetitionsFilter:
     async def test_list_my_competitions_as_creator(self, client: AsyncClient):
         """`my_competitions=true` devuelve solo las competiciones creadas por el usuario."""
         creator = await create_authenticated_user(
-            client, "my_creator@test.com", "Pass123!", "My", "Creator"
+            client, "my_creator@test.com", "P@ssw0rd123!", "My", "Creator"
         )
         other_user = await create_authenticated_user(
-            client, "other_creator@test.com", "Pass123!", "Other", "Creator"
+            client, "other_creator@test.com", "P@ssw0rd123!", "Other", "Creator"
         )
 
         # Crear competiciones
@@ -271,10 +271,10 @@ class TestMyCompetitionsFilter:
     async def test_list_my_competitions_as_enrolled(self, client: AsyncClient):
         """`my_competitions=true` devuelve competiciones en las que el usuario está inscrito."""
         creator = await create_authenticated_user(
-            client, "enrolled_creator@test.com", "Pass123!", "Enrolled", "Creator"
+            client, "enrolled_creator@test.com", "P@ssw0rd123!", "Enrolled", "Creator"
         )
         enrolled_user = await create_authenticated_user(
-            client, "enrolled_user@test.com", "Pass123!", "Enrolled", "User"
+            client, "enrolled_user@test.com", "P@ssw0rd123!", "Enrolled", "User"
         )
 
         # Crear competición y activar
@@ -307,7 +307,7 @@ class TestGetCompetition:
     async def test_get_competition_success(self, client: AsyncClient):
         """Obtener competición por ID retorna datos completos, incluyendo el creador."""
         user = await create_authenticated_user(
-            client, "getter@test.com", "Pass123!", "Get", "User"
+            client, "getter@test.com", "P@ssw0rd123!", "Get", "User"
         )
 
         comp = await create_competition(client, user["token"])
@@ -331,7 +331,7 @@ class TestGetCompetition:
     async def test_get_competition_not_found(self, client: AsyncClient):
         """Obtener competición inexistente retorna 404."""
         user = await create_authenticated_user(
-            client, "getter2@test.com", "Pass123!", "Get", "Two"
+            client, "getter2@test.com", "P@ssw0rd123!", "Get", "Two"
         )
 
         fake_id = "00000000-0000-0000-0000-000000000000"
@@ -350,7 +350,7 @@ class TestUpdateCompetition:
     async def test_update_competition_success(self, client: AsyncClient):
         """Actualizar competición en DRAFT exitosamente."""
         user = await create_authenticated_user(
-            client, "updater@test.com", "Pass123!", "Update", "User"
+            client, "updater@test.com", "P@ssw0rd123!", "Update", "User"
         )
 
         comp = await create_competition(client, user["token"])
@@ -382,10 +382,10 @@ class TestUpdateCompetition:
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):
         """Actualizar competición de otro usuario retorna 403."""
         creator = await create_authenticated_user(
-            client, "creator3@test.com", "Pass123!", "Creator", "Three"
+            client, "creator3@test.com", "P@ssw0rd123!", "Creator", "Three"
         )
         other_user = await create_authenticated_user(
-            client, "other@test.com", "Pass123!", "Other", "User"
+            client, "other@test.com", "P@ssw0rd123!", "Other", "User"
         )
 
         comp = await create_competition(client, creator["token"])
@@ -406,7 +406,7 @@ class TestDeleteCompetition:
     async def test_delete_competition_success(self, client: AsyncClient):
         """Eliminar competición en DRAFT retorna 204."""
         user = await create_authenticated_user(
-            client, "deleter@test.com", "Pass123!", "Delete", "User"
+            client, "deleter@test.com", "P@ssw0rd123!", "Delete", "User"
         )
 
         comp = await create_competition(client, user["token"])
@@ -422,7 +422,7 @@ class TestDeleteCompetition:
     async def test_delete_active_competition_returns_400(self, client: AsyncClient):
         """Eliminar competición ACTIVE retorna 400."""
         user = await create_authenticated_user(
-            client, "deleter2@test.com", "Pass123!", "Delete", "Two"
+            client, "deleter2@test.com", "P@ssw0rd123!", "Delete", "Two"
         )
 
         comp = await create_competition(client, user["token"])
@@ -443,7 +443,7 @@ class TestCompetitionStateTransitions:
     async def test_activate_competition(self, client: AsyncClient):
         """Activar competición cambia estado a ACTIVE."""
         user = await create_authenticated_user(
-            client, "activator@test.com", "Pass123!", "Activate", "User"
+            client, "activator@test.com", "P@ssw0rd123!", "Activate", "User"
         )
 
         comp = await create_competition(client, user["token"])
@@ -460,7 +460,7 @@ class TestCompetitionStateTransitions:
     async def test_cancel_competition(self, client: AsyncClient):
         """Cancelar competición cambia estado a CANCELLED."""
         user = await create_authenticated_user(
-            client, "canceler@test.com", "Pass123!", "Cancel", "User"
+            client, "canceler@test.com", "P@ssw0rd123!", "Cancel", "User"
         )
 
         comp = await create_competition(client, user["token"])
@@ -477,7 +477,7 @@ class TestCompetitionStateTransitions:
     async def test_full_lifecycle(self, client: AsyncClient):
         """Test del ciclo de vida completo: DRAFT -> ACTIVE -> CLOSED -> IN_PROGRESS -> COMPLETED."""
         user = await create_authenticated_user(
-            client, "lifecycle@test.com", "Pass123!", "Life", "Cycle"
+            client, "lifecycle@test.com", "P@ssw0rd123!", "Life", "Cycle"
         )
 
         # 1. Crear (DRAFT)
@@ -516,7 +516,7 @@ class TestCompetitionStateTransitions:
     async def test_invalid_state_transition_returns_400(self, client: AsyncClient):
         """Transición de estado inválida retorna 400."""
         user = await create_authenticated_user(
-            client, "invalid_trans@test.com", "Pass123!", "Invalid", "Trans"
+            client, "invalid_trans@test.com", "P@ssw0rd123!", "Invalid", "Trans"
         )
 
         comp = await create_competition(client, user["token"])
@@ -537,7 +537,7 @@ class TestEdgeCases:
     async def test_create_competition_duplicate_name_returns_409(self, client: AsyncClient):
         """Crear competición con nombre duplicado retorna 409."""
         user = await create_authenticated_user(
-            client, "dupname@test.com", "Pass123!", "Dup", "Name"
+            client, "dupname@test.com", "P@ssw0rd123!", "Dup", "Name"
         )
 
         start = date.today() + timedelta(days=30)
@@ -573,7 +573,7 @@ class TestEdgeCases:
     async def test_update_non_draft_competition_returns_400(self, client: AsyncClient):
         """Actualizar competición no-DRAFT retorna 400."""
         user = await create_authenticated_user(
-            client, "update_active@test.com", "Pass123!", "Update", "Active"
+            client, "update_active@test.com", "P@ssw0rd123!", "Update", "Active"
         )
 
         comp = await create_competition(client, user["token"])
@@ -591,10 +591,10 @@ class TestEdgeCases:
     async def test_get_competition_with_is_creator_false(self, client: AsyncClient):
         """Ver competición de otro usuario tiene is_creator=false."""
         creator = await create_authenticated_user(
-            client, "creator_check@test.com", "Pass123!", "Creator", "Check"
+            client, "creator_check@test.com", "P@ssw0rd123!", "Creator", "Check"
         )
         viewer = await create_authenticated_user(
-            client, "viewer@test.com", "Pass123!", "Viewer", "User"
+            client, "viewer@test.com", "P@ssw0rd123!", "Viewer", "User"
         )
 
         comp = await create_competition(client, creator["token"])
@@ -611,7 +611,7 @@ class TestEdgeCases:
     async def test_create_competition_with_invalid_country_returns_400(self, client: AsyncClient):
         """Crear competición con país inválido retorna 400."""
         user = await create_authenticated_user(
-            client, "badcountry@test.com", "Pass123!", "Bad", "Country"
+            client, "badcountry@test.com", "P@ssw0rd123!", "Bad", "Country"
         )
 
         start = date.today() + timedelta(days=30)
@@ -640,7 +640,7 @@ class TestEdgeCases:
     async def test_create_competition_with_non_adjacent_countries_returns_400(self, client: AsyncClient):
         """Crear competición con países no adyacentes retorna 400."""
         user = await create_authenticated_user(
-            client, "nonadjacent@test.com", "Pass123!", "Non", "Adjacent"
+            client, "nonadjacent@test.com", "P@ssw0rd123!", "Non", "Adjacent"
         )
 
         start = date.today() + timedelta(days=30)
@@ -669,7 +669,7 @@ class TestEdgeCases:
     async def test_cancel_already_cancelled_competition_returns_400(self, client: AsyncClient):
         """Cancelar competición ya cancelada retorna 400."""
         user = await create_authenticated_user(
-            client, "doublecancel@test.com", "Pass123!", "Double", "Cancel"
+            client, "doublecancel@test.com", "P@ssw0rd123!", "Double", "Cancel"
         )
 
         comp = await create_competition(client, user["token"])

@@ -46,7 +46,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "rafa@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Rafael",
             "Nadal Parera"
         )
@@ -77,7 +77,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "auth@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Auth",
             "User"
         )
@@ -106,7 +106,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "admin@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Admin",
             "User"
         )
@@ -114,13 +114,13 @@ class TestHandicapEndpoints:
 
         user1_data = {
             "email": "rafa.multiple@test.com",
-            "password": "Pass123!",
+            "password": "P@ssw0rd123!",
             "first_name": "Rafael",
             "last_name": "Nadal Parera"
         }
         user2_data = {
             "email": "carlos.multiple@test.com",
-            "password": "Pass123!",
+            "password": "P@ssw0rd123!",
             "first_name": "Carlos",
             "last_name": "Alcaraz Garfia"
         }
@@ -162,7 +162,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "empty@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Empty",
             "Test"
         )
@@ -190,7 +190,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "unknown@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Jugador",
             "Desconocido"
         )
@@ -219,7 +219,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "manual@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Manual",
             "Handicap"
         )
@@ -248,7 +248,7 @@ class TestHandicapEndpoints:
         auth_data = await create_authenticated_user(
             client,
             "invalid@test.com",
-            "Pass123!",
+            "P@ssw0rd123!",
             "Invalid",
             "UUID"
         )

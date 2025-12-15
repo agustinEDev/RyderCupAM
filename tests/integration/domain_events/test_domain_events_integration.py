@@ -96,7 +96,7 @@ class TestDomainEventsIntegration:
             first_name="Ana",
             last_name="García",
             email_str="ana.garcia@test.com",
-            plain_password="Password123!"
+            plain_password="T3stP@ssw0rd!"
         )
 
         # Mock de métodos para todos los handlers
@@ -154,7 +154,7 @@ class TestDomainEventsIntegration:
             first_name="Luis",
             last_name="Martín",
             email_str="luis.martin@test.com",
-            plain_password="Password123!"
+            plain_password="T3stP@ssw0rd!"
         )
 
         # Mock del handler
@@ -206,7 +206,7 @@ class TestDomainEventsIntegration:
             first_name="Pedro",
             last_name="López",
             email_str="pedro.lopez@test.com",
-            plain_password="Password123!"
+            plain_password="T3stP@ssw0rd!"
         )
 
         # Configurar mocks: uno que falla y otro que funciona
@@ -242,7 +242,7 @@ class TestDomainEventsIntegration:
             first_name="María",
             last_name="González",
             email_str="maria.gonzalez@test.com",
-            plain_password="Password123!"
+            plain_password="T3stP@ssw0rd!"
         )
 
         original_events = user.get_domain_events()
@@ -282,7 +282,7 @@ class TestDomainEventsIntegration:
             first_name="Sofía",
             last_name="Hernández",
             email_str="sofia.hernandez@test.com",
-            plain_password="Password123!"
+            plain_password="T3stP@ssw0rd!"
         )
 
         # Act

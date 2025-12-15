@@ -40,7 +40,7 @@ class TestVerifyEmailUseCase:
         """
         # Arrange - Crear usuario y generar token
         async with uow:
-            user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+            user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
             token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -124,7 +124,7 @@ class TestVerifyEmailUseCase:
         """
         # Arrange - Crear usuario
         async with uow:
-            user = User.create("María", "García", "maria@test.com", "Password123!")
+            user = User.create("María", "García", "maria@test.com", "T3stP@ssw0rd!")
             token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -152,7 +152,7 @@ class TestVerifyEmailUseCase:
         """
         # Arrange - Crear y verificar usuario
         async with uow:
-            user = User.create("Pedro", "López", "pedro@test.com", "Password123!")
+            user = User.create("Pedro", "López", "pedro@test.com", "T3stP@ssw0rd!")
             token = user.generate_verification_token()
             user.verify_email(token)  # Primera verificación
             await uow.users.save(user)
@@ -180,7 +180,7 @@ class TestVerifyEmailUseCase:
         """
         # Arrange
         async with uow:
-            user = User.create("Ana", "Martínez", "ana@test.com", "Password123!")
+            user = User.create("Ana", "Martínez", "ana@test.com", "T3stP@ssw0rd!")
             real_token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -209,7 +209,7 @@ class TestVerifyEmailUseCase:
         """
         # Arrange
         async with uow:
-            user = User.create("Carlos", "Ruiz", "carlos@test.com", "Password123!")
+            user = User.create("Carlos", "Ruiz", "carlos@test.com", "T3stP@ssw0rd!")
             token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()

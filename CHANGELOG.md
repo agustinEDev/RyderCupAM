@@ -7,6 +7,37 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Password Policy (OWASP ASVS V2.1)
+
+**🔑 Política de Contraseñas Robusta según Estándares de Seguridad**
+
+#### Implementación
+- **Longitud mínima:** 12 caracteres (ASVS V2.1.1)
+- **Complejidad completa:** Mayúsculas + Minúsculas + Dígitos + Símbolos (ASVS V2.1.2)
+- **Blacklist:** Contraseñas comunes bloqueadas (password, admin, qwerty, etc.) (ASVS V2.1.7)
+- **Hashing:** bcrypt con 12 rounds (producción) y 4 rounds (tests) (ASVS V2.4.1)
+- **Archivo:** `src/modules/user/domain/value_objects/password.py`
+
+#### Validaciones
+```python
+MIN_LENGTH = 12  # Actualizado de 8 a 12 caracteres
+MAX_LENGTH = 128
+# Todas las reglas de complejidad son obligatorias
+```
+
+#### Tests
+- **681 tests actualizados** con contraseñas que cumplen nueva política
+- **Script de migración:** `fix_test_passwords.py` con 157 reemplazos automáticos
+- **test_password.py** completamente reescrito para validar nueva política
+- **Tiempo de ejecución:** 44.95 segundos (100% pasando con `-n auto`)
+
+#### Fix de Paralelización
+- **Problema resuelto:** 21 errores intermitentes en ejecución paralela con pytest-xdist
+- **Causa:** Colisiones de nombres de BD entre workers (`test_db_{worker_id}`)
+- **Solución:** UUID único por test (`test_db_{worker_id}_{uuid}`)
+- **Archivo modificado:** `tests/conftest.py:143-145, 370-411`
+- **Helper refactorizado:** `get_user_by_email()` usa dependency overrides en lugar de crear nuevas conexiones
+
 ### Added - Rate Limiting con SlowAPI
 
 **🚦 Protección contra Brute Force, DoS y Abuso de API** (OWASP A04/A07)

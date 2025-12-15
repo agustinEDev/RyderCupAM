@@ -23,7 +23,7 @@ class TestUpdateUserHandicapUseCase:
         """Test: Actualizar hándicap de un usuario existente."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Rafael", "Nadal Parera", "rafa@test.com", "Pass123!")
+        user = User.create("Rafael", "Nadal Parera", "rafa@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -62,7 +62,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Unknown", "Player", "unknown@test.com", "Pass123!")
+        user = User.create("Unknown", "Player", "unknown@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -78,7 +78,7 @@ class TestUpdateUserHandicapUseCase:
         """Test: El cambio de hándicap se persiste correctamente."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "Pass123!")
+        user = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -99,7 +99,7 @@ class TestUpdateUserHandicapUseCase:
         """Test: Usa hándicap manual cuando RFEG devuelve None."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -119,7 +119,7 @@ class TestUpdateUserHandicapUseCase:
         """Test: Prefiere RFEG sobre hándicap manual si RFEG devuelve valor."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Rafael", "Nadal Parera", "rafa@test.com", "Pass123!")
+        user = User.create("Rafael", "Nadal Parera", "rafa@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -143,7 +143,7 @@ class TestUpdateUserHandicapUseCase:
 
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -168,8 +168,8 @@ class TestUpdateMultipleHandicapsUseCase:
 
         # Arrange
         uow = InMemoryUnitOfWork()
-        user1 = User.create("Rafael", "Nadal Parera", "rafa@test.com", "Pass123!")
-        user2 = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "Pass123!")
+        user1 = User.create("Rafael", "Nadal Parera", "rafa@test.com", "P@ssw0rd123!")
+        user2 = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!")
         await uow.users.save(user1)
         await uow.users.save(user2)
         await uow.commit()
@@ -201,7 +201,7 @@ class TestUpdateMultipleHandicapsUseCase:
 
         # Arrange
         uow = InMemoryUnitOfWork()
-        user1 = User.create("Rafael", "Nadal Parera", "rafa@test.com", "Pass123!")
+        user1 = User.create("Rafael", "Nadal Parera", "rafa@test.com", "P@ssw0rd123!")
         await uow.users.save(user1)
         await uow.commit()
 

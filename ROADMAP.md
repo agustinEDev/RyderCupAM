@@ -26,7 +26,7 @@
 ### 📈 Métricas Clave
 
 - **Endpoints:** 30+ rutas API
-- **Tests:** 672 tests pasando (100%)
+- **Tests:** 681 tests pasando (100%) en 45 segundos
 - **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
 - **Database:** PostgreSQL con migraciones Alembic
 - **Deployment:** Render.com (contenedor Docker)
@@ -37,12 +37,12 @@
 ## 🔐 SEGURIDAD - Mejoras Prioritarias (v1.8.0)
 
 > **Análisis OWASP Top 10 2021 completado:** 15 Dic 2025
-> **Puntuación General Backend:** 8.0/10 ✅ (+1.0 tras Rate Limiting + Security Headers)
+> **Puntuación General Backend:** 8.2/10 ✅ (+0.2 tras Password Policy)
 >
 > **⚠️ IMPORTANTE:** Los detalles completos de implementación están en `docs/SECURITY_IMPLEMENTATION.md`
 > **Este documento temporal debe ELIMINARSE cuando se completen todas las tareas.**
 >
-> **✨ PROGRESO v1.8.0:** 2/16 tareas completadas (Rate Limiting + Security Headers)
+> **✨ PROGRESO v1.8.0:** 3/16 tareas completadas (Rate Limiting + Security Headers + Password Policy)
 
 ### Estado de Protecciones OWASP
 
@@ -72,7 +72,7 @@
 | Input Validation | ⚠️ Parcial (Pydantic básico) | 🟠 Alta | A03 |
 | Security Logging | ⚠️ Básico | 🟠 Alta | A09 |
 | Sentry Monitoring | ❌ NO implementado | 🟡 Media | A09 |
-| Password Policy | ⚠️ Básico (no enforced) | 🟠 Alta | A07 |
+| Password Policy | ✅ Implementado (OWASP ASVS V2.1) | - | A07 |
 | 2FA/MFA | ❌ NO implementado | 🟠 Alta | A07 |
 | Session Management | ⚠️ Parcial (no timeout) | 🟠 Alta | A07 |
 | Audit Logging | ❌ NO implementado | 🟡 Media | A09 |
@@ -86,7 +86,7 @@
 4. ⚠️ **Validaciones Pydantic básicas** - Falta sanitización HTML (A03)
 5. ⚠️ **Logging básico** - No hay audit trail completo (A09)
 6. ❌ **No hay MFA/2FA** - Vulnerable a credential stuffing (A07)
-7. ⚠️ **Password policy no enforced** - Acepta contraseñas débiles (A07)
+7. ✅ **Password policy implementada** - OWASP ASVS V2.1 (12+ chars, complejidad completa) ✨ COMPLETADO
 8. ⚠️ **No hay session timeout** - Sesiones indefinidas (A07)
 
 ---
@@ -112,11 +112,14 @@
   - ✅ Tests de integración (7 tests)
   - ✅ Documentación en CHANGELOG.md
   - **Puntuación mejorada:** 7.5/10 → 8.0/10 (+0.5)
-- [ ] **3. Password Policy Enforcement** - 2-3h (NUEVO)
-  - Mínimo 12 caracteres
-  - Validación de complejidad
-  - Rechazar contraseñas comunes
-- [ ] Tests básicos de seguridad - 2h
+- [x] **3. Password Policy Enforcement** - ✅ COMPLETADO (16 Dic 2025)
+  - ✅ Mínimo 12 caracteres (ASVS V2.1.1)
+  - ✅ Complejidad completa (mayúsculas + minúsculas + dígitos + símbolos)
+  - ✅ Blacklist de contraseñas comunes (ASVS V2.1.7)
+  - ✅ 681 tests actualizados (100% pasando)
+  - ✅ Script de migración `fix_test_passwords.py`
+  - ✅ Fix de paralelización (UUID único por BD de test)
+  - **Puntuación mejorada:** 8.0/10 → 8.2/10 (+0.2)
 
 **Semana 2: httpOnly Cookies + Session Management**
 - [ ] **4. httpOnly Cookies (JWT)** - 6-8h (CRÍTICO)
@@ -455,10 +458,12 @@ RAG_TEMPERATURE=0.3
 ## 🧪 Testing
 
 ### Estado Actual
-- ✅ **672 tests pasando (100%)**
+- ✅ **681 tests pasando (100%)**
+- ✅ Tiempo de ejecución: 44.95 segundos (con paralelización `-n auto`)
 - ✅ Suite completa: unitarios, integración, end-to-end
 - ✅ CI/CD automático con GitHub Actions
 - ✅ Cobertura >90% en lógica de negocio
+- ✅ Fix de paralelización (UUID único por BD test)
 
 ### Próximos Tests (v1.8.0 - Security)
 1. Tests de rate limiting (verificar 429 después de límite)

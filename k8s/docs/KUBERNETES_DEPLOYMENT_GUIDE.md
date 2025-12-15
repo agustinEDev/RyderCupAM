@@ -100,32 +100,32 @@ allowed_origins.extend([
 │              KUBERNETES CLUSTER (Kind)                      │
 │                                                             │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │  Service: rydercup-frontend-service (LoadBalancer)    │ │
-│  │  ClusterIP: 10.96.235.251  Port: 80                   │ │
+│  │  Service: rydercup-frontend-service (LoadBalancer)     │ │
+│  │  ClusterIP: 10.96.235.251  Port: 80                    │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                          ↓                                  │
-│  ┌─────────────────────┐      ┌─────────────────────┐     │
-│  │ Frontend Pod 1      │      │ Frontend Pod 2      │     │
-│  │ nginx + React       │      │ nginx + React       │     │
-│  │ RAM: 256Mi-512Mi    │      │ RAM: 256Mi-512Mi    │     │
-│  │ CPU: 250m-500m      │      │ CPU: 250m-500m      │     │
-│  └─────────────────────┘      └─────────────────────┘     │
+│  ┌─────────────────────┐      ┌─────────────────────┐       │
+│  │ Frontend Pod 1      │      │ Frontend Pod 2      │       │
+│  │ nginx + React       │      │ nginx + React       │       │
+│  │ RAM: 256Mi-512Mi    │      │ RAM: 256Mi-512Mi    │       │
+│  │ CPU: 250m-500m      │      │ CPU: 250m-500m      │       │
+│  └─────────────────────┘      └─────────────────────┘       │
 │                          ↓                                  │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │  Service: rydercup-api-service (LoadBalancer)         │ │
-│  │  ClusterIP: 10.96.208.7  Port: 80                     │ │
+│  │  Service: rydercup-api-service (LoadBalancer)          │ │
+│  │  ClusterIP: 10.96.208.7  Port: 80                      │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                          ↓                                  │
-│  ┌─────────────────────┐      ┌─────────────────────┐     │
-│  │ Backend Pod 1       │      │ Backend Pod 2       │     │
-│  │ FastAPI             │      │ FastAPI             │     │
-│  │ RAM: 512Mi-1Gi      │      │ RAM: 512Mi-1Gi      │     │
-│  │ CPU: 500m-1000m     │      │ CPU: 500m-1000m     │     │
-│  └─────────────────────┘      └─────────────────────┘     │
+│  ┌─────────────────────┐      ┌─────────────────────┐       │
+│  │ Backend Pod 1       │      │ Backend Pod 2       │       │
+│  │ FastAPI             │      │ FastAPI             │       │
+│  │ RAM: 512Mi-1Gi      │      │ RAM: 512Mi-1Gi      │       │
+│  │ CPU: 500m-1000m     │      │ CPU: 500m-1000m     │       │
+│  └─────────────────────┘      └─────────────────────┘       │
 │                          ↓                                  │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │  Service: postgres-service (ClusterIP - Interno)      │ │
-│  │  ClusterIP: 10.96.157.225  Port: 5432                 │ │
+│  │  Service: postgres-service (ClusterIP - Interno)       │ │
+│  │  ClusterIP: 10.96.157.225  Port: 5432                  │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                          ↓                                  │
 │  ┌────────────────────────────────────────────────────────┐ │

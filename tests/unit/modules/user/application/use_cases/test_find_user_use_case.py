@@ -34,7 +34,7 @@ class TestFindUserUseCase:
         user = User(
             id=UserId(uuid4()),
             email=Email("test@example.com"),
-            password=Password.from_plain_text("securePassword123"),
+            password=Password.from_plain_text("s3cur3P@ssw0rd!"),
             first_name="Test",
             last_name="User"
         )
@@ -235,7 +235,7 @@ class TestFindUserUseCase:
         complex_user = User(
             id=UserId(uuid4()),
             email=Email("complex@example.com"),
-            password=Password.from_plain_text("securePassword123"),
+            password=Password.from_plain_text("s3cur3P@ssw0rd!"),
             first_name="María José",
             last_name="García-López de la Torre"
         )

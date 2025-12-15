@@ -43,7 +43,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="ValidPass123"
+        plain_password="V@l1dP@ss123!"
     )
 
     async with uow:

@@ -41,7 +41,7 @@ class TestRegisterUserUseCase:
         use_case = RegisterUserUseCase(uow, country_repository)
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
-            password="ValidPass123",
+            password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
         )
@@ -73,7 +73,7 @@ class TestRegisterUserUseCase:
         use_case = RegisterUserUseCase(uow, country_repository)
         existing_user_request = RegisterUserRequestDTO(
             email="existing.user@example.com",
-            password="ValidPass123",
+            password="V@l1dP@ss123!",
             first_name="Existing",
             last_name="User",
         )
@@ -82,7 +82,7 @@ class TestRegisterUserUseCase:
         # Ahora, intentamos registrar otro usuario con el MISMO email
         new_request_dto = RegisterUserRequestDTO(
             email="existing.user@example.com",
-            password="AnotherValidPass456",
+            password="An0th3rV@l1dP@ss!",
             first_name="Another",
             last_name="User",
         )
@@ -109,7 +109,7 @@ class TestRegisterUserUseCase:
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
-            password="ValidPass123",
+            password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
             manual_handicap=15.5
@@ -141,7 +141,7 @@ class TestRegisterUserUseCase:
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
-            password="ValidPass123",
+            password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
             manual_handicap=20.0  # Este será ignorado
@@ -171,7 +171,7 @@ class TestRegisterUserUseCase:
 
         request_dto = RegisterUserRequestDTO(
             email="test.user@example.com",
-            password="ValidPass123",
+            password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
             # No manual_handicap
