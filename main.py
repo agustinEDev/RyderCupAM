@@ -17,9 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from src.config.settings import settings
 from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
@@ -32,14 +31,7 @@ from src.shared.infrastructure.api.v1 import country_routes
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     start_mappers as start_country_mappers,
 )
-
-# ================================
-# RATE LIMITING CONFIGURATION
-# ================================
-
-# Inicializar el limiter con un límite global de 100 peticiones por minuto
-# Identifica clientes por su dirección IP (get_remote_address)
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+from src.config.rate_limit import limiter
 
 
 @asynccontextmanager

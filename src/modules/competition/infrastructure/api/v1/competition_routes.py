@@ -8,9 +8,8 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from src.config.rate_limit import limiter
 from src.config.dependencies import (
     get_activate_competition_use_case,
     get_cancel_competition_use_case,
@@ -258,9 +257,6 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
     return result
 
 router = APIRouter()
-
-# Inicializar limiter para rate limiting de creación de competiciones
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ======================================================================================
@@ -521,8 +517,8 @@ class CompetitionDTOMapper:
 )
 @limiter.limit("10/hour")  # Anti-spam: máximo 10 competiciones nuevas por hora
 async def create_competition(
-    http_request: Request,
-    request: CreateCompetitionRequestDTO,
+    request: Request,
+    competition_data: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
@@ -556,7 +552,7 @@ async def create_competition(
         creator_id = UserId(str(current_user.id))
 
         # Ejecutar use case (retorna DTO simple)
-        response = await use_case.execute(request, creator_id)
+        response = await use_case.execute(competition_data, creator_id)
 
         # Obtener la entidad completa para enriquecer el response
         async with uow:

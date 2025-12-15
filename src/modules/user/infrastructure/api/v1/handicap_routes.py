@@ -8,9 +8,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from src.config.rate_limit import limiter
 from src.config.dependencies import (
     get_current_user,
     get_update_handicap_manually_use_case,
@@ -34,9 +33,6 @@ from src.modules.user.domain.errors.handicap_errors import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 router = APIRouter(prefix="/handicaps")
-
-# Inicializar limiter para rate limiting de endpoints que consultan RFEG API
-limiter = Limiter(key_func=get_remote_address)
 
 
 # === Request/Response DTOs ===
@@ -135,8 +131,8 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
 )
 @limiter.limit("5/hour")  # Proteger RFEG API externa: máximo 5 consultas por hora
 async def update_user_handicap(
-    http_request: Request,
-    request: UpdateHandicapRequestDTO,
+    request: Request,
+    handicap_data: UpdateHandicapRequestDTO,
     use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
     current_user: UserResponseDTO = Depends(get_current_user)
 ):
@@ -155,13 +151,13 @@ async def update_user_handicap(
         503: Si el servicio RFEG no está disponible
     """
     try:
-        user_id = UserId(request.user_id)
-        result = await use_case.execute(user_id, request.manual_handicap)
+        user_id = UserId(handicap_data.user_id)
+        result = await use_case.execute(user_id, handicap_data.manual_handicap)
 
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Usuario con ID {request.user_id} no encontrado"
+                detail=f"Usuario con ID {handicap_data.user_id} no encontrado"
             )
 
         return result

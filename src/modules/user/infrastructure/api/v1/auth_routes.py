@@ -2,9 +2,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from src.config.rate_limit import limiter
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
@@ -36,9 +35,6 @@ from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Inicializar limiter para rate limiting específico de auth endpoints
-limiter = Limiter(key_func=get_remote_address)
-
 @router.post(
     "/register",
     response_model=UserResponseDTO,
@@ -49,15 +45,15 @@ limiter = Limiter(key_func=get_remote_address)
 )
 @limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
 async def register_user(
-    http_request: Request,
-    request: RegisterUserRequestDTO,
+    request: Request,
+    register_data: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
     """
     Endpoint para registrar un nuevo usuario.
     """
     try:
-        user_response = await use_case.execute(request)
+        user_response = await use_case.execute(register_data)
         return user_response
     except UserAlreadyExistsError as e:
         raise HTTPException(
@@ -81,8 +77,8 @@ async def register_user(
 )
 @limiter.limit("5/minute")  # Anti brute-force: máximo 5 intentos de login por minuto
 async def login_user(
-    http_request: Request,
-    request: LoginRequestDTO,
+    request: Request,
+    login_data: LoginRequestDTO,
     use_case: LoginUserUseCase = Depends(get_login_user_use_case),
 ):
     """
@@ -91,7 +87,7 @@ async def login_user(
     Autentica las credenciales y retorna un token JWT que debe ser usado
     en requests subsecuentes en el header Authorization: Bearer <token>
     """
-    response = await use_case.execute(request)
+    response = await use_case.execute(login_data)
 
     if not response:
         raise HTTPException(
@@ -265,8 +261,8 @@ async def verify_email(
 )
 @limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
 async def resend_verification_email(
-    http_request: Request,
-    request: ResendVerificationEmailRequestDTO,
+    request: Request,
+    resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):
     """
@@ -292,11 +288,11 @@ async def resend_verification_email(
         independientemente de si el email existe o está verificado.
     """
     # Log intento de reenvío (parcialmente ofuscado para proteger privacidad)
-    email_preview = f"{request.email[:3]}***@{request.email.split('@')[1] if '@' in request.email else '***'}"
+    email_preview = f"{resend_data.email[:3]}***@{resend_data.email.split('@')[1] if '@' in resend_data.email else '***'}"
     logger.info(f"Verification email resend requested for: {email_preview}")
 
     try:
-        await use_case.execute(request.email)
+        await use_case.execute(resend_data.email)
         logger.info(f"Verification email resend successful for: {email_preview}")
     except ValueError as e:
         # Log para monitoreo de seguridad sin exponer en respuesta
@@ -319,5 +315,5 @@ async def resend_verification_email(
     # Siempre retornamos el mismo mensaje genérico
     return ResendVerificationEmailResponseDTO(
         message="If the email address exists in our system, a verification email has been sent.",
-        email=request.email
+        email=resend_data.email
     )
