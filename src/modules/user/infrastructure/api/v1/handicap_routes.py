@@ -6,8 +6,10 @@ Endpoints HTTP para gestión de hándicaps de usuarios.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from src.config.dependencies import (
     get_current_user,
@@ -32,6 +34,9 @@ from src.modules.user.domain.errors.handicap_errors import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 router = APIRouter(prefix="/handicaps")
+
+# Inicializar limiter para rate limiting de endpoints que consultan RFEG API
+limiter = Limiter(key_func=get_remote_address)
 
 
 # === Request/Response DTOs ===
@@ -128,7 +133,9 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
         "manual_handicap, se usará ese valor."
     )
 )
+@limiter.limit("5/hour")  # Proteger RFEG API externa: máximo 5 consultas por hora
 async def update_user_handicap(
+    http_request: Request,
     request: UpdateHandicapRequestDTO,
     use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
     current_user: UserResponseDTO = Depends(get_current_user)

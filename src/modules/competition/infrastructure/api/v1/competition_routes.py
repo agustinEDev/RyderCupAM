@@ -7,7 +7,9 @@ Endpoints FastAPI para el módulo Competition siguiendo Clean Architecture.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
@@ -256,6 +258,9 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
     return result
 
 router = APIRouter()
+
+# Inicializar limiter para rate limiting de creación de competiciones
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ======================================================================================
@@ -514,7 +519,9 @@ class CompetitionDTOMapper:
     description="Crea una nueva competición en estado DRAFT. Requiere autenticación.",
     tags=["Competitions"],
 )
+@limiter.limit("10/hour")  # Anti-spam: máximo 10 competiciones nuevas por hora
 async def create_competition(
+    http_request: Request,
     request: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),

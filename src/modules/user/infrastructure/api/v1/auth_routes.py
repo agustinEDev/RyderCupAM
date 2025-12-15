@@ -1,7 +1,9 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from src.config.dependencies import (
     get_current_user,
@@ -34,6 +36,9 @@ from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Inicializar limiter para rate limiting específico de auth endpoints
+limiter = Limiter(key_func=get_remote_address)
+
 @router.post(
     "/register",
     response_model=UserResponseDTO,
@@ -42,7 +47,9 @@ router = APIRouter()
     description="Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y opcionalmente código de país (ISO 3166-1 alpha-2).",
     tags=["Authentication"],
 )
+@limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
 async def register_user(
+    http_request: Request,
     request: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
@@ -72,7 +79,9 @@ async def register_user(
     description="Autentica un usuario y devuelve un token JWT de acceso.",
     tags=["Authentication"],
 )
+@limiter.limit("5/minute")  # Anti brute-force: máximo 5 intentos de login por minuto
 async def login_user(
+    http_request: Request,
     request: LoginRequestDTO,
     use_case: LoginUserUseCase = Depends(get_login_user_use_case),
 ):
@@ -254,7 +263,9 @@ async def verify_email(
     description="Genera un nuevo token de verificación y reenvía el email al usuario.",
     tags=["Authentication"],
 )
+@limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
 async def resend_verification_email(
+    http_request: Request,
     request: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):
