@@ -58,6 +58,11 @@ bcrypt==4.2.0
 # Actualizado a 3.4.0+ para resolver vulnerabilidad de seguridad CVE-2024-XXXXX
 python-jose[cryptography]==3.4.0
 
+# slowapi - Rate limiting para FastAPI
+# Protege contra brute force, DoS y abuso de API limitando peticiones por IP
+# Basado en Flask-Limiter, soporta memoria local y Redis como backend
+slowapi==0.1.9
+
 
 # ================================
 # TESTING Y DESARROLLO
