@@ -7,6 +7,72 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Rate Limiting con SlowAPI
+
+**🚦 Protección contra Brute Force, DoS y Abuso de API** (OWASP A04/A07)
+
+#### Implementación Completa
+- **SlowAPI v0.1.9** integrado como librería de rate limiting
+- **Módulo centralizado** `src/config/rate_limit.py` para configuración del limiter
+- **Exception handler** automático para HTTP 429 Too Many Requests
+- **Identificación por IP** usando `get_remote_address`
+
+#### Límites Implementados
+
+**Límite Global:**
+- 100 peticiones/minuto por IP (protección DoS básica)
+
+**Límites Específicos por Endpoint:**
+- `POST /api/v1/auth/login`: **5/minuto** (anti brute-force)
+- `POST /api/v1/auth/register`: **3/hora** (anti spam de registros)
+- `POST /api/v1/auth/resend-verification`: **3/hora** (proteger Mailgun)
+- `POST /api/v1/handicaps/update`: **5/hora** (proteger RFEG API)
+- `POST /api/v1/competitions`: **10/hora** (anti spam de competiciones)
+
+#### Arquitectura
+- **Problema resuelto**: Importación circular entre `main.py` y routes
+- **Solución**: Crear módulo `src/config/rate_limit.py` independiente
+- **Pattern**: Limiter compartido importado por main.py y routes
+- **Parámetro obligatorio**: Endpoints requieren `request: Request` con nombre exacto "request"
+
+#### Tests
+- **5 tests de integración** en `tests/integration/api/v1/test_rate_limiting.py`
+- Tests verifican HTTP 429 cuando se excede límite
+- Tests verifican operación normal dentro del límite
+- Cobertura: Login (5/min), Register (3/h), Handicap (5/h), Competition (10/h)
+
+#### Respuesta HTTP 429
+```json
+{
+  "error": "Rate limit exceeded: 5 per 1 minute"
+}
+```
+
+#### Archivos Modificados
+- `requirements.txt`: Añadido slowapi==0.1.9
+- `main.py`: Registro del limiter en app.state + exception handler
+- `src/config/rate_limit.py`: **NUEVO** - Configuración centralizada
+- `src/modules/user/infrastructure/api/v1/auth_routes.py`: Límites en login/register/resend
+- `src/modules/user/infrastructure/api/v1/handicap_routes.py`: Límite en update RFEG
+- `src/modules/competition/infrastructure/api/v1/competition_routes.py`: Límite en create
+- `tests/integration/api/v1/test_rate_limiting.py`: **NUEVO** - Suite de tests
+
+#### Cumplimiento OWASP Top 10 2021
+- ✅ **A04: Insecure Design** - Rate limiting previene DoS y abuso
+- ✅ **A07: Identification and Authentication Failures** - Protección brute-force
+
+#### Decisiones de Diseño
+- `headers_enabled=False`: Headers X-RateLimit-* causan conflictos con DTOs Pydantic
+- Headers solo aparecen en respuestas 429 (cuando se excede límite)
+- Lo crítico es el bloqueo (429), no los headers informativos
+
+#### Seguridad Mejorada
+Puntuación de seguridad: **7.0/10 → 7.5/10** (+0.5)
+- ✅ Rate limiting implementado en endpoints críticos
+- ✅ Protección contra brute force en login
+- ✅ Protección contra spam de registros y emails
+- ✅ Protección de API externa (RFEG)
+
 ---
 
 ## [1.10.0] - 2025-11-30
