@@ -19,6 +19,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from secure import Secure
 
 from src.config.settings import settings
 from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
@@ -176,6 +177,61 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=3600,
 )
+
+# ================================
+# SECURITY HEADERS MIDDLEWARE
+# ================================
+# Configurar Security Headers HTTP para proteger contra:
+# - XSS (Cross-Site Scripting)
+# - Clickjacking
+# - MIME-sniffing
+# - MITM (Man-in-the-Middle) attacks
+# - Inyección de recursos maliciosos
+#
+# IMPORTANTE: Este middleware debe ir DESPUÉS de CORS
+# para que los headers de seguridad se añadan correctamente
+
+# Instanciar configuración de security headers con valores por defecto
+# La biblioteca 'secure' proporciona headers seguros pre-configurados
+secure_headers = Secure()
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Middleware para añadir Security Headers HTTP a todas las respuestas.
+
+    Headers añadidos por defecto (biblioteca 'secure'):
+    - Strict-Transport-Security (HSTS): max-age=63072000; includeSubdomains
+      → Fuerza HTTPS durante 2 años, previene MITM downgrade attacks
+    - X-Frame-Options: SAMEORIGIN
+      → Previene clickjacking, solo permite iframes del mismo origen
+    - X-Content-Type-Options: nosniff
+      → Previene MIME-sniffing, fuerza respeto al Content-Type declarado
+    - Referrer-Policy: no-referrer, strict-origin-when-cross-origin
+      → Controla información de referer enviada en requests
+    - X-XSS-Protection: 0
+      → Desactivado (obsoleto en navegadores modernos, puede causar vulnerabilidades)
+    - Cache-Control: no-store
+      → Previene cacheo de respuestas sensibles
+
+    OWASP Top 10 2021 Coverage:
+    - A02: Cryptographic Failures (HSTS fuerza cifrado HTTPS)
+    - A03: Injection (X-XSS-Protection, aunque obsoleto)
+    - A04: Insecure Design (X-Frame-Options previene clickjacking)
+    - A05: Security Misconfiguration (todos los headers)
+    - A07: Authentication Failures (X-Frame-Options en login, Cache-Control en tokens)
+
+    Nota: En desarrollo (HTTP), HSTS será ignorado por el navegador.
+          Solo es efectivo en producción con HTTPS.
+    """
+    response = await call_next(request)
+
+    # Añadir todos los security headers a la respuesta
+    headers_dict = secure_headers.headers()
+    for header_name, header_value in headers_dict.items():
+        response.headers[header_name] = header_value
+
+    return response
 
 # Incluir los routers de la API
 app.include_router(

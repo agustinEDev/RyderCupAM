@@ -63,6 +63,12 @@ python-jose[cryptography]==3.4.0
 # Basado en Flask-Limiter, soporta memoria local y Redis como backend
 slowapi==0.1.9
 
+# secure - Security Headers HTTP para FastAPI
+# Añade automáticamente headers de seguridad (CSP, HSTS, X-Frame-Options, etc.)
+# Protege contra XSS, Clickjacking, MIME-sniffing, MITM attacks
+# Cumple con OWASP Top 10: A02, A03, A04, A05, A07
+secure==0.3.0
+
 
 # ================================
 # TESTING Y DESARROLLO
