@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.config.rate_limit import limiter
+from src.shared.infrastructure.security.cookie_handler import delete_auth_cookie, set_auth_cookie
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
@@ -11,6 +12,7 @@ from src.config.dependencies import (
     get_register_user_use_case,
     get_resend_verification_email_use_case,
     get_verify_email_use_case,
+    security,
 )
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
@@ -72,31 +74,71 @@ async def register_user(
     response_model=LoginResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Login de usuario",
-    description="Autentica un usuario y devuelve un token JWT de acceso.",
+    description="Autentica un usuario y devuelve un token JWT (httpOnly cookie + response body para compatibilidad).",
     tags=["Authentication"],
 )
 @limiter.limit("5/minute")  # Anti brute-force: máximo 5 intentos de login por minuto
 async def login_user(
     request: Request,
+    response: Response,
     login_data: LoginRequestDTO,
     use_case: LoginUserUseCase = Depends(get_login_user_use_case),
 ):
     """
     Endpoint para login de usuario.
 
-    Autentica las credenciales y retorna un token JWT que debe ser usado
-    en requests subsecuentes en el header Authorization: Bearer <token>
-    """
-    response = await use_case.execute(login_data)
+    FASE TRANSITORIA (v1.8.0 - v2.0.0):
+    Retorna el JWT de dos formas para permitir migración gradual del frontend:
 
-    if not response:
+    1. **httpOnly Cookie** (NUEVO - Recomendado):
+       - Establecida automáticamente en el navegador
+       - JavaScript NO puede leerla (protección XSS)
+       - Se envía automáticamente en requests subsecuentes
+
+    2. **Response Body** (LEGACY - Deprecated):
+       - Campo `access_token` en LoginResponseDTO
+       - Permite compatibilidad con frontend actual (localStorage)
+       - TODO (v2.0.0): Eliminar este campo en breaking change
+
+    Security Improvements (OWASP A01/A02):
+    - httpOnly=True: Previene robo de token vía XSS
+    - secure=True (producción): Cookie solo viaja por HTTPS
+    - samesite="lax": Protección contra CSRF
+
+    Migration Path:
+    - v1.8.0 (actual): Dual support (cookie + body)
+    - v1.9.0: Deprecation warning en docs
+    - v2.0.0: BREAKING CHANGE - Solo cookies, eliminar campo access_token
+
+    Args:
+        request: Request de FastAPI (requerido por SlowAPI rate limiting)
+        response: Response de FastAPI (para establecer cookies)
+        login_data: Credenciales de login (email + password)
+        use_case: Caso de uso de login
+
+    Returns:
+        LoginResponseDTO con token y datos del usuario
+
+    Raises:
+        HTTPException 401: Si las credenciales son incorrectas
+    """
+    login_response = await use_case.execute(login_data)
+
+    if not login_response:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return response
+    # ✅ NUEVO (v1.8.0): Establecer cookie httpOnly con el JWT
+    # Protección contra XSS: JavaScript NO puede leer esta cookie
+    set_auth_cookie(response, login_response.access_token)
+
+    # ⚠️ LEGACY: Retornar token en response body para compatibilidad
+    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
+    # cuando frontend migre completamente a cookies httpOnly
+    return login_response
 
 
 @router.get(
@@ -119,55 +161,87 @@ async def get_current_user_endpoint(
     return current_user
 
 
-# Esquema de seguridad HTTP Bearer para obtener el token
-security = HTTPBearer()
-
 @router.post(
     "/logout",
     response_model=LogoutResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Logout de usuario",
-    description="Cierra la sesión del usuario autenticado. En Fase 1, el token sigue técnicamente válido hasta su expiración.",
+    description="Cierra la sesión del usuario autenticado (elimina cookie httpOnly + domain event).",
     tags=["Authentication"],
 )
 async def logout_user(
-    request: LogoutRequestDTO,
+    request: Request,
+    logout_request: LogoutRequestDTO,
+    response: Response,
     current_user: UserResponseDTO = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     use_case: LogoutUserUseCase = Depends(get_logout_user_use_case),
 ):
     """
     Endpoint para logout de usuario.
 
-    Requiere autenticación mediante token JWT en el header:
-    Authorization: Bearer <token>
+    FASE TRANSITORIA (v1.8.0 - v2.0.0):
+    El logout ahora elimina la cookie httpOnly del navegador:
 
-    Nota sobre Fase 1 vs Fase 2:
-    - Fase 1 (Actual): El token sigue siendo técnicamente válido hasta su expiración.
-      El logout es principalmente del lado cliente (borrar el token del storage).
-    - Fase 2 (Futura): El token se agregará a una blacklist para invalidación inmediata.
+    1. **Eliminar cookie httpOnly** (NUEVO - v1.8.0):
+       - Invalida la cookie en el navegador (logout inmediato)
+       - Protege contra reutilización accidental de sesiones
+
+    2. **Domain Event** (Existente):
+       - Registra el evento de logout en el dominio
+       - Preparado para blacklist de tokens en Fase 2
+
+    Nota sobre invalidación de tokens:
+    - Fase 1 (v1.8.0): Cookie eliminada del navegador, pero JWT técnicamente válido hasta expiración
+    - Fase 2 (v1.9.0+): Blacklist de tokens para invalidación completa en backend
+
+    Security Improvements:
+    - delete_auth_cookie(): Elimina cookie httpOnly del navegador
+    - Frontend no puede acceder a la cookie (httpOnly=true)
+    - Logout inmediato sin intervención de JavaScript
 
     Args:
-        request: DTO de logout (preparado para extensiones futuras)
+        request: Request de FastAPI (para leer cookies)
+        logout_request: DTO de logout (renombrado de 'request' para evitar conflicto)
+        response: Response de FastAPI (para eliminar cookies)
         current_user: Usuario autenticado obtenido del token
-        credentials: Credenciales con el token JWT
+        credentials: Credenciales con el token JWT (opcional con cookies)
         use_case: Caso de uso de logout
 
     Returns:
         LogoutResponseDTO con confirmación y timestamp
     """
+    from src.shared.infrastructure.security.cookie_handler import get_cookie_name
+    
     user_id = str(current_user.id)
-    token = credentials.credentials
+    
+    # Obtener token: prioridad cookie, luego header (mismo orden que get_current_user)
+    token = None
+    cookie_name = get_cookie_name()
+    token = request.cookies.get(cookie_name)
+    
+    if not token and credentials:
+        token = credentials.credentials
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token no encontrado",
+        )
 
-    response = await use_case.execute(request, user_id, token)
+    logout_response = await use_case.execute(logout_request, user_id, token)
 
-    if not response:
+    if not logout_response:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario no encontrado",
         )
 
-    return response
+    # ✅ NUEVO (v1.8.0): Eliminar cookie httpOnly del navegador
+    # Logout inmediato en el cliente (cookie invalidada)
+    delete_auth_cookie(response)
+
+    return logout_response
 
 
 
@@ -181,7 +255,8 @@ from src.shared.infrastructure.security.jwt_handler import create_access_token
     summary="Verificar email y autenticar usuario",
     description=(
         "Verifica el email del usuario usando el token recibido por correo. "
-        "Si la verificación es exitosa, retorna un JWT de acceso y la información del usuario autenticado en el mismo formato que el login. "
+        "Si la verificación es exitosa, retorna un JWT de acceso (httpOnly cookie + response body) "
+        "y la información del usuario autenticado en el mismo formato que el login. "
         "Esto permite que el usuario quede autenticado automáticamente tras verificar su email. "
         "\n\n"
         "Respuesta: LoginResponseDTO (access_token, token_type, user, email_verification_required)."
@@ -190,20 +265,34 @@ from src.shared.infrastructure.security.jwt_handler import create_access_token
 )
 async def verify_email(
     request: VerifyEmailRequestDTO,
+    response: Response,
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
 ):
     """
     Endpoint para verificar el email del usuario y autenticarlo automáticamente.
 
-    El usuario recibe un email con un link que contiene un token.
-    Este endpoint valida el token, marca el email como verificado y retorna un JWT y la información del usuario.
+    FASE TRANSITORIA (v1.8.0 - v2.0.0):
+    Al igual que /login, este endpoint retorna el JWT de dos formas:
 
-    Security Note:
+    1. **httpOnly Cookie** (NUEVO - Recomendado):
+       - Establecida automáticamente en el navegador
+       - Protección contra XSS
+
+    2. **Response Body** (LEGACY - Deprecated):
+       - Campo `access_token` en LoginResponseDTO
+       - TODO (v2.0.0): Eliminar este campo en breaking change
+
+    El usuario recibe un email con un link que contiene un token.
+    Este endpoint valida el token, marca el email como verificado y retorna un JWT.
+
+    Security Notes:
     - Usa mensajes de error genéricos para prevenir user enumeration
     - No revela información sobre el estado de la cuenta
+    - httpOnly cookie previene robo de token vía XSS
 
     Args:
         request: DTO con el token de verificación
+        response: Response de FastAPI (para establecer cookies)
         use_case: Caso de uso de verificación de email
 
     Returns:
@@ -222,10 +311,16 @@ async def verify_email(
         # Generar JWT
         access_token = create_access_token({"sub": str(user.id.value)})
 
+        # ✅ NUEVO (v1.8.0): Establecer cookie httpOnly con el JWT
+        # Protección contra XSS: JavaScript NO puede leer esta cookie
+        set_auth_cookie(response, access_token)
+
         # Mapear a DTO
         from src.modules.user.application.dto.user_dto import LoginResponseDTO, UserResponseDTO
         user_dto = UserResponseDTO.model_validate(user)
 
+        # ⚠️ LEGACY: Retornar token en response body para compatibilidad
+        # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
         return LoginResponseDTO(
             access_token=access_token,
             token_type="bearer",

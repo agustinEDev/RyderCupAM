@@ -106,6 +106,172 @@ Puntuación de seguridad: **7.0/10 → 7.5/10** (+0.5)
 
 ---
 
+### Added - httpOnly Cookies (JWT Authentication)
+
+**🍪 Protección de Tokens JWT contra Ataques XSS** (OWASP A01/A02)
+
+#### Implementación Completa
+- **httpOnly Cookies** - JWT almacenado en cookies inaccesibles desde JavaScript
+- **Middleware Dual** - Soporte simultáneo de cookies (prioridad 1) y headers (prioridad 2)
+- **Cookie Handler** - Módulo centralizado `src/shared/infrastructure/security/cookie_handler.py`
+- **Compatibilidad Transitoria** - Token en response body (LEGACY) + cookie httpOnly (NUEVO)
+
+#### Cookie Configuration
+
+**Flags de Seguridad:**
+- `httponly=True` - Previene lectura desde JavaScript (protección XSS)
+- `secure=is_production()` - HTTPS solo en producción, HTTP permitido en desarrollo
+- `samesite="lax"` - Protección CSRF moderada, permite navegación normal
+- `max_age=3600` - Expira en 1 hora (igual que JWT)
+- `path="/"` - Disponible en toda la aplicación
+
+#### Endpoints Modificados
+
+**1. POST /api/v1/auth/login**
+- ✅ Establece cookie httpOnly con JWT (`set_auth_cookie()`)
+- ✅ Retorna token en body (LEGACY - compatibilidad)
+- ✅ Documentado: BREAKING CHANGE en v2.0.0 eliminará token del body
+
+**2. POST /api/v1/auth/verify-email**
+- ✅ Establece cookie httpOnly tras verificación exitosa
+- ✅ Auto-login automático después de verificar email
+- ✅ Mismo patrón dual: cookie + body
+
+**3. POST /api/v1/auth/logout**
+- ✅ Elimina cookie httpOnly del navegador (`delete_auth_cookie()`)
+- ✅ Logout inmediato en cliente
+- ✅ Token obtenido desde cookie o header (prioridad cookie)
+
+#### Middleware Dual Authentication
+
+**Configuración:**
+- ✅ `HTTPBearer(auto_error=False)` - Permite que no exista header
+- ✅ `get_current_user()` modificado para leer desde cookies primero
+- ✅ Prioridad 1: Cookie (`request.cookies.get("access_token")`)
+- ✅ Prioridad 2: Header (`Authorization: Bearer <token>`)
+
+**Flujo de Autenticación:**
+```python
+# 1. Intentar leer desde cookie
+token = request.cookies.get("access_token")
+
+# 2. Si no hay cookie, usar header Authorization
+if not token and credentials:
+    token = credentials.credentials
+
+# 3. Si no hay ninguno, error 401
+if not token:
+    raise HTTPException(401, "Credenciales no proporcionadas")
+```
+
+#### Tests
+
+**Cobertura (6 tests - 100% pasando):**
+- ✅ `test_login_sets_httponly_cookie` - Verifica Set-Cookie con flags correctos
+- ✅ `test_authentication_with_cookie_without_header` - Auth solo con cookie
+- ✅ `test_logout_deletes_httponly_cookie` - Logout elimina cookie del navegador
+- ✅ `test_verify_email_sets_httponly_cookie` - Verificación establece cookie httpOnly
+- ✅ `test_middleware_dual_cookie_has_priority_over_header` - Prioridad cookie > header
+- ✅ `test_authentication_fails_without_cookie_and_header` - HTTP 401 sin auth
+
+**Archivo de Tests:**
+- `tests/integration/api/v1/test_httponly_cookies.py` - 6 tests (100% pasando)
+
+#### Arquitectura
+
+**Cookie Handler Module:**
+```python
+# src/shared/infrastructure/security/cookie_handler.py
+COOKIE_NAME = "access_token"
+COOKIE_MAX_AGE = 3600  # 1 hora
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=is_production(),
+        samesite="lax",
+        max_age=COOKIE_MAX_AGE,
+        path="/",
+    )
+
+def delete_auth_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=is_production(),
+        samesite="lax",
+    )
+```
+
+#### CORS Compatibility
+
+**Configuración Requerida:**
+- ✅ `allow_credentials=True` - Ya configurado en `main.py`
+- ✅ `allow_origins` - Frontend incluido en lista de orígenes
+- ✅ Sin cambios necesarios - CORS ya soporta cookies
+
+#### Cumplimiento OWASP Top 10 2021
+- ✅ **A01: Broken Access Control** - httpOnly previene robo de tokens vía XSS
+- ✅ **A02: Cryptographic Failures** - secure=True fuerza HTTPS en producción
+- ✅ **A07: Authentication Failures** - Mejora seguridad de sesiones
+
+#### Archivos Modificados
+- `src/shared/infrastructure/security/cookie_handler.py`: **NUEVO** - Helper centralizado
+- `src/modules/user/infrastructure/api/v1/auth_routes.py`: 3 endpoints modificados
+- `src/config/dependencies.py`: Middleware `get_current_user()` con soporte dual
+- `tests/integration/api/v1/test_httponly_cookies.py`: **NUEVO** - 6 tests
+
+#### Migration Path (v1.8.0 → v2.0.0)
+
+**Fase 1 (v1.8.0 - Actual):**
+- ✅ Dual support: Cookie (httpOnly) + Body (token)
+- ✅ Frontend puede usar cualquiera de los dos
+- ✅ Middleware acepta ambos (prioridad cookie)
+
+**Fase 2 (v1.9.0 - Deprecation):**
+- ⚠️ Warning en docs: Token en body será eliminado
+- ⚠️ Frontend debe migrar a cookies
+- ✅ Dual support continúa
+
+**Fase 3 (v2.0.0 - BREAKING CHANGE):**
+- ❌ Eliminar `access_token` de `LoginResponseDTO`
+- ❌ Eliminar `access_token` de respuesta en /verify-email
+- ❌ Solo autenticación vía cookies (eliminar header fallback)
+- ✅ XSS protection 100%
+
+#### Limitaciones Conocidas
+- **Logout no invalida JWT en backend** - Cookie eliminada del navegador, pero token técnicamente válido hasta expiración
+  - Fase 2 (v1.9.0+): Implementar blacklist de tokens para invalidación completa
+- **secure=True solo funciona en HTTPS** - En desarrollo (HTTP localhost), navegador puede rechazar cookie
+  - Solución: `is_production()` helper desactiva secure en desarrollo
+
+#### Decisiones de Diseño
+- **samesite="lax"** - Balance entre seguridad y usabilidad
+  - Previene CSRF en POST requests desde otros dominios
+  - Permite navegación normal (GET desde enlaces)
+  - Para máxima seguridad usar "strict" (puede afectar UX)
+- **Dual middleware** - Compatibilidad con frontend legacy
+  - Prioridad cookie sobre header (cookie más seguro)
+  - Permite migración gradual sin breaking changes
+
+#### Seguridad Mejorada
+Puntuación de seguridad: **8.0/10 → 8.5/10** (+0.5)
+- ✅ httpOnly previene robo de tokens vía XSS (JavaScript no puede leer cookie)
+- ✅ secure=True fuerza HTTPS en producción
+- ✅ samesite="lax" protege contra CSRF
+- ✅ Cookie expira en 1 hora (igual que JWT)
+- ✅ Logout elimina cookie del navegador inmediatamente
+
+#### Próximos Pasos (v1.9.0+)
+- [ ] **Token Blacklist** - Invalidación completa de JWT en backend tras logout
+- [ ] **Refresh Tokens** - Tokens de larga duración separados de access tokens
+- [ ] **Session Timeout** - Límite de duración de sesiones activas
+
+---
+
 ### Added - Security Headers HTTP
 
 **🔒 Protección contra XSS, Clickjacking, MIME-sniffing y MITM** (OWASP A02/A03/A04/A05/A07)

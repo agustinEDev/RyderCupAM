@@ -328,7 +328,10 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
 
 async def create_authenticated_user(client: AsyncClient, email: str, password: str, first_name: str, last_name: str) -> dict:
     """
-    Helper para crear un usuario y obtener su token de autenticación.
+    Helper para crear un usuario y obtener sus cookies de autenticación.
+
+    Simula el flujo real de producción donde el frontend usa HTTPOnly cookies
+    en lugar de headers Authorization.
 
     Args:
         client: Cliente HTTP de testing
@@ -338,7 +341,7 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
         last_name: Apellido
 
     Returns:
-        Dict con 'token', 'user_id' y 'user_data'
+        Dict con 'cookies', 'token' (legacy), 'user'
     """
     # Registrar usuario
     user_data = {
@@ -360,11 +363,37 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
 
     token = login_response.json()["access_token"]
     user_info = login_response.json()["user"]
+    
+    # Capturar cookies HTTPOnly del response (como lo haría el navegador)
+    cookies = dict(login_response.cookies)
+    
+    # Limpiar cookies del cliente para evitar conflictos entre usuarios
+    client.cookies.clear()
 
     return {
-        "token": token,
+        "cookies": cookies,
+        "token": token,  # Mantener por compatibilidad
         "user": user_info
     }
+
+
+def set_auth_cookies(client: AsyncClient, cookies: dict) -> None:
+    """
+    Helper para establecer cookies de autenticación en el cliente.
+    
+    Evita el DeprecationWarning de httpx al usar cookies= en cada request.
+    Usar antes de requests autenticadas en tests.
+    
+    Args:
+        client: Cliente HTTP de testing
+        cookies: Dict de cookies de autenticación
+    
+    Example:
+        set_auth_cookies(client, user["cookies"])
+        response = await client.get("/api/v1/protected")
+    """
+    client.cookies.clear()
+    client.cookies.update(cookies)
 
 
 async def get_user_by_email(client: AsyncClient, email: str):
@@ -466,7 +495,7 @@ def sample_competition_data() -> dict:
 
 async def create_competition(
     client: AsyncClient,
-    token: str,
+    cookies: dict,
     competition_data: dict | None = None
 ) -> dict:
     """
@@ -474,19 +503,20 @@ async def create_competition(
 
     Args:
         client: Cliente HTTP de testing
-        token: Token JWT de autenticación
+        cookies: Cookies HTTPOnly de autenticación
         competition_data: Datos de la competición (opcional)
 
     Returns:
         Dict con los datos de la competición creada
     """
     from datetime import date, timedelta
+    import uuid
 
     if competition_data is None:
         start = date.today() + timedelta(days=30)
         end = start + timedelta(days=3)
         competition_data = {
-            "name": f"Test Competition {start.isoformat()}",
+            "name": f"Test Competition {uuid.uuid4().hex[:8]}",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
@@ -496,20 +526,26 @@ async def create_competition(
             "team_assignment": "MANUAL"
         }
 
+    # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
+    client.cookies.clear()
+    client.cookies.update(cookies)
+    
     response = await client.post(
         "/api/v1/competitions",
-        json=competition_data,
-        headers={"Authorization": f"Bearer {token}"}
+        json=competition_data
     )
     assert response.status_code == 201, f"Failed to create competition: {response.text}"
     return response.json()
 
 
-async def activate_competition(client: AsyncClient, token: str, competition_id: str) -> dict:
+async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
     """Helper para activar una competición (DRAFT -> ACTIVE)."""
+    # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
+    client.cookies.clear()
+    client.cookies.update(cookies)
+    
     response = await client.post(
-        f"/api/v1/competitions/{competition_id}/activate",
-        headers={"Authorization": f"Bearer {token}"}
+        f"/api/v1/competitions/{competition_id}/activate"
     )
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"
     return response.json()

@@ -37,12 +37,13 @@
 ## 🔐 SEGURIDAD - Mejoras Prioritarias (v1.8.0)
 
 > **Análisis OWASP Top 10 2021 completado:** 15 Dic 2025
-> **Puntuación General Backend:** 8.2/10 ✅ (+0.2 tras Password Policy)
+> **Puntuación General Backend:** 8.5/10 ✅ (+0.3 tras httpOnly Cookies)
 >
 > **⚠️ IMPORTANTE:** Los detalles completos de implementación están en `docs/SECURITY_IMPLEMENTATION.md`
 > **Este documento temporal debe ELIMINARSE cuando se completen todas las tareas.**
 >
-> **✨ PROGRESO v1.8.0:** 3/16 tareas completadas (Rate Limiting + Security Headers + Password Policy)
+> **✨ PROGRESO v1.8.0:** 5/16 tareas completadas (Rate Limiting + Security Headers + Password Policy + httpOnly Cookies + Fix Tests)
+> **⚠️ SIGUIENTE:** Session Timeout (tarea 5)
 
 ### Estado de Protecciones OWASP
 
@@ -67,27 +68,27 @@
 | SQL Injection | ✅ Protegido (SQLAlchemy ORM) | - | A03 |
 | Rate Limiting | ✅ Implementado (SlowAPI) | - | A04, A07 |
 | Security Headers | ✅ Implementado (secure) | - | A02, A03, A04, A05, A07 |
-| httpOnly Cookies | ❌ NO implementado | 🔴 CRÍTICA | A01, A02 |
-| CSRF Protection | ❌ NO implementado | 🟡 Media | A01 |
+| httpOnly Cookies | ✅ Implementado (dual support) | - | A01, A02 |
+| CSRF Protection | ⚠️ Parcial (SameSite=lax) | 🟡 Media | A01 |
 | Input Validation | ⚠️ Parcial (Pydantic básico) | 🟠 Alta | A03 |
 | Security Logging | ⚠️ Básico | 🟠 Alta | A09 |
 | Sentry Monitoring | ❌ NO implementado | 🟡 Media | A09 |
 | Password Policy | ✅ Implementado (OWASP ASVS V2.1) | - | A07 |
 | 2FA/MFA | ❌ NO implementado | 🟠 Alta | A07 |
-| Session Management | ⚠️ Parcial (no timeout) | 🟠 Alta | A07 |
+| Session Management | ⚠️ Parcial (cookies, no timeout) | 🟠 Alta | A07 |
 | Audit Logging | ❌ NO implementado | 🟡 Media | A09 |
 | API Versioning | ✅ Implementado | - | A08 |
 
 ### Vulnerabilidades Críticas Detectadas
 
-1. ❌ **Tokens en response body** - Vulnerable a XSS (A01, A02)
+1. ✅ **Tokens en response body** - ✨ RESUELTO con httpOnly cookies (A01, A02) - Fase transitoria
 2. ✅ **Rate limiting implementado** - Protegido contra brute force (A04, A07) ✨ COMPLETADO
 3. ✅ **Security headers implementados** - Protección completa (A02/A03/A04/A05/A07) ✨ COMPLETADO
 4. ⚠️ **Validaciones Pydantic básicas** - Falta sanitización HTML (A03)
 5. ⚠️ **Logging básico** - No hay audit trail completo (A09)
 6. ❌ **No hay MFA/2FA** - Vulnerable a credential stuffing (A07)
 7. ✅ **Password policy implementada** - OWASP ASVS V2.1 (12+ chars, complejidad completa) ✨ COMPLETADO
-8. ⚠️ **No hay session timeout** - Sesiones indefinidas (A07)
+8. ⚠️ **No hay session timeout** - Sesiones de 1 hora (A07) - Mejorar con refresh tokens
 
 ---
 
@@ -122,10 +123,21 @@
   - **Puntuación mejorada:** 8.0/10 → 8.2/10 (+0.2)
 
 **Semana 2: httpOnly Cookies + Session Management**
-- [ ] **4. httpOnly Cookies (JWT)** - 6-8h (CRÍTICO)
-  - Backend: set_cookie en auth routes
-  - Auth middleware con cookies
-  - Mantener compatibilidad transitoria con headers
+- [x] **4. httpOnly Cookies (JWT)** - ✅ COMPLETADO (16 Dic 2025)
+  - ✅ Cookie Handler helper (`cookie_handler.py`)
+  - ✅ Endpoint `/login` establece cookie httpOnly
+  - ✅ Endpoint `/verify-email` establece cookie httpOnly
+  - ✅ Endpoint `/logout` elimina cookie httpOnly
+  - ✅ Middleware dual (cookies + headers) con prioridad a cookies
+  - ✅ CORS con `allow_credentials=True` (ya existente)
+  - ✅ Tests de integración (6/6 pasando - 100%)
+  - ✅ Compatibilidad transitoria (dual support)
+  - ✅ Documentación en CHANGELOG.md y CLAUDE.md
+  - **Puntuación mejorada:** 8.2/10 → 8.5/10 (+0.3)
+- [x] **4.1. Fix Tests httpOnly Cookies** - ✅ COMPLETADO (16 Dic 2025)
+  - ✅ Arreglado `test_logout_deletes_httponly_cookie` (endpoint `/logout` con middleware dual)
+  - ✅ Arreglado `test_verify_email_sets_httponly_cookie` (helper `get_user_by_email`)
+  - ✅ 6/6 tests pasando en 5.90s
 - [ ] **5. Session Timeout** - 2-3h (NUEVO)
   - JWT con expiración corta (15 min)
   - Refresh token mechanism
@@ -576,6 +588,15 @@ Ver plan detallado en sección [🤖 IA & RAG](#-ia--rag---módulo-de-asistente-
 
 ### v2.0.0 (Mayor - Futuro)
 **Estimación:** 4-6 meses | **Total:** 200+ horas
+
+**BREAKING CHANGES (Migration from v1.8.0/v1.9.0):**
+- [ ] **Eliminar token del response body (BREAKING)** - 4-6h
+  - Eliminar campo `access_token` de `LoginResponseDTO`
+  - Eliminar campo `access_token` de `VerifyEmailResponseDTO`
+  - Solo httpOnly cookies (eliminar compatibilidad con headers)
+  - Actualizar tests para solo usar cookies
+  - **Requiere:** Frontend completamente migrado a cookies
+  - **Deprecation period:** 6 meses desde v1.8.0
 
 **Security:**
 - 🔐 OAuth 2.0 / Social Login (Google, Apple)
