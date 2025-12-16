@@ -3,17 +3,18 @@ SQLAlchemy Imperative Mapping para RefreshToken.
 
 Mapea la entidad RefreshToken a la tabla refresh_tokens usando Imperative Mapping.
 """
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, MetaData, String, Table, TypeDecorator
-from sqlalchemy.orm import registry, relationship
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, TypeDecorator
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Registry para imperative mapping
-mapper_registry = registry()
-metadata = MetaData()
+# Importar metadata y registry compartidos del mapper principal de users
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
+    mapper_registry,
+    metadata,
+)
 
 # ============================================================================
 # TypeDecorators para Value Objects

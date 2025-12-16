@@ -7,7 +7,7 @@ Tests de integración que verifican los endpoints de países y adyacencias.
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_authenticated_user, set_auth_cookies
 
 
 class TestListCountries:
@@ -20,9 +20,9 @@ class TestListCountries:
             client, "user@test.com", "P@ssw0rd123!", "Test", "User"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries"
         )
 
         assert response.status_code == 200
@@ -40,7 +40,7 @@ class TestListCountries:
 
         response = await client.get(
             "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -63,7 +63,7 @@ class TestListCountries:
 
         response = await client.get(
             "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -87,7 +87,7 @@ class TestListAdjacentCountries:
 
         response = await client.get(
             "/api/v1/countries/ES/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -108,7 +108,7 @@ class TestListAdjacentCountries:
 
         response = await client.get(
             "/api/v1/countries/INVALID/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -122,7 +122,7 @@ class TestListAdjacentCountries:
 
         response = await client.get(
             "/api/v1/countries/XX/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 404
@@ -136,7 +136,7 @@ class TestListAdjacentCountries:
 
         response = await client.get(
             "/api/v1/countries/FR/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200

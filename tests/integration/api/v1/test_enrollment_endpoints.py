@@ -13,6 +13,7 @@ from tests.conftest import (
     activate_competition,
     create_authenticated_user,
     create_competition,
+    set_auth_cookies,
 )
 
 
@@ -30,13 +31,13 @@ class TestRequestEnrollment:
             client, "player@test.com", "P@ssw0rd123!", "Player", "User"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Act
+        set_auth_cookies(client, player["cookies"])
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         # Assert
@@ -55,12 +56,12 @@ class TestRequestEnrollment:
             client, "player2@test.com", "P@ssw0rd123!", "Player", "Two"
         )
 
-        comp = await create_competition(client, creator["token"])
+        comp = await create_competition(client, creator["cookies"])
         # No activamos la competición
 
+        set_auth_cookies(client, player["cookies"])
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         assert response.status_code == 400
@@ -75,19 +76,18 @@ class TestRequestEnrollment:
             client, "player3@test.com", "P@ssw0rd123!", "Player", "Three"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Primera solicitud
+        set_auth_cookies(client, player["cookies"])
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         # Segunda solicitud (duplicada)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         assert response.status_code == 409
@@ -106,13 +106,13 @@ class TestDirectEnrollPlayer:
             client, "player4@test.com", "P@ssw0rd123!", "Player", "Four"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
             json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 201
@@ -132,13 +132,13 @@ class TestDirectEnrollPlayer:
             client, "player5@test.com", "P@ssw0rd123!", "Player", "Five"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, other["cookies"])
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
-            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
-            headers={"Authorization": f"Bearer {other['token']}"}
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]}
         )
 
         assert response.status_code == 403
@@ -154,11 +154,11 @@ class TestListEnrollments:
             client, "creator6@test.com", "P@ssw0rd123!", "Creator", "Six"
         )
 
-        comp = await create_competition(client, creator["token"])
+        comp = await create_competition(client, creator["cookies"])
 
         response = await client.get(
             f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 200
@@ -177,22 +177,22 @@ class TestListEnrollments:
             client, "player7b@test.com", "P@ssw0rd123!", "Player", "7B"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Crear 2 inscripciones
+        set_auth_cookies(client, player1["cookies"])
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player1['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
+        set_auth_cookies(client, player2["cookies"])
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player2['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         response = await client.get(
             f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 200
@@ -212,20 +212,20 @@ class TestApproveRejectEnrollment:
             client, "player8@test.com", "P@ssw0rd123!", "Player", "Eight"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Solicitar inscripción
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
         # Aprobar
+        set_auth_cookies(client, creator["cookies"])
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/approve"
         )
 
         assert response.status_code == 200
@@ -241,18 +241,18 @@ class TestApproveRejectEnrollment:
             client, "player9@test.com", "P@ssw0rd123!", "Player", "Nine"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
+        set_auth_cookies(client, creator["cookies"])
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/reject",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/reject"
         )
 
         assert response.status_code == 200
@@ -272,18 +272,17 @@ class TestCancelWithdrawEnrollment:
             client, "player10@test.com", "P@ssw0rd123!", "Player", "Ten"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/cancel",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/cancel"
         )
 
         assert response.status_code == 200
@@ -299,25 +298,25 @@ class TestCancelWithdrawEnrollment:
             client, "player11@test.com", "P@ssw0rd123!", "Player", "Eleven"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Solicitar y aprobar
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
+        set_auth_cookies(client, creator["cookies"])
         await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/approve"
         )
 
         # Retirarse
+        set_auth_cookies(client, player["cookies"])
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/withdraw",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/withdraw"
         )
 
         assert response.status_code == 200
@@ -336,18 +335,18 @@ class TestCancelWithdrawEnrollment:
             client, "other12@test.com", "P@ssw0rd123!", "Other", "Twelve"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
+        set_auth_cookies(client, other["cookies"])
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/cancel",
-            headers={"Authorization": f"Bearer {other['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/cancel"
         )
 
         assert response.status_code == 403
@@ -366,14 +365,14 @@ class TestSetCustomHandicap:
             client, "player13@test.com", "P@ssw0rd123!", "Player", "Thirteen"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Inscripción directa
         enroll_response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
             json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
         enrollment_id = enroll_response.json()["id"]
 
@@ -381,7 +380,7 @@ class TestSetCustomHandicap:
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
             json={"enrollment_id": enrollment_id, "custom_handicap": 15.5},
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 200
@@ -401,25 +400,24 @@ class TestEnrollmentEdgeCases:
             client, "player_ec1@test.com", "P@ssw0rd123!", "Player", "EC1"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
         # Primera aprobación
+        set_auth_cookies(client, creator["cookies"])
         await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/approve"
         )
 
         # Segunda aprobación
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/approve"
         )
 
         assert response.status_code == 400
@@ -434,19 +432,18 @@ class TestEnrollmentEdgeCases:
             client, "player_ec2@test.com", "P@ssw0rd123!", "Player", "EC2"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
         # Intentar withdraw sin aprobar
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/withdraw",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/withdraw"
         )
 
         assert response.status_code == 400
@@ -461,25 +458,25 @@ class TestEnrollmentEdgeCases:
             client, "player_ec3@test.com", "P@ssw0rd123!", "Player", "EC3"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
+        set_auth_cookies(client, player["cookies"])
         enroll_response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
         enrollment_id = enroll_response.json()["id"]
 
         # Aprobar
+        set_auth_cookies(client, creator["cookies"])
         await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/approve"
         )
 
         # Intentar cancel en vez de withdraw
+        set_auth_cookies(client, player["cookies"])
         response = await client.post(
-            f"/api/v1/enrollments/{enrollment_id}/cancel",
-            headers={"Authorization": f"Bearer {player['token']}"}
+            f"/api/v1/enrollments/{enrollment_id}/cancel"
         )
 
         assert response.status_code == 400
@@ -494,21 +491,21 @@ class TestEnrollmentEdgeCases:
             client, "player_ec4@test.com", "P@ssw0rd123!", "Player", "EC4"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         enroll_response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
             json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
         enrollment_id = enroll_response.json()["id"]
 
         # Jugador intenta cambiar su propio handicap (no permitido)
+        set_auth_cookies(client, player["cookies"])
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/handicap",
-            json={"enrollment_id": enrollment_id, "custom_handicap": 10.0},
-            headers={"Authorization": f"Bearer {player['token']}"}
+            json={"enrollment_id": enrollment_id, "custom_handicap": 10.0}
         )
 
         assert response.status_code == 403
@@ -523,7 +520,7 @@ class TestEnrollmentEdgeCases:
         fake_id = "00000000-0000-0000-0000-000000000000"
         response = await client.post(
             f"/api/v1/enrollments/{fake_id}/approve",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 404
@@ -541,28 +538,29 @@ class TestEnrollmentEdgeCases:
             client, "player_ec5b@test.com", "P@ssw0rd123!", "Player", "EC5B"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Crear 2 inscripciones, aprobar solo 1
+        set_auth_cookies(client, player1["cookies"])
         enroll1 = await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player1['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
+        set_auth_cookies(client, creator["cookies"])
         await client.post(
-            f"/api/v1/enrollments/{enroll1.json()['id']}/approve",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            f"/api/v1/enrollments/{enroll1.json()['id']}/approve"
         )
 
+        set_auth_cookies(client, player2["cookies"])
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {player2['token']}"}
+            f"/api/v1/competitions/{comp['id']}/enrollments"
         )
 
         # Filtrar solo APPROVED
+        set_auth_cookies(client, creator["cookies"])
         response = await client.get(
             f"/api/v1/competitions/{comp['id']}/enrollments?status=APPROVED",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 200
@@ -580,13 +578,13 @@ class TestEnrollmentEdgeCases:
             client, "player_ec6@test.com", "P@ssw0rd123!", "Player", "EC6"
         )
 
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments/direct",
             json={"competition_id": comp["id"], "user_id": player["user"]["id"], "custom_handicap": 12.5},
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         assert response.status_code == 201

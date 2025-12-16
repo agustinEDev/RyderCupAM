@@ -2,7 +2,7 @@
 Logout User Use Case
 
 Caso de uso para cerrar sesión de un usuario.
-Implementación evolutiva: simple ahora, preparada para blacklist después.
+Session Timeout (v1.8.0): Revoca todos los refresh tokens del usuario.
 """
 
 from datetime import datetime
@@ -21,22 +21,17 @@ class LogoutUserUseCase:
     """
     Caso de uso para logout de usuario.
 
-    Esta implementación está diseñada para evolucionar:
-
-    Fase 1 (Actual): Logout simple con validación de usuario
-    - Valida que el usuario existe
-    - Registra el timestamp del logout
-    - Retorna confirmación
-
-    Fase 2 (Futura): Con blacklist profesional
-    - Misma interface pública
-    - Internamente agregará tokens a blacklist
-    - Sin cambios en controllers
-
     Responsabilidades:
     - Validar que el usuario existe (del token JWT)
-    - Gestionar la invalidación del token (preparado para blacklist)
+    - Revocar todos los refresh tokens del usuario (v1.8.0)
     - Registrar el evento de logout para auditoría
+    - Retornar confirmación
+
+    Session Timeout (v1.8.0):
+    - Revoca todos los refresh tokens activos del usuario
+    - El access token sigue técnicamente válido hasta expiración (15 min)
+    - Frontend debe eliminar cookies httpOnly de access y refresh tokens
+    - OWASP A01: Previene reuso de refresh tokens después de logout
     """
 
     def __init__(self, uow: UserUnitOfWorkInterface):
@@ -44,7 +39,7 @@ class LogoutUserUseCase:
         Inicializa el caso de uso.
 
         Args:
-            uow: Unit of Work para acceso a repositorio de usuarios
+            uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
         """
         self._uow = uow
 
@@ -60,7 +55,7 @@ class LogoutUserUseCase:
         Args:
             request: DTO de logout (preparado para extensiones futuras)
             user_id: ID del usuario obtenido del token JWT
-            token: Token JWT original (preparado para blacklist futura)
+            token: Token JWT original (actualmente no usado)
 
         Returns:
             LogoutResponseDTO con confirmación y timestamp
@@ -78,41 +73,27 @@ class LogoutUserUseCase:
         if not user:
             return None
 
-        # 2. Invalidar token (Fase 1: Solo preparación)
-        self._invalidate_token(token, user_id)
-
-        # 3. Registrar evento de logout para auditoría
+        # 2. Registrar evento de logout para auditoría
         logout_time = datetime.now()
         user.record_logout(logout_time, token)
+
+        # 3. Revocar todos los refresh tokens del usuario (v1.8.0)
+        # Esto previene que el usuario pueda renovar su access token después del logout
+        refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
+
+        for refresh_token in refresh_tokens:
+            if not refresh_token.revoked:
+                refresh_token.revoke()
+                await self._uow.refresh_tokens.save(refresh_token)
 
         # 4. Persistir cambios usando Unit of Work (Clean Architecture)
         # El UoW maneja automáticamente la transacción y publicación de eventos
         async with self._uow:
             await self._uow.users.save(user)
+            # Los refresh tokens ya fueron actualizados, commit automático
 
         return LogoutResponseDTO(
             message="Logout exitoso",
             logged_out_at=logout_time
         )
-
-    def _invalidate_token(self, token: str | None, _user_id: str) -> None:
-        """
-        Invalida el token de acceso.
-
-        Fase 1 (Actual): No hace nada real - logout del lado cliente
-        Fase 2 (Futura): Agregará el token a blacklist
-
-        Args:
-            token: Token JWT a invalidar
-            _user_id: ID del usuario para logging (preparado para Fase 2)
-        """
-        # Fase 1: Implementación simple - logout del lado cliente
-        # El token permanece técnicamente válido hasta su expiración
-
-        # Preparado para Fase 2: Blacklist implementation
-        # await self._blacklist_service.add_token(token)
-
-        if token:
-            # Fase 1: Solo validación de que el token existe
-            pass
 

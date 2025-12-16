@@ -126,9 +126,14 @@ class LoginRequestDTO(BaseModel):
 class LoginResponseDTO(BaseModel):
     """
     DTO de salida para el caso de uso de login.
-    Devuelve el token de acceso y la información básica del usuario.
+    Devuelve el token de acceso, refresh token y la información básica del usuario.
+
+    Session Timeout (v1.8.0):
+    - access_token: Válido por 15 minutos (operaciones frecuentes)
+    - refresh_token: Válido por 7 días (renovar access sin re-login)
     """
-    access_token: str = Field(..., description="Token JWT de acceso.")
+    access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
+    refresh_token: str = Field(..., description="Token JWT de renovación (7 días).")
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
     email_verification_required: bool = Field(default=False, description="Indica si el usuario necesita verificar su email.")
@@ -249,3 +254,35 @@ class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
     message: str = Field(default="Email de verificación enviado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     email: EmailStr = Field(..., description="Email al que se envió el mensaje de verificación.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Refresh Access Token (Session Timeout - v1.8.0)
+# ======================================================================================
+
+class RefreshAccessTokenRequestDTO(BaseModel):
+    """
+    DTO de entrada para renovar el access token usando un refresh token válido.
+
+    Esta operación NO requiere autenticación previa, ya que el refresh token
+    contiene toda la información necesaria para generar un nuevo access token.
+    """
+    # El refresh token se leerá desde la cookie httpOnly, no del body
+    # Este DTO está vacío pero sirve como contrato del caso de uso
+    pass
+
+
+class RefreshAccessTokenResponseDTO(BaseModel):
+    """
+    DTO de salida para renovación de access token.
+
+    Retorna un nuevo access token válido por 15 minutos.
+    El refresh token NO se renueva (sigue siendo el mismo hasta su expiración).
+    """
+    access_token: str = Field(..., description="Nuevo access token JWT válido por 15 minutos.")
+    token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
+    user: UserResponseDTO = Field(..., description="Información básica del usuario autenticado.")
+    message: str = Field(
+        default="Access token renovado exitosamente",
+        description="Mensaje de confirmación de renovación."
+    )

@@ -315,6 +315,24 @@ def get_logout_user_use_case(
     """
     return LogoutUserUseCase(uow)
 
+def get_refresh_access_token_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    token_service: ITokenService = Depends(get_token_service)
+) -> "RefreshAccessTokenUseCase":
+    """
+    Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens).
+    2. Depende de `get_token_service` para generación de tokens JWT.
+    3. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    """
+    from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+        RefreshAccessTokenUseCase,
+    )
+    return RefreshAccessTokenUseCase(uow, token_service)
+
 def get_update_profile_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository)

@@ -85,7 +85,7 @@ class TestHttpOnlyCookies:
         assert "HttpOnly" in set_cookie_header, "Cookie debe tener flag HttpOnly"
         assert "SameSite=lax" in set_cookie_header, "Cookie debe tener SameSite=lax"
         assert "Path=/" in set_cookie_header, "Cookie debe tener Path=/"
-        assert "Max-Age=3600" in set_cookie_header, "Cookie debe expirar en 1 hora"
+        assert "Max-Age=900" in set_cookie_header, "Cookie debe expirar en 15 minutos"
 
         # En producción (HTTPS), también debería tener Secure
         # En desarrollo (HTTP), Secure no está presente

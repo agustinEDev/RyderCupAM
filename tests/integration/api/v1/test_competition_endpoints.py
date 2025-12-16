@@ -14,6 +14,7 @@ from tests.conftest import (
     activate_competition,
     create_authenticated_user,
     create_competition,
+    set_auth_cookies,
 )
 
 
@@ -46,7 +47,7 @@ class TestCreateCompetition:
         response = await client.post(
             "/api/v1/competitions",
             json=competition_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         # Assert
@@ -70,8 +71,8 @@ class TestCreateCompetition:
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
-        # FastAPI retorna 403 cuando falta el token de autenticación
-        assert response.status_code == 403
+        # Con HTTPOnly Cookies, retorna 401 cuando no hay autenticación
+        assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_create_competition_invalid_dates_returns_400(self, client: AsyncClient):
@@ -94,7 +95,7 @@ class TestCreateCompetition:
         response = await client.post(
             "/api/v1/competitions",
             json=competition_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 422  # Validation error
@@ -112,7 +113,7 @@ class TestListCompetitions:
 
         response = await client.get(
             "/api/v1/competitions",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -126,7 +127,7 @@ class TestListCompetitions:
         )
 
         # Crear 2 competiciones
-        await create_competition(client, user["token"])
+        await create_competition(client, user["cookies"])
 
         start = date.today() + timedelta(days=60)
         end = start + timedelta(days=3)
@@ -139,12 +140,12 @@ class TestListCompetitions:
             "max_players": 16,
             "team_assignment": "MANUAL"
         }
-        await create_competition(client, user["token"], comp2_data)
+        await create_competition(client, user["cookies"], comp2_data)
 
         # Act
         response = await client.get(
             "/api/v1/competitions",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         # Assert
@@ -160,13 +161,13 @@ class TestListCompetitions:
         )
 
         # Crear y activar una competición
-        comp = await create_competition(client, user["token"])
-        await activate_competition(client, user["token"], comp["id"])
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
 
         # Crear otra en DRAFT
         start = date.today() + timedelta(days=90)
         end = start + timedelta(days=3)
-        await create_competition(client, user["token"], {
+        await create_competition(client, user["cookies"], {
             "name": "Draft Competition",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
@@ -179,7 +180,7 @@ class TestListCompetitions:
         # Filtrar solo ACTIVE
         response = await client.get(
             "/api/v1/competitions?status=ACTIVE",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -198,7 +199,7 @@ class TestListCompetitions:
         end = start + timedelta(days=3)
 
         # Crear competiciones
-        await create_competition(client, user["token"], {
+        await create_competition(client, user["cookies"], {
             "name": "Ryder Cup 2025",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
@@ -207,7 +208,7 @@ class TestListCompetitions:
             "max_players": 24,
             "team_assignment": "MANUAL"
         })
-        await create_competition(client, user["token"], {
+        await create_competition(client, user["cookies"], {
             "name": "Open de España",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
@@ -216,7 +217,7 @@ class TestListCompetitions:
             "max_players": 24,
             "team_assignment": "MANUAL"
         })
-        await create_competition(client, user["token"], {
+        await create_competition(client, user["cookies"], {
             "name": "Ryder Cup Friends",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
@@ -229,7 +230,7 @@ class TestListCompetitions:
         # Filtrar por "Ryder"
         response = await client.get(
             "/api/v1/competitions?search_name=Ryder",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -252,13 +253,13 @@ class TestMyCompetitionsFilter:
         )
 
         # Crear competiciones
-        await create_competition(client, creator["token"])  # Creada por el usuario
-        await create_competition(client, other_user["token"])  # Creada por otro
+        await create_competition(client, creator["cookies"])  # Creada por el usuario
+        await create_competition(client, other_user["cookies"])  # Creada por otro
 
         # Act
         response = await client.get(
             "/api/v1/competitions?my_competitions=true",
-            headers={"Authorization": f"Bearer {creator['token']}"}
+            cookies=creator["cookies"]
         )
 
         # Assert
@@ -278,19 +279,19 @@ class TestMyCompetitionsFilter:
         )
 
         # Crear competición y activar
-        comp = await create_competition(client, creator["token"])
-        await activate_competition(client, creator["token"], comp["id"])
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
 
         # Inscribir usuario
         await client.post(
             f"/api/v1/competitions/{comp['id']}/enrollments",
-            headers={"Authorization": f"Bearer {enrolled_user['token']}"}
+            cookies=enrolled_user["cookies"]
         )
 
         # Act
         response = await client.get(
             "/api/v1/competitions?my_competitions=true",
-            headers={"Authorization": f"Bearer {enrolled_user['token']}"}
+            cookies=enrolled_user["cookies"]
         )
 
         # Assert
@@ -310,11 +311,11 @@ class TestGetCompetition:
             client, "getter@test.com", "P@ssw0rd123!", "Get", "User"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         response = await client.get(
             f"/api/v1/competitions/{comp['id']}",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -337,7 +338,7 @@ class TestGetCompetition:
         fake_id = "00000000-0000-0000-0000-000000000000"
         response = await client.get(
             f"/api/v1/competitions/{fake_id}",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 404
@@ -353,7 +354,7 @@ class TestUpdateCompetition:
             client, "updater@test.com", "P@ssw0rd123!", "Update", "User"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         update_data = {
             "name": "Updated Ryder Cup Name",
@@ -365,7 +366,7 @@ class TestUpdateCompetition:
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
             json=update_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -388,12 +389,12 @@ class TestUpdateCompetition:
             client, "other@test.com", "P@ssw0rd123!", "Other", "User"
         )
 
-        comp = await create_competition(client, creator["token"])
+        comp = await create_competition(client, creator["cookies"])
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
             json={"name": "Hacked Name"},
-            headers={"Authorization": f"Bearer {other_user['token']}"}
+            cookies=other_user["cookies"]
         )
 
         assert response.status_code == 403
@@ -409,11 +410,11 @@ class TestDeleteCompetition:
             client, "deleter@test.com", "P@ssw0rd123!", "Delete", "User"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         response = await client.delete(
             f"/api/v1/competitions/{comp['id']}",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 204
@@ -425,12 +426,12 @@ class TestDeleteCompetition:
             client, "deleter2@test.com", "P@ssw0rd123!", "Delete", "Two"
         )
 
-        comp = await create_competition(client, user["token"])
-        await activate_competition(client, user["token"], comp["id"])
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
 
         response = await client.delete(
             f"/api/v1/competitions/{comp['id']}",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -446,11 +447,11 @@ class TestCompetitionStateTransitions:
             client, "activator@test.com", "P@ssw0rd123!", "Activate", "User"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -463,11 +464,11 @@ class TestCompetitionStateTransitions:
             client, "canceler@test.com", "P@ssw0rd123!", "Cancel", "User"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/cancel",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -481,34 +482,34 @@ class TestCompetitionStateTransitions:
         )
 
         # 1. Crear (DRAFT)
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
         assert comp["status"] == "DRAFT"
 
         # 2. Activar (ACTIVE)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
         assert response.json()["status"] == "ACTIVE"
 
         # 3. Cerrar inscripciones (CLOSED)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
         assert response.json()["status"] == "CLOSED"
 
         # 4. Iniciar (IN_PROGRESS)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/start",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
         assert response.json()["status"] == "IN_PROGRESS"
 
         # 5. Completar (COMPLETED)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/complete",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
         assert response.json()["status"] == "COMPLETED"
 
@@ -519,12 +520,12 @@ class TestCompetitionStateTransitions:
             client, "invalid_trans@test.com", "P@ssw0rd123!", "Invalid", "Trans"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         # Intentar cerrar inscripciones desde DRAFT (debe ser ACTIVE)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -557,14 +558,14 @@ class TestEdgeCases:
         await client.post(
             "/api/v1/competitions",
             json=comp_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         # Segunda con mismo nombre
         response = await client.post(
             "/api/v1/competitions",
             json=comp_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 409
@@ -576,13 +577,13 @@ class TestEdgeCases:
             client, "update_active@test.com", "P@ssw0rd123!", "Update", "Active"
         )
 
-        comp = await create_competition(client, user["token"])
-        await activate_competition(client, user["token"], comp["id"])
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
             json={"name": "New Name"},
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -597,11 +598,11 @@ class TestEdgeCases:
             client, "viewer@test.com", "P@ssw0rd123!", "Viewer", "User"
         )
 
-        comp = await create_competition(client, creator["token"])
+        comp = await create_competition(client, creator["cookies"])
 
         response = await client.get(
             f"/api/v1/competitions/{comp['id']}",
-            headers={"Authorization": f"Bearer {viewer['token']}"}
+            cookies=viewer["cookies"]
         )
 
         assert response.status_code == 200
@@ -630,7 +631,7 @@ class TestEdgeCases:
         response = await client.post(
             "/api/v1/competitions",
             json=comp_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         # Podría ser 400 o 422 dependiendo de la validación
@@ -660,7 +661,7 @@ class TestEdgeCases:
         response = await client.post(
             "/api/v1/competitions",
             json=comp_data,
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -672,18 +673,18 @@ class TestEdgeCases:
             client, "doublecancel@test.com", "P@ssw0rd123!", "Double", "Cancel"
         )
 
-        comp = await create_competition(client, user["token"])
+        comp = await create_competition(client, user["cookies"])
 
         # Primera cancelación
         await client.post(
             f"/api/v1/competitions/{comp['id']}/cancel",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         # Segunda cancelación
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/cancel",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            cookies=user["cookies"]
         )
 
         assert response.status_code == 400

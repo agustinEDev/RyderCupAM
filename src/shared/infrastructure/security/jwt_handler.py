@@ -5,6 +5,7 @@ Utilidades para crear y verificar tokens JWT (JSON Web Tokens).
 Implementa autenticación basada en tokens con algoritmo HS256.
 """
 
+import uuid
 from datetime import datetime, timedelta
 
 from jose import JWTError, jwt
@@ -71,6 +72,9 @@ class JWTTokenService(ITokenService):
         Los refresh tokens tienen mayor duración y se usan solo para
         obtener nuevos access tokens, no para acceder a recursos.
 
+        Incluye un jti (JWT ID) único para garantizar que cada token sea único,
+        incluso si se generan múltiples tokens para el mismo usuario al mismo tiempo.
+
         Args:
             data: Datos a incluir en el payload (ej: {"sub": user_id})
             expires_delta: Tiempo de expiración personalizado. Si None, usa 7 días.
@@ -81,7 +85,7 @@ class JWTTokenService(ITokenService):
         Example:
             >>> service = JWTTokenService()
             >>> refresh_token = service.create_refresh_token({"sub": "user-123"})
-            >>> # Token válido por 7 días
+            >>> # Token válido por 7 días con jti único
         """
         to_encode = data.copy()
 
@@ -90,7 +94,13 @@ class JWTTokenService(ITokenService):
         else:
             expire = datetime.now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-        to_encode.update({"exp": expire, "type": "refresh"})
+        # Agregar jti (JWT ID) único para garantizar unicidad del token
+        # Esto previene colisiones de hash cuando se generan múltiples tokens al mismo tiempo
+        to_encode.update({
+            "exp": expire,
+            "type": "refresh",
+            "jti": str(uuid.uuid4())  # JWT ID único por token
+        })
 
         encoded_jwt = jwt.encode(
             to_encode,

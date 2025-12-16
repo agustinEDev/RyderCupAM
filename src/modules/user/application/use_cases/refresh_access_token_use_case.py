@@ -108,7 +108,7 @@ class RefreshAccessTokenUseCase:
             # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
             return None
 
-        if refresh_token_entity.is_revoked():
+        if refresh_token_entity.revoked:
             # Refresh token fue revocado explícitamente (logout)
             return None
 

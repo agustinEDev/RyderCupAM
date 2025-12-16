@@ -4,11 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.config.rate_limit import limiter
-from src.shared.infrastructure.security.cookie_handler import delete_auth_cookie, set_auth_cookie
+from src.shared.infrastructure.security.cookie_handler import (
+    delete_auth_cookie,
+    delete_refresh_token_cookie,
+    set_auth_cookie,
+    set_refresh_token_cookie,
+)
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
     get_logout_user_use_case,
+    get_refresh_access_token_use_case,
     get_register_user_use_case,
     get_resend_verification_email_use_case,
     get_verify_email_use_case,
@@ -19,6 +25,8 @@ from src.modules.user.application.dto.user_dto import (
     LoginResponseDTO,
     LogoutRequestDTO,
     LogoutResponseDTO,
+    RefreshAccessTokenRequestDTO,
+    RefreshAccessTokenResponseDTO,
     RegisterUserRequestDTO,
     ResendVerificationEmailRequestDTO,
     ResendVerificationEmailResponseDTO,
@@ -27,6 +35,9 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+    RefreshAccessTokenUseCase,
+)
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
@@ -74,7 +85,7 @@ async def register_user(
     response_model=LoginResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Login de usuario",
-    description="Autentica un usuario y devuelve un token JWT (httpOnly cookie + response body para compatibilidad).",
+    description="Autentica un usuario y devuelve access + refresh tokens (httpOnly cookies + response body).",
     tags=["Authentication"],
 )
 @limiter.limit("5/minute")  # Anti brute-force: máximo 5 intentos de login por minuto
@@ -87,28 +98,32 @@ async def login_user(
     """
     Endpoint para login de usuario.
 
-    FASE TRANSITORIA (v1.8.0 - v2.0.0):
-    Retorna el JWT de dos formas para permitir migración gradual del frontend:
+    Session Timeout (v1.8.0):
+    Retorna dos tokens JWT con diferentes duraciones:
 
-    1. **httpOnly Cookie** (NUEVO - Recomendado):
-       - Establecida automáticamente en el navegador
-       - JavaScript NO puede leerla (protección XSS)
-       - Se envía automáticamente en requests subsecuentes
+    1. **Access Token (15 minutos)**:
+       - httpOnly cookie: access_token
+       - Response body: access_token (LEGACY - compatibilidad)
+       - Usado para acceder a recursos protegidos
+       - Corta duración para máxima seguridad
 
-    2. **Response Body** (LEGACY - Deprecated):
-       - Campo `access_token` en LoginResponseDTO
-       - Permite compatibilidad con frontend actual (localStorage)
-       - TODO (v2.0.0): Eliminar este campo en breaking change
+    2. **Refresh Token (7 días)**:
+       - httpOnly cookie: refresh_token
+       - Response body: refresh_token (LEGACY - compatibilidad)
+       - Usado solo en endpoint /refresh-token
+       - Larga duración para mejor UX (sin re-login)
 
-    Security Improvements (OWASP A01/A02):
+    Security Improvements (OWASP A01/A02/A07):
     - httpOnly=True: Previene robo de token vía XSS
-    - secure=True (producción): Cookie solo viaja por HTTPS
+    - secure=True (producción): Cookies solo viajan por HTTPS
     - samesite="lax": Protección contra CSRF
+    - Refresh token hasheado en BD (no texto plano)
+    - Access token de corta duración (15 min)
 
     Migration Path:
-    - v1.8.0 (actual): Dual support (cookie + body)
+    - v1.8.0 (actual): Dual support (cookies + body)
     - v1.9.0: Deprecation warning en docs
-    - v2.0.0: BREAKING CHANGE - Solo cookies, eliminar campo access_token
+    - v2.0.0: BREAKING CHANGE - Solo cookies
 
     Args:
         request: Request de FastAPI (requerido por SlowAPI rate limiting)
@@ -117,7 +132,7 @@ async def login_user(
         use_case: Caso de uso de login
 
     Returns:
-        LoginResponseDTO con token y datos del usuario
+        LoginResponseDTO con access_token, refresh_token y datos del usuario
 
     Raises:
         HTTPException 401: Si las credenciales son incorrectas
@@ -131,13 +146,15 @@ async def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # ✅ NUEVO (v1.8.0): Establecer cookie httpOnly con el JWT
-    # Protección contra XSS: JavaScript NO puede leer esta cookie
+    # ✅ NUEVO (v1.8.0): Establecer cookies httpOnly con ambos tokens
+    # Access Token: 15 minutos
     set_auth_cookie(response, login_response.access_token)
 
-    # ⚠️ LEGACY: Retornar token en response body para compatibilidad
-    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
-    # cuando frontend migre completamente a cookies httpOnly
+    # Refresh Token: 7 días (Session Timeout)
+    set_refresh_token_cookie(response, login_response.refresh_token)
+
+    # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
+    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
     return login_response
 
 
@@ -166,7 +183,7 @@ async def get_current_user_endpoint(
     response_model=LogoutResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Logout de usuario",
-    description="Cierra la sesión del usuario autenticado (elimina cookie httpOnly + domain event).",
+    description="Cierra la sesión del usuario autenticado (elimina cookies httpOnly + revoca refresh tokens en BD).",
     tags=["Authentication"],
 )
 async def logout_user(
@@ -180,25 +197,33 @@ async def logout_user(
     """
     Endpoint para logout de usuario.
 
-    FASE TRANSITORIA (v1.8.0 - v2.0.0):
-    El logout ahora elimina la cookie httpOnly del navegador:
+    Session Timeout (v1.8.0):
+    El logout ahora realiza una invalidación completa de la sesión:
 
-    1. **Eliminar cookie httpOnly** (NUEVO - v1.8.0):
-       - Invalida la cookie en el navegador (logout inmediato)
-       - Protege contra reutilización accidental de sesiones
+    1. **Eliminar cookies httpOnly** (NUEVO - v1.8.0):
+       - access_token cookie (15 min)
+       - refresh_token cookie (7 días)
+       - Logout inmediato en el cliente
 
-    2. **Domain Event** (Existente):
+    2. **Revocar refresh tokens en BD** (NUEVO - v1.8.0):
+       - Marca todos los refresh tokens del usuario como revocados
+       - Previene renovación de access tokens después del logout
+       - OWASP A01: Broken Access Control
+
+    3. **Domain Event** (Existente):
        - Registra el evento de logout en el dominio
-       - Preparado para blacklist de tokens en Fase 2
+       - Auditoría y trazabilidad
 
-    Nota sobre invalidación de tokens:
-    - Fase 1 (v1.8.0): Cookie eliminada del navegador, pero JWT técnicamente válido hasta expiración
-    - Fase 2 (v1.9.0+): Blacklist de tokens para invalidación completa en backend
+    Security Improvements (OWASP A01/A07):
+    - delete_auth_cookie(): Elimina access token del navegador
+    - delete_refresh_token_cookie(): Elimina refresh token del navegador
+    - LogoutUserUseCase: Revoca refresh tokens en BD
+    - Previene reuso de refresh tokens después de logout
 
-    Security Improvements:
-    - delete_auth_cookie(): Elimina cookie httpOnly del navegador
-    - Frontend no puede acceder a la cookie (httpOnly=true)
-    - Logout inmediato sin intervención de JavaScript
+    Nota sobre access tokens:
+    - Access token sigue técnicamente válido hasta expiración (15 min)
+    - Pero sin refresh token, usuario debe re-login cuando expire
+    - Esto es aceptable por la corta duración (15 min)
 
     Args:
         request: Request de FastAPI (para leer cookies)
@@ -212,17 +237,17 @@ async def logout_user(
         LogoutResponseDTO con confirmación y timestamp
     """
     from src.shared.infrastructure.security.cookie_handler import get_cookie_name
-    
+
     user_id = str(current_user.id)
-    
+
     # Obtener token: prioridad cookie, luego header (mismo orden que get_current_user)
     token = None
     cookie_name = get_cookie_name()
     token = request.cookies.get(cookie_name)
-    
+
     if not token and credentials:
         token = credentials.credentials
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -237,12 +262,96 @@ async def logout_user(
             detail="Usuario no encontrado",
         )
 
-    # ✅ NUEVO (v1.8.0): Eliminar cookie httpOnly del navegador
-    # Logout inmediato en el cliente (cookie invalidada)
+    # ✅ NUEVO (v1.8.0): Eliminar ambas cookies httpOnly del navegador
+    # Access Token (15 min)
     delete_auth_cookie(response)
+
+    # Refresh Token (7 días) - Session Timeout
+    delete_refresh_token_cookie(response)
 
     return logout_response
 
+
+@router.post(
+    "/refresh-token",
+    response_model=RefreshAccessTokenResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Renovar access token",
+    description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
+    tags=["Authentication"],
+)
+async def refresh_access_token(
+    request: Request,
+    response: Response,
+    use_case: RefreshAccessTokenUseCase = Depends(get_refresh_access_token_use_case),
+):
+    """
+    Endpoint para renovar el access token usando un refresh token válido.
+
+    Session Timeout (v1.8.0):
+    Este endpoint permite mantener al usuario autenticado sin necesidad de
+    re-login cuando su access token (15 min) expira, siempre que tenga un
+    refresh token válido (7 días).
+
+    Flujo:
+    1. Frontend detecta que access token expiró (HTTP 401 en request)
+    2. Frontend llama a /refresh-token (cookie refresh_token enviada automáticamente)
+    3. Backend valida refresh token (JWT + BD)
+    4. Backend genera nuevo access token (15 min)
+    5. Backend retorna nuevo access token (httpOnly cookie + body)
+    6. Frontend reintenta request original con nuevo access token
+
+    Security (OWASP A01/A02/A07):
+    - Refresh token leído desde httpOnly cookie (previene XSS)
+    - Refresh token validado contra BD (previene reuso después de logout)
+    - Refresh token hasheado en BD (previene robo en DB leak)
+    - Access token de corta duración (15 min)
+    - Refresh token NO se renueva (debe durar hasta expiración o logout)
+
+    NO requiere autenticación previa:
+    - NO lleva header Authorization
+    - Solo requiere cookie refresh_token válida
+
+    Args:
+        request: Request de FastAPI (para leer cookie refresh_token)
+        response: Response de FastAPI (para establecer nuevo access_token)
+        use_case: Caso de uso de refresh token
+
+    Returns:
+        RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
+
+    Raises:
+        HTTPException 401: Si refresh token es inválido, expirado o revocado
+    """
+    from src.shared.infrastructure.security.cookie_handler import get_refresh_cookie_name
+
+    # Leer refresh token desde cookie httpOnly
+    refresh_cookie_name = get_refresh_cookie_name()
+    refresh_token_jwt = request.cookies.get(refresh_cookie_name)
+
+    if not refresh_token_jwt:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
+        )
+
+    # Ejecutar caso de uso
+    refresh_request = RefreshAccessTokenRequestDTO()
+    refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
+
+    if not refresh_response:
+        # Refresh token inválido, expirado o revocado
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
+        )
+
+    # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
+    set_auth_cookie(response, refresh_response.access_token)
+
+    # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
+    # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
+    return refresh_response
 
 
 from src.shared.infrastructure.security.jwt_handler import create_access_token
@@ -308,21 +417,24 @@ async def verify_email(
         user = await use_case.execute(request.token)
         logger.info(f"Email verification successful for token: {token_preview}")
 
-        # Generar JWT
+        # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0
         access_token = create_access_token({"sub": str(user.id.value)})
+        from src.shared.infrastructure.security.jwt_handler import create_refresh_token
+        refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
-        # ✅ NUEVO (v1.8.0): Establecer cookie httpOnly con el JWT
-        # Protección contra XSS: JavaScript NO puede leer esta cookie
+        # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
         set_auth_cookie(response, access_token)
+        set_refresh_token_cookie(response, refresh_token)
 
         # Mapear a DTO
         from src.modules.user.application.dto.user_dto import LoginResponseDTO, UserResponseDTO
         user_dto = UserResponseDTO.model_validate(user)
 
-        # ⚠️ LEGACY: Retornar token en response body para compatibilidad
-        # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
+        # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
+        # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
         return LoginResponseDTO(
             access_token=access_token,
+            refresh_token=refresh_token,
             token_type="bearer",
             user=user_dto,
             email_verification_required=False

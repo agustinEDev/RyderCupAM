@@ -346,7 +346,8 @@ class TestUserRoutes:
             json={"first_name": "New", "last_name": None}
         )
 
-        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+        # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
+        assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_update_profile_rejects_empty_names(self, client: AsyncClient):
         """Verifica que no se aceptan strings vacíos (validación Pydantic)."""
@@ -553,7 +554,8 @@ class TestUserRoutes:
             }
         )
 
-        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+        # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
+        assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_update_security_password_confirmation_must_match(self, client: AsyncClient):
         """Verifica que el password y su confirmación deben coincidir."""
