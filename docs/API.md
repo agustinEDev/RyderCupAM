@@ -2,20 +2,21 @@
 
 **Base URL**: `http://localhost:8000`
 **Docs**: `/docs` (Swagger UI)
-**Total Endpoints**: 32 active
+**Total Endpoints**: 33 active ⭐ ACTUALIZADO
 **Version**: v1.8.0
-**Last Updated**: 25 Nov 2025
+**Last Updated**: 16 Dic 2025
 
 ## Quick Reference
 
 ```
-Authentication (6 endpoints)
+Authentication (7 endpoints) ⭐ ACTUALIZADO
 ├── POST /api/v1/auth/register           # User registration
-├── POST /api/v1/auth/login              # JWT authentication
+├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies)
 ├── GET  /api/v1/auth/current-user       # Get authenticated user info
-├── POST /api/v1/auth/logout             # Session logout
+├── POST /api/v1/auth/logout             # Session logout (revoke refresh tokens)
 ├── POST /api/v1/auth/verify-email       # Email verification
-└── POST /api/v1/auth/resend-verification # Resend verification email
+├── POST /api/v1/auth/resend-verification # Resend verification email
+└── POST /api/v1/auth/refresh-token      # Renew access token ⭐ NUEVO
 
 User Management (3 endpoints)
 ├── GET   /api/v1/users/search           # Search users by email/name
@@ -101,6 +102,7 @@ Request:
 Response: 200 OK
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", ⭐ NUEVO
   "token_type": "bearer",
   "user": {
     "id": "uuid",
@@ -113,8 +115,20 @@ Response: 200 OK
     "email_verified": true,
     "created_at": "2025-11-09T10:00:00Z",
     "updated_at": "2025-11-09T10:00:00Z"
-  }
+  },
+  "email_verification_required": false
 }
+
+Set-Cookie Headers (httpOnly - v1.8.0): ⭐ NUEVO
+- access_token=eyJ...; HttpOnly; Secure; SameSite=Lax; Max-Age=900; Path=/
+- refresh_token=eyJ...; HttpOnly; Secure; SameSite=Lax; Max-Age=604800; Path=/
+
+Notes (v1.8.0 - Session Timeout):
+- Access token expires in 15 minutes (reduced from 60 min)
+- Refresh token expires in 7 days
+- Both tokens are sent as httpOnly cookies (XSS protection)
+- Tokens also in response body for backward compatibility (deprecated in v2.0.0)
+- Use POST /auth/refresh-token to renew access token when expired
 
 Errors:
 401 Unauthorized - Invalid credentials
@@ -147,10 +161,11 @@ Errors:
 ```http
 POST /api/v1/auth/logout
 Authorization: Bearer {token}
+Cookie: access_token, refresh_token (httpOnly)
 
 Request:
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  // Optional
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  // Optional (deprecated)
 }
 
 Response: 200 OK
@@ -159,9 +174,82 @@ Response: 200 OK
   "logged_out_at": "2025-11-09T10:00:00Z"
 }
 
+Set-Cookie Headers (elimina cookies - v1.8.0): ⭐ ACTUALIZADO
+- access_token=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/
+- refresh_token=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/
+
+Notes (v1.8.0 - Session Timeout):
+- Revokes ALL refresh tokens for the user in database
+- Deletes both httpOnly cookies from browser
+- Access token technically valid until expiration (15 min max)
+- Refresh token revoked immediately (cannot renew access token)
+
 Errors:
 401 Unauthorized - Invalid or missing token
 404 Not Found - User not found
+```
+
+### Refresh Access Token ⭐ NUEVO (v1.8.0)
+```http
+POST /api/v1/auth/refresh-token
+Cookie: refresh_token (httpOnly - required)
+
+Request:
+{} // Empty body - refresh token read from httpOnly cookie
+
+Response: 200 OK
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "user": {
+    "id": "uuid",
+    "email": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "handicap": 15.5,
+    "country_code": "ES",
+    "avatar_url": null,
+    "email_verified": true,
+    "created_at": "2025-11-09T10:00:00Z",
+    "updated_at": "2025-11-09T10:00:00Z"
+  },
+  "message": "Access token renovado exitosamente"
+}
+
+Set-Cookie Headers (httpOnly):
+- access_token=eyJ...; HttpOnly; Secure; SameSite=Lax; Max-Age=900; Path=/
+  (refresh_token NOT renewed - same 7-day token)
+
+Purpose:
+- Renew access token when expired (after 15 minutes)
+- Maintains user session without re-login for up to 7 days
+- Frontend should call this endpoint when receiving HTTP 401
+
+Flow:
+1. User logs in → Receives access token (15 min) + refresh token (7 days)
+2. After 15 min → Access token expires → HTTP 401 on protected endpoints
+3. Frontend calls POST /auth/refresh-token with refresh token cookie
+4. Backend validates refresh token (JWT + database)
+5. Backend returns new access token (15 min) if refresh token valid
+6. User continues using app for up to 7 days without re-login
+
+Security:
+- Refresh token stored in httpOnly cookie (XSS protection)
+- Refresh token hash stored in database (SHA256)
+- Revoked on logout (cannot be reused after logout)
+- Expires after 7 days (user must re-login)
+- Access token short duration (15 min) reduces hijacking window
+
+Errors:
+401 Unauthorized - Refresh token missing, invalid, revoked, or expired
+  {
+    "detail": "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente."
+  }
+
+Notes:
+- Does NOT require Authorization header (uses cookie only)
+- Refresh token is NOT renewed (maintains same 7-day expiration)
+- After 7 days, user must login again manually
 ```
 
 ### Verify Email

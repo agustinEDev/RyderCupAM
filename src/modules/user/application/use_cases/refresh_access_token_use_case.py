@@ -94,15 +94,14 @@ class RefreshAccessTokenUseCase:
 
         try:
             user_id = UserId(user_id_str)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, Exception):
+            # Captura ValueError, TypeError, InvalidUserIdError y cualquier otra excepción
             return None
 
         # 3. Verificar que el refresh token NO esté revocado en base de datos
-        # El refresh token entity tiene un hash del token JWT
-        from src.shared.infrastructure.security.token_hash import hash_token
-        token_hash = hash_token(refresh_token_jwt)
-
-        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(token_hash)
+        # Nota: find_by_token_hash espera el JWT token original, NO el hash
+        # El repositorio se encarga de hashear internamente
+        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
 
         if not refresh_token_entity:
             # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)

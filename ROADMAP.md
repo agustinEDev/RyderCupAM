@@ -26,7 +26,7 @@
 ### 📈 Métricas Clave
 
 - **Endpoints:** 30+ rutas API
-- **Tests:** 681 tests pasando (100%) en 45 segundos
+- **Tests:** 722 tests pasando (100%) en ~2 minutos ⭐ ACTUALIZADO
 - **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
 - **Database:** PostgreSQL con migraciones Alembic
 - **Deployment:** Render.com (contenedor Docker)
@@ -75,7 +75,7 @@
 | Sentry Monitoring | ❌ NO implementado | 🟡 Media | A09 |
 | Password Policy | ✅ Implementado (OWASP ASVS V2.1) | - | A07 |
 | 2FA/MFA | ❌ NO implementado | 🟠 Alta | A07 |
-| Session Management | ⚠️ Parcial (cookies, no timeout) | 🟠 Alta | A07 |
+| Session Management | ✅ Implementado (refresh tokens, 15min/7días) ⭐ NUEVO | - | A01, A02, A07 |
 | Audit Logging | ❌ NO implementado | 🟡 Media | A09 |
 | API Versioning | ✅ Implementado | - | A08 |
 
@@ -88,7 +88,7 @@
 5. ⚠️ **Logging básico** - No hay audit trail completo (A09)
 6. ❌ **No hay MFA/2FA** - Vulnerable a credential stuffing (A07)
 7. ✅ **Password policy implementada** - OWASP ASVS V2.1 (12+ chars, complejidad completa) ✨ COMPLETADO
-8. ⚠️ **No hay session timeout** - Sesiones de 1 hora (A07) - Mejorar con refresh tokens
+8. ✅ **Session timeout implementado** - Access 15 min + Refresh 7 días (A01/A02/A07) ✨ COMPLETADO
 
 ---
 
@@ -138,22 +138,30 @@
   - ✅ Arreglado `test_logout_deletes_httponly_cookie` (endpoint `/logout` con middleware dual)
   - ✅ Arreglado `test_verify_email_sets_httponly_cookie` (helper `get_user_by_email`)
   - ✅ 6/6 tests pasando en 5.90s
-- [x] **5. Session Timeout with Refresh Tokens** ✅ COMPLETADO - 3.5h (100%)
+- [x] **5. Session Timeout with Refresh Tokens** ✅ COMPLETADO - 5h (100%) ⭐ FINAL
   - ✅ **Domain Layer:** RefreshToken entity + VOs (RefreshTokenId, TokenHash)
   - ✅ **Infrastructure:** Tabla refresh_tokens + Repository + Mapper
   - ✅ **Configuration:** Access 15min (reducido de 60min), Refresh 7 días
-  - ✅ **JWT Handler:** Métodos create_refresh_token() y verify_refresh_token()
-  - ✅ **Application Layer:** RefreshAccessTokenUseCase + DTOs ⭐ NUEVO
-  - ✅ **Application Layer:** LoginUserUseCase modificado (genera refresh token) ⭐ NUEVO
-  - ✅ **Application Layer:** LogoutUserUseCase modificado (revoca refresh tokens) ⭐ NUEVO
-  - ✅ **API Layer:** Endpoint POST /api/v1/auth/refresh-token ⭐ NUEVO
-  - ✅ **API Layer:** Endpoint /login actualizado (2 cookies httpOnly) ⭐ NUEVO
-  - ✅ **API Layer:** Endpoint /logout actualizado (revoca + elimina cookies) ⭐ NUEVO
-  - ✅ **Cookies:** Funciones set_refresh_token_cookie(), delete_refresh_token_cookie() ⭐ NUEVO
-  - ✅ **Unit of Work:** Añadido refresh_tokens repository ⭐ NUEVO
-  - ✅ **Documentation:** CHANGELOG.md y CLAUDE.md actualizados ⭐ NUEVO
-  - ⏳ **Tests:** Pendiente (unit + integration tests del flujo completo)
-  - **Resultado:** Feature 100% funcional. OWASP Score: 8.5/10 → 9.0/10 (+0.5)
+  - ✅ **JWT Handler:** Métodos create_refresh_token() y verify_refresh_token() + jti único
+  - ✅ **Application Layer:** RefreshAccessTokenUseCase + DTOs
+  - ✅ **Application Layer:** LoginUserUseCase modificado (genera refresh token)
+  - ✅ **Application Layer:** LogoutUserUseCase modificado (revoca refresh tokens)
+  - ✅ **API Layer:** Endpoint POST /api/v1/auth/refresh-token
+  - ✅ **API Layer:** Endpoint /login actualizado (2 cookies httpOnly)
+  - ✅ **API Layer:** Endpoint /logout actualizado (revoca + elimina cookies)
+  - ✅ **Cookies:** Funciones set_refresh_token_cookie(), delete_refresh_token_cookie()
+  - ✅ **Unit of Work:** Añadido refresh_tokens repository
+  - ✅ **Documentation:** CHANGELOG.md, CLAUDE.md y ROADMAP.md actualizados
+  - ✅ **Tests:** 722/722 pasando (100%) ⭐ SUITE COMPLETA (16 Dic 2025)
+    - ✅ Sesión 1-2: Domain + Infrastructure + Application + API
+    - ✅ Sesión 3: Correcciones (687/687 tests - 23 failures + 47 errors)
+    - ✅ Sesión 4: Tests finales (722/722 tests - +35 nuevos) ⭐ COMPLETADO
+      - ✅ 18 tests unitarios: RefreshToken entity
+      - ✅ 10 tests unitarios: RefreshAccessTokenUseCase
+      - ✅ 7 tests integración: POST /refresh-token endpoint
+      - ✅ Bugs corregidos: find_by_token_hash (doble hash), InvalidUserIdError
+      - ✅ Creado InMemoryRefreshTokenRepository (8 métodos)
+  - **Resultado:** Feature 100% funcional con cobertura completa. OWASP Score: 8.5/10 → 9.0/10 (+0.5)
 - [ ] **6. CORS mejorado** - 1h (NUEVO)
   - `allow_credentials=True`
   - Whitelist de orígenes específicos
