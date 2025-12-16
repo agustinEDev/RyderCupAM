@@ -22,6 +22,10 @@ class JWTTokenService(ITokenService):
 
     Puede ser reemplazada por otras implementaciones (OAuth2, Paseto, etc.)
     sin afectar a la capa de aplicación.
+
+    Session Timeout (v1.8.0):
+    - Access Token: 15 minutos (operaciones frecuentes)
+    - Refresh Token: 7 días (renovación sin re-login)
     """
 
     def create_access_token(
@@ -30,11 +34,11 @@ class JWTTokenService(ITokenService):
         expires_delta: timedelta | None = None
     ) -> str:
         """
-        Crea un token JWT de acceso.
+        Crea un token JWT de acceso (15 minutos por defecto).
 
         Args:
             data: Datos a incluir en el payload del token (ej: {"sub": user_id})
-            expires_delta: Tiempo de expiración personalizado. Si None, usa el default de settings.
+            expires_delta: Tiempo de expiración personalizado. Si None, usa 15 min.
 
         Returns:
             Token JWT codificado como string
@@ -46,7 +50,47 @@ class JWTTokenService(ITokenService):
         else:
             expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-        to_encode.update({"exp": expire})
+        to_encode.update({"exp": expire, "type": "access"})
+
+        encoded_jwt = jwt.encode(
+            to_encode,
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM
+        )
+
+        return encoded_jwt
+
+    def create_refresh_token(
+        self,
+        data: dict,
+        expires_delta: timedelta | None = None
+    ) -> str:
+        """
+        Crea un token JWT de renovación (7 días por defecto).
+
+        Los refresh tokens tienen mayor duración y se usan solo para
+        obtener nuevos access tokens, no para acceder a recursos.
+
+        Args:
+            data: Datos a incluir en el payload (ej: {"sub": user_id})
+            expires_delta: Tiempo de expiración personalizado. Si None, usa 7 días.
+
+        Returns:
+            Token JWT codificado como string
+
+        Example:
+            >>> service = JWTTokenService()
+            >>> refresh_token = service.create_refresh_token({"sub": "user-123"})
+            >>> # Token válido por 7 días
+        """
+        to_encode = data.copy()
+
+        if expires_delta:
+            expire = datetime.now() + expires_delta
+        else:
+            expire = datetime.now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        to_encode.update({"exp": expire, "type": "refresh"})
 
         encoded_jwt = jwt.encode(
             to_encode,
@@ -58,7 +102,7 @@ class JWTTokenService(ITokenService):
 
     def verify_access_token(self, token: str) -> dict | None:
         """
-        Verifica y decodifica un token JWT.
+        Verifica y decodifica un token JWT de acceso.
 
         Args:
             token: Token JWT a verificar
@@ -72,6 +116,44 @@ class JWTTokenService(ITokenService):
                 settings.SECRET_KEY,
                 algorithms=[settings.ALGORITHM]
             )
+
+            # Verificar que sea un access token (v1.8.0+)
+            if payload.get("type") == "refresh":
+                # No permitir refresh tokens en endpoints de access token
+                return None
+
+            return payload
+        except JWTError:
+            return None
+
+    def verify_refresh_token(self, token: str) -> dict | None:
+        """
+        Verifica y decodifica un token JWT de renovación.
+
+        Args:
+            token: Refresh token JWT a verificar
+
+        Returns:
+            Payload del token si es válido, None si es inválido o expirado
+
+        Example:
+            >>> service = JWTTokenService()
+            >>> payload = service.verify_refresh_token(refresh_token)
+            >>> if payload:
+            >>>     user_id = payload.get("sub")
+            >>>     # Generar nuevo access token
+        """
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM]
+            )
+
+            # Verificar que sea un refresh token
+            if payload.get("type") != "refresh":
+                return None
+
             return payload
         except JWTError:
             return None
@@ -84,40 +166,51 @@ class JWTTokenService(ITokenService):
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """
-    Crea un token JWT de acceso.
+    Crea un token JWT de acceso (15 minutos).
+
+    DEPRECATED: Usar JWTTokenService().create_access_token() en su lugar.
 
     Args:
         data: Datos a incluir en el payload del token (ej: {"sub": user_id})
-        expires_delta: Tiempo de expiración personalizado. Si None, usa el default de settings.
+        expires_delta: Tiempo de expiración personalizado. Si None, usa 15 min.
 
     Returns:
         Token JWT codificado como string
 
     Example:
         >>> token = create_access_token({"sub": "user-123"})
-        >>> # Token válido por ACCESS_TOKEN_EXPIRE_MINUTES
+        >>> # Token válido por 15 minutos
     """
-    to_encode = data.copy()
+    service = JWTTokenService()
+    return service.create_access_token(data, expires_delta)
 
-    if expires_delta:
-        expire = datetime.now() + expires_delta
-    else:
-        expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({"exp": expire})
+def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    """
+    Crea un token JWT de renovación (7 días).
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM
-    )
+    DEPRECATED: Usar JWTTokenService().create_refresh_token() en su lugar.
 
-    return encoded_jwt
+    Args:
+        data: Datos a incluir en el payload (ej: {"sub": user_id})
+        expires_delta: Tiempo de expiración personalizado. Si None, usa 7 días.
+
+    Returns:
+        Token JWT codificado como string
+
+    Example:
+        >>> token = create_refresh_token({"sub": "user-123"})
+        >>> # Token válido por 7 días
+    """
+    service = JWTTokenService()
+    return service.create_refresh_token(data, expires_delta)
 
 
 def verify_access_token(token: str) -> dict | None:
     """
-    Verifica y decodifica un token JWT.
+    Verifica y decodifica un token JWT de acceso.
+
+    DEPRECATED: Usar JWTTokenService().verify_access_token() en su lugar.
 
     Args:
         token: Token JWT a verificar
@@ -130,12 +223,26 @@ def verify_access_token(token: str) -> dict | None:
         >>> if payload:
         >>>     user_id = payload.get("sub")
     """
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-        return payload
-    except JWTError:
-        return None
+    service = JWTTokenService()
+    return service.verify_access_token(token)
+
+
+def verify_refresh_token(token: str) -> dict | None:
+    """
+    Verifica y decodifica un token JWT de renovación.
+
+    DEPRECATED: Usar JWTTokenService().verify_refresh_token() en su lugar.
+
+    Args:
+        token: Refresh token JWT a verificar
+
+    Returns:
+        Payload del token si es válido, None si es inválido o expirado
+
+    Example:
+        >>> payload = verify_refresh_token(token)
+        >>> if payload:
+        >>>     user_id = payload.get("sub")
+    """
+    service = JWTTokenService()
+    return service.verify_refresh_token(token)

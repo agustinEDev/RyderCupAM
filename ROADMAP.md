@@ -138,10 +138,15 @@
   - ✅ Arreglado `test_logout_deletes_httponly_cookie` (endpoint `/logout` con middleware dual)
   - ✅ Arreglado `test_verify_email_sets_httponly_cookie` (helper `get_user_by_email`)
   - ✅ 6/6 tests pasando en 5.90s
-- [ ] **5. Session Timeout** - 2-3h (NUEVO)
-  - JWT con expiración corta (15 min)
-  - Refresh token mechanism
-  - Auto-logout por inactividad
+- [ ] **5. Session Timeout with Refresh Tokens** - 2-3h (EN PROGRESO - 50% completado)
+  - ✅ **Domain Layer:** RefreshToken entity + VOs (RefreshTokenId, TokenHash)
+  - ✅ **Infrastructure:** Tabla refresh_tokens + Repository + Mapper
+  - ✅ **Configuration:** Access 15min (reducido de 60min), Refresh 7 días
+  - ✅ **JWT Handler:** Métodos create_refresh_token() y verify_refresh_token()
+  - ⏳ **Application Layer:** RefreshAccessTokenUseCase (pendiente)
+  - ⏳ **API Layer:** Endpoint /refresh-token (pendiente)
+  - ⏳ **Integration:** Modificar /login y /logout (pendiente)
+  - **Nota:** Commit intermedio realizado. Continuar en próxima sesión.
 - [ ] **6. CORS mejorado** - 1h (NUEVO)
   - `allow_credentials=True`
   - Whitelist de orígenes específicos

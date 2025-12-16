@@ -101,3 +101,9 @@ def start_mappers():
             'password': composite(Password, '_password'),
             # handicap se mapea directamente - el HandicapDecorator maneja la conversión y None
         })
+
+    # Mapear RefreshToken entity (v1.8.0 - Session Timeout)
+    from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (
+        start_mappers as start_refresh_token_mappers
+    )
+    start_refresh_token_mappers()

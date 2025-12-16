@@ -7,6 +7,121 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Session Timeout with Refresh Tokens (WIP - Domain + Infrastructure)
+
+**🕒 Mejora de Seguridad de Sesiones con Tokens de Renovación** (OWASP A01/A02)
+
+#### Estado: Trabajo en Progreso
+- ✅ Domain Layer completado
+- ✅ Infrastructure Layer completado
+- ⏳ Application Layer (pendiente)
+- ⏳ API Layer (pendiente)
+
+#### Implementación Completada
+
+**Domain Layer - User Module:**
+- ✅ `RefreshToken` entity con lógica de negocio
+  - Métodos: `create()`, `is_valid()`, `revoke()`, `is_expired()`
+  - Estados: válido, expirado, revocado
+- ✅ Value Objects: `RefreshTokenId`, `TokenHash` (SHA256)
+- ✅ `RefreshTokenRepositoryInterface` (8 métodos)
+  - save, find_by_id, find_by_token_hash, find_all_by_user
+  - revoke_all_for_user, delete_expired, count_active_for_user, delete
+
+**Infrastructure Layer:**
+- ✅ Migración Alembic: `217417e0f20f_add_refresh_tokens_table`
+  - Tabla `refresh_tokens` con 7 columnas
+  - 3 índices (user_id, token_hash, expires_at)
+  - Foreign key a users con CASCADE
+- ✅ `SQLAlchemyRefreshTokenRepository` (implementación completa)
+- ✅ Mapper SQLAlchemy con TypeDecorators para VOs
+- ✅ Integrado en `start_mappers()`
+
+**Configuration:**
+- ✅ Settings: `ACCESS_TOKEN_EXPIRE_MINUTES = 15` (reducido de 60)
+- ✅ Settings: `REFRESH_TOKEN_EXPIRE_DAYS = 7` (nuevo)
+- ✅ JWT Handler: Métodos `create_refresh_token()` y `verify_refresh_token()`
+- ✅ JWT Handler: Validación de token type (access vs refresh)
+- ✅ JWT Handler: Payload incluye `{"type": "access"}` o `{"type": "refresh"}`
+
+#### Arquitectura
+
+**Tabla refresh_tokens:**
+```sql
+id               VARCHAR(36)  PRIMARY KEY
+user_id          VARCHAR(36)  FK -> users.id CASCADE
+token_hash       VARCHAR(64)  UNIQUE (SHA256 del JWT)
+expires_at       DATETIME     Expiración (7 días)
+created_at       DATETIME     Fecha creación
+revoked          BOOLEAN      Si fue revocado manualmente
+revoked_at       DATETIME     Fecha de revocación
+```
+
+**Flujo Planeado (pendiente implementar):**
+```
+Login → Access (15 min) + Refresh (7 días)
+   ↓
+Access expira → Frontend detecta 401
+   ↓
+POST /refresh-token con Refresh cookie
+   ↓
+Nuevo Access Token generado
+   ↓
+Refresh expira (7 días) → Re-login manual
+```
+
+#### Security Benefits (Proyectados)
+
+| Mejora | Antes (v1.8.0) | Después (v1.8.1) |
+|--------|----------------|------------------|
+| **Access Token Duration** | 60 min | 15 min (-75%) |
+| **Token Revocation** | ❌ No posible | ✅ Revocación en BD |
+| **Session Hijacking Window** | 60 min | 15 min |
+| **Logout Efectivo** | ⚠️ Cookie eliminada | ✅ Refresh revocado en BD |
+
+**OWASP Score (proyectado):** 8.5/10 → 9.0/10 (+0.5)
+- A01: Broken Access Control (+0.3)
+- A02: Cryptographic Failures (+0.2)
+
+#### Archivos Creados
+
+**Domain Layer:**
+- `src/modules/user/domain/value_objects/refresh_token_id.py` (61 líneas)
+- `src/modules/user/domain/value_objects/token_hash.py` (95 líneas)
+- `src/modules/user/domain/entities/refresh_token.py` (185 líneas)
+- `src/modules/user/domain/repositories/refresh_token_repository_interface.py` (158 líneas)
+
+**Infrastructure Layer:**
+- `alembic/versions/217417e0f20f_add_refresh_tokens_table_for_session_.py` (91 líneas)
+- `src/modules/user/infrastructure/persistence/sqlalchemy/refresh_token_repository.py` (176 líneas)
+- `src/modules/user/infrastructure/persistence/sqlalchemy/refresh_token_mapper.py` (107 líneas)
+
+**Archivos Modificados:**
+- `src/config/settings.py` (añadidos ACCESS_TOKEN_EXPIRE_MINUTES=15, REFRESH_TOKEN_EXPIRE_DAYS=7)
+- `src/shared/infrastructure/security/jwt_handler.py` (añadidos métodos de refresh token)
+- `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py` (integrado mapper de refresh_token)
+
+#### Próximos Pasos (v1.8.1)
+
+**Application Layer:**
+- [ ] `RefreshAccessTokenUseCase` (nuevo use case)
+- [ ] Modificar `LoginUserUseCase` para generar refresh token
+- [ ] Modificar `LogoutUserUseCase` para revocar refresh tokens
+- [ ] Añadir `refresh_token_repository` al Unit of Work
+
+**API Layer:**
+- [ ] Endpoint `POST /api/v1/auth/refresh-token`
+- [ ] Modificar `/login` para retornar refresh token
+- [ ] Modificar `/logout` para revocar tokens
+- [ ] `cookie_handler`: funciones para refresh_token cookie
+
+**Testing:**
+- [ ] Tests unitarios de RefreshToken entity
+- [ ] Tests de integración de refresh token flow
+- [ ] Tests de revocación en logout
+
+---
+
 ### Added - Password Policy (OWASP ASVS V2.1)
 
 **🔑 Política de Contraseñas Robusta según Estándares de Seguridad**
