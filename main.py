@@ -33,6 +33,8 @@ from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     start_mappers as start_country_mappers,
 )
 from src.config.rate_limit import limiter
+from src.config.cors_config import get_cors_config
+from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
 
 
 @asynccontextmanager
@@ -120,41 +122,26 @@ app.state.limiter = limiter
 # Cuando se excede el límite, se responde automáticamente con HTTP 429
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configurar CORS para permitir peticiones desde el frontend
-# Leemos orígenes desde la variable de entorno FRONTEND_ORIGINS
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
-allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
-
-# Incluir localhost en desarrollo (no en producción)
-ENV = os.getenv("ENVIRONMENT", "development").lower()
-if ENV != "production":
-    allowed_origins.extend([
-        "http://localhost:3000",   # React/Next.js
-        "http://127.0.0.1:3000",   # React/Next.js
-        "http://localhost:5173",   # Vite
-        "http://127.0.0.1:5173",   # Vite
-        "http://localhost:5174",   # Vite (fallback)
-        "http://127.0.0.1:5174",   # Vite (fallback)
-        "http://localhost:8080",   # Kubernetes port-forward (frontend)
-        "http://127.0.0.1:8080",   # Kubernetes port-forward (frontend)
-    ])
-
-# Eliminar duplicados conservando orden
-allowed_origins = list(dict.fromkeys(allowed_origins))
-
-# Si no hay orígenes configurados, dejar solo localhost (modo seguro por defecto)
-if not allowed_origins:
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ]
-
-# Debug: imprimir allowed_origins al iniciar
-print(f"🔒 CORS allowed_origins: {allowed_origins}")
+# ================================
+# CORS MIDDLEWARE (v1.8.0)
+# ================================
+# Configurar CORS (Cross-Origin Resource Sharing) para permitir
+# peticiones desde frontends autorizados únicamente.
+#
+# Características:
+# - Whitelist estricta de orígenes (no wildcards)
+# - Validación automática de esquemas (http/https)
+# - Separación clara desarrollo/producción
+# - allow_credentials=True para cookies httpOnly
+#
+# OWASP Coverage:
+# - A05: Security Misconfiguration (whitelist estricta)
+# - A01: Broken Access Control (control de acceso por origen)
+#
+# Configuración centralizada en: src/config/cors_config.py
 
 # Debug middleware para ver requests OPTIONS (solo en desarrollo)
+ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
     @app.middleware("http")
     async def debug_options_requests(request, call_next):
@@ -163,20 +150,16 @@ if ENV != "production":
             print(f"   Origin: {request.headers.get('origin', 'N/A')}")
             print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
             print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
-            print(f"   All headers: {dict(request.headers)}")
         response = await call_next(request)
         if request.method == "OPTIONS":
             print(f"   Response status: {response.status_code}")
         return response
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    max_age=3600,
-)
+# Correlation ID Middleware (debe ir PRIMERO para capturar todos los requests)
+app.add_middleware(CorrelationMiddleware)
+
+# Aplicar middleware CORS con configuración centralizada
+app.add_middleware(CORSMiddleware, **get_cors_config())
 
 # ================================
 # SECURITY HEADERS MIDDLEWARE

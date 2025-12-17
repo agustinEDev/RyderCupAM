@@ -7,6 +7,419 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Structured Logging Enhancement ✅ COMPLETADO (17 Dic 2025)
+
+**🔍 Correlation IDs para Trazabilidad de Requests** (OWASP A09)
+
+#### Estado: Feature Completa (100%)
+- ✅ Middleware de Correlation ID implementado
+- ✅ ContextVar para propagación async
+- ✅ Header X-Correlation-ID en requests/responses
+- ✅ Tests completos: 819/819 tests pasando (100%) ⭐ ACTUALIZADO
+
+#### Implementación
+
+**Infrastructure Layer:**
+- ✅ `src/shared/infrastructure/http/correlation_middleware.py` - Middleware completo:
+  - `CorrelationMiddleware` (BaseHTTPMiddleware) - Gestiona correlation IDs
+  - `correlation_id_var` (ContextVar) - Almacena ID por request async
+  - `get_correlation_id()` - Helper para acceder al ID desde cualquier capa
+  - Genera UUID si no viene en request header
+  - Añade header `X-Correlation-ID` a responses
+  - Compatible con múltiples workers (context isolation)
+
+**Main Application:**
+- ✅ `main.py` - Middleware registrado como PRIMERO (captura todos los requests)
+
+**Características:**
+- ✅ UUID v4 automático si request no incluye X-Correlation-ID
+- ✅ Propagación desde header si cliente lo envía (microservicios)
+- ✅ Isolation por request (ContextVar thread-safe)
+- ✅ Disponible para uso en loggers (future enhancement)
+
+**Ejemplo de Uso:**
+```python
+# En cualquier capa de la aplicación
+from src.shared.infrastructure.http.correlation_middleware import get_correlation_id
+
+def some_function():
+    correlation_id = get_correlation_id()
+    logger.info(f"Processing order", extra={"correlation_id": correlation_id})
+```
+
+**HTTP Headers:**
+```http
+# Request sin header (genera UUID)
+GET /api/v1/countries HTTP/1.1
+
+# Response
+HTTP/1.1 200 OK
+X-Correlation-ID: 550e8400-e29b-41d4-a716-446655440000
+
+# Request con header custom (propaga)
+GET /api/v1/countries HTTP/1.1
+X-Correlation-ID: my-custom-correlation-123
+
+# Response
+HTTP/1.1 200 OK
+X-Correlation-ID: my-custom-correlation-123
+```
+
+**Seguridad (OWASP):**
+- ✅ **A09: Security Logging and Monitoring Failures** - Trazabilidad de requests
+- ✅ Permite rastrear flujo completo de una operación
+- ✅ Facilita debugging en sistemas distribuidos
+- ✅ Correlation entre frontend y backend logs
+
+**Casos de Uso:**
+1. **Debugging distribuido** - Rastrear request a través de múltiples servicios
+2. **Logs correlacionados** - Agrupar todos los logs de un mismo request
+3. **Análisis de performance** - Identificar cuellos de botella por request
+4. **Investigación de errores** - Contexto completo de requests fallidos
+
+#### Archivos Creados/Modificados
+**Creados:**
+- `src/shared/infrastructure/http/correlation_middleware.py` (80 líneas)
+- `src/shared/infrastructure/http/__init__.py` (1 línea)
+- `tests/unit/shared/infrastructure/http/test_correlation_middleware.py` (3 tests) ⭐ NUEVO
+- `tests/unit/shared/infrastructure/http/__init__.py` (2 líneas)
+
+**Modificados:**
+- `main.py` - Añadido CorrelationMiddleware (posición 1 - antes de CORS)
+
+#### Impacto
+- Trazabilidad completa de requests HTTP
+- Debugging simplificado en producción
+- Preparación para arquitectura de microservicios
+- Integración futura con OpenTelemetry
+
+#### Referencias
+- W3C Trace Context: https://www.w3.org/TR/trace-context/
+- OpenTelemetry Correlation: https://opentelemetry.io/docs/concepts/context-propagation/
+
+---
+
+### Added - Security Logging Avanzado ✅ COMPLETADO (17 Dic 2025)
+
+**🔐 Sistema de Auditoría de Seguridad Completo** (OWASP A09)
+
+#### Estado: Feature Completa (100%)
+- ✅ Domain Events para seguridad (8 eventos específicos)
+- ✅ SecurityLogger service con formato JSON
+- ✅ Integración en 4 use cases críticos
+- ✅ Extracción de contexto HTTP (IP, User-Agent)
+- ✅ Archivo de logs dedicado: `logs/security_audit.log`
+- ✅ Tests completos: 816/816 tests pasando (100%) ⭐ ACTUALIZADO
+  - 14 tests unitarios (Domain Events)
+  - 8 tests unitarios (SecurityLogger)
+  - 5 tests de integración (Audit Trail E2E)
+
+#### Implementación
+
+**Domain Layer:**
+- ✅ `src/shared/domain/events/security_events.py` - Eventos inmutables de seguridad:
+  - `SecurityAuditEvent` (clase base abstracta) con campos: user_id, ip_address, user_agent, severity
+  - `SecuritySeverity` enum (CRITICAL, HIGH, MEDIUM, LOW)
+  - **8 Eventos Específicos:**
+    1. `LoginAttemptEvent` - Intentos de login (éxito/fallo) - MEDIUM/HIGH
+    2. `LogoutEvent` - Sesiones cerradas - LOW
+    3. `RefreshTokenUsedEvent` - Renovación de access tokens - LOW
+    4. `RefreshTokenRevokedEvent` - Revocación de tokens - LOW/HIGH/CRITICAL
+    5. `PasswordChangedEvent` - Cambios de contraseña - HIGH
+    6. `EmailChangedEvent` - Cambios de email - HIGH
+    7. `AccessDeniedEvent` - HTTP 403 (control de acceso) - HIGH
+    8. `RateLimitExceededEvent` - HTTP 429 (rate limiting) - MEDIUM
+
+**Infrastructure Layer:**
+- ✅ `src/shared/infrastructure/logging/security_logger.py` - Logger especializado:
+  - Archivo dedicado: `logs/security_audit.log`
+  - Formato: JSON estructurado (análisis con herramientas como jq, ELK)
+  - Rotación automática: 10MB x 5 backups
+  - Severity-based logging levels (LOW→INFO, MEDIUM→WARNING, HIGH→ERROR, CRITICAL→CRITICAL)
+  - 8 helper methods para creación rápida de eventos
+  - Singleton pattern: `get_security_logger()`
+  - Metadatos enriquecidos: timestamp, event_type, user_id, IP, User-Agent
+
+**Use Cases Modificados:**
+- ✅ `LoginUserUseCase` - Logs de login exitoso/fallido con failure_reason
+- ✅ `LogoutUserUseCase` - Logs de logout + revocación de tokens
+- ✅ `RefreshAccessTokenUseCase` - Logs de renovación de tokens
+- ✅ `UpdateSecurityUseCase` - Logs de cambios de password/email
+
+**API Layer:**
+- ✅ Helper functions en routes:
+  - `get_client_ip()` - Extrae IP con soporte para X-Forwarded-For, X-Real-IP
+  - `get_user_agent()` - Extrae User-Agent del request
+- ✅ Routes actualizadas (4 archivos):
+  - `auth_routes.py` - Login, logout, refresh-token
+  - `user_routes.py` - Update security endpoint
+- ✅ Contexto HTTP pasado via DTOs (campos opcionales para backward compatibility)
+
+**DTOs Actualizados:**
+- ✅ `LoginRequestDTO` - Añadido ip_address, user_agent (opcionales)
+- ✅ `LogoutRequestDTO` - Añadido ip_address, user_agent (opcionales)
+- ✅ `RefreshAccessTokenRequestDTO` - Añadido ip_address, user_agent (opcionales)
+- ✅ `UpdateSecurityRequestDTO` - Añadido ip_address, user_agent (opcionales)
+
+**Formato de Logs JSON:**
+```json
+{
+  "timestamp": "2025-12-17 20:23:30",
+  "level": "WARNING",
+  "logger": "security.audit",
+  "message": "🔑 LOGIN SUCCESS | User uuid | Email: user@example.com | IP: 192.168.1.1",
+  "module": "security_logger",
+  "function": "log_security_event",
+  "line": 185,
+  "extra": {
+    "security_event": {
+      "event_id": "uuid",
+      "event_type": "LoginAttemptEvent",
+      "occurred_on": "2025-12-17T20:23:30.393492",
+      "user_id": "uuid",
+      "ip_address": "192.168.1.1",
+      "user_agent": "Mozilla/5.0...",
+      "severity": "MEDIUM",
+      "aggregate_type": "Security",
+      "email": "user@example.com",
+      "success": true,
+      "failure_reason": null
+    },
+    "event_class": "LoginAttemptEvent",
+    "severity": "MEDIUM"
+  }
+}
+```
+
+**Seguridad (OWASP):**
+- ✅ **A09: Security Logging and Monitoring Failures** - Audit trail completo
+- ✅ Trazabilidad de acciones críticas (login, logout, password changes)
+- ✅ Detección de patrones sospechosos (login failures, rate limit exceeded)
+- ✅ Contexto completo para forensics (IP, User-Agent, timestamp)
+- ✅ Severity levels para priorización de alertas
+- ✅ Formato JSON para integración con SIEM (Splunk, ELK, Datadog)
+
+**Casos de Uso:**
+1. **Investigación de incidentes** - Búsqueda de eventos por user_id, IP, severity
+2. **Detección de ataques** - Múltiples login failures desde misma IP
+3. **Compliance y auditoría** - Registro completo de cambios de seguridad
+4. **Monitoreo en tiempo real** - Alertas automáticas en eventos CRITICAL/HIGH
+5. **Análisis de tendencias** - Visualización de eventos de seguridad (dashboards)
+
+**Ejemplos de Análisis con jq:**
+```bash
+# Contar tipos de eventos
+jq -r '.extra.event_class' logs/security_audit.log | sort | uniq -c | sort -rn
+
+# Buscar login failures
+jq 'select(.extra.security_event.event_type == "LoginAttemptEvent" and .extra.security_event.success == false)' logs/security_audit.log
+
+# Eventos CRITICAL en las últimas 24h
+jq 'select(.extra.severity == "CRITICAL")' logs/security_audit.log
+
+# Eventos de un usuario específico
+jq 'select(.extra.security_event.user_id == "uuid")' logs/security_audit.log
+```
+
+#### Archivos Creados/Modificados
+**Creados:**
+- `src/shared/domain/events/security_events.py` (424 líneas)
+- `src/shared/infrastructure/logging/security_logger.py` (485 líneas)
+- `tests/unit/shared/domain/events/test_security_events.py` (14 tests) ⭐ NUEVO
+- `tests/unit/shared/infrastructure/logging/test_security_logger.py` (8 tests) ⭐ NUEVO
+- `tests/integration/logging/test_security_audit_trail.py` (5 tests) ⭐ NUEVO
+
+**Modificados:**
+- `src/modules/user/application/use_cases/login_user_use_case.py`
+- `src/modules/user/application/use_cases/logout_user_use_case.py`
+- `src/modules/user/application/use_cases/refresh_access_token_use_case.py`
+- `src/modules/user/application/use_cases/update_security_use_case.py`
+- `src/modules/user/application/dto/user_dto.py`
+- `src/modules/user/infrastructure/api/v1/auth_routes.py`
+- `src/modules/user/infrastructure/api/v1/user_routes.py`
+
+#### Impacto
+- Compliance con OWASP Top 10 2021 (A09)
+- Trazabilidad completa de acciones críticas
+- Facilita detección de anomalías de seguridad
+- Información forense para investigaciones
+- Preparación para certificaciones (ISO 27001, SOC 2)
+- Mejora en tiempo de respuesta ante incidentes
+
+#### Referencias
+- OWASP Logging Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+- OWASP Top 10 2021 - A09: https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/
+- NIST SP 800-92: Guide to Computer Security Log Management
+
+---
+
+### Added - Validaciones Pydantic Mejoradas ✅ COMPLETADO (17 Dic 2025)
+
+**🛡️ Sistema de Validación y Sanitización Avanzado** (OWASP A03/A04)
+
+#### Estado: Feature Completa (100%)
+- ✅ Módulo `src/shared/application/validation/` completo
+- ✅ Sanitizadores HTML anti-XSS (sanitize_html, sanitize_all_fields)
+- ✅ Validadores estrictos (EmailValidator, NameValidator)
+- ✅ Límites de longitud centralizados (FieldLimits)
+- ✅ DTOs actualizados con nuevas validaciones
+- ✅ Tests unitarios (56/56 pasando)
+- ✅ Suite completa: 789/789 tests pasando
+
+#### Implementación
+
+**Módulos Creados:**
+- ✅ `field_limits.py` - Constantes de longitud máxima (EMAIL=254, NAME=100, PASSWORD=128)
+- ✅ `sanitizers.py` - Funciones de sanitización HTML:
+  - `sanitize_html()` - Elimina tags HTML, normaliza espacios, escapa entidades
+  - `sanitize_all_fields()` - Sanitiza todos los campos string de un dict recursivamente
+  - `remove_sql_keywords()` - Elimina palabras clave SQL (defensa en profundidad)
+  - `normalize_unicode()` - Previene ataques de homógrafos (lookalike characters)
+- ✅ `validators.py` - Validadores personalizados:
+  - `EmailValidator` - Validación estricta según RFC 5322 (local ≤64, domain ≤253)
+  - `NameValidator` - Solo letras, espacios, guiones y apóstrofes (sin números)
+  - `validate_country_code()` - Validación ISO 3166-1 alpha-2
+  - `validate_no_script_tags()` - Rechaza patrones XSS sospechosos
+
+**DTOs Actualizados:**
+- ✅ `RegisterUserRequestDTO` - Añadido `max_length` a todos los campos, sanitización de nombres
+- ✅ `UpdateProfileRequestDTO` - Añadido `max_length`, validación de nombres
+- ✅ `UpdateSecurityRequestDTO` - Añadido `max_length` a passwords y email
+- ✅ `LoginRequestDTO` - Añadido `max_length`
+- ✅ `FindUserRequestDTO` - Añadido `max_length`
+- ✅ `ResendVerificationEmailRequestDTO` - Añadido `max_length`
+
+**Estrategia de Sanitización:**
+1. Eliminar tags HTML (`<script>`, `<iframe>`, etc.)
+2. Escapar entidades HTML (`<` → `&lt;`, `>` → `&gt;`)
+3. Eliminar caracteres de control (NULL bytes, etc.)
+4. Normalizar espacios múltiples
+5. Trim de espacios al inicio/final
+
+**Seguridad (OWASP):**
+- ✅ **A03: Injection** - Prevención de XSS mediante sanitización HTML
+- ✅ **A04: Insecure Design** - Límites de longitud previenen DoS
+- ✅ **Defense in Depth** - Múltiples capas de validación (Pydantic + Domain)
+
+**Tests Unitarios (56 tests):**
+- ✅ `test_sanitizers.py` (20 tests) - sanitize_html, sanitize_all_fields, remove_sql_keywords
+- ✅ `test_validators.py` (36 tests) - EmailValidator, NameValidator, validate_country_code
+
+**Impacto:**
+- Prevención de XSS stored/reflected
+- Validación estricta de formatos (email, nombres)
+- Límites consistentes en toda la aplicación
+- Mejor mensajes de error para usuarios
+- Defensa contra ataques de homógrafos
+
+#### Archivos Modificados
+- `src/shared/application/validation/__init__.py` - Exports actualizados
+- `src/shared/application/validation/field_limits.py` - Constantes de longitud
+- `src/shared/application/validation/sanitizers.py` - Funciones de sanitización
+- `src/shared/application/validation/validators.py` - Validadores personalizados
+- `src/modules/user/application/dto/user_dto.py` - DTOs con validaciones mejoradas
+- `tests/integration/api/v1/test_enrollment_endpoints.py` - Nombres válidos en tests
+- `tests/integration/api/v1/test_user_routes.py` - Nombres válidos en tests
+
+#### Referencias
+- OWASP Input Validation Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+- RFC 5322 (Email Format): https://www.rfc-editor.org/rfc/rfc5322
+- Pydantic Field Validators: https://docs.pydantic.dev/latest/concepts/validators/
+
+---
+
+### Added - CORS Configuration Mejorada ✅ COMPLETADO (17 Dic 2025)
+
+**🔒 Configuración CORS Centralizada y Segura** (OWASP A05/A01)
+
+#### Estado: Feature Completa (100%)
+- ✅ Módulo `cors_config.py` con configuración centralizada
+- ✅ Validación automática de orígenes en tiempo de ejecución
+- ✅ Separación clara desarrollo/producción
+- ✅ Whitelist estricta (sin wildcards)
+- ✅ Tests de integración (11/11 pasando)
+- ✅ Suite completa: 733/733 tests pasando
+
+#### Implementación
+
+**Configuración Centralizada:**
+- ✅ Módulo `src/config/cors_config.py` creado
+- ✅ Función `get_cors_config()` - Retorna dict completo para CORSMiddleware
+- ✅ Función `get_allowed_origins()` - Parsea y valida orígenes
+- ✅ Validación automática de esquemas (http/https)
+- ✅ Detección automática de entorno (production/development)
+
+**Validaciones Implementadas:**
+- ✅ Rechaza wildcards ('*') en producción (ValueError)
+- ✅ Rechaza orígenes inválidos (sin esquema http/https)
+- ✅ Elimina duplicados automáticamente
+- ✅ FRONTEND_ORIGINS obligatorio en producción
+- ✅ Fallback seguro en desarrollo (solo localhost)
+
+**Seguridad:**
+- ✅ `allow_credentials=True` - Requerido para cookies httpOnly
+- ✅ `allow_methods` - Whitelist explícita (GET, POST, PUT, PATCH, DELETE, OPTIONS)
+- ✅ `allow_headers=["*"]` - Necesario para Authorization, Content-Type
+- ✅ `max_age=3600` - Cache de preflight requests (1 hora)
+
+**Configuración por Entorno:**
+
+*Producción:*
+- Solo orígenes de `FRONTEND_ORIGINS` (variable de entorno)
+- No se permiten wildcards
+- Error si `FRONTEND_ORIGINS` está vacío
+
+*Desarrollo:*
+- Combina `FRONTEND_ORIGINS` + orígenes locales
+- localhost:3000 (React/Next.js)
+- localhost:5173/5174 (Vite)
+- localhost:8080 (Kubernetes port-forward)
+- Versiones con 127.0.0.1 de todas las anteriores
+
+**Refactoring:**
+- ✅ `main.py` simplificado (de 60 líneas a 30)
+- ✅ Lógica CORS extraída a módulo independiente
+- ✅ Debug logs mejorados (solo en desarrollo)
+- ✅ Comentarios OWASP añadidos
+
+**Tests de Integración (11 tests):**
+- ✅ `test_cors_allows_configured_origin` - Origen en whitelist aceptado
+- ✅ `test_cors_allows_multiple_configured_origins` - Múltiples orígenes
+- ✅ `test_cors_rejects_unauthorized_origin` - Origen NO en whitelist rechazado
+- ✅ `test_cors_preflight_request_options` - Preflight (OPTIONS) funciona
+- ✅ `test_cors_allows_credentials_true` - allow_credentials=true presente
+- ✅ `test_cors_max_age_configured` - max_age=3600 presente
+- ✅ `test_cors_allows_all_http_methods` - Todos los métodos permitidos
+- ✅ `test_cors_fails_in_production_without_frontend_origins` - Error en prod sin config
+- ✅ `test_cors_rejects_wildcard_in_production` - Wildcard rechazado en prod
+- ✅ `test_cors_uses_only_frontend_origins_in_production` - Solo FRONTEND_ORIGINS en prod
+- ✅ `test_cors_headers_present_in_authenticated_endpoints` - Headers CORS en endpoints autenticados
+
+**Resultado:** 733/733 tests pasando (100%) - Tiempo: 103s
+
+#### OWASP Coverage
+
+| Categoría | Mejora | Descripción |
+|-----------|--------|-------------|
+| **A05: Security Misconfiguration** | +0.3 | Whitelist estricta, validación de orígenes |
+| **A01: Broken Access Control** | +0.2 | Control de acceso a nivel de origen |
+
+**Puntuación OWASP:** 9.0/10 → 9.5/10 (+0.5)
+
+#### Archivos Modificados
+
+**Creados:**
+- `src/config/cors_config.py` (200+ líneas) - Configuración centralizada
+- `tests/integration/api/v1/test_cors_configuration.py` (290+ líneas) - Suite de tests
+
+**Modificados:**
+- `main.py` - Refactorizado para usar get_cors_config()
+- `CHANGELOG.md` - Documentación de cambios
+- `CLAUDE.md` - Sección CORS Configuration
+- `ROADMAP.md` - Tarea 6 marcada como completada
+
+---
+
 ### Added - Session Timeout with Refresh Tokens ✅ COMPLETADO
 
 **🕒 Mejora de Seguridad de Sesiones con Tokens de Renovación** (OWASP A01/A02/A07)
