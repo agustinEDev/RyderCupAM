@@ -7,95 +7,61 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Sentry Backend Integration ✅ COMPLETADO (18 Dic 2025)
+
+**📊 Error Tracking y Performance Monitoring** (OWASP A09)
+
+- ✅ Sentry SDK instalado con integración FastAPI, SQLAlchemy, Logging
+- ✅ Error tracking automático con stack traces completos
+- ✅ Performance monitoring (APM) con sampling configurable
+- ✅ Profiling de código (CPU/memoria) con sampling configurable
+- ✅ Middleware de contexto de usuario (captura user_id, email, IP de JWT)
+- ✅ Filtros automáticos (health checks, OPTIONS, 404s)
+- ✅ Configuración por entorno (development, staging, production)
+- ✅ Tests completos: 819/819 tests pasando (100%)
+
+**Archivos Creados:**
+- `src/config/sentry_config.py` (157 líneas)
+- `src/shared/infrastructure/http/sentry_middleware.py` (169 líneas)
+
+**Archivos Modificados:**
+- `requirements.txt` (añadido sentry-sdk[fastapi]==2.19.2)
+- `src/config/settings.py` (añadidas 4 variables Sentry)
+- `main.py` (inicialización Sentry + middleware)
+
+**Variables de Entorno Nuevas:**
+- `SENTRY_DSN`: URL del proyecto Sentry (opcional - si no está, Sentry se desactiva)
+- `ENVIRONMENT`: development/staging/production (default: development)
+- `SENTRY_TRACES_SAMPLE_RATE`: % de transacciones a capturar (default: 0.1 = 10%)
+- `SENTRY_PROFILES_SAMPLE_RATE`: % de perfiles a capturar (default: 0.1 = 10%)
+
+**Características:**
+- Captura automática de excepciones no manejadas
+- Breadcrumbs de navegación (últimos 50 eventos antes del error)
+- Contexto HTTP completo (URL, método, headers, IP)
+- Contexto de usuario (user_id, email) extraído de JWT
+- Releases versionados (rydercup-backend@1.8.0)
+- Integración con Security Logging existente
+
+**Impacto:** Visibilidad total en producción, debugging simplificado, métricas de performance, alertas automáticas. Puntuación OWASP A09: 9.5/10 → 10/10 (+0.5)
+
+---
+
 ### Added - Structured Logging Enhancement ✅ COMPLETADO (17 Dic 2025)
 
 **🔍 Correlation IDs para Trazabilidad de Requests** (OWASP A09)
 
-#### Estado: Feature Completa (100%)
 - ✅ Middleware de Correlation ID implementado
 - ✅ ContextVar para propagación async
 - ✅ Header X-Correlation-ID en requests/responses
-- ✅ Tests completos: 819/819 tests pasando (100%) ⭐ ACTUALIZADO
+- ✅ UUID v4 automático si request no incluye header
+- ✅ Tests completos: 819/819 tests pasando (100%)
 
-#### Implementación
+**Archivos Creados:**
+- `src/shared/infrastructure/http/correlation_middleware.py`
+- `tests/unit/shared/infrastructure/http/test_correlation_middleware.py`
 
-**Infrastructure Layer:**
-- ✅ `src/shared/infrastructure/http/correlation_middleware.py` - Middleware completo:
-  - `CorrelationMiddleware` (BaseHTTPMiddleware) - Gestiona correlation IDs
-  - `correlation_id_var` (ContextVar) - Almacena ID por request async
-  - `get_correlation_id()` - Helper para acceder al ID desde cualquier capa
-  - Genera UUID si no viene en request header
-  - Añade header `X-Correlation-ID` a responses
-  - Compatible con múltiples workers (context isolation)
-
-**Main Application:**
-- ✅ `main.py` - Middleware registrado como PRIMERO (captura todos los requests)
-
-**Características:**
-- ✅ UUID v4 automático si request no incluye X-Correlation-ID
-- ✅ Propagación desde header si cliente lo envía (microservicios)
-- ✅ Isolation por request (ContextVar thread-safe)
-- ✅ Disponible para uso en loggers (future enhancement)
-
-**Ejemplo de Uso:**
-```python
-# En cualquier capa de la aplicación
-from src.shared.infrastructure.http.correlation_middleware import get_correlation_id
-
-def some_function():
-    correlation_id = get_correlation_id()
-    logger.info(f"Processing order", extra={"correlation_id": correlation_id})
-```
-
-**HTTP Headers:**
-```http
-# Request sin header (genera UUID)
-GET /api/v1/countries HTTP/1.1
-
-# Response
-HTTP/1.1 200 OK
-X-Correlation-ID: 550e8400-e29b-41d4-a716-446655440000
-
-# Request con header custom (propaga)
-GET /api/v1/countries HTTP/1.1
-X-Correlation-ID: my-custom-correlation-123
-
-# Response
-HTTP/1.1 200 OK
-X-Correlation-ID: my-custom-correlation-123
-```
-
-**Seguridad (OWASP):**
-- ✅ **A09: Security Logging and Monitoring Failures** - Trazabilidad de requests
-- ✅ Permite rastrear flujo completo de una operación
-- ✅ Facilita debugging en sistemas distribuidos
-- ✅ Correlation entre frontend y backend logs
-
-**Casos de Uso:**
-1. **Debugging distribuido** - Rastrear request a través de múltiples servicios
-2. **Logs correlacionados** - Agrupar todos los logs de un mismo request
-3. **Análisis de performance** - Identificar cuellos de botella por request
-4. **Investigación de errores** - Contexto completo de requests fallidos
-
-#### Archivos Creados/Modificados
-**Creados:**
-- `src/shared/infrastructure/http/correlation_middleware.py` (80 líneas)
-- `src/shared/infrastructure/http/__init__.py` (1 línea)
-- `tests/unit/shared/infrastructure/http/test_correlation_middleware.py` (3 tests) ⭐ NUEVO
-- `tests/unit/shared/infrastructure/http/__init__.py` (2 líneas)
-
-**Modificados:**
-- `main.py` - Añadido CorrelationMiddleware (posición 1 - antes de CORS)
-
-#### Impacto
-- Trazabilidad completa de requests HTTP
-- Debugging simplificado en producción
-- Preparación para arquitectura de microservicios
-- Integración futura con OpenTelemetry
-
-#### Referencias
-- W3C Trace Context: https://www.w3.org/TR/trace-context/
-- OpenTelemetry Correlation: https://opentelemetry.io/docs/concepts/context-propagation/
+**Impacto:** Trazabilidad completa de requests, debugging simplificado en producción, preparación para OpenTelemetry.
 
 ---
 
@@ -103,153 +69,20 @@ X-Correlation-ID: my-custom-correlation-123
 
 **🔐 Sistema de Auditoría de Seguridad Completo** (OWASP A09)
 
-#### Estado: Feature Completa (100%)
-- ✅ Domain Events para seguridad (8 eventos específicos)
-- ✅ SecurityLogger service con formato JSON
-- ✅ Integración en 4 use cases críticos
-- ✅ Extracción de contexto HTTP (IP, User-Agent)
-- ✅ Archivo de logs dedicado: `logs/security_audit.log`
-- ✅ Tests completos: 816/816 tests pasando (100%) ⭐ ACTUALIZADO
-  - 14 tests unitarios (Domain Events)
-  - 8 tests unitarios (SecurityLogger)
-  - 5 tests de integración (Audit Trail E2E)
+- ✅ 8 Domain Events de seguridad (LoginAttempt, Logout, RefreshTokenUsed, RefreshTokenRevoked, PasswordChanged, EmailChanged, AccessDenied, RateLimitExceeded)
+- ✅ SecurityLogger service con formato JSON estructurado
+- ✅ Archivo dedicado: `logs/security_audit.log` con rotación automática (10MB x 5 backups)
+- ✅ Severity levels con auto-ajuste (CRITICAL, HIGH, MEDIUM, LOW)
+- ✅ Contexto HTTP completo: IP (X-Forwarded-For, X-Real-IP), User-Agent
+- ✅ Integración en 4 use cases críticos (Login, Logout, RefreshToken, UpdateSecurity)
+- ✅ Tests: 816/816 pasando (100%) - 27 tests nuevos
 
-#### Implementación
-
-**Domain Layer:**
-- ✅ `src/shared/domain/events/security_events.py` - Eventos inmutables de seguridad:
-  - `SecurityAuditEvent` (clase base abstracta) con campos: user_id, ip_address, user_agent, severity
-  - `SecuritySeverity` enum (CRITICAL, HIGH, MEDIUM, LOW)
-  - **8 Eventos Específicos:**
-    1. `LoginAttemptEvent` - Intentos de login (éxito/fallo) - MEDIUM/HIGH
-    2. `LogoutEvent` - Sesiones cerradas - LOW
-    3. `RefreshTokenUsedEvent` - Renovación de access tokens - LOW
-    4. `RefreshTokenRevokedEvent` - Revocación de tokens - LOW/HIGH/CRITICAL
-    5. `PasswordChangedEvent` - Cambios de contraseña - HIGH
-    6. `EmailChangedEvent` - Cambios de email - HIGH
-    7. `AccessDeniedEvent` - HTTP 403 (control de acceso) - HIGH
-    8. `RateLimitExceededEvent` - HTTP 429 (rate limiting) - MEDIUM
-
-**Infrastructure Layer:**
-- ✅ `src/shared/infrastructure/logging/security_logger.py` - Logger especializado:
-  - Archivo dedicado: `logs/security_audit.log`
-  - Formato: JSON estructurado (análisis con herramientas como jq, ELK)
-  - Rotación automática: 10MB x 5 backups
-  - Severity-based logging levels (LOW→INFO, MEDIUM→WARNING, HIGH→ERROR, CRITICAL→CRITICAL)
-  - 8 helper methods para creación rápida de eventos
-  - Singleton pattern: `get_security_logger()`
-  - Metadatos enriquecidos: timestamp, event_type, user_id, IP, User-Agent
-
-**Use Cases Modificados:**
-- ✅ `LoginUserUseCase` - Logs de login exitoso/fallido con failure_reason
-- ✅ `LogoutUserUseCase` - Logs de logout + revocación de tokens
-- ✅ `RefreshAccessTokenUseCase` - Logs de renovación de tokens
-- ✅ `UpdateSecurityUseCase` - Logs de cambios de password/email
-
-**API Layer:**
-- ✅ Helper functions en routes:
-  - `get_client_ip()` - Extrae IP con soporte para X-Forwarded-For, X-Real-IP
-  - `get_user_agent()` - Extrae User-Agent del request
-- ✅ Routes actualizadas (4 archivos):
-  - `auth_routes.py` - Login, logout, refresh-token
-  - `user_routes.py` - Update security endpoint
-- ✅ Contexto HTTP pasado via DTOs (campos opcionales para backward compatibility)
-
-**DTOs Actualizados:**
-- ✅ `LoginRequestDTO` - Añadido ip_address, user_agent (opcionales)
-- ✅ `LogoutRequestDTO` - Añadido ip_address, user_agent (opcionales)
-- ✅ `RefreshAccessTokenRequestDTO` - Añadido ip_address, user_agent (opcionales)
-- ✅ `UpdateSecurityRequestDTO` - Añadido ip_address, user_agent (opcionales)
-
-**Formato de Logs JSON:**
-```json
-{
-  "timestamp": "2025-12-17 20:23:30",
-  "level": "WARNING",
-  "logger": "security.audit",
-  "message": "🔑 LOGIN SUCCESS | User uuid | Email: user@example.com | IP: 192.168.1.1",
-  "module": "security_logger",
-  "function": "log_security_event",
-  "line": 185,
-  "extra": {
-    "security_event": {
-      "event_id": "uuid",
-      "event_type": "LoginAttemptEvent",
-      "occurred_on": "2025-12-17T20:23:30.393492",
-      "user_id": "uuid",
-      "ip_address": "192.168.1.1",
-      "user_agent": "Mozilla/5.0...",
-      "severity": "MEDIUM",
-      "aggregate_type": "Security",
-      "email": "user@example.com",
-      "success": true,
-      "failure_reason": null
-    },
-    "event_class": "LoginAttemptEvent",
-    "severity": "MEDIUM"
-  }
-}
-```
-
-**Seguridad (OWASP):**
-- ✅ **A09: Security Logging and Monitoring Failures** - Audit trail completo
-- ✅ Trazabilidad de acciones críticas (login, logout, password changes)
-- ✅ Detección de patrones sospechosos (login failures, rate limit exceeded)
-- ✅ Contexto completo para forensics (IP, User-Agent, timestamp)
-- ✅ Severity levels para priorización de alertas
-- ✅ Formato JSON para integración con SIEM (Splunk, ELK, Datadog)
-
-**Casos de Uso:**
-1. **Investigación de incidentes** - Búsqueda de eventos por user_id, IP, severity
-2. **Detección de ataques** - Múltiples login failures desde misma IP
-3. **Compliance y auditoría** - Registro completo de cambios de seguridad
-4. **Monitoreo en tiempo real** - Alertas automáticas en eventos CRITICAL/HIGH
-5. **Análisis de tendencias** - Visualización de eventos de seguridad (dashboards)
-
-**Ejemplos de Análisis con jq:**
-```bash
-# Contar tipos de eventos
-jq -r '.extra.event_class' logs/security_audit.log | sort | uniq -c | sort -rn
-
-# Buscar login failures
-jq 'select(.extra.security_event.event_type == "LoginAttemptEvent" and .extra.security_event.success == false)' logs/security_audit.log
-
-# Eventos CRITICAL en las últimas 24h
-jq 'select(.extra.severity == "CRITICAL")' logs/security_audit.log
-
-# Eventos de un usuario específico
-jq 'select(.extra.security_event.user_id == "uuid")' logs/security_audit.log
-```
-
-#### Archivos Creados/Modificados
-**Creados:**
+**Archivos Creados:**
 - `src/shared/domain/events/security_events.py` (424 líneas)
 - `src/shared/infrastructure/logging/security_logger.py` (485 líneas)
-- `tests/unit/shared/domain/events/test_security_events.py` (14 tests) ⭐ NUEVO
-- `tests/unit/shared/infrastructure/logging/test_security_logger.py` (8 tests) ⭐ NUEVO
-- `tests/integration/logging/test_security_audit_trail.py` (5 tests) ⭐ NUEVO
+- Tests unitarios e integración (27 tests)
 
-**Modificados:**
-- `src/modules/user/application/use_cases/login_user_use_case.py`
-- `src/modules/user/application/use_cases/logout_user_use_case.py`
-- `src/modules/user/application/use_cases/refresh_access_token_use_case.py`
-- `src/modules/user/application/use_cases/update_security_use_case.py`
-- `src/modules/user/application/dto/user_dto.py`
-- `src/modules/user/infrastructure/api/v1/auth_routes.py`
-- `src/modules/user/infrastructure/api/v1/user_routes.py`
-
-#### Impacto
-- Compliance con OWASP Top 10 2021 (A09)
-- Trazabilidad completa de acciones críticas
-- Facilita detección de anomalías de seguridad
-- Información forense para investigaciones
-- Preparación para certificaciones (ISO 27001, SOC 2)
-- Mejora en tiempo de respuesta ante incidentes
-
-#### Referencias
-- OWASP Logging Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
-- OWASP Top 10 2021 - A09: https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/
-- NIST SP 800-92: Guide to Computer Security Log Management
+**Impacto:** Compliance OWASP A09, trazabilidad completa, detección de anomalías, información forense. Puntuación: 6/10 → 9/10 (+3.0)
 
 ---
 
@@ -257,74 +90,19 @@ jq 'select(.extra.security_event.user_id == "uuid")' logs/security_audit.log
 
 **🛡️ Sistema de Validación y Sanitización Avanzado** (OWASP A03/A04)
 
-#### Estado: Feature Completa (100%)
-- ✅ Módulo `src/shared/application/validation/` completo
 - ✅ Sanitizadores HTML anti-XSS (sanitize_html, sanitize_all_fields)
-- ✅ Validadores estrictos (EmailValidator, NameValidator)
+- ✅ Validadores estrictos (EmailValidator RFC 5322, NameValidator)
 - ✅ Límites de longitud centralizados (FieldLimits)
-- ✅ DTOs actualizados con nuevas validaciones
-- ✅ Tests unitarios (56/56 pasando)
+- ✅ Prevención de ataques de homógrafos (normalize_unicode)
+- ✅ DTOs actualizados con @field_validator y max_length
+- ✅ Tests unitarios: 56/56 pasando
 - ✅ Suite completa: 789/789 tests pasando
 
-#### Implementación
+**Archivos Creados:**
+- `src/shared/application/validation/` (field_limits.py, sanitizers.py, validators.py)
+- `tests/unit/shared/application/` (56 tests)
 
-**Módulos Creados:**
-- ✅ `field_limits.py` - Constantes de longitud máxima (EMAIL=254, NAME=100, PASSWORD=128)
-- ✅ `sanitizers.py` - Funciones de sanitización HTML:
-  - `sanitize_html()` - Elimina tags HTML, normaliza espacios, escapa entidades
-  - `sanitize_all_fields()` - Sanitiza todos los campos string de un dict recursivamente
-  - `remove_sql_keywords()` - Elimina palabras clave SQL (defensa en profundidad)
-  - `normalize_unicode()` - Previene ataques de homógrafos (lookalike characters)
-- ✅ `validators.py` - Validadores personalizados:
-  - `EmailValidator` - Validación estricta según RFC 5322 (local ≤64, domain ≤253)
-  - `NameValidator` - Solo letras, espacios, guiones y apóstrofes (sin números)
-  - `validate_country_code()` - Validación ISO 3166-1 alpha-2
-  - `validate_no_script_tags()` - Rechaza patrones XSS sospechosos
-
-**DTOs Actualizados:**
-- ✅ `RegisterUserRequestDTO` - Añadido `max_length` a todos los campos, sanitización de nombres
-- ✅ `UpdateProfileRequestDTO` - Añadido `max_length`, validación de nombres
-- ✅ `UpdateSecurityRequestDTO` - Añadido `max_length` a passwords y email
-- ✅ `LoginRequestDTO` - Añadido `max_length`
-- ✅ `FindUserRequestDTO` - Añadido `max_length`
-- ✅ `ResendVerificationEmailRequestDTO` - Añadido `max_length`
-
-**Estrategia de Sanitización:**
-1. Eliminar tags HTML (`<script>`, `<iframe>`, etc.)
-2. Escapar entidades HTML (`<` → `&lt;`, `>` → `&gt;`)
-3. Eliminar caracteres de control (NULL bytes, etc.)
-4. Normalizar espacios múltiples
-5. Trim de espacios al inicio/final
-
-**Seguridad (OWASP):**
-- ✅ **A03: Injection** - Prevención de XSS mediante sanitización HTML
-- ✅ **A04: Insecure Design** - Límites de longitud previenen DoS
-- ✅ **Defense in Depth** - Múltiples capas de validación (Pydantic + Domain)
-
-**Tests Unitarios (56 tests):**
-- ✅ `test_sanitizers.py` (20 tests) - sanitize_html, sanitize_all_fields, remove_sql_keywords
-- ✅ `test_validators.py` (36 tests) - EmailValidator, NameValidator, validate_country_code
-
-**Impacto:**
-- Prevención de XSS stored/reflected
-- Validación estricta de formatos (email, nombres)
-- Límites consistentes en toda la aplicación
-- Mejor mensajes de error para usuarios
-- Defensa contra ataques de homógrafos
-
-#### Archivos Modificados
-- `src/shared/application/validation/__init__.py` - Exports actualizados
-- `src/shared/application/validation/field_limits.py` - Constantes de longitud
-- `src/shared/application/validation/sanitizers.py` - Funciones de sanitización
-- `src/shared/application/validation/validators.py` - Validadores personalizados
-- `src/modules/user/application/dto/user_dto.py` - DTOs con validaciones mejoradas
-- `tests/integration/api/v1/test_enrollment_endpoints.py` - Nombres válidos en tests
-- `tests/integration/api/v1/test_user_routes.py` - Nombres válidos en tests
-
-#### Referencias
-- OWASP Input Validation Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
-- RFC 5322 (Email Format): https://www.rfc-editor.org/rfc/rfc5322
-- Pydantic Field Validators: https://docs.pydantic.dev/latest/concepts/validators/
+**Impacto:** Prevención XSS, validación estricta de formatos, límites consistentes. A03: 9.5/10 (+0.5), A04: 8.5/10
 
 ---
 
@@ -332,1499 +110,362 @@ jq 'select(.extra.security_event.user_id == "uuid")' logs/security_audit.log
 
 **🔒 Configuración CORS Centralizada y Segura** (OWASP A05/A01)
 
-#### Estado: Feature Completa (100%)
-- ✅ Módulo `cors_config.py` con configuración centralizada
-- ✅ Validación automática de orígenes en tiempo de ejecución
+- ✅ Módulo `src/config/cors_config.py` con configuración centralizada
+- ✅ Validación automática de orígenes (rechazo de wildcards, esquemas inválidos)
 - ✅ Separación clara desarrollo/producción
-- ✅ Whitelist estricta (sin wildcards)
-- ✅ Tests de integración (11/11 pasando)
+- ✅ Whitelist estricta, fallback seguro en desarrollo
+- ✅ allow_credentials=True (requerido para cookies httpOnly)
+- ✅ Tests de integración: 11/11 pasando
 - ✅ Suite completa: 733/733 tests pasando
 
-#### Implementación
+**Archivos Creados:**
+- `src/config/cors_config.py` (200+ líneas)
+- `tests/integration/api/v1/test_cors_configuration.py` (11 tests)
 
-**Configuración Centralizada:**
-- ✅ Módulo `src/config/cors_config.py` creado
-- ✅ Función `get_cors_config()` - Retorna dict completo para CORSMiddleware
-- ✅ Función `get_allowed_origins()` - Parsea y valida orígenes
-- ✅ Validación automática de esquemas (http/https)
-- ✅ Detección automática de entorno (production/development)
-
-**Validaciones Implementadas:**
-- ✅ Rechaza wildcards ('*') en producción (ValueError)
-- ✅ Rechaza orígenes inválidos (sin esquema http/https)
-- ✅ Elimina duplicados automáticamente
-- ✅ FRONTEND_ORIGINS obligatorio en producción
-- ✅ Fallback seguro en desarrollo (solo localhost)
-
-**Seguridad:**
-- ✅ `allow_credentials=True` - Requerido para cookies httpOnly
-- ✅ `allow_methods` - Whitelist explícita (GET, POST, PUT, PATCH, DELETE, OPTIONS)
-- ✅ `allow_headers=["*"]` - Necesario para Authorization, Content-Type
-- ✅ `max_age=3600` - Cache de preflight requests (1 hora)
-
-**Configuración por Entorno:**
-
-*Producción:*
-- Solo orígenes de `FRONTEND_ORIGINS` (variable de entorno)
-- No se permiten wildcards
-- Error si `FRONTEND_ORIGINS` está vacío
-
-*Desarrollo:*
-- Combina `FRONTEND_ORIGINS` + orígenes locales
-- localhost:3000 (React/Next.js)
-- localhost:5173/5174 (Vite)
-- localhost:8080 (Kubernetes port-forward)
-- Versiones con 127.0.0.1 de todas las anteriores
-
-**Refactoring:**
-- ✅ `main.py` simplificado (de 60 líneas a 30)
-- ✅ Lógica CORS extraída a módulo independiente
-- ✅ Debug logs mejorados (solo en desarrollo)
-- ✅ Comentarios OWASP añadidos
-
-**Tests de Integración (11 tests):**
-- ✅ `test_cors_allows_configured_origin` - Origen en whitelist aceptado
-- ✅ `test_cors_allows_multiple_configured_origins` - Múltiples orígenes
-- ✅ `test_cors_rejects_unauthorized_origin` - Origen NO en whitelist rechazado
-- ✅ `test_cors_preflight_request_options` - Preflight (OPTIONS) funciona
-- ✅ `test_cors_allows_credentials_true` - allow_credentials=true presente
-- ✅ `test_cors_max_age_configured` - max_age=3600 presente
-- ✅ `test_cors_allows_all_http_methods` - Todos los métodos permitidos
-- ✅ `test_cors_fails_in_production_without_frontend_origins` - Error en prod sin config
-- ✅ `test_cors_rejects_wildcard_in_production` - Wildcard rechazado en prod
-- ✅ `test_cors_uses_only_frontend_origins_in_production` - Solo FRONTEND_ORIGINS en prod
-- ✅ `test_cors_headers_present_in_authenticated_endpoints` - Headers CORS en endpoints autenticados
-
-**Resultado:** 733/733 tests pasando (100%) - Tiempo: 103s
-
-#### OWASP Coverage
-
-| Categoría | Mejora | Descripción |
-|-----------|--------|-------------|
-| **A05: Security Misconfiguration** | +0.3 | Whitelist estricta, validación de orígenes |
-| **A01: Broken Access Control** | +0.2 | Control de acceso a nivel de origen |
-
-**Puntuación OWASP:** 9.0/10 → 9.5/10 (+0.5)
-
-#### Archivos Modificados
-
-**Creados:**
-- `src/config/cors_config.py` (200+ líneas) - Configuración centralizada
-- `tests/integration/api/v1/test_cors_configuration.py` (290+ líneas) - Suite de tests
-
-**Modificados:**
-- `main.py` - Refactorizado para usar get_cors_config()
-- `CHANGELOG.md` - Documentación de cambios
-- `CLAUDE.md` - Sección CORS Configuration
-- `ROADMAP.md` - Tarea 6 marcada como completada
+**Impacto:** Whitelist estricta, control de acceso a nivel de origen. Puntuación: 9.0/10 → 9.5/10 (+0.5)
 
 ---
 
-### Added - Session Timeout with Refresh Tokens ✅ COMPLETADO
+### Added - Session Timeout with Refresh Tokens ✅ COMPLETADO (16 Dic 2025)
 
 **🕒 Mejora de Seguridad de Sesiones con Tokens de Renovación** (OWASP A01/A02/A07)
 
-#### Estado: Feature Completa (100%)
-- ✅ Domain Layer completado
-- ✅ Infrastructure Layer completado
-- ✅ Application Layer completado ⭐ NUEVO
-- ✅ API Layer completado ⭐ NUEVO
+- ✅ RefreshToken entity con lógica de negocio (Value Objects: RefreshTokenId, TokenHash SHA256)
+- ✅ Tabla `refresh_tokens` con 7 columnas, 3 índices, FK a users CASCADE
+- ✅ SQLAlchemyRefreshTokenRepository implementado
+- ✅ Access Token reducido de 60 min a 15 min, Refresh Token 7 días
+- ✅ JWT Handler con create_refresh_token(), verify_refresh_token()
+- ✅ Endpoint POST /api/v1/auth/refresh-token (nuevo)
+- ✅ Login/Logout actualizados: 2 cookies httpOnly (access + refresh)
+- ✅ Revocación de refresh tokens en BD al logout
+- ✅ Tests: 722/722 pasando (100%) - +35 tests nuevos
 
-#### Implementación Completada
+**Archivos Creados:**
+- 10 archivos nuevos (~1,078 líneas): Domain, Infrastructure, Application, API layers
+- `InMemoryRefreshTokenRepository` para tests
 
-**Domain Layer - User Module:**
-- ✅ `RefreshToken` entity con lógica de negocio
-  - Métodos: `create()`, `is_valid()`, `revoke()`, `is_expired()`
-  - Estados: válido, expirado, revocado
-- ✅ Value Objects: `RefreshTokenId`, `TokenHash` (SHA256)
-- ✅ `RefreshTokenRepositoryInterface` (8 métodos)
-  - add, update, find_by_id, find_by_token_hash, find_by_user_id
-  - revoke_all_for_user, delete_expired, count_active_for_user
+**Security Benefits:**
+- Access Token Duration: 60 min → 15 min (-75%)
+- Token Revocation: ❌ → ✅ (+100%)
+- Session Hijacking Window: -75%
+- Logout Efectivo: ⚠️ → ✅ (+100%)
 
-**Infrastructure Layer:**
-- ✅ Migración Alembic: `217417e0f20f_add_refresh_tokens_table`
-  - Tabla `refresh_tokens` con 7 columnas
-  - 3 índices (user_id, token_hash, expires_at)
-  - Foreign key a users con CASCADE
-- ✅ `SQLAlchemyRefreshTokenRepository` (implementación completa)
-- ✅ Mapper SQLAlchemy con TypeDecorators para VOs
-- ✅ Integrado en `start_mappers()`
-- ✅ `token_hash.py` helper: hash_token(), verify_token_hash()
-
-**Application Layer (⭐ COMPLETADO EN ESTA SESIÓN):**
-- ✅ `RefreshAccessTokenUseCase` - Renovar access tokens
-- ✅ `LoginUserUseCase` modificado - Genera y guarda refresh token
-- ✅ `LogoutUserUseCase` modificado - Revoca todos los refresh tokens del usuario
-- ✅ Unit of Work actualizado - Incluye `refresh_tokens` repository
-- ✅ DTOs: `RefreshAccessTokenRequestDTO`, `RefreshAccessTokenResponseDTO`
-- ✅ `LoginResponseDTO` actualizado - Incluye `refresh_token`
-
-**API Layer (⭐ COMPLETADO EN ESTA SESIÓN):**
-- ✅ `POST /api/v1/auth/login` - Retorna access + refresh tokens en cookies httpOnly
-- ✅ `POST /api/v1/auth/logout` - Elimina ambas cookies + revoca refresh tokens en BD
-- ✅ `POST /api/v1/auth/refresh-token` ⭐ NUEVO - Renueva access token
-- ✅ Cookie handlers: `set_refresh_token_cookie()`, `delete_refresh_token_cookie()`
-- ✅ Dependency injection: `get_refresh_access_token_use_case()`
-
-**Configuration:**
-- ✅ Settings: `ACCESS_TOKEN_EXPIRE_MINUTES = 15` (reducido de 60)
-- ✅ Settings: `REFRESH_TOKEN_EXPIRE_DAYS = 7` (nuevo)
-- ✅ JWT Handler: Métodos `create_refresh_token()` y `verify_refresh_token()`
-- ✅ JWT Handler: Validación de token type (access vs refresh)
-- ✅ JWT Handler: Payload incluye `{"type": "access"}` o `{"type": "refresh"}`
-- ✅ Cookie config: Access 15 min (COOKIE_MAX_AGE = 900)
-- ✅ Cookie config: Refresh 7 días (REFRESH_COOKIE_MAX_AGE = 604800)
-
-#### Arquitectura
-
-**Tabla refresh_tokens:**
-```sql
-id               VARCHAR(36)  PRIMARY KEY
-user_id          VARCHAR(36)  FK -> users.id CASCADE
-token_hash       VARCHAR(64)  UNIQUE (SHA256 del JWT)
-expires_at       DATETIME     Expiración (7 días)
-created_at       DATETIME     Fecha creación
-revoked          BOOLEAN      Si fue revocado manualmente
-revoked_at       DATETIME     Fecha de revocación
-```
-
-**Flujo Implementado:**
-```
-1. Login (POST /auth/login)
-   └→ Access Token (15 min) + Refresh Token (7 días) → Cookies httpOnly
-
-2. Request con Access Token
-   └→ Si Access expira (después de 15 min) → HTTP 401
-
-3. Renovación Automática (POST /auth/refresh-token)
-   └→ Frontend envía Refresh cookie → Nuevo Access Token (15 min)
-
-4. Logout (POST /auth/logout)
-   └→ Elimina cookies httpOnly + Revoca refresh tokens en BD
-
-5. Refresh Token expira (7 días)
-   └→ Usuario debe hacer login manual de nuevo
-```
-
-#### Security Benefits Alcanzados ✅
-
-| Mejora | Antes (v1.7.0) | Después (v1.8.0) | Ganancia |
-|--------|----------------|------------------|----------|
-| **Access Token Duration** | 60 min | 15 min | -75% |
-| **Token Revocation** | ❌ No posible | ✅ Revocación en BD | +100% |
-| **Session Hijacking Window** | 60 min | 15 min | -75% |
-| **Logout Efectivo** | ⚠️ Cookie eliminada | ✅ Refresh revocado en BD | +100% |
-| **XSS Token Theft** | ⚠️ Vulnerable (httpOnly) | ✅ Doble protección | +50% |
-| **Refresh Token Storage** | N/A | ✅ Hasheado (SHA256) | +100% |
-
-**OWASP Score (proyectado):** 8.5/10 → 9.0/10 (+0.5)
-- A01: Broken Access Control (+0.3)
-- A02: Cryptographic Failures (+0.2)
-
-#### Archivos Creados (Total: 10 archivos)
-
-**Domain Layer (Primera Sesión):**
-- `src/modules/user/domain/value_objects/refresh_token_id.py` (61 líneas)
-- `src/modules/user/domain/value_objects/token_hash.py` (95 líneas)
-- `src/modules/user/domain/entities/refresh_token.py` (185 líneas)
-- `src/modules/user/domain/repositories/refresh_token_repository_interface.py` (158 líneas)
-
-**Infrastructure Layer (Primera Sesión):**
-- `alembic/versions/217417e0f20f_add_refresh_tokens_table_for_session_.py` (91 líneas)
-- `src/modules/user/infrastructure/persistence/sqlalchemy/refresh_token_repository.py` (176 líneas)
-- `src/modules/user/infrastructure/persistence/sqlalchemy/refresh_token_mapper.py` (107 líneas)
-
-**Application Layer (⭐ Segunda Sesión):**
-- `src/modules/user/application/use_cases/refresh_access_token_use_case.py` (138 líneas)
-
-**Shared Layer (⭐ Segunda Sesión):**
-- `src/shared/infrastructure/security/token_hash.py` (67 líneas)
-
-#### Archivos Modificados (Total: 9 archivos)
-
-**Primera Sesión:**
-- `src/config/settings.py` - Añadidos ACCESS_TOKEN_EXPIRE_MINUTES=15, REFRESH_TOKEN_EXPIRE_DAYS=7
-- `src/shared/infrastructure/security/jwt_handler.py` - Añadidos métodos de refresh token
-- `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py` - Integrado mapper de refresh_token
-
-**⭐ Segunda Sesión:**
-- `src/modules/user/application/dto/user_dto.py` - Añadidos RefreshAccessTokenRequestDTO/ResponseDTO, actualizado LoginResponseDTO
-- `src/modules/user/application/use_cases/login_user_use_case.py` - Genera y guarda refresh token
-- `src/modules/user/application/use_cases/logout_user_use_case.py` - Revoca refresh tokens en BD
-- `src/modules/user/domain/repositories/user_unit_of_work_interface.py` - Añadido refresh_tokens property
-- `src/modules/user/infrastructure/persistence/sqlalchemy/unit_of_work.py` - Instancia refresh_token_repository
-- `src/shared/infrastructure/security/cookie_handler.py` - Funciones para refresh_token cookie
-- `src/modules/user/infrastructure/api/v1/auth_routes.py` - Añadido endpoint /refresh-token, actualizados /login y /logout
-- `src/config/dependencies.py` - Añadido get_refresh_access_token_use_case()
-
-#### Estadísticas Finales
-
-**Código Creado:**
-- 10 archivos nuevos (~1,078 líneas)
-- 9 archivos modificados (~500 líneas modificadas/añadidas)
-- **Total:** ~1,578 líneas de código
-
-**Tiempo de Desarrollo:**
-- Primera Sesión: ~2 horas (Domain + Infrastructure)
-- Segunda Sesión: ~1.5 horas (Application + API)
-- Tercera Sesión: ~1 hora (Test Fixes - 687/687 tests)
-- Cuarta Sesión: ~0.5 horas (Final Test Suite - 722/722 tests) ⭐ COMPLETADO
-- **Total:** ~5 horas
-
-**Tests Completados ✅ (FINAL):**
-- ✅ **722/722 tests pasando (100%)** - Tiempo: 129.03s (~2 min) ⭐ FINAL
-- ✅ +35 tests nuevos en esta sesión (refresh token flow completo)
-- ✅ Tests unitarios: RefreshToken entity (18 tests), RefreshAccessTokenUseCase (10 tests)
-- ✅ Tests de integración: POST /refresh-token endpoint (7 tests)
-- ✅ Corregidos 4 tests fallando (find_by_token_hash, InvalidUserIdError)
-- ✅ Creado `InMemoryRefreshTokenRepository` para tests unitarios
-- ✅ Agregado `jti` (JWT ID) único a refresh tokens para prevenir colisiones de hash
-- ✅ Corregidos métodos de repositorio (save, find_all_by_user, revoked property)
-
-#### Correcciones de Tests (Tercera Sesión - 687/687 tests)
-
-**Errores Corregidos:**
-
-1. **Repository Method Naming** (LoginUserUseCase, LogoutUserUseCase)
-   - ❌ `add()` → ✅ `save()` para refresh tokens
-   - ❌ `update()` → ✅ `save()` para revocar tokens
-   - ❌ `find_by_user_id()` → ✅ `find_all_by_user()`
-   - ❌ `is_revoked()` → ✅ `revoked` (property)
-
-2. **JWT Token Uniqueness** (JWTTokenService)
-   - Agregado `jti` (JWT ID) único a cada refresh token
-   - Previene colisiones de hash con tokens generados al mismo tiempo
-   - Resuelve error: `duplicate key constraint violation`
-
-3. **SQLAlchemy Mapper Architecture** (refresh_token_mapper.py)
-   - Importado metadata y mapper_registry compartidos
-   - Resuelve error: `NoReferencedTableError` (FK a users table)
-
-4. **LoginResponseDTO Validation** (auth_routes.py)
-   - Agregado refresh_token a endpoint verify_email
-   - Previene validation error en auto-login
-
-5. **Session Timeout Cookie Duration** (test_httponly_cookies.py)
-   - Actualizado de Max-Age=3600 (1h) a Max-Age=900 (15min)
-
-6. **In-Memory Test Doubles** (InMemoryUnitOfWork)
-   - Creado `InMemoryRefreshTokenRepository` (157 líneas)
-   - Actualizado `InMemoryUnitOfWork` con propiedad `refresh_tokens`
-   - Corregidos 4 mocks en `test_user_unit_of_work_interface.py`
-
-**Archivos Modificados para Tests (21):**
-- 1 archivo creado: `in_memory_refresh_token_repository.py`
-- 7 archivos de infraestructura actualizados
-- 6 archivos de tests de integración corregidos
-- 1 archivo de tests unitarios corregido
-
-#### Correcciones Finales (Cuarta Sesión - 722/722 tests) ⭐
-
-**Tests Unitarios - RefreshAccessTokenUseCase:**
-
-1. **Bug en find_by_token_hash** (refresh_access_token_use_case.py:104)
-   - ❌ Problema: Use case llamaba `find_by_token_hash(hash_token(jwt))` → doble hash
-   - ❌ Resultado: Repository no encontraba tokens válidos
-   - ✅ Solución: Llamar directamente `find_by_token_hash(refresh_token_jwt)` sin pre-hashear
-   - ✅ El repositorio ya hace el hash internamente
-   - ✅ 3 tests corregidos: `test_execute_with_valid_refresh_token_returns_new_access_token`, etc.
-
-2. **InvalidUserIdError no capturado** (refresh_access_token_use_case.py:97)
-   - ❌ Problema: `except (ValueError, TypeError)` no capturaba `InvalidUserIdError`
-   - ❌ Resultado: Test `test_execute_with_invalid_user_id_returns_none` fallaba
-   - ✅ Solución: Cambiar a `except (ValueError, TypeError, Exception)` para capturar todas las excepciones
-   - ✅ 1 test corregido: `test_execute_with_invalid_user_id_returns_none`
-
-**Tests de Integración - POST /refresh-token Endpoint:**
-
-3. **Creado archivo completo** (tests/integration/api/v1/test_refresh_token.py)
-   - ✅ 7 tests de integración nuevos (258 líneas)
-   - ✅ Validación de flujo completo: login → refresh → access protegido
-   - ✅ Validación de errores: sin cookie, token inválido, token revocado (logout)
-   - ✅ Validación de cookies httpOnly: Set-Cookie con flags correctos
-   - ✅ Validación de NO renovación del refresh token
-
-**Tests Creados en Esta Sesión:**
-- ✅ 10 tests unitarios (RefreshAccessTokenUseCase)
-- ✅ 7 tests de integración (POST /refresh-token endpoint)
-- ✅ **Total: +17 tests nuevos**
-- ✅ **Test suite final: 722 tests pasando (100%)**
-
-**Archivos Modificados:**
-- `src/modules/user/application/use_cases/refresh_access_token_use_case.py` (2 bugs corregidos)
-- `tests/integration/api/v1/test_refresh_token.py` (archivo nuevo - 258 líneas)
+**Impacto:** Puntuación OWASP: 8.5/10 → 9.0/10 (+0.5). A01 (+0.3), A02 (+0.2)
 
 ---
 
-### Added - Password Policy (OWASP ASVS V2.1)
+### Added - Password Policy (OWASP ASVS V2.1) ✅ COMPLETADO (16 Dic 2025)
 
 **🔑 Política de Contraseñas Robusta según Estándares de Seguridad**
 
-#### Implementación
-- **Longitud mínima:** 12 caracteres (ASVS V2.1.1)
-- **Complejidad completa:** Mayúsculas + Minúsculas + Dígitos + Símbolos (ASVS V2.1.2)
-- **Blacklist:** Contraseñas comunes bloqueadas (password, admin, qwerty, etc.) (ASVS V2.1.7)
-- **Hashing:** bcrypt con 12 rounds (producción) y 4 rounds (tests) (ASVS V2.4.1)
-- **Archivo:** `src/modules/user/domain/value_objects/password.py`
+- ✅ Longitud mínima: 12 caracteres (actualizado de 8, ASVS V2.1.1)
+- ✅ Complejidad completa: Mayúsculas + Minúsculas + Dígitos + Símbolos (ASVS V2.1.2)
+- ✅ Blacklist de contraseñas comunes (password, admin, qwerty, etc.) (ASVS V2.1.7)
+- ✅ Hashing: bcrypt 12 rounds (producción), 4 rounds (tests) (ASVS V2.4.1)
+- ✅ 681 tests actualizados (100% pasando)
+- ✅ Script de migración: `fix_test_passwords.py` con 157 reemplazos automáticos
 
-#### Validaciones
-```python
-MIN_LENGTH = 12  # Actualizado de 8 a 12 caracteres
-MAX_LENGTH = 128
-# Todas las reglas de complejidad son obligatorias
-```
+**Fix de Paralelización:**
+- ✅ UUID único por test (test_db_{worker_id}_{uuid})
+- ✅ Helper `get_user_by_email()` refactorizado
+- ✅ 0 errores intermitentes en pytest-xdist
 
-#### Tests
-- **681 tests actualizados** con contraseñas que cumplen nueva política
-- **Script de migración:** `fix_test_passwords.py` con 157 reemplazos automáticos
-- **test_password.py** completamente reescrito para validar nueva política
-- **Tiempo de ejecución:** 44.95 segundos (100% pasando con `-n auto`)
-
-#### Fix de Paralelización
-- **Problema resuelto:** 21 errores intermitentes en ejecución paralela con pytest-xdist
-- **Causa:** Colisiones de nombres de BD entre workers (`test_db_{worker_id}`)
-- **Solución:** UUID único por test (`test_db_{worker_id}_{uuid}`)
-- **Archivo modificado:** `tests/conftest.py:143-145, 370-411`
-- **Helper refactorizado:** `get_user_by_email()` usa dependency overrides en lugar de crear nuevas conexiones
-
-### Added - Rate Limiting con SlowAPI
-
-**🚦 Protección contra Brute Force, DoS y Abuso de API** (OWASP A04/A07)
-
-#### Implementación Completa
-- **SlowAPI v0.1.9** integrado como librería de rate limiting
-- **Módulo centralizado** `src/config/rate_limit.py` para configuración del limiter
-- **Exception handler** automático para HTTP 429 Too Many Requests
-- **Identificación por IP** usando `get_remote_address`
-
-#### Límites Implementados
-
-**Límite Global:**
-- 100 peticiones/minuto por IP (protección DoS básica)
-
-**Límites Específicos por Endpoint:**
-- `POST /api/v1/auth/login`: **5/minuto** (anti brute-force)
-- `POST /api/v1/auth/register`: **3/hora** (anti spam de registros)
-- `POST /api/v1/auth/resend-verification`: **3/hora** (proteger Mailgun)
-- `POST /api/v1/handicaps/update`: **5/hora** (proteger RFEG API)
-- `POST /api/v1/competitions`: **10/hora** (anti spam de competiciones)
-
-#### Arquitectura
-- **Problema resuelto**: Importación circular entre `main.py` y routes
-- **Solución**: Crear módulo `src/config/rate_limit.py` independiente
-- **Pattern**: Limiter compartido importado por main.py y routes
-- **Parámetro obligatorio**: Endpoints requieren `request: Request` con nombre exacto "request"
-
-#### Tests
-- **5 tests de integración** en `tests/integration/api/v1/test_rate_limiting.py`
-- Tests verifican HTTP 429 cuando se excede límite
-- Tests verifican operación normal dentro del límite
-- Cobertura: Login (5/min), Register (3/h), Handicap (5/h), Competition (10/h)
-
-#### Respuesta HTTP 429
-```json
-{
-  "error": "Rate limit exceeded: 5 per 1 minute"
-}
-```
-
-#### Archivos Modificados
-- `requirements.txt`: Añadido slowapi==0.1.9
-- `main.py`: Registro del limiter en app.state + exception handler
-- `src/config/rate_limit.py`: **NUEVO** - Configuración centralizada
-- `src/modules/user/infrastructure/api/v1/auth_routes.py`: Límites en login/register/resend
-- `src/modules/user/infrastructure/api/v1/handicap_routes.py`: Límite en update RFEG
-- `src/modules/competition/infrastructure/api/v1/competition_routes.py`: Límite en create
-- `tests/integration/api/v1/test_rate_limiting.py`: **NUEVO** - Suite de tests
-
-#### Cumplimiento OWASP Top 10 2021
-- ✅ **A04: Insecure Design** - Rate limiting previene DoS y abuso
-- ✅ **A07: Identification and Authentication Failures** - Protección brute-force
-
-#### Decisiones de Diseño
-- `headers_enabled=False`: Headers X-RateLimit-* causan conflictos con DTOs Pydantic
-- Headers solo aparecen en respuestas 429 (cuando se excede límite)
-- Lo crítico es el bloqueo (429), no los headers informativos
-
-#### Seguridad Mejorada
-Puntuación de seguridad: **7.0/10 → 7.5/10** (+0.5)
-- ✅ Rate limiting implementado en endpoints críticos
-- ✅ Protección contra brute force en login
-- ✅ Protección contra spam de registros y emails
-- ✅ Protección de API externa (RFEG)
+**Impacto:** Puntuación: 8.0/10 → 8.2/10 (+0.2)
 
 ---
 
-### Added - httpOnly Cookies (JWT Authentication)
+### Added - httpOnly Cookies (JWT Authentication) ✅ COMPLETADO (16 Dic 2025)
 
 **🍪 Protección de Tokens JWT contra Ataques XSS** (OWASP A01/A02)
 
-#### Implementación Completa
-- **httpOnly Cookies** - JWT almacenado en cookies inaccesibles desde JavaScript
-- **Middleware Dual** - Soporte simultáneo de cookies (prioridad 1) y headers (prioridad 2)
-- **Cookie Handler** - Módulo centralizado `src/shared/infrastructure/security/cookie_handler.py`
-- **Compatibilidad Transitoria** - Token en response body (LEGACY) + cookie httpOnly (NUEVO)
+- ✅ Cookie Handler centralizado (`src/shared/infrastructure/security/cookie_handler.py`)
+- ✅ Flags de seguridad: httponly=True, secure=is_production(), samesite="lax", max_age=3600
+- ✅ Middleware dual: cookies (prioridad 1) + headers (prioridad 2)
+- ✅ Endpoints actualizados: /login, /verify-email, /logout
+- ✅ Compatibilidad transitoria: token en cookie + body (LEGACY)
+- ✅ Tests: 6/6 pasando (100%)
 
-#### Cookie Configuration
+**Migration Path:**
+- v1.8.0 (actual): Dual support (cookie + body)
+- v1.9.0: Deprecation warning
+- v2.0.0: BREAKING CHANGE (solo cookies)
 
-**Flags de Seguridad:**
-- `httponly=True` - Previene lectura desde JavaScript (protección XSS)
-- `secure=is_production()` - HTTPS solo en producción, HTTP permitido en desarrollo
-- `samesite="lax"` - Protección CSRF moderada, permite navegación normal
-- `max_age=3600` - Expira en 1 hora (igual que JWT)
-- `path="/"` - Disponible en toda la aplicación
-
-#### Endpoints Modificados
-
-**1. POST /api/v1/auth/login**
-- ✅ Establece cookie httpOnly con JWT (`set_auth_cookie()`)
-- ✅ Retorna token en body (LEGACY - compatibilidad)
-- ✅ Documentado: BREAKING CHANGE en v2.0.0 eliminará token del body
-
-**2. POST /api/v1/auth/verify-email**
-- ✅ Establece cookie httpOnly tras verificación exitosa
-- ✅ Auto-login automático después de verificar email
-- ✅ Mismo patrón dual: cookie + body
-
-**3. POST /api/v1/auth/logout**
-- ✅ Elimina cookie httpOnly del navegador (`delete_auth_cookie()`)
-- ✅ Logout inmediato en cliente
-- ✅ Token obtenido desde cookie o header (prioridad cookie)
-
-#### Middleware Dual Authentication
-
-**Configuración:**
-- ✅ `HTTPBearer(auto_error=False)` - Permite que no exista header
-- ✅ `get_current_user()` modificado para leer desde cookies primero
-- ✅ Prioridad 1: Cookie (`request.cookies.get("access_token")`)
-- ✅ Prioridad 2: Header (`Authorization: Bearer <token>`)
-
-**Flujo de Autenticación:**
-```python
-# 1. Intentar leer desde cookie
-token = request.cookies.get("access_token")
-
-# 2. Si no hay cookie, usar header Authorization
-if not token and credentials:
-    token = credentials.credentials
-
-# 3. Si no hay ninguno, error 401
-if not token:
-    raise HTTPException(401, "Credenciales no proporcionadas")
-```
-
-#### Tests
-
-**Cobertura (6 tests - 100% pasando):**
-- ✅ `test_login_sets_httponly_cookie` - Verifica Set-Cookie con flags correctos
-- ✅ `test_authentication_with_cookie_without_header` - Auth solo con cookie
-- ✅ `test_logout_deletes_httponly_cookie` - Logout elimina cookie del navegador
-- ✅ `test_verify_email_sets_httponly_cookie` - Verificación establece cookie httpOnly
-- ✅ `test_middleware_dual_cookie_has_priority_over_header` - Prioridad cookie > header
-- ✅ `test_authentication_fails_without_cookie_and_header` - HTTP 401 sin auth
-
-**Archivo de Tests:**
-- `tests/integration/api/v1/test_httponly_cookies.py` - 6 tests (100% pasando)
-
-#### Arquitectura
-
-**Cookie Handler Module:**
-```python
-# src/shared/infrastructure/security/cookie_handler.py
-COOKIE_NAME = "access_token"
-COOKIE_MAX_AGE = 3600  # 1 hora
-
-def set_auth_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=is_production(),
-        samesite="lax",
-        max_age=COOKIE_MAX_AGE,
-        path="/",
-    )
-
-def delete_auth_cookie(response: Response) -> None:
-    response.delete_cookie(
-        key=COOKIE_NAME,
-        path="/",
-        httponly=True,
-        secure=is_production(),
-        samesite="lax",
-    )
-```
-
-#### CORS Compatibility
-
-**Configuración Requerida:**
-- ✅ `allow_credentials=True` - Ya configurado en `main.py`
-- ✅ `allow_origins` - Frontend incluido en lista de orígenes
-- ✅ Sin cambios necesarios - CORS ya soporta cookies
-
-#### Cumplimiento OWASP Top 10 2021
-- ✅ **A01: Broken Access Control** - httpOnly previene robo de tokens vía XSS
-- ✅ **A02: Cryptographic Failures** - secure=True fuerza HTTPS en producción
-- ✅ **A07: Authentication Failures** - Mejora seguridad de sesiones
-
-#### Archivos Modificados
-- `src/shared/infrastructure/security/cookie_handler.py`: **NUEVO** - Helper centralizado
-- `src/modules/user/infrastructure/api/v1/auth_routes.py`: 3 endpoints modificados
-- `src/config/dependencies.py`: Middleware `get_current_user()` con soporte dual
-- `tests/integration/api/v1/test_httponly_cookies.py`: **NUEVO** - 6 tests
-
-#### Migration Path (v1.8.0 → v2.0.0)
-
-**Fase 1 (v1.8.0 - Actual):**
-- ✅ Dual support: Cookie (httpOnly) + Body (token)
-- ✅ Frontend puede usar cualquiera de los dos
-- ✅ Middleware acepta ambos (prioridad cookie)
-
-**Fase 2 (v1.9.0 - Deprecation):**
-- ⚠️ Warning en docs: Token en body será eliminado
-- ⚠️ Frontend debe migrar a cookies
-- ✅ Dual support continúa
-
-**Fase 3 (v2.0.0 - BREAKING CHANGE):**
-- ❌ Eliminar `access_token` de `LoginResponseDTO`
-- ❌ Eliminar `access_token` de respuesta en /verify-email
-- ❌ Solo autenticación vía cookies (eliminar header fallback)
-- ✅ XSS protection 100%
-
-#### Limitaciones Conocidas
-- **Logout no invalida JWT en backend** - Cookie eliminada del navegador, pero token técnicamente válido hasta expiración
-  - Fase 2 (v1.9.0+): Implementar blacklist de tokens para invalidación completa
-- **secure=True solo funciona en HTTPS** - En desarrollo (HTTP localhost), navegador puede rechazar cookie
-  - Solución: `is_production()` helper desactiva secure en desarrollo
-
-#### Decisiones de Diseño
-- **samesite="lax"** - Balance entre seguridad y usabilidad
-  - Previene CSRF en POST requests desde otros dominios
-  - Permite navegación normal (GET desde enlaces)
-  - Para máxima seguridad usar "strict" (puede afectar UX)
-- **Dual middleware** - Compatibilidad con frontend legacy
-  - Prioridad cookie sobre header (cookie más seguro)
-  - Permite migración gradual sin breaking changes
-
-#### Seguridad Mejorada
-Puntuación de seguridad: **8.0/10 → 8.5/10** (+0.5)
-- ✅ httpOnly previene robo de tokens vía XSS (JavaScript no puede leer cookie)
-- ✅ secure=True fuerza HTTPS en producción
-- ✅ samesite="lax" protege contra CSRF
-- ✅ Cookie expira en 1 hora (igual que JWT)
-- ✅ Logout elimina cookie del navegador inmediatamente
-
-#### Próximos Pasos (v1.9.0+)
-- [ ] **Token Blacklist** - Invalidación completa de JWT en backend tras logout
-- [ ] **Refresh Tokens** - Tokens de larga duración separados de access tokens
-- [ ] **Session Timeout** - Límite de duración de sesiones activas
+**Impacto:** Puntuación: 8.2/10 → 8.5/10 (+0.3)
 
 ---
 
-### Added - Security Headers HTTP
+### Added - Rate Limiting con SlowAPI ✅ COMPLETADO (15 Dic 2025)
+
+**🚦 Protección contra Brute Force, DoS y Abuso de API** (OWASP A04/A07)
+
+- ✅ SlowAPI v0.1.9 integrado
+- ✅ Módulo centralizado `src/config/rate_limit.py`
+- ✅ Límite global: 100/minuto por IP
+- ✅ Límites específicos: Login 5/min, Register 3/h, RFEG 5/h, Competitions 10/h
+- ✅ Exception handler automático (HTTP 429)
+- ✅ Tests: 5 tests de integración
+
+**Archivos Creados:**
+- `src/config/rate_limit.py`
+- `tests/integration/api/v1/test_rate_limiting.py`
+
+**Impacto:** Puntuación: 7.0/10 → 7.5/10 (+0.5)
+
+---
+
+### Added - Security Headers HTTP ✅ COMPLETADO (15 Dic 2025)
 
 **🔒 Protección contra XSS, Clickjacking, MIME-sniffing y MITM** (OWASP A02/A03/A04/A05/A07)
 
-#### Implementación Completa
-- **secure v0.3.0** integrado para gestión automática de security headers
-- **Middleware HTTP** configurado en `main.py` para añadir headers a todas las respuestas
-- **6 Security Headers** implementados con valores seguros por defecto
+- ✅ secure v0.3.0 integrado
+- ✅ 6 Security Headers implementados:
+  - Strict-Transport-Security: max-age=63072000; includeSubdomains
+  - X-Frame-Options: SAMEORIGIN
+  - X-Content-Type-Options: nosniff
+  - Referrer-Policy: no-referrer, strict-origin-when-cross-origin
+  - Cache-Control: no-store
+  - X-XSS-Protection: 0 (desactivado, obsoleto)
+- ✅ Middleware global (aplica a todas las respuestas)
+- ✅ Tests: 7 tests de integración
 
-#### Headers Implementados
+**Archivos Creados:**
+- `tests/integration/api/v1/test_security_headers.py` (7 tests)
 
-| Header | Valor | Protección |
-|--------|-------|------------|
-| **Strict-Transport-Security** | `max-age=63072000; includeSubdomains` | Fuerza HTTPS durante 2 años, previene MITM downgrade attacks |
-| **X-Frame-Options** | `SAMEORIGIN` | Previene clickjacking, solo permite iframes del mismo origen |
-| **X-Content-Type-Options** | `nosniff` | Previene MIME-sniffing XSS, fuerza respeto al Content-Type |
-| **Referrer-Policy** | `no-referrer, strict-origin-when-cross-origin` | Controla información de referer en requests |
-| **X-XSS-Protection** | `0` | Desactivado (obsoleto, puede causar vulnerabilidades) |
-| **Cache-Control** | `no-store` | Previene cacheo de datos sensibles (tokens, sesiones) |
-
-#### Arquitectura
-- **Middleware global**: Aplica headers a TODAS las respuestas (200, 401, 403, 404, 500, etc.)
-- **Orden de middlewares**: Security headers DESPUÉS de CORS
-- **Implementación simple**: Biblioteca `secure` proporciona defaults seguros
-- **Sin dependencias complejas**: 2 líneas de configuración
-
-#### Tests
-- **7 tests de integración** en `tests/integration/api/v1/test_security_headers.py`
-- Tests verifican presencia de headers en:
-  - Endpoints públicos (root `/`)
-  - Endpoints de autenticación (login, register)
-  - Endpoints protegidos (requieren JWT)
-  - Endpoints de diferentes módulos (User, Competition, Countries)
-  - Respuestas de error (401, 403, 404)
-- Test específico: HSTS max-age >= 1 año (OWASP recommendation)
-- Test de consistencia: Todos los endpoints tienen los mismos headers
-
-#### Verificación Manual
-```bash
-# Verificar headers en cualquier endpoint
-curl -I http://localhost:8000/
-
-# Output esperado:
-# Strict-Transport-Security: max-age=63072000; includeSubdomains
-# X-Frame-Options: SAMEORIGIN
-# X-Content-Type-Options: nosniff
-# Referrer-Policy: no-referrer, strict-origin-when-cross-origin
-# Cache-Control: no-store
-```
-
-#### Archivos Modificados
-- `requirements.txt`: Añadido secure==0.3.0
-- `main.py`: Middleware de security headers configurado
-- `tests/integration/api/v1/test_security_headers.py`: **NUEVO** - 7 tests
-
-#### Cumplimiento OWASP Top 10 2021
-- ✅ **A02: Cryptographic Failures** - HSTS fuerza cifrado HTTPS
-- ✅ **A03: Injection** - X-Content-Type-Options previene MIME-sniffing XSS
-- ✅ **A04: Insecure Design** - X-Frame-Options previene clickjacking
-- ✅ **A05: Security Misconfiguration** - Headers de seguridad configurados
-- ✅ **A07: Authentication Failures** - X-Frame-Options protege login, Cache-Control protege tokens
-
-#### Decisiones de Diseño
-- **HSTS con 2 años**: OWASP recomienda mínimo 1 año, usamos 2 años (63072000s)
-- **X-Frame-Options SAMEORIGIN**: Permite iframes del mismo origen (útil para embeds propios)
-- **X-XSS-Protection desactivado**: Navegadores modernos tienen mejores protecciones built-in
-- **Cache-Control no-store**: Crítico para prevenir cacheo de tokens/sesiones
-
-#### Limitaciones Conocidas
-- **HSTS solo funciona en HTTPS**: En desarrollo (HTTP) el navegador lo ignora
-  - Efectivo solo en producción con HTTPS (Render.com)
-- **Headers informativos**: No previenen ataques activos, pero dificultan explotación
-
-#### Seguridad Mejorada
-Puntuación de seguridad: **7.5/10 → 8.0/10** (+0.5)
-- ✅ Security headers implementados en todos los endpoints
-- ✅ Protección contra XSS mediante MIME-sniffing
-- ✅ Protección contra clickjacking en formularios de login
-- ✅ HSTS fuerza HTTPS (efectivo en producción)
-- ✅ Cache-Control previene filtración de tokens
+**Impacto:** Puntuación: 7.5/10 → 8.0/10 (+0.5)
 
 ---
 
 ## [1.10.0] - 2025-11-30
 
-### Added - CI/CD Pipeline con GitHub Actions
+### Added
+- ✅ CI/CD Pipeline con GitHub Actions (7 jobs paralelos: Preparation, Unit Tests, Integration Tests, Security Scan, Code Quality, Type Checking, Database Migrations)
+- ✅ Mypy Configuration pragmática para SQLAlchemy imperative mapping (173 archivos validados, 0 errores)
+- ✅ Gitleaks Configuration con whitelist para false positives
+- ✅ Pipeline: ~3 minutos duración, 672 tests (100% passing)
 
-**🔄 Pipeline de Integración y Despliegue Continuo**
-
-#### Implementación Completa de CI/CD
-- **GitHub Actions Workflow** configurado en `.github/workflows/ci_cd_pipeline.yml`
-- **7 jobs paralelos** ejecutándose en cada push y pull request:
-  1. Preparation (setup Python + cache)
-  2. Unit Tests (Python 3.11, 3.12 matrix)
-  3. Integration Tests (PostgreSQL service container)
-  4. Security Scan (Gitleaks)
-  5. Code Quality (Ruff)
-  6. Type Checking (Mypy)
-  7. Database Migrations (Alembic validation)
-
-#### Configuraciones Técnicas
-- **Mypy Configuration** (`mypy.ini`):
-  - Configuración pragmática para SQLAlchemy imperative mapping
-  - Balance entre strictness y productividad
-  - 173 archivos validados, 0 errores
-- **Gitleaks Configuration** (`.gitleaksignore`):
-  - Whitelist específico para false positives en documentación
-  - Prevención de commits con secretos reales
-- **Matrix Strategy**: Tests en Python 3.11 y 3.12
-- **Dependency Caching**: pip cache para reducir tiempo de build
-
-#### Métricas de Pipeline
-- **Duración total**: ~3 minutos
-- **Tests ejecutados**: 672 tests (100% passing)
-- **Paralelización**: 7 jobs independientes
-- **Cobertura**: Unit + Integration + E2E
-
-### Fixed - Code Quality Issues
-
-**Ruff Linting (B904, I001, ARG001)**
-- Añadido exception chaining (`from e`) a 20+ exception handlers
-- Fix import sorting en `mappers.py`
-- Suprimido warning ARG001 en parámetros de FastAPI Depends
-
-**Mypy Type Checking**
-- Reducción de errores: 127 → 0
-- Configuración por módulo (domain, application, infrastructure)
-- Ignora dynamic attributes esperados en SQLAlchemy ORM
+### Fixed
+- ✅ Ruff Linting: exception chaining (`from e`), import sorting
+- ✅ Mypy Type Checking: reducción de errores 127 → 0
 
 ### Documentation
-
-**ADR-021**: GitHub Actions CI/CD Pipeline
-- Decisión técnica documentada
-- Comparación con alternativas (GitLab CI, CircleCI, Jenkins)
-- Justificación y consecuencias
-
-**README.md**
-- Badge de CI/CD añadido
-- Actualización de estadísticas (672 tests)
-- Sección de CI/CD Pipeline
-- Estado del proyecto actualizado (Fase 2 completada)
-
-**CLAUDE.md**
-- Nueva sección: CI/CD Pipeline
-- Configuraciones de Mypy y Gitleaks
-- Tiempos de ejecución del pipeline
+- ✅ ADR-021: GitHub Actions CI/CD Pipeline
+- ✅ README.md: Badge de CI/CD, estadísticas actualizadas
 
 ---
 
 ## [1.9.2] - 2025-11-25
 
-### Fixed - Refactorización de Calidad de Código (SonarQube)
-
-**🔍 Corrección de Alertas de SonarQube - 4 Issues Resueltos**
-
-#### 1. Complejidad Cognitiva Excesiva (python:S3776)
-- **Archivo**: `src/modules/competition/infrastructure/api/v1/competition_routes.py`
-- **Problema**: Función `_get_user_competitions` con complejidad cognitiva de 34 (límite: 15)
-- **Solución**: Refactorización en 6 funciones más pequeñas y específicas:
-  - `_fetch_competitions_by_status()`: Obtención de competiciones con filtros de status
-  - `_should_exclude_enrollment()`: Lógica de exclusión de enrollments rechazados
-  - `_matches_status_filter()`: Validación de filtros de status
-  - `_fetch_enrolled_competitions()`: Obtención de competiciones inscritas
-  - `_get_all_competitions()`: Wrapper para obtención general
-  - `_exclude_user_competitions()`: Exclusión de competiciones del usuario
-- **Beneficios**:
-  - Código más mantenible y testeable
-  - Separación clara de responsabilidades (Single Responsibility Principle)
-  - Mayor legibilidad y comprensión del flujo de lógica
-
-#### 2. Uso Innecesario de `async` (python:S7503)
-- **Archivo**: `src/modules/competition/infrastructure/api/v1/competition_routes.py`
-- **Problema**: Funciones `_should_exclude_enrollment` y `_matches_status_filter` marcadas como `async` sin operaciones asíncronas
-- **Solución**: Removido `async` keyword y `await` en las llamadas
-- **Beneficios**:
-  - Eliminación de overhead innecesario de event loop
-  - Mejora en claridad del código (funciones síncronas no marcadas como async)
-
-#### 3. Variables No Utilizadas (python:S1481)
-- **Archivos**:
-  - `tests/conftest.py` (línea 338)
-  - `tests/unit/modules/competition/application/use_cases/test_create_competition_use_case.py` (línea 242)
-- **Problema**: Variables locales `user_id` y `response` declaradas pero no utilizadas
-- **Solución**: Eliminadas las asignaciones innecesarias
-- **Beneficios**:
-  - Código de tests más limpio
-  - Eliminación de ruido visual
-  - Cumplimiento con estándares de código limpio
-
-#### Resultados
-- ✅ **4 alertas de SonarQube resueltas**
-- ✅ **672/672 tests pasando (100%)** - Sin regresiones
-- ✅ **Complejidad cognitiva reducida**: 34 → <15 (mejora del 56%)
-- ✅ **0 warnings de pytest**
+### Fixed
+- ✅ Refactorización de complejidad cognitiva en `competition_routes.py` (34 → <15, mejora 56%)
+- ✅ 6 funciones más pequeñas para mejor mantenibilidad
+- ✅ Removido `async` innecesario de funciones síncronas
+- ✅ Variables no utilizadas eliminadas en tests
+- ✅ 672/672 tests pasando (100%)
 
 ---
 
 ## [1.9.1] - 2025-11-25
 
 ### Fixed
-- ✅ **Hotfix Deploy**: Corregidos problemas de dependencias en `requirements.txt` para asegurar despliegue correcto en producción.
-  - Separados `pytest-asyncio` y `pytest-cov` en líneas individuales para evitar conflictos de instalación
-  - Solución a error de despliegue causado por dependencias en la misma línea
+- ✅ Hotfix Deploy: Corregidas dependencias en `requirements.txt`
+- ✅ Separados `pytest-asyncio` y `pytest-cov` en líneas individuales
 
 ### Chore
-- ✅ **Organización del Proyecto**:
-  - Reorganizado `.gitignore` para mejor estructura
-  - Añadido `sonar-project.properties` para integración con SonarQube/SonarCloud
-  - Añadido `.coverage` (archivo de cobertura de tests) a `.gitignore`
+- ✅ Reorganizado `.gitignore`
+- ✅ Añadido `sonar-project.properties`
 
 ---
 
 ## [1.9.0] - 2025-11-25
 
 ### Added
-- ✅ **Aumento de Cobertura de Tests**: Creados nuevos tests para los casos de uso del módulo de competición, aumentando la cobertura y la robustez del código. Se han añadido tests para:
-  - `handle_enrollment_use_case.py`
-  - `direct_enroll_player_use_case.py`
-  - `list_enrollments_use_case.py`
-  - `request_enrollment_use_case.py`
-  - `set_custom_handicap_use_case.py`
-  - `withdraw_enrollment_use_case.py`
-  - `cancel_enrollment_use_case.py`
+- ✅ Aumento de cobertura de tests (7 use cases de Enrollment)
 
 ### Fixed
-- ✅ **Corrección de Tests de Integración**: Arreglados múltiples tests de integración que fallaban debido a inconsistencias en la estructura de datos devuelta por los `helpers` de autenticación.
-- ✅ **Mejora del Rendimiento de los Tests**: Reducido significativamente el tiempo de ejecución de los tests mediante la paralelización con `pytest-xdist`.
-
-### Chore
-- ✅ **Dependencias**: Añadido `pytest-cov` al fichero `requirements.txt` para asegurar que la herramienta de coverage esté disponible en todos los entornos.
+- ✅ Corrección de tests de integración (helpers de autenticación)
+- ✅ Mejora de rendimiento con paralelización (`pytest-xdist`)
 
 ---
 
 ## [1.8.1] - 2025-11-25
 
 ### Changed
-**BREAKING CHANGE:** Las respuestas de competiciones ahora incluyen campo `countries` (array) además de los campos `adjacent_country_1/2` existentes.
+- ✅ BREAKING CHANGE: Respuestas de competiciones incluyen campo `countries` (array)
 
 ### Documentation
-- ✅ Actualizado `ROADMAP.md` para reflejar el estado real de las tareas.
-- ✅ Actualizado `API.md` a la versión `v1.8.0`, añadiendo el campo `country_code` en los endpoints de registro y actualización de perfiles, y una nota aclaratoria sobre el campo `avatar_url`.
+- ✅ Actualizado `ROADMAP.md` y `API.md` a v1.8.0
 
 ---
 
 ## [1.8.0] - 2025-11-24
 
-### Fixed - Critical: Handicap Value Object Architecture Fix
-
-**🐛 CRITICAL BUG FIX: AttributeError en serialización de Handicap**
-
-#### Problema Identificado
-- ❌ Error: `AttributeError: 'float' object has no attribute 'value'`
-- ❌ Frontend recibiendo HTTP 400 Bad Request al listar competiciones
-- ❌ Tests fallando: 558/663 pasando (84.16%)
-- ❌ Causa: Mapeo incorrecto de Handicap Value Object con SQLAlchemy
-
-#### Solución Implementada
-
-**Infrastructure Layer - User Module:**
-- ✅ **Nuevo `HandicapDecorator` (TypeDecorator)**: Reemplaza composite mapping
-  - Convierte `Handicap` VO ↔ `float` automáticamente
-  - Maneja correctamente valores `NULL` (retorna `None`)
-  - Valida rango -10.0 a 54.0 al cargar desde BD
-- ✅ **User mapper actualizado**: Usa `HandicapDecorator` en lugar de `composite()`
-  - `Column('handicap', HandicapDecorator, nullable=True)`
-  - Elimina mapping privado `_handicap_value`
-
-**Domain Layer - User Module:**
-- ✅ **User.update_handicap()**: Corregido para asignar objeto `Handicap` completo
-  - `self.handicap = validated` (no `validated.value`)
-  - Extrae `.value` solo al emitir eventos de dominio
-- ✅ **HandicapUpdatedEvent**: Recibe `float` en lugar de objeto `Handicap`
-
-**Application Layer:**
-- ✅ **UserResponseDTO**: Añadido validator para convertir `Handicap` → `float`
-  - `@field_validator("id", "email", "country_code", "handicap", mode="before")`
-- ✅ **RegisterUserRequestDTO**: Eliminados campos duplicados (country_code, manual_handicap)
-- ✅ **CreatorDTO**: Cambiado de `Decimal` a `float` para serialización JSON correcta
-
-**API Layer:**
-- ✅ **competition_routes.py**: Extrae `.value` al crear CreatorDTO
-  - `handicap=creator.handicap.value if creator.handicap else None`
-
-**Tests:**
-- ✅ **7 tests corregidos**: Actualizados para acceder a `handicap.value`
-  - `test_user.py`: 5 assertions
-  - `test_update_user_handicap_manually_use_case.py`: 1 assertion
-  - `test_update_user_handicap_use_case.py`: 1 assertion
-
-#### Resultados
-
-**Tests:**
-- ✅ **663/663 tests pasando (100.00%)** - Mejora del 15.84%
-- ✅ User Module: 100% tests pasando
-- ✅ Competition Module: 100% tests pasando
-- ✅ Integration tests: 100% tests pasando
-
-**API End-to-End:**
-- ✅ Registro de usuario sin handicap: OK
-- ✅ Registro de usuario con handicap: OK
-- ✅ Listar competiciones (my_competitions=true): OK
-- ✅ Detalle de competición con creator: OK
-- ✅ Listar enrollments: OK
-- ✅ Serialización JSON: `handicap` como `float` (no string)
-
-**Docker:**
-- ✅ Sin errores `AttributeError` en logs
-- ✅ Aplicación estable y funcional
-
-#### Lecciones Aprendidas
-
-**TypeDecorator vs Composite en SQLAlchemy:**
-
-**✅ Usar TypeDecorator cuando:**
-- Value Object de **una sola columna**
-- Campo **puede ser NULL**
-- Conversión simple entre tipo primitivo y VO
-
-**❌ NO usar Composite cuando:**
-- Campo puede ser NULL (causa `TypeError` en VO constructor)
-- Value Object no permite `None` como valor válido
-
-**✅ Usar Composite cuando:**
-- Value Object abarca **múltiples columnas**
-- Campo **nunca es NULL**
-- Lógica compleja en el VO
-
-#### Archivos Modificados
-- `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py`
-- `src/modules/user/domain/entities/user.py`
-- `src/modules/user/application/dto/user_dto.py`
-- `src/modules/competition/infrastructure/api/v1/competition_routes.py`
-- `src/modules/competition/application/dto/competition_dto.py`
-- `tests/unit/modules/user/domain/entities/test_user.py`
-- `tests/unit/modules/user/application/use_cases/test_update_user_handicap_*.py`
+### Fixed
+- ✅ CRITICAL BUG: AttributeError en serialización de Handicap
+- ✅ Nuevo `HandicapDecorator` (TypeDecorator) reemplaza composite mapping
+- ✅ Maneja correctamente valores NULL, valida rango -10.0 a 54.0
+- ✅ Tests: 663/663 pasando (100%, mejora del 15.84%)
+- ✅ Lecciones: TypeDecorator para Value Objects de 1 columna nullable
 
 ---
 
 ## [1.7.0] - 2025-11-23
 
-### Added - Sprint 1 Complete: Nationality Support & Nested Objects
+### Added
+- ✅ User Nationality Support (`country_code` opcional con CountryCode VO)
+- ✅ Creator Nested Object en Competition responses (reduce ~60% llamadas API)
+- ✅ My Competitions Filter (`my_competitions` query parameter)
+- ✅ Search Parameters (search_name, search_creator con ILIKE case-insensitive)
+- ✅ User Nested Object en Enrollment responses
+- ✅ Cross-Module Dependency Injection (UserUoW en Competition/Enrollment modules)
 
-**🎯 Sprint 1 COMPLETADO - 4 Tareas Críticas Implementadas**
-
-#### 1. User Nationality Support (country_code)
-
-**Domain Layer:**
-- ✅ User entity: Campo `country_code` opcional usando `CountryCode` VO
-- ✅ User.create(): Acepta `country_code_str` como parámetro opcional
-- ✅ User.update_profile(): Permite actualizar nacionalidad
-- ✅ User.is_spanish(): Nuevo método para validación RFEG compliance
-
-**Application Layer:**
-- ✅ RegisterUserRequestDTO: Campo `country_code` opcional con validación
-- ✅ UserResponseDTO: Incluye `country_code` en todas las respuestas
-- ✅ UpdateProfileRequestDTO: Permite actualizar `country_code`
-- ✅ RegisterUserUseCase: Valida country_code contra repositorio de países
-- ✅ UpdateProfileUseCase: Valida integridad referencial con tabla countries
-
-**Infrastructure Layer:**
-- ✅ User mapper: FK a tabla `countries` con validación de integridad
-- ✅ /register, /login, /current-user: Devuelven `country_code`
-- ✅ /profile: Permite leer y actualizar `country_code`
-
-#### 2. Creator Nested Object in Competition Responses
-
-**Application Layer:**
-- ✅ Nuevo `CreatorDTO`: Campos id, first_name, last_name, email, handicap, country_code
-- ✅ CompetitionResponseDTO: Incluye objeto `creator` completo
-- ✅ CreateCompetitionResponseDTO: Incluye `creator` en creación
-- ✅ CompetitionDTOMapper: Método async `_get_creator_dto()` que consulta UserRepository
-
-**Infrastructure Layer:**
-- ✅ 10 endpoints actualizados: Todos los endpoints de Competition ahora incluyen datos del creador
-- ✅ UserUnitOfWork inyectado en competition_routes.py
-- ✅ Endpoints afectados: create, list, detail, update, delete, activate, close, start, complete, cancel
-
-**Benefits:**
-- 🚀 ~60% reducción de llamadas API en pantalla "Discover Competitions"
-
-#### 3. My Competitions Filter
-
-**Infrastructure Layer:**
-- ✅ Nuevo query parameter `my_competitions` en GET /api/v1/competitions
-- ✅ Lógica para filtrar competiciones donde el usuario es creador O está inscrito
-- ✅ Compatible con filtros existentes (status, creator_id)
-
-**Features:**
-- `my_competitions=false` (default): Devuelve todas las competiciones
-- `my_competitions=true`: Solo competiciones creadas o con enrollment del usuario
-- Combina resultados de competiciones creadas + inscripciones del usuario
-- Aplica filtro de status sobre resultados combinados
-
-**Benefits:**
-- 🎯 Vista "My Competitions" ahora muestra solo competiciones relevantes
-- 📊 Mejora UX al separar "Discover" vs "My Competitions"
-
-#### 4. Search Parameters for Competitions
-
-**Domain Layer:**
-- ✅ CompetitionRepositoryInterface: Nuevo método `find_by_filters()` con parámetros de búsqueda
-- ✅ Soporte para search_name y search_creator como filtros opcionales
-
-**Infrastructure Layer:**
-- ✅ SQLAlchemyCompetitionRepository: Implementación con ILIKE para case-insensitive search
-- ✅ InMemoryCompetitionRepository: Implementación para tests
-- ✅ Nuevos query parameters en GET /api/v1/competitions:
-  - `search_name`: Búsqueda parcial en nombre de competición
-  - `search_creator`: Búsqueda parcial en nombre (first_name o last_name) del creador
-
-**Application Layer:**
-- ✅ ListCompetitionsUseCase: Actualizado para soportar search_name y search_creator
-- ✅ Método `_fetch_with_search()` que usa find_by_filters del repositorio
-
-**Features:**
-- Búsqueda case-insensitive usando ILIKE en PostgreSQL
-- Búsqueda independiente por nombre y por creador
-- Combinable con filtros existentes (status, creator_id, my_competitions)
-- JOIN con tabla User solo cuando se usa search_creator (optimización)
-
-**Examples:**
-- `GET /competitions?search_name=ryder` - Busca "ryder" en nombre
-- `GET /competitions?search_creator=john` - Busca "john" en first_name o last_name del creador
-- `GET /competitions?search_name=cup&search_creator=doe` - Búsqueda combinada
-
-**Benefits:**
-- 🔍 Permite búsqueda rápida de competiciones sin cargar todas
-- 🎯 Mejora la experiencia de usuario en pantalla "Discover Competitions"
-- ⚡ Optimizado con índices en base de datos
-
-### Fixed
-
-#### Competition Routes
-- 🐛 Fixed AttributeError en serialización de handicap del creador
-  - Problema: `creator.handicap.value` cuando handicap ya es float
-  - Solución: Cambiado a `creator.handicap` directamente
-  - Afecta: GET /api/v1/competitions y todos los endpoints que devuelven creator nested
-- 🎯 Frontend ya no necesita llamar GET /users/{id} por cada competición
-- 🌍 Incluye country_code del creador para mostrar nacionalidad
-
-#### 4. User Nested Object in Enrollment Responses
-
-**Application Layer:**
-- ✅ Nuevo `EnrolledUserDTO`: Campos id, first_name, last_name, email, handicap, country_code, avatar_url
-- ✅ EnrollmentResponseDTO: Incluye objeto `user` completo
-- ✅ EnrollmentDTOMapper: Método async `_get_user_dto()` que consulta UserRepository
-
-**Infrastructure Layer:**
-- ✅ 8 endpoints actualizados: Todos los endpoints de Enrollment ahora incluyen datos del usuario
-- ✅ UserUnitOfWork inyectado en enrollment_routes.py
-- ✅ Endpoints afectados: request, direct, list, approve, reject, cancel, withdraw, set-handicap
-
-**Benefits:**
-- 🎯 Frontend recibe datos completos sin llamadas adicionales
-- 🌍 Incluye country_code para mostrar nacionalidad
-- 📸 Incluye avatar_url (null por ahora, preparado para Sprint 2)
-
-#### 4. Cross-Module Dependency Injection
-
-**Configuration:**
-- ✅ dependencies.py: UserUoW ahora se inyecta en Competition y Enrollment modules
-- ✅ Clean Architecture mantenida: Acceso cross-module vía UoW pattern
-- ✅ Sin acoplamiento directo entre repositorios
-
-### Changed - Database Migrations
-
-**Migration Consolidation:**
-- ✅ 6 migraciones incrementales consolidadas en una sola migración inicial
-- ✅ Migraciones removidas: 0cfaf48e5b9c, 314aef4924e4, 7610ccc63d69, 852ad2e01efe, b4301dc0075c, f67961867576
-- ✅ Nueva migración: c283e057a219_initial_schema_with_all_modules.py
+### Changed
+- ✅ Database Migrations consolidadas: 6 migraciones → 1 migración inicial
 - ✅ Schema completo: users, competitions, enrollments, countries, country_adjacencies
-- ✅ Seeds automáticos: 198 países + 614 relaciones de fronteras
-
-**Database Schema:**
-- ✅ users.country_code: FK a countries(code), nullable
-- ✅ countries: 198 países con nombres bilingües (EN/ES)
-- ✅ country_adjacencies: 614 relaciones bidireccionales de fronteras
+- ✅ Seeds: 198 países + 614 fronteras
 
 ### Tests
-
-**Coverage:**
 - ✅ 663/663 tests pasando (100%)
-- ✅ Tests actualizados: RegisterUserUseCase, UpdateProfileUseCase con country_code
-- ✅ Nuevos tests: Validación de country_code, nested objects en responses
-
-### Documentation
-
-**Updated:**
-- ✅ ROADMAP.md: Añadido roadmap completo Sprint 1 (completado) y Sprint 2 (pendiente)
-- ✅ CHANGELOG.md: Documentación completa de Sprint 1
-- ✅ API.md: Actualizado con country_code y nested objects (siguiente commit)
-- ✅ CLAUDE.md: Actualizado con estado Sprint 1 completado
-
-**Removed:**
-- ✅ PROGRESS_LOG.md: Documento obsoleto reemplazado por ROADMAP.md
-
-### Performance
-
-- 🚀 API calls reduction: ~60% en pantalla "Discover Competitions"
-- 🚀 Menos round trips: Datos completos en una sola llamada
-
-### Frontend-Ready
-
-- ✅ country_code en todos los endpoints de usuario
-- ✅ creator object completo en competiciones
-- ✅ user object completo en enrollments
-- ✅ avatar_url preparado para Sprint 2
 
 ---
 
 ## [1.6.4] - 2025-11-22
 
-### Added - Soporte Dual de Formatos para Creación de Competiciones
-
-**Nueva Funcionalidad:**
-- ✅ **Campo Alias**: Añadido alias `number_of_players` → `max_players` para compatibilidad con frontend
-- ✅ **Array de Países**: Soporte para campo `countries` (array) en requests de creación de competiciones
-- ✅ **Conversión Automática**: Validador que convierte array `countries` a campos `adjacent_country_1/2`
-- ✅ **Respuestas Enriquecidas**: Todos los endpoints de competiciones ahora devuelven array `countries` con detalles completos (código, nombre_en, nombre_es)
-- ✅ **CountryResponseDTO**: Nuevo DTO para representar países con información completa
-- ✅ **Compatibilidad Backward**: Los formatos legacy (`adjacent_country_1/2`) siguen siendo soportados
-
-**Cambios Técnicos:**
-- 🔧 **Pydantic Config**: Añadido `ConfigDict(populate_by_name=True)` para soporte de aliases
-- 🔧 **Model Validators**: Validador automático para conversión de formatos de países
-- 🔧 **Serialización**: Corregida serialización de `CountryCode` value objects extrayendo `.value`
-- 🔧 **Mapeo de Respuestas**: Método `_get_countries_list()` para obtener detalles completos de países
-
-**Documentación Actualizada:**
-- 📚 **API Reference**: Actualizada a v1.6.4 con nuevos campos y ejemplos
-- 📚 **Postman Collection**: Añadidos ejemplos para formato legacy y frontend
-- 📚 **CHANGELOG**: Documentados todos los cambios y beneficios
-
-**Beneficios:**
-- 🔄 **Compatibilidad**: Frontend puede enviar `number_of_players` y `countries` array
-- 📊 **Respuestas Ricas**: API devuelve información completa de países en lugar de solo códigos
-- 🔒 **Backward Compatible**: Formatos antiguos siguen funcionando sin cambios
-- 🧪 **Testeado**: Validación de serialización y conversión de formatos verificada
+### Added
+- ✅ Soporte dual de formatos: alias `number_of_players` → `max_players`
+- ✅ Array de países: campo `countries` con conversión automática
+- ✅ CountryResponseDTO con detalles completos (código, nombre_en, nombre_es)
+- ✅ Compatibilidad backward con formato legacy
 
 ---
 
 ## [1.6.3] - 2025-11-20
 
-### Security - Corrección de Divulgación de Información en Login
-
-**Problema de Seguridad Resuelto:**
-- **Divulgación de reglas de validación**: El endpoint de login revelaba información sobre las reglas de validación de contraseñas cuando se enviaba una contraseña corta.
-- **Antes**: Error `"password: String should have at least 8 characters"` revelaba que el sistema valida longitud mínima de 8 caracteres.
-- **Después**: Error genérico `"Credenciales incorrectas"` independientemente del motivo del fallo.
-
-**Cambios Implementados:**
-- ✅ **LoginRequestDTO**: Eliminada validación `min_length=8` del campo `password` para evitar filtrado de requests inválidos antes de la lógica de negocio.
-- ✅ **Endpoint de Login**: Ahora procesa cualquier contraseña y devuelve error genérico si las credenciales son incorrectas.
-- ✅ **Test de Seguridad**: Añadido test `test_login_with_short_password_returns_generic_error` que verifica que contraseñas cortas devuelven "Credenciales incorrectas".
-
-**Beneficios de Seguridad:**
-- ⚠️ **Prevención de enumeración**: Atacantes no pueden inferir reglas de validación de contraseñas.
-- 🔒 **Consistencia**: Todos los fallos de autenticación devuelven el mismo mensaje genérico.
-- 🛡️ **Defensa en profundidad**: Validaciones de contraseña solo aplican en registro/cambio, no en login.
+### Security
+- ✅ Corrección de divulgación de información en login
+- ✅ Eliminada validación `min_length=8` en LoginRequestDTO
+- ✅ Error genérico "Credenciales incorrectas" para todos los fallos
 
 ---
 
 ## [1.6.2] - 2025-11-19
 
 ### Fixed
-- **Update Competition Endpoint**: Corregido el endpoint `PUT /api/v1/competitions/{id}` para que actualice correctamente todos los campos de negocio en estado DRAFT, incluyendo `max_players`, `team_assignment` y los nombres de los equipos. El caso de uso, la entidad de dominio y los DTOs fueron actualizados para soportar esta funcionalidad.
+- ✅ Update Competition Endpoint: actualiza correctamente todos los campos de negocio en DRAFT
 
 ### Changed
-- **Documentación**:
-  - Añadida sección `Competition Management` al archivo `docs/API.md` para incluir los endpoints de creación y actualización de competiciones.
-  - Actualizado el `postman_collection.json` con un cuerpo de ejemplo más completo para la petición `Update Competition`.
+- ✅ Documentación: `docs/API.md` y `postman_collection.json` actualizados
 
 ---
 
 ## [1.6.1] - 2025-11-19
 
-### Fixed - Correcciones de Integración y Arquitectura
-
-**Mejoras de Tests:**
-- ✅ Tests pasando: de 618 a 651 (+33 tests arreglados)
-- ✅ Tasa de éxito: de 93.35% a 98.34%
-- ✅ Fallos reducidos: de 44 a 11
-
-**Correcciones en Competition Routes:**
-- ✅ Corregidas llamadas a use cases de state transitions (activate, close, start, complete, cancel)
-- ✅ Use cases ahora reciben DTOs + user_id correctamente
-- ✅ Importadas excepciones específicas de cada use case
-- ✅ Manejo apropiado de excepciones HTTP (404, 403, 400)
-- ✅ Añadido manejo de `InvalidCountryError` en create_competition
-
-**Correcciones en Entidades de Dominio:**
-- ✅ Competition entity: añadidos métodos `_ensure_domain_events()` y `_add_domain_event()`
-- ✅ Compatibilidad con SQLAlchemy que no inicializa `_domain_events` al cargar desde BD
-- ✅ EnrollmentStatus: añadido `__composite_values__()` para SQLAlchemy composite
-
-**Correcciones en Mappers SQLAlchemy:**
-- ✅ Location composite usa named parameters
-- ✅ Añadido mapeo explícito de `max_players`
-- ✅ Enrollment mapper usa pattern `_status_value` (mismo que Competition)
-
-**Correcciones en Tests:**
-- ✅ conftest.py: extraída lógica de seed a función helper `seed_countries_and_adjacencies()`
-- ✅ Añadido país JP al seed para tests de adyacencia
-- ✅ Corregido assert de 401 a 403 en test sin auth
-
-**Código Limpiado:**
-- ✅ Eliminado código muerto en GetCompetitionUseCase (clase CompetitionResponse no usada)
-- ✅ Actualizado docstring de GetCompetitionUseCase
-
-**Endpoint de Countries:**
-- ✅ Corregido manejo de `InvalidCountryCodeError` en list_adjacent_countries
-
-### Fixed - Corrección de Enrollment Endpoints
-
-**Tests (Módulo Enrollment):**
-- ✅ Corregidos los 11 tests fallidos de los endpoints de `enrollment`.
-- ✅ Todos los tests en `tests/integration/api/v1/test_enrollment_endpoints.py` (20/20) ahora pasan.
-
-**Correcciones en Entidad `Enrollment` (Dominio):**
-- ✅ Solucionado `AttributeError` al registrar eventos de dominio en objetos cargados por SQLAlchemy.
-- ✅ Añadido método `_add_domain_event` para asegurar la inicialización de la lista de eventos, siguiendo el patrón de la entidad `Competition`.
-
-**Correcciones en Tests de API (Infraestructura):**
-- ✅ Corregido el `payload` en 5 tests de inscripción directa (`direct_enroll`) para incluir el `competition_id`, solucionando los errores de validación `422 Unprocessable Entity`.
+### Fixed
+- ✅ Tests: de 618 a 651 (+33 arreglados), tasa de éxito 93.35% → 98.34%
+- ✅ Competition routes: llamadas a use cases de state transitions corregidas
+- ✅ Entidades: añadidos métodos `_ensure_domain_events()` y `_add_domain_event()`
+- ✅ Mappers: Location composite con named parameters, mapeo explícito `max_players`
+- ✅ Tests: seed extraído a función helper, país JP añadido
 
 ---
 
 ## [1.6.0] - 2025-11-18
 
-### Added - Competition Module COMPLETO (FASE 2 - Enrollment API)
-
-**Módulo Competition 100% Funcional** - API REST completa para gestión de competiciones e inscripciones.
-
-**Use Cases de Enrollment (7 nuevos):**
-- ✅ `RequestEnrollmentUseCase` - Jugador solicita inscripción (REQUESTED)
-- ✅ `DirectEnrollPlayerUseCase` - Creador inscribe directamente (APPROVED)
-- ✅ `HandleEnrollmentUseCase` - Creador aprueba/rechaza (APPROVE/REJECT)
-- ✅ `CancelEnrollmentUseCase` - Jugador cancela solicitud (CANCELLED)
-- ✅ `WithdrawEnrollmentUseCase` - Jugador se retira (WITHDRAWN)
-- ✅ `SetCustomHandicapUseCase` - Creador establece handicap personalizado
-- ✅ `ListEnrollmentsUseCase` - Lista inscripciones con filtros
-
-**API REST Endpoints - Enrollments (8 nuevos):**
-1. `POST /api/v1/competitions/{id}/enrollments` - Solicitar inscripción
-2. `POST /api/v1/competitions/{id}/enrollments/direct` - Inscripción directa por creador
-3. `GET /api/v1/competitions/{id}/enrollments` - Listar inscripciones (?status=X)
-4. `POST /api/v1/enrollments/{id}/approve` - Aprobar solicitud
-5. `POST /api/v1/enrollments/{id}/reject` - Rechazar solicitud
-6. `POST /api/v1/enrollments/{id}/cancel` - Cancelar solicitud/invitación
-7. `POST /api/v1/enrollments/{id}/withdraw` - Retirarse de competición
-8. `PUT /api/v1/enrollments/{id}/handicap` - Establecer handicap personalizado
-
-**Dependency Injection:**
-- ✅ 7 providers para Enrollment use cases en `dependencies.py`
-
-**Archivos Creados:**
-- 7 use cases en `src/modules/competition/application/use_cases/`
-- `src/modules/competition/infrastructure/api/v1/enrollment_routes.py` (~400 líneas)
-
-**Archivos Modificados:**
-- `src/config/dependencies.py` - 7 imports + 7 providers
-- `main.py` - Router de enrollments registrado
-
-**Reglas de Negocio Implementadas:**
-- Solo el creador puede aprobar/rechazar/inscribir directamente
-- Solo el dueño puede cancelar/retirarse de su inscripción
-- Competición debe estar ACTIVE para inscripciones
-- No se permiten inscripciones duplicadas
-- Transiciones de estado validadas (REQUESTED→APPROVED, APPROVED→WITHDRAWN, etc.)
-
-**Total Endpoints API:**
-- Competition: 10 endpoints
-- Enrollment: 8 endpoints
-- Countries: 2 endpoints
-- **Total módulo Competition: 20 endpoints**
+### Added
+- ✅ Competition Module COMPLETO: 7 use cases de Enrollment
+- ✅ 8 endpoints REST de Enrollments (request, direct, list, approve, reject, cancel, withdraw, set-handicap)
+- ✅ Reglas de negocio: autorización creador, validaciones estado, no duplicados
+- ✅ Total módulo Competition: 20 endpoints (10 Competition + 8 Enrollment + 2 Countries)
 
 ---
 
 ## [1.5.1] - 2025-11-18
 
-### Added - Country Endpoints (Shared Domain API)
-
-**Endpoints de Países (2 nuevos):**
-- ✅ `GET /api/v1/countries` - Lista 166 países activos para selectores
-- ✅ `GET /api/v1/countries/{code}/adjacent` - Lista países adyacentes a un código dado
-
-**DTO:**
-- ✅ `CountryResponseDTO` con campos: `code`, `name_en`, `name_es`
-
-**Archivos Creados:**
-- `src/shared/infrastructure/api/v1/country_routes.py` (~110 líneas)
-- `src/shared/infrastructure/api/__init__.py`
-- `src/shared/infrastructure/api/v1/__init__.py`
-
-**Integración:**
-- ✅ Router registrado en `main.py` con prefix `/api/v1/countries`
-- ✅ Tag `Countries` en Swagger UI
-- ✅ Usa `CompetitionUnitOfWork` para acceso al `CountryRepository`
-
-**Uso en Frontend:**
-- Selector de país principal en formulario de crear/editar competición
-- Selectores de países secundario/terciario (filtrados por adyacencia)
+### Added
+- ✅ 2 endpoints de Countries (GET /countries, GET /countries/{code}/adjacent)
+- ✅ CountryResponseDTO con campos: code, name_en, name_es
+- ✅ Router registrado en `main.py` con tag "Countries"
 
 ---
 
 ## [1.5.0] - 2025-11-18
 
-### Added - Competition Module API REST Layer (FASE 1 COMPLETA)
-
-**10 Endpoints de Competition:**
-1. `POST /api/v1/competitions` - Crear competición (estado DRAFT)
-2. `GET /api/v1/competitions` - Listar competiciones (con filtros status, creator_id)
-3. `GET /api/v1/competitions/{id}` - Obtener competición por ID
-4. `PUT /api/v1/competitions/{id}` - Actualizar competición (solo DRAFT)
-5. `DELETE /api/v1/competitions/{id}` - Eliminar competición (solo DRAFT)
-6. `POST /api/v1/competitions/{id}/activate` - DRAFT → ACTIVE
-7. `POST /api/v1/competitions/{id}/close-enrollments` - ACTIVE → CLOSED
-8. `POST /api/v1/competitions/{id}/start` - CLOSED → IN_PROGRESS
-9. `POST /api/v1/competitions/{id}/complete` - IN_PROGRESS → COMPLETED
-10. `POST /api/v1/competitions/{id}/cancel` - Cualquier estado → CANCELLED
-
-**Arquitectura:**
-- ✅ `CompetitionDTOMapper` en API Layer para campos calculados
-- ✅ Use cases retornan entidades, NO DTOs (Clean Architecture)
-- ✅ 11 providers de Dependency Injection configurados
-- ✅ JWT authentication en todos los endpoints
-- ✅ Autorización: solo creador puede modificar
-
-**DTOs Enriquecidos:**
-- `is_creator` (boolean calculado)
-- `enrolled_count` (count de APPROVED)
-- `location` (string formateado: "Spain, France, Italy")
-
-**Total Código Nuevo:** ~1,422 líneas
+### Added
+- ✅ Competition Module API REST Layer (FASE 1 COMPLETA)
+- ✅ 10 endpoints de Competition (CRUD + 5 state transitions)
+- ✅ CompetitionDTOMapper con campos calculados (is_creator, enrolled_count, location)
+- ✅ JWT authentication + autorización (solo creador puede modificar)
+- ✅ Total código nuevo: ~1,422 líneas
 
 ---
 
 ## [1.4.0] - 2025-11-18
 
-### Added - Competition Module Infrastructure Layer
-
-**Persistencia SQLAlchemy:**
-- ✅ 2 migraciones Alembic (4 tablas + seed data)
+### Added
+- ✅ Competition Module Infrastructure Layer
+- ✅ 2 migraciones Alembic (4 tablas + seed: 166 países + 614 fronteras)
 - ✅ 3 repositorios async (Competition, Enrollment, Country)
-- ✅ Imperative Mapping con TypeDecorators y Composites
-- ✅ 166 países + 614 fronteras cargadas
-
-**Unit of Work:**
-- ✅ `SQLAlchemyCompetitionUnitOfWork` con 3 repositorios
+- ✅ SQLAlchemyCompetitionUnitOfWork
 
 ---
 
 ## [1.3.0] - 2025-11-18
 
-### Added - Competition Module (Domain + Application Layer COMPLETO)
-
-**Módulo Competition - Domain Layer**
-- ✅ Implementado módulo Competition completo (domain layer)
-- ✅ 2 entidades principales: `Competition` y `Enrollment` con máquina de estados
-- ✅ 9 Value Objects con validaciones completas:
-  - `CompetitionId`, `CompetitionName`, `DateRange`
-  - `Location`, `HandicapSettings`
-  - `EnrollmentId`, `EnrollmentStatus`
-  - `CountryCode` (shared), `Country` entity (shared)
-- ✅ 11 Domain Events para comunicación entre agregados:
-  - 7 eventos de Competition (Created, Activated, EnrollmentsClosed, Started, Completed, Cancelled, Updated)
-  - 4 eventos de Enrollment (Requested, Approved, Cancelled, Withdrawn)
-- ✅ Shared domain: `Country` entity con soporte multilenguaje (name_en, name_es)
-- ✅ Estado `CANCELLED` agregado para cancelaciones de jugadores
-- ✅ Semántica clara: CANCELLED (jugador cancela pre-inscripción) vs REJECTED (creador rechaza) vs WITHDRAWN (jugador se retira post-inscripción)
-
-**Application Layer - DTOs y Repository Interfaces**
-- ✅ 3 Repository Interfaces (Clean Architecture):
-  - `CompetitionRepositoryInterface` (9 métodos)
-  - `EnrollmentRepositoryInterface` (9 métodos)
-  - `CountryRepositoryInterface` (5 métodos, shared domain)
-- ✅ 18 DTOs con validaciones Pydantic:
-  - 5 Competition DTOs (Create, Update, Response)
-  - 13 Enrollment DTOs (Request, DirectEnroll, Handle, Cancel, Withdraw, SetHandicap, Response)
-- ✅ Validaciones automáticas:
-  - Rangos de fechas, hándicaps, max_players
-  - Conversión automática a mayúsculas (country codes, handicap_type, actions)
-  - Validación condicional (PERCENTAGE requiere percentage, SCRATCH no)
-
-**Application Layer - Use Cases (9 casos de uso, 58 tests) ⭐ NUEVO**
-
-*CRUD Operations (4 casos de uso, 25 tests):*
-- ✅ `CreateCompetitionUseCase` (7 tests) - Crea competiciones en estado DRAFT
-- ✅ `UpdateCompetitionUseCase` (8 tests) - Actualización parcial solo en DRAFT
-- ✅ `GetCompetitionUseCase` (4 tests) - Query de competición por ID
-- ✅ `DeleteCompetitionUseCase` (6 tests) - Eliminación física solo en DRAFT
-
-*State Transitions (5 casos de uso, 33 tests):*
-- ✅ `ActivateCompetitionUseCase` (6 tests) - Transición DRAFT → ACTIVE
-- ✅ `CloseEnrollmentsUseCase` (6 tests) - Transición ACTIVE → CLOSED
-- ✅ `StartCompetitionUseCase` (6 tests) - Transición CLOSED → IN_PROGRESS
-- ✅ `CompleteCompetitionUseCase` (6 tests) - Transición IN_PROGRESS → COMPLETED
-- ✅ `CancelCompetitionUseCase` (9 tests) - Transición cualquier estado → CANCELLED
-
-**Domain Service:**
-- ✅ `LocationBuilder` - Valida países y adyacencias (sigue patrón UserFinder)
-- ✅ Separa correctamente lógica de dominio de casos de uso
-
-**Modificaciones a Entidades:**
-- ✅ Competition entity: agregados campos `max_players` y `team_assignment`
-- ✅ Corregido tipo de `handicap_settings` en DTOs (Dict[str, Any] para soportar type y percentage)
-
-**Decisiones Arquitectónicas**
-- `HandicapSettings` almacena solo políticas (SCRATCH o PERCENTAGE con 90/95/100), no cálculos completos
-- Cálculo completo de hándicap (Course Rating, Slope Rating) se moverá a entidad Match
-- Validación de adyacencia de países delegada a Domain Service (LocationBuilder)
-- `custom_handicap` en Enrollment permite override del hándicap oficial por el creador
-- DTOs siguen patrón: `XxxRequestDTO` / `XxxResponseDTO`
-- Todos los casos de uso validan que solo el creador puede modificar la competición
-- Domain Events emitidos en todas las transiciones de estado
-
-**Arquitectura:**
-- ✅ Clean Architecture completa en Application Layer
-- ✅ SOLID principles aplicados en todos los casos de uso
-- ✅ Unit of Work pattern para transaccionalidad
-- ✅ Repository Pattern con interfaces del dominio
-- ✅ Dependency Injection en constructores
-
-**Testing**
-- ✅ 173 tests pasando (100% cobertura Competition Module):
-  - 38 tests domain (Value Objects, Entities, Events)
-  - 29 tests repository interfaces (estructura y contratos)
-  - 48 tests DTOs (validaciones y edge cases)
-  - 58 tests use cases (CRUD + state transitions) ⭐ NUEVO
-
-**Documentación**
-- ✅ ADR-020: Competition Module Domain Design
-- ✅ CHANGELOG actualizado con v1.3.0
-- ✅ CLAUDE.md actualizado con changelog detallado
-- ✅ **Total tests proyecto: 613 tests** (308 User + 173 Competition + 60 Shared + 72 Integration)
-
-### Pending
-- [ ] Infrastructure Layer: Repositories SQLAlchemy y persistencia
-- [ ] Migraciones de base de datos (competitions, enrollments, countries, country_adjacencies)
-- [ ] API REST Layer: Endpoints FastAPI
-- [ ] Tests de integración y E2E
+### Added
+- ✅ Competition Module Domain + Application Layer COMPLETO
+- ✅ 2 entidades: Competition, Enrollment con máquinas de estado
+- ✅ 9 Value Objects con validaciones completas
+- ✅ 11 Domain Events (7 Competition + 4 Enrollment)
+- ✅ 9 use cases (4 CRUD + 5 state transitions) con 58 tests
+- ✅ LocationBuilder Domain Service
+- ✅ Total: 173 tests pasando (100% cobertura Competition Module)
 
 ---
 
 ## [1.2.0] - 2025-11-14
 
-### Added - Tests y Calidad de Código
-
-**Tests y Calidad de Código**
-- ✅ Agregados 24 tests para Email Verification (cobertura completa)
+### Added
+- ✅ 24 tests para Email Verification (cobertura completa)
 - ✅ Corregidos todos los warnings de pytest (0 warnings)
-- ✅ Total: 420 tests pasando (anteriormente 440, ajustado a 420 según README)
-- ✅ Mejorado `dev_tests.py` para capturar y reportar warnings
-- ✅ Tests renombrados: `TestEvent` → `SampleEvent` (evitar conflictos con pytest)
-- ✅ Helper agregado: `get_user_by_email()` en conftest.py
+- ✅ Total: 420 tests pasando
+- ✅ Helper: `get_user_by_email()` en conftest.py
 
 ---
 
 ## [1.1.0] - 2025-11-12
 
-### Added - Email Verification
-
-**Email Verification**
-- ✅ Implementada verificación de email con tokens únicos
-- ✅ Integración con Mailgun (región EU)
-- ✅ Templates bilingües (ES/EN) para emails de verificación
-- ✅ Domain events: `EmailVerifiedEvent`
-- ✅ Migración agregada: campos `email_verified` y `verification_token` en tabla users
-- ✅ Endpoint: `POST /api/v1/auth/verify-email`
-- ✅ Tests completos: 24 tests en 3 niveles (unit, integration, E2E)
+### Added
+- ✅ Email Verification con tokens únicos
+- ✅ Integración Mailgun (región EU), templates bilingües (ES/EN)
+- ✅ Domain event: EmailVerifiedEvent
+- ✅ Migración: campos `email_verified` y `verification_token`
+- ✅ Endpoint: POST /api/v1/auth/verify-email
+- ✅ Tests completos: 24 tests (unit, integration, E2E)
 
 ---
 
 ## [1.0.0] - 2025-11-01
 
-### Added - Foundation
-
-**Core Features**
+### Added
 - ✅ Clean Architecture + DDD completo
 - ✅ User management (registro, autenticación, perfil)
 - ✅ JWT authentication con tokens Bearer
-- ✅ Login/Logout con Domain Events
-- ✅ Session Management (Fase 1)
 - ✅ Handicap system con integración RFEG
-- ✅ Actualización manual y batch de handicaps
 - ✅ 8 endpoints API funcionales
 
-**Arquitectura**
-- Repository Pattern con Unit of Work
-- Domain Events Pattern
-- Value Objects para validaciones
-- External Services Pattern (Mailgun, RFEG)
-- Dependency Injection completa
+### Architecture
+- ✅ Repository Pattern con Unit of Work
+- ✅ Domain Events Pattern
+- ✅ Value Objects para validaciones
+- ✅ External Services Pattern (Mailgun, RFEG)
 
-**Testing**
-- 420 tests pasando (unit + integration)
-- Cobertura >90% en lógica de negocio
-- 0 warnings de pytest
+### Testing
+- ✅ 420 tests pasando (unit + integration)
+- ✅ Cobertura >90% en lógica de negocio
 
-**Infrastructure**
-- Docker + Docker Compose para desarrollo
-- PostgreSQL 15 con Alembic para migraciones
-- FastAPI 0.115+
-- Python 3.12+
+### Infrastructure
+- ✅ Docker + Docker Compose
+- ✅ PostgreSQL 15 con Alembic
+- ✅ FastAPI 0.115+, Python 3.12+
 
 ---
 
@@ -1833,7 +474,3 @@ Puntuación de seguridad: **7.5/10 → 8.0/10** (+0.5)
 - **Mayor (X.0.0)**: Cambios incompatibles en la API
 - **Menor (1.X.0)**: Nueva funcionalidad compatible hacia atrás
 - **Parche (1.0.X)**: Correcciones de bugs compatibles
-
----
-
-**Última actualización:** 20 de Noviembre de 2025 (v1.6.3 - Security Fix: Login Information Disclosure)

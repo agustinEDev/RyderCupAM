@@ -51,5 +51,17 @@ class Settings:
     # - Producción: https://rydercupfriends.com (Render.com)
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+    # Sentry Configuration (v1.8.0 - Task 10)
+    # Error tracking y performance monitoring
+    # Configuración:
+    # - SENTRY_DSN: URL de proyecto Sentry (obligatorio para habilitar Sentry)
+    # - SENTRY_ENVIRONMENT: Entorno actual (development, staging, production)
+    # - SENTRY_TRACES_SAMPLE_RATE: % de transacciones a capturar (0.0-1.0)
+    # - SENTRY_PROFILES_SAMPLE_RATE: % de perfiles a capturar (0.0-1.0)
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    SENTRY_PROFILES_SAMPLE_RATE: float = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
+
 
 settings = Settings()

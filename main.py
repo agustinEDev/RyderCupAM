@@ -22,6 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from secure import Secure
 
 from src.config.settings import settings
+from src.config.sentry_config import init_sentry
 from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     start_mappers as start_competition_mappers,
@@ -35,16 +36,22 @@ from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
 from src.config.rate_limit import limiter
 from src.config.cors_config import get_cors_config
 from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
+from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Gestor de ciclo de vida de la aplicación.
+    - Inicializa Sentry para error tracking y performance monitoring
     - Inicia los mappers de SQLAlchemy al arrancar.
     - (Aquí se podrían añadir otras tareas de inicio/apagado, como conectar a Redis).
     """
     print("INFO:     Iniciando aplicación y configurando mappers...")
+
+    # Inicializar Sentry (v1.8.0 - Task 10)
+    init_sentry()
+
     start_mappers()  # User module mappers
     start_country_mappers()  # Shared domain (Country) mappers
     start_competition_mappers()  # Competition module mappers
@@ -157,6 +164,9 @@ if ENV != "production":
 
 # Correlation ID Middleware (debe ir PRIMERO para capturar todos los requests)
 app.add_middleware(CorrelationMiddleware)
+
+# Sentry User Context Middleware (captura usuario de JWT para eventos)
+app.add_middleware(SentryUserContextMiddleware)
 
 # Aplicar middleware CORS con configuración centralizada
 app.add_middleware(CORSMiddleware, **get_cors_config())

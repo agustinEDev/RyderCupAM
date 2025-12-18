@@ -69,6 +69,12 @@ slowapi==0.1.9
 # Cumple con OWASP Top 10: A02, A03, A04, A05, A07
 secure==0.3.0
 
+# sentry-sdk - Error tracking y performance monitoring
+# Captura automáticamente excepciones, errores y métricas de rendimiento
+# Integraciones: FastAPI, SQLAlchemy, Redis
+# Cumple con OWASP Top 10: A09 (Logging & Monitoring)
+sentry-sdk[fastapi]==2.19.2
+
 
 # ================================
 # TESTING Y DESARROLLO
