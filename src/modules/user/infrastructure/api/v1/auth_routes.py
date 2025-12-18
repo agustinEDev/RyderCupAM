@@ -48,6 +48,57 @@ from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+# ============================================================================
+# HELPER FUNCTIONS - Security Context Extraction
+# ============================================================================
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extrae la dirección IP del cliente del request.
+
+    Prioriza headers de proxy (X-Forwarded-For, X-Real-IP) para detectar
+    IP real detrás de proxies/load balancers.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        Dirección IP del cliente o "unknown" si no se puede determinar
+    """
+    # Prioridad 1: X-Forwarded-For (proxies, load balancers)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
+        # La primera es la IP real del cliente
+        return forwarded_for.split(",")[0].strip()
+
+    # Prioridad 2: X-Real-IP (Nginx, otros proxies)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+
+    # Prioridad 3: client.host (conexión directa)
+    if request.client and request.client.host:
+        return request.client.host
+
+    # Fallback: IP desconocida
+    return "unknown"
+
+
+def get_user_agent(request: Request) -> str:
+    """
+    Extrae el User-Agent del cliente del request.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        User-Agent del navegador o "unknown" si no está presente
+    """
+    user_agent = request.headers.get("User-Agent")
+    return user_agent if user_agent else "unknown"
+
 @router.post(
     "/register",
     response_model=UserResponseDTO,
@@ -137,6 +188,10 @@ async def login_user(
     Raises:
         HTTPException 401: Si las credenciales son incorrectas
     """
+    # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
+    login_data.ip_address = get_client_ip(request)
+    login_data.user_agent = get_user_agent(request)
+
     login_response = await use_case.execute(login_data)
 
     if not login_response:
@@ -254,6 +309,10 @@ async def logout_user(
             detail="Token no encontrado",
         )
 
+    # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
+    logout_request.ip_address = get_client_ip(request)
+    logout_request.user_agent = get_user_agent(request)
+
     logout_response = await use_case.execute(logout_request, user_id, token)
 
     if not logout_response:
@@ -335,8 +394,11 @@ async def refresh_access_token(
             detail="Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
         )
 
-    # Ejecutar caso de uso
-    refresh_request = RefreshAccessTokenRequestDTO()
+    # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
+    refresh_request = RefreshAccessTokenRequestDTO(
+        ip_address=get_client_ip(request),
+        user_agent=get_user_agent(request)
+    )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 
     if not refresh_response:

@@ -3,6 +3,7 @@ Refresh Access Token Use Case
 
 Caso de uso para renovar el access token usando un refresh token válido.
 Implementa el patrón Session Timeout (OWASP A01/A02 - v1.8.0).
+Security Logging (v1.8.0): Registra uso de refresh tokens.
 """
 
 from src.modules.user.application.dto.user_dto import (
@@ -15,6 +16,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RefreshAccessTokenUseCase:
@@ -64,22 +66,36 @@ class RefreshAccessTokenUseCase:
         Ejecuta el caso de uso de renovación de access token.
 
         Args:
-            request: DTO de entrada (vacío, solo contrato)
+            request: DTO de entrada con contexto de seguridad (IP, User-Agent)
             refresh_token_jwt: Refresh token JWT obtenido de la cookie httpOnly
 
         Returns:
             RefreshAccessTokenResponseDTO con nuevo access token si el refresh token es válido
             None si el refresh token es inválido, revocado o el usuario no existe
 
+        Security Logging (v1.8.0):
+            - Registra uso exitoso de refresh token
+            - Severity LOW (acción normal de renovación)
+
         Raises:
             None - Retorna None en caso de error para que el endpoint retorne 401
 
         Example:
-            >>> request = RefreshAccessTokenRequestDTO()
+            >>> request = RefreshAccessTokenRequestDTO(
+            ...     ip_address="192.168.1.1",
+            ...     user_agent="Mozilla/5.0..."
+            ... )
             >>> response = await use_case.execute(request, "eyJ...")
             >>> if response:
             >>>     print(response.access_token)  # Nuevo token válido por 15 min
         """
+        # Obtener security logger
+        security_logger = get_security_logger()
+
+        # Valores por defecto para security logging
+        ip_address = request.ip_address or "unknown"
+        user_agent = request.user_agent or "unknown"
+
         # 1. Verificar que el refresh token JWT sea válido (firma + expiración)
         payload = self._token_service.verify_refresh_token(refresh_token_jwt)
 
@@ -127,7 +143,16 @@ class RefreshAccessTokenUseCase:
             data={"sub": str(user.id.value)}
         )
 
-        # 6. Preparar respuesta
+        # 6. Security Logging: Uso exitoso de refresh token
+        security_logger.log_refresh_token_used(
+            user_id=str(user.id.value),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            refresh_token_id=str(refresh_token_entity.id.value),
+            new_access_token_created=True,
+        )
+
+        # 7. Preparar respuesta
         user_dto = UserResponseDTO.model_validate(user)
 
         return RefreshAccessTokenResponseDTO(

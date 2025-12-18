@@ -3,6 +3,7 @@ Update Security Use Case - Application Layer
 
 Caso de uso para actualizar datos de seguridad del usuario (email y/o password).
 Requiere validación de contraseña actual para autorizar los cambios.
+Security Logging (v1.8.0): Registra cambios de contraseña y email.
 """
 
 import logging
@@ -23,6 +24,7 @@ from src.modules.user.domain.errors.user_errors import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +58,15 @@ class UpdateSecurityUseCase:
 
         Args:
             user_id: ID del usuario autenticado (del JWT token)
-            request: DTO con los datos a actualizar y password actual
+            request: DTO con los datos a actualizar, password actual y contexto de seguridad
 
         Returns:
             UpdateSecurityResponseDTO con el usuario actualizado
+
+        Security Logging (v1.8.0):
+            - Registra cambio de contraseña (severity HIGH)
+            - Registra cambio de email (severity HIGH)
+            - Revoca refresh tokens si cambia contraseña
 
         Raises:
             UserNotFoundError: Si el usuario no existe
@@ -67,6 +74,13 @@ class UpdateSecurityUseCase:
             DuplicateEmailError: Si el nuevo email ya está en uso
             ValueError: Si los datos no son válidos
         """
+        # Obtener security logger
+        security_logger = get_security_logger()
+
+        # Valores por defecto para security logging
+        ip_address = request.ip_address or "unknown"
+        user_agent = request.user_agent or "unknown"
+
         async with self._uow:
             # Buscar usuario
             user_id_vo = UserId(user_id)
@@ -78,8 +92,11 @@ class UpdateSecurityUseCase:
             if not user.verify_password(request.current_password):
                 raise InvalidCredentialsError("Current password is incorrect")
 
-            # Si se cambia el email, verificar que no esté en uso
+            # Tracking de cambios para security logging
             email_changed = False
+            password_changed = False
+
+            # Si se cambia el email, verificar que no esté en uso
             if request.new_email:
                 email_vo = Email(request.new_email)
                 existing_user = await self._uow.users.find_by_email(email_vo)
@@ -92,6 +109,18 @@ class UpdateSecurityUseCase:
             # Si se cambia el password
             if request.new_password:
                 user.change_password(request.new_password)
+                password_changed = True
+
+                # IMPORTANTE: Si cambia contraseña, revocar todos los refresh tokens
+                # Esto previene que tokens antiguos sigan siendo válidos
+                refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
+                tokens_revoked_count = 0
+
+                for refresh_token in refresh_tokens:
+                    if not refresh_token.revoked:
+                        refresh_token.revoke()
+                        await self._uow.refresh_tokens.save(refresh_token)
+                        tokens_revoked_count += 1
 
             # Si se cambió el email, generar token de verificación
             verification_token = None
@@ -102,6 +131,34 @@ class UpdateSecurityUseCase:
             await self._uow.users.save(user)
 
             # El context manager (__aexit__) hace commit automático y publica eventos
+
+        # Security Logging: Cambio de contraseña
+        if password_changed:
+            security_logger.log_password_changed(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                old_password_verified=True,
+            )
+
+            # Security Logging: Revocación de tokens por cambio de contraseña
+            if tokens_revoked_count > 0:
+                security_logger.log_refresh_token_revoked(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=tokens_revoked_count,
+                    reason="password_change",
+                )
+
+        # Security Logging: Cambio de email
+        if email_changed:
+            security_logger.log_email_changed(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                email_verification_required=True,
+            )
 
         # Si se cambió el email, enviar email de verificación al NUEVO correo
         if email_changed and verification_token and self._email_service:

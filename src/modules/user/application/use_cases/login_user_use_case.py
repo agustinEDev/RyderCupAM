@@ -3,6 +3,7 @@ Login User Use Case
 
 Caso de uso para autenticar un usuario y generar un token JWT.
 Session Timeout (v1.8.0): Genera access token (15 min) + refresh token (7 días).
+Security Logging (v1.8.0): Registra todos los intentos de login (exitosos y fallidos).
 """
 
 
@@ -17,6 +18,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class LoginUserUseCase:
@@ -57,28 +59,63 @@ class LoginUserUseCase:
         Ejecuta el caso de uso de login.
 
         Args:
-            request: DTO con email y password
+            request: DTO con email, password y contexto de seguridad (IP, User-Agent)
 
         Returns:
             LoginResponseDTO con access token, refresh token y datos de usuario
             None si el usuario no existe o las credenciales son inválidas
 
+        Security Logging (v1.8.0):
+            - Registra TODOS los intentos de login (exitosos y fallidos)
+            - Severity HIGH para fallos (posible brute force)
+            - Severity MEDIUM para éxitos (evento normal)
+
         Example:
-            >>> request = LoginRequestDTO(email="user@example.com", password="P@ssw0rd123!")
+            >>> request = LoginRequestDTO(
+            ...     email="user@example.com",
+            ...     password="P@ssw0rd123!",
+            ...     ip_address="192.168.1.1",
+            ...     user_agent="Mozilla/5.0..."
+            ... )
             >>> response = await use_case.execute(request)
             >>> if response:
             >>>     print(response.access_token)  # Válido 15 min
             >>>     print(response.refresh_token)  # Válido 7 días
         """
+        # Obtener security logger
+        security_logger = get_security_logger()
+
         # Buscar usuario por email
         email = Email(request.email)
         user = await self._uow.users.find_by_email(email)
 
+        # Valores por defecto para security logging si no se proporcionan
+        ip_address = request.ip_address or "unknown"
+        user_agent = request.user_agent or "unknown"
+
         if not user:
+            # Security Logging: Login fallido (usuario no existe)
+            security_logger.log_login_attempt(
+                user_id=None,
+                email=request.email,
+                success=False,
+                failure_reason="User not found",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             return None
 
         # Verificar contraseña
         if not user.verify_password(request.password):
+            # Security Logging: Login fallido (contraseña incorrecta)
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=False,
+                failure_reason="Invalid credentials",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             return None
 
         # Registrar evento de login exitoso (Clean Architecture)
@@ -112,6 +149,16 @@ class LoginUserUseCase:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
             # Commit automático al salir del contexto
+
+        # Security Logging: Login exitoso
+        security_logger.log_login_attempt(
+            user_id=str(user.id.value),
+            email=request.email,
+            success=True,
+            failure_reason=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         # Crear respuesta con tokens y datos de usuario
         user_dto = UserResponseDTO.model_validate(user)
