@@ -44,11 +44,9 @@
 
 ## 🔧 Configuración Inicial
 
-### 1. Variables de Entorno
+### Variables de Entorno
 
-```bash
-# .env y Render Environment Variables
-
+```env
 # Redis Cloud (Free Tier - 30MB)
 REDIS_URL=redis://default:password@redis-xxxxx.c123.us-east-1-1.ec2.cloud.redislabs.com:12345
 
@@ -57,7 +55,7 @@ PINECONE_API_KEY=xxxxx
 PINECONE_ENVIRONMENT=us-west1-gcp
 PINECONE_INDEX_NAME=rydercup-golf-rules
 
-# OpenAI
+# OpenAI (ya configurado)
 OPENAI_API_KEY=sk-xxxxx
 
 # RAG Settings
@@ -67,10 +65,9 @@ RAG_MAX_TOKENS=500
 RAG_TEMPERATURE=0.3  # Respuestas consistentes
 ```
 
-### 2. Dependencias (requirements.txt)
+### Dependencias (requirements.txt)
 
 ```txt
-# RAG Module
 langchain>=0.1.0
 openai>=1.0.0
 pinecone-client>=3.0.0
@@ -78,28 +75,22 @@ tiktoken>=0.5.0
 redis>=4.5.0
 ```
 
-### 3. Registro de Servicios Externos
+### Registro de Servicios Externos
 
 #### Redis Cloud (Free)
-1. Ir a https://redis.com/try-free/
-2. Crear cuenta gratuita
-3. Crear base de datos (Free Tier: 30MB, 30 conexiones)
-4. Copiar Redis URL (incluye password)
-5. Añadir a variables de entorno
+1. https://redis.com/try-free/ → Crear cuenta
+2. Crear BD (Free: 30MB, 30 conexiones)
+3. Copiar Redis URL (incluye password)
+4. Añadir a variables de entorno
 
 #### Pinecone (Free)
-1. Ir a https://www.pinecone.io/
-2. Crear cuenta gratuita
-3. Crear índice "rydercup-golf-rules":
+1. https://www.pinecone.io/ → Crear cuenta
+2. Crear índice "rydercup-golf-rules":
    - Dimensión: 1536 (OpenAI embeddings)
    - Metric: cosine
    - Pod type: Starter (free)
-4. Copiar API key y environment
-5. Añadir a variables de entorno
-
-#### OpenAI (ya configurado)
-- Usar misma API key existente del proyecto
-- Monitorear uso en dashboard
+3. Copiar API key y environment
+4. Añadir a variables de entorno
 
 ---
 
@@ -109,586 +100,195 @@ redis>=4.5.0
 
 ```
 src/modules/ai/
-├── __init__.py
 ├── domain/
-│   ├── __init__.py
 │   ├── entities/
-│   │   ├── __init__.py
 │   │   ├── document.py
 │   │   └── query_result.py
 │   ├── value_objects/
-│   │   ├── __init__.py
 │   │   ├── document_id.py
 │   │   └── embedding_vector.py
 │   └── repositories/
-│       ├── __init__.py
 │       ├── vector_repository.py
 │       └── cache_repository.py
 ```
 
-### 1. Entities
+### Entities
 
-```python
-# src/modules/ai/domain/entities/document.py
-from dataclasses import dataclass
-from typing import List
-from ..value_objects.document_id import DocumentId
-from ..value_objects.embedding_vector import EmbeddingVector
+**Document:** Documento embebido en knowledge base
+- Campos: `id`, `content`, `source`, `metadata`, `embedding`
+- Método: `embed(vector: List[float])`
 
-@dataclass
-class Document:
-    """Documento embebido en el knowledge base"""
-    id: DocumentId
-    content: str
-    source: str  # Nombre del archivo fuente
-    metadata: dict  # page, section, language, etc.
-    embedding: EmbeddingVector | None = None
+**QueryResult:** Resultado de consulta RAG
+- Campos: `answer`, `sources`, `confidence`, `cached`, `related_questions`
 
-    def embed(self, vector: List[float]) -> None:
-        """Asigna embedding al documento"""
-        self.embedding = EmbeddingVector(vector)
-```
+### Value Objects
 
-```python
-# src/modules/ai/domain/entities/query_result.py
-from dataclasses import dataclass
-from typing import List
+**DocumentId:** UUID validado
+- Validación: `uuid.UUID(value)` válido
+- Método factory: `DocumentId.generate()`
 
-@dataclass
-class Source:
-    document: str
-    page: int | None
-    section: str | None
-    relevance: float
+**EmbeddingVector:** Vector 1536 dimensiones (OpenAI)
+- Validación: Exactamente 1536 dimensiones
+- Tipo: `List[float]`
 
-@dataclass
-class QueryResult:
-    """Resultado de una consulta RAG"""
-    answer: str
-    sources: List[Source]
-    confidence: float
-    cached: bool
-    related_questions: List[str] | None = None
-```
+### Repository Interfaces
 
-### 2. Value Objects
+**VectorRepositoryInterface:**
+- `add_document(document)` - Añadir a knowledge base
+- `search(query, top_k, language)` - Buscar relevantes
+- `delete_document(document_id)` - Eliminar
 
-```python
-# src/modules/ai/domain/value_objects/document_id.py
-from dataclasses import dataclass
-import uuid
-
-@dataclass(frozen=True)
-class DocumentId:
-    value: str
-
-    def __post_init__(self):
-        try:
-            uuid.UUID(self.value)
-        except ValueError:
-            raise ValueError(f"Invalid DocumentId: {self.value}")
-
-    @classmethod
-    def generate(cls) -> 'DocumentId':
-        return cls(str(uuid.uuid4()))
-```
-
-```python
-# src/modules/ai/domain/value_objects/embedding_vector.py
-from dataclasses import dataclass
-from typing import List
-
-@dataclass(frozen=True)
-class EmbeddingVector:
-    """Vector de embeddings (1536 dimensiones para OpenAI)"""
-    values: List[float]
-
-    def __post_init__(self):
-        if len(self.values) != 1536:
-            raise ValueError(f"Expected 1536 dimensions, got {len(self.values)}")
-```
-
-### 3. Repository Interfaces
-
-```python
-# src/modules/ai/domain/repositories/vector_repository.py
-from abc import ABC, abstractmethod
-from typing import List
-from ..entities.document import Document
-from ..entities.query_result import Source
-
-class VectorRepositoryInterface(ABC):
-    @abstractmethod
-    async def add_document(self, document: Document) -> None:
-        """Añade documento al knowledge base"""
-        pass
-
-    @abstractmethod
-    async def search(
-        self,
-        query: str,
-        top_k: int = 3,
-        language: str = "es"
-    ) -> List[Source]:
-        """Busca documentos relevantes para la query"""
-        pass
-
-    @abstractmethod
-    async def delete_document(self, document_id: str) -> None:
-        """Elimina documento del knowledge base"""
-        pass
-```
-
-```python
-# src/modules/ai/domain/repositories/cache_repository.py
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-
-class CacheRepositoryInterface(ABC):
-    @abstractmethod
-    async def get(self, key: str) -> Dict[str, Any] | None:
-        """Obtiene respuesta cacheada"""
-        pass
-
-    @abstractmethod
-    async def set(self, key: str, value: Dict[str, Any], ttl: int) -> None:
-        """Guarda respuesta en caché"""
-        pass
-
-    @abstractmethod
-    async def delete(self, key: str) -> None:
-        """Elimina del caché"""
-        pass
-```
+**CacheRepositoryInterface:**
+- `get(key)` - Obtener respuesta cacheada
+- `set(key, value, ttl)` - Guardar en caché
+- `delete(key)` - Eliminar del caché
 
 ---
 
 ## 📦 Semana 2: Application + Infrastructure
 
-### Application Layer - DTOs
+### DTOs
 
+**QueryRequestDTO:**
 ```python
-# src/modules/ai/application/dto/query_request_dto.py
-from pydantic import BaseModel, Field, validator
-
-class QueryRequestDTO(BaseModel):
-    question: str = Field(..., min_length=5, max_length=500)
-    competition_id: str = Field(..., description="UUID de la competición")
-    language: str = Field(default="es", pattern="^(es|en)$")
-
-    @validator('question')
-    def sanitize_question(cls, v):
-        if '<' in v or '>' in v:
-            raise ValueError('Question cannot contain HTML tags')
-        return v.strip()
+question: str (5-500 chars, validación anti-XSS)
+competition_id: str (UUID)
+language: str (default="es", pattern="^(es|en)$")
 ```
 
+**QueryResponseDTO:**
 ```python
-# src/modules/ai/application/dto/query_response_dto.py
-from pydantic import BaseModel
-from typing import List, Optional
-
-class SourceDTO(BaseModel):
-    document: str
-    page: Optional[int]
-    section: Optional[str]
-
-class QueryResponseDTO(BaseModel):
-    answer: str
-    sources: List[SourceDTO]
-    confidence: float
-    cached: bool
-    global_queries_remaining: int
-    competition_queries_remaining: int
-    is_competition_creator: bool
-    related_questions: Optional[List[str]] = None
+answer: str
+sources: List[SourceDTO]
+confidence: float
+cached: bool
+global_queries_remaining: int
+competition_queries_remaining: int
+is_competition_creator: bool
+related_questions: Optional[List[str]]
 ```
 
-### Application Layer - Ports
+### Ports (Interfaces)
 
-```python
-# src/modules/ai/application/ports/daily_quota_service_interface.py
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
+**DailyQuotaServiceInterface:**
+- `check_global_quota(user_id)` → QuotaCheck (10 consultas/día)
+- `check_competition_quota(user_id, competition_id, daily_limit)` → QuotaCheck (3 o 6)
+- `increment_global_quota(user_id)` → None
+- `increment_competition_quota(user_id, competition_id)` → None
 
-@dataclass
-class QuotaCheck:
-    can_query: bool
-    queries_used: int
-    queries_remaining: int
+**LLMServiceInterface:**
+- `generate_answer(question, context, language)` → str
 
-class DailyQuotaServiceInterface(ABC):
-    @abstractmethod
-    async def check_global_quota(self, user_id: str) -> QuotaCheck:
-        """Verifica límite global de 10 consultas/día"""
-        pass
+**EmbeddingsServiceInterface:**
+- `embed_text(text)` → List[float] (1536 dims)
 
-    @abstractmethod
-    async def check_competition_quota(
-        self, user_id: str, competition_id: str, daily_limit: int
-    ) -> QuotaCheck:
-        """Verifica límite por competición (3 o 6)"""
-        pass
+### Use Case Principal: QueryGolfRulesUseCase
 
-    @abstractmethod
-    async def increment_global_quota(self, user_id: str) -> None:
-        """Incrementa contador global"""
-        pass
+**Validaciones (en orden):**
+1. Competición existe
+2. Competición en estado IN_PROGRESS
+3. Usuario inscrito o creador
+4. Límite global (10 queries/día)
+5. Límite por competición (3 user, 6 creator)
+6. Intentar caché
+7. Incrementar contadores
+8. Buscar en knowledge base (top 3 documentos)
+9. Generar respuesta con LLM
+10. Cachear respuesta (7 días TTL)
+11. Retornar QueryResponseDTO
 
-    @abstractmethod
-    async def increment_competition_quota(
-        self, user_id: str, competition_id: str
-    ) -> None:
-        """Incrementa contador por competición"""
-        pass
-```
+### Infrastructure: RedisDailyQuotaService
 
-```python
-# src/modules/ai/application/ports/llm_service_interface.py
-from abc import ABC, abstractmethod
-from typing import List
-from ..dto.query_response_dto import SourceDTO
+**Estrategia de almacenamiento:**
+- **Global:** `rag:daily:{user_id}:global` (límite 10)
+- **Por competición:** `rag:daily:{user_id}:{competition_id}` (límite 3 o 6)
+- **TTL:** Expira a medianoche UTC
+- **Reset:** Automático diario
 
-class LLMServiceInterface(ABC):
-    @abstractmethod
-    async def generate_answer(
-        self,
-        question: str,
-        context: List[SourceDTO],
-        language: str = "es"
-    ) -> str:
-        """Genera respuesta usando LLM"""
-        pass
-```
-
-### Application Layer - Use Case Principal
-
-```python
-# src/modules/ai/application/use_cases/query_golf_rules_use_case.py
-from ..dto.query_request_dto import QueryRequestDTO
-from ..dto.query_response_dto import QueryResponseDTO
-from ...domain.repositories.vector_repository import VectorRepositoryInterface
-from ...domain.repositories.cache_repository import CacheRepositoryInterface
-from ..ports.daily_quota_service_interface import DailyQuotaServiceInterface
-from ..ports.llm_service_interface import LLMServiceInterface
-
-class QueryGolfRulesUseCase:
-    def __init__(
-        self,
-        competition_repository,  # From competition module
-        enrollment_repository,   # From enrollment module
-        daily_quota_service: DailyQuotaServiceInterface,
-        cache_repository: CacheRepositoryInterface,
-        vector_repository: VectorRepositoryInterface,
-        llm_service: LLMServiceInterface,
-    ):
-        self._competitions = competition_repository
-        self._enrollments = enrollment_repository
-        self._quota = daily_quota_service
-        self._cache = cache_repository
-        self._vector = vector_repository
-        self._llm = llm_service
-
-    async def execute(
-        self,
-        request: QueryRequestDTO,
-        current_user_id: str
-    ) -> QueryResponseDTO:
-        # 1. Validar competición existe y está IN_PROGRESS
-        competition = await self._competitions.find_by_id(request.competition_id)
-        if not competition:
-            raise CompetitionNotFoundError()
-
-        if competition.status != CompetitionStatus.IN_PROGRESS:
-            raise CompetitionNotInProgressError()
-
-        # 2. Validar usuario inscrito o creador
-        is_creator = competition.creator_id.value == current_user_id
-        if not is_creator:
-            enrollment = await self._enrollments.exists_for_user_in_competition(
-                user_id=current_user_id,
-                competition_id=request.competition_id
-            )
-            if not enrollment or enrollment.status != EnrollmentStatus.APPROVED:
-                raise UserNotEnrolledError()
-
-        # 3. Verificar límite global (10 queries/día)
-        global_quota = await self._quota.check_global_quota(current_user_id)
-        if not global_quota.can_query:
-            raise GlobalDailyLimitExceededError()
-
-        # 4. Verificar límite por competición (3 o 6)
-        daily_limit = 6 if is_creator else 3
-        competition_quota = await self._quota.check_competition_quota(
-            user_id=current_user_id,
-            competition_id=request.competition_id,
-            daily_limit=daily_limit
-        )
-        if not competition_quota.can_query:
-            raise CompetitionDailyLimitExceededError()
-
-        # 5. Intentar responder desde caché
-        cached_response = await self._cache.get(request.question)
-        if cached_response:
-            return QueryResponseDTO(
-                **cached_response,
-                cached=True,
-                global_queries_remaining=global_quota.queries_remaining,
-                competition_queries_remaining=competition_quota.queries_remaining,
-                is_competition_creator=is_creator
-            )
-
-        # 6. Incrementar contadores (cuenta incluso si hay cache miss)
-        await self._quota.increment_global_quota(current_user_id)
-        await self._quota.increment_competition_quota(
-            current_user_id, request.competition_id
-        )
-
-        # 7. Buscar en knowledge base
-        relevant_sources = await self._vector.search(
-            query=request.question,
-            top_k=3,
-            language=request.language
-        )
-
-        # 8. Generar respuesta con LLM
-        answer = await self._llm.generate_answer(
-            question=request.question,
-            context=relevant_sources,
-            language=request.language
-        )
-
-        # 9. Cachear respuesta
-        response_dict = {
-            "answer": answer,
-            "sources": [s.dict() for s in relevant_sources],
-            "confidence": 0.9,  # Calculado por LLM
-        }
-        await self._cache.set(request.question, response_dict, ttl=604800)
-
-        # 10. Retornar respuesta
-        return QueryResponseDTO(
-            answer=answer,
-            sources=relevant_sources,
-            confidence=0.9,
-            cached=False,
-            global_queries_remaining=global_quota.queries_remaining - 1,
-            competition_queries_remaining=competition_quota.queries_remaining - 1,
-            is_competition_creator=is_creator
-        )
-```
-
-### Infrastructure Layer - DailyQuotaService
-
-```python
-# src/modules/ai/infrastructure/quota/redis_daily_quota_service.py
-from datetime import datetime, timezone, timedelta
-from redis import Redis
-from ...application.ports.daily_quota_service_interface import (
-    DailyQuotaServiceInterface,
-    QuotaCheck
-)
-
-class RedisDailyQuotaService(DailyQuotaServiceInterface):
-    GLOBAL_LIMIT = 10
-
-    def __init__(self, redis_url: str):
-        self.client = Redis.from_url(redis_url, decode_responses=True)
-
-    async def check_global_quota(self, user_id: str) -> QuotaCheck:
-        key = f"rag:daily:{user_id}:global"
-        queries_used = int(self.client.get(key) or 0)
-
-        return QuotaCheck(
-            can_query=queries_used < self.GLOBAL_LIMIT,
-            queries_used=queries_used,
-            queries_remaining=max(0, self.GLOBAL_LIMIT - queries_used)
-        )
-
-    async def check_competition_quota(
-        self, user_id: str, competition_id: str, daily_limit: int
-    ) -> QuotaCheck:
-        key = f"rag:daily:{user_id}:{competition_id}"
-        queries_used = int(self.client.get(key) or 0)
-
-        return QuotaCheck(
-            can_query=queries_used < daily_limit,
-            queries_used=queries_used,
-            queries_remaining=max(0, daily_limit - queries_used)
-        )
-
-    async def increment_global_quota(self, user_id: str) -> None:
-        key = f"rag:daily:{user_id}:global"
-        self.client.incr(key)
-
-        if self.client.ttl(key) == -1:
-            seconds_until_midnight = self._seconds_until_midnight()
-            self.client.expire(key, seconds_until_midnight)
-
-    async def increment_competition_quota(
-        self, user_id: str, competition_id: str
-    ) -> None:
-        key = f"rag:daily:{user_id}:{competition_id}"
-        self.client.incr(key)
-
-        if self.client.ttl(key) == -1:
-            seconds_until_midnight = self._seconds_until_midnight()
-            self.client.expire(key, seconds_until_midnight)
-
-    def _seconds_until_midnight(self) -> int:
-        now = datetime.now(timezone.utc)
-        tomorrow = now.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + timedelta(days=1)
-        return int((tomorrow - now).total_seconds())
-```
+**QuotaCheck:** Retorna `can_query`, `queries_used`, `queries_remaining`
 
 ### Pre-FAQs Hardcodeadas
 
+Ejemplos de FAQs para caché instantáneo:
+- "cómo calcular handicap de juego"
+- "reglas foursome"
+- "qué es slope rating"
+- "diferencia foursome fourball"
+- "qué es match play"
+- ... (15-25 preguntas más)
+
+**Formato:**
 ```python
-# src/modules/ai/domain/common_faqs.py
 COMMON_GOLF_FAQS = {
-    "cómo calcular handicap de juego": {
-        "answer": "El hándicap de juego se calcula aplicando un porcentaje de allowance al hándicap de curso según el formato. Stroke play: 100%, match play: 100%, foursome: 50% combinado, fourball: 85-90%.",
-        "sources": [{"document": "WHS_2020", "page": 10, "section": "Playing Handicap"}]
-    },
-    "reglas foursome": {
-        "answer": "En foursome (alternate shot), dos jugadores de un equipo juegan una sola bola alternándose. Un jugador hace el drive en hoyos impares, el otro en pares, luego se alternan hasta embocar.",
-        "sources": [{"document": "Ryder_Cup_Format", "section": "Formats"}]
-    },
-    "qué es slope rating": {
-        "answer": "El Slope Rating mide la dificultad de un campo para jugadores no scratch (hándicap 0). Va de 55 a 155, siendo 113 el estándar. Mayor slope = más difícil para jugadores con hándicap alto.",
-        "sources": [{"document": "WHS_2020", "page": 5}]
-    },
-    "diferencia foursome fourball": {
-        "answer": "Foursome: 2 jugadores, 1 bola, se alternan golpes. Fourball: 2 jugadores, 2 bolas, cuenta la mejor puntuación del equipo.",
-        "sources": [{"document": "Ryder_Cup_Format", "section": "Formats"}]
-    },
-    "qué es match play": {
-        "answer": "Match play es un formato donde ganas hoyos, no cuentas golpes totales. Ganas un hoyo si completas en menos golpes que tu oponente. Gana quien gana más hoyos.",
-        "sources": [{"document": "R&A_Rules", "page": 45}]
-    },
-    # ... 15-25 preguntas más
+    "pregunta": {
+        "answer": "respuesta detallada",
+        "sources": [{"document": "...", "page": X}]
+    }
 }
 ```
 
 ### Excepciones Custom
 
-```python
-# src/modules/ai/domain/exceptions.py
-class CompetitionNotFoundError(Exception):
-    """Competición no encontrada"""
-    pass
-
-class CompetitionNotInProgressError(Exception):
-    """Competición no está en estado IN_PROGRESS"""
-    def __init__(self, current_status: str):
-        self.current_status = current_status
-        super().__init__(f"Competition is {current_status}, not IN_PROGRESS")
-
-class UserNotEnrolledError(Exception):
-    """Usuario no inscrito en la competición"""
-    pass
-
-class GlobalDailyLimitExceededError(Exception):
-    """Límite global de 10 consultas/día excedido"""
-    pass
-
-class CompetitionDailyLimitExceededError(Exception):
-    """Límite de consultas por competición excedido"""
-    def __init__(self, queries_used: int, daily_limit: int):
-        self.queries_used = queries_used
-        self.daily_limit = daily_limit
-        super().__init__(f"Exceeded {daily_limit} daily queries")
-```
+- `CompetitionNotFoundError` - Competición no encontrada
+- `CompetitionNotInProgressError` - No está IN_PROGRESS
+- `UserNotEnrolledError` - Usuario no inscrito
+- `GlobalDailyLimitExceededError` - Límite global excedido (10)
+- `CompetitionDailyLimitExceededError` - Límite por competición excedido
 
 ---
 
 ## 📦 Semana 3: API + Deploy
 
-### API Routes
+### API Endpoints
 
+**POST `/api/v1/ai/assistant/query`**
+- **Rate Limit:** 10/minuto (SlowAPI)
+- **Auth:** Required (JWT)
+- **Request:** QueryRequestDTO
+- **Response:** QueryResponseDTO
+
+**Códigos de Error:**
+- `429 GLOBAL_DAILY_LIMIT_EXCEEDED` - 10 consultas globales alcanzadas
+- `429 COMPETITION_DAILY_LIMIT_EXCEEDED` - Límite por competición alcanzado
+- `403 COMPETITION_NOT_IN_PROGRESS` - Competición no activa
+- `403 USER_NOT_ENROLLED` - Usuario no inscrito
+
+### Script de Ingestión
+
+**Ubicación:** `scripts/ingest_golf_rules.py`
+
+**Documentos a ingerir (50 inicial):**
+- R&A Rules 2023 (ES/EN)
+- WHS Manual 2020 (ES)
+- Ryder Cup Format Guide
+- Local Rules Spain
+- ... (más PDFs y Markdown)
+
+**Proceso:**
+1. Leer documentos desde `data/golf_rules/`
+2. Chunking (500 tokens overlapping)
+3. Generar embeddings (OpenAI)
+4. Upload a Pinecone
+
+### Dependency Injection
+
+**Configurar en `src/config/dependencies.py`:**
 ```python
-# src/modules/ai/infrastructure/api/routes.py
-from fastapi import APIRouter, Depends, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from ...application.use_cases.query_golf_rules_use_case import QueryGolfRulesUseCase
-from ...application.dto.query_request_dto import QueryRequestDTO
+def get_query_golf_rules_use_case():
+    redis_url = settings.REDIS_URL
+    quota_service = RedisDailyQuotaService(redis_url)
+    cache_repo = RedisCacheRepository(redis_url)
+    vector_repo = PineconeRepository(...)
+    llm_service = OpenAILLMService(...)
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI Assistant"])
-limiter = Limiter(key_func=get_remote_address)
-
-@router.post("/assistant/query")
-@limiter.limit("10/minute")
-async def query_assistant(
-    request: Request,
-    query: QueryRequestDTO,
-    current_user: dict = Depends(get_current_user),
-    use_case: QueryGolfRulesUseCase = Depends(get_query_golf_rules_use_case)
-):
-    try:
-        result = await use_case.execute(query, current_user["id"])
-        return result
-    except GlobalDailyLimitExceededError as e:
-        raise HTTPException(status_code=429, detail={
-            "code": "GLOBAL_DAILY_LIMIT_EXCEEDED",
-            "message": "Has alcanzado el límite global de 10 consultas diarias"
-        })
-    except CompetitionDailyLimitExceededError as e:
-        raise HTTPException(status_code=429, detail={
-            "code": "COMPETITION_DAILY_LIMIT_EXCEEDED",
-            "message": f"Has alcanzado el límite de {e.daily_limit} consultas para esta competición"
-        })
-    except CompetitionNotInProgressError as e:
-        raise HTTPException(status_code=403, detail={
-            "code": "COMPETITION_NOT_IN_PROGRESS",
-            "message": "Las consultas solo están disponibles durante la competición",
-            "current_status": e.current_status
-        })
-    except UserNotEnrolledError:
-        raise HTTPException(status_code=403, detail={
-            "code": "USER_NOT_ENROLLED",
-            "message": "Debes estar inscrito en la competición"
-        })
-```
-
-### Script de Ingestión de Documentos
-
-```python
-# scripts/ingest_golf_rules.py
-import asyncio
-from pathlib import Path
-from src.modules.ai.infrastructure.vector_db.pinecone_repository import PineconeRepository
-from src.modules.ai.infrastructure.embeddings.openai_embeddings import OpenAIEmbeddings
-
-async def ingest_documents():
-    """Carga documentos iniciales al knowledge base"""
-
-    docs_path = Path("data/golf_rules")
-
-    # Lista de documentos a ingerir
-    documents = [
-        "R&A_Rules_2023_ES.pdf",
-        "R&A_Rules_2023_EN.pdf",
-        "WHS_Manual_2020_ES.pdf",
-        "Ryder_Cup_Format.md",
-        "Local_Rules_Spain.md",
-        # ... más documentos
-    ]
-
-    embeddings_service = OpenAIEmbeddings()
-    vector_repo = PineconeRepository()
-
-    for doc_file in documents:
-        print(f"Processing {doc_file}...")
-        # Leer, chunking, embeddings, upload
-        # ...
-
-    print(f"✅ Ingested {len(documents)} documents")
-
-if __name__ == "__main__":
-    asyncio.run(ingest_documents())
+    return QueryGolfRulesUseCase(
+        competition_repository=get_competition_repo(),
+        enrollment_repository=get_enrollment_repo(),
+        daily_quota_service=quota_service,
+        cache_repository=cache_repo,
+        vector_repository=vector_repo,
+        llm_service=llm_service
+    )
 ```
 
 ---
@@ -710,14 +310,32 @@ Este documento puede **ELIMINARSE** cuando:
 
 ## 📊 Métricas a Monitorear (primeros 30 días)
 
-- Cache hit rate (objetivo: >80%)
-- Latencia promedio (objetivo: <2 seg)
-- Queries/día por usuario (validar límites)
-- Costo mensual OpenAI (objetivo: <$5)
-- Feedback positivo (objetivo: >90%)
-- Memoria RAM Render (objetivo: <400MB)
+| Métrica | Objetivo |
+|---------|----------|
+| Cache hit rate | >80% |
+| Latencia promedio | <2 seg |
+| Queries/día por usuario | Validar límites (10 global, 3-6 comp) |
+| Costo mensual OpenAI | <$5 |
+| Feedback positivo | >90% |
+| Memoria RAM Render | <400MB |
 
 ---
 
-**Última actualización:** 6 Dic 2025
+## 🔗 Referencias
+
+### Documentación
+- **ADR-022:** RAG Assistant Architecture (pendiente de crear)
+- **CLAUDE.md:** Actualizar con RAG module
+- **API.md:** Actualizar con endpoints de AI
+
+### Stack Tecnológico
+- **Pinecone:** https://docs.pinecone.io/
+- **LangChain:** https://python.langchain.com/docs/
+- **OpenAI API:** https://platform.openai.com/docs/
+- **Redis:** https://redis.io/docs/
+
+---
+
+**Última actualización:** 6 Diciembre 2025
 **Responsable:** Backend Team
+**Status:** Temporal - Eliminar al completar v1.11.0
