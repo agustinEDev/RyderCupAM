@@ -149,7 +149,7 @@ class TestUserRoutes:
             client,
             "searcher2@example.com",
             "s3cur3P@ssw0rd!",
-            "Searcher2",
+            "Searcher",
             "User"
         )
         token = auth_data["token"]
@@ -176,8 +176,8 @@ class TestUserRoutes:
             client,
             "searcher3@example.com",
             "s3cur3P@ssw0rd!",
-            "Searcher3",
-            "User"
+            "Searcher",
+            "Third"
         )
         token = auth_data["token"]
 
@@ -411,7 +411,7 @@ class TestUserRoutes:
             client,
             "security2.test@example.com",
             "0ldP@ssw0rd!",
-            "Security2",
+            "SecurityTwo",
             "Test"
         )
         token = auth_data["token"]
@@ -447,7 +447,7 @@ class TestUserRoutes:
             client,
             "security3.test@example.com",
             "0ldP@ssw0rd!",
-            "Security3",
+            "SecurityThree",
             "Test"
         )
         token = auth_data["token"]
@@ -485,7 +485,7 @@ class TestUserRoutes:
             client,
             "security4.test@example.com",
             "C0rr3ctP@ss!",
-            "Security4",
+            "SecurityFour",
             "Test"
         )
         token = auth_data["token"]
@@ -513,7 +513,7 @@ class TestUserRoutes:
             client,
             "user1@example.com",
             "S3cur3P@ss123!",
-            "User1",
+            "UserOne",
             "Test"
         )
 
@@ -521,7 +521,7 @@ class TestUserRoutes:
             client,
             "user2@example.com",
             "S3cur3P@ss123!",
-            "User2",
+            "UserTwo",
             "Test"
         )
 
@@ -564,7 +564,7 @@ class TestUserRoutes:
             client,
             "security5.test@example.com",
             "S3cur3P@ss123!",
-            "Security5",
+            "SecurityFive",
             "Test"
         )
         token = auth_data["token"]

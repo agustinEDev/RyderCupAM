@@ -468,6 +468,75 @@ def mock_external_services():
 
 
 # ======================================================================================
+# REUSABLE USER FIXTURES (Performance optimization)
+# ======================================================================================
+# Estos fixtures crean usuarios UNA VEZ por módulo de tests (scope="module")
+# y los reutilizan en todos los tests del módulo, ahorrando ~10-15s en total.
+#
+# IMPORTANTE: Estos usuarios NO deben modificarse en los tests (read-only).
+# Si un test necesita modificar un usuario, debe crear uno nuevo.
+
+@pytest_asyncio.fixture(scope="module")
+async def module_creator_user(client: AsyncClient) -> dict:
+    """
+    Usuario creador reutilizable para todo el módulo de tests.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_creator@test.com",
+        "CreatorPass123!",
+        "Module",
+        "Creator"
+    )
+
+
+@pytest_asyncio.fixture(scope="module")
+async def module_player_user(client: AsyncClient) -> dict:
+    """
+    Usuario jugador reutilizable para todo el módulo de tests.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_player@test.com",
+        "PlayerPass123!",
+        "Module",
+        "Player"
+    )
+
+
+@pytest_asyncio.fixture(scope="module")
+async def module_second_player(client: AsyncClient) -> dict:
+    """
+    Segundo usuario jugador reutilizable para tests que necesitan múltiples jugadores.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_player2@test.com",
+        "Player2Pass123!",
+        "Second",
+        "Player"
+    )
+
+
+# ======================================================================================
 # COMPETITION MODULE FIXTURES
 # ======================================================================================
 

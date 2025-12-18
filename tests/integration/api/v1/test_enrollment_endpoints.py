@@ -171,10 +171,10 @@ class TestListEnrollments:
             client, "creator7@test.com", "P@ssw0rd123!", "Creator", "Seven"
         )
         player1 = await create_authenticated_user(
-            client, "player7a@test.com", "P@ssw0rd123!", "Player", "7A"
+            client, "player7a@test.com", "P@ssw0rd123!", "Player", "Alpha"
         )
         player2 = await create_authenticated_user(
-            client, "player7b@test.com", "P@ssw0rd123!", "Player", "7B"
+            client, "player7b@test.com", "P@ssw0rd123!", "Player", "Beta"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -394,10 +394,10 @@ class TestEnrollmentEdgeCases:
     async def test_approve_already_approved_returns_400(self, client: AsyncClient):
         """Aprobar inscripción ya aprobada retorna 400."""
         creator = await create_authenticated_user(
-            client, "creator_ec1@test.com", "P@ssw0rd123!", "Creator", "EC1"
+            client, "creator_ec1@test.com", "P@ssw0rd123!", "Creator", "EdgeOne"
         )
         player = await create_authenticated_user(
-            client, "player_ec1@test.com", "P@ssw0rd123!", "Player", "EC1"
+            client, "player_ec1@test.com", "P@ssw0rd123!", "Player", "EdgeOne"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -426,10 +426,10 @@ class TestEnrollmentEdgeCases:
     async def test_withdraw_from_requested_returns_400(self, client: AsyncClient):
         """Retirarse de inscripción REQUESTED retorna 400 (debe estar APPROVED)."""
         creator = await create_authenticated_user(
-            client, "creator_ec2@test.com", "P@ssw0rd123!", "Creator", "EC2"
+            client, "creator_ec2@test.com", "P@ssw0rd123!", "Creator", "EdgeTwo"
         )
         player = await create_authenticated_user(
-            client, "player_ec2@test.com", "P@ssw0rd123!", "Player", "EC2"
+            client, "player_ec2@test.com", "P@ssw0rd123!", "Player", "EdgeTwo"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -452,10 +452,10 @@ class TestEnrollmentEdgeCases:
     async def test_cancel_approved_returns_400(self, client: AsyncClient):
         """Cancelar inscripción APPROVED retorna 400 (debe usar withdraw)."""
         creator = await create_authenticated_user(
-            client, "creator_ec3@test.com", "P@ssw0rd123!", "Creator", "EC3"
+            client, "creator_ec3@test.com", "P@ssw0rd123!", "Creator", "EdgeThree"
         )
         player = await create_authenticated_user(
-            client, "player_ec3@test.com", "P@ssw0rd123!", "Player", "EC3"
+            client, "player_ec3@test.com", "P@ssw0rd123!", "Player", "EdgeThree"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -485,10 +485,10 @@ class TestEnrollmentEdgeCases:
     async def test_set_handicap_not_creator_returns_403(self, client: AsyncClient):
         """Establecer handicap sin ser creador retorna 403."""
         creator = await create_authenticated_user(
-            client, "creator_ec4@test.com", "P@ssw0rd123!", "Creator", "EC4"
+            client, "creator_ec4@test.com", "P@ssw0rd123!", "Creator", "EdgeFour"
         )
         player = await create_authenticated_user(
-            client, "player_ec4@test.com", "P@ssw0rd123!", "Player", "EC4"
+            client, "player_ec4@test.com", "P@ssw0rd123!", "Player", "EdgeFour"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -529,13 +529,13 @@ class TestEnrollmentEdgeCases:
     async def test_list_enrollments_filter_by_status(self, client: AsyncClient):
         """Filtrar inscripciones por estado."""
         creator = await create_authenticated_user(
-            client, "creator_ec5@test.com", "P@ssw0rd123!", "Creator", "EC5"
+            client, "creator_ec5@test.com", "P@ssw0rd123!", "Creator", "EdgeFive"
         )
         player1 = await create_authenticated_user(
-            client, "player_ec5a@test.com", "P@ssw0rd123!", "Player", "EC5A"
+            client, "player_ec5a@test.com", "P@ssw0rd123!", "Player", "EdgeFiveA"
         )
         player2 = await create_authenticated_user(
-            client, "player_ec5b@test.com", "P@ssw0rd123!", "Player", "EC5B"
+            client, "player_ec5b@test.com", "P@ssw0rd123!", "Player", "EdgeFiveB"
         )
 
         comp = await create_competition(client, creator["cookies"])
@@ -572,10 +572,10 @@ class TestEnrollmentEdgeCases:
     async def test_direct_enroll_with_custom_handicap(self, client: AsyncClient):
         """Inscripción directa con handicap personalizado."""
         creator = await create_authenticated_user(
-            client, "creator_ec6@test.com", "P@ssw0rd123!", "Creator", "EC6"
+            client, "creator_ec6@test.com", "P@ssw0rd123!", "Creator", "EdgeSix"
         )
         player = await create_authenticated_user(
-            client, "player_ec6@test.com", "P@ssw0rd123!", "Player", "EC6"
+            client, "player_ec6@test.com", "P@ssw0rd123!", "Player", "EdgeSix"
         )
 
         comp = await create_competition(client, creator["cookies"])

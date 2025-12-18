@@ -81,7 +81,9 @@ class Password:
     @staticmethod
     def _hash_password(plain_password: str) -> str:
         """Hashea password con bcrypt y salt."""
-        # Usar rounds más bajo para tests (detecta si estamos en testing)
+        # Usar rounds mínimo de bcrypt para tests (4 es el mínimo permitido)
+        # 4 rounds en tests: ~5ms por hash (ya optimizado vs 12 rounds)
+        # 12 rounds en producción: ~200ms por hash (seguro según OWASP)
         rounds = 4 if os.getenv('TESTING') == 'true' else 12
         salt = bcrypt.gensalt(rounds=rounds)
         hashed = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
