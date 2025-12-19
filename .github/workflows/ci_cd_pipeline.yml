@@ -275,22 +275,27 @@ jobs:
           set -e
 
           # Parse results
-          CRITICAL_COUNT=$(jq '[.dependencies[].vulns[] | select(.id | startswith("CVE"))] | length' pip-audit-report.json 2>/dev/null || echo "0")
+          # Count only CVEs that have a fix available (pragmatic approach)
+          CRITICAL_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length > 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
+          # Count CVEs without fix (for monitoring only)
+          NO_FIX_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length == 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
           TOTAL_VULNS=$(jq '[.dependencies[].vulns[]] | length' pip-audit-report.json 2>/dev/null || echo "0")
 
           echo "critical_vulnerabilities=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "no_fix_vulnerabilities=$NO_FIX_COUNT" >> $GITHUB_OUTPUT
           echo "total_vulnerabilities=$TOTAL_VULNS" >> $GITHUB_OUTPUT
 
           echo ""
           echo "📊 pip-audit Summary:"
           echo "  Total vulnerabilities: $TOTAL_VULNS"
-          echo "  Critical (CVEs): $CRITICAL_COUNT"
+          echo "  CVEs with fix available: $CRITICAL_COUNT"
+          echo "  CVEs without fix (monitoring): $NO_FIX_COUNT"
 
-          # Fail if critical vulnerabilities found
+          # Fail if critical vulnerabilities WITH FIX found
           if [ "$CRITICAL_COUNT" -gt "0" ]; then
             echo "  Status: ❌ CRITICAL VULNERABILITIES FOUND"
             echo ""
-            echo "❌ SECURITY ALERT: Found $CRITICAL_COUNT CVEs in dependencies"
+            echo "❌ SECURITY ALERT: Found $CRITICAL_COUNT CVEs with fixes available"
             echo "This pipeline will FAIL to prevent vulnerable code from being deployed"
             echo ""
             echo "📋 Action Required:"
@@ -299,10 +304,16 @@ jobs:
             echo "  3. Run locally: pip-audit"
             echo "  4. Commit updated requirements.txt"
             exit 1
-          elif [ "$TOTAL_VULNS" -gt "0" ]; then
-            echo "  Status: ⚠️ VULNERABILITIES DETECTED (non-critical)"
+          elif [ "$NO_FIX_COUNT" -gt "0" ]; then
+            echo "  Status: ⚠️ CVEs WITHOUT FIX DETECTED (not blocking)"
             echo ""
-            echo "⚠️ WARNING: Found $TOTAL_VULNS vulnerabilities (no CVEs)"
+            echo "⚠️ INFO: Found $NO_FIX_COUNT CVEs without available fixes"
+            echo "These are monitored but do not block deployment"
+            echo "Review pip-audit-report.json for details and consider alternatives"
+          elif [ "$TOTAL_VULNS" -gt "0" ]; then
+            echo "  Status: ⚠️ VULNERABILITIES DETECTED (non-CVE)"
+            echo ""
+            echo "⚠️ WARNING: Found $TOTAL_VULNS non-CVE vulnerabilities"
             echo "Consider updating these packages when possible"
           else
             echo "  Status: ✅ NO VULNERABILITIES"

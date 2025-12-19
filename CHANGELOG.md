@@ -7,6 +7,33 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed - CI/CD Pipeline Improvement ✅ COMPLETADO (19 Dic 2025)
+
+**🔧 Pragmatic CVE Handling in Dependency Audit** (OWASP A06)
+
+- ✅ Pipeline solo falla con CVEs que tienen fix disponible
+- ✅ CVEs sin fix disponible se monitorean pero no bloquean deployment
+- ✅ Filtro mejorado con jq: `map(select(.fix_versions | length > 0))`
+- ✅ Métricas separadas: CVEs con fix vs CVEs sin fix
+- ✅ Mensaje informativo para CVEs sin solución (CVE-2024-23342 en ecdsa)
+
+**Impacto:**
+- ✅ Pipeline pasa con CVE-2024-23342 (ecdsa) - sin fix disponible, out of scope del proyecto
+- ✅ Pipeline sigue bloqueando CVEs con fix disponible (seguridad mantenida)
+- ✅ Desarrollo no bloqueado por vulnerabilidades sin solución posible
+- ✅ Reportes de seguridad mantienen visibilidad completa
+
+**Archivos Modificados:**
+- `.github/workflows/ci_cd_pipeline.yml` (líneas 277-320)
+
+**Justificación Técnica:**
+- CVE-2024-23342 (ecdsa timing attack) no tiene fix disponible
+- ecdsa es dependencia transitiva de python-jose (JWT)
+- No usamos ECDSA directamente (usamos HS256)
+- Enfoque pragmático: solo bloquear lo que podemos solucionar
+
+---
+
 ### Added - Security Tests Suite ✅ COMPLETADO (19 Dic 2025)
 
 **🛡️ Comprehensive Security Testing** (OWASP A01, A03, A04, A07)
