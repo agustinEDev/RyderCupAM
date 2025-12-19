@@ -17,7 +17,6 @@ Features implementadas:
 """
 
 import os
-from typing import List
 from urllib.parse import urlparse
 
 
@@ -31,7 +30,7 @@ def _is_production() -> bool:
     return os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 
-def _parse_frontend_origins() -> List[str]:
+def _parse_frontend_origins() -> list[str]:
     """
     Parsea los orígenes del frontend desde la variable de entorno FRONTEND_ORIGINS.
 
@@ -39,13 +38,13 @@ def _parse_frontend_origins() -> List[str]:
     FRONTEND_ORIGINS=https://app.rydercupfriends.com,https://www.rydercupfriends.com
 
     Returns:
-        List[str]: Lista de orígenes parseados (sin espacios en blanco)
+        list[str]: Lista de orígenes parseados (sin espacios en blanco)
     """
     frontend_origins_raw = os.getenv("FRONTEND_ORIGINS", "")
     return [origin.strip() for origin in frontend_origins_raw.split(",") if origin.strip()]
 
 
-def _get_development_origins() -> List[str]:
+def _get_development_origins() -> list[str]:
     """
     Retorna lista de orígenes permitidos en desarrollo local.
 
@@ -56,7 +55,7 @@ def _get_development_origins() -> List[str]:
     - Versiones con 127.0.0.1 de todas las anteriores
 
     Returns:
-        List[str]: Lista de orígenes de desarrollo
+        list[str]: Lista de orígenes de desarrollo
     """
     return [
         "http://localhost:3000",
@@ -70,7 +69,7 @@ def _get_development_origins() -> List[str]:
     ]
 
 
-def _validate_origins(origins: List[str]) -> List[str]:
+def _validate_origins(origins: list[str]) -> list[str]:
     """
     Valida y sanitiza una lista de orígenes CORS.
 
@@ -84,7 +83,7 @@ def _validate_origins(origins: List[str]) -> List[str]:
         origins: Lista de orígenes a validar
 
     Returns:
-        List[str]: Lista de orígenes validados
+        list[str]: Lista de orígenes validados
 
     Raises:
         ValueError: Si se detecta un origen inválido en producción
@@ -100,9 +99,8 @@ def _validate_origins(origins: List[str]) -> List[str]:
                     "CORS: No se permite el wildcard '*' en producción. "
                     "Configure FRONTEND_ORIGINS con orígenes específicos."
                 )
-            else:
-                print(f"⚠️  CORS: Wildcard '*' detectado en desarrollo (ignorado)")
-                continue
+            print("⚠️  CORS: Wildcard '*' detectado en desarrollo (ignorado)")
+            continue
 
         # Rechazar orígenes vacíos
         if not origin:
@@ -115,17 +113,15 @@ def _validate_origins(origins: List[str]) -> List[str]:
                 if _is_production():
                     raise ValueError(
                         f"CORS: Origen inválido '{origin}'. "
-                        f"Solo se permiten esquemas http/https."
+                        "Solo se permiten esquemas http/https."
                     )
-                else:
-                    print(f"⚠️  CORS: Origen inválido '{origin}' (ignorado)")
-                    continue
+                print(f"⚠️  CORS: Origen inválido '{origin}' (ignorado)")
+                continue
         except Exception as e:
             if _is_production():
-                raise ValueError(f"CORS: Error parseando origen '{origin}': {e}")
-            else:
-                print(f"⚠️  CORS: Error parseando origen '{origin}' (ignorado)")
-                continue
+                raise ValueError(f"CORS: Error parseando origen '{origin}': {e}") from e
+            print(f"⚠️  CORS: Error parseando origen '{origin}' (ignorado)")
+            continue
 
         # Eliminar duplicados (preservando orden)
         if origin not in seen:
@@ -135,7 +131,7 @@ def _validate_origins(origins: List[str]) -> List[str]:
     return validated
 
 
-def get_allowed_origins() -> List[str]:
+def get_allowed_origins() -> list[str]:
     """
     Retorna la lista final de orígenes permitidos según el entorno.
 
@@ -238,4 +234,4 @@ def get_cors_config() -> dict:
 
 
 # Variables exportadas para uso en main.py
-__all__ = ["get_cors_config", "get_allowed_origins"]
+__all__ = ["get_allowed_origins", "get_cors_config"]
