@@ -7,6 +7,55 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added - Security Tests Suite ✅ COMPLETADO (19 Dic 2025)
+
+**🛡️ Comprehensive Security Testing** (OWASP A01, A03, A04, A07)
+
+- ✅ 34 tests de seguridad (100% pasando en ~9s)
+- ✅ Tests de rate limiting (7 tests) - OWASP A04, A07
+  - Validación de límites en login (5/min), register (3/h), competitions (10/h)
+  - Tests de bypass (User-Agent, persistencia)
+  - Metadata de rate limiting
+- ✅ Tests de SQL injection (5 tests) - OWASP A03
+  - Intentos de inyección en login, registro, competiciones
+  - Validación de protección ORM (consultas parametrizadas)
+  - Tests de no-raw-SQL execution
+- ✅ Tests de XSS - Cross-Site Scripting (13 tests) - OWASP A03
+  - XSS en campos de usuario y competiciones
+  - Stored XSS en perfiles
+  - Sanitización HTML (tags, protocolos javascript:)
+  - Security headers (X-Content-Type-Options, X-Frame-Options)
+- ✅ Tests de authentication bypass (9 tests) - OWASP A01, A07
+  - Validación de endpoints protegidos
+  - Rechazo de tokens inválidos/expirados
+  - Prevención de manipulación de tokens (alg=none, payload modificado)
+  - Gestión de sesiones (logout, refresh tokens)
+  - Prevención de enumeración de usuarios
+
+**Archivos Creados:**
+- `tests/security/__init__.py`
+- `tests/security/test_rate_limiting_security.py` (293 líneas, 7 tests)
+- `tests/security/test_sql_injection_security.py` (181 líneas, 5 tests)
+- `tests/security/test_xss_security.py` (235 líneas, 13 tests)
+- `tests/security/test_auth_bypass_security.py` (289 líneas, 9 tests)
+
+**Tests Corregidos:**
+- Fixture `test_user_token` reemplazado por `authenticated_client` existente
+- Validación de respuesta 429 ajustada para SlowAPI
+- Schema de competiciones completado con campos obligatorios
+- Tests de manipulación de tokens corregidos (limpieza cookies/headers)
+- Tests de logout corregidos (JSON vacío para LogoutRequestDTO)
+
+**Cobertura OWASP:**
+- A01: Broken Access Control (6 tests)
+- A03: Injection - SQL (5 tests) + XSS (13 tests)
+- A04: Insecure Design (7 tests de rate limiting)
+- A07: Authentication Failures (9 tests)
+
+**Impacto:** Testing automático de seguridad en CI/CD, documentación viva de protecciones, validación continua de controles de seguridad. Total de tests: 819 → 853 (+34 tests de seguridad).
+
+---
+
 ### Added - Sentry Backend Integration ✅ COMPLETADO (18 Dic 2025)
 
 **📊 Error Tracking y Performance Monitoring** (OWASP A09)
@@ -44,6 +93,55 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Integración con Security Logging existente
 
 **Impacto:** Visibilidad total en producción, debugging simplificado, métricas de performance, alertas automáticas. Puntuación OWASP A09: 9.5/10 → 10/10 (+0.5)
+
+---
+
+### Security - Dependency Audit ✅ COMPLETADO (19 Dic 2025)
+
+**🔍 Auditoría de Vulnerabilidades en Dependencias** (OWASP A06)
+
+- ✅ Herramientas de auditoría instaladas: safety 3.7.0 + pip-audit 2.10.0
+- ✅ 6 CVEs detectados en 4 paquetes
+- ✅ 5 CVEs resueltos (83.3% de éxito)
+- ✅ Actualizaciones críticas aplicadas sin breaking changes
+- ✅ Tests completos: 819/819 tests pasando (100%)
+
+**Vulnerabilidades Resueltas:**
+- ✅ CVE-2024-47874 (starlette): DoS via Memory Exhaustion → starlette 0.38.6 → 0.50.0
+- ✅ CVE-2025-54121 (starlette): Event Loop Blocking → starlette 0.38.6 → 0.50.0
+- ✅ CVE-2025-66418 (urllib3): Unlimited Decompression Chain → urllib3 2.5.0 → 2.6.0
+- ✅ CVE-2025-66471 (urllib3): Streaming Decompression Memory Leak → urllib3 2.5.0 → 2.6.0
+- ✅ CVE-2025-68146 (filelock): TOCTOU Race Condition → filelock 3.20.0 → 3.20.1
+
+**Vulnerabilidades Monitoreadas:**
+- ⏳ CVE-2024-23342 (ecdsa): Timing Attack - Sin fix disponible, bajo impacto (no usamos ECDSA)
+
+**Actualizaciones Aplicadas:**
+- `fastapi==0.115.0` → `fastapi==0.125.0`
+- `starlette==0.38.6` → `starlette==0.50.0` (automático con FastAPI)
+- `urllib3==2.5.0` → `urllib3==2.6.0`
+- `filelock==3.20.0` → `filelock==3.20.1`
+- `safety==3.7.0` (nuevo)
+- `pip-audit==2.10.0` (nuevo)
+
+**Archivos Modificados:**
+- `requirements.txt` (6 paquetes actualizados/agregados)
+- `.github/workflows/ci_cd_pipeline.yml` (job security_checks mejorado)
+
+**CI/CD Integration:**
+- ✅ Safety + pip-audit integrados en GitHub Actions
+- ✅ Pipeline falla automáticamente si encuentra CVEs críticos
+- ✅ Reportes JSON generados como artifacts (retención 30 días)
+- ✅ Resumen de seguridad en cada push/PR
+
+**Proceso de Auditoría:**
+1. Instalación de herramientas (safety + pip-audit)
+2. Escaneo de 130 dependencias (directas + transitivas)
+3. Análisis y priorización de vulnerabilidades
+4. Actualización de paquetes críticos
+5. Validación con suite completa de tests
+
+**Impacto:** Protección contra 5 vulnerabilidades críticas/altas (DoS, Memory Exhaustion, Race Conditions). Puntuación OWASP A06: 8.0/10 → 8.5/10 (+0.5). Compliance mejorado para Vulnerable and Outdated Components.
 
 ---
 

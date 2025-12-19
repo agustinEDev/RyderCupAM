@@ -26,7 +26,7 @@
 ### 📈 Métricas Clave
 
 - **Endpoints:** 30+ rutas API
-- **Tests:** 819 tests pasando (100%) en ~124s ⭐ ACTUALIZADO (17 Dic 2025)
+- **Tests:** 853 tests pasando (100%) en ~54s ⭐ ACTUALIZADO (19 Dic 2025)
 - **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
 - **Database:** PostgreSQL con migraciones Alembic
 - **Deployment:** Render.com (contenedor Docker)
@@ -42,8 +42,8 @@
 > **⚠️ IMPORTANTE:** Los detalles completos de implementación están en `docs/SECURITY_IMPLEMENTATION.md`
 > **Este documento temporal debe ELIMINARSE cuando se completen todas las tareas.**
 >
-> **✨ PROGRESO v1.8.0:** 10/16 tareas completadas (Rate Limiting + Security Headers + Password Policy + httpOnly Cookies + Fix Tests + Session Timeout + CORS + Validaciones Pydantic + Security Logging + Correlation IDs + Sentry)
-> **⚠️ SIGUIENTE:** Dependency Audit (tarea 11)
+> **✨ PROGRESO v1.8.0:** 12/16 tareas completadas (Rate Limiting + Security Headers + Password Policy + httpOnly Cookies + Fix Tests + Session Timeout + CORS + Validaciones Pydantic + Security Logging + Correlation IDs + Sentry + Dependency Audit + Security Tests Suite)
+> **⚠️ SIGUIENTE:** Testing exhaustivo e2e (opcional)
 
 ### Estado de Protecciones OWASP
 
@@ -54,7 +54,7 @@
 | **A03: Injection** | 10/10 | ✅ Excelente (+0.5 Sanitización HTML) | 🟢 Baja |
 | **A04: Insecure Design** | 9/10 | ✅ Excelente (+0.5 Límites de longitud) | 🟢 Baja |
 | **A05: Security Misconfiguration** | 8.5/10 | ✅ Bien (+2 Security Headers, +0.3 CORS) | 🟢 Baja |
-| **A06: Vulnerable Components** | 8/10 | ✅ Bien | 🟡 Media |
+| **A06: Vulnerable Components** | 8.5/10 | ✅ Bien (+0.5 Dependency Audit) | 🟡 Media |
 | **A07: Auth Failures** | 9.5/10 | ✅ Excelente (+1.5 Session Timeout + Rate Limiting) | 🟢 Baja |
 | **A08: Data Integrity** | 7/10 | ⚠️ Parcial | 🟡 Media |
 | **A09: Logging & Monitoring** | 10/10 | ✅ Excelente (+3 Security Logging, +0.5 Correlation IDs, +0.5 Sentry) | 🟢 Baja |
@@ -73,7 +73,8 @@
 | CSRF Protection | ⚠️ Parcial (SameSite=lax) | 🟡 Media | A01 |
 | Input Validation | ✅ Implementado (sanitización HTML + validadores estrictos) | - | A03 |
 | Security Logging | ✅ Implementado (8 eventos JSON) | - | A09 |
-| Sentry Monitoring | ✅ Implementado (error tracking + APM + profiling) ⭐ NUEVO | - | A09 |
+| Sentry Monitoring | ✅ Implementado (error tracking + APM + profiling) | - | A09 |
+| Dependency Audit | ✅ Implementado (safety + pip-audit, 5/6 CVEs resueltos) ⭐ NUEVO | - | A06 |
 | Password Policy | ✅ Implementado (OWASP ASVS V2.1) | - | A07 |
 | 2FA/MFA | ❌ NO implementado | 🟠 Alta | A07 |
 | Session Management | ✅ Implementado (refresh tokens, 15min/7días) ⭐ NUEVO | - | A01, A02, A07 |
@@ -224,15 +225,20 @@
   - ✅ Filtros automáticos (health checks, OPTIONS, 404s)
   - ✅ 819/819 tests pasando (100%)
   - **Puntuación mejorada:** A09: 9.5/10 → 10/10 (+0.5)
-- [ ] **11. Dependency Audit** - 2h (NUEVO)
-  - `pip install safety`
-  - Verificar vulnerabilidades conocidas
-  - Actualizar dependencias críticas
-- [ ] **12. Security Tests Suite** - 3-4h (NUEVO)
-  - Tests de rate limiting
-  - Tests de SQL injection attempts
-  - Tests de XSS attempts
-  - Tests de authentication bypass
+- [x] **11. Dependency Audit** - ✅ COMPLETADO (19 Dic 2025) - 2h
+  - ✅ Herramientas instaladas: safety 3.7.0 + pip-audit 2.10.0
+  - ✅ 6 CVEs detectados, 5 resueltos (83.3% éxito)
+  - ✅ Actualizaciones: fastapi 0.125.0, starlette 0.50.0, urllib3 2.6.0, filelock 3.20.1
+  - ✅ 819/819 tests pasando (100%)
+  - **Puntuación mejorada:** A06: 8.0/10 → 8.5/10 (+0.5)
+- [x] **12. Security Tests Suite** - ✅ COMPLETADO (19 Dic 2025)
+  - ✅ 34 tests de seguridad (100% pasando)
+  - ✅ Tests de rate limiting (7 tests)
+  - ✅ Tests de SQL injection attempts (5 tests)
+  - ✅ Tests de XSS attempts (13 tests)
+  - ✅ Tests de authentication bypass (9 tests)
+  - ✅ Cobertura OWASP: A01, A03, A04, A07
+  - **Puntuación mejorada:** 853 tests totales (+34)
 - [ ] Testing exhaustivo e2e - 4h
 - [ ] Deploy y monitoreo - 2h
 

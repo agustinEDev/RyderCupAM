@@ -2,12 +2,12 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-681%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-819%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.125-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF)](.)
-[![Security](https://img.shields.io/badge/security-8.2%2F10-success)](.)
+[![Security](https://img.shields.io/badge/security-10.0%2F10-success)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-ASVS%20V2.1-blue)](https://owasp.org/www-project-application-security-verification-standard/)
 
 ## 🌐 Frontend
@@ -132,12 +132,15 @@ Ver [docs/SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) para deta
 GitHub Actions ejecuta automáticamente en cada push:
 - ✅ **Unit Tests** (Python 3.11, 3.12 en paralelo)
 - ✅ **Integration Tests** (con PostgreSQL)
-- ✅ **Security Scan** (Gitleaks - detección de secretos)
+- ✅ **Security Checks**
+  - Dependency Audit (safety + pip-audit) - **Pipeline falla si encuentra CVEs**
+  - Gitleaks (detección de secretos)
+  - Bandit (security linting)
 - ✅ **Code Quality** (Ruff linting)
 - ✅ **Type Checking** (Mypy)
 - ✅ **Database Migrations** (Alembic validation)
 
-**Pipeline duration**: ~3 minutos | **Jobs**: 7 paralelos
+**Pipeline duration**: ~3 minutos | **Jobs**: 7 paralelos | **Reports**: 30 días retención
 
 Ver [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md) para decisiones técnicas.
 

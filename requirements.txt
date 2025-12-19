@@ -4,7 +4,8 @@
 
 # FastAPI - Framework web moderno para crear APIs REST
 # Características: validación automática, documentación auto-generada, type hints
-fastapi==0.115.0
+# Actualizado a 0.125.0 para resolver CVE-2024-47874 y CVE-2025-54121 en starlette
+fastapi==0.125.0
 
 # Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
 # [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
@@ -74,6 +75,27 @@ secure==0.3.0
 # Integraciones: FastAPI, SQLAlchemy, Redis
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
 sentry-sdk[fastapi]==2.19.2
+
+# safety - Auditoría de vulnerabilidades en dependencias
+# Escanea el proyecto contra Safety DB (40K+ vulnerabilidades conocidas)
+# Detecta CVEs en dependencias directas y transitivas
+# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
+safety==3.7.0
+
+# pip-audit - Auditoría oficial de PyPA para dependencias
+# Escanea contra PyPI Advisory Database y OSV (Open Source Vulnerabilities)
+# Alternativa oficial mantenida por Python Packaging Authority
+# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
+pip-audit==2.10.0
+
+# urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
+# Fijada explícitamente para resolver CVE-2025-66418 y CVE-2025-66471
+# (decompression bomb y unlimited decompression chain)
+urllib3==2.6.0
+
+# filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
+# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition)
+filelock==3.20.1
 
 
 # ================================

@@ -340,20 +340,112 @@ def filter_sensitive_data(event, hint):
 
 ---
 
-## 🟢 9. Auditoría de Dependencias
+## 🟢 9. Auditoría de Dependencias ✅ COMPLETADO (19 Dic 2025)
 
-### Proceso
+### Herramientas Instaladas
 ```bash
-pip install safety
-safety check
-pip list --outdated
-pip install --upgrade fastapi sqlalchemy alembic pydantic
+pip install safety==3.7.0 pip-audit==2.10.0
 ```
 
-### Frecuencia
-- Ejecutar `safety check` mensualmente
-- Revisar `pip list --outdated` mensualmente
-- Testing exhaustivo después de updates
+### CI/CD Integration (GitHub Actions)
+- ✅ **safety** + **pip-audit** ejecutan en cada push/PR
+- ✅ Pipeline **falla automáticamente** si encuentra CVEs críticos
+- ✅ Reportes JSON guardados como artifacts (30 días)
+- ✅ Ubicación: `.github/workflows/ci_cd_pipeline.yml` → Job `security_checks`
+
+### Uso Local
+```bash
+# Escanear vulnerabilidades
+safety scan
+pip-audit
+
+# Actualizar dependencias vulnerables
+pip install "package>=fixed-version"
+pytest tests/ -n auto  # Validar
+```
+
+### Resultados Actuales (19 Dic 2025)
+- ✅ 6 CVEs detectados, 5 resueltos (83.3%)
+- ✅ Actualizaciones: fastapi 0.125.0, starlette 0.50.0, urllib3 2.6.0, filelock 3.20.1
+- ⏳ CVE-2024-23342 (ecdsa): Sin fix, bajo impacto (no usamos ECDSA)
+- ✅ 819/819 tests pasando
+
+---
+
+## Tarea 12: Security Tests Suite ✅ COMPLETADO
+
+**Fecha:** 19 Dic 2025
+**Tiempo:** 4 horas
+**Puntuación OWASP:** A01/A03/A04/A07 - Testing Coverage
+
+### Implementación
+
+**Archivos Creados:**
+- `tests/security/__init__.py`
+- `tests/security/test_rate_limiting_security.py` (293 líneas, 7 tests)
+- `tests/security/test_sql_injection_security.py` (181 líneas, 5 tests)
+- `tests/security/test_xss_security.py` (235 líneas, 13 tests)
+- `tests/security/test_auth_bypass_security.py` (289 líneas, 9 tests)
+
+### Tests Implementados
+
+**1. Rate Limiting Security (7 tests)**
+- ✅ Login rate limit (5/minuto) - bloqueo después de 5 intentos
+- ✅ Prevención de brute force con múltiples passwords
+- ✅ Register rate limit (3/hora) - prevención de spam accounts
+- ✅ Competition creation rate limit (10/hora)
+- ✅ Bypass prevention (User-Agent, persistencia)
+- ✅ Rate limit metadata en headers
+
+**2. SQL Injection Security (5 tests)**
+- ✅ SQL injection en campo email (login)
+- ✅ SQL injection en campo password
+- ✅ SQL injection en campos de registro
+- ✅ SQL injection en nombre de competición
+- ✅ ORM protection (consultas parametrizadas)
+
+**3. XSS Security (13 tests)**
+- ✅ XSS en campos de nombre/apellido
+- ✅ XSS reflejado en mensajes de error
+- ✅ XSS en nombre de competición
+- ✅ XSS en descripción de competición
+- ✅ Stored XSS en perfiles de usuario
+- ✅ Sanitización HTML (tags, protocolos javascript:)
+- ✅ Security headers (X-Content-Type-Options, X-Frame-Options)
+
+**4. Authentication Bypass Security (9 tests)**
+- ✅ Endpoints protegidos requieren autenticación
+- ✅ Rechazo de tokens JWT inválidos
+- ✅ Rechazo de tokens expirados
+- ✅ Prevención de modificación de payload
+- ✅ Prevención de algoritmo 'none'
+- ✅ Logout invalida refresh tokens
+- ✅ No reutilización de refresh tokens revocados
+- ✅ Prevención de enumeración de usuarios
+- ✅ Manejo seguro de race conditions
+
+### Resultados
+
+- ✅ **34 tests de seguridad** (100% pasando)
+- ✅ Tiempo de ejecución: ~9 segundos
+- ✅ Cobertura OWASP: A01, A03 (SQL+XSS), A04, A07
+- ✅ Total de tests: 819 → 853 (+34)
+
+### Integración CI/CD
+
+Los tests de seguridad se ejecutan automáticamente en cada PR:
+```bash
+pytest tests/security/ -v
+```
+
+### Correcciones Aplicadas
+
+Durante la implementación se corrigieron:
+- Fixtures incorrectos (`test_user_token` → `authenticated_client`)
+- Validación de respuestas 429 de SlowAPI
+- Schema de competiciones con campos obligatorios
+- Limpieza de cookies/headers para tests de manipulación de tokens
+- Formato JSON para LogoutRequestDTO
 
 ---
 
