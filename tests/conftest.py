@@ -130,6 +130,41 @@ def pytest_sessionfinish(session, exitstatus):
         print(f"❌ Algunos tests fallaron. Código de salida: {exitstatus}")
 
 # ======================================================================================
+# FIXTURE PARA TESTS UNITARIOS (SIN BASE DE DATOS)
+# ======================================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def unit_client() -> AsyncGenerator[AsyncClient, None]:
+    """
+    Fixture para tests unitarios que NO requieren base de datos.
+    
+    Crea un cliente HTTP para probar middlewares, handlers y lógica
+    que no depende de persistencia. Ideal para tests unitarios puros.
+    
+    Uso:
+        async def test_middleware(unit_client: AsyncClient):
+            response = await unit_client.get("/health")
+            assert response.status_code == 200
+    """
+    from fastapi import FastAPI
+    from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
+    
+    # Crear una app mínima solo con middlewares (sin BD)
+    minimal_app = FastAPI()
+    minimal_app.add_middleware(CorrelationMiddleware)
+    
+    # Endpoint simple para testing
+    @minimal_app.get("/test")
+    async def test_endpoint():
+        return {"status": "ok"}
+    
+    async with AsyncClient(
+        transport=ASGITransport(app=minimal_app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+
+# ======================================================================================
 # FIXTURE PRINCIPAL PARA TESTS DE INTEGRACIÓN
 # ======================================================================================
 
