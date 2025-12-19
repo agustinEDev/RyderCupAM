@@ -1,0 +1,38 @@
+# GitLeaks configuration file
+# https://github.com/gitleaks/gitleaks
+
+title = "Ryder Cup AM - GitLeaks Configuration"
+
+# Paths to ignore completely
+[allowlist]
+  description = "Allowlist for known false positives"
+  
+  # Ignore test files with example tokens
+  paths = [
+    '''tests/.*''',
+    '''.*test.*\.py''',
+    '''k8s/.*-secret\.yaml''',  # Kubernetes secret templates with placeholders
+  ]
+
+  # Ignore specific patterns that are safe
+  regexes = [
+    '''eyJhbGciOiJIUzI1NiIsInR5''',  # Example JWT prefix in documentation
+    '''your-secret-key-change-me''',  # Placeholder values
+    '''rydercupam_password''',        # Example password (not real)
+    '''your-mailgun-key''',            # Placeholder API key
+  ]
+
+  # Ignore commits (if needed)
+  commits = []
+
+  # Ignore specific stopwords that indicate examples/tests
+  stopwords = [
+    '''example''',
+    '''test''',
+    '''mock''',
+    '''fake''',
+    '''placeholder''',
+    '''change-me''',
+  ]
+
+# Additional rules can be added here if needed
