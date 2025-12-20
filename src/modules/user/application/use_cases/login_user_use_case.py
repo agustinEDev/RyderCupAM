@@ -6,6 +6,7 @@ Session Timeout (v1.8.0): Genera access token (15 min) + refresh token (7 días)
 Security Logging (v1.8.0): Registra todos los intentos de login (exitosos y fallidos).
 """
 
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
@@ -119,7 +120,6 @@ class LoginUserUseCase:
             return None
 
         # Registrar evento de login exitoso (Clean Architecture)
-        from datetime import datetime
         login_time = datetime.now()
         user.record_login(
             logged_in_at=login_time,

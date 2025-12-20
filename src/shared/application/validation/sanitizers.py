@@ -16,6 +16,7 @@ Estrategia:
 
 import html
 import re
+import unicodedata
 from typing import Any
 
 
@@ -85,6 +86,27 @@ def sanitize_html(text: str | None, *, allow_whitespace: bool = True) -> str | N
     return sanitized
 
 
+def _sanitize_list_items(items: list, exclude: list[str]) -> list:
+    """Sanitiza items de una lista recursivamente."""
+    return [
+        sanitize_all_fields(item, exclude=exclude) if isinstance(item, dict)
+        else sanitize_html(item) if isinstance(item, str)
+        else item
+        for item in items
+    ]
+
+
+def _sanitize_field_value(value: Any, exclude: list[str]) -> Any:
+    """Sanitiza un valor individual según su tipo."""
+    if isinstance(value, str):
+        return sanitize_html(value)
+    if isinstance(value, dict):
+        return sanitize_all_fields(value, exclude=exclude)
+    if isinstance(value, list):
+        return _sanitize_list_items(value, exclude)
+    return value
+
+
 def sanitize_all_fields(data: dict[str, Any], *, exclude: list[str] | None = None) -> dict[str, Any]:
     """
     Sanitiza todos los campos string de un diccionario recursivamente.
@@ -127,28 +149,8 @@ def sanitize_all_fields(data: dict[str, Any], *, exclude: list[str] | None = Non
         # Saltar campos excluidos
         if key in exclude:
             sanitized[key] = value
-            continue
-
-        # Sanitizar strings
-        if isinstance(value, str):
-            sanitized[key] = sanitize_html(value)
-
-        # Recursión para diccionarios anidados
-        elif isinstance(value, dict):
-            sanitized[key] = sanitize_all_fields(value, exclude=exclude)
-
-        # Recursión para listas
-        elif isinstance(value, list):
-            sanitized[key] = [
-                sanitize_all_fields(item, exclude=exclude) if isinstance(item, dict)
-                else sanitize_html(item) if isinstance(item, str)
-                else item
-                for item in value
-            ]
-
-        # Otros tipos (int, bool, None, etc.) sin modificar
         else:
-            sanitized[key] = value
+            sanitized[key] = _sanitize_field_value(value, exclude)
 
     return sanitized
 
@@ -224,5 +226,4 @@ def normalize_unicode(text: str | None) -> str | None:
     if text is None:
         return None
 
-    import unicodedata
     return unicodedata.normalize("NFC", text)

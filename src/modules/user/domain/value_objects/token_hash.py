@@ -24,11 +24,13 @@ class TokenHash:
         Raises:
             ValueError: Si el hash no es válido
         """
+        sha256_hex_length = 64  # SHA256 produce 64 caracteres hex
+
         if not isinstance(hashed_value, str):
             raise ValueError(f"Hash debe ser string. Recibido: {type(hashed_value).__name__}")
 
-        if len(hashed_value) != 64:  # SHA256 produce 64 caracteres hex
-            raise ValueError(f"Hash inválido. Debe ser SHA256 (64 chars). Recibido: {len(hashed_value)} chars")
+        if len(hashed_value) != sha256_hex_length:
+            raise ValueError(f"Hash inválido. Debe ser SHA256 ({sha256_hex_length} chars). Recibido: {len(hashed_value)} chars")
 
         # Verificar que sea hexadecimal válido
         try:

@@ -52,7 +52,11 @@ class UpdateSecurityUseCase:
         self._uow = uow
         self._email_service = email_service
 
-    async def execute(self, user_id: str, request: UpdateSecurityRequestDTO) -> UpdateSecurityResponseDTO:
+    async def execute(  # noqa: PLR0912, C901 - Complexity required by OWASP security requirements
+        self,
+        user_id: str,
+        request: UpdateSecurityRequestDTO
+    ) -> UpdateSecurityResponseDTO:
         """
         Ejecuta el caso de uso de actualización de seguridad.
 
@@ -73,6 +77,14 @@ class UpdateSecurityUseCase:
             InvalidCredentialsError: Si la contraseña actual es incorrecta
             DuplicateEmailError: Si el nuevo email ya está en uso
             ValueError: Si los datos no son válidos
+
+        Note:
+            Complejidad necesaria por requisitos de seguridad OWASP:
+            - Validación de contraseña actual
+            - Verificación de email único
+            - Revocación de tokens
+            - Logging de seguridad diferenciado
+            - Notificación por email
         """
         # Obtener security logger
         security_logger = get_security_logger()

@@ -1,15 +1,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 
-from src.config.rate_limit import limiter
-from src.shared.infrastructure.security.cookie_handler import (
-    delete_auth_cookie,
-    delete_refresh_token_cookie,
-    set_auth_cookie,
-    set_refresh_token_cookie,
-)
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
@@ -20,6 +13,7 @@ from src.config.dependencies import (
     get_verify_email_use_case,
     security,
 )
+from src.config.rate_limit import limiter
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
@@ -44,6 +38,18 @@ from src.modules.user.application.use_cases.resend_verification_email_use_case i
 )
 from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.shared.infrastructure.security.cookie_handler import (
+    delete_auth_cookie,
+    delete_refresh_token_cookie,
+    get_cookie_name,
+    get_refresh_cookie_name,
+    set_auth_cookie,
+    set_refresh_token_cookie,
+)
+from src.shared.infrastructure.security.jwt_handler import (
+    create_access_token,
+    create_refresh_token,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -109,7 +115,7 @@ def get_user_agent(request: Request) -> str:
 )
 @limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
 async def register_user(
-    request: Request,
+    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
     register_data: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
@@ -291,8 +297,6 @@ async def logout_user(
     Returns:
         LogoutResponseDTO con confirmación y timestamp
     """
-    from src.shared.infrastructure.security.cookie_handler import get_cookie_name
-
     user_id = str(current_user.id)
 
     # Obtener token: prioridad cookie, luego header (mismo orden que get_current_user)
@@ -382,8 +386,6 @@ async def refresh_access_token(
     Raises:
         HTTPException 401: Si refresh token es inválido, expirado o revocado
     """
-    from src.shared.infrastructure.security.cookie_handler import get_refresh_cookie_name
-
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
@@ -472,7 +474,8 @@ async def verify_email(
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    token_preview = f"{request.token[:8]}..." if len(request.token) > 8 else "***"
+    TOKEN_PREVIEW_LENGTH = 8
+    token_preview = f"{request.token[:TOKEN_PREVIEW_LENGTH]}..." if len(request.token) > TOKEN_PREVIEW_LENGTH else "***"
     logger.info(f"Email verification attempt with token: {token_preview}")
 
     try:
@@ -481,7 +484,6 @@ async def verify_email(
 
         # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0
         access_token = create_access_token({"sub": str(user.id.value)})
-        from src.shared.infrastructure.security.jwt_handler import create_refresh_token
         refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
         # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
@@ -489,7 +491,6 @@ async def verify_email(
         set_refresh_token_cookie(response, refresh_token)
 
         # Mapear a DTO
-        from src.modules.user.application.dto.user_dto import LoginResponseDTO, UserResponseDTO
         user_dto = UserResponseDTO.model_validate(user)
 
         # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
@@ -530,7 +531,7 @@ async def verify_email(
 )
 @limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
 async def resend_verification_email(
-    request: Request,
+    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
     resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):

@@ -161,10 +161,7 @@ class RefreshToken:
             return False
 
         # 3. Verificar que el token coincida con el hash
-        if not self._token_hash.verify(token):
-            return False
-
-        return True
+        return self._token_hash.verify(token)
 
     def revoke(self) -> None:
         """
@@ -202,5 +199,10 @@ class RefreshToken:
 
     def __repr__(self) -> str:
         """Representación debug del RefreshToken."""
-        status = "revoked" if self._revoked else ("expired" if self.is_expired() else "valid")
+        if self._revoked:
+            status = "revoked"
+        elif self.is_expired():
+            status = "expired"
+        else:
+            status = "valid"
         return f"RefreshToken(id={self._id}, user_id={self._user_id}, status={status})"

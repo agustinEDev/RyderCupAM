@@ -15,7 +15,7 @@ from src.modules.user.application.ports.token_service_interface import ITokenSer
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
@@ -110,8 +110,8 @@ class RefreshAccessTokenUseCase:
 
         try:
             user_id = UserId(user_id_str)
-        except (ValueError, TypeError, Exception):
-            # Captura ValueError, TypeError, InvalidUserIdError y cualquier otra excepción
+        except (ValueError, TypeError, InvalidUserIdError):
+            # Captura ValueError, TypeError, InvalidUserIdError
             return None
 
         # 3. Verificar que el refresh token NO esté revocado en base de datos

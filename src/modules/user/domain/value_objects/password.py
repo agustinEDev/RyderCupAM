@@ -90,7 +90,7 @@ class Password:
         return hashed.decode('utf-8')
 
     @staticmethod
-    def _validate_password_strength(password: str) -> str | None:
+    def _validate_password_strength(password: str) -> str | None:  # noqa: PLR0911
         """
         Valida la fortaleza de la contraseña según OWASP ASVS V2.1.
 
