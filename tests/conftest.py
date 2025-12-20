@@ -230,6 +230,70 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     fastapi_app.dependency_overrides.clear()
 
+
+@pytest_asyncio.fixture(scope="module")
+async def module_client() -> AsyncGenerator[AsyncClient, None]:
+    """
+    Fixture de cliente para tests a nivel de módulo.
+    Crea una base de datos que se reutiliza para todos los tests del módulo.
+    
+    Scope: module (creado una vez por módulo de tests)
+    Uso: Para fixtures de usuario reutilizables (module_creator_user, etc.)
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    unique_id = str(uuid.uuid4())[:8]
+    db_name = f"test_db_module_{worker_id}_{unique_id}"
+
+    # URL base para conectarse a PostgreSQL
+    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    if db_url_base.startswith(POSTGRESQL_PREFIX):
+        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
+
+    test_db_url = f"{db_url_base}/{db_name}"
+
+    # Motor para crear la base de datos
+    engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
+    async with engine.connect() as conn:
+        await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
+        await conn.execute(text(f"CREATE DATABASE {db_name}"))
+    await engine.dispose()
+
+    # Motor conectado a la base de datos de test
+    test_engine = create_async_engine(test_db_url)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(metadata.create_all)
+        await seed_countries_and_adjacencies(conn)
+
+    test_session_local = async_sessionmaker(
+        autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
+        async with test_session_local() as session:
+            yield session
+
+    fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+
+    test_client_id = f"test-module-{uuid.uuid4()}"
+
+    transport = ASGITransport(app=fastapi_app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Test-Client-ID": test_client_id}
+    ) as ac:
+        yield ac
+
+    # Limpieza
+    await test_engine.dispose()
+
+    async with engine.connect() as conn:
+        await conn.execute(text(f"DROP DATABASE {db_name}"))
+    await engine.dispose()
+
+    fastapi_app.dependency_overrides.clear()
+
+
 # ======================================================================================
 # FIXTURES DE DATOS PARA TESTS
 # ======================================================================================
@@ -512,7 +576,7 @@ def mock_external_services():
 # Si un test necesita modificar un usuario, debe crear uno nuevo.
 
 @pytest_asyncio.fixture(scope="module")
-async def module_creator_user(client: AsyncClient) -> dict:
+async def module_creator_user(module_client: AsyncClient) -> dict:
     """
     Usuario creador reutilizable para todo el módulo de tests.
 
@@ -523,7 +587,7 @@ async def module_creator_user(client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        client,
+        module_client,
         "module_creator@test.com",
         "CreatorPass123!",
         "Module",
@@ -532,7 +596,7 @@ async def module_creator_user(client: AsyncClient) -> dict:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def module_player_user(client: AsyncClient) -> dict:
+async def module_player_user(module_client: AsyncClient) -> dict:
     """
     Usuario jugador reutilizable para todo el módulo de tests.
 
@@ -543,7 +607,7 @@ async def module_player_user(client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        client,
+        module_client,
         "module_player@test.com",
         "PlayerPass123!",
         "Module",
@@ -552,7 +616,7 @@ async def module_player_user(client: AsyncClient) -> dict:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def module_second_player(client: AsyncClient) -> dict:
+async def module_second_player(module_client: AsyncClient) -> dict:
     """
     Segundo usuario jugador reutilizable para tests que necesitan múltiples jugadores.
 
@@ -563,7 +627,7 @@ async def module_second_player(client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        client,
+        module_client,
         "module_player2@test.com",
         "Player2Pass123!",
         "Second",

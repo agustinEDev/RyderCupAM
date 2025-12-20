@@ -2,11 +2,16 @@
  * Login Example
  *
  * Ejemplo de cómo manejar el login con verificación de email
+ * 
+ * SEGURIDAD (v1.8.0+): Usa httpOnly cookies automáticas
+ * - NO necesitas guardar tokens en localStorage
+ * - Los tokens se envían automáticamente con cada request
+ * - El navegador gestiona las cookies de forma segura
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi, saveAuthToken } from '../services/api';
+import { authApi } from '../services/api';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -23,9 +28,9 @@ export const LoginPage = () => {
     try {
       const response = await authApi.login({ email, password });
 
-      // Guardar token
-      saveAuthToken(response.data.access_token);
-
+      // ✅ NO necesitas guardar tokens - las cookies httpOnly se establecieron automáticamente
+      // ❌ NO HAGAS: saveAuthToken(response.data.access_token)
+      
       // Guardar usuario en estado global (Redux, Context, etc.)
       // setUser(response.data.user);
 

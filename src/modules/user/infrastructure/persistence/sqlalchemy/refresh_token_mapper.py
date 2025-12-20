@@ -3,15 +3,17 @@ SQLAlchemy Imperative Mapping para RefreshToken.
 
 Mapea la entidad RefreshToken a la tabla refresh_tokens usando Imperative Mapping.
 """
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, TypeDecorator
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, TypeDecorator, inspect
+from sqlalchemy.exc import NoInspectionAvailable
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Importar metadata y registry compartidos del mapper principal de users
+# Importar metadata, registry y UserIdDecorator compartidos del mapper principal de users
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
+    UserIdDecorator,
     mapper_registry,
     metadata,
 )
@@ -37,24 +39,6 @@ class RefreshTokenIdDecorator(TypeDecorator):
         if value is None:
             return None
         return RefreshTokenId(value)
-
-
-class UserIdDecorator(TypeDecorator):
-    """TypeDecorator para UserId."""
-    impl = String(36)
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        """Convierte UserId → string para BD."""
-        if isinstance(value, UserId):
-            return str(value.value)
-        return value
-
-    def process_result_value(self, value, dialect):
-        """Convierte string → UserId desde BD."""
-        if value is None:
-            return None
-        return UserId(value)
 
 
 class TokenHashDecorator(TypeDecorator):
@@ -101,17 +85,24 @@ def start_mappers():
     Configura el imperative mapping de RefreshToken.
 
     Debe ser llamado al inicio de la aplicación (main.py).
+    Es idempotente: verifica si RefreshToken ya está mapeado antes de mapear.
     """
-    mapper_registry.map_imperatively(
-        RefreshToken,
-        refresh_tokens_table,
-        properties={
-            "_id": refresh_tokens_table.c.id,
-            "_user_id": refresh_tokens_table.c.user_id,
-            "_token_hash": refresh_tokens_table.c.token_hash,
-            "_expires_at": refresh_tokens_table.c.expires_at,
-            "_created_at": refresh_tokens_table.c.created_at,
-            "_revoked": refresh_tokens_table.c.revoked,
-            "_revoked_at": refresh_tokens_table.c.revoked_at,
-        },
-    )
+    # Verificar si RefreshToken ya está mapeado usando inspect() (idempotencia)
+    try:
+        inspect(RefreshToken)
+        # Si llegamos aquí, RefreshToken ya está mapeado
+    except NoInspectionAvailable:
+        # RefreshToken no está mapeado, proceder a mapear
+        mapper_registry.map_imperatively(
+            RefreshToken,
+            refresh_tokens_table,
+            properties={
+                "_id": refresh_tokens_table.c.id,
+                "_user_id": refresh_tokens_table.c.user_id,
+                "_token_hash": refresh_tokens_table.c.token_hash,
+                "_expires_at": refresh_tokens_table.c.expires_at,
+                "_created_at": refresh_tokens_table.c.created_at,
+                "_revoked": refresh_tokens_table.c.revoked,
+                "_revoked_at": refresh_tokens_table.c.revoked_at,
+            },
+        )

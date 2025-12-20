@@ -33,7 +33,7 @@ from ...domain.events.security_events import (
     SecuritySeverity,
 )
 from .config import HandlerConfig, LogConfig, LogFormat, LogHandler, LogLevel
-from .formatters import JsonFormatter
+from .formatters import JsonFormatter, PythonLoggingFormatter
 
 
 class SecurityLogger:
@@ -137,7 +137,8 @@ class SecurityLogger:
             include_context=True,
         )
         json_formatter = JsonFormatter(config=handler_config)
-        handler.setFormatter(json_formatter)
+        # Envolver JsonFormatter en PythonLoggingFormatter adapter para compatibilidad con logging.Handler
+        handler.setFormatter(PythonLoggingFormatter(json_formatter))
 
         logger.addHandler(handler)
 

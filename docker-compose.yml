@@ -21,7 +21,7 @@ services:
   app:
     build: .
     ports:
-      - "${PORT:-8100}:8100"
+      - "${PORT:-8000}:8000"
     volumes:
       - .:/app
     env_file:
@@ -36,7 +36,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-ryderclub}
 
       # Application Configuration
-      - PORT=${PORT:-8100}
+      - PORT=${PORT:-8000}
       - ENVIRONMENT=${ENVIRONMENT:-development}
 
       # JWT Configuration

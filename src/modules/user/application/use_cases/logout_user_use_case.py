@@ -94,22 +94,25 @@ class LogoutUserUseCase:
         logout_time = datetime.now()
         user.record_logout(logout_time, token)
 
-        # 3. Revocar todos los refresh tokens del usuario (v1.8.0)
+        # 3. Obtener todos los refresh tokens del usuario (v1.8.0)
         # Esto previene que el usuario pueda renovar su access token después del logout
         refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
         tokens_revoked_count = 0
 
-        for refresh_token in refresh_tokens:
-            if not refresh_token.revoked:
-                refresh_token.revoke()
-                await self._uow.refresh_tokens.save(refresh_token)
-                tokens_revoked_count += 1
-
         # 4. Persistir cambios usando Unit of Work (Clean Architecture)
-        # El UoW maneja automáticamente la transacción y publicación de eventos
+        # CRÍTICO: Todas las operaciones dentro del contexto UoW para garantizar atomicidad
+        # Si algo falla, TODO se revierte (rollback). Si todo OK, TODO se guarda (commit).
         async with self._uow:
+            # Revocar tokens dentro de la transacción
+            for refresh_token in refresh_tokens:
+                if not refresh_token.revoked:
+                    refresh_token.revoke()
+                    await self._uow.refresh_tokens.save(refresh_token)
+                    tokens_revoked_count += 1
+
+            # Guardar usuario dentro de la misma transacción
             await self._uow.users.save(user)
-            # Los refresh tokens ya fueron actualizados, commit automático
+            # Commit automático al salir del contexto (atomicidad garantizada)
 
         # 5. Security Logging: Logout exitoso
         security_logger.log_logout(

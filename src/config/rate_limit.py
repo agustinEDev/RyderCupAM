@@ -15,21 +15,25 @@ def get_client_identifier(request: Request) -> str:
     """
     Obtiene el identificador del cliente para rate limiting.
 
-    En testing: Usa el header X-Test-Client-ID si existe (permite simular diferentes clientes).
-    En producción: Usa la IP real del cliente.
+    En testing/development: Usa el header X-Test-Client-ID si existe (permite simular diferentes clientes).
+    En producción: Usa SOLO la IP real del cliente (ignora headers para evitar bypass).
     """
-    # En testing, permitir simular diferentes clientes con un header especial
-    if os.getenv('TESTING', 'false').lower() == 'true':
-        test_client_id = request.headers.get('X-Test-Client-ID')
-        if test_client_id:
-            return test_client_id
+    # En producción, SIEMPRE usar IP real (ignorar headers por seguridad)
+    environment = os.getenv('ENVIRONMENT', 'development').lower()
+    if environment == 'production':
+        return get_remote_address(request)
 
-    # En producción (o testing sin header especial), usar IP real
+    # En testing/development, permitir simular diferentes clientes con un header especial
+    test_client_id = request.headers.get('X-Test-Client-ID')
+    if test_client_id:
+        return test_client_id
+
+    # Fallback: usar IP real
     return get_remote_address(request)
 
 
 # Crear instancia global del limiter
-# - key_func: Identifica clientes por IP o header de testing
+# - key_func: Identifica clientes por IP (producción) o header X-Test-Client-ID (testing/dev)
 # - default_limits: Límite global de 100 peticiones/minuto
 # NOTE: headers_enabled=False porque causa conflictos con endpoints que retornan DTOs
 #       Los headers X-RateLimit-* solo aparecen cuando se excede el límite (HTTP 429)

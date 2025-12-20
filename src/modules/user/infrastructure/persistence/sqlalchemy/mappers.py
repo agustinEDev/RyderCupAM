@@ -1,7 +1,8 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, Table
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, Table, inspect
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -87,8 +88,12 @@ def start_mappers():
     Inicia el mapeo entre las entidades de dominio y las tablas de la base de datos.
     Es idempotente, por lo que se puede llamar de forma segura varias veces.
     """
-    # La forma correcta de comprobar si un mapper ya existe para una clase
-    if User not in mapper_registry.mappers:
+    # Verificar si User ya está mapeado usando inspect() (idempotencia)
+    try:
+        inspect(User)
+        # Si llegamos aquí, User ya está mapeado
+    except NoInspectionAvailable:
+        # User no está mapeado, proceder a mapear
         mapper_registry.map_imperatively(User, users_table, properties={
             # Mapeamos las columnas de los ValueObjects a atributos "privados"
             # para que SQLAlchemy no intente mapearlas automáticamente a los públicos.

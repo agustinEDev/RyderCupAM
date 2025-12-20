@@ -31,13 +31,14 @@ import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.types import Event, Hint
 
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
-def before_send(event: dict, hint: dict) -> dict | None:
+def before_send(event: Event, hint: Hint) -> Event | None:
     """
     Hook ejecutado antes de enviar eventos a Sentry.
 
@@ -63,8 +64,19 @@ def before_send(event: dict, hint: dict) -> dict | None:
         return None
 
     # Filtrar 404 Not Found (ruido común)
-    if event.get("exception", {}).get("values", [{}])[0].get("type") == "HTTPException" and "404" in str(hint.get("exc_info", [""])[1]):
-        return None
+    # Acceso robusto: verificar que exception.values existe y no está vacía
+    exception_values = event.get("exception", {}).get("values")
+    if exception_values and len(exception_values) > 0:
+        exception_type = exception_values[0].get("type")
+
+        # Acceso robusto: verificar que exc_info es tupla/lista con suficientes elementos
+        exc_info = hint.get("exc_info")
+        if exc_info and isinstance(exc_info, (tuple, list)) and len(exc_info) > 1:
+            exception_instance = exc_info[1]
+
+            # Filtrar HTTPException 404
+            if exception_type == "HTTPException" and "404" in str(exception_instance):
+                return None
 
     return event
 

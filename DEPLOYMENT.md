@@ -249,7 +249,7 @@ MAILGUN_API_URL=https://api.eu.mailgun.net/v3
 FRONTEND_URL=https://www.rydercupfriends.com
 
 # Sentry - Error Tracking & Performance Monitoring (v1.8.0+)
-SENTRY_DSN=https://2cf71658a6451c6276d3f19dbe7cd032@o4510427294662656.ingest.de.sentry.io/4510430367318096
+SENTRY_DSN=https://<PUBLIC_KEY>@o<ORG_ID>.ingest.de.sentry.io/<PROJECT_ID>
 SENTRY_TRACES_SAMPLE_RATE=0.1
 SENTRY_PROFILES_SAMPLE_RATE=0.05
 
@@ -261,7 +261,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 - DATABASE_URL debe usar `postgresql+asyncpg://` (no `postgresql://`)
 - MAILGUN variables son obligatorias desde v1.1.0
 - FRONTEND_URL debe ser tu dominio de producción
-- SENTRY_DSN: Obtener desde https://sentry.io (dashboard del proyecto)
+- **SENTRY_DSN:** Obtener tu DSN real desde https://sentry.io → Settings → Projects → [Tu Proyecto] → Client Keys (DSN). Reemplaza `<PUBLIC_KEY>`, `<ORG_ID>` y `<PROJECT_ID>` con tus valores reales.
 - SENTRY_TRACES_SAMPLE_RATE: 0.1 = 10% de requests monitoreados (recomendado)
 - SENTRY_PROFILES_SAMPLE_RATE: 0.05 = 5% de profiles (reduce costos en producción)
 
@@ -310,7 +310,7 @@ git push origin main
 |-------|----------|
 | **"Failed to connect to database"** | Verificar DATABASE_URL tiene `postgresql+asyncpg://` y es Internal URL |
 | **"Alembic migrations failed"** | Ejecutar manualmente en Shell: `alembic upgrade head` |
-| **"Port already in use"** | Asegurar `PORT=8000` en variables de entorno |
+| **"Port already in use"** | Asegurar variable `PORT` en variables de entorno (Render la asigna automáticamente) |
 | **Cold Starts (Free Plan)** | App duerme tras 15 min → Primera petición: 30-60s. Upgrade a Starter ($7/mes) para mantenerla activa |
 
 ---
