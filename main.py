@@ -12,13 +12,17 @@ import secrets
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from secure import Secure
 
 from src.config.settings import settings
+from src.config.sentry_config import init_sentry
 from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     start_mappers as start_competition_mappers,
@@ -29,16 +33,25 @@ from src.shared.infrastructure.api.v1 import country_routes
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     start_mappers as start_country_mappers,
 )
+from src.config.rate_limit import limiter
+from src.config.cors_config import get_cors_config
+from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
+from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Gestor de ciclo de vida de la aplicación.
+    - Inicializa Sentry para error tracking y performance monitoring
     - Inicia los mappers de SQLAlchemy al arrancar.
     - (Aquí se podrían añadir otras tareas de inicio/apagado, como conectar a Redis).
     """
     print("INFO:     Iniciando aplicación y configurando mappers...")
+
+    # Inicializar Sentry (v1.8.0 - Task 10)
+    init_sentry()
+
     start_mappers()  # User module mappers
     start_country_mappers()  # Shared domain (Country) mappers
     start_competition_mappers()  # Competition module mappers
@@ -109,41 +122,33 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configurar CORS para permitir peticiones desde el frontend
-# Leemos orígenes desde la variable de entorno FRONTEND_ORIGINS
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
-allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
+# Registrar el limiter en la app para que esté disponible en todos los endpoints
+app.state.limiter = limiter
 
-# Incluir localhost en desarrollo (no en producción)
-ENV = os.getenv("ENVIRONMENT", "development").lower()
-if ENV != "production":
-    allowed_origins.extend([
-        "http://localhost:3000",   # React/Next.js
-        "http://127.0.0.1:3000",   # React/Next.js
-        "http://localhost:5173",   # Vite
-        "http://127.0.0.1:5173",   # Vite
-        "http://localhost:5174",   # Vite (fallback)
-        "http://127.0.0.1:5174",   # Vite (fallback)
-        "http://localhost:8080",   # Kubernetes port-forward (frontend)
-        "http://127.0.0.1:8080",   # Kubernetes port-forward (frontend)
-    ])
+# Registrar el exception handler para RateLimitExceeded
+# Cuando se excede el límite, se responde automáticamente con HTTP 429
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Eliminar duplicados conservando orden
-allowed_origins = list(dict.fromkeys(allowed_origins))
-
-# Si no hay orígenes configurados, dejar solo localhost (modo seguro por defecto)
-if not allowed_origins:
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ]
-
-# Debug: imprimir allowed_origins al iniciar
-print(f"🔒 CORS allowed_origins: {allowed_origins}")
+# ================================
+# CORS MIDDLEWARE (v1.8.0)
+# ================================
+# Configurar CORS (Cross-Origin Resource Sharing) para permitir
+# peticiones desde frontends autorizados únicamente.
+#
+# Características:
+# - Whitelist estricta de orígenes (no wildcards)
+# - Validación automática de esquemas (http/https)
+# - Separación clara desarrollo/producción
+# - allow_credentials=True para cookies httpOnly
+#
+# OWASP Coverage:
+# - A05: Security Misconfiguration (whitelist estricta)
+# - A01: Broken Access Control (control de acceso por origen)
+#
+# Configuración centralizada en: src/config/cors_config.py
 
 # Debug middleware para ver requests OPTIONS (solo en desarrollo)
+ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
     @app.middleware("http")
     async def debug_options_requests(request, call_next):
@@ -152,20 +157,74 @@ if ENV != "production":
             print(f"   Origin: {request.headers.get('origin', 'N/A')}")
             print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
             print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
-            print(f"   All headers: {dict(request.headers)}")
         response = await call_next(request)
         if request.method == "OPTIONS":
             print(f"   Response status: {response.status_code}")
         return response
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    max_age=3600,
-)
+# Correlation ID Middleware (debe ir PRIMERO para capturar todos los requests)
+app.add_middleware(CorrelationMiddleware)
+
+# Sentry User Context Middleware (captura usuario de JWT para eventos)
+app.add_middleware(SentryUserContextMiddleware)
+
+# Aplicar middleware CORS con configuración centralizada
+app.add_middleware(CORSMiddleware, **get_cors_config())
+
+# ================================
+# SECURITY HEADERS MIDDLEWARE
+# ================================
+# Configurar Security Headers HTTP para proteger contra:
+# - XSS (Cross-Site Scripting)
+# - Clickjacking
+# - MIME-sniffing
+# - MITM (Man-in-the-Middle) attacks
+# - Inyección de recursos maliciosos
+#
+# IMPORTANTE: Este middleware debe ir DESPUÉS de CORS
+# para que los headers de seguridad se añadan correctamente
+
+# Instanciar configuración de security headers con valores por defecto
+# La biblioteca 'secure' proporciona headers seguros pre-configurados
+secure_headers = Secure()
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Middleware para añadir Security Headers HTTP a todas las respuestas.
+
+    Headers añadidos por defecto (biblioteca 'secure'):
+    - Strict-Transport-Security (HSTS): max-age=63072000; includeSubdomains
+      → Fuerza HTTPS durante 2 años, previene MITM downgrade attacks
+    - X-Frame-Options: SAMEORIGIN
+      → Previene clickjacking, solo permite iframes del mismo origen
+    - X-Content-Type-Options: nosniff
+      → Previene MIME-sniffing, fuerza respeto al Content-Type declarado
+    - Referrer-Policy: no-referrer, strict-origin-when-cross-origin
+      → Controla información de referer enviada en requests
+    - X-XSS-Protection: 0
+      → Desactivado (obsoleto en navegadores modernos, puede causar vulnerabilidades)
+    - Cache-Control: no-store
+      → Previene cacheo de respuestas sensibles
+
+    OWASP Top 10 2021 Coverage:
+    - A02: Cryptographic Failures (HSTS fuerza cifrado HTTPS)
+    - A03: Injection (X-XSS-Protection, aunque obsoleto)
+    - A04: Insecure Design (X-Frame-Options previene clickjacking)
+    - A05: Security Misconfiguration (todos los headers)
+    - A07: Authentication Failures (X-Frame-Options en login, Cache-Control en tokens)
+
+    Nota: En desarrollo (HTTP), HSTS será ignorado por el navegador.
+          Solo es efectivo en producción con HTTPS.
+    """
+    response = await call_next(request)
+
+    # Añadir todos los security headers a la respuesta
+    headers_dict = secure_headers.headers()
+    for header_name, header_value in headers_dict.items():
+        response.headers[header_name] = header_value
+
+    return response
 
 # Incluir los routers de la API
 app.include_router(

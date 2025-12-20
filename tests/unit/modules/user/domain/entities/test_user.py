@@ -475,7 +475,7 @@ class TestUserEntityEventCollection:
         Then: No debe tener eventos de dominio
         """
         # Arrange
-        user = User.create("Ana", "García", "ana@test.com", "Password123!")
+        user = User.create("Ana", "García", "ana@test.com", "T3stP@ssw0rd!")
         assert user.has_domain_events() is True
 
         # Act
@@ -493,7 +493,7 @@ class TestUserEntityEventCollection:
         Then: La lista interna no debe cambiar
         """
         # Arrange
-        user = User.create("Luis", "Martín", "luis@test.com", "Password123!")
+        user = User.create("Luis", "Martín", "luis@test.com", "T3stP@ssw0rd!")
         original_count = len(user.get_domain_events())
 
         # Act
@@ -543,7 +543,7 @@ class TestUserEntityEventCollection:
         Then: El aggregate_id debe coincidir con el ID del usuario
         """
         # Arrange & Act
-        user = User.create("Pedro", "López", "pedro@test.com", "Password123!")
+        user = User.create("Pedro", "López", "pedro@test.com", "T3stP@ssw0rd!")
 
         # Assert
         events = user.get_domain_events()
@@ -557,7 +557,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_with_valid_value(self):
         """Test: Actualizar hándicap con un valor válido."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         user.update_handicap(15.5)
 
@@ -565,7 +565,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_emits_domain_event(self):
         """Test: Actualizar hándicap emite un evento de dominio."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.clear_domain_events()  # Limpiar evento de creación
 
         user.update_handicap(15.5)
@@ -576,7 +576,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_event_contains_correct_data(self):
         """Test: El evento de actualización contiene los datos correctos."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.clear_domain_events()
 
         user.update_handicap(15.5)
@@ -588,7 +588,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_from_existing_value(self):
         """Test: Actualizar hándicap cuando ya tiene un valor previo."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.update_handicap(15.5)
         user.clear_domain_events()
 
@@ -600,7 +600,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_to_none(self):
         """Test: Actualizar hándicap a None (eliminar hándicap)."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.update_handicap(15.5)
         user.clear_domain_events()
 
@@ -613,7 +613,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_does_not_emit_event_if_same_value(self):
         """Test: No emite evento si el valor no cambia."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.update_handicap(15.5)
         user.clear_domain_events()
 
@@ -624,21 +624,21 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_with_invalid_value_raises_error(self):
         """Test: Actualizar con valor inválido lanza ValueError."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         with pytest.raises(ValueError, match=r"debe estar entre -10\.0 y 54\.0"):
             user.update_handicap(100.0)
 
     def test_update_handicap_below_minimum_raises_error(self):
         """Test: Actualizar con valor por debajo del mínimo lanza error."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         with pytest.raises(ValueError):
             user.update_handicap(-15.0)
 
     def test_update_handicap_updates_timestamp(self):
         """Test: Actualizar hándicap actualiza el timestamp updated_at."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         original_updated_at = user.updated_at
 
         import time
@@ -650,7 +650,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_with_negative_value(self):
         """Test: Actualizar con hándicap negativo válido."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         user.update_handicap(-5.0)
 
@@ -658,7 +658,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_with_zero(self):
         """Test: Actualizar con hándicap cero."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         user.update_handicap(0.0)
 
@@ -666,7 +666,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_minimum_valid_value(self):
         """Test: Actualizar con valor mínimo válido (-10.0)."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         user.update_handicap(-10.0)
 
@@ -674,7 +674,7 @@ class TestUserUpdateHandicap:
 
     def test_update_handicap_maximum_valid_value(self):
         """Test: Actualizar con valor máximo válido (54.0)."""
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         user.update_handicap(54.0)
 
@@ -692,7 +692,7 @@ class TestUserEmailVerification:
         Then: Se genera un token y se asigna al usuario
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         assert user.verification_token is None
 
         # Act
@@ -712,7 +712,7 @@ class TestUserEmailVerification:
         Then: Cada token es diferente
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         # Act
         token1 = user.generate_verification_token()
@@ -732,7 +732,7 @@ class TestUserEmailVerification:
         Then: updated_at se actualiza
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         original_updated_at = user.updated_at
 
         # Act
@@ -749,7 +749,7 @@ class TestUserEmailVerification:
         Then: El email se marca como verificado
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
 
         # Act
@@ -768,7 +768,7 @@ class TestUserEmailVerification:
         Then: Se lanza ValueError
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         user.generate_verification_token()
 
         # Act & Assert
@@ -783,7 +783,7 @@ class TestUserEmailVerification:
         Then: Se lanza ValueError
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
         user.verify_email(token)
 
@@ -800,7 +800,7 @@ class TestUserEmailVerification:
         Then: El token se elimina (se pone en None)
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
         assert user.verification_token is not None
 
@@ -818,7 +818,7 @@ class TestUserEmailVerification:
         Then: updated_at se actualiza
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
         original_updated_at = user.updated_at
 
@@ -836,7 +836,7 @@ class TestUserEmailVerification:
         Then: Se emite un EmailVerifiedEvent
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
         user.clear_domain_events()  # Limpiar eventos anteriores
 
@@ -865,7 +865,7 @@ class TestUserEmailVerification:
         Then: Retorna False
         """
         # Arrange & Act
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         # Assert
         assert user.is_email_verified() is False
@@ -878,7 +878,7 @@ class TestUserEmailVerification:
         Then: Retorna True
         """
         # Arrange
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
         token = user.generate_verification_token()
         user.verify_email(token)
 
@@ -893,7 +893,7 @@ class TestUserEmailVerification:
         Then: email_verified es False y verification_token es None
         """
         # Act
-        user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+        user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
 
         # Assert
         assert user.email_verified is False

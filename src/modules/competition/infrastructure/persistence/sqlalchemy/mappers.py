@@ -163,6 +163,9 @@ class CompetitionNameComposite:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash(str(self.value) if self.value else None)
+
 
 class DateRangeComposite:
     """
@@ -187,6 +190,11 @@ class DateRangeComposite:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        if self.value:
+            return hash((self.value.start_date, self.value.end_date))
+        return hash(None)
 
 
 class LocationComposite:
@@ -229,6 +237,15 @@ class LocationComposite:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        if self.value:
+            return hash((
+                self.value.main_country,
+                self.value.adjacent_country_1,
+                self.value.adjacent_country_2
+            ))
+        return hash(None)
+
 
 class HandicapSettingsComposite:
     """
@@ -258,6 +275,11 @@ class HandicapSettingsComposite:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        if self.value:
+            return hash((self.value.type.value, self.value.percentage))
+        return hash(None)
+
 
 class CompetitionStatusComposite:
     """
@@ -281,6 +303,9 @@ class CompetitionStatusComposite:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash(self.value.value if self.value else None)
+
 
 class EnrollmentStatusComposite:
     """
@@ -303,6 +328,9 @@ class EnrollmentStatusComposite:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(self.value.value if self.value else None)
 
 
 # =============================================================================

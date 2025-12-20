@@ -1,10 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.user.domain.repositories.refresh_token_repository_interface import (
+    RefreshTokenRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_repository import (
+    SQLAlchemyRefreshTokenRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
@@ -14,15 +20,24 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository impo
 class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     """
     Implementación asíncrona de la Unit of Work con SQLAlchemy.
+
+    Repositorios incluidos (v1.8.0):
+    - users: SQLAlchemyUserRepository
+    - refresh_tokens: SQLAlchemyRefreshTokenRepository (Session Timeout)
     """
 
     def __init__(self, session: AsyncSession):
         self._session = session
         self._users = SQLAlchemyUserRepository(session)
+        self._refresh_tokens = SQLAlchemyRefreshTokenRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
         return self._users
+
+    @property
+    def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+        return self._refresh_tokens
 
     async def __aenter__(self):
         return self

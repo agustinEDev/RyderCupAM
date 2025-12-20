@@ -38,7 +38,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="ValidPass123"
+        plain_password="V@l1dP@ss123!"
     )
 
     async with uow:
@@ -58,7 +58,7 @@ async def another_user(uow):
         first_name="Jane",
         last_name="Smith",
         email_str="another@example.com",
-        plain_password="AnotherPass123"
+        plain_password="An0th3rP@ss!"
     )
 
     async with uow:
@@ -78,7 +78,7 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password=None,
             confirm_password=None
@@ -94,7 +94,7 @@ class TestUpdateSecurityUseCase:
 
         # Verificar que el password no cambió
         updated_user = await uow.users.find_by_id(UserId(user_id))
-        assert updated_user.verify_password("ValidPass123")
+        assert updated_user.verify_password("V@l1dP@ss123!")
 
     async def test_update_password_only(self, uow, existing_user):
         """Debe actualizar solo el password cuando se proporciona."""
@@ -102,10 +102,10 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email=None,
-            new_password="NewSecurePass456",
-            confirm_password="NewSecurePass456"
+            new_password="N3wS3cur3P@ss!",
+            confirm_password="N3wS3cur3P@ss!"
         )
 
         # Act
@@ -117,8 +117,8 @@ class TestUpdateSecurityUseCase:
 
         # Verificar que el password SÍ cambió
         updated_user = await uow.users.find_by_id(UserId(user_id))
-        assert updated_user.verify_password("NewSecurePass456")
-        assert not updated_user.verify_password("ValidPass123")
+        assert updated_user.verify_password("N3wS3cur3P@ss!")
+        assert not updated_user.verify_password("V@l1dP@ss123!")
 
     async def test_update_both_email_and_password(self, uow, existing_user):
         """Debe actualizar ambos cuando se proporcionan."""
@@ -126,10 +126,10 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
-            new_password="NewSecurePass456",
-            confirm_password="NewSecurePass456"
+            new_password="N3wS3cur3P@ss!",
+            confirm_password="N3wS3cur3P@ss!"
         )
 
         # Act
@@ -142,7 +142,7 @@ class TestUpdateSecurityUseCase:
         # Verificar cambios en BD
         updated_user = await uow.users.find_by_id(UserId(user_id))
         assert str(updated_user.email.value) == "newemail@example.com"
-        assert updated_user.verify_password("NewSecurePass456")
+        assert updated_user.verify_password("N3wS3cur3P@ss!")
 
     async def test_update_fails_with_wrong_current_password(self, uow, existing_user):
         """Debe lanzar InvalidCredentialsError cuando el password actual es incorrecto."""
@@ -150,7 +150,7 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="WrongPassword",
+            current_password="Wr0ngP@ssw0rd!",
             new_email="newemail@example.com",
             new_password=None,
             confirm_password=None
@@ -166,7 +166,7 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         non_existent_id = "00000000-0000-0000-0000-000000000000"
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password=None,
             confirm_password=None
@@ -182,7 +182,7 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="another@example.com",  # Ya existe
             new_password=None,
             confirm_password=None
@@ -198,7 +198,7 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="test@example.com",  # Mismo email
             new_password=None,
             confirm_password=None
@@ -218,7 +218,7 @@ class TestUpdateSecurityUseCase:
         # Act & Assert
         with pytest.raises(ValidationError):
             UpdateSecurityRequestDTO(
-                current_password="ValidPass123",
+                current_password="V@l1dP@ss123!",
                 new_email="invalid-email",  # Sin @
                 new_password=None,
                 confirm_password=None
@@ -230,10 +230,10 @@ class TestUpdateSecurityUseCase:
         use_case = UpdateSecurityUseCase(uow)
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
-            current_password="ValidPass123",
+            current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
-            new_password="NewPass456",
-            confirm_password="NewPass456"
+            new_password="N3wP@ss456!0",
+            confirm_password="N3wP@ss456!0"
         )
 
         # Act
@@ -244,4 +244,4 @@ class TestUpdateSecurityUseCase:
 
         # Verificar que los cambios se aplicaron
         assert str(updated_user.email.value) == "newemail@example.com"
-        assert updated_user.verify_password("NewPass456")
+        assert updated_user.verify_password("N3wP@ss456!0")

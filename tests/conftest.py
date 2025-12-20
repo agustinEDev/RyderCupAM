@@ -1,6 +1,7 @@
 # tests/conftest.py
 import os
 import sys
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
@@ -129,6 +130,41 @@ def pytest_sessionfinish(session, exitstatus):
         print(f"❌ Algunos tests fallaron. Código de salida: {exitstatus}")
 
 # ======================================================================================
+# FIXTURE PARA TESTS UNITARIOS (SIN BASE DE DATOS)
+# ======================================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def unit_client() -> AsyncGenerator[AsyncClient, None]:
+    """
+    Fixture para tests unitarios que NO requieren base de datos.
+    
+    Crea un cliente HTTP para probar middlewares, handlers y lógica
+    que no depende de persistencia. Ideal para tests unitarios puros.
+    
+    Uso:
+        async def test_middleware(unit_client: AsyncClient):
+            response = await unit_client.get("/health")
+            assert response.status_code == 200
+    """
+    from fastapi import FastAPI
+    from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
+    
+    # Crear una app mínima solo con middlewares (sin BD)
+    minimal_app = FastAPI()
+    minimal_app.add_middleware(CorrelationMiddleware)
+    
+    # Endpoint simple para testing
+    @minimal_app.get("/test")
+    async def test_endpoint():
+        return {"status": "ok"}
+    
+    async with AsyncClient(
+        transport=ASGITransport(app=minimal_app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+
+# ======================================================================================
 # FIXTURE PRINCIPAL PARA TESTS DE INTEGRACIÓN
 # ======================================================================================
 
@@ -139,7 +175,9 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     limpia y aislada para CADA test, incluso en ejecuciones paralelas.
     """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    db_name = f"test_db_{worker_id}"
+    # Usar UUID único para cada test para evitar colisiones
+    unique_id = str(uuid.uuid4())[:8]
+    db_name = f"test_db_{worker_id}_{unique_id}"
 
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
     db_url_base = DATABASE_URL.rsplit('/', 1)[0]
@@ -172,8 +210,15 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
 
+    # Generar ID único para este test (evita colisiones con rate limiter)
+    test_client_id = f"test-{uuid.uuid4()}"
+
     transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Test-Client-ID": test_client_id}  # IP simulada única por test
+    ) as ac:
         yield ac
 
     # Limpieza
@@ -318,7 +363,10 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
 
 async def create_authenticated_user(client: AsyncClient, email: str, password: str, first_name: str, last_name: str) -> dict:
     """
-    Helper para crear un usuario y obtener su token de autenticación.
+    Helper para crear un usuario y obtener sus cookies de autenticación.
+
+    Simula el flujo real de producción donde el frontend usa HTTPOnly cookies
+    en lugar de headers Authorization.
 
     Args:
         client: Cliente HTTP de testing
@@ -328,7 +376,7 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
         last_name: Apellido
 
     Returns:
-        Dict con 'token', 'user_id' y 'user_data'
+        Dict con 'cookies', 'token' (legacy), 'user'
     """
     # Registrar usuario
     user_data = {
@@ -350,11 +398,37 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
 
     token = login_response.json()["access_token"]
     user_info = login_response.json()["user"]
+    
+    # Capturar cookies HTTPOnly del response (como lo haría el navegador)
+    cookies = dict(login_response.cookies)
+    
+    # Limpiar cookies del cliente para evitar conflictos entre usuarios
+    client.cookies.clear()
 
     return {
-        "token": token,
+        "cookies": cookies,
+        "token": token,  # Mantener por compatibilidad
         "user": user_info
     }
+
+
+def set_auth_cookies(client: AsyncClient, cookies: dict) -> None:
+    """
+    Helper para establecer cookies de autenticación en el cliente.
+    
+    Evita el DeprecationWarning de httpx al usar cookies= en cada request.
+    Usar antes de requests autenticadas en tests.
+    
+    Args:
+        client: Cliente HTTP de testing
+        cookies: Dict de cookies de autenticación
+    
+    Example:
+        set_auth_cookies(client, user["cookies"])
+        response = await client.get("/api/v1/protected")
+    """
+    client.cookies.clear()
+    client.cookies.update(cookies)
 
 
 async def get_user_by_email(client: AsyncClient, email: str):
@@ -372,35 +446,33 @@ async def get_user_by_email(client: AsyncClient, email: str):
     Raises:
         AssertionError: Si el usuario no existe
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
     from src.modules.user.domain.value_objects.email import Email
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
         SQLAlchemyUserRepository,
     )
+    from src.config.dependencies import get_db_session
 
-    # Obtener la URL de la BD del cliente (está en la app state)
-    # Como no podemos acceder directamente, usamos la variable de entorno
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    db_name = f"test_db_{worker_id}"
-    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
-    if db_url_base.startswith(POSTGRESQL_PREFIX):
-        db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
-    test_db_url = f"{db_url_base}/{db_name}"
+    # Obtener la sesión DB desde el override del cliente
+    # El override está configurado en el fixture client()
+    db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
+    if db_session_override is None:
+        raise RuntimeError("get_db_session no tiene override - el test debe usar el fixture client()")
 
-    # Crear engine y session
-    engine = create_async_engine(test_db_url, echo=False)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    # Usar la sesión overrideada
+    # IMPORTANTE: Usar async with para asegurar que la sesión se cierra correctamente
+    async for session in db_session_override():
+        try:
+            repo = SQLAlchemyUserRepository(session)
+            email_vo = Email(email)
+            user = await repo.find_by_email(email_vo)
+            assert user is not None, f"Usuario con email {email} no encontrado"
+            return user
+        finally:
+            # Cerrar la sesión explícitamente para liberar la conexión
+            await session.close()
 
-    async with session_factory() as session:
-        repo = SQLAlchemyUserRepository(session)
-        email_vo = Email(email)
-        user = await repo.find_by_email(email_vo)
-
-    await engine.dispose()
-
-    assert user is not None, f"Usuario con email {email} no encontrado"
-    return user
+    # Este punto nunca debería alcanzarse
+    raise RuntimeError("No se pudo obtener sesión DB")
 
 
 # ======================================================================================
@@ -431,6 +503,75 @@ def mock_external_services():
 
 
 # ======================================================================================
+# REUSABLE USER FIXTURES (Performance optimization)
+# ======================================================================================
+# Estos fixtures crean usuarios UNA VEZ por módulo de tests (scope="module")
+# y los reutilizan en todos los tests del módulo, ahorrando ~10-15s en total.
+#
+# IMPORTANTE: Estos usuarios NO deben modificarse en los tests (read-only).
+# Si un test necesita modificar un usuario, debe crear uno nuevo.
+
+@pytest_asyncio.fixture(scope="module")
+async def module_creator_user(client: AsyncClient) -> dict:
+    """
+    Usuario creador reutilizable para todo el módulo de tests.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_creator@test.com",
+        "CreatorPass123!",
+        "Module",
+        "Creator"
+    )
+
+
+@pytest_asyncio.fixture(scope="module")
+async def module_player_user(client: AsyncClient) -> dict:
+    """
+    Usuario jugador reutilizable para todo el módulo de tests.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_player@test.com",
+        "PlayerPass123!",
+        "Module",
+        "Player"
+    )
+
+
+@pytest_asyncio.fixture(scope="module")
+async def module_second_player(client: AsyncClient) -> dict:
+    """
+    Segundo usuario jugador reutilizable para tests que necesitan múltiples jugadores.
+
+    Scope: module (creado una vez, reutilizado en todos los tests del módulo)
+    Performance: Ahorra ~50ms por test (bcrypt hashing)
+
+    Returns:
+        Dict con user data y cookies de autenticación
+    """
+    return await create_authenticated_user(
+        client,
+        "module_player2@test.com",
+        "Player2Pass123!",
+        "Second",
+        "Player"
+    )
+
+
+# ======================================================================================
 # COMPETITION MODULE FIXTURES
 # ======================================================================================
 
@@ -458,7 +599,7 @@ def sample_competition_data() -> dict:
 
 async def create_competition(
     client: AsyncClient,
-    token: str,
+    cookies: dict,
     competition_data: dict | None = None
 ) -> dict:
     """
@@ -466,19 +607,20 @@ async def create_competition(
 
     Args:
         client: Cliente HTTP de testing
-        token: Token JWT de autenticación
+        cookies: Cookies HTTPOnly de autenticación
         competition_data: Datos de la competición (opcional)
 
     Returns:
         Dict con los datos de la competición creada
     """
     from datetime import date, timedelta
+    import uuid
 
     if competition_data is None:
         start = date.today() + timedelta(days=30)
         end = start + timedelta(days=3)
         competition_data = {
-            "name": f"Test Competition {start.isoformat()}",
+            "name": f"Test Competition {uuid.uuid4().hex[:8]}",
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
@@ -488,20 +630,26 @@ async def create_competition(
             "team_assignment": "MANUAL"
         }
 
+    # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
+    client.cookies.clear()
+    client.cookies.update(cookies)
+    
     response = await client.post(
         "/api/v1/competitions",
-        json=competition_data,
-        headers={"Authorization": f"Bearer {token}"}
+        json=competition_data
     )
     assert response.status_code == 201, f"Failed to create competition: {response.text}"
     return response.json()
 
 
-async def activate_competition(client: AsyncClient, token: str, competition_id: str) -> dict:
+async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
     """Helper para activar una competición (DRAFT -> ACTIVE)."""
+    # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
+    client.cookies.clear()
+    client.cookies.update(cookies)
+    
     response = await client.post(
-        f"/api/v1/competitions/{competition_id}/activate",
-        headers={"Authorization": f"Bearer {token}"}
+        f"/api/v1/competitions/{competition_id}/activate"
     )
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"
     return response.json()
