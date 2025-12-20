@@ -1,0 +1,31 @@
+# GitGuardian configuration file
+# Excludes test files and known false positives
+
+version: 2
+
+paths-ignore:
+  - tests/**
+  - **/test_*.py
+  - **/*_test.py
+  - k8s/*-secret.yaml  # Template secrets with placeholders
+  - k8s/api-secret.yaml
+
+# Specific secrets to ignore (these are examples/placeholders, not real secrets)
+matches-ignore:
+  - name: Example JWT in documentation
+    match: eyJhbGciOiJIUzI1NiIsInR5
+  
+  - name: Placeholder secret key
+    match: your-secret-key-change-me
+  
+  - name: Example database password
+    match: rydercupam_password
+  
+  - name: Placeholder Mailgun key
+    match: your-mailgun-key
+  
+  - name: Base64 placeholders in k8s
+    match: cnlkZXJjdXBhbV9hZG1pbnVzZXI=
+  
+  - name: Test token hashes
+    match: "^[a-f0-9]{64}$"  # SHA256 hashes in tests

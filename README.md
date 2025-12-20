@@ -2,11 +2,13 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-667%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-819%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)](.)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.125-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF)](.)
+[![Security](https://img.shields.io/badge/security-10.0%2F10-success)](.)
+[![OWASP](https://img.shields.io/badge/OWASP-ASVS%20V2.1-blue)](https://owasp.org/www-project-application-security-verification-standard/)
 
 ## 🌐 Frontend
 
@@ -66,12 +68,11 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 
 ## ✨ Features API
 
-- ✅ **User Management** - Registro, autenticación JWT, gestión de perfil
-- ✅ **Authentication** - Login/Logout con tokens JWT + Domain Events
-- ✅ **Email Verification** - Confirmación de email con Mailgun (bilingüe ES/EN)
-- ✅ **Handicap System** - Integración RFEG, actualización automática y batch
-- ✅ **Session Management** - Estrategia progresiva (Fase 1 implementada)
-- 🚧 **Competition Module** - Domain layer completo (Use Cases en desarrollo)
+- ✅ **User Management** - Registro, autenticación JWT, gestión de perfil, verificación email (Mailgun)
+- ✅ **Handicap System** - Integración RFEG, actualización manual y batch
+- ✅ **Competition Module** - CRUD completo, state transitions, enrollment system (20 endpoints)
+- ✅ **Countries** - 166 países con 614 relaciones de fronteras, soporte multilenguaje
+- ⏳ **RAG Chatbot** - Asistente de reglamento de golf (v1.11.0 planeado)
 - ⏳ **Real-time Scoring** - Resultados en vivo (planeado)
 
 ## 🏗️ Arquitectura
@@ -86,52 +87,76 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (667 tests, ~30s con paralelización)
-pytest tests/unit/           # Unit tests (595+ tests)
-pytest tests/integration/    # Integration tests (72+ tests)
+python dev_tests.py          # Full suite (681 tests, ~45s con paralelización)
+pytest tests/unit/           # Unit tests (544 tests)
+pytest tests/integration/    # Integration tests (137 tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **667 tests** pasando (97.6% ✅)
+- **681 tests** pasando (100% ✅) en 44.95 segundos
+- **Competition Module**: 174 tests completos (domain, application, infrastructure)
+- **User Module**: 507 tests (incluye password policy)
+- **Security Tests**: 12 tests (rate limiting + security headers)
 - **Cobertura**: >90% en lógica de negocio
-- **Cobertura Email Verification**: 100% (24 tests en 3 niveles)
-- **Cobertura Competition Module**: 100% (174 tests completos)
+- **Fix de paralelización**: UUID único por BD de test (pytest-xdist)
+
+## 🔐 Seguridad
+
+**Puntuación OWASP Top 10 2021**: 8.2/10 ✅ (+0.2 tras Password Policy)
+
+**Protecciones Implementadas**:
+- ✅ **Password Policy** (OWASP ASVS V2.1) - Contraseñas robustas (A07)
+  - Mínimo 12 caracteres (ASVS V2.1.1)
+  - Complejidad completa: mayúsculas + minúsculas + dígitos + símbolos (ASVS V2.1.2)
+  - Blacklist de contraseñas comunes (ASVS V2.1.7)
+  - bcrypt con 12 rounds (4 rounds en tests)
+- ✅ **Rate Limiting** (SlowAPI) - Previene brute force, DoS (A04, A07)
+  - Login: 5/min, Register: 3/hour, API externa: 5/hour
+- ✅ **Security Headers HTTP** (secure) - Previene XSS, clickjacking, MITM (A02, A03, A04, A05, A07)
+  - HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Cache-Control
+- ✅ **HTTPS** obligatorio en producción (Render.com)
+- ✅ **SQL Injection Protection** (SQLAlchemy ORM parameterizado)
+- ✅ **JWT Authentication** con tokens seguros
+- ✅ **Input Validation** (Pydantic schemas)
+
+**Pendiente (v1.8.0)**:
+- ⏳ httpOnly Cookies (próximo)
+- ⏳ Session Timeout + Refresh Tokens
+- ⏳ 2FA/MFA (v1.9.0)
+
+Ver [docs/SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) para detalles completos.
 
 ## 🔄 CI/CD Pipeline
 
 GitHub Actions ejecuta automáticamente en cada push:
 - ✅ **Unit Tests** (Python 3.11, 3.12 en paralelo)
 - ✅ **Integration Tests** (con PostgreSQL)
-- ✅ **Security Scan** (Gitleaks - detección de secretos)
+- ✅ **Security Checks**
+  - Dependency Audit (safety + pip-audit) - **Pipeline falla si encuentra CVEs**
+  - Gitleaks (detección de secretos)
+  - Bandit (security linting)
 - ✅ **Code Quality** (Ruff linting)
 - ✅ **Type Checking** (Mypy)
 - ✅ **Database Migrations** (Alembic validation)
 
-**Pipeline duration**: ~3 minutos | **Jobs**: 7 paralelos
+**Pipeline duration**: ~3 minutos | **Jobs**: 7 paralelos | **Reports**: 30 días retención
 
 Ver [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md) para decisiones técnicas.
 
 ### Endpoints API Disponibles
 
-```bash
-# Authentication
-POST   /api/v1/auth/register         # User registration
-POST   /api/v1/auth/login            # JWT authentication
-POST   /api/v1/auth/verify-email     # Email verification
-POST   /api/v1/auth/logout           # Logout with audit
-
-# Handicap Management
-POST   /api/v1/handicaps/update              # RFEG lookup + fallback
-POST   /api/v1/handicaps/update-manual       # Manual update
-POST   /api/v1/handicaps/update-multiple     # Batch processing
-
-# User Management
-GET    /api/v1/users/search          # Search by email/name
-```
+**30+ endpoints REST** organizados en módulos:
+- **Auth** (4): registro, login, logout, verificación email
+- **Users**: perfil, búsqueda, gestión
+- **Handicaps** (3): actualización RFEG, manual, batch
+- **Competitions** (10): CRUD + state transitions (activate, start, complete, etc.)
+- **Enrollments** (8): solicitudes, aprobaciones, custom handicap
+- **Countries** (2): listado, países adyacentes
 
 **Documentación completa**:
 - Swagger UI: `http://localhost:8000/docs`
+- API Reference: [docs/API.md](docs/API.md)
 - Frontend Examples: [docs/frontend-examples/](docs/frontend-examples/)
 
 ## 💻 Desarrollo

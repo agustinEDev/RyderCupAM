@@ -57,7 +57,7 @@ class TestResendVerificationEmailUseCase:
         """
         # Crear usuario sin verificar
         async with uow:
-            user = User.create("Juan", "Pérez", "juan@test.com", "Password123!")
+            user = User.create("Juan", "Pérez", "juan@test.com", "T3stP@ssw0rd!")
             old_token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -121,7 +121,7 @@ class TestResendVerificationEmailUseCase:
         """
         # Arrange - Crear usuario y verificarlo
         async with uow:
-            user = User.create("María", "García", "maria@test.com", "Password123!")
+            user = User.create("María", "García", "maria@test.com", "T3stP@ssw0rd!")
             token = user.generate_verification_token()
             user.verify_email(token)  # Verificar el email
             await uow.users.save(user)
@@ -144,7 +144,7 @@ class TestResendVerificationEmailUseCase:
         Then: Se genera un nuevo token diferente al anterior
         """
         async with uow:
-            user = User.create("Pedro", "López", "pedro@test.com", "Password123!")
+            user = User.create("Pedro", "López", "pedro@test.com", "T3stP@ssw0rd!")
             old_token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -174,7 +174,7 @@ class TestResendVerificationEmailUseCase:
         Then: Los cambios se persisten correctamente
         """
         async with uow:
-            user = User.create("Ana", "Martínez", "ana@test.com", "Password123!")
+            user = User.create("Ana", "Martínez", "ana@test.com", "T3stP@ssw0rd!")
             user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -208,7 +208,7 @@ class TestResendVerificationEmailUseCase:
         email_service_mock_fail.send_verification_email.return_value = False
 
         async with uow:
-            user = User.create("Carlos", "Ruiz", "carlos@test.com", "Password123!")
+            user = User.create("Carlos", "Ruiz", "carlos@test.com", "T3stP@ssw0rd!")
             original_token = user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()
@@ -238,7 +238,7 @@ class TestResendVerificationEmailUseCase:
         Then: El servicio de email se llama con los parámetros correctos
         """
         async with uow:
-            user = User.create("Luis", "Fernández", "luis@test.com", "Password123!")
+            user = User.create("Luis", "Fernández", "luis@test.com", "T3stP@ssw0rd!")
             user.generate_verification_token()
             await uow.users.save(user)
             await uow.commit()

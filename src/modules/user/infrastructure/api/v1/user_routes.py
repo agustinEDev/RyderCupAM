@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_current_user,
@@ -26,6 +26,48 @@ from src.modules.user.domain.errors.user_errors import (
 )
 
 router = APIRouter()
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Security Context Extraction
+# ============================================================================
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extrae la dirección IP del cliente del request.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        Dirección IP del cliente o "unknown"
+    """
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
+def get_user_agent(request: Request) -> str:
+    """
+    Extrae el User-Agent del cliente del request.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        User-Agent del navegador o "unknown"
+    """
+    user_agent = request.headers.get("User-Agent")
+    return user_agent if user_agent else "unknown"
 
 @router.get(
     "/search",
@@ -129,6 +171,7 @@ async def update_profile(
     tags=["Users"],
 )
 async def update_security(
+    http_request: Request,
     request: UpdateSecurityRequestDTO,
     use_case: UpdateSecurityUseCase = Depends(get_update_security_use_case),
     current_user: UserResponseDTO = Depends(get_current_user)
@@ -145,8 +188,17 @@ async def update_security(
     - Al menos uno de: new_email o new_password
 
     Si se cambia password, se debe proporcionar confirm_password.
+
+    Security Logging (v1.8.0):
+    - Registra cambios de contraseña (severity HIGH)
+    - Registra cambios de email (severity HIGH)
+    - Revoca refresh tokens si cambia contraseña
     """
     try:
+        # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
+        request.ip_address = get_client_ip(http_request)
+        request.user_agent = get_user_agent(http_request)
+
         # Ejecutar el caso de uso con el user_id del token JWT
         user_id = str(current_user.id)
         response = await use_case.execute(user_id, request)

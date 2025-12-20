@@ -48,7 +48,7 @@ Pipeline Jobs:
 2. **Costo y Performance**
    - Gratuito para repositorio público
    - Caché de dependencias reduce builds
-   - ~3 minutos para 667 tests
+   - Ejecución rápida (~3 minutos)
 
 3. **Ecosystem**
    - Actions pre-construidas (setup-python, gitleaks)
@@ -63,7 +63,7 @@ Pipeline Jobs:
 ## Consecuencias
 
 ### Positivas:
-- ✅ 667 tests ejecutándose automáticamente en ~3 minutos
+- ✅ Tests ejecutándose automáticamente en ~3 minutos
 - ✅ Detección temprana de errores (types, linting, security)
 - ✅ Validación de migraciones antes de merge
 - ✅ Soporte multi-version Python
@@ -100,7 +100,7 @@ La decisión se considera exitosa si:
 - ✅ 7 jobs paralelos con dependencias optimizadas
 - ✅ Mypy configurado pragmáticamente (SQLAlchemy imperative mapping)
 - ✅ Gitleaks con `.gitleaksignore` para false positives
-- ✅ 667 tests (97.6% passing)
+- ✅ Suite de tests completa ejecutándose en CI
 
 ### Lecciones Aprendidas:
 - **Python compatibility**: PEP 695 syntax requiere 3.12+, usar `Generic[TypeVar]` para compatibilidad

@@ -22,7 +22,7 @@ tests/
 │   ├── test_summary.md
 │   └── warnings.txt
 │
-├── unit/             # 🔬 Tests Unitarios (360 tests - rápidos y aislados)
+├── unit/             # 🔬 Tests Unitarios (553 tests - rápidos y aislados)
 │   ├── modules/
 │   │   └── user/
 │   │       └── domain/
@@ -35,7 +35,7 @@ tests/
 │           ├── events/
 │           └── repositories/ (interfaces)
 │
-└── integration/      # 🔗 Tests de Integración (60 tests - requieren entorno Docker)
+└── integration/      # 🔗 Tests de Integración (119 tests - requieren entorno Docker)
     ├── api/          # -> Prueban los endpoints de FastAPI
     ├── domain_events/ # -> Prueban el flujo completo de eventos
     └── modules/

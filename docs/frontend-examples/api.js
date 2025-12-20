@@ -2,6 +2,12 @@
  * API Service
  *
  * Configuración de Axios y endpoints para interactuar con el backend
+ * 
+ * SEGURIDAD (v1.8.0+): Usa httpOnly cookies para tokens JWT
+ * - Los tokens se envían automáticamente desde las cookies del navegador
+ * - NO se usa localStorage (vulnerable a XSS)
+ * - NO se necesita header Authorization manual
+ * - Requiere withCredentials: true para enviar cookies cross-origin
  */
 
 import axios from 'axios';
@@ -16,21 +22,8 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 10000, // 10 segundos
+  withCredentials: true, // ✅ CRÍTICO: Envía cookies httpOnly automáticamente
 });
-
-// Interceptor de request - añade token JWT si existe
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
 
 // Interceptor de response - manejo de errores globales
 api.interceptors.response.use(
@@ -38,9 +31,9 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Si el token expiró, redirigir al login
+    // Si el token expiró (401), el backend ya limpió las cookies
+    // Solo redirigir al login
     if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
       window.location.href = '/login?session_expired=true';
     }
     return Promise.reject(error);
@@ -69,6 +62,8 @@ export const authApi = {
    * @param {Object} credentials
    * @param {string} credentials.email - Email
    * @param {string} credentials.password - Password
+   * @returns {Promise} Response incluye user data (tokens vienen en httpOnly cookies)
+   * @note El backend establece cookies automáticamente: access_token (15min) y refresh_token (7 días)
    */
   login: (credentials) => {
     return api.post('/api/v1/auth/login', credentials);
@@ -91,6 +86,7 @@ export const authApi = {
 
   /**
    * Logout de usuario (requiere autenticación)
+   * @note El backend invalida el refresh token y limpia las cookies automáticamente
    */
   logout: () => {
     return api.post('/api/v1/auth/logout', {});
@@ -178,24 +174,28 @@ export const handicapApi = {
 };
 
 /**
- * Helper para guardar token después del login
- */
-export const saveAuthToken = (token) => {
-  localStorage.setItem('access_token', token);
-};
-
-/**
- * Helper para limpiar token al logout
- */
-export const clearAuthToken = () => {
-  localStorage.removeItem('access_token');
-};
-
-/**
  * Helper para verificar si el usuario está autenticado
+ * @note Con httpOnly cookies, no podemos verificar desde el frontend
+ * @note Opción 1: Llamar a /api/v1/auth/current-user y ver si retorna 200 o 401
+ * @note Opción 2: Mantener estado local después del login (no persistente)
+ * @example
+ * // Verificación asíncrona (recomendado)
+ * async function checkAuth() {
+ *   try {
+ *     await authApi.getCurrentUser();
+ *     return true; // Autenticado
+ *   } catch (error) {
+ *     return false; // No autenticado o token expirado
+ *   }
+ * }
  */
-export const isAuthenticated = () => {
-  return !!localStorage.getItem('access_token');
+export const checkAuthentication = async () => {
+  try {
+    await authApi.getCurrentUser();
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
 
 export default api;

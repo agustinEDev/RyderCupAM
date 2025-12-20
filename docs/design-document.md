@@ -244,7 +244,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 **Estrategia**: Test Pyramid (89% unit, 11% integration)
 
 ```
-667 tests (97.6% passing)
+672 tests (100% passing)
 ├── Unit: 595+ tests
 │   ├── User Module: 308 tests
 │   ├── Competition Module: 173 tests
@@ -313,7 +313,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Métrica | Valor |
 |---------|-------|
-| Tests totales | 667 (97.6% passing) |
+| Tests totales | 672 (100% passing) |
 | Tests unitarios | 595+ tests |
 | Tests integración | 72+ tests |
 | Cobertura | >90% |

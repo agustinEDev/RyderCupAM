@@ -22,7 +22,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         """Test: Actualizar hándicap manualmente de un usuario existente."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -55,7 +55,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         """Test: Valida que el hándicap esté en el rango correcto."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -70,7 +70,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         """Test: El cambio de hándicap se persiste correctamente."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -88,7 +88,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         """Test: Actualizar hándicap cambia el timestamp updated_at."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -108,7 +108,7 @@ class TestUpdateUserHandicapManuallyUseCase:
         """Test: Puede actualizar con valores negativos válidos."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create("Test", "User", "test@test.com", "Pass123!")
+        user = User.create("Test", "User", "test@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 

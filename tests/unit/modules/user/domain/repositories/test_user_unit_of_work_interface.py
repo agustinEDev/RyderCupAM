@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from src.modules.user.domain.repositories.refresh_token_repository_interface import RefreshTokenRepositoryInterface
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
@@ -44,15 +45,21 @@ class TestUserUnitOfWorkInterface:
         """Verifica que se puede crear una implementación concreta."""
 
         mock_user_repo = AsyncMock(spec=UserRepositoryInterface)
+        mock_refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
 
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._users = mock_user_repo
+                self._refresh_tokens = mock_refresh_token_repo
                 self._active = False
 
             @property
             def users(self) -> UserRepositoryInterface:
                 return self._users
+
+            @property
+            def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+                return self._refresh_tokens
 
             async def __aenter__(self):
                 self._active = True
@@ -81,6 +88,7 @@ class TestUserUnitOfWorkInterface:
         assert isinstance(mock_uow, UserUnitOfWorkInterface)
         assert isinstance(mock_uow, UnitOfWorkInterface)
         assert isinstance(mock_uow.users, UserRepositoryInterface)
+        assert isinstance(mock_uow.refresh_tokens, RefreshTokenRepositoryInterface)
 
     def test_incomplete_implementation_fails(self):
         """Verifica que una implementación incompleta falla."""
@@ -142,12 +150,17 @@ class TestUserUnitOfWorkContractCompliance:
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
                 self._active = False
                 self._committed = False
 
             @property
             def users(self) -> UserRepositoryInterface:
                 return self._user_repo
+
+            @property
+            def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+                return self._refresh_token_repo
 
             async def __aenter__(self):
                 self._active = True
@@ -203,12 +216,17 @@ class TestUserUnitOfWorkContractCompliance:
         class TestUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
                 self._active = False
                 self._rolled_back = False
 
             @property
             def users(self) -> UserRepositoryInterface:
                 return self._user_repo
+
+            @property
+            def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+                return self._refresh_token_repo
 
             async def __aenter__(self):
                 self._active = True
@@ -256,12 +274,17 @@ class TestUserUnitOfWorkIntegration:
         class IntegrationUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
                 self._operations = []
                 self._committed = False
 
             @property
             def users(self) -> UserRepositoryInterface:
                 return self._user_repo
+
+            @property
+            def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+                return self._refresh_token_repo
 
             async def __aenter__(self):
                 return self

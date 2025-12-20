@@ -33,7 +33,7 @@ class TestLoginUserUseCaseEventIntegration:
         # Arrange
         user_id = UserId.generate()
         email = Email("test@example.com")
-        password = Password.from_plain_text("Password123")
+        password = Password.from_plain_text("P@ssw0rd123!")
 
         user = User(
             id=user_id,
@@ -55,7 +55,7 @@ class TestLoginUserUseCaseEventIntegration:
 
         request = LoginRequestDTO(
             email="test@example.com",
-            password="Password123"
+            password="P@ssw0rd123!"
         )
 
         # Act
@@ -100,7 +100,7 @@ class TestLoginUserUseCaseEventIntegration:
 
         request = LoginRequestDTO(
             email="noexiste@example.com",
-            password="Password123"
+            password="P@ssw0rd123!"
         )
 
         # Act
@@ -122,7 +122,7 @@ class TestLoginUserUseCaseEventIntegration:
         # Arrange
         user_id = UserId.generate()
         email = Email("test@example.com")
-        password = Password.from_plain_text("CorrectPass123")
+        password = Password.from_plain_text("C0rr3ctP@ss123!")
 
         user = User(
             id=user_id,

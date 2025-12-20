@@ -21,7 +21,7 @@ class TestAuthRoutes:
         # Arrange
         user_data = {
             "email": "integration.test@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Integration",
             "last_name": "Test",
         }
@@ -43,7 +43,7 @@ class TestAuthRoutes:
         # Arrange: Primero, registrar un usuario.
         user_data = {
             "email": "conflict.test@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Conflict",
             "last_name": "Test",
         }
@@ -67,7 +67,7 @@ class TestAuthRoutes:
         auth_data = await create_authenticated_user(
             client,
             "logout.test@example.com",
-            "ValidPass123",
+            "V@l1dP@ss123!",
             "Logout",
             "Test"
         )
@@ -95,8 +95,8 @@ class TestAuthRoutes:
         response = await client.post("/api/v1/auth/logout", json=logout_data)
 
         # Assert
-        # FastAPI devuelve 403 cuando falta completamente el header Authorization
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        # Con HTTPOnly Cookies, devuelve 401 cuando no hay cookie de autenticación
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_logout_fails_with_invalid_token(self, client: AsyncClient):
         """
@@ -123,7 +123,7 @@ class TestAuthRoutes:
         # Arrange - Registrar usuario
         user_data = {
             "email": "verify.success@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Verify",
             "last_name": "Success",
         }
@@ -195,7 +195,7 @@ class TestAuthRoutes:
         # Arrange - Registrar y verificar usuario
         user_data = {
             "email": "already.verified@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Already",
             "last_name": "Verified",
         }
@@ -228,7 +228,7 @@ class TestAuthRoutes:
         # Arrange - Registrar usuario
         user_data = {
             "email": "resend.success@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Resend",
             "last_name": "Success",
         }
@@ -285,7 +285,7 @@ class TestAuthRoutes:
         # Arrange - Registrar y verificar usuario
         user_data = {
             "email": "verified.resend@example.com",
-            "password": "ValidPass123",
+            "password": "V@l1dP@ss123!",
             "first_name": "Verified",
             "last_name": "Resend",
         }

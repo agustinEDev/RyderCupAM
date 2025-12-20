@@ -7,7 +7,7 @@ Tests de integración que verifican los endpoints de países y adyacencias.
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_authenticated_user, set_auth_cookies
 
 
 class TestListCountries:
@@ -17,12 +17,12 @@ class TestListCountries:
     async def test_list_countries_returns_list(self, client: AsyncClient):
         """Listar países retorna lista no vacía."""
         user = await create_authenticated_user(
-            client, "user@test.com", "Pass123!", "Test", "User"
+            client, "user@test.com", "P@ssw0rd123!", "Test", "User"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries"
         )
 
         assert response.status_code == 200
@@ -35,12 +35,12 @@ class TestListCountries:
     async def test_list_countries_structure(self, client: AsyncClient):
         """Países tienen estructura correcta."""
         user = await create_authenticated_user(
-            client, "user2@test.com", "Pass123!", "Test", "Two"
+            client, "user2@test.com", "P@ssw0rd123!", "Test", "Two"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries"
         )
 
         assert response.status_code == 200
@@ -58,12 +58,12 @@ class TestListCountries:
     async def test_list_countries_includes_spain(self, client: AsyncClient):
         """Lista de países incluye España."""
         user = await create_authenticated_user(
-            client, "user3@test.com", "Pass123!", "Test", "Three"
+            client, "user3@test.com", "P@ssw0rd123!", "Test", "Three"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries"
         )
 
         assert response.status_code == 200
@@ -82,12 +82,12 @@ class TestListAdjacentCountries:
     async def test_adjacent_countries_spain(self, client: AsyncClient):
         """España tiene países adyacentes."""
         user = await create_authenticated_user(
-            client, "user4@test.com", "Pass123!", "Test", "Four"
+            client, "user4@test.com", "P@ssw0rd123!", "Test", "Four"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries/ES/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries/ES/adjacent"
         )
 
         assert response.status_code == 200
@@ -103,12 +103,12 @@ class TestListAdjacentCountries:
     async def test_adjacent_countries_invalid_code_returns_400(self, client: AsyncClient):
         """Código de país inválido retorna 400."""
         user = await create_authenticated_user(
-            client, "user5@test.com", "Pass123!", "Test", "Five"
+            client, "user5@test.com", "P@ssw0rd123!", "Test", "Five"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries/INVALID/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries/INVALID/adjacent"
         )
 
         assert response.status_code == 400
@@ -117,12 +117,12 @@ class TestListAdjacentCountries:
     async def test_adjacent_countries_not_found_returns_404(self, client: AsyncClient):
         """País no existente retorna 404."""
         user = await create_authenticated_user(
-            client, "user6@test.com", "Pass123!", "Test", "Six"
+            client, "user6@test.com", "P@ssw0rd123!", "Test", "Six"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries/XX/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries/XX/adjacent"
         )
 
         assert response.status_code == 404
@@ -131,12 +131,12 @@ class TestListAdjacentCountries:
     async def test_adjacent_countries_structure(self, client: AsyncClient):
         """Países adyacentes tienen estructura correcta."""
         user = await create_authenticated_user(
-            client, "user7@test.com", "Pass123!", "Test", "Seven"
+            client, "user7@test.com", "P@ssw0rd123!", "Test", "Seven"
         )
 
+        set_auth_cookies(client, user["cookies"])
         response = await client.get(
-            "/api/v1/countries/FR/adjacent",
-            headers={"Authorization": f"Bearer {user['token']}"}
+            "/api/v1/countries/FR/adjacent"
         )
 
         assert response.status_code == 200

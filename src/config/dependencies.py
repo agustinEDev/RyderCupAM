@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,6 +73,9 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
+from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+    RefreshAccessTokenUseCase,
+)
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
@@ -114,6 +117,7 @@ from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
+from src.shared.infrastructure.security.cookie_handler import get_cookie_name
 from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
@@ -313,6 +317,21 @@ def get_logout_user_use_case(
     """
     return LogoutUserUseCase(uow)
 
+def get_refresh_access_token_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    token_service: ITokenService = Depends(get_token_service)
+) -> RefreshAccessTokenUseCase:
+    """
+    Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens).
+    2. Depende de `get_token_service` para generación de tokens JWT.
+    3. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    """
+    return RefreshAccessTokenUseCase(uow, token_service)
+
 def get_update_profile_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository)
@@ -344,23 +363,47 @@ def get_update_security_use_case(
     return UpdateSecurityUseCase(uow, email_service)
 
 # Esquema de seguridad HTTP Bearer para Swagger
-security = HTTPBearer()
+# IMPORTANTE: auto_error=False permite que el endpoint no falle si no hay header Authorization
+# Esto es necesario para el middleware dual (cookies + headers)
+security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO:
     """
     Dependencia para obtener el usuario actual desde el token JWT.
 
-    Esta función:
-    1. Extrae el token del header Authorization: Bearer <token>
+    FASE TRANSITORIA (v1.8.0 - v2.0.0):
+    Soporta autenticación dual para migración gradual del frontend:
+
+    1. **httpOnly Cookie** (PRIORIDAD 1 - Recomendado):
+       - Intenta leer JWT desde cookie "access_token"
+       - Protección contra XSS (JavaScript no puede leerla)
+
+    2. **Authorization Header** (PRIORIDAD 2 - LEGACY - Fallback):
+       - Si no hay cookie, lee desde header "Authorization: Bearer <token>"
+       - Permite compatibilidad con frontend actual (localStorage)
+       - TODO (v2.0.0): Eliminar soporte para headers cuando frontend migre
+
+    Flujo de Autenticación:
+    1. Extrae token desde cookie O header (prioridad a cookie)
     2. Verifica y decodifica el token JWT
     3. Busca el usuario en la base de datos
     4. Retorna el usuario autenticado
 
+    Security Improvements (OWASP A01/A02):
+    - httpOnly cookie: JavaScript NO puede leer el token (previene XSS)
+    - Fallback a headers: Compatibilidad backward sin breaking changes
+
+    Args:
+        request: Request de FastAPI (para leer cookies)
+        credentials: Credenciales del header Authorization (opcional ahora)
+        uow: Unit of Work para acceso a datos
+
     Raises:
-        HTTPException 401: Si el token es inválido o el usuario no existe
+        HTTPException 401: Si no hay token, es inválido, o el usuario no existe
 
     Returns:
         Usuario autenticado
@@ -370,9 +413,25 @@ async def get_current_user(
         async def protected_route(current_user: UserResponseDTO = Depends(get_current_user)):
             return {"message": f"Hello {current_user.email}"}
     """
-    token = credentials.credentials
+    token: str | None = None
 
-    # Verificar y decodificar token
+    # PRIORIDAD 1: Intentar leer JWT desde httpOnly cookie (NUEVO - v1.8.0)
+    cookie_name = get_cookie_name()
+    token = request.cookies.get(cookie_name)
+
+    # PRIORIDAD 2 (Fallback): Si no hay cookie, leer desde header Authorization (LEGACY)
+    if not token and credentials:
+        token = credentials.credentials
+
+    # Si no hay token en ninguno de los dos lugares, rechazar autenticación
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales de autenticación no proporcionadas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Verificar y decodificar token (mismo código que antes)
     payload = verify_access_token(token)
 
     if not payload:

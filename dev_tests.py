@@ -68,9 +68,9 @@ def run_tests() -> tuple[str, int]:
     command = [
         sys.executable, "-m", "pytest",
         "--json-report", f"--json-report-file={report_file}",
-        "-n", "auto"
+        # Nota: -n auto ya está en pytest.ini como addopts por defecto
     ]
-    print(f"{ICONS['ROCKET']} Ejecutando pytest con paralelización automática...")
+    print(f"{ICONS['ROCKET']} Ejecutando pytest con paralelización automática (pytest.ini)...")
     result = subprocess.run(command, check=False, capture_output=True, text=True)
 
     # Contar warnings en stderr

@@ -7,7 +7,7 @@ Endpoints FastAPI para el módulo Competition siguiendo Clean Architecture.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
@@ -24,6 +24,7 @@ from src.config.dependencies import (
     get_uow,  # User Unit of Work para obtener datos del creador
     get_update_competition_use_case,
 )
+from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
@@ -514,8 +515,10 @@ class CompetitionDTOMapper:
     description="Crea una nueva competición en estado DRAFT. Requiere autenticación.",
     tags=["Competitions"],
 )
+@limiter.limit("10/hour")  # Anti-spam: máximo 10 competiciones nuevas por hora
 async def create_competition(
-    request: CreateCompetitionRequestDTO,
+    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
+    competition_data: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
@@ -549,7 +552,7 @@ async def create_competition(
         creator_id = UserId(str(current_user.id))
 
         # Ejecutar use case (retorna DTO simple)
-        response = await use_case.execute(request, creator_id)
+        response = await use_case.execute(competition_data, creator_id)
 
         # Obtener la entidad completa para enriquecer el response
         async with uow:

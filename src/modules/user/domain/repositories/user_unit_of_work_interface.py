@@ -9,6 +9,9 @@ from abc import abstractmethod
 
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
+from ..repositories.refresh_token_repository_interface import (
+    RefreshTokenRepositoryInterface,
+)
 from ..repositories.user_repository_interface import UserRepositoryInterface
 
 
@@ -18,6 +21,10 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
     Proporciona acceso coordinated a todos los repositorios relacionados
     con el dominio de usuarios, manteniendo consistencia transaccional.
+
+    Repositorios incluidos (v1.8.0):
+    - users: UserRepositoryInterface
+    - refresh_tokens: RefreshTokenRepositoryInterface (Session Timeout)
 
     Uso típico en casos de uso:
     ```python
@@ -48,5 +55,24 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             UserRepositoryInterface: Repositorio de usuarios transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
+        """
+        Acceso al repositorio de refresh tokens dentro de la transacción.
+
+        Proporciona una instancia del repositorio de refresh tokens que participa
+        en la misma transacción que otros repositorios del Unit of Work.
+
+        Session Timeout (v1.8.0):
+        - Permite crear refresh tokens en login
+        - Permite validar y revocar tokens en logout
+        - Mantiene consistencia transaccional con users
+
+        Returns:
+            RefreshTokenRepositoryInterface: Repositorio de refresh tokens transaccional
         """
         pass

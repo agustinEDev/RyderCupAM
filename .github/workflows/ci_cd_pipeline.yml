@@ -226,17 +226,125 @@ jobs:
           bandit -r src/ -f screen
         continue-on-error: true
 
-      - name: Run Safety (Dependency Vulnerability Scanner)
+      - name: Run Safety Check (Dependency Vulnerabilities)
+        id: safety-check
         run: |
-          echo "🛡️ Checking dependencies for known vulnerabilities..."
-          safety check --json || true
+          echo "🛡️ Running Safety - Checking dependencies for known vulnerabilities..."
+          echo "Using Safety DB (40,000+ known vulnerabilities)"
+
+          # Generate JSON report (always succeeds)
+          safety scan --output json > safety-report.json || true
+
+          # Run safety scan for screen output
+          # Exit codes: 0 = no vulns, 64 = vulns found, other = error
+          safety scan --output screen || SAFETY_EXIT=$?
+
+          # Analyze results
+          VULN_COUNT=$(jq '[.dependencies[].vulns[]] | length' safety-report.json 2>/dev/null || echo "0")
+          echo "vulnerabilities_found=$VULN_COUNT" >> $GITHUB_OUTPUT
+
+          echo ""
+          echo "📊 Safety Summary:"
+          echo "  Vulnerabilities found: $VULN_COUNT"
+
+          if [ "$VULN_COUNT" -gt "0" ]; then
+            echo "  Status: ⚠️ VULNERABILITIES DETECTED"
+            echo ""
+            echo "⚠️ WARNING: Found $VULN_COUNT known vulnerabilities in dependencies"
+            echo "Review the safety-report.json artifact for details"
+            # Don't fail yet - pip-audit will be the final arbiter
+          else
+            echo "  Status: ✅ NO VULNERABILITIES"
+          fi
         continue-on-error: true
+
+      - name: Run pip-audit (PyPA Official Audit)
+        id: pip-audit-check
+        run: |
+          echo "🔍 Running pip-audit - Official PyPA vulnerability scanner..."
+          echo "Using PyPI Advisory Database + OSV"
+
+          # Generate JSON report (exit code 1 if vulns found)
+          pip-audit --format json --output pip-audit-report.json || true
+
+          # Run pip-audit for screen output
+          # Exit codes: 0 = no vulns, 1 = vulns found
+          set +e
+          pip-audit --format markdown
+          PIP_AUDIT_EXIT=$?
+          set -e
+
+          # Parse results
+          # Count only CVEs that have a fix available (pragmatic approach)
+          CRITICAL_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length > 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
+          # Count CVEs without fix (for monitoring only)
+          NO_FIX_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length == 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
+          TOTAL_VULNS=$(jq '[.dependencies[].vulns[]] | length' pip-audit-report.json 2>/dev/null || echo "0")
+
+          echo "critical_vulnerabilities=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "no_fix_vulnerabilities=$NO_FIX_COUNT" >> $GITHUB_OUTPUT
+          echo "total_vulnerabilities=$TOTAL_VULNS" >> $GITHUB_OUTPUT
+
+          echo ""
+          echo "📊 pip-audit Summary:"
+          echo "  Total vulnerabilities: $TOTAL_VULNS"
+          echo "  CVEs with fix available: $CRITICAL_COUNT"
+          echo "  CVEs without fix (monitoring): $NO_FIX_COUNT"
+
+          # Fail if critical vulnerabilities WITH FIX found
+          if [ "$CRITICAL_COUNT" -gt "0" ]; then
+            echo "  Status: ❌ CRITICAL VULNERABILITIES FOUND"
+            echo ""
+            echo "❌ SECURITY ALERT: Found $CRITICAL_COUNT CVEs with fixes available"
+            echo "This pipeline will FAIL to prevent vulnerable code from being deployed"
+            echo ""
+            echo "📋 Action Required:"
+            echo "  1. Review pip-audit-report.json artifact"
+            echo "  2. Update vulnerable packages: pip install <package>==<fixed-version>"
+            echo "  3. Run locally: pip-audit"
+            echo "  4. Commit updated requirements.txt"
+            exit 1
+          elif [ "$NO_FIX_COUNT" -gt "0" ]; then
+            echo "  Status: ⚠️ CVEs WITHOUT FIX DETECTED (not blocking)"
+            echo ""
+            echo "⚠️ INFO: Found $NO_FIX_COUNT CVEs without available fixes"
+            echo "These are monitored but do not block deployment"
+            echo "Review pip-audit-report.json for details and consider alternatives"
+          elif [ "$TOTAL_VULNS" -gt "0" ]; then
+            echo "  Status: ⚠️ VULNERABILITIES DETECTED (non-CVE)"
+            echo ""
+            echo "⚠️ WARNING: Found $TOTAL_VULNS non-CVE vulnerabilities"
+            echo "Consider updating these packages when possible"
+          else
+            echo "  Status: ✅ NO VULNERABILITIES"
+          fi
 
       - name: Check for Secrets with Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
         continue-on-error: true
+
+      - name: Generate Security Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "🔒 SECURITY CHECKS SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "📦 Dependency Audit Results:"
+          echo "  Safety vulnerabilities: ${{ steps.safety-check.outputs.vulnerabilities_found || '0' }}"
+          echo "  pip-audit total: ${{ steps.pip-audit-check.outputs.total_vulnerabilities || '0' }}"
+          echo "  pip-audit critical (CVEs): ${{ steps.pip-audit-check.outputs.critical_vulnerabilities || '0' }}"
+          echo ""
+
+          if [ "${{ steps.pip-audit-check.outputs.critical_vulnerabilities }}" == "0" ]; then
+            echo "✅ Dependency audit PASSED - No critical vulnerabilities"
+          else
+            echo "❌ Dependency audit FAILED - Critical vulnerabilities found"
+          fi
+          echo "=========================================="
 
       - name: Upload Security Reports
         if: always()
@@ -245,6 +353,8 @@ jobs:
           name: security-reports
           path: |
             bandit-report.json
+            safety-report.json
+            pip-audit-report.json
           retention-days: 30
 
   # ================================

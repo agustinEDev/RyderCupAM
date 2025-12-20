@@ -22,7 +22,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "test_user@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Test",
             "User"
         )
@@ -51,7 +51,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "john.doe@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "John",
             "Doe"
         )
@@ -80,7 +80,7 @@ class TestUserRoutes:
         auth_data1 = await create_authenticated_user(
             client,
             "user1@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Jane",
             "Smith"
         )
@@ -88,7 +88,7 @@ class TestUserRoutes:
 
         user2_data = {
             "email": "user2@example.com",
-            "password": "securePassword123",
+            "password": "s3cur3P@ssw0rd!",
             "first_name": "John",
             "last_name": "Smith"
         }
@@ -121,7 +121,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "searcher@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Searcher",
             "User"
         )
@@ -148,8 +148,8 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "searcher2@example.com",
-            "securePassword123",
-            "Searcher2",
+            "s3cur3P@ssw0rd!",
+            "Searcher",
             "User"
         )
         token = auth_data["token"]
@@ -175,9 +175,9 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "searcher3@example.com",
-            "securePassword123",
-            "Searcher3",
-            "User"
+            "s3cur3P@ssw0rd!",
+            "Searcher",
+            "Third"
         )
         token = auth_data["token"]
 
@@ -201,7 +201,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "case.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Case",
             "Test"
         )
@@ -231,7 +231,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "rafa_nadal@prueba.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Rafael",
             "Nadal Parera"
         )
@@ -272,7 +272,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "profile.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Original",
             "Name"
         )
@@ -297,7 +297,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "profile2.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "John",
             "Original"
         )
@@ -321,7 +321,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "profile3.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Old",
             "Names"
         )
@@ -346,7 +346,8 @@ class TestUserRoutes:
             json={"first_name": "New", "last_name": None}
         )
 
-        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+        # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
+        assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_update_profile_rejects_empty_names(self, client: AsyncClient):
         """Verifica que no se aceptan strings vacíos (validación Pydantic)."""
@@ -354,7 +355,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "profile4.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Test",
             "User"
         )
@@ -380,7 +381,7 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "security.test@example.com",
-            "securePassword123",
+            "s3cur3P@ssw0rd!",
             "Security",
             "Test"
         )
@@ -390,7 +391,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "securePassword123",
+                "current_password": "s3cur3P@ssw0rd!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
                 "confirm_password": None
@@ -409,8 +410,8 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "security2.test@example.com",
-            "oldPassword123",
-            "Security2",
+            "0ldP@ssw0rd!",
+            "SecurityTwo",
             "Test"
         )
         token = auth_data["token"]
@@ -419,10 +420,10 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "oldPassword123",
+                "current_password": "0ldP@ssw0rd!",
                 "new_email": None,
-                "new_password": "newPassword456",
-                "confirm_password": "newPassword456"
+                "new_password": "n3wP@ssw0rd!",
+                "confirm_password": "n3wP@ssw0rd!"
             },
             headers={"Authorization": f"Bearer {token}"}
         )
@@ -434,7 +435,7 @@ class TestUserRoutes:
             "/api/v1/auth/login",
             json={
                 "email": "security2.test@example.com",
-                "password": "newPassword456"
+                "password": "n3wP@ssw0rd!"
             }
         )
         assert login_response.status_code == status.HTTP_200_OK
@@ -445,8 +446,8 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "security3.test@example.com",
-            "oldPassword123",
-            "Security3",
+            "0ldP@ssw0rd!",
+            "SecurityThree",
             "Test"
         )
         token = auth_data["token"]
@@ -455,10 +456,10 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "oldPassword123",
+                "current_password": "0ldP@ssw0rd!",
                 "new_email": "newemail3@example.com",
-                "new_password": "newPassword789",
-                "confirm_password": "newPassword789"
+                "new_password": "n3wP@ssw0rd!9",
+                "confirm_password": "n3wP@ssw0rd!9"
             },
             headers={"Authorization": f"Bearer {token}"}
         )
@@ -472,7 +473,7 @@ class TestUserRoutes:
             "/api/v1/auth/login",
             json={
                 "email": "newemail3@example.com",
-                "password": "newPassword789"
+                "password": "n3wP@ssw0rd!9"
             }
         )
         assert login_response.status_code == status.HTTP_200_OK
@@ -483,8 +484,8 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "security4.test@example.com",
-            "correctPassword123",
-            "Security4",
+            "C0rr3ctP@ss!",
+            "SecurityFour",
             "Test"
         )
         token = auth_data["token"]
@@ -493,7 +494,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "wrongPassword",
+                "current_password": "Wr0ngP@ssw0rd!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
                 "confirm_password": None
@@ -511,16 +512,16 @@ class TestUserRoutes:
         auth_data1 = await create_authenticated_user(
             client,
             "user1@example.com",
-            "SecurePass123",
-            "User1",
+            "S3cur3P@ss123!",
+            "UserOne",
             "Test"
         )
 
         await create_authenticated_user(
             client,
             "user2@example.com",
-            "SecurePass123",
-            "User2",
+            "S3cur3P@ss123!",
+            "UserTwo",
             "Test"
         )
 
@@ -530,7 +531,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "SecurePass123",
+                "current_password": "S3cur3P@ss123!",
                 "new_email": "user2@example.com",  # Ya existe
                 "new_password": None,
                 "confirm_password": None
@@ -546,14 +547,15 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "password123",
+                "current_password": "p@ssw0rd1234!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
                 "confirm_password": None
             }
         )
 
-        assert update_response.status_code == status.HTTP_403_FORBIDDEN
+        # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
+        assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_update_security_password_confirmation_must_match(self, client: AsyncClient):
         """Verifica que el password y su confirmación deben coincidir."""
@@ -561,8 +563,8 @@ class TestUserRoutes:
         auth_data = await create_authenticated_user(
             client,
             "security5.test@example.com",
-            "SecurePass123",
-            "Security5",
+            "S3cur3P@ss123!",
+            "SecurityFive",
             "Test"
         )
         token = auth_data["token"]
@@ -571,10 +573,10 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/security",
             json={
-                "current_password": "SecurePass123",
+                "current_password": "S3cur3P@ss123!",
                 "new_email": None,
-                "new_password": "NewSecurePass456",
-                "confirm_password": "DifferentPass456"
+                "new_password": "N3wS3cur3P@ss!",
+                "confirm_password": "D1ff3r3ntP@ss!"
             },
             headers={"Authorization": f"Bearer {token}"}
         )
