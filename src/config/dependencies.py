@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -73,6 +72,9 @@ from src.modules.user.application.use_cases.get_current_user_use_case import (
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
+)
+from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+    RefreshAccessTokenUseCase,
 )
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
@@ -318,7 +320,7 @@ def get_logout_user_use_case(
 def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service)
-) -> "RefreshAccessTokenUseCase":
+) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
@@ -328,9 +330,6 @@ def get_refresh_access_token_use_case(
     3. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
     """
-    from src.modules.user.application.use_cases.refresh_access_token_use_case import (
-        RefreshAccessTokenUseCase,
-    )
     return RefreshAccessTokenUseCase(uow, token_service)
 
 def get_update_profile_use_case(
@@ -370,7 +369,7 @@ security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO:
     """
@@ -414,7 +413,7 @@ async def get_current_user(
         async def protected_route(current_user: UserResponseDTO = Depends(get_current_user)):
             return {"message": f"Hello {current_user.email}"}
     """
-    token: Optional[str] = None
+    token: str | None = None
 
     # PRIORIDAD 1: Intentar leer JWT desde httpOnly cookie (NUEVO - v1.8.0)
     cookie_name = get_cookie_name()

@@ -5,7 +5,6 @@ Configuración centralizada de rate limiting para la API.
 """
 
 import os
-import uuid
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address

@@ -26,20 +26,18 @@ Configuración requerida:
 """
 
 import logging
-import os
-from typing import Optional
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
-def before_send(event: dict, hint: dict) -> Optional[dict]:
+def before_send(event: dict, hint: dict) -> dict | None:
     """
     Hook ejecutado antes de enviar eventos a Sentry.
 
@@ -65,9 +63,8 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
         return None
 
     # Filtrar 404 Not Found (ruido común)
-    if event.get("exception", {}).get("values", [{}])[0].get("type") == "HTTPException":
-        if "404" in str(hint.get("exc_info", [""])[1]):
-            return None
+    if event.get("exception", {}).get("values", [{}])[0].get("type") == "HTTPException" and "404" in str(hint.get("exc_info", [""])[1]):
+        return None
 
     return event
 
@@ -115,7 +112,7 @@ def init_sentry() -> None:
         before_send=before_send,
 
         # Metadata
-        release=f"rydercup-backend@1.8.0",  # Versión actual del backend
+        release="rydercup-backend@1.8.0",  # Versión actual del backend
 
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
