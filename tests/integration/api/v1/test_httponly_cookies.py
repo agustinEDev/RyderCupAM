@@ -270,7 +270,6 @@ class TestHttpOnlyCookies:
         }
         login_response = await client.post("/api/v1/auth/login", json=login_payload)
         assert login_response.status_code == 200
-        token_from_body = login_response.json()["access_token"]
 
         # When: Request con cookie + header Authorization (token diferente/inválido en header)
         # El middleware debería usar la cookie (válida) y ignorar el header (inválido)

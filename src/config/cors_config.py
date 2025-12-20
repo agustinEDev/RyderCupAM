@@ -69,6 +69,27 @@ def _get_development_origins() -> list[str]:
     ]
 
 
+def _is_wildcard(origin: str) -> bool:
+    """Verifica si el origen es un wildcard."""
+    return origin == "*"
+
+
+def _has_valid_scheme(origin: str) -> bool:
+    """Verifica si el origen tiene un esquema HTTP/HTTPS válido."""
+    try:
+        parsed = urlparse(origin)
+        return parsed.scheme in ["http", "https"]
+    except Exception:
+        return False
+
+
+def _handle_invalid_origin(message: str) -> None:
+    """Maneja un origen inválido: lanza excepción en producción, imprime warning en desarrollo."""
+    if _is_production():
+        raise ValueError(f"CORS: {message}")
+    print(f"⚠️  CORS: {message} (ignorado)")
+
+
 def _validate_origins(origins: list[str]) -> list[str]:
     """
     Valida y sanitiza una lista de orígenes CORS.
@@ -93,13 +114,11 @@ def _validate_origins(origins: list[str]) -> list[str]:
 
     for origin in origins:
         # Rechazar wildcards
-        if origin == "*":
-            if _is_production():
-                raise ValueError(
-                    "CORS: No se permite el wildcard '*' en producción. "
-                    "Configure FRONTEND_ORIGINS con orígenes específicos."
-                )
-            print("⚠️  CORS: Wildcard '*' detectado en desarrollo (ignorado)")
+        if _is_wildcard(origin):
+            _handle_invalid_origin(
+                "No se permite el wildcard '*' en producción. "
+                "Configure FRONTEND_ORIGINS con orígenes específicos."
+            )
             continue
 
         # Rechazar orígenes vacíos
@@ -107,20 +126,8 @@ def _validate_origins(origins: list[str]) -> list[str]:
             continue
 
         # Validar esquema HTTP/HTTPS
-        try:
-            parsed = urlparse(origin)
-            if parsed.scheme not in ["http", "https"]:
-                if _is_production():
-                    raise ValueError(
-                        f"CORS: Origen inválido '{origin}'. "
-                        "Solo se permiten esquemas http/https."
-                    )
-                print(f"⚠️  CORS: Origen inválido '{origin}' (ignorado)")
-                continue
-        except Exception as e:
-            if _is_production():
-                raise ValueError(f"CORS: Error parseando origen '{origin}': {e}") from e
-            print(f"⚠️  CORS: Error parseando origen '{origin}' (ignorado)")
+        if not _has_valid_scheme(origin):
+            _handle_invalid_origin(f"Origen inválido '{origin}'. Solo se permiten esquemas http/https.")
             continue
 
         # Eliminar duplicados (preservando orden)

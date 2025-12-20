@@ -517,7 +517,7 @@ class CompetitionDTOMapper:
 )
 @limiter.limit("10/hour")  # Anti-spam: máximo 10 competiciones nuevas por hora
 async def create_competition(
-    _request: Request,  # Necesario para limiter pero no usado directamente
+    request: Request,  # Necesario para limiter pero no usado directamente
     competition_data: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),

@@ -11,6 +11,8 @@ from src.shared.application.validation import (
 
 # Literales reutilizados
 CONFIRMATION_MESSAGE_DESCRIPTION = "Mensaje de confirmación."
+IP_ADDRESS_DESCRIPTION = "Dirección IP del cliente (para security audit trail)."
+USER_AGENT_DESCRIPTION = "User-Agent del navegador (para security audit trail)."
 
 
 # Constants
@@ -183,12 +185,12 @@ class LoginRequestDTO(BaseModel):
     ip_address: str | None = Field(
         None,
         max_length=45,  # IPv6 máximo: 39 chars (ej: 2001:0db8:85a3:0000:0000:8a2e:0370:7334)
-        description="Dirección IP del cliente (para security audit trail)."
+        description=IP_ADDRESS_DESCRIPTION
     )
     user_agent: str | None = Field(
         None,
         max_length=500,
-        description="User-Agent del navegador (para security audit trail)."
+        description=USER_AGENT_DESCRIPTION
     )
 
 
@@ -225,12 +227,12 @@ class LogoutRequestDTO(BaseModel):
     ip_address: str | None = Field(
         None,
         max_length=45,
-        description="Dirección IP del cliente (para security audit trail)."
+        description=IP_ADDRESS_DESCRIPTION
     )
     user_agent: str | None = Field(
         None,
         max_length=500,
-        description="User-Agent del navegador (para security audit trail)."
+        description=USER_AGENT_DESCRIPTION
     )
 
 
@@ -337,12 +339,12 @@ class UpdateSecurityRequestDTO(BaseModel):
     ip_address: str | None = Field(
         None,
         max_length=45,
-        description="Dirección IP del cliente (para security audit trail)."
+        description=IP_ADDRESS_DESCRIPTION
     )
     user_agent: str | None = Field(
         None,
         max_length=500,
-        description="User-Agent del navegador (para security audit trail)."
+        description=USER_AGENT_DESCRIPTION
     )
 
     def model_post_init(self, __context) -> None:
@@ -418,12 +420,12 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     ip_address: str | None = Field(
         None,
         max_length=45,
-        description="Dirección IP del cliente (para security audit trail)."
+        description=IP_ADDRESS_DESCRIPTION
     )
     user_agent: str | None = Field(
         None,
         max_length=500,
-        description="User-Agent del navegador (para security audit trail)."
+        description=USER_AGENT_DESCRIPTION
     )
 
 

@@ -384,7 +384,7 @@ class TestSetCustomHandicap:
         )
 
         assert response.status_code == 200
-        assert float(response.json()["custom_handicap"]) == 15.5
+        assert float(response.json()["custom_handicap"]) == pytest.approx(15.5)
 
 
 class TestEnrollmentEdgeCases:
@@ -588,4 +588,4 @@ class TestEnrollmentEdgeCases:
         )
 
         assert response.status_code == 201
-        assert float(response.json()["custom_handicap"]) == 12.5
+        assert float(response.json()["custom_handicap"]) == pytest.approx(12.5)
