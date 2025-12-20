@@ -52,7 +52,125 @@ class UpdateSecurityUseCase:
         self._uow = uow
         self._email_service = email_service
 
-    async def execute(  # noqa: PLR0912, C901 - Complexity required by OWASP security requirements
+    async def _validate_user_and_password(
+        self,
+        user_id: str,
+        current_password: str
+    ) -> tuple[UserId, object]:
+        """Valida que el usuario exista y la contraseña sea correcta."""
+        user_id_vo = UserId(user_id)
+        user = await self._uow.users.find_by_id(user_id_vo)
+        
+        if not user:
+            raise UserNotFoundError(f"User with id {user_id} not found")
+        
+        if not user.verify_password(current_password):
+            raise InvalidCredentialsError("Current password is incorrect")
+        
+        return user_id_vo, user
+
+    async def _handle_email_change(
+        self,
+        user: object,
+        new_email: str,
+        user_id: str
+    ) -> tuple[bool, str | None]:
+        """Maneja el cambio de email y genera token de verificación."""
+        email_vo = Email(new_email)
+        existing_user = await self._uow.users.find_by_email(email_vo)
+        
+        if existing_user and str(existing_user.id.value) != user_id:
+            raise DuplicateEmailError(f"Email {new_email} is already in use")
+        
+        user.change_email(new_email)
+        verification_token = user.generate_verification_token()
+        return True, verification_token
+
+    async def _handle_password_change(
+        self,
+        user: object,
+        new_password: str,
+        user_id_vo: UserId
+    ) -> tuple[bool, int]:
+        """Maneja el cambio de password y revoca refresh tokens."""
+        user.change_password(new_password)
+        
+        # Revocar todos los refresh tokens
+        refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
+        tokens_revoked_count = 0
+        
+        for refresh_token in refresh_tokens:
+            if not refresh_token.revoked:
+                refresh_token.revoke()
+                await self._uow.refresh_tokens.save(refresh_token)
+                tokens_revoked_count += 1
+        
+        return True, tokens_revoked_count
+
+    def _log_security_changes(
+        self,
+        password_changed: bool,
+        email_changed: bool,
+        tokens_revoked_count: int,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        security_logger
+    ) -> None:
+        """Registra los cambios de seguridad en el audit trail."""
+        if password_changed:
+            security_logger.log_password_changed(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                old_password_verified=True,
+            )
+            
+            if tokens_revoked_count > 0:
+                security_logger.log_refresh_token_revoked(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=tokens_revoked_count,
+                    reason="password_change",
+                )
+        
+        if email_changed:
+            security_logger.log_email_changed(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                email_verification_required=True,
+            )
+
+    def _send_verification_email(
+        self,
+        user: object,
+        new_email: str,
+        verification_token: str
+    ) -> None:
+        """Envía email de verificación al nuevo correo."""
+        if not self._email_service:
+            return
+        
+        try:
+            email_sent = self._email_service.send_verification_email(
+                to_email=new_email,
+                user_name=user.first_name,
+                verification_token=verification_token
+            )
+            if not email_sent:
+                logger.warning(
+                    "No se pudo enviar el email de verificación para el usuario %s",
+                    user.id.value
+                )
+        except (requests.RequestException, ValueError, ConnectionError):
+            logger.exception(
+                "Error al enviar email de verificación para el usuario %s",
+                user.id.value
+            )
+
+    async def execute(
         self,
         user_id: str,
         request: UpdateSecurityRequestDTO
@@ -77,14 +195,6 @@ class UpdateSecurityUseCase:
             InvalidCredentialsError: Si la contraseña actual es incorrecta
             DuplicateEmailError: Si el nuevo email ya está en uso
             ValueError: Si los datos no son válidos
-
-        Note:
-            Complejidad necesaria por requisitos de seguridad OWASP:
-            - Validación de contraseña actual
-            - Verificación de email único
-            - Revocación de tokens
-            - Logging de seguridad diferenciado
-            - Notificación por email
         """
         # Obtener security logger
         security_logger = get_security_logger()
@@ -94,103 +204,52 @@ class UpdateSecurityUseCase:
         user_agent = request.user_agent or "unknown"
 
         async with self._uow:
-            # Buscar usuario
-            user_id_vo = UserId(user_id)
-            user = await self._uow.users.find_by_id(user_id_vo)
-            if not user:
-                raise UserNotFoundError(f"User with id {user_id} not found")
+            # Validar usuario y contraseña actual
+            user_id_vo, user = await self._validate_user_and_password(
+                user_id,
+                request.current_password
+            )
 
-            # Verificar contraseña actual
-            if not user.verify_password(request.current_password):
-                raise InvalidCredentialsError("Current password is incorrect")
-
-            # Tracking de cambios para security logging
+            # Tracking de cambios
             email_changed = False
             password_changed = False
-
-            # Si se cambia el email, verificar que no esté en uso
-            if request.new_email:
-                email_vo = Email(request.new_email)
-                existing_user = await self._uow.users.find_by_email(email_vo)
-                if existing_user and str(existing_user.id.value) != user_id:
-                    raise DuplicateEmailError(f"Email {request.new_email} is already in use")
-
-                user.change_email(request.new_email)
-                email_changed = True
-
-            # Si se cambia el password
-            if request.new_password:
-                user.change_password(request.new_password)
-                password_changed = True
-
-                # IMPORTANTE: Si cambia contraseña, revocar todos los refresh tokens
-                # Esto previene que tokens antiguos sigan siendo válidos
-                refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
-                tokens_revoked_count = 0
-
-                for refresh_token in refresh_tokens:
-                    if not refresh_token.revoked:
-                        refresh_token.revoke()
-                        await self._uow.refresh_tokens.save(refresh_token)
-                        tokens_revoked_count += 1
-
-            # Si se cambió el email, generar token de verificación
+            tokens_revoked_count = 0
             verification_token = None
-            if email_changed:
-                verification_token = user.generate_verification_token()
+
+            # Procesar cambio de email
+            if request.new_email:
+                email_changed, verification_token = await self._handle_email_change(
+                    user,
+                    request.new_email,
+                    user_id
+                )
+
+            # Procesar cambio de password
+            if request.new_password:
+                password_changed, tokens_revoked_count = await self._handle_password_change(
+                    user,
+                    request.new_password,
+                    user_id_vo
+                )
 
             # Guardar cambios
             await self._uow.users.save(user)
-
             # El context manager (__aexit__) hace commit automático y publica eventos
 
-        # Security Logging: Cambio de contraseña
-        if password_changed:
-            security_logger.log_password_changed(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                old_password_verified=True,
-            )
+        # Security Logging
+        self._log_security_changes(
+            password_changed,
+            email_changed,
+            tokens_revoked_count,
+            user_id,
+            ip_address,
+            user_agent,
+            security_logger
+        )
 
-            # Security Logging: Revocación de tokens por cambio de contraseña
-            if tokens_revoked_count > 0:
-                security_logger.log_refresh_token_revoked(
-                    user_id=user_id,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    tokens_revoked_count=tokens_revoked_count,
-                    reason="password_change",
-                )
-
-        # Security Logging: Cambio de email
-        if email_changed:
-            security_logger.log_email_changed(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                email_verification_required=True,
-            )
-
-        # Si se cambió el email, enviar email de verificación al NUEVO correo
-        if email_changed and verification_token and self._email_service:
-            try:
-                email_sent = self._email_service.send_verification_email(
-                    to_email=request.new_email,
-                    user_name=user.first_name,
-                    verification_token=verification_token
-                )
-                if not email_sent:
-                    logger.warning(
-                        "No se pudo enviar el email de verificación para el usuario %s",
-                        user.id.value
-                    )
-            except (requests.RequestException, ValueError, ConnectionError):
-                logger.exception(
-                    "Error al enviar email de verificación para el usuario %s",
-                    user.id.value
-                )
-                # No fallar la actualización si el email no se pudo enviar
+        # Enviar email de verificación si cambió el email
+        if email_changed and verification_token:
+            self._send_verification_email(user, request.new_email, verification_token)
 
         # Construir respuesta
         return UpdateSecurityResponseDTO(
