@@ -9,7 +9,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from src.config.rate_limit import limiter
 from src.config.dependencies import (
     get_activate_competition_use_case,
     get_cancel_competition_use_case,
@@ -25,6 +24,7 @@ from src.config.dependencies import (
     get_uow,  # User Unit of Work para obtener datos del creador
     get_update_competition_use_case,
 )
+from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
@@ -517,7 +517,7 @@ class CompetitionDTOMapper:
 )
 @limiter.limit("10/hour")  # Anti-spam: máximo 10 competiciones nuevas por hora
 async def create_competition(
-    request: Request,
+    _request: Request,  # Necesario para limiter pero no usado directamente
     competition_data: CreateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateCompetitionUseCase = Depends(get_create_competition_use_case),

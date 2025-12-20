@@ -7,7 +7,6 @@ from src.shared.application.validation import (
     FieldLimits,
     NameValidator,
     sanitize_html,
-    validate_email_strict,
 )
 
 # Literales reutilizados
@@ -66,15 +65,15 @@ class RegisterUserRequestDTO(BaseModel):
 
     @field_validator("first_name", "last_name")
     @classmethod
-    def sanitize_and_validate_name(cls, v: str, info) -> str:
+    def sanitize_and_validate_name(cls, v: str) -> str:
         """Sanitiza HTML y valida formato de nombre según NameValidator."""
         # Sanitizar HTML primero
         sanitized = sanitize_html(v)
         if sanitized is None:
-            raise ValueError(f"{info.field_name} no puede estar vacío")
+            raise ValueError("El nombre no puede estar vacío")
 
         # Validar formato de nombre (sin números ni caracteres especiales)
-        return NameValidator.validate(sanitized, field_name=info.field_name)
+        return NameValidator.validate(sanitized)
 
 # ======================================================================================
 # DTO para el Caso de Uso: Buscar Usuario
@@ -99,7 +98,7 @@ class FindUserRequestDTO(BaseModel):
 
     @field_validator('email', 'full_name', mode='before')
     @classmethod
-    def check_at_least_one_field(cls, v, info):
+    def check_at_least_one_field(cls, v):
         """Valida que se proporcione al menos un campo de búsqueda."""
         return v
 
