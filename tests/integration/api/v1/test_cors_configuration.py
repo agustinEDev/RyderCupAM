@@ -255,12 +255,14 @@ class TestCORSConfiguration:
 
         allowed_origins = get_allowed_origins()
 
-        # Assert
+        # Assert - Verificación exacta de URLs (no substring matching por seguridad)
         assert len(allowed_origins) == 2
-        assert "https://app.rydercupfriends.com" in allowed_origins
-        assert "https://www.rydercupfriends.com" in allowed_origins
-        assert "http://localhost:5173" not in allowed_origins  # No debe incluir locales
-        assert "http://localhost:3000" not in allowed_origins
+        assert allowed_origins == [
+            "https://app.rydercupfriends.com",
+            "https://www.rydercupfriends.com"
+        ]
+        # Verificar que NO incluye orígenes de desarrollo
+        assert not any(origin.startswith("http://localhost") for origin in allowed_origins)
 
     async def test_cors_headers_present_in_authenticated_endpoints(
         self,
