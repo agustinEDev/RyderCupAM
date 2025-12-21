@@ -2,7 +2,7 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-819%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-853%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
@@ -69,6 +69,7 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## ✨ Features API
 
 - ✅ **User Management** - Registro, autenticación JWT, gestión de perfil, verificación email (Mailgun)
+- ✅ **Security** (v1.10.0) - httpOnly cookies, session timeout, security logging, Sentry monitoring
 - ✅ **Handicap System** - Integración RFEG, actualización manual y batch
 - ✅ **Competition Module** - CRUD completo, state transitions, enrollment system (20 endpoints)
 - ✅ **Countries** - 166 países con 614 relaciones de fronteras, soporte multilenguaje
@@ -87,25 +88,42 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (681 tests, ~45s con paralelización)
-pytest tests/unit/           # Unit tests (544 tests)
-pytest tests/integration/    # Integration tests (137 tests)
+python dev_tests.py          # Full suite (853 tests, ~54s con paralelización)
+pytest tests/unit/           # Unit tests (662 tests)
+pytest tests/integration/    # Integration tests (157 tests)
+pytest tests/security/       # Security tests (34 tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **681 tests** pasando (100% ✅) en 44.95 segundos
+- **853 tests** pasando (100% ✅) en ~54 segundos ⭐ Actualizado (19 Dic 2025)
 - **Competition Module**: 174 tests completos (domain, application, infrastructure)
-- **User Module**: 507 tests (incluye password policy)
-- **Security Tests**: 12 tests (rate limiting + security headers)
+- **User Module**: 507 tests (incluye password policy + session timeout)
+- **Security Tests**: 34 tests (rate limiting + security headers + httpOnly cookies + XSS + SQL injection)
 - **Cobertura**: >90% en lógica de negocio
 - **Fix de paralelización**: UUID único por BD de test (pytest-xdist)
 
 ## 🔐 Seguridad
 
-**Puntuación OWASP Top 10 2021**: 8.2/10 ✅ (+0.2 tras Password Policy)
+**Puntuación OWASP Top 10 2021**: 10.0/10 ✅ (+1.8 tras v1.8.0-v1.10.0)
 
-**Protecciones Implementadas**:
+**Protecciones Implementadas (v1.10.0)**:
+- ✅ **httpOnly Cookies** (dual support) - Previene XSS en tokens (A01, A02)
+  - Cookies httpOnly para access_token y refresh_token
+  - Compatibilidad transitoria con Authorization header
+  - Middleware dual con prioridad a cookies
+- ✅ **Session Timeout** - Tokens de corta duración (A01, A02, A07)
+  - Access token: 15 minutos (reducido de 60min)
+  - Refresh token: 7 días con revocación
+  - Logout revoca todos los refresh tokens
+- ✅ **Security Logging** - Audit trail completo (A09)
+  - 8 tipos de eventos de seguridad en JSON
+  - Archivo dedicado security_audit.log con rotación
+  - Correlation IDs para trazabilidad
+- ✅ **Sentry Integration** - Error tracking y APM (A09)
+  - Performance monitoring (10% traces)
+  - Profiling de código (5% profiles)
+  - Alertas configurables
 - ✅ **Password Policy** (OWASP ASVS V2.1) - Contraseñas robustas (A07)
   - Mínimo 12 caracteres (ASVS V2.1.1)
   - Complejidad completa: mayúsculas + minúsculas + dígitos + símbolos (ASVS V2.1.2)
@@ -115,15 +133,17 @@ pytest --cov=src             # Con cobertura
   - Login: 5/min, Register: 3/hour, API externa: 5/hour
 - ✅ **Security Headers HTTP** (secure) - Previene XSS, clickjacking, MITM (A02, A03, A04, A05, A07)
   - HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Cache-Control
+- ✅ **Input Validation & Sanitization** - Previene XSS e inyecciones (A03)
+  - Sanitización HTML con bleach
+  - Validadores Pydantic estrictos con límites de longitud
+- ✅ **CORS Configuration** - Whitelist estricta (A05, A01)
 - ✅ **HTTPS** obligatorio en producción (Render.com)
 - ✅ **SQL Injection Protection** (SQLAlchemy ORM parameterizado)
 - ✅ **JWT Authentication** con tokens seguros
-- ✅ **Input Validation** (Pydantic schemas)
 
-**Pendiente (v1.8.0)**:
-- ⏳ httpOnly Cookies (próximo)
-- ⏳ Session Timeout + Refresh Tokens
-- ⏳ 2FA/MFA (v1.9.0)
+**Pendiente**:
+- ⏳ 2FA/MFA (v2.0.0)
+- ⏳ CSRF Tokens (v2.0.0)
 
 Ver [docs/SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) para detalles completos.
 
@@ -147,7 +167,7 @@ Ver [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 ### Endpoints API Disponibles
 
 **30+ endpoints REST** organizados en módulos:
-- **Auth** (4): registro, login, logout, verificación email
+- **Auth** (5): registro, login, logout, verificación email, refresh token
 - **Users**: perfil, búsqueda, gestión
 - **Handicaps** (3): actualización RFEG, manual, batch
 - **Competitions** (10): CRUD + state transitions (activate, start, complete, etc.)
