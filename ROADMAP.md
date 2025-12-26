@@ -21,13 +21,13 @@
 | **Enrollments** | ✅ Completo | Solicitudes, Aprobaciones, Equipos, Custom Handicap |
 | **Handicaps** | ✅ Completo | Manual + RFEG (solo usuarios españoles) |
 | **Países** | ✅ Repository | 250+ países, códigos ISO, adyacencias geográficas |
-| **Password Reset** | ✅ Completo | Token seguro, Email bilingüe, Rate limiting ⭐ NUEVO (26 Dic 2025) |
+| **Password Reset** | ✅ Completo | Token 256-bit, Email bilingüe, Session invalidation ⭐ v1.11.0 (26 Dic 2025) |
 | **HTTPS** | ✅ Habilitado | Render.com proporciona SSL automático |
 
 ### 📈 Métricas Clave
 
-- **Endpoints:** 33+ rutas API (+3 password reset) ⭐ ACTUALIZADO (26 Dic 2025)
-- **Tests:** 904 tests pasando (100%) en ~60s (+51 password reset) ⭐ ACTUALIZADO (26 Dic 2025)
+- **Endpoints:** 36 rutas API (33 + 3 password reset) ⭐ v1.11.0 (26 Dic 2025)
+- **Tests:** 905 tests pasando (100%) en ~60s (+51 password reset) ⭐ v1.11.0 (26 Dic 2025)
 - **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
 - **Database:** PostgreSQL con migraciones Alembic
 - **Deployment:** Render.com (contenedor Docker)
@@ -506,8 +506,8 @@ RAG_TEMPERATURE=0.3
 ---
 
 #### Sistema de Recuperación de Contraseña (Password Reset)
-**Estado:** ✅ **COMPLETADO** (100% - 26 Dic 2025)
-**Prioridad:** 🟠 Alta
+**Estado:** ✅ **COMPLETADO** (v1.11.0 - 26 Dic 2025)
+**Prioridad:** ~~🟠 Alta~~
 **Estimación Total:** 12-14 horas | **Invertido:** ~12 horas
 
 **📋 Progreso por Capas:**
@@ -569,7 +569,10 @@ RAG_TEMPERATURE=0.3
     - Tests de timing attack prevention
 
 11. ✅ **Documentation**
-    - ROADMAP.md actualizado
+    - CHANGELOG.md: Entrada v1.11.0 con detalles completos
+    - ADR-024: Password Reset Security (93 líneas, formato conciso)
+    - ROADMAP.md: Feature marcada como completada
+    - CLAUDE.md: Actualizado con métricas (905 tests, 36 endpoints)
     - Feature branch: `feature/password-reset-system`
     - Commit: `3b0fad0 - feat: implement password reset system with complete security features`
 
@@ -579,11 +582,11 @@ RAG_TEMPERATURE=0.3
 - ✅ Token de un solo uso (invalidación post-uso)
 - ✅ Timing attack prevention (delay artificial si email no existe)
 - ✅ Mensaje genérico anti-enumeración de usuarios
-- ✅ Invalidación automática de TODAS las sesiones activas
+- ✅ Invalidación automática de TODAS las sesiones activas (refresh tokens)
 - ✅ Templates de email bilingües con warnings de seguridad
 - ✅ Política de contraseñas aplicada (OWASP ASVS V2.1)
-- ⏳ Security logging completo (pendiente)
-- ⏳ Rate limiting 3/hora por email (pendiente)
+- ✅ Security logging completo (audit trail)
+- ✅ Rate limiting 3/hora por email/IP (SlowAPI)
 
 **📊 OWASP Coverage:**
 - **A01: Broken Access Control** - ✅ Session invalidation, mensaje genérico
@@ -596,14 +599,16 @@ RAG_TEMPERATURE=0.3
 **📁 Archivos Creados/Modificados:**
 - **11 archivos nuevos:** Domain events, Use cases, Tests, Migración
 - **18 archivos modificados:** User entity, DTOs, Repository, Email service, API routes, Security logging
-- **Total:** ~1,200 líneas de código + documentación
+- **Total:** ~1,200 líneas de código
+- **Documentación:** CHANGELOG.md v1.11.0, ADR-024, ROADMAP.md, CLAUDE.md
 
-**🎯 Resultado Final:**
-- ✅ 904 tests pasando (100%) - +51 tests de password reset
-- ✅ 3 endpoints REST con rate limiting 3/hora
+**🎯 Resultado Final (v1.11.0):**
+- ✅ 905 tests pasando (100%) - +51 tests de password reset (+6.1%)
+- ✅ 36 endpoints REST totales (+3 password reset)
 - ✅ Security compliance: OWASP A01, A02, A03, A04, A07, A09
 - ✅ Email templates bilingües (ES/EN)
 - ✅ Clean Architecture completa (Domain → Application → Infrastructure → API)
+- ✅ Feature branch mergeada a develop
 
 ---
 
@@ -635,7 +640,7 @@ RAG_TEMPERATURE=0.3
 ## 🧪 Testing
 
 ### Estado Actual
-- ✅ **904 tests pasando (100%)** (+51 password reset) ⭐ ACTUALIZADO (26 Dic 2025)
+- ✅ **905 tests pasando (100%)** (+51 password reset v1.11.0) ⭐ (26 Dic 2025)
 - ✅ Tiempo de ejecución: ~60 segundos (con paralelización `-n auto`)
 - ✅ Suite completa: unitarios, integración, end-to-end, security
 - ✅ CI/CD automático con GitHub Actions
@@ -802,6 +807,6 @@ Ver plan detallado en sección [🤖 IA & RAG](#-ia--rag---módulo-de-asistente-
 
 ---
 
-**Última revisión:** 26 Dic 2025 (Password Reset System completado)
-**Próxima revisión:** Después de v1.11.0 (IA & RAG Module)
+**Última revisión:** 26 Dic 2025 (v1.11.0 - Password Reset System completado y mergeado)
+**Próxima revisión:** Antes de v1.12.0 (IA & RAG Module)
 **Responsable:** Equipo de desarrollo backend
