@@ -492,6 +492,61 @@ def get_resend_verification_email_use_case(
     return ResendVerificationEmailUseCase(uow, email_service)
 
 
+def get_request_password_reset_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service)
+):
+    """
+    Proveedor del caso de uso RequestPasswordResetUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Depende de `get_email_service` para envío de emails de reseteo.
+    3. Crea una instancia de `RequestPasswordResetUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    from src.modules.user.application.use_cases.request_password_reset_use_case import (
+        RequestPasswordResetUseCase,
+    )
+    return RequestPasswordResetUseCase(uow, email_service)
+
+
+def get_reset_password_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service)
+):
+    """
+    Proveedor del caso de uso ResetPasswordUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Depende de `get_email_service` para envío de email de confirmación.
+    3. Crea una instancia de `ResetPasswordUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    from src.modules.user.application.use_cases.reset_password_use_case import (
+        ResetPasswordUseCase,
+    )
+    return ResetPasswordUseCase(uow, email_service)
+
+
+def get_validate_reset_token_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow)
+):
+    """
+    Proveedor del caso de uso ValidateResetTokenUseCase.
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ValidateResetTokenUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    from src.modules.user.application.use_cases.validate_reset_token_use_case import (
+        ValidateResetTokenUseCase,
+    )
+    return ValidateResetTokenUseCase(uow)
+
+
 # ============================================================================
 # COMPETITION MODULE - Dependency Injection
 # ============================================================================

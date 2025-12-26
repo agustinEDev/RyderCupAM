@@ -178,3 +178,29 @@ class UserRepositoryInterface(ABC):
             RepositoryError: Si ocurre un error de consulta
         """
         pass
+
+    @abstractmethod
+    async def find_by_password_reset_token(self, token: str) -> User | None:
+        """
+        Busca un usuario por su token de reseteo de contraseña.
+
+        Args:
+            token (str): El token de reseteo de contraseña (generado con generate_password_reset_token)
+
+        Returns:
+            Optional[User]: El usuario encontrado o None si no existe o el token expiró
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+
+        Security:
+            - Solo busca tokens activos (no nulos)
+            - NO valida expiración (esa lógica está en User.can_reset_password())
+            - Usa índice único ix_users_password_reset_token para búsqueda rápida
+
+        Example:
+            >>> user = await repository.find_by_password_reset_token("abc123...")
+            >>> if user and user.can_reset_password("abc123..."):
+            ...     # Token válido y no expirado
+        """
+        pass

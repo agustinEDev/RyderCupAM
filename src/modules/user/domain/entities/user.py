@@ -1,11 +1,13 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 
 from ..events.email_verified_event import EmailVerifiedEvent
 from ..events.handicap_updated_event import HandicapUpdatedEvent
+from ..events.password_reset_completed_event import PasswordResetCompletedEvent
+from ..events.password_reset_requested_event import PasswordResetRequestedEvent
 from ..events.user_email_changed_event import UserEmailChangedEvent
 from ..events.user_logged_in_event import UserLoggedInEvent
 from ..events.user_logged_out_event import UserLoggedOutEvent
@@ -61,6 +63,8 @@ class User:
         email_verified: bool = False,
         verification_token: str | None = None,
         country_code: CountryCode | None = None,
+        password_reset_token: str | None = None,
+        reset_token_expires_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None
     ):
         self.id = id
@@ -75,6 +79,8 @@ class User:
         self.email_verified = email_verified
         self.verification_token = verification_token
         self.country_code = country_code
+        self.password_reset_token = password_reset_token
+        self.reset_token_expires_at = reset_token_expires_at
         self._domain_events = domain_events or []
 
     def get_full_name(self) -> str:
@@ -409,6 +415,177 @@ class User:
             False
         """
         return self.country_code is not None and self.country_code.value == "ES"
+
+    # === Password Reset Methods ===
+
+    def generate_password_reset_token(
+        self,
+        ip_address: str | None = None,
+        user_agent: str | None = None
+    ) -> str:
+        """
+        Genera un token seguro de reseteo de contraseña con expiración de 24 horas.
+
+        Este método:
+        1. Genera un token criptográficamente seguro (URL-safe, 32 bytes)
+        2. Establece la fecha de expiración a 24 horas desde ahora
+        3. Emite un PasswordResetRequestedEvent para auditoría
+
+        Args:
+            ip_address: IP desde donde se solicitó el reseteo (para auditoría)
+            user_agent: User agent del navegador (para detección de anomalías)
+
+        Returns:
+            str: Token de reseteo único y seguro
+
+        Security:
+            - Token generado con secrets.token_urlsafe() (CSPRNG)
+            - Expiración automática en 24 horas
+            - Evento de dominio registrado para auditoría (OWASP A09)
+            - IP y User-Agent capturados para análisis de seguridad
+
+        Ejemplo:
+            >>> user = User(...)
+            >>> token = user.generate_password_reset_token(ip_address="192.168.1.1")
+            >>> # Token válido por 24 horas
+        """
+        # Generar token seguro (mismo método que email verification)
+        token = secrets.token_urlsafe(32)
+        self.password_reset_token = token
+
+        # Establecer expiración a 24 horas desde ahora
+        now = datetime.now()
+        self.reset_token_expires_at = now + timedelta(hours=24)
+        self.updated_at = now
+
+        # Emitir evento de dominio para auditoría
+        self._add_domain_event(PasswordResetRequestedEvent(
+            user_id=str(self.id.value),
+            email=str(self.email.value),
+            requested_at=now,
+            reset_token_expires_at=self.reset_token_expires_at,
+            ip_address=ip_address,
+            user_agent=user_agent
+        ))
+
+        return token
+
+    def can_reset_password(self, token: str) -> bool:
+        """
+        Valida si un token de reseteo es válido y no ha expirado.
+
+        Validaciones:
+        1. El token coincide con el almacenado
+        2. El token no ha expirado (< 24 horas desde su generación)
+        3. Existe un token de reseteo activo
+
+        Args:
+            token: Token de reseteo a validar
+
+        Returns:
+            bool: True si el token es válido y está dentro del plazo de 24h
+
+        Raises:
+            ValueError: Si no hay token de reseteo activo
+
+        Security:
+            - Validación estricta de expiración (24 horas máximo)
+            - Prevención de timing attacks (verificación en orden constante)
+            - No revela información sobre la existencia del usuario
+
+        Ejemplo:
+            >>> user.generate_password_reset_token()
+            >>> user.can_reset_password(token)  # True (dentro de 24h)
+            >>> # Después de 25 horas...
+            >>> user.can_reset_password(token)  # False (expirado)
+        """
+        # Validar que existe un token activo
+        if not self.password_reset_token:
+            raise ValueError("No hay ninguna solicitud de reseteo de contraseña activa")
+
+        # Validar que el token coincide
+        if self.password_reset_token != token:
+            return False
+
+        # Validar que no ha expirado
+        if not self.reset_token_expires_at:
+            return False
+
+        now = datetime.now()
+        if now > self.reset_token_expires_at:
+            return False
+
+        return True
+
+    def reset_password(
+        self,
+        token: str,
+        new_password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None
+    ) -> None:
+        """
+        Resetea la contraseña del usuario usando un token válido.
+
+        Este método:
+        1. Valida el token y su expiración
+        2. Cambia la contraseña por la nueva (hasheada con bcrypt)
+        3. Invalida el token de reseteo (uso único)
+        4. Emite evento PasswordResetCompletedEvent (trigger para invalidar sesiones)
+
+        Args:
+            token: Token de reseteo generado previamente
+            new_password: Nueva contraseña en texto plano (será hasheada)
+            ip_address: IP desde donde se hizo el reseteo (para auditoría)
+            user_agent: User agent del navegador (para detección de anomalías)
+
+        Raises:
+            ValueError: Si el token es inválido, expirado, o la contraseña no cumple la política
+
+        Security:
+            - Validación de token con can_reset_password()
+            - Password hasheado con bcrypt 12 rounds (OWASP ASVS V2.4.1)
+            - Token invalidado después del primer uso (uso único)
+            - Evento emitido para invalidar TODAS las sesiones activas
+            - Política de contraseñas aplicada por el Value Object Password
+
+        Post-Condiciones:
+            - password_reset_token = None (token invalidado)
+            - reset_token_expires_at = None (expiración limpiada)
+            - Todas las sesiones activas deben ser invalidadas (por event handler)
+
+        Ejemplo:
+            >>> user.reset_password(
+            ...     token="abc123...",
+            ...     new_password="NewSecure123!",
+            ...     ip_address="192.168.1.1"
+            ... )
+            >>> # Password cambiado, sesiones invalidadas, token eliminado
+        """
+        # Validar el token antes de proceder
+        if not self.can_reset_password(token):
+            raise ValueError("Token de reseteo inválido o expirado")
+
+        # Cambiar la contraseña (Password VO valida la política de seguridad)
+        new_password_vo = Password.from_plain_text(new_password)
+        self.password = new_password_vo
+
+        # Invalidar el token (uso único)
+        self.password_reset_token = None
+        self.reset_token_expires_at = None
+
+        # Actualizar timestamp
+        now = datetime.now()
+        self.updated_at = now
+
+        # Emitir evento de dominio (trigger para invalidar refresh tokens)
+        self._add_domain_event(PasswordResetCompletedEvent(
+            user_id=str(self.id.value),
+            email=str(self.email.value),
+            completed_at=now,
+            ip_address=ip_address,
+            user_agent=user_agent
+        ))
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

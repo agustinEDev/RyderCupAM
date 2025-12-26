@@ -94,3 +94,21 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         statement = select(User).filter_by(verification_token=token)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def find_by_password_reset_token(self, token: str) -> User | None:
+        """
+        Busca un usuario por su token de reseteo de contraseña.
+
+        Args:
+            token: Token de reseteo generado con User.generate_password_reset_token()
+
+        Returns:
+            User encontrado o None si no existe
+
+        Note:
+            - Usa índice ix_users_password_reset_token para búsqueda rápida
+            - NO valida expiración (esa lógica está en User.can_reset_password())
+        """
+        statement = select(User).filter_by(password_reset_token=token)
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
