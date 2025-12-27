@@ -226,3 +226,344 @@ The Ryder Cup Friends Team
         except Exception as e:
             logger.error("Error inesperado al enviar email: %s", str(e))
             return False
+
+    async def send_password_reset_email(
+        self,
+        to_email: str,
+        reset_link: str,
+        user_name: str
+    ) -> bool:
+        """
+        Envía un email con enlace para resetear contraseña.
+
+        Template bilingüe (ES/EN) con diseño consistente con verify_email.
+        """
+        # Sanitizar user_name para prevenir inyección de headers
+        safe_user_name = (
+            user_name
+            .replace('\n', '')
+            .replace('\r', '')
+            .replace('"', '')
+            .replace('<', '')
+            .replace('>', '')
+            .strip()
+        )
+
+        subject = f"Resetea tu contraseña - Ryder Cup Friends | Reset your password"
+
+        text_body = f"""
+Hola {safe_user_name},
+
+Hemos recibido una solicitud para resetear la contraseña de tu cuenta en Ryder Cup Friends.
+
+Para establecer una nueva contraseña, haz clic en el siguiente enlace (válido por 24 horas):
+
+{reset_link}
+
+Si no solicitaste este cambio, puedes ignorar este mensaje. Tu contraseña actual seguirá siendo válida.
+
+Por seguridad, todas tus sesiones activas serán cerradas al cambiar la contraseña.
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_user_name},
+
+We received a request to reset the password for your Ryder Cup Friends account.
+
+To set a new password, click on the following link (valid for 24 hours):
+
+{reset_link}
+
+If you did not request this change, you can safely ignore this message. Your current password will remain valid.
+
+For security, all your active sessions will be closed when you change your password.
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .container {{
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 30px;
+        }}
+        .header {{
+            background-color: #0066cc;
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }}
+        .content {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 0 0 10px 10px;
+        }}
+        .button {{
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #0066cc;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: bold;
+        }}
+        .footer {{
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }}
+        .warning {{
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }}
+        .divider {{
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Reseteo de Contraseña</h1>
+            <h2>Password Reset</h2>
+        </div>
+        <div class="content">
+            <!-- Spanish -->
+            <p>Hola <strong>{safe_user_name}</strong>,</p>
+            <p>Hemos recibido una solicitud para resetear la contraseña de tu cuenta en Ryder Cup Friends.</p>
+            <p>Para establecer una nueva contraseña, haz clic en el siguiente botón:</p>
+            <center>
+                <a href="{reset_link}" class="button">Resetear mi contraseña</a>
+            </center>
+            <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+            <p style="font-size: 12px; word-break: break-all;">{reset_link}</p>
+
+            <div class="warning">
+                <p style="margin: 0;"><strong>⚠️ Importante:</strong></p>
+                <ul style="margin: 10px 0 0 0;">
+                    <li>Este enlace es válido por <strong>24 horas</strong></li>
+                    <li>Todas tus sesiones activas serán cerradas al cambiar la contraseña</li>
+                    <li>Si no solicitaste este cambio, ignora este mensaje</li>
+                </ul>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- English -->
+            <p>Hello <strong>{safe_user_name}</strong>,</p>
+            <p>We received a request to reset the password for your Ryder Cup Friends account.</p>
+            <p>To set a new password, click on the following button:</p>
+            <center>
+                <a href="{reset_link}" class="button">Reset my password</a>
+            </center>
+            <p style="font-size: 12px; color: #666;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="font-size: 12px; word-break: break-all;">{reset_link}</p>
+
+            <div class="warning">
+                <p style="margin: 0;"><strong>⚠️ Important:</strong></p>
+                <ul style="margin: 10px 0 0 0;">
+                    <li>This link is valid for <strong>24 hours</strong></li>
+                    <li>All your active sessions will be closed when you change your password</li>
+                    <li>If you did not request this change, ignore this message</li>
+                </ul>
+            </div>
+
+            <div class="footer">
+                <p>Saludos | Best regards,<br>
+                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        return self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_password_changed_notification(
+        self,
+        to_email: str,
+        user_name: str
+    ) -> bool:
+        """
+        Envía un email notificando que la contraseña fue cambiada exitosamente.
+
+        Template bilingüe (ES/EN) con información de seguridad.
+        """
+        # Sanitizar user_name para prevenir inyección de headers
+        safe_user_name = (
+            user_name
+            .replace('\n', '')
+            .replace('\r', '')
+            .replace('"', '')
+            .replace('<', '')
+            .replace('>', '')
+            .strip()
+        )
+
+        subject = f"Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+
+        text_body = f"""
+Hola {safe_user_name},
+
+Te confirmamos que la contraseña de tu cuenta en Ryder Cup Friends ha sido cambiada exitosamente.
+
+Por seguridad, hemos cerrado todas tus sesiones activas. Necesitarás iniciar sesión nuevamente con tu nueva contraseña.
+
+Si NO realizaste este cambio, tu cuenta podría estar comprometida. Por favor, contacta a nuestro equipo de soporte inmediatamente.
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_user_name},
+
+We confirm that the password for your Ryder Cup Friends account has been successfully changed.
+
+For security, we have closed all your active sessions. You will need to log in again with your new password.
+
+If you did NOT make this change, your account may be compromised. Please contact our support team immediately.
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .container {{
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 30px;
+        }}
+        .header {{
+            background-color: #28a745;
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }}
+        .content {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 0 0 10px 10px;
+        }}
+        .success-box {{
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+        }}
+        .alert-box {{
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 20px 0;
+        }}
+        .footer {{
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }}
+        .divider {{
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ Contraseña Cambiada</h1>
+            <h2>Password Changed</h2>
+        </div>
+        <div class="content">
+            <!-- Spanish -->
+            <p>Hola <strong>{safe_user_name}</strong>,</p>
+
+            <div class="success-box">
+                <p style="margin: 0;"><strong>✅ Cambio exitoso</strong></p>
+                <p style="margin: 10px 0 0 0;">Tu contraseña ha sido cambiada exitosamente.</p>
+            </div>
+
+            <p><strong>Acciones de seguridad tomadas:</strong></p>
+            <ul>
+                <li>Todas tus sesiones activas han sido cerradas</li>
+                <li>Necesitarás iniciar sesión nuevamente con tu nueva contraseña</li>
+                <li>Este cambio ha sido registrado en nuestro sistema</li>
+            </ul>
+
+            <div class="alert-box">
+                <p style="margin: 0;"><strong>⚠️ ¿No fuiste tú?</strong></p>
+                <p style="margin: 10px 0 0 0;">Si NO realizaste este cambio, tu cuenta podría estar comprometida. Contacta a nuestro equipo de soporte inmediatamente.</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- English -->
+            <p>Hello <strong>{safe_user_name}</strong>,</p>
+
+            <div class="success-box">
+                <p style="margin: 0;"><strong>✅ Successful change</strong></p>
+                <p style="margin: 10px 0 0 0;">Your password has been successfully changed.</p>
+            </div>
+
+            <p><strong>Security actions taken:</strong></p>
+            <ul>
+                <li>All your active sessions have been closed</li>
+                <li>You will need to log in again with your new password</li>
+                <li>This change has been logged in our system</li>
+            </ul>
+
+            <div class="alert-box">
+                <p style="margin: 0;"><strong>⚠️ Wasn't you?</strong></p>
+                <p style="margin: 10px 0 0 0;">If you did NOT make this change, your account may be compromised. Contact our support team immediately.</p>
+            </div>
+
+            <div class="footer">
+                <p>Saludos | Best regards,<br>
+                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        return self._send_email(to_email, subject, text_body, html_body)

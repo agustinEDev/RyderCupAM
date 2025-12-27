@@ -480,6 +480,90 @@ class SecurityLogger:
         )
         self.log_security_event(event)
 
+    def log_password_reset_requested(
+        self,
+        user_id: str | None,
+        email: str,
+        success: bool,
+        ip_address: str,
+        user_agent: str,
+        failure_reason: str | None = None,
+    ) -> None:
+        """
+        Helper rápido para registrar solicitud de reseteo de contraseña.
+
+        Args:
+            user_id: ID del usuario (None si email no existe)
+            email: Email usado en la solicitud
+            success: Si el email existe y se envió el enlace
+            ip_address: IP del cliente
+            user_agent: User-Agent del navegador
+            failure_reason: Razón del fallo (requerido si success=False)
+
+        Example:
+            >>> security_logger.log_password_reset_requested(
+            ...     user_id=None,
+            ...     email="user@example.com",
+            ...     success=False,
+            ...     failure_reason="Email not found (not revealed to client)",
+            ...     ip_address="192.168.1.1",
+            ...     user_agent="Mozilla/5.0..."
+            ... )
+        """
+        from src.shared.domain.events.security_events import PasswordResetRequestedEvent
+
+        event = PasswordResetRequestedEvent(
+            user_id=user_id,
+            email=email,
+            success=success,
+            failure_reason=failure_reason,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        self.log_security_event(event)
+
+    def log_password_reset_completed(
+        self,
+        user_id: str | None,
+        email: str,
+        success: bool,
+        ip_address: str,
+        user_agent: str,
+        failure_reason: str | None = None,
+    ) -> None:
+        """
+        Helper rápido para registrar reseteo de contraseña completado.
+
+        Args:
+            user_id: ID del usuario (None si token inválido)
+            email: Email del usuario que reseteó la contraseña
+            success: Si el reseteo fue exitoso
+            ip_address: IP del cliente
+            user_agent: User-Agent del navegador
+            failure_reason: Razón del fallo (requerido si success=False)
+
+        Example:
+            >>> security_logger.log_password_reset_completed(
+            ...     user_id="123",
+            ...     email="user@example.com",
+            ...     success=True,
+            ...     failure_reason=None,
+            ...     ip_address="192.168.1.1",
+            ...     user_agent="Mozilla/5.0..."
+            ... )
+        """
+        from src.shared.domain.events.security_events import PasswordResetCompletedEvent
+
+        event = PasswordResetCompletedEvent(
+            user_id=user_id,
+            email=email,
+            success=success,
+            failure_reason=failure_reason,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        self.log_security_event(event)
+
 
 # Singleton global para fácil acceso
 _security_logger_instance: SecurityLogger | None = None

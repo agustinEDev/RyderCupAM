@@ -392,3 +392,122 @@ class RateLimitExceededEvent(SecurityAuditEvent):
             "request_count": self.request_count,
         })
         return base
+
+
+# ============================================================================
+# PASSWORD RESET EVENTS
+# ============================================================================
+
+@dataclass(frozen=True)
+class PasswordResetRequestedEvent(SecurityAuditEvent):
+    """
+    Evento de solicitud de reseteo de contraseña.
+
+    Se emite cuando un usuario solicita resetear su contraseña a través del
+    formulario "Olvidé mi contraseña". Este evento se registra SIEMPRE,
+    incluso si el email no existe (para auditoría completa).
+
+    Atributos:
+        email: Email usado en la solicitud
+        success: Si el email existe y se envió el enlace
+        failure_reason: Razón del fallo (None si exitoso)
+
+    Ejemplos de failure_reason:
+        - "Email not found (not revealed to client)"
+        - "Rate limit exceeded"
+        - "Email service unavailable"
+
+    Security:
+        - Permite detectar intentos masivos de enumeración de usuarios
+        - success=False NO se revela al cliente (mensaje genérico)
+        - Timing attack prevention con delay artificial
+    """
+    email: str = field(kw_only=True)
+    success: bool = field(kw_only=True)
+    failure_reason: str | None = field(default=None, kw_only=True)
+
+    def __post_init__(self):
+        """Validación y asignación de severity según éxito/fallo"""
+        super().__post_init__()
+
+        # Validar email
+        if not self.email or '@' not in self.email:
+            raise ValueError("email debe ser válido")
+
+        # Severity:
+        # - Fallido = HIGH (posible ataque de enumeración)
+        # - Exitoso = MEDIUM (operación normal)
+        if self.success:
+            object.__setattr__(self, 'severity', SecuritySeverity.MEDIUM)
+        else:
+            object.__setattr__(self, 'severity', SecuritySeverity.HIGH)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con campos específicos del evento"""
+        base = super().to_dict()
+        base.update({
+            "email": self.email,
+            "success": self.success,
+            "failure_reason": self.failure_reason,
+        })
+        return base
+
+
+@dataclass(frozen=True)
+class PasswordResetCompletedEvent(SecurityAuditEvent):
+    """
+    Evento de reseteo de contraseña completado.
+
+    Se emite cuando un usuario completa exitosamente el reseteo de su contraseña
+    usando el token del email. Este evento es crítico para auditoría de seguridad.
+
+    Atributos:
+        email: Email del usuario que reseteó la contraseña
+        success: Si el reseteo fue exitoso
+        failure_reason: Razón del fallo (None si exitoso)
+
+    Ejemplos de failure_reason:
+        - "Invalid or expired token"
+        - "Password does not meet policy"
+        - "Token already used"
+
+    Security:
+        - Permite detectar cambios de contraseña no autorizados
+        - success=True trigger para invalidar TODAS las sesiones activas
+        - Email de notificación enviado al usuario
+        - Severity HIGH/CRITICAL según contexto
+
+    Post-Conditions (si success=True):
+        - Token invalidado (uso único)
+        - Todos los refresh tokens revocados
+        - Email de confirmación enviado
+    """
+    email: str = field(kw_only=True)
+    success: bool = field(kw_only=True)
+    failure_reason: str | None = field(default=None, kw_only=True)
+
+    def __post_init__(self):
+        """Validación y asignación de severity según éxito/fallo"""
+        super().__post_init__()
+
+        # Validar email
+        if not self.email or '@' not in self.email:
+            raise ValueError("email debe ser válido")
+
+        # Severity:
+        # - Exitoso = HIGH (cambio de seguridad importante)
+        # - Fallido = MEDIUM (intento fallido normal)
+        if self.success:
+            object.__setattr__(self, 'severity', SecuritySeverity.HIGH)
+        else:
+            object.__setattr__(self, 'severity', SecuritySeverity.MEDIUM)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con campos específicos del evento"""
+        base = super().to_dict()
+        base.update({
+            "email": self.email,
+            "success": self.success,
+            "failure_reason": self.failure_reason,
+        })
+        return base

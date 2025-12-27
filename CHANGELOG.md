@@ -7,6 +7,86 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+---
+
+## [1.11.0] - 2025-12-26
+
+### Added - Password Reset System ✅ COMPLETADO (26 Dic 2025)
+
+**🔑 Sistema de Recuperación de Contraseña Completo** (OWASP A01, A02, A07)
+
+- ✅ Password Reset System implementado (100% funcional)
+- ✅ 3 REST endpoints con rate limiting 3/hora
+- ✅ Domain Layer: 3 métodos en User entity + 2 eventos
+  - `generate_password_reset_token()` - Token seguro 24h (256 bits, secrets.token_urlsafe)
+  - `can_reset_password()` - Validación token + expiración
+  - `reset_password()` - Cambio + invalidación + revocación sesiones
+  - `PasswordResetRequestedEvent` + `PasswordResetCompletedEvent`
+- ✅ Application Layer: 3 Use Cases + 6 DTOs
+  - `RequestPasswordResetUseCase` - Timing attack prevention (delay artificial)
+  - `ResetPasswordUseCase` - Token único + session invalidation
+  - `ValidateResetTokenUseCase` - Pre-validación (mejor UX)
+- ✅ Infrastructure Layer: Migration + Repository + Email templates
+  - Migración Alembic: 2 campos + 2 índices (único en token, normal en expires_at)
+  - `find_by_password_reset_token()` en UserRepository
+  - Templates HTML bilingües (ES/EN): reset request + password changed notification
+- ✅ API Layer: 3 endpoints REST
+  - `POST /api/v1/auth/forgot-password` - Solicitar reseteo
+  - `POST /api/v1/auth/reset-password` - Completar reseteo
+  - `GET /api/v1/auth/validate-reset-token/:token` - Validar token
+  - Rate limiting: 3 intentos/hora por email/IP
+- ✅ Security Features:
+  - Token criptográficamente seguro (256 bits)
+  - Expiración automática (24 horas)
+  - Token de un solo uso (invalidación post-uso)
+  - Timing attack prevention (delay artificial si email no existe)
+  - Mensaje genérico anti-enumeración de usuarios
+  - Invalidación automática de TODAS las sesiones activas (refresh tokens)
+  - Templates de email bilingües con warnings de seguridad
+  - Política de contraseñas aplicada (OWASP ASVS V2.1)
+  - Security logging completo (audit trail)
+- ✅ Tests: 905/905 tests pasando (100%) - +51 tests nuevos
+  - 15 tests: User Entity métodos password reset
+  - 9 tests: RequestPasswordResetUseCase
+  - 11 tests: ResetPasswordUseCase
+  - 7 tests: ValidateResetTokenUseCase
+  - 9 tests: Domain Events
+
+**Archivos Creados (11):**
+- `alembic/versions/3s4721zck3x7_add_password_reset_fields_to_users_table.py`
+- `src/modules/user/domain/events/password_reset_requested_event.py`
+- `src/modules/user/domain/events/password_reset_completed_event.py`
+- `src/modules/user/application/use_cases/request_password_reset_use_case.py`
+- `src/modules/user/application/use_cases/reset_password_use_case.py`
+- `src/modules/user/application/use_cases/validate_reset_token_use_case.py`
+- `tests/unit/modules/user/domain/entities/test_user_password_reset.py`
+- `tests/unit/modules/user/application/use_cases/test_request_password_reset_use_case.py`
+- `tests/unit/modules/user/application/use_cases/test_reset_password_use_case.py`
+- `tests/unit/modules/user/application/use_cases/test_validate_reset_token_use_case.py`
+- `tests/unit/modules/user/domain/events/test_password_reset_events.py`
+
+**Archivos Modificados (18):**
+- `src/modules/user/domain/entities/user.py` (+3 métodos, +2 campos)
+- `src/modules/user/infrastructure/api/v1/auth_routes.py` (+3 endpoints)
+- `src/modules/user/application/dto/user_dto.py` (+6 DTOs)
+- `src/config/dependencies.py` (+3 dependency injections)
+- `src/shared/domain/events/security_events.py` (+2 eventos)
+- `src/shared/infrastructure/logging/security_logger.py` (+2 helpers)
+- `src/shared/infrastructure/email/email_service.py` (+2 templates)
+- Y 11 archivos más (mappers, repositorios, interfaces)
+
+**OWASP Coverage:**
+- A01: Broken Access Control (session invalidation, mensaje genérico)
+- A02: Cryptographic Failures (token seguro, expiración, uso único)
+- A03: Injection (email sanitization, Pydantic validation)
+- A04: Insecure Design (rate limiting 3/hora)
+- A07: Authentication Failures (password policy, token validation)
+- A09: Security Logging (audit trail completo)
+
+**Impacto:** Feature de seguridad crítica implementada con Clean Architecture completa. Total: ~1,200 líneas de código. Tests: 853 → 905 (+51 nuevos, +6.1%). Compliance OWASP mejorado.
+
+---
+
 ### Changed - CI/CD Pipeline Improvement ✅ COMPLETADO (19 Dic 2025)
 
 **🔧 Pragmatic CVE Handling in Dependency Audit** (OWASP A06)

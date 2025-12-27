@@ -130,62 +130,15 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ================================
-# CORS MIDDLEWARE (v1.8.0)
+# MIDDLEWARE STACK
 # ================================
-# Configurar CORS (Cross-Origin Resource Sharing) para permitir
-# peticiones desde frontends autorizados únicamente.
-#
-# Características:
-# - Whitelist estricta de orígenes (no wildcards)
-# - Validación automática de esquemas (http/https)
-# - Separación clara desarrollo/producción
-# - allow_credentials=True para cookies httpOnly
-#
-# OWASP Coverage:
-# - A05: Security Misconfiguration (whitelist estricta)
-# - A01: Broken Access Control (control de acceso por origen)
-#
-# Configuración centralizada en: src/config/cors_config.py
-
-# Debug middleware para ver requests OPTIONS (solo en desarrollo)
-ENV = os.getenv("ENVIRONMENT", "development").lower()
-if ENV != "production":
-    @app.middleware("http")
-    async def debug_options_requests(request, call_next):
-        if request.method == "OPTIONS":
-            print(f"🔍 OPTIONS request to: {request.url.path}")
-            print(f"   Origin: {request.headers.get('origin', 'N/A')}")
-            print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
-            print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
-        response = await call_next(request)
-        if request.method == "OPTIONS":
-            print(f"   Response status: {response.status_code}")
-        return response
-
-# Correlation ID Middleware (debe ir PRIMERO para capturar todos los requests)
-app.add_middleware(CorrelationMiddleware)
-
-# Sentry User Context Middleware (captura usuario de JWT para eventos)
-app.add_middleware(SentryUserContextMiddleware)
-
-# Aplicar middleware CORS con configuración centralizada
-app.add_middleware(CORSMiddleware, **get_cors_config())
+# Los middlewares se ejecutan en el orden INVERSO al que se registran:
+# El último en añadirse es el primero en ejecutarse
 
 # ================================
 # SECURITY HEADERS MIDDLEWARE
 # ================================
-# Configurar Security Headers HTTP para proteger contra:
-# - XSS (Cross-Site Scripting)
-# - Clickjacking
-# - MIME-sniffing
-# - MITM (Man-in-the-Middle) attacks
-# - Inyección de recursos maliciosos
-#
-# IMPORTANTE: Este middleware debe ir DESPUÉS de CORS
-# para que los headers de seguridad se añadan correctamente
-
-# Instanciar configuración de security headers con valores por defecto
-# La biblioteca 'secure' proporciona headers seguros pre-configurados
+# Instanciar configuración de security headers
 secure_headers = Secure()
 
 @app.middleware("http")
@@ -193,38 +146,61 @@ async def add_security_headers(request: Request, call_next):
     """
     Middleware para añadir Security Headers HTTP a todas las respuestas.
 
-    Headers añadidos por defecto (biblioteca 'secure'):
-    - Strict-Transport-Security (HSTS): max-age=63072000; includeSubdomains
-      → Fuerza HTTPS durante 2 años, previene MITM downgrade attacks
-    - X-Frame-Options: SAMEORIGIN
-      → Previene clickjacking, solo permite iframes del mismo origen
-    - X-Content-Type-Options: nosniff
-      → Previene MIME-sniffing, fuerza respeto al Content-Type declarado
-    - Referrer-Policy: no-referrer, strict-origin-when-cross-origin
-      → Controla información de referer enviada en requests
-    - X-XSS-Protection: 0
-      → Desactivado (obsoleto en navegadores modernos, puede causar vulnerabilidades)
-    - Cache-Control: no-store
-      → Previene cacheo de respuestas sensibles
-
     OWASP Top 10 2021 Coverage:
     - A02: Cryptographic Failures (HSTS fuerza cifrado HTTPS)
-    - A03: Injection (X-XSS-Protection, aunque obsoleto)
-    - A04: Insecure Design (X-Frame-Options previene clickjacking)
-    - A05: Security Misconfiguration (todos los headers)
-    - A07: Authentication Failures (X-Frame-Options en login, Cache-Control en tokens)
-
-    Nota: En desarrollo (HTTP), HSTS será ignorado por el navegador.
-          Solo es efectivo en producción con HTTPS.
+    - A05: Security Misconfiguration
     """
     response = await call_next(request)
-
-    # Añadir todos los security headers a la respuesta
-    headers_dict = secure_headers.headers()
-    for header_name, header_value in headers_dict.items():
-        response.headers[header_name] = header_value
-
+    secure_headers.framework.fastapi(response)
     return response
+
+# ================================
+# CORS MIDDLEWARE (v1.8.0)
+# ================================
+# Aplicar middleware CORS con configuración centralizada
+# IMPORTANTE: Debe ir DESPUÉS de security headers para que CORS
+# se aplique ANTES (orden inverso de ejecución)
+app.add_middleware(CORSMiddleware, **get_cors_config())
+
+# Sentry User Context Middleware (captura usuario de JWT para eventos)
+app.add_middleware(SentryUserContextMiddleware)
+
+# Correlation ID Middleware (debe capturar todos los requests)
+app.add_middleware(CorrelationMiddleware)
+
+# Debug middleware para ver requests CORS (solo en desarrollo)
+# Este debe ir AL FINAL para que se ejecute PRIMERO y vea todo
+ENV = os.getenv("ENVIRONMENT", "development").lower()
+if ENV != "production":
+    @app.middleware("http")
+    async def debug_cors_requests(request, call_next):
+        origin = request.headers.get('origin', 'N/A')
+        method = request.method
+        
+        # Log de peticiones con origen
+        if origin != 'N/A':
+            print(f"🌍 {method} request to: {request.url.path}")
+            print(f"   Origin: {origin}")
+            
+            if method == "OPTIONS":
+                print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
+                print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
+        
+        response = await call_next(request)
+        
+        # Log de respuesta CORS
+        if origin != 'N/A':
+            print(f"   Response status: {response.status_code}")
+            cors_headers = {
+                k: v for k, v in response.headers.items() 
+                if 'access-control' in k.lower() or 'vary' in k.lower()
+            }
+            if cors_headers:
+                print(f"   CORS headers: {cors_headers}")
+            else:
+                print(f"   ⚠️  NO CORS headers in response!")
+                
+        return response
 
 # Incluir los routers de la API
 app.include_router(

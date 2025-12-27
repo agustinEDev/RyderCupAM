@@ -80,6 +80,8 @@ users_table = Table(
     Column('updated_at', DateTime, nullable=False),
     Column('email_verified', Boolean, nullable=False, default=False),
     Column('verification_token', String(255), nullable=True),
+    Column('password_reset_token', String(255), nullable=True),
+    Column('reset_token_expires_at', DateTime, nullable=True),
     Column('country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='SET NULL'), nullable=True),
 )
 

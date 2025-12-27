@@ -69,3 +69,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
             if user.verification_token == token:
                 return user
         return None
+
+    async def find_by_password_reset_token(self, token: str) -> User | None:
+        """Busca un usuario por su token de reseteo de contraseña."""
+        for user in self._users.values():
+            if user.password_reset_token == token:
+                return user
+        return None
