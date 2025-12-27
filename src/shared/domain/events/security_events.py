@@ -13,7 +13,7 @@ Características:
 """
 
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -422,9 +422,9 @@ class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
         - success=False NO se revela al cliente (mensaje genérico)
         - Timing attack prevention con delay artificial
     """
-    email: str = field(kw_only=True)
-    success: bool = field(kw_only=True)
-    failure_reason: str | None = field(default=None, kw_only=True)
+    email: str = ""  # Requerido, validado en __post_init__
+    success: bool = False  # Requerido, pero con default para dataclass
+    failure_reason: str | None = None
 
     def __post_init__(self):
         """Validación y asignación de severity según éxito/fallo"""
@@ -433,6 +433,10 @@ class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
         # Validar email
         if not self.email or '@' not in self.email:
             raise ValueError("email debe ser válido")
+
+        # Si falló, debe haber una razón (auditoría completa)
+        if not self.success and not self.failure_reason:
+            raise ValueError("failure_reason es requerido cuando success=False")
 
         # Severity:
         # - Fallido = HIGH (posible ataque de enumeración)
@@ -482,9 +486,9 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
         - Todos los refresh tokens revocados
         - Email de confirmación enviado
     """
-    email: str = field(kw_only=True)
-    success: bool = field(kw_only=True)
-    failure_reason: str | None = field(default=None, kw_only=True)
+    email: str = ""  # Requerido, validado en __post_init__
+    success: bool = False  # Requerido, pero con default para dataclass
+    failure_reason: str | None = None
 
     def __post_init__(self):
         """Validación y asignación de severity según éxito/fallo"""
@@ -493,6 +497,10 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
         # Validar email
         if not self.email or '@' not in self.email:
             raise ValueError("email debe ser válido")
+
+        # Si falló, debe haber una razón (auditoría completa)
+        if not self.success and not self.failure_reason:
+            raise ValueError("failure_reason es requerido cuando success=False")
 
         # Severity:
         # - Exitoso = HIGH (cambio de seguridad importante)

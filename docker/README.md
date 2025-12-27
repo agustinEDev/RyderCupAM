@@ -4,7 +4,7 @@ Este directorio contiene toda la configuración relacionada con Docker para el p
 
 ## 📂 Estructura
 
-```
+```plaintext
 docker/
 ├── Dockerfile              # Imagen de la aplicación FastAPI
 ├── docker-compose.yml      # Orquestación de servicios (app + PostgreSQL)
