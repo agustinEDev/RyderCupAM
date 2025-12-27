@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: rydercup-api
+    runtime: docker
+    repo: https://github.com/agustinEDev/RyderCupAM
+    branch: main
+    dockerfilePath: docker/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: MAILGUN_API_KEY
+        sync: false
+      - key: MAILGUN_DOMAIN
+        sync: false
+      - key: MAILGUN_FROM_EMAIL
+        sync: false
+      - key: MAILGUN_API_URL
+        value: https://api.eu.mailgun.net/v3
+      - key: FRONTEND_URL
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: PORT
+        value: 8000
+      - key: DOCS_USERNAME
+        sync: false
+      - key: DOCS_PASSWORD
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
+      - key: SENTRY_PROFILES_SAMPLE_RATE
+        value: "0.1"
+    healthCheckPath: /health
+    autoDeploy: true
