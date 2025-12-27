@@ -99,8 +99,8 @@ build_docker_image() {
     print_info "Tag: $tag"
     print_info "Directorio: $(pwd)"
 
-    # Construir la imagen
-    if docker build -t "$tag" .; then
+    # Construir la imagen (usando Dockerfile en docker/)
+    if docker build -f docker/Dockerfile -t "$tag" .; then
         print_success "Imagen construida exitosamente: $tag"
     else
         print_error "Error al construir la imagen Docker"
@@ -254,7 +254,7 @@ print_header "🔧 INICIANDO DEPLOYMENT"
 check_prerequisites
 
 # Cambiar al directorio raíz del proyecto si no estamos allí
-if [ ! -f "Dockerfile" ]; then
+if [ ! -f "docker/Dockerfile" ]; then
     print_info "Cambiando al directorio raíz del proyecto..."
     cd "$(dirname "$0")/../.."
 fi

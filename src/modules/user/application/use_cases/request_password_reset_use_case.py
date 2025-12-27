@@ -12,7 +12,6 @@ Security Features:
 """
 
 import asyncio
-from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,

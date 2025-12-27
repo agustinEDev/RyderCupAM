@@ -237,7 +237,7 @@ def get_cors_config() -> dict:
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": [
             "Content-Type",
-            "Authorization", 
+            "Authorization",
             "Accept",
             "Accept-Language",
             "Content-Language",
@@ -250,7 +250,6 @@ def get_cors_config() -> dict:
         ],
         "expose_headers": [
             "X-Correlation-ID",
-            "Set-Cookie",
         ],
         "max_age": 3600,  # Cache de preflight requests (1 hora)
     }

@@ -510,9 +510,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetRequestedEvent
+        from src.shared.domain.events.security_events import PasswordResetRequestedAuditEvent
 
-        event = PasswordResetRequestedEvent(
+        event = PasswordResetRequestedAuditEvent(
             user_id=user_id,
             email=email,
             success=success,
@@ -552,9 +552,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetCompletedEvent
+        from src.shared.domain.events.security_events import PasswordResetCompletedAuditEvent
 
-        event = PasswordResetCompletedEvent(
+        event = PasswordResetCompletedAuditEvent(
             user_id=user_id,
             email=email,
             success=success,

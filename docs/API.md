@@ -125,8 +125,6 @@ Country Management (2 endpoints)
 
 **📋 Ver detalles:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
 
-**📋 Ver detalles:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
-
 ---
 
 ## 👤 User Management

@@ -144,14 +144,16 @@ class ResetPasswordUseCase:
             )
             raise  # Re-lanzar la excepción para que el API layer la maneje
 
-        # Revocar TODOS los refresh tokens del usuario (logout forzado)
-        # Esto asegura que todas las sesiones activas se cierren
-        await self._uow.refresh_tokens.revoke_all_for_user(user.id)
-
-        # Guardar usuario con nueva contraseña y token invalidado
+        # Guardar usuario con nueva contraseña y revocar todos los refresh tokens
+        # Ambas operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
         async with self._uow:
+            # Revocar TODOS los refresh tokens del usuario (logout forzado)
+            # Esto asegura que todas las sesiones activas se cierren
+            await self._uow.refresh_tokens.revoke_all_for_user(user.id)
+
+            # Guardar usuario con nueva contraseña y token invalidado
             await self._uow.users.save(user)
-            # Commit automático al salir del contexto
+            # Commit automático al salir del contexto (ambas operaciones atomicas)
 
         # Enviar email de confirmación
         await self._email_service.send_password_changed_notification(

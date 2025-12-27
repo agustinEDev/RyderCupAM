@@ -503,8 +503,8 @@ class User:
         if not self.password_reset_token:
             raise ValueError("No hay ninguna solicitud de reseteo de contraseña activa")
 
-        # Validar que el token coincide
-        if self.password_reset_token != token:
+        # Validar que el token coincide (usando compare_digest para prevenir timing attacks)
+        if not secrets.compare_digest(self.password_reset_token, token):
             return False
 
         # Validar que no ha expirado

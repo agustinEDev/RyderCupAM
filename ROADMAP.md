@@ -21,13 +21,13 @@
 | **Enrollments** | ✅ Completo | Solicitudes, Aprobaciones, Equipos, Custom Handicap |
 | **Handicaps** | ✅ Completo | Manual + RFEG (solo usuarios españoles) |
 | **Países** | ✅ Repository | 250+ países, códigos ISO, adyacencias geográficas |
-| **Password Reset** | ✅ Completo | Token 256-bit, Email bilingüe, Session invalidation ⭐ v1.11.0 (26 Dic 2025) |
+| **Password Reset** | ✅ Completo | Token seguro, Email bilingüe, Rate limiting ⭐ NUEVO (26 Dic 2025) |
 | **HTTPS** | ✅ Habilitado | Render.com proporciona SSL automático |
 
 ### 📈 Métricas Clave
 
-- **Endpoints:** 36 rutas API (33 + 3 password reset) ⭐ v1.11.0 (26 Dic 2025)
-- **Tests:** 905 tests pasando (100%) en ~60s (+51 password reset) ⭐ v1.11.0 (26 Dic 2025)
+- **Endpoints:** 33+ rutas API (+3 password reset) ⭐ ACTUALIZADO (26 Dic 2025)
+- **Tests:** 905 tests pasando (100%) en ~60s (+51 password reset) ⭐ ACTUALIZADO (26 Dic 2025)
 - **Bounded Contexts:** 4 (User, Auth, Competition, Handicap)
 - **Database:** PostgreSQL con migraciones Alembic
 - **Deployment:** Render.com (contenedor Docker)
@@ -257,7 +257,7 @@
 
 ---
 
-### Tareas Adicionales (v1.9.0 - Security + Features)
+### Tareas Adicionales (v1.12.0 - Security + Features)
 
 **Security (Prioridad Alta):**
 - [ ] **13. Autenticación 2FA/MFA (TOTP)** - 12-16h (CRÍTICO)
@@ -479,7 +479,7 @@ RAG_TEMPERATURE=0.3
 
 ---
 
-#### **Futuras Mejoras (v1.12.0+):**
+#### **Futuras Mejoras (v1.13.0+):**
 - Asistente de configuración de torneos
 - Widget de chat en frontend
 - Soporte multilenguaje (EN/ES/PT)
@@ -506,8 +506,8 @@ RAG_TEMPERATURE=0.3
 ---
 
 #### Sistema de Recuperación de Contraseña (Password Reset)
-**Estado:** ✅ **COMPLETADO** (v1.11.0 - 26 Dic 2025)
-**Prioridad:** ~~🟠 Alta~~
+**Estado:** ✅ **COMPLETADO** (100% - 26 Dic 2025)
+**Prioridad:** 🟠 Alta
 **Estimación Total:** 12-14 horas | **Invertido:** ~12 horas
 
 **📋 Progreso por Capas:**
@@ -569,10 +569,7 @@ RAG_TEMPERATURE=0.3
     - Tests de timing attack prevention
 
 11. ✅ **Documentation**
-    - CHANGELOG.md: Entrada v1.11.0 con detalles completos
-    - ADR-024: Password Reset Security (93 líneas, formato conciso)
-    - ROADMAP.md: Feature marcada como completada
-    - CLAUDE.md: Actualizado con métricas (905 tests, 36 endpoints)
+    - ROADMAP.md actualizado
     - Feature branch: `feature/password-reset-system`
     - Commit: `3b0fad0 - feat: implement password reset system with complete security features`
 
@@ -582,33 +579,80 @@ RAG_TEMPERATURE=0.3
 - ✅ Token de un solo uso (invalidación post-uso)
 - ✅ Timing attack prevention (delay artificial si email no existe)
 - ✅ Mensaje genérico anti-enumeración de usuarios
-- ✅ Invalidación automática de TODAS las sesiones activas (refresh tokens)
+- ✅ Invalidación automática de TODAS las sesiones activas
 - ✅ Templates de email bilingües con warnings de seguridad
 - ✅ Política de contraseñas aplicada (OWASP ASVS V2.1)
-- ✅ Security logging completo (audit trail)
-- ✅ Rate limiting 3/hora por email/IP (SlowAPI)
+- ✅ Security logging completo (PasswordResetRequestedEvent, PasswordResetCompletedEvent)
+- ✅ Rate limiting 3/hora por email (implementado con SlowAPI)
 
 **📊 OWASP Coverage:**
 - **A01: Broken Access Control** - ✅ Session invalidation, mensaje genérico
 - **A02: Cryptographic Failures** - ✅ Token seguro, expiración, uso único
 - **A03: Injection** - ✅ Email sanitization, Pydantic validation
-- **A04: Insecure Design** - ⏳ Rate limiting (pendiente)
+- **A04: Insecure Design** - ✅ Rate limiting (3/hour password reset, timing attack prevention)
 - **A07: Authentication Failures** - ✅ Password policy, token validation
-- **A09: Security Logging** - ⏳ Audit trail (pendiente)
+- **A09: Security Logging** - ✅ Audit trail (log_password_reset_requested, log_password_reset_completed)
 
-**📁 Archivos Creados/Modificados:**
-- **11 archivos nuevos:** Domain events, Use cases, Tests, Migración
-- **18 archivos modificados:** User entity, DTOs, Repository, Email service, API routes, Security logging
-- **Total:** ~1,200 líneas de código
-- **Documentación:** CHANGELOG.md v1.11.0, ADR-024, ROADMAP.md, CLAUDE.md
+**📁 Archivos Creados/Modificados (21 archivos):**
 
-**🎯 Resultado Final (v1.11.0):**
-- ✅ 905 tests pasando (100%) - +51 tests de password reset (+6.1%)
-- ✅ 36 endpoints REST totales (+3 password reset)
-- ✅ Security compliance: OWASP A01, A02, A03, A04, A07, A09
-- ✅ Email templates bilingües (ES/EN)
-- ✅ Clean Architecture completa (Domain → Application → Infrastructure → API)
-- ✅ Feature branch mergeada a develop
+**Domain Layer (3 archivos):**
+- `password_reset_requested_event.py` (nuevo)
+- `password_reset_completed_event.py` (nuevo)
+- `user.py` (modificado: +3 métodos, +2 campos constructor)
+
+**Application Layer (6 archivos):**
+- `user_dto.py` (modificado: +6 DTOs)
+- `email_service_interface.py` (modificado: +2 métodos abstractos)
+- `request_password_reset_use_case.py` (nuevo)
+- `reset_password_use_case.py` (nuevo)
+- `validate_reset_token_use_case.py` (nuevo)
+
+**Infrastructure Layer (7 archivos):**
+- `3s4721zck3x7_add_password_reset_fields_to_users_table.py` (migración nueva)
+- `mappers.py` (modificado: +2 columnas)
+- `user_repository.py` (SQLAlchemy - modificado: +1 método)
+- `in_memory_user_repository.py` (modificado: +1 método)
+- `user_repository_interface.py` (modificado: +1 método abstracto)
+- `email_service.py` (modificado: +2 métodos con templates HTML)
+
+**Total líneas añadidas:** ~1,200 líneas de código + documentación
+
+**🚀 Próximos Pasos (Nueva Sesión):**
+
+**Pre-requisitos antes de continuar:**
+1. Revisar código implementado (Domain, Application, Infrastructure)
+2. Ejecutar suite de tests actual: `pytest tests/ -n auto`
+3. Aplicar migración a BD de desarrollo:
+   ```bash
+   # Opción 1: Docker
+   docker exec rydercupam-app-1 alembic upgrade head
+
+   # Opción 2: Local
+   alembic upgrade head
+   ```
+4. Verificar que todos los imports están correctos
+5. Confirmar que no hay errores de sintaxis
+
+**Implementación restante (orden sugerido):**
+1. **FASE 7:** SecurityLogger (15-30 min)
+   - Añadir 2 helper methods
+   - Crear 2 security events en `security_events.py`
+
+2. **FASE 8:** API Endpoints (1-2 horas)
+   - Crear 3 endpoints en `auth_routes.py`
+   - Configurar rate limiting específico
+   - Dependency injection de Use Cases
+
+3. **FASE 9-10:** Testing (3-5 horas)
+   - Unit tests (Domain + Application)
+   - Integration tests (API + BD + Email mock)
+
+4. **FASE 11:** Documentation (30 min)
+   - Swagger/OpenAPI
+   - CHANGELOG.md
+   - ADR-022
+
+**Estimación para completar:** 5-7 horas adicionales
 
 ---
 
@@ -640,9 +684,9 @@ RAG_TEMPERATURE=0.3
 ## 🧪 Testing
 
 ### Estado Actual
-- ✅ **905 tests pasando (100%)** (+51 password reset v1.11.0) ⭐ (26 Dic 2025)
-- ✅ Tiempo de ejecución: ~60 segundos (con paralelización `-n auto`)
-- ✅ Suite completa: unitarios, integración, end-to-end, security
+- ✅ **681 tests pasando (100%)**
+- ✅ Tiempo de ejecución: 44.95 segundos (con paralelización `-n auto`)
+- ✅ Suite completa: unitarios, integración, end-to-end
 - ✅ CI/CD automático con GitHub Actions
 - ✅ Cobertura >90% en lógica de negocio
 - ✅ Fix de paralelización (UUID único por BD test)
@@ -807,6 +851,6 @@ Ver plan detallado en sección [🤖 IA & RAG](#-ia--rag---módulo-de-asistente-
 
 ---
 
-**Última revisión:** 26 Dic 2025 (v1.11.0 - Password Reset System completado y mergeado)
-**Próxima revisión:** Antes de v1.12.0 (IA & RAG Module)
+**Última revisión:** 6 Dic 2025
+**Próxima revisión:** Después de v1.8.0 (Security Release)
 **Responsable:** Equipo de desarrollo backend

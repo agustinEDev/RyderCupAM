@@ -399,9 +399,9 @@ class RateLimitExceededEvent(SecurityAuditEvent):
 # ============================================================================
 
 @dataclass(frozen=True)
-class PasswordResetRequestedEvent(SecurityAuditEvent):
+class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
     """
-    Evento de solicitud de reseteo de contraseña.
+    Evento de auditoría para solicitud de reseteo de contraseña.
 
     Se emite cuando un usuario solicita resetear su contraseña a través del
     formulario "Olvidé mi contraseña". Este evento se registra SIEMPRE,
@@ -454,9 +454,9 @@ class PasswordResetRequestedEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
-class PasswordResetCompletedEvent(SecurityAuditEvent):
+class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
     """
-    Evento de reseteo de contraseña completado.
+    Evento de auditoría para reseteo de contraseña completado.
 
     Se emite cuando un usuario completa exitosamente el reseteo de su contraseña
     usando el token del email. Este evento es crítico para auditoría de seguridad.
