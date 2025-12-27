@@ -235,7 +235,22 @@ def get_cors_config() -> dict:
         "allow_origins": allowed_origins,
         "allow_credentials": True,  # Requerido para cookies httpOnly (v1.8.0)
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["*"],  # Permitir todos los headers (Content-Type, Authorization, etc.)
+        "allow_headers": [
+            "Content-Type",
+            "Authorization",
+            "Accept",
+            "Accept-Language",
+            "Content-Language",
+            "Origin",
+            "X-Requested-With",
+            "X-Correlation-ID",
+            # Sentry headers para tracing distribuido
+            "sentry-trace",
+            "baggage",
+        ],
+        "expose_headers": [
+            "X-Correlation-ID",
+        ],
         "max_age": 3600,  # Cache de preflight requests (1 hora)
     }
 

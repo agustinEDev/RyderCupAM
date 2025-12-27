@@ -71,19 +71,23 @@ Country Management (2 endpoints)
 | `/auth/refresh-token` | POST | No | Renovar access token (usa refresh cookie) |
 | `/auth/verify-email` | POST | No | Verificar email con token único |
 | `/auth/resend-verification` | POST | No | Reenviar email de verificación |
+| `/auth/forgot-password` | POST | No | Solicitar reseteo de contraseña (envía email con token) |
+| `/auth/reset-password` | POST | No | Completar reseteo de contraseña usando token |
+| `/auth/validate-reset-token/{token}` | GET | No | Validar token de reseteo antes de mostrar formulario |
+
 
 ### Campos Principales
 
 **Register Request:**
-- `email` (string, required, max 254, unique)
-- `password` (string, required, 12-128 chars, OWASP ASVS V2.1)
-- `first_name` (string, required, max 100)
-- `last_name` (string, required, max 100)
-- `country_code` (string, optional, ISO 3166-1 alpha-2)
+- `email` (string, requerido, max 254, único)
+- `password` (string, requerido, 12-128 chars, OWASP ASVS V2.1)
+- `first_name` (string, requerido, max 100)
+- `last_name` (string, requerido, max 100)
+- `country_code` (string, opcional, ISO 3166-1 alpha-2)
 
 **Login Request:**
-- `email` (string, required)
-- `password` (string, required)
+- `email` (string, requerido)
+- `password` (string, requerido)
 
 **Login Response:**
 - `access_token` (string, JWT) - LEGACY, usar cookie
@@ -91,12 +95,32 @@ Country Management (2 endpoints)
 - `user` (object) - Datos del usuario
 - Cookies httpOnly: `access_token` (15 min), `refresh_token` (7 días)
 
+**Forgot Password Request:**
+- `email` (string, requerido)
+
+**Forgot Password Response:**
+- `message` (string) - Mensaje genérico de éxito
+
+**Reset Password Request:**
+- `token` (string, requerido) - Token recibido por email
+- `new_password` (string, requerido, 12-128 chars, OWASP ASVS V2.1)
+
+**Reset Password Response:**
+- `message` (string) - Mensaje de confirmación
+
+**Validate Reset Token Response:**
+- `valid` (bool) - Indica si el token es válido
+- `message` (string) - Mensaje explicativo
+
+
 ### Notas de Seguridad
 
 - **httpOnly Cookies:** JWT almacenado en cookies inaccesibles desde JavaScript
 - **Dual Support:** Cookies (prioridad 1) + Headers (legacy)
-- **Rate Limiting:** Login 5/min, Register 3/h, Resend 3/h
+- **Rate Limiting:** Login 5/min, Register 3/h, Resend 3/h, Forgot/Reset 3/h, Validate 10/h
 - **Password Policy:** 12 chars min, complejidad completa, blacklist
+- **Forgot/Reset:** Mensaje genérico, nunca revela si el email existe (previene user enumeration)
+- **Reset Token:** Token de un solo uso, expira en 24h, invalida todas las sesiones activas tras cambio
 - **Refresh Tokens:** SHA256 hash en BD, revocables en logout
 
 **📋 Ver detalles:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`

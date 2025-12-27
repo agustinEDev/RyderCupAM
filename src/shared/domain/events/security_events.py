@@ -13,7 +13,7 @@ Características:
 """
 
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -390,5 +390,132 @@ class RateLimitExceededEvent(SecurityAuditEvent):
             "limit_type": self.limit_type,
             "limit_value": self.limit_value,
             "request_count": self.request_count,
+        })
+        return base
+
+
+# ============================================================================
+# PASSWORD RESET EVENTS
+# ============================================================================
+
+@dataclass(frozen=True)
+class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
+    """
+    Evento de auditoría para solicitud de reseteo de contraseña.
+
+    Se emite cuando un usuario solicita resetear su contraseña a través del
+    formulario "Olvidé mi contraseña". Este evento se registra SIEMPRE,
+    incluso si el email no existe (para auditoría completa).
+
+    Atributos:
+        email: Email usado en la solicitud
+        success: Si el email existe y se envió el enlace
+        failure_reason: Razón del fallo (None si exitoso)
+
+    Ejemplos de failure_reason:
+        - "Email not found (not revealed to client)"
+        - "Rate limit exceeded"
+        - "Email service unavailable"
+
+    Security:
+        - Permite detectar intentos masivos de enumeración de usuarios
+        - success=False NO se revela al cliente (mensaje genérico)
+        - Timing attack prevention con delay artificial
+    """
+    email: str = ""  # Requerido, validado en __post_init__
+    success: bool = False  # Requerido, pero con default para dataclass
+    failure_reason: str | None = None
+
+    def __post_init__(self):
+        """Validación y asignación de severity según éxito/fallo"""
+        super().__post_init__()
+
+        # Validar email
+        if not self.email or '@' not in self.email:
+            raise ValueError("email debe ser válido")
+
+        # Si falló, debe haber una razón (auditoría completa)
+        if not self.success and not self.failure_reason:
+            raise ValueError("failure_reason es requerido cuando success=False")
+
+        # Severity:
+        # - Fallido = HIGH (posible ataque de enumeración)
+        # - Exitoso = MEDIUM (operación normal)
+        if self.success:
+            object.__setattr__(self, 'severity', SecuritySeverity.MEDIUM)
+        else:
+            object.__setattr__(self, 'severity', SecuritySeverity.HIGH)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con campos específicos del evento"""
+        base = super().to_dict()
+        base.update({
+            "email": self.email,
+            "success": self.success,
+            "failure_reason": self.failure_reason,
+        })
+        return base
+
+
+@dataclass(frozen=True)
+class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
+    """
+    Evento de auditoría para reseteo de contraseña completado.
+
+    Se emite cuando un usuario completa exitosamente el reseteo de su contraseña
+    usando el token del email. Este evento es crítico para auditoría de seguridad.
+
+    Atributos:
+        email: Email del usuario que reseteó la contraseña
+        success: Si el reseteo fue exitoso
+        failure_reason: Razón del fallo (None si exitoso)
+
+    Ejemplos de failure_reason:
+        - "Invalid or expired token"
+        - "Password does not meet policy"
+        - "Token already used"
+
+    Security:
+        - Permite detectar cambios de contraseña no autorizados
+        - success=True trigger para invalidar TODAS las sesiones activas
+        - Email de notificación enviado al usuario
+        - Severity HIGH/CRITICAL según contexto
+
+    Post-Conditions (si success=True):
+        - Token invalidado (uso único)
+        - Todos los refresh tokens revocados
+        - Email de confirmación enviado
+    """
+    email: str = ""  # Requerido, validado en __post_init__
+    success: bool = False  # Requerido, pero con default para dataclass
+    failure_reason: str | None = None
+
+    def __post_init__(self):
+        """Validación y asignación de severity según éxito/fallo"""
+        super().__post_init__()
+
+        # Validar email
+        if not self.email or '@' not in self.email:
+            raise ValueError("email debe ser válido")
+
+        # Si falló, debe haber una razón (auditoría completa)
+        if not self.success and not self.failure_reason:
+            raise ValueError("failure_reason es requerido cuando success=False")
+
+        # Severity:
+        # - Exitoso = HIGH (cambio de seguridad importante)
+        # - Fallido = MEDIUM (intento fallido normal)
+        if self.success:
+            object.__setattr__(self, 'severity', SecuritySeverity.HIGH)
+        else:
+            object.__setattr__(self, 'severity', SecuritySeverity.MEDIUM)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con campos específicos del evento"""
+        base = super().to_dict()
+        base.update({
+            "email": self.email,
+            "success": self.success,
+            "failure_reason": self.failure_reason,
         })
         return base

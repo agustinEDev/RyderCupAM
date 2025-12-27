@@ -443,3 +443,161 @@ class RefreshAccessTokenResponseDTO(BaseModel):
         default="Access token renovado exitosamente",
         description="Mensaje de confirmación de renovación."
     )
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Request Password Reset (Forgot Password)
+# ======================================================================================
+
+class RequestPasswordResetRequestDTO(BaseModel):
+    """
+    DTO de entrada para solicitar el reseteo de contraseña.
+
+    Este endpoint es público (NO requiere autenticación) y se usa cuando el usuario
+    olvida su contraseña. Se envía un email con un token único válido por 24 horas.
+
+    Security:
+    - Rate limiting: 3 intentos/hora por email (configurado en SlowAPI)
+    - Timing attack prevention: Mensaje genérico sin revelar si el email existe
+    - Sanitización de email para prevenir email injection
+    - ip_address y user_agent opcionales para security audit trail
+
+    Nota:
+    - Si el email NO existe, se retorna 200 OK con mensaje genérico
+    - Si el email existe, se envía el email y se retorna 200 OK con el mismo mensaje
+    - Esto previene enumeración de usuarios (OWASP A01)
+    """
+    email: EmailStr = Field(
+        ...,
+        max_length=FieldLimits.EMAIL_MAX_LENGTH,
+        description="Email del usuario que solicita resetear su contraseña."
+    )
+    # Security context (opcional, proporcionado por API layer)
+    ip_address: str | None = Field(
+        None,
+        max_length=45,
+        description=IP_ADDRESS_DESCRIPTION
+    )
+    user_agent: str | None = Field(
+        None,
+        max_length=500,
+        description=USER_AGENT_DESCRIPTION
+    )
+
+
+class RequestPasswordResetResponseDTO(BaseModel):
+    """
+    DTO de salida para solicitud de reseteo de contraseña.
+
+    IMPORTANTE: El mensaje es genérico para prevenir enumeración de usuarios.
+    No revela si el email existe o no en el sistema.
+    """
+    message: str = Field(
+        default="Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña.",
+        description="Mensaje genérico de confirmación (no revela si el email existe)."
+    )
+    email: EmailStr = Field(..., description="Email al que se envió el enlace (si existe).")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Reset Password (Completar Reseteo)
+# ======================================================================================
+
+class ResetPasswordRequestDTO(BaseModel):
+    """
+    DTO de entrada para completar el reseteo de contraseña.
+
+    Este endpoint es público (NO requiere autenticación) y se usa cuando el usuario
+    hace clic en el enlace del email de reseteo.
+
+    Validaciones:
+    - Token debe ser válido y no expirado (< 24 horas)
+    - Nueva contraseña debe cumplir política OWASP ASVS V2.1:
+      * Mínimo 12 caracteres
+      * Al menos 1 mayúscula, 1 minúscula, 1 número, 1 símbolo
+      * No en lista de contraseñas comunes
+
+    Post-Condiciones:
+    - Token invalidado (uso único)
+    - Todas las sesiones activas del usuario invalidadas (refresh tokens revocados)
+    - Email de confirmación enviado al usuario
+
+    Security:
+    - Rate limiting: 3 intentos/hora por IP (configurado en SlowAPI)
+    - Token de un solo uso (se invalida después del primer uso exitoso)
+    - Password policy aplicada por el Value Object Password
+    - ip_address y user_agent opcionales para security audit trail
+    """
+    token: str = Field(
+        ...,
+        min_length=32,
+        max_length=100,
+        description="Token de reseteo único recibido por email (válido 24 horas)."
+    )
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        max_length=FieldLimits.PASSWORD_MAX_LENGTH,
+        description="Nueva contraseña (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos)."
+    )
+    # Security context (opcional, proporcionado por API layer)
+    ip_address: str | None = Field(
+        None,
+        max_length=45,
+        description=IP_ADDRESS_DESCRIPTION
+    )
+    user_agent: str | None = Field(
+        None,
+        max_length=500,
+        description=USER_AGENT_DESCRIPTION
+    )
+
+
+class ResetPasswordResponseDTO(BaseModel):
+    """
+    DTO de salida para reseteo de contraseña completado.
+
+    Confirma que la contraseña fue cambiada exitosamente.
+    """
+    message: str = Field(
+        default="Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad.",
+        description="Mensaje de confirmación de reseteo exitoso."
+    )
+    email: EmailStr = Field(..., description="Email del usuario que completó el reseteo.")
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Validate Reset Token (Validación Previa - Opcional)
+# ======================================================================================
+
+class ValidateResetTokenRequestDTO(BaseModel):
+    """
+    DTO de entrada para validar un token de reseteo antes de mostrar el formulario.
+
+    Este endpoint es OPCIONAL pero mejora la UX:
+    - Valida el token ANTES de que el usuario complete el formulario
+    - Si el token es inválido/expirado, redirige a /forgot-password con mensaje
+    - Si el token es válido, muestra el formulario de nueva contraseña
+
+    Security:
+    - NO requiere autenticación (endpoint público)
+    - NO revela información sobre el usuario (solo valida token)
+    - Rate limiting: 10 intentos/hora por IP
+    """
+    token: str = Field(
+        ...,
+        min_length=32,
+        max_length=100,
+        description="Token de reseteo a validar."
+    )
+
+
+class ValidateResetTokenResponseDTO(BaseModel):
+    """
+    DTO de salida para validación de token de reseteo.
+
+    Retorna si el token es válido y no ha expirado.
+    """
+    valid: bool = Field(..., description="True si el token es válido y no expiró.")
+    message: str = Field(..., description="Mensaje descriptivo del estado del token.")
+    # NO incluir email del usuario por seguridad (no revelar información)

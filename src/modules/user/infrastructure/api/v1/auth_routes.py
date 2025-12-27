@@ -9,7 +9,10 @@ from src.config.dependencies import (
     get_logout_user_use_case,
     get_refresh_access_token_use_case,
     get_register_user_use_case,
+    get_request_password_reset_use_case,
     get_resend_verification_email_use_case,
+    get_reset_password_use_case,
+    get_validate_reset_token_use_case,
     get_verify_email_use_case,
     security,
 )
@@ -22,9 +25,15 @@ from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
     RefreshAccessTokenResponseDTO,
     RegisterUserRequestDTO,
+    RequestPasswordResetRequestDTO,
+    RequestPasswordResetResponseDTO,
     ResendVerificationEmailRequestDTO,
     ResendVerificationEmailResponseDTO,
+    ResetPasswordRequestDTO,
+    ResetPasswordResponseDTO,
     UserResponseDTO,
+    ValidateResetTokenRequestDTO,
+    ValidateResetTokenResponseDTO,
     VerifyEmailRequestDTO,
 )
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
@@ -33,8 +42,15 @@ from src.modules.user.application.use_cases.refresh_access_token_use_case import
     RefreshAccessTokenUseCase,
 )
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
+from src.modules.user.application.use_cases.request_password_reset_use_case import (
+    RequestPasswordResetUseCase,
+)
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
+)
+from src.modules.user.application.use_cases.reset_password_use_case import ResetPasswordUseCase
+from src.modules.user.application.use_cases.validate_reset_token_use_case import (
+    ValidateResetTokenUseCase,
 )
 from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
@@ -587,3 +603,202 @@ async def resend_verification_email(
         message="If the email address exists in our system, a verification email has been sent.",
         email=resend_data.email
     )
+
+
+# ============================================================================
+# PASSWORD RESET ENDPOINTS
+# ============================================================================
+
+@router.post(
+    "/forgot-password",
+    response_model=RequestPasswordResetResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Solicitar reseteo de contraseña",
+    description="""
+    Endpoint público para solicitar el reseteo de contraseña (flujo "Olvidé mi contraseña").
+
+    Security Features:
+    - Rate limiting: 3 intentos/hora por email
+    - Timing attack prevention: Mensaje genérico sin revelar si el email existe
+    - Email injection prevention: Validación con Pydantic EmailStr
+    - Security logging: Todos los intentos registrados (exitosos y fallidos)
+
+    Flow:
+    1. Usuario ingresa email en formulario /forgot-password
+    2. Backend valida email (mensaje genérico si no existe)
+    3. Si existe: Genera token (24h) y envía email con enlace
+    4. Si no existe: Delay artificial + mensaje genérico (previene enumeración)
+
+    Response:
+    - SIEMPRE retorna 200 OK con mensaje genérico
+    - NUNCA revela si el email existe (previene user enumeration)
+    """,
+    tags=["Authentication"]
+)
+@limiter.limit("3/hour")  # 3 intentos por hora por IP/email
+async def forgot_password(
+    request: Request,
+    reset_data: RequestPasswordResetRequestDTO,
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case)
+) -> RequestPasswordResetResponseDTO:
+    """
+    Solicita el reseteo de contraseña enviando un email con token único.
+
+    Args:
+        request: Request de FastAPI (para extraer IP, User-Agent)
+        reset_data: DTO con email del usuario
+        use_case: Caso de uso inyectado por FastAPI
+
+    Returns:
+        RequestPasswordResetResponseDTO con mensaje genérico
+
+    Note:
+        - Siempre retorna 200 OK (nunca 404)
+        - Mensaje genérico previene enumeración de usuarios
+        - Timing attack prevention con delay artificial
+    """
+    # Extraer contexto de seguridad
+    ip_address = get_client_ip(request)
+    user_agent = get_user_agent(request)
+
+    # Añadir contexto al request DTO
+    reset_data.ip_address = ip_address
+    reset_data.user_agent = user_agent
+
+    # Ejecutar use case (maneja toda la lógica)
+    response = await use_case.execute(reset_data)
+
+    return response
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Completar reseteo de contraseña",
+    description="""
+    Endpoint público para completar el reseteo de contraseña usando el token del email.
+
+    Security Features:
+    - Token de un solo uso (se invalida después del primer uso exitoso)
+    - Validación estricta de expiración (24 horas)
+    - Password policy enforcement (OWASP ASVS V2.1: 12+ chars, complejidad completa)
+    - Invalidación automática de TODAS las sesiones activas (logout forzado)
+    - Email de confirmación enviado al usuario
+    - Security logging completo
+
+    Flow:
+    1. Usuario hace clic en enlace del email → accede a /reset-password/:token
+    2. Frontend muestra formulario de nueva contraseña
+    3. Usuario envía nueva contraseña + token
+    4. Backend valida token, cambia password, invalida sesiones
+    5. Email de confirmación enviado
+    6. Usuario debe hacer login nuevamente
+
+    Errors:
+    - 400: Token inválido/expirado
+    - 400: Password no cumple política
+    - 429: Rate limit excedido
+    """,
+    tags=["Authentication"]
+)
+@limiter.limit("3/hour")  # 3 intentos por hora por IP
+async def reset_password(
+    request: Request,
+    reset_data: ResetPasswordRequestDTO,
+    use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case)
+) -> ResetPasswordResponseDTO:
+    """
+    Completa el reseteo de contraseña usando el token del email.
+
+    Args:
+        request: Request de FastAPI (para extraer IP, User-Agent)
+        reset_data: DTO con token y nueva contraseña
+        use_case: Caso de uso inyectado por FastAPI
+
+    Returns:
+        ResetPasswordResponseDTO con mensaje de confirmación
+
+    Raises:
+        HTTPException 400: Si el token es inválido/expirado o password inválido
+
+    Post-Conditions:
+        - Token invalidado (uso único)
+        - Todas las sesiones activas invalidadas
+        - Email de confirmación enviado
+    """
+    # Extraer contexto de seguridad
+    ip_address = get_client_ip(request)
+    user_agent = get_user_agent(request)
+
+    # Añadir contexto al request DTO
+    reset_data.ip_address = ip_address
+    reset_data.user_agent = user_agent
+
+    try:
+        # Ejecutar use case (maneja toda la lógica)
+        response = await use_case.execute(reset_data)
+        return response
+    except ValueError as e:
+        # Token inválido/expirado o password inválido
+        logger.warning(f"Password reset failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/validate-reset-token/{token}",
+    response_model=ValidateResetTokenResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Validar token de reseteo (OPCIONAL)",
+    description="""
+    Endpoint público OPCIONAL para validar un token ANTES de mostrar el formulario.
+
+    UX Benefits:
+    - Detecta token expirado ANTES de que el usuario escriba nueva contraseña
+    - Redirige a /forgot-password si el token es inválido (mejor experiencia)
+    - Muestra formulario solo si el token es válido
+
+    Security:
+    - NO requiere autenticación (endpoint público)
+    - NO revela información sobre el usuario (solo retorna valid: bool)
+    - Rate limiting: 10 intentos/hora por IP
+
+    Flow sin validación previa:
+    1. Usuario hace clic → Formulario → Envía → "Token expirado" (mala UX)
+
+    Flow con validación previa:
+    1. Usuario hace clic → Validación → Si expirado: Redirige con mensaje
+    2. Si válido: Muestra formulario → Envía → SUCCESS
+    """,
+    tags=["Authentication"]
+)
+@limiter.limit("10/hour")  # 10 intentos por hora por IP
+async def validate_reset_token(
+    request: Request,
+    token: str,
+    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case)
+) -> ValidateResetTokenResponseDTO:
+    """
+    Valida un token de reseteo antes de mostrar el formulario.
+
+    Args:
+        token: Token de reseteo a validar (path parameter)
+        use_case: Caso de uso inyectado por FastAPI
+
+    Returns:
+        ValidateResetTokenResponseDTO con valid=True/False y mensaje
+
+    Note:
+        - SIEMPRE retorna 200 OK (nunca 404)
+        - NO incluye email del usuario por seguridad
+    """
+    # Crear request DTO
+    request_dto = ValidateResetTokenRequestDTO(token=token)
+
+    # Ejecutar use case
+    response = await use_case.execute(request_dto)
+
+    return response

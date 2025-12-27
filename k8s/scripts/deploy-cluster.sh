@@ -205,8 +205,8 @@ if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     BACKEND_DIR="$PROJECT_ROOT"
 
     # Verificar que existen los Dockerfiles
-    if [ ! -f "$BACKEND_DIR/Dockerfile" ]; then
-        print_error "No se encontró Dockerfile en: $BACKEND_DIR"
+    if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
+        print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
         exit 1
     fi
 
@@ -217,7 +217,7 @@ if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
 
     # Construir imagen del Backend
     print_step "Construyendo imagen del Backend (FastAPI)..."
-    docker build -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
+    docker build -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
     print_success "Imagen del backend construida"
 
     # Construir imagen del Frontend
