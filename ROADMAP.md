@@ -1,7 +1,7 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Versión:** 1.11.0
-> **Última actualización:** 27 Dic 2025
+> **Versión:** 1.12.0
+> **Última actualización:** 3 Ene 2026
 > **Estado:** ✅ Producción
 > **OWASP Score:** 10.0/10
 
@@ -13,16 +13,16 @@
 - **Tests:** 905 (100% passing, ~60s)
 - **Endpoints:** 36 REST API
 - **Módulos:** User, Competition, Enrollment, Countries
-- **CI/CD:** GitHub Actions (7 jobs paralelos, ~3min)
+- **CI/CD:** GitHub Actions (8 jobs paralelos, ~3min)
 - **Deployment:** Render.com + Docker + PostgreSQL
 
-### Completado (v1.0.0 - v1.11.0)
+### Completado (v1.0.0 - v1.12.0)
 
 | Componente | Features |
 |-----------|----------|
 | **User Module** | Login, Register, Email Verification, Password Reset, Handicap (RFEG), Profile |
 | **Competition Module** | CRUD, State Machine (6 estados), Enrollments, Countries (166 + 614 fronteras) |
-| **Security (v1.8.0)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit |
+| **Security (v1.8.0 + v1.12.0)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk) |
 | **Testing** | 905 tests (unit + integration + security), CI/CD automático |
 
 ### OWASP Top 10 Coverage
@@ -34,7 +34,7 @@
 | A03: Injection | 10/10 | SQLAlchemy ORM, HTML Sanitization, Pydantic Validation |
 | A04: Insecure Design | 9/10 | Rate Limiting (5/min login), Field Limits, Password Policy |
 | A05: Misconfiguration | 9.5/10 | Security Headers, CORS Whitelist, Secrets Management |
-| A06: Vulnerable Components | 8.5/10 | Dependency Audit (safety + pip-audit), Auto-updates |
+| A06: Vulnerable Components | 9.0/10 | Triple Audit (Safety + pip-audit + Snyk), Auto-updates, 6 CVEs resueltos |
 | A07: Auth Failures | 9.5/10 | Password Policy (ASVS V2.1), Account Protection, Rate Limiting |
 | A08: Data Integrity | 7/10 | API Versioning |
 | A09: Logging | 10/10 | Security Audit Trail, Correlation IDs, Sentry (APM + Profiling) |
@@ -44,7 +44,7 @@
 
 ## 🎯 Roadmap Futuro
 
-### v1.12.0 - Security Hardening (CRÍTICO) - 3-4 semanas
+### v1.13.0 - Security Hardening (CRÍTICO) - 3-4 semanas
 
 **Objetivo:** Cerrar gaps de seguridad críticos
 
@@ -92,7 +92,7 @@
 
 ---
 
-### v1.13.0 - Compliance & Features - 2-3 semanas
+### v1.14.0 - Compliance & Features - 2-3 semanas
 
 **Objetivo:** GDPR compliance + UX improvements
 
@@ -144,7 +144,7 @@
 
 ---
 
-### v1.14.0 - AI & RAG Module - 2-3 semanas
+### v1.15.0 - AI & RAG Module - 2-3 semanas
 
 **Objetivo:** Chatbot asistente de reglas de golf
 
@@ -224,9 +224,9 @@ src/modules/ai/
 ## 📅 Timeline Recomendado
 
 ```
-2026 Q1  │ v1.12.0 - Security Hardening (2FA, CSRF, Account Protection)
-2026 Q2  │ v1.13.0 - Compliance (GDPR, Audit Logging, Avatares)
-2026 Q2  │ v1.14.0 - AI & RAG Module (Golf Rules Assistant)
+2026 Q1  │ v1.13.0 - Security Hardening (2FA, CSRF, Account Protection)
+2026 Q2  │ v1.14.0 - Compliance (GDPR, Audit Logging, Avatares)
+2026 Q2  │ v1.15.0 - AI & RAG Module (Golf Rules Assistant)
 2026 Q3+ │ v2.0.0 - Major Release (planificación + desarrollo)
 ```
 
@@ -241,5 +241,5 @@ src/modules/ai/
 
 ---
 
-**Próxima revisión:** Después de v1.12.0
+**Próxima revisión:** Después de v1.13.0
 **Responsable:** Equipo Backend

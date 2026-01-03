@@ -7,6 +7,10 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+---
+
+## [1.12.0] - 2026-01-03
+
 ### Security - Snyk Vulnerability Fixes ✅ COMPLETADO (3 Ene 2026)
 
 **🔒 Resolución de 6 Vulnerabilidades Detectadas por Snyk** (OWASP A06)
