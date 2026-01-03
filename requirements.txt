@@ -103,8 +103,10 @@ filelock==3.20.1
 authlib==1.6.5
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
-# Fijada explícitamente para resolver CVE-2024-6345 (Code Injection via package_index)
-# y CVE-2025-47273 (Directory Traversal en _download_url)
+# Fijada explícitamente para resolver:
+# - CVE-2024-6345 (Code Injection via package_index - CVSS 7.5 HIGH)
+# - CVE-2022-40897 (Regular Expression DoS - CVSS 5.9 MEDIUM)
+# - CVE-2025-47273 (Directory Traversal en _download_url - CVSS 6.8 MEDIUM)
 setuptools==78.1.1
 
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata)
