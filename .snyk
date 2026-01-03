@@ -1,0 +1,24 @@
+# Snyk (https://snyk.io) policy file
+
+# Specifies for which file snyk tests your project
+language-settings:
+  python: '3.12'
+
+# Ignore specific vulnerabilities that are already resolved
+# These are documented in requirements.txt with explicit version pins
+ignore:
+  SNYK-PYTHON-SETUPTOOLS-7448482:
+    - '*':
+        reason: 'setuptools upgraded to 78.1.1 in requirements.txt (resolves CVE-2024-6345)'
+        expires: '2026-04-01T00:00:00.000Z'
+  SNYK-PYTHON-SETUPTOOLS-3180412:
+    - '*':
+        reason: 'setuptools upgraded to 78.1.1 in requirements.txt (resolves CVE-2022-40897)'
+        expires: '2026-04-01T00:00:00.000Z'
+  SNYK-PYTHON-SETUPTOOLS-9964606:
+    - '*':
+        reason: 'setuptools upgraded to 78.1.1 in requirements.txt (resolves CVE-2025-47273)'
+        expires: '2026-04-01T00:00:00.000Z'
+
+# Patch settings - none needed as all vulnerabilities are resolved via upgrades
+patch: {}
