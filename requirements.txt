@@ -97,6 +97,24 @@ urllib3==2.6.0
 # Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition)
 filelock==3.20.1
 
+# authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
+# Fijada explícitamente para resolver CVE-2025-61920 (DoS via large base64 tokens)
+# y CVE-2025-62706 (DoS via zip bomb decompression)
+authlib==1.6.5
+
+# setuptools - Build system y package installer (dependencia transitiva de safety)
+# Fijada explícitamente para resolver CVE-2024-6345 (Code Injection via package_index)
+# y CVE-2025-47273 (Directory Traversal en _download_url)
+setuptools==78.1.1
+
+# zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata)
+# Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
+zipp==3.19.1
+
+# marshmallow - Object serialization/deserialization library (dependencia transitiva de safety)
+# Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
+marshmallow==3.26.2
+
 
 # ================================
 # TESTING Y DESARROLLO
