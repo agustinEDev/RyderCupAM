@@ -3,7 +3,7 @@
 > **Versión:** 1.12.0
 > **Última actualización:** 3 Ene 2026
 > **Estado:** ✅ Producción
-> **OWASP Score:** 10.0/10
+> **OWASP Score:** 9.2/10 (promedio de 10 categorías, redondeado)
 
 ---
 
@@ -39,6 +39,7 @@
 | A08: Data Integrity | 7/10 | API Versioning |
 | A09: Logging | 10/10 | Security Audit Trail, Correlation IDs, Sentry (APM + Profiling) |
 | A10: SSRF | 8/10 | Input Validation |
+| **Promedio** | **9.2/10** | Suma: 91.5 puntos / 10 categorías = 9.15 (redondeado a 9.2) |
 
 ---
 

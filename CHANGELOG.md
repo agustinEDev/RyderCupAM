@@ -40,7 +40,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - `.github/workflows/ci_cd_pipeline.yml` - Job 8: Snyk Security Scan
 
 **Tests:**
-- ✅ 705/705 tests unitarios pasando (100%)
+- ✅ 905/905 tests pasando (100%)
 
 **CI/CD Configuración:**
 ```bash
@@ -56,7 +56,7 @@ SNYK_ENABLED=true
 - ✅ requests==2.32.4 (CVE-2024-35195, CVE-2024-47081 ya cubiertos)
 - ✅ filelock==3.20.1 (CVE-2025-68146 ya cubierto)
 
-**Impacto:** Protección contra 6 vulnerabilidades HIGH/MEDIUM en dependencias transitivas. Pipeline mejorado con triple escáner de seguridad (Safety + pip-audit + Snyk). Puntuación OWASP A06: 8.5/10 (mantenida).
+**Impacto:** Protección contra 6 vulnerabilidades HIGH/MEDIUM en dependencias transitivas. Pipeline mejorado con triple escáner de seguridad (Safety + pip-audit + Snyk). Puntuación OWASP A06: 8.5/10 → 9.0/10 (mejorada por integración Snyk en v1.12.0).
 
 ---
 
