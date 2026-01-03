@@ -9,6 +9,57 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.12.0] - 2026-01-03
+
+### Security - Snyk Vulnerability Fixes ✅ COMPLETADO (3 Ene 2026)
+
+**🔒 Resolución de 6 Vulnerabilidades Detectadas por Snyk** (OWASP A06)
+
+- ✅ **authlib** 1.2.1 → 1.6.5 (dependencia transitiva de safety)
+  - CVE-2025-61920 RESUELTO - DoS via tokens con segmentos base64 excesivos (CVSS 8.7 HIGH)
+  - CVE-2025-62706 RESUELTO - DoS via decompresión ZIP (zip bomb attack) (CVSS 7.1 HIGH)
+
+- ✅ **setuptools** 68.0.0 → 78.1.1 (dependencia transitiva de safety)
+  - CVE-2024-6345 RESUELTO - Code Injection via package_index (os.system) (CVSS 7.5 HIGH)
+  - CVE-2025-47273 RESUELTO - Directory Traversal en _download_url (CVSS 6.8 MEDIUM)
+
+- ✅ **zipp** 3.15.0 → 3.19.1 (dependencia transitiva de importlib-metadata)
+  - CVE-2024-5569 RESUELTO - Infinite loop DoS via Path module (CVSS 6.9 MEDIUM)
+
+- ✅ **marshmallow** 3.19.0 → 3.26.2 (dependencia transitiva de safety)
+  - CVE-2025-68480 RESUELTO - DoS via Asymmetric Resource Consumption (CVSS 6.9 MEDIUM)
+
+- ✅ **Snyk Integration en CI/CD** - Job automático en GitHub Actions
+  - Scan automático en cada push/PR
+  - Severity threshold: HIGH
+  - Reportes JSON (retención 30 días)
+  - Snyk monitor para dashboard web
+
+**Archivos Modificados:**
+- `requirements.txt` - 4 paquetes añadidos (authlib, setuptools, zipp, marshmallow)
+- `.github/workflows/ci_cd_pipeline.yml` - Job 8: Snyk Security Scan
+
+**Tests:**
+- ✅ 905/905 tests pasando (100%)
+
+**CI/CD Configuración:**
+```bash
+# GitHub Secrets requerido
+SNYK_TOKEN=<tu_token_de_snyk>
+
+# Opcional: Variable para habilitar/deshabilitar
+SNYK_ENABLED=true
+```
+
+**Vulnerabilidades Pre-existentes (ya resueltas):**
+- ✅ urllib3==2.6.0 (CVE-2024-37891, CVE-2025-50181 ya cubiertos)
+- ✅ requests==2.32.4 (CVE-2024-35195, CVE-2024-47081 ya cubiertos)
+- ✅ filelock==3.20.1 (CVE-2025-68146 ya cubierto)
+
+**Impacto:** Protección contra 6 vulnerabilidades HIGH/MEDIUM en dependencias transitivas. Pipeline mejorado con triple escáner de seguridad (Safety + pip-audit + Snyk). Puntuación OWASP A06: 8.5/10 → 9.0/10 (mejorada por integración Snyk en v1.12.0).
+
+---
+
 ## [1.11.0] - 2025-12-26
 
 ### Added - Password Reset System ✅ COMPLETADO (26 Dic 2025)
