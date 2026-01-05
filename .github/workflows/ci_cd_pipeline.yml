@@ -528,7 +528,9 @@ jobs:
   # ================================
   # JOB 8: SNYK SECURITY SCAN
   # ================================
-  # Escanea vulnerabilidades con Snyk (alternativa a Safety/pip-audit)
+  # Escanea vulnerabilidades con Snyk (SCA + SAST)
+  # - Snyk Test: Vulnerabilidades en dependencias (requirements.txt)
+  # - Snyk Code: Vulnerabilidades en código fuente (src/)
   # Requiere SNYK_TOKEN en GitHub Secrets
 
   snyk_scan:
@@ -556,21 +558,60 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Snyk Security Scan
+      - name: Run Snyk Test (Dependency Scan)
         uses: snyk/actions/python@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --json-file-output=snyk-report.json
+          args: --severity-threshold=high --json-file-output=snyk-dependencies-report.json
 
-      - name: Upload Snyk Report (if exists)
+      - name: Run Snyk Code (SAST - Source Code Analysis)
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: code test
+          args: --severity-threshold=high --json-file-output=snyk-code-report.json
+
+      - name: Generate Snyk Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "🐍 SNYK SECURITY SCAN SUMMARY"
+          echo "=========================================="
+          echo ""
+
+          # Dependencies scan results
+          if [ -f snyk-dependencies-report.json ]; then
+            DEPS_ISSUES=$(jq '.vulnerabilities | length' snyk-dependencies-report.json 2>/dev/null || echo "0")
+            echo "📦 Dependencies Scan:"
+            echo "  Issues found: $DEPS_ISSUES"
+          else
+            echo "📦 Dependencies Scan: No report generated"
+          fi
+
+          # Code scan results
+          if [ -f snyk-code-report.json ]; then
+            CODE_ISSUES=$(jq '.runs[0].results | length' snyk-code-report.json 2>/dev/null || echo "0")
+            echo "🔍 Code Analysis (SAST):"
+            echo "  Issues found: $CODE_ISSUES"
+          else
+            echo "🔍 Code Analysis (SAST): No report generated"
+          fi
+
+          echo "=========================================="
+
+      - name: Upload Snyk Reports
         uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
         with:
-          name: snyk-security-report
-          path: snyk-report.json
+          name: snyk-security-reports
+          path: |
+            snyk-dependencies-report.json
+            snyk-code-report.json
           retention-days: 30
 
       - name: Snyk Monitor (Track in Dashboard)
