@@ -37,7 +37,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 **Impacto:** Doble capa de seguridad en CI/CD (SCA + SAST). Detección temprana de vulnerabilidades antes de mergear a main. Compliance OWASP mejorado para A03 (Injection), A02 (Cryptographic Failures), A01 (Access Control).
 
-**PR:** #38
+**PR:** #39
 
 ---
 
