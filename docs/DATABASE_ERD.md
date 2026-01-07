@@ -40,8 +40,8 @@ erDiagram
         TIMESTAMP handicap_updated_at "nullable"
         BOOLEAN email_verified
         VARCHAR(255) verification_token "nullable"
-        VARCHAR(255) password_reset_token "nullable, v1.11.0"
-        TIMESTAMP password_reset_expires_at "nullable, v1.11.0"
+        VARCHAR(255) password_reset_token "nullable - v1.11.0"
+        TIMESTAMP password_reset_expires_at "nullable - v1.11.0"
         CHAR(2) country_code FK "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -82,11 +82,11 @@ erDiagram
         UUID id PK
         VARCHAR(200) name
         CHAR(2) country_code FK
-        VARCHAR(20) course_type "STANDARD_18, PITCH_AND_PUTT, EXECUTIVE"
+        VARCHAR(20) course_type "STANDARD_18 | PITCH_AND_PUTT | EXECUTIVE"
         INT number_of_holes "9 or 18"
-        VARCHAR(20) approval_status "PENDING_APPROVAL, APPROVED, REJECTED"
+        VARCHAR(20) approval_status "PENDING_APPROVAL | APPROVED | REJECTED"
         UUID creator_id FK "Usuario que lo creó"
-        UUID approved_by FK "nullable, Admin que aprobó"
+        UUID approved_by FK "nullable - Admin que aprobó"
         TIMESTAMP approved_at "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -95,11 +95,11 @@ erDiagram
     tees {
         UUID id PK
         UUID golf_course_id FK
-        VARCHAR(50) identifier "60, Blancas, Championship, etc"
-        VARCHAR(30) category "CHAMPIONSHIP_MALE, AMATEUR_MALE, etc"
+        VARCHAR(50) identifier "60 | Blancas | Championship | etc"
+        VARCHAR(30) category "CHAMPIONSHIP_MALE | AMATEUR_MALE | etc"
         FLOAT slope_rating "55-155"
         FLOAT course_rating
-        VARCHAR(10) gender "MALE, FEMALE, UNISEX"
+        VARCHAR(10) gender "MALE | FEMALE | UNISEX"
         TIMESTAMP created_at
     }
 
@@ -127,11 +127,11 @@ erDiagram
         CHAR(2) tertiary_country_code FK "nullable"
         VARCHAR(100) team_1_name
         VARCHAR(100) team_2_name
-        VARCHAR(20) handicap_type "SCRATCH, PERCENTAGE"
-        INT handicap_value "nullable, 90/95/100"
+        VARCHAR(20) handicap_type "SCRATCH | PERCENTAGE"
+        INT handicap_value "nullable - 90/95/100"
         INT max_players
-        VARCHAR(20) team_assignment "MANUAL, AUTOMATIC"
-        VARCHAR(20) status "DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED, CANCELLED"
+        VARCHAR(20) team_assignment "MANUAL | AUTOMATIC"
+        VARCHAR(20) status "DRAFT | ACTIVE | CLOSED | IN_PROGRESS | COMPLETED | CANCELLED"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -140,9 +140,9 @@ erDiagram
         UUID id PK
         UUID competition_id FK
         UUID user_id FK
-        VARCHAR(20) status "REQUESTED, INVITED, APPROVED, REJECTED, CANCELLED, WITHDRAWN"
-        VARCHAR(10) team_id "nullable, team_1 or team_2"
-        DECIMAL(4,1) custom_handicap "nullable, override"
+        VARCHAR(20) status "REQUESTED | INVITED | APPROVED | REJECTED | CANCELLED | WITHDRAWN"
+        VARCHAR(10) team_id "nullable - team_1 or team_2"
+        DECIMAL(4_1) custom_handicap "nullable - override"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -156,7 +156,7 @@ erDiagram
         UUID competition_id FK
         UUID golf_course_id FK
         DATE date
-        VARCHAR(20) session_type "MORNING, AFTERNOON, FULL_DAY"
+        VARCHAR(20) session_type "MORNING | AFTERNOON | FULL_DAY"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -164,9 +164,9 @@ erDiagram
     matches {
         UUID id PK
         UUID round_id FK
-        VARCHAR(20) format "FOURBALL, FOURSOMES, SINGLES, GREENSOME"
-        VARCHAR(20) status "SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, WALKOVER_TEAM_A, WALKOVER_TEAM_B"
-        INT starting_hole "1-18, para shotgun start"
+        VARCHAR(20) format "FOURBALL | FOURSOMES | SINGLES | GREENSOME"
+        VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | WALKOVER_TEAM_A | WALKOVER_TEAM_B"
+        INT starting_hole "1-18 para shotgun start"
         UUID team_a_player_1_id FK
         UUID team_a_player_1_tee_id FK
         INT team_a_player_1_playing_handicap "Pre-calculado WHS"
@@ -193,7 +193,7 @@ erDiagram
         UUID inviter_id FK "Creator que invita"
         VARCHAR(255) invitee_email
         UUID invitee_user_id FK "nullable si no registrado"
-        VARCHAR(20) status "PENDING, ACCEPTED, REJECTED, EXPIRED"
+        VARCHAR(20) status "PENDING | ACCEPTED | REJECTED | EXPIRED"
         VARCHAR(255) token UK "256-bit secure token"
         TEXT personal_message "nullable"
         TIMESTAMP expires_at "7 días"
@@ -212,9 +212,9 @@ erDiagram
         INT hole_number "1-18"
         UUID player_id FK
         INT gross_score "Golpes brutos"
-        INT net_score "Golpes netos (calculado)"
+        INT net_score "Golpes netos calculado"
         INT strokes_received "Golpes recibidos por handicap"
-        VARCHAR(20) status "DRAFT, SUBMITTED, VALIDATED, DISPUTED"
+        VARCHAR(20) status "DRAFT | SUBMITTED | VALIDATED | DISPUTED"
         TIMESTAMP submitted_at "nullable"
         TIMESTAMP validated_at "nullable"
         TIMESTAMP created_at
