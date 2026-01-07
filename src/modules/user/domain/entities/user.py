@@ -1,9 +1,11 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 
+from ..events.account_locked_event import AccountLockedEvent
+from ..events.account_unlocked_event import AccountUnlockedEvent
 from ..events.email_verified_event import EmailVerifiedEvent
 from ..events.handicap_updated_event import HandicapUpdatedEvent
 from ..events.password_reset_completed_event import PasswordResetCompletedEvent
@@ -18,6 +20,10 @@ from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
 from ..value_objects.password import Password
 from ..value_objects.user_id import UserId
+
+# Account Lockout Configuration
+MAX_FAILED_ATTEMPTS = 10
+LOCKOUT_DURATION_MINUTES = 30
 
 
 class User:
@@ -65,6 +71,8 @@ class User:
         country_code: CountryCode | None = None,
         password_reset_token: str | None = None,
         reset_token_expires_at: datetime | None = None,
+        failed_login_attempts: int = 0,
+        locked_until: datetime | None = None,
         domain_events: list[DomainEvent] | None = None
     ):
         self.id = id
@@ -81,6 +89,8 @@ class User:
         self.country_code = country_code
         self.password_reset_token = password_reset_token
         self.reset_token_expires_at = reset_token_expires_at
+        self.failed_login_attempts = failed_login_attempts
+        self.locked_until = locked_until
         self._domain_events = domain_events or []
 
     def get_full_name(self) -> str:
@@ -586,6 +596,158 @@ class User:
             ip_address=ip_address,
             user_agent=user_agent
         ))
+
+    # === Account Lockout Methods ===
+
+    def record_failed_login(self) -> None:
+        """
+        Registra un intento fallido de login y bloquea la cuenta si se excede el límite.
+
+        Este método:
+        1. Incrementa el contador de intentos fallidos
+        2. Si alcanza MAX_FAILED_ATTEMPTS (10), bloquea la cuenta por 30 minutos
+        3. Emite AccountLockedEvent cuando se bloquea
+
+        Post-Condiciones:
+            - failed_login_attempts incrementado en 1
+            - Si >= 10: locked_until = NOW() + 30 minutos
+            - AccountLockedEvent emitido si se bloqueó
+
+        Security (OWASP A07):
+            - Previene ataques de fuerza bruta
+            - Bloqueo temporal (30 min) vs permanente
+            - Evento de auditoría para análisis de seguridad
+
+        Ejemplo:
+            >>> user.record_failed_login()  # Intento 1
+            >>> user.failed_login_attempts
+            1
+            >>> # ... 9 intentos más ...
+            >>> user.record_failed_login()  # Intento 10
+            >>> user.is_locked()
+            True
+        """
+        self.failed_login_attempts += 1
+        self.updated_at = datetime.now()
+
+        # Bloquear si alcanza el límite
+        if self.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+            now = datetime.now(timezone.utc)
+            self.locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+
+            # Emitir evento de bloqueo
+            self._add_domain_event(AccountLockedEvent(
+                user_id=str(self.id.value),
+                locked_until=self.locked_until,
+                failed_attempts=self.failed_login_attempts,
+                locked_at=now
+            ))
+
+    def is_locked(self) -> bool:
+        """
+        Verifica si la cuenta está actualmente bloqueada.
+
+        Validaciones:
+        1. Si locked_until es None → NO está bloqueada
+        2. Si locked_until > NOW() → SÍ está bloqueada (aún dentro del período)
+        3. Si locked_until <= NOW() → NO está bloqueada (período expiró)
+
+        Returns:
+            bool: True si la cuenta está bloqueada, False si no lo está o el bloqueo expiró
+
+        Security:
+            - Auto-desbloqueo tras LOCKOUT_DURATION_MINUTES (30 min)
+            - No requiere intervención manual para desbloqueos temporales
+
+        Ejemplo:
+            >>> user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=10)
+            >>> user.is_locked()
+            True
+            >>> # Después de 10 minutos...
+            >>> user.is_locked()
+            False
+        """
+        if self.locked_until is None:
+            return False
+
+        now = datetime.now(timezone.utc)
+        return now < self.locked_until
+
+    def unlock(self, unlocked_by_user_id: str) -> None:
+        """
+        Desbloquea manualmente la cuenta (solo Admin).
+
+        Este método:
+        1. Resetea el contador de intentos fallidos a 0
+        2. Elimina el timestamp de bloqueo (locked_until = None)
+        3. Emite AccountUnlockedEvent para auditoría
+
+        Args:
+            unlocked_by_user_id: ID del admin que realizó el desbloqueo
+
+        Raises:
+            ValueError: Si la cuenta no está bloqueada
+
+        Security:
+            - Solo accesible por Admin (verificado en Application Layer)
+            - Evento de auditoría registra quién desbloqueó
+            - Previene abuso de auto-desbloqueo
+
+        Ejemplo:
+            >>> user.is_locked()
+            True
+            >>> user.unlock(unlocked_by_user_id="admin-uuid-123")
+            >>> user.is_locked()
+            False
+            >>> user.failed_login_attempts
+            0
+        """
+        if not self.is_locked() and self.failed_login_attempts == 0:
+            raise ValueError("La cuenta no está bloqueada")
+
+        now = datetime.now(timezone.utc)
+        old_locked_until = self.locked_until
+        old_failed_attempts = self.failed_login_attempts
+
+        # Resetear estado de bloqueo
+        self.failed_login_attempts = 0
+        self.locked_until = None
+        self.updated_at = now
+
+        # Emitir evento de desbloqueo
+        self._add_domain_event(AccountUnlockedEvent(
+            user_id=str(self.id.value),
+            unlocked_by=unlocked_by_user_id,
+            unlocked_at=now,
+            previous_locked_until=old_locked_until,
+            previous_failed_attempts=old_failed_attempts
+        ))
+
+    def reset_failed_attempts(self) -> None:
+        """
+        Resetea el contador de intentos fallidos tras un login exitoso.
+
+        Este método debe llamarse cuando:
+        - El usuario hace login exitosamente
+        - Se quiere limpiar el contador sin desbloquear (casos especiales)
+
+        Post-Condiciones:
+            - failed_login_attempts = 0
+            - locked_until permanece sin cambios (si existe, se mantendrá hasta expirar)
+
+        Security:
+            - Solo resetea contador, NO desbloquea la cuenta
+            - Si la cuenta está bloqueada, permanece bloqueada hasta expiración o unlock manual
+
+        Ejemplo:
+            >>> user.failed_login_attempts = 5
+            >>> user.reset_failed_attempts()
+            >>> user.failed_login_attempts
+            0
+        """
+        if self.failed_login_attempts > 0:
+            self.failed_login_attempts = 0
+            self.updated_at = datetime.now()
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

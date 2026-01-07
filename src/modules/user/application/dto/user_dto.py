@@ -601,3 +601,41 @@ class ValidateResetTokenResponseDTO(BaseModel):
     valid: bool = Field(..., description="True si el token es válido y no expiró.")
     message: str = Field(..., description="Mensaje descriptivo del estado del token.")
     # NO incluir email del usuario por seguridad (no revelar información)
+
+
+# ======================================================================================
+# DTOs para Account Lockout (v1.13.0)
+# ======================================================================================
+
+class UnlockAccountRequestDTO(BaseModel):
+    """
+    DTO de entrada para desbloquear manualmente una cuenta (solo Admin).
+
+    Security (OWASP A01, A09):
+    - Solo Admin puede ejecutar este endpoint
+    - Se registra quién desbloqueó en AccountUnlockedEvent
+    """
+    user_id: str = Field(
+        ...,
+        min_length=36,
+        max_length=36,
+        description="UUID del usuario cuya cuenta se va a desbloquear."
+    )
+    unlocked_by_user_id: str = Field(
+        ...,
+        min_length=36,
+        max_length=36,
+        description="UUID del admin que realiza el desbloqueo (para auditoría)."
+    )
+
+
+class UnlockAccountResponseDTO(BaseModel):
+    """
+    DTO de salida para desbloqueo de cuenta.
+
+    Retorna el resultado de la operación de desbloqueo.
+    """
+    success: bool = Field(..., description="True si la cuenta fue desbloqueada exitosamente.")
+    message: str = Field(..., description="Mensaje descriptivo del resultado.")
+    user_id: str = Field(..., description="UUID del usuario cuya cuenta fue desbloqueada.")
+    unlocked_by: str = Field(..., description="UUID del admin que realizó el desbloqueo.")

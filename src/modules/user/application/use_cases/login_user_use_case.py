@@ -4,6 +4,7 @@ Login User Use Case
 Caso de uso para autenticar un usuario y generar un token JWT.
 Session Timeout (v1.8.0): Genera access token (15 min) + refresh token (7 días).
 Security Logging (v1.8.0): Registra todos los intentos de login (exitosos y fallidos).
+Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minutos.
 """
 
 from datetime import datetime
@@ -15,6 +16,7 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -106,8 +108,33 @@ class LoginUserUseCase:
             )
             return None
 
+        # Account Lockout (v1.13.0): Verificar si la cuenta está bloqueada
+        if user.is_locked():
+            # Security Logging: Intento de login en cuenta bloqueada
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=False,
+                failure_reason=f"Account locked until {user.locked_until.isoformat()}",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            # Lanzar excepción con información del bloqueo
+            raise AccountLockedException(
+                locked_until=user.locked_until,
+                message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}"
+            )
+
         # Verificar contraseña
         if not user.verify_password(request.password):
+            # Account Lockout (v1.13.0): Registrar intento fallido
+            user.record_failed_login()
+
+            # Persistir cambios (incremento de failed_login_attempts)
+            async with self._uow:
+                await self._uow.users.save(user)
+                # Commit automático al salir del contexto
+
             # Security Logging: Login fallido (contraseña incorrecta)
             security_logger.log_login_attempt(
                 user_id=str(user.id.value),
@@ -118,6 +145,9 @@ class LoginUserUseCase:
                 user_agent=user_agent,
             )
             return None
+
+        # Account Lockout (v1.13.0): Resetear intentos fallidos tras login exitoso
+        user.reset_failed_attempts()
 
         # Registrar evento de login exitoso (Clean Architecture)
         login_time = datetime.now()

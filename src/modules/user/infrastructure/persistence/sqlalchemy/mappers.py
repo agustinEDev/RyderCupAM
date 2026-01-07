@@ -1,7 +1,7 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, Table, inspect
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, inspect
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
@@ -83,6 +83,9 @@ users_table = Table(
     Column('password_reset_token', String(255), nullable=True),
     Column('reset_token_expires_at', DateTime, nullable=True),
     Column('country_code', CountryCodeDecorator, ForeignKey('countries.code', ondelete='SET NULL'), nullable=True),
+    # Account Lockout fields (v1.13.0)
+    Column('failed_login_attempts', Integer, nullable=False, default=0),
+    Column('locked_until', DateTime, nullable=True),
 )
 
 def start_mappers():
