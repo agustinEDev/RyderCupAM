@@ -7,6 +7,54 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Planned - v2.1.0 - Competition Module Evolution (En Planificación - 7 semanas)
+
+**🏌️ Sistema Completo de Gestión de Torneos Ryder Cup**
+
+#### Added (Planificado)
+- Sistema de roles formal (Admin, Creator, Player) con tablas dedicadas
+- Gestión completa de campos de golf con tees y 18 hoyos
+- Sistema de aprobación de campos (Creator → PENDING_APPROVAL → Admin aprueba)
+- Planificación de jornadas (Rounds) y partidos (Matches)
+- Sistema de invitaciones con token seguro y auto-registro
+- Cálculo automático de Playing Handicap (WHS)
+- Live scoring hoyo a hoyo con navegación libre
+- Validación dual independiente (jugador vs marcador)
+- Leaderboards en tiempo real (match + global)
+
+#### Nuevas Entidades (9 bloques)
+1. **Roles & Permissions**: `Role`, `UserRole`
+2. **Golf Courses**: `GolfCourse`, `Tee` (múltiples por campo), `Hole` (18 por campo)
+3. **Schedule**: `Round`, `Match` (Fourball, Foursomes, Singles, Greensome)
+4. **Invitations**: `Invitation` (búsqueda + email + token)
+5. **Scoring**: `HoleScore` (gross, net, strokes_received)
+
+#### Nuevos Endpoints (~35 REST API)
+- Golf Courses: CRUD Admin + búsqueda por país (Creator)
+- Course Approval: Aprobar/rechazar + notificaciones email
+- Rounds: CRUD jornadas por competición
+- Matches: CRUD partidos + asignación jugadores/tees
+- Invitations: Buscar usuarios + invitar (registrados y email) + responder
+- Scoring: Anotar scores hoyo a hoyo + validación dual + entregar tarjeta
+- Leaderboards: Match individual + Global por equipos
+
+#### Changed (Planificado)
+- Competition Module: Evolución de gestión básica a sistema completo profesional
+- Playing Handicap: Pre-calculado y almacenado (WHS fórmula oficial)
+- Validación de scores: Sistema dual independiente por jugador
+
+#### Tests Esperados
+- +355 tests nuevos (905 → 1,260 tests, +39% growth)
+- Cobertura completa: Domain, Application, Infrastructure, API
+
+#### Documentación
+- ADR-025: Competition Module Evolution v2.1.0
+- ADR-026: Playing Handicap WHS Calculation
+- DATABASE_ERD.md: Diagrama completo (15 tablas)
+- ROADMAP.md: Planificación detallada 7 semanas
+
+**Ver detalles completos:** `ROADMAP.md`, `docs/DATABASE_ERD.md`, `docs/architecture/decisions/ADR-025*.md`
+
 ---
 
 ## [1.12.1] - 2026-01-05
