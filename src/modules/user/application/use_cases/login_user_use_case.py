@@ -135,6 +135,21 @@ class LoginUserUseCase:
                 await self._uow.users.save(user)
                 # Commit automático al salir del contexto
 
+            # Si la cuenta quedó bloqueada en este intento, lanzar excepción
+            if user.is_locked():
+                security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=request.email,
+                    success=False,
+                    failure_reason=f"Account locked until {user.locked_until.isoformat()}",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+                raise AccountLockedException(
+                    locked_until=user.locked_until,
+                    message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}"
+                )
+
             # Security Logging: Login fallido (contraseña incorrecta)
             security_logger.log_login_attempt(
                 user_id=str(user.id.value),

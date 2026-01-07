@@ -9,6 +9,7 @@ Tests the complete flow:
 - Successful login resets counter
 """
 
+import asyncio
 import pytest
 from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
@@ -17,7 +18,7 @@ from src.modules.user.domain.entities.user import MAX_FAILED_ATTEMPTS
 
 
 @pytest.mark.asyncio
-async def test_account_locks_after_max_failed_attempts(authenticated_client: AsyncClient):
+async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
     """
     Test que la cuenta se bloquea tras MAX_FAILED_ATTEMPTS (10) intentos fallidos.
 
@@ -37,28 +38,31 @@ async def test_account_locks_after_max_failed_attempts(authenticated_client: Asy
         "last_name": "Test",
     }
 
-    response = await authenticated_client.post("/api/v1/auth/register", json=register_data)
+    response = await client.post("/api/v1/auth/register", json=register_data)
     assert response.status_code == 201
 
     # When: Hacer 9 intentos fallidos (no debería bloquear aún)
+    # Rate limiting bypass: Usar diferentes IDs de cliente simulados con X-Test-Client-ID
     for i in range(9):
-        response = await authenticated_client.post(
+        response = await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "locktest@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-1-{i+1}"}  # Cliente diferente por intento
         )
         # Then: Todos retornan 401 (credenciales incorrectas)
         assert response.status_code == 401, f"Attempt {i+1} should return 401"
 
     # When: Intento 10 (debería bloquear)
-    response = await authenticated_client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         json={
             "email": "locktest@example.com",
             "password": "WrongPassword123!",
         },
+        headers={"X-Test-Client-ID": "test-client-1-10"}
     )
 
     # Then: Retorna 423 Locked
@@ -68,7 +72,7 @@ async def test_account_locks_after_max_failed_attempts(authenticated_client: Asy
 
 
 @pytest.mark.asyncio
-async def test_locked_account_cannot_login_even_with_correct_password(authenticated_client: AsyncClient):
+async def test_locked_account_cannot_login_even_with_correct_password(client: AsyncClient):
     """
     Test que una cuenta bloqueada NO puede hacer login incluso con password correcta.
 
@@ -84,26 +88,28 @@ async def test_locked_account_cannot_login_even_with_correct_password(authentica
         "last_name": "User",
     }
 
-    response = await authenticated_client.post("/api/v1/auth/register", json=register_data)
+    response = await client.post("/api/v1/auth/register", json=register_data)
     assert response.status_code == 201
 
     # Hacer 10 intentos fallidos para bloquear
-    for _ in range(10):
-        await authenticated_client.post(
+    for i in range(10):
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "locked@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-2-{i+1}"}
         )
 
     # When: Intentar login con password CORRECTA
-    response = await authenticated_client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         json={
             "email": "locked@example.com",
             "password": "CorrectPassword123!",  # ← Password correcta
         },
+        headers={"X-Test-Client-ID": "test-client-2-11"}
     )
 
     # Then: Sigue bloqueada (423)
@@ -112,7 +118,7 @@ async def test_locked_account_cannot_login_even_with_correct_password(authentica
 
 
 @pytest.mark.asyncio
-async def test_successful_login_resets_failed_attempts_counter(authenticated_client: AsyncClient):
+async def test_successful_login_resets_failed_attempts_counter(client: AsyncClient):
     """
     Test que un login exitoso resetea el contador de intentos fallidos.
 
@@ -131,26 +137,28 @@ async def test_successful_login_resets_failed_attempts_counter(authenticated_cli
         "last_name": "Test",
     }
 
-    response = await authenticated_client.post("/api/v1/auth/register", json=register_data)
+    response = await client.post("/api/v1/auth/register", json=register_data)
     assert response.status_code == 201
 
     # Hacer 5 intentos fallidos
-    for _ in range(5):
-        await authenticated_client.post(
+    for i in range(5):
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "reset@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-3-{i+1}"}
         )
 
     # When: Login exitoso
-    response = await authenticated_client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         json={
             "email": "reset@example.com",
             "password": "ValidPassword123!",  # ← Correcta
         },
+        headers={"X-Test-Client-ID": "test-client-3-6"}
     )
 
     # Then: Login exitoso
@@ -160,20 +168,21 @@ async def test_successful_login_resets_failed_attempts_counter(authenticated_cli
     # Verificar que contador se reseteo:
     # Si hacemos 9 intentos fallidos más, NO debería bloquear
     # (porque el contador se reseteo a 0)
-    for _ in range(9):
-        response = await authenticated_client.post(
+    for i in range(9):
+        response = await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "reset@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-3-{i+10}"}
         )
         assert response.status_code == 401  # No bloqueado aún
 
 
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Admin role system not implemented yet (v2.1.0)")
-async def test_admin_can_unlock_account_manually(authenticated_client: AsyncClient):
+async def test_admin_can_unlock_account_manually(client: AsyncClient):
     """
     Test que un admin puede desbloquear una cuenta manualmente.
 
@@ -197,7 +206,7 @@ async def test_admin_can_unlock_account_manually(authenticated_client: AsyncClie
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_lockout_persists_across_requests(authenticated_client: AsyncClient):
+async def test_lockout_persists_across_requests(client: AsyncClient):
     """
     Test que el bloqueo persiste en la BD (no es solo en memoria).
 
@@ -213,27 +222,29 @@ async def test_lockout_persists_across_requests(authenticated_client: AsyncClien
         "last_name": "Test",
     }
 
-    response = await authenticated_client.post("/api/v1/auth/register", json=register_data)
+    response = await client.post("/api/v1/auth/register", json=register_data)
     assert response.status_code == 201
 
     # Bloquear cuenta (10 intentos fallidos)
-    for _ in range(10):
-        await authenticated_client.post(
+    for i in range(10):
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "persist@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-4-{i+1}"}
         )
 
     # When: Intentar login desde "nuevo cliente" (simular nueva sesión)
     # En tests, es el mismo cliente pero conceptualmente es diferente request
-    response = await authenticated_client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         json={
             "email": "persist@example.com",
             "password": "ValidPassword123!",
         },
+        headers={"X-Test-Client-ID": "test-client-4-11"}
     )
 
     # Then: Sigue bloqueada (persiste en BD)
@@ -241,7 +252,7 @@ async def test_lockout_persists_across_requests(authenticated_client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_lockout_error_message_includes_locked_until_timestamp(authenticated_client: AsyncClient):
+async def test_lockout_error_message_includes_locked_until_timestamp(client: AsyncClient):
     """
     Test que el mensaje de error incluye el timestamp locked_until.
 
@@ -259,26 +270,28 @@ async def test_lockout_error_message_includes_locked_until_timestamp(authenticat
         "last_name": "Test",
     }
 
-    response = await authenticated_client.post("/api/v1/auth/register", json=register_data)
+    response = await client.post("/api/v1/auth/register", json=register_data)
     assert response.status_code == 201
 
     # Bloquear cuenta
-    for _ in range(10):
-        await authenticated_client.post(
+    for i in range(10):
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "timestamp@example.com",
                 "password": "WrongPassword123!",
             },
+            headers={"X-Test-Client-ID": f"test-client-5-{i+1}"}  # Cliente diferente por intento
         )
 
     # When: Intentar login
-    response = await authenticated_client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         json={
             "email": "timestamp@example.com",
             "password": "ValidPassword123!",
         },
+        headers={"X-Test-Client-ID": "test-client-5-11"}
     )
 
     # Then: Mensaje incluye timestamp en formato ISO

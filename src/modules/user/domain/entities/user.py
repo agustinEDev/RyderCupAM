@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -632,7 +632,7 @@ class User:
 
         # Bloquear si alcanza el límite
         if self.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
-            now = datetime.now(timezone.utc)
+            now = datetime.now()
             self.locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
 
             # Emitir evento de bloqueo
@@ -660,7 +660,7 @@ class User:
             - No requiere intervención manual para desbloqueos temporales
 
         Ejemplo:
-            >>> user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=10)
+            >>> user.locked_until = datetime.now() + timedelta(minutes=10)
             >>> user.is_locked()
             True
             >>> # Después de 10 minutos...
@@ -670,7 +670,7 @@ class User:
         if self.locked_until is None:
             return False
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         return now < self.locked_until
 
     def unlock(self, unlocked_by_user_id: str) -> None:
@@ -705,7 +705,7 @@ class User:
         if not self.is_locked() and self.failed_login_attempts == 0:
             raise ValueError("La cuenta no está bloqueada")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         old_locked_until = self.locked_until
         old_failed_attempts = self.failed_login_attempts
 
