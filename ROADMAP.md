@@ -161,47 +161,49 @@ Progreso: ✅✅✅❌⚪⚪⚪⚪⚪ | ⚪⚪⚪⚪⚪⚪⚪⚪⚪
 
 ---
 
-### v1.13.0 - Security Hardening (CRÍTICO) - 3-4 semanas
+### v1.13.0 - Security Hardening (EN PROGRESO - Ene 2026) ⏳
 
-**Objetivo:** Cerrar gaps de seguridad críticos
+**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** 1/4 completado
 
-| Tarea | Estimación | OWASP | Prioridad |
-|-------|-----------|-------|-----------|
-| **2FA/MFA (TOTP)** | 12-16h | A07 | 🔴 CRÍTICA |
-| **CSRF Protection** | 4-6h | A01 | 🔴 CRÍTICA |
-| **Account Lockout** | 3-4h | A07 | 🟠 Alta |
-| **Password History** | 3-4h | A07 | 🟠 Alta |
-| **Device Fingerprinting** | 4-6h | A01 | 🟠 Alta |
+| Tarea | Estimación | OWASP | Prioridad | Estado |
+|-------|-----------|-------|-----------|--------|
+| ~~**Account Lockout**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (7 Ene) |
+| **CSRF Protection** | 4-6h | A01 | 🔴 CRÍTICA | ⏳ Pendiente |
+| **Device Fingerprinting** | 4-6h | A01 | 🟠 Alta | ⏳ Pendiente |
+| **Password History** | 3-4h | A07 | 🟠 Alta | ⏳ Pendiente |
+| ~~**2FA/MFA (TOTP)**~~ | ~~12-16h~~ | A07 | 🔴 CRÍTICA | ❌ **REMOVIDO** (no necesario ahora) |
 
-**Total:** ~30-40 horas | **OWASP Esperado:** 10.0/10 → 10/10 perfecto
+**Total:** ~14-20 horas (ajustado sin 2FA) | **OWASP Esperado:** 10.0/10 → 10/10
 
-#### 1. 2FA/MFA (TOTP)
-- Modelo `TwoFactorSecret` en BD
-- Endpoints: enable/disable/verify 2FA
-- Integración `pyotp` (TOTP RFC 6238)
-- Backup codes (10 códigos de un solo uso)
-- QR code generation
-- Tests: 20+ tests (unit + integration)
+**Cambios de Scope:**
+- ❌ 2FA/MFA removido: No crítico para app actual (OWASP ya 10.0/10, no hay datos financieros sensibles)
+- ✅ Focus en 4 features de alto impacto
 
-#### 2. CSRF Protection
+#### 1. ~~Account Lockout Policy~~ ✅ **COMPLETADO (7 Ene 2026)**
+- ✅ Bloqueo tras 10 intentos fallidos (HTTP 423 Locked)
+- ✅ Desbloqueo automático (30 min)
+- ✅ Endpoint manual unlock (POST /auth/unlock-account, Admin)
+- ✅ Persistencia en BD (failed_login_attempts, locked_until)
+- ✅ 5 tests integración pasando (100%)
+- ✅ ADR-027 documentado
+- ⚠️ Email notificación pendiente (opcional, no bloqueante)
+
+**Implementación:** 3 commits (`a9fe089`, `e499add`, `14ecfd0`)
+**Ver:** `docs/architecture/decisions/ADR-027-account-lockout-brute-force-protection.md`
+
+#### 2. CSRF Protection ⏳ PENDIENTE
 - Implementar `fastapi-csrf-protect`
 - Double-submit cookie pattern
 - CSRF tokens en forms
 - Tests de CSRF bypass attempts
 
-#### 3. Account Lockout Policy
-- Bloqueo tras 10 intentos fallidos
-- Desbloqueo automático (30 min)
-- Email de notificación
-- Endpoint manual unlock (admin)
-
-#### 4. Password History
+#### 3. Password History ⏳ PENDIENTE
 - Modelo `PasswordHistory` en BD
 - No reutilizar últimas 5 contraseñas
 - Hash bcrypt de histórico
 - Limpieza automática (1 año)
 
-#### 5. Device Fingerprinting
+#### 4. Device Fingerprinting ⏳ PENDIENTE
 - Modelo `UserDevice` en BD
 - User-Agent + IP tracking
 - Email de notificación (nuevo dispositivo)

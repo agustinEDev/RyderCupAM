@@ -57,6 +57,66 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.13.0] - 2026-01-07
+
+### Added - Account Lockout (Brute Force Protection) ✅ COMPLETADO (7 Ene 2026)
+
+**🔒 Protección Contra Ataques de Fuerza Bruta** (OWASP A07)
+
+#### Features Implementadas:
+- ✅ Account lockout automático tras 10 intentos fallidos de login
+- ✅ Bloqueo temporal de 30 minutos (auto-desbloqueo)
+- ✅ HTTP 423 Locked cuando cuenta está bloqueada
+- ✅ Reset automático de contador tras login exitoso
+- ✅ Endpoint manual de desbloqueo para admins (POST /auth/unlock-account)
+- ✅ Persistencia en BD (no solo memoria)
+
+#### Arquitectura (Clean Architecture):
+- **Domain Layer**:
+  - 4 métodos nuevos en User entity: `record_failed_login()`, `is_locked()`, `unlock()`, `reset_failed_attempts()`
+  - 2 Domain Events: `AccountLockedEvent`, `AccountUnlockedEvent`
+  - 1 Excepción: `AccountLockedException`
+- **Application Layer**:
+  - LoginUserUseCase modificado (dual check pattern)
+  - UnlockAccountUseCase nuevo
+  - 2 DTOs: `UnlockAccountRequestDTO`, `UnlockAccountResponseDTO`
+- **Infrastructure Layer**:
+  - Migration b6d8a1c65bd2: 2 campos (`failed_login_attempts`, `locked_until`) + índice
+  - Mapper actualizado para nuevos campos
+- **API Layer**:
+  - POST /api/v1/auth/unlock-account (pendiente rol Admin v2.1.0)
+  - Login endpoint modificado (retorna HTTP 423)
+
+#### Tests:
+- ✅ 5 tests de integración pasando (100%)
+- Tests: lockout tras 10 intentos, bloqueo con password correcta, reset contador, persistencia, mensaje con timestamp
+
+#### Decisiones Técnicas (ADR-027):
+- Integración en User entity (vs LoginAttempt separado)
+- Naive datetimes (consistencia con codebase)
+- Dual check pattern (pre + post password verification)
+- X-Test-Client-ID para tests (bypass rate limiting)
+
+#### Security:
+- **OWASP A07** mitigado: Credential stuffing, dictionary attacks, brute force
+- **Defense in Depth**: Complementa rate limiting existente (5/min)
+- **Audit Trail**: Domain events para security logging
+
+#### Commits:
+1. `a9fe089`: Domain + Application + Infrastructure layers
+2. `e499add`: API Layer + Tests
+3. `14ecfd0`: Bug fixes (lockout logic + timezone consistency)
+
+#### Documentación:
+- ✅ ADR-027: Account Lockout - Brute Force Protection
+- ✅ docs/API.md: Endpoint unlock-account documentado
+- ✅ postman_collection.json: Request "Unlock Account (Admin)" agregado
+- ✅ docs/SECURITY_IMPLEMENTATION.md: Actualizado
+
+**Ver detalles:** `docs/architecture/decisions/ADR-027*.md`, `docs/API.md`
+
+---
+
 ## [1.12.1] - 2026-01-05
 
 ### Added - Snyk Code (SAST) Integration ✅ COMPLETADO (5 Ene 2026)

@@ -3,23 +3,27 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generado con ejemplos interactivos)
 **ReDoc**: `/redoc` (documentación alternativa)
-**Total Endpoints**: 33 active
-**Version**: v1.8.0
-**Last Updated**: 18 Dic 2025
+**Total Endpoints**: 34 active
+**Version**: v1.13.0
+**Last Updated**: 7 Ene 2026
 
 ---
 
 ## 📋 Quick Reference
 
 ```
-Authentication (7 endpoints)
+Authentication (11 endpoints)
 ├── POST /api/v1/auth/register           # User registration
-├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies)
+├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, lockout tras 10 intentos)
 ├── GET  /api/v1/auth/current-user       # Get authenticated user info
 ├── POST /api/v1/auth/logout             # Session logout (revoke refresh tokens)
 ├── POST /api/v1/auth/verify-email       # Email verification
 ├── POST /api/v1/auth/resend-verification # Resend verification email
-└── POST /api/v1/auth/refresh-token      # Renew access token
+├── POST /api/v1/auth/refresh-token      # Renew access token
+├── POST /api/v1/auth/forgot-password    # Request password reset (email with token)
+├── POST /api/v1/auth/reset-password     # Complete password reset
+├── GET  /api/v1/auth/validate-reset-token/:token # Validate reset token
+└── POST /api/v1/auth/unlock-account     # Manual account unlock (Admin, v1.13.0)
 
 User Management (3 endpoints)
 ├── GET   /api/v1/users/search           # Search users by email/name
@@ -65,7 +69,7 @@ Country Management (2 endpoints)
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/auth/register` | POST | No | Registro de usuario + email verification |
-| `/auth/login` | POST | No | Login con JWT (httpOnly cookies) |
+| `/auth/login` | POST | No | Login con JWT (httpOnly cookies) - **Lockout tras 10 intentos fallidos** |
 | `/auth/current-user` | GET | Yes | Obtener usuario autenticado |
 | `/auth/logout` | POST | Yes | Logout con revocación de refresh tokens |
 | `/auth/refresh-token` | POST | No | Renovar access token (usa refresh cookie) |
@@ -74,6 +78,7 @@ Country Management (2 endpoints)
 | `/auth/forgot-password` | POST | No | Solicitar reseteo de contraseña (envía email con token) |
 | `/auth/reset-password` | POST | No | Completar reseteo de contraseña usando token |
 | `/auth/validate-reset-token/{token}` | GET | No | Validar token de reseteo antes de mostrar formulario |
+| `/auth/unlock-account` | POST | Yes | Desbloqueo manual de cuenta (Admin) - **v1.13.0** |
 
 
 ### Campos Principales
@@ -112,6 +117,16 @@ Country Management (2 endpoints)
 - `valid` (bool) - Indica si el token es válido
 - `message` (string) - Mensaje explicativo
 
+**Unlock Account Request:**
+- `user_id` (string, requerido, UUID) - ID del usuario a desbloquear
+- `unlocked_by_user_id` (string, auto-extraído del JWT) - ID del admin que desbloquea
+
+**Unlock Account Response:**
+- `success` (bool) - Indica si el desbloqueo fue exitoso
+- `message` (string) - Mensaje de confirmación
+- `user_id` (string) - ID del usuario desbloqueado
+- `unlocked_by` (string) - ID del admin que realizó el desbloqueo
+
 
 ### Notas de Seguridad
 
@@ -122,6 +137,7 @@ Country Management (2 endpoints)
 - **Forgot/Reset:** Mensaje genérico, nunca revela si el email existe (previene user enumeration)
 - **Reset Token:** Token de un solo uso, expira en 24h, invalida todas las sesiones activas tras cambio
 - **Refresh Tokens:** SHA256 hash en BD, revocables en logout
+- **Account Lockout (v1.13.0):** 10 intentos fallidos → bloqueo 30 min, auto-desbloqueo, HTTP 423 Locked
 
 **📋 Ver detalles:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
 
