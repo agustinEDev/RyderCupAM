@@ -765,3 +765,17 @@ def get_list_enrollments_use_case(
 ) -> ListEnrollmentsUseCase:
     """Proveedor del caso de uso ListEnrollmentsUseCase."""
     return ListEnrollmentsUseCase(uow)
+
+
+# ============================================================================
+# Account Lockout Use Cases (v1.13.0)
+# ============================================================================
+
+def get_unlock_account_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> "UnlockAccountUseCase":
+    """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0 - Account Lockout)."""
+    from src.modules.user.application.use_cases.unlock_account_use_case import (
+        UnlockAccountUseCase,
+    )
+    return UnlockAccountUseCase(uow)

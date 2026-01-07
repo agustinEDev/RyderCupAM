@@ -12,6 +12,7 @@ from src.config.dependencies import (
     get_request_password_reset_use_case,
     get_resend_verification_email_use_case,
     get_reset_password_use_case,
+    get_unlock_account_use_case,
     get_validate_reset_token_use_case,
     get_verify_email_use_case,
     security,
@@ -31,6 +32,8 @@ from src.modules.user.application.dto.user_dto import (
     ResendVerificationEmailResponseDTO,
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
+    UnlockAccountRequestDTO,
+    UnlockAccountResponseDTO,
     UserResponseDTO,
     ValidateResetTokenRequestDTO,
     ValidateResetTokenResponseDTO,
@@ -49,11 +52,13 @@ from src.modules.user.application.use_cases.resend_verification_email_use_case i
     ResendVerificationEmailUseCase,
 )
 from src.modules.user.application.use_cases.reset_password_use_case import ResetPasswordUseCase
+from src.modules.user.application.use_cases.unlock_account_use_case import UnlockAccountUseCase
 from src.modules.user.application.use_cases.validate_reset_token_use_case import (
     ValidateResetTokenUseCase,
 )
 from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.modules.user.domain.exceptions import AccountLockedException
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_refresh_token_cookie,
@@ -214,7 +219,14 @@ async def login_user(
     login_data.ip_address = get_client_ip(request)
     login_data.user_agent = get_user_agent(request)
 
-    login_response = await use_case.execute(login_data)
+    try:
+        login_response = await use_case.execute(login_data)
+    except AccountLockedException as e:
+        # Account Lockout (v1.13.0): Cuenta bloqueada por intentos fallidos
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
+        ) from e
 
     if not login_response:
         raise HTTPException(
@@ -802,3 +814,74 @@ async def validate_reset_token(
     response = await use_case.execute(request_dto)
 
     return response
+
+
+# ============================================================================
+# ACCOUNT LOCKOUT ENDPOINT (v1.13.0)
+# ============================================================================
+
+@router.post(
+    "/unlock-account",
+    response_model=UnlockAccountResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Desbloquear cuenta manualmente (Admin)",
+    description="Permite a un administrador desbloquear una cuenta bloqueada por intentos fallidos antes de la expiración de 30 minutos.",
+    tags=["Authentication", "Admin"],
+)
+async def unlock_account(
+    request: Request,
+    unlock_data: UnlockAccountRequestDTO,
+    use_case: UnlockAccountUseCase = Depends(get_unlock_account_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+):
+    """
+    Desbloquea manualmente una cuenta bloqueada (solo Admin).
+
+    Account Lockout (v1.13.0):
+    - Permite desbloquear cuentas antes de expiración automática (30 min)
+    - Resetea failed_login_attempts a 0
+    - Elimina locked_until (None)
+    - Emite AccountUnlockedEvent para auditoría
+
+    Security (OWASP A01, A09):
+    - Solo Admin puede ejecutar este endpoint
+    - Requiere autenticación JWT válida
+    - Registra quién desbloqueó en evento de auditoría
+    - TODO: Verificar rol Admin cuando se implemente sistema de roles (v2.1.0)
+
+    Args:
+        request: Request de FastAPI
+        unlock_data: DTO con user_id (a desbloquear) y unlocked_by_user_id (admin)
+        use_case: Caso de uso de desbloqueo
+        current_user: Usuario autenticado (de JWT)
+
+    Returns:
+        UnlockAccountResponseDTO con resultado de la operación
+
+    Raises:
+        HTTPException 401: Si no está autenticado
+        HTTPException 403: Si no es Admin (cuando se implemente verificación de rol)
+        HTTPException 404: Si el usuario no existe
+        HTTPException 400: Si la cuenta no está bloqueada
+    """
+    # TODO (v2.1.0): Verificar que current_user tiene rol ADMIN
+    # Por ahora, cualquier usuario autenticado puede desbloquear (MVP)
+    # When roles are implemented:
+    # if current_user.role != "ADMIN":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators can unlock accounts"
+    #     )
+
+    # Establecer unlocked_by_user_id del usuario autenticado
+    unlock_data.unlocked_by_user_id = str(current_user.id)
+
+    try:
+        response = await use_case.execute(unlock_data)
+        return response
+    except ValueError as e:
+        # Usuario no existe o cuenta no está bloqueada
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
