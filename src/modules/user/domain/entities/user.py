@@ -522,10 +522,7 @@ class User:
             return False
 
         now = datetime.now()
-        if now > self.reset_token_expires_at:
-            return False
-
-        return True
+        return now <= self.reset_token_expires_at
 
     def reset_password(
         self,

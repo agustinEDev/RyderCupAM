@@ -9,13 +9,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.config.rate_limit import limiter
 from src.config.dependencies import (
     get_current_user,
     get_update_handicap_manually_use_case,
     get_update_handicap_use_case,
     get_update_multiple_handicaps_use_case,
 )
+from src.config.rate_limit import limiter
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
     UpdateMultipleHandicapsUseCase,
@@ -131,10 +131,10 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
 )
 @limiter.limit("5/hour")  # Proteger RFEG API externa: máximo 5 consultas por hora
 async def update_user_handicap(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     handicap_data: UpdateHandicapRequestDTO,
     use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user)  # noqa: ARG001 - Reserved for future role checks
 ):
     """
     Actualiza el hándicap de un usuario buscándolo en la RFEG.
@@ -166,12 +166,12 @@ async def update_user_handicap(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
-        )
+        ) from None
     except HandicapServiceUnavailableError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"El servicio de hándicap no está disponible: {e!s}"
-        )
+        ) from None
 
 
 @router.post(
@@ -187,7 +187,7 @@ async def update_user_handicap(
 async def update_multiple_handicaps(
     request: UpdateMultipleHandicapsRequestDTO,
     use_case: UpdateMultipleHandicapsUseCase = Depends(get_update_multiple_handicaps_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user)  # noqa: ARG001 - Reserved for future role checks
 ):
     """
     Actualiza los hándicaps de múltiples usuarios.
@@ -236,7 +236,7 @@ async def update_multiple_handicaps(
 async def update_user_handicap_manually(
     request: UpdateHandicapManuallyRequestDTO,
     use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user)  # noqa: ARG001 - Reserved for future role checks
 ):
     """
     Actualiza el hándicap de un usuario manualmente (sin consultar RFEG).
@@ -268,4 +268,4 @@ async def update_user_handicap_manually(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from None
