@@ -89,9 +89,10 @@ safety==3.7.0
 pip-audit==2.10.0
 
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
-# Fijada explícitamente para resolver CVE-2025-66418 y CVE-2025-66471
-# (decompression bomb y unlimited decompression chain)
-urllib3==2.6.0
+# Fijada explícitamente para resolver:
+# - CVE-2025-66418 y CVE-2025-66471 (decompression bomb y unlimited decompression chain)
+# - CVE-2026-21441 (Security vulnerability - fixed in 2.6.3)
+urllib3==2.6.3
 
 # filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
 # Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition)
@@ -116,6 +117,11 @@ zipp==3.19.1
 # marshmallow - Object serialization/deserialization library (dependencia transitiva de safety)
 # Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
 marshmallow==3.26.2
+
+# ecdsa - Elliptic Curve Digital Signature Algorithm (dependencia transitiva de python-jose)
+# Fijada explícitamente para resolver CVE-2024-23342 (Signature malleability vulnerability)
+# NOTA: No hay versión fija disponible aún, monitorear actualizaciones
+ecdsa==0.19.1
 
 
 # ================================
