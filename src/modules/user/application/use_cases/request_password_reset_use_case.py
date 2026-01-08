@@ -13,6 +13,7 @@ Security Features:
 
 import asyncio
 
+from src.config.settings import Settings
 from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetRequestDTO,
     RequestPasswordResetResponseDTO,
@@ -179,7 +180,6 @@ class RequestPasswordResetUseCase:
             >>> print(link)
             "http://localhost:5173/reset-password/abc123..."
         """
-        from src.config.settings import Settings
         settings = Settings()
         frontend_url = settings.FRONTEND_URL.rstrip('/')
         return f"{frontend_url}/reset-password/{token}"

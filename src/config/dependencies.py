@@ -79,6 +79,15 @@ from src.modules.user.application.use_cases.refresh_access_token_use_case import
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
+from src.modules.user.application.use_cases.request_password_reset_use_case import (
+    RequestPasswordResetUseCase,
+)
+from src.modules.user.application.use_cases.reset_password_use_case import (
+    ResetPasswordUseCase,
+)
+from src.modules.user.application.use_cases.validate_reset_token_use_case import (
+    ValidateResetTokenUseCase,
+)
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
 )
@@ -96,6 +105,9 @@ from src.modules.user.application.use_cases.update_user_handicap_manually_use_ca
 )
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
+)
+from src.modules.user.application.use_cases.unlock_account_use_case import (
+    UnlockAccountUseCase,
 )
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
@@ -505,9 +517,6 @@ def get_request_password_reset_use_case(
     3. Crea una instancia de `RequestPasswordResetUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.request_password_reset_use_case import (
-        RequestPasswordResetUseCase,
-    )
     return RequestPasswordResetUseCase(uow, email_service)
 
 
@@ -524,9 +533,6 @@ def get_reset_password_use_case(
     3. Crea una instancia de `ResetPasswordUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.reset_password_use_case import (
-        ResetPasswordUseCase,
-    )
     return ResetPasswordUseCase(uow, email_service)
 
 
@@ -541,9 +547,6 @@ def get_validate_reset_token_use_case(
     2. Crea una instancia de `ValidateResetTokenUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.validate_reset_token_use_case import (
-        ValidateResetTokenUseCase,
-    )
     return ValidateResetTokenUseCase(uow)
 
 
@@ -773,9 +776,6 @@ def get_list_enrollments_use_case(
 
 def get_unlock_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-) -> "UnlockAccountUseCase":
+) -> UnlockAccountUseCase:
     """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0 - Account Lockout)."""
-    from src.modules.user.application.use_cases.unlock_account_use_case import (
-        UnlockAccountUseCase,
-    )
     return UnlockAccountUseCase(uow)

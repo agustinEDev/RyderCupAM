@@ -23,6 +23,7 @@ from src.modules.user.application.dto.user_dto import (
     ResetPasswordResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -147,8 +148,6 @@ class ResetPasswordUseCase:
         # Guardar usuario con nueva contraseña, historial y revocar todos los refresh tokens
         # Todas las operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
         async with self._uow:
-            from src.modules.user.domain.entities.password_history import PasswordHistory
-
             # Guardar el nuevo hash en el historial de contraseñas
             total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
             password_history = PasswordHistory.create(

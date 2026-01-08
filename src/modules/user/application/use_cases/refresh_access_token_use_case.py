@@ -59,7 +59,7 @@ class RefreshAccessTokenUseCase:
         self._uow = uow
         self._token_service = token_service
 
-    async def execute(
+    async def execute(  # noqa: PLR0911
         self,
         request: RefreshAccessTokenRequestDTO,
         refresh_token_jwt: str

@@ -60,7 +60,7 @@ class UpdateSecurityUseCase:
         """Valida que el usuario exista y la contraseña sea correcta."""
         user_id_vo = UserId(user_id)
         user = await self._uow.users.find_by_id(user_id_vo)
-        
+
         if not user:
             raise UserNotFoundError(f"User with id {user_id} not found")
         
