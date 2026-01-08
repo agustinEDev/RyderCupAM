@@ -1,3 +1,6 @@
+from src.modules.user.domain.repositories.password_history_repository_interface import (
+    PasswordHistoryRepositoryInterface,
+)
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
@@ -6,6 +9,9 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
+)
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_password_history_repository import (
+    InMemoryPasswordHistoryRepository,
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_refresh_token_repository import (
     InMemoryRefreshTokenRepository,
@@ -23,6 +29,7 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
     def __init__(self):
         self._users = InMemoryUserRepository()
         self._refresh_tokens = InMemoryRefreshTokenRepository()
+        self._password_history = InMemoryPasswordHistoryRepository()
         self.committed = False
 
     @property
@@ -34,6 +41,11 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
     def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
         """Propiedad para acceder al repositorio de refresh tokens."""
         return self._refresh_tokens
+
+    @property
+    def password_history(self) -> PasswordHistoryRepositoryInterface:
+        """Propiedad para acceder al repositorio de password history."""
+        return self._password_history
 
     async def __aenter__(self):
         self.committed = False

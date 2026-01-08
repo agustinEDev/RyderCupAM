@@ -144,16 +144,27 @@ class ResetPasswordUseCase:
             )
             raise  # Re-lanzar la excepción para que el API layer la maneje
 
-        # Guardar usuario con nueva contraseña y revocar todos los refresh tokens
-        # Ambas operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
+        # Guardar usuario con nueva contraseña, historial y revocar todos los refresh tokens
+        # Todas las operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
         async with self._uow:
+            from src.modules.user.domain.entities.password_history import PasswordHistory
+
+            # Guardar el nuevo hash en el historial de contraseñas
+            total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
+            password_history = PasswordHistory.create(
+                user_id=user.id,
+                password_hash=user.password.hashed_value,
+                total_history_count=total_history_count
+            )
+            await self._uow.password_history.save(password_history)
+
             # Revocar TODOS los refresh tokens del usuario (logout forzado)
             # Esto asegura que todas las sesiones activas se cierren
             await self._uow.refresh_tokens.revoke_all_for_user(user.id)
 
             # Guardar usuario con nueva contraseña y token invalidado
             await self._uow.users.save(user)
-            # Commit automático al salir del contexto (ambas operaciones atomicas)
+            # Commit automático al salir del contexto (todas las operaciones atomicas)
 
         # Enviar email de confirmación
         await self._email_service.send_password_changed_notification(

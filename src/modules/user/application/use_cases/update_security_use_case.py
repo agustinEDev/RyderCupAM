@@ -92,19 +92,47 @@ class UpdateSecurityUseCase:
         new_password: str,
         user_id_vo: UserId
     ) -> tuple[bool, int]:
-        """Maneja el cambio de password y revoca refresh tokens."""
+        """Maneja el cambio de password, valida historial y revoca refresh tokens."""
+        from src.modules.user.domain.entities.password_history import PasswordHistory
+        from src.modules.user.domain.value_objects.password import Password
+
+        # Validar que la nueva contraseña no esté en el historial (últimas 5)
+        recent_history = await self._uow.password_history.find_recent_by_user(
+            user_id_vo,
+            limit=5
+        )
+
+        # Verificar si la nueva contraseña coincide con alguna del historial
+        for history_record in recent_history:
+            temp_password = Password(history_record.password_hash)
+            if temp_password.verify(new_password):
+                raise ValueError(
+                    "Cannot reuse any of your last 5 passwords. "
+                    "Please choose a different password."
+                )
+
+        # Cambiar la contraseña
         user.change_password(new_password)
-        
+
+        # Guardar el nuevo hash en el historial
+        total_history_count = await self._uow.password_history.count_by_user(user_id_vo) + 1
+        password_history = PasswordHistory.create(
+            user_id=user_id_vo,
+            password_hash=user.password.hashed_value,
+            total_history_count=total_history_count
+        )
+        await self._uow.password_history.save(password_history)
+
         # Revocar todos los refresh tokens
         refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
         tokens_revoked_count = 0
-        
+
         for refresh_token in refresh_tokens:
             if not refresh_token.revoked:
                 refresh_token.revoke()
                 await self._uow.refresh_tokens.save(refresh_token)
                 tokens_revoked_count += 1
-        
+
         return True, tokens_revoked_count
 
     def _log_security_changes(

@@ -117,3 +117,9 @@ def start_mappers():
         start_mappers as start_refresh_token_mappers
     )
     start_refresh_token_mappers()
+
+    # Mapear PasswordHistory entity (v1.13.0 - Password History)
+    from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_mapper import (
+        start_mappers as start_password_history_mappers
+    )
+    start_password_history_mappers()
