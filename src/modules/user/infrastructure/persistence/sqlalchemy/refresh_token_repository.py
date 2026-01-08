@@ -5,7 +5,7 @@ Implementación del repositorio de Refresh Tokens usando SQLAlchemy (async).
 """
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -162,8 +162,6 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Número de tokens activos
         """
-        from sqlalchemy import func
-
         stmt = (
             select(func.count())
             .select_from(refresh_tokens_table)

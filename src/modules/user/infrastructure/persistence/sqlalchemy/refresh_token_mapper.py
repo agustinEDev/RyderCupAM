@@ -9,7 +9,6 @@ from sqlalchemy.exc import NoInspectionAvailable
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
-from src.modules.user.domain.value_objects.user_id import UserId
 
 # Importar metadata, registry y UserIdDecorator compartidos del mapper principal de users
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (

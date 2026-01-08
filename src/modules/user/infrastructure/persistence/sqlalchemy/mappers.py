@@ -112,14 +112,14 @@ def start_mappers():
             # handicap se mapea directamente - el HandicapDecorator maneja la conversión y None
         })
 
-    # Mapear RefreshToken entity (v1.8.0 - Session Timeout)
-    from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (
-        start_mappers as start_refresh_token_mappers
+    # Mapear RefreshToken y PasswordHistory entities
+    # Imports dinámicos necesarios para evitar circular imports
+    from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_mapper import (  # noqa: PLC0415
+        start_mappers as start_password_history_mappers,
     )
-    start_refresh_token_mappers()
+    from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (  # noqa: PLC0415
+        start_mappers as start_refresh_token_mappers,
+    )
 
-    # Mapear PasswordHistory entity (v1.13.0 - Password History)
-    from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_mapper import (
-        start_mappers as start_password_history_mappers
-    )
+    start_refresh_token_mappers()
     start_password_history_mappers()
