@@ -14,7 +14,7 @@ from .domain_event import DomainEvent
 EventType = TypeVar('EventType', bound=DomainEvent)
 
 
-class EventHandler(Generic[EventType], ABC):
+class EventHandler(Generic[EventType], ABC):  # noqa: UP046 - Generic syntax for Python 3.11 compatibility
     """
     Interfaz base para todos los handlers de eventos de dominio.
 

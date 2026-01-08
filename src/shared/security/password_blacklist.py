@@ -83,8 +83,6 @@ COMMON_PASSWORDS = {
     "charlie",
     "princess",
     "killer",
-    "master",
-
     # Defaults de sistemas
     "admin123",
     "admin1234",
@@ -136,8 +134,6 @@ COMMON_PASSWORDS = {
     "01011993",
     "01011994",
     "01011995",
-    "12345678",
-
     # Otras comunes
     "nothing",
     "whatever",

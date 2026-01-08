@@ -192,7 +192,7 @@ class SecurityLogger:
             }
         )
 
-    def _build_message(self, event: SecurityAuditEvent) -> str:
+    def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911 - Multiple event types require specific messages
         """
         Construye un mensaje descriptivo para el log.
 
@@ -210,30 +210,29 @@ class SecurityLogger:
             status = "SUCCESS" if event.success else "FAILED"
             return f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
 
-        elif isinstance(event, LogoutEvent):
+        if isinstance(event, LogoutEvent):
             return f"🚪 LOGOUT | {user_info} | Tokens revoked: {event.refresh_tokens_revoked}"
 
-        elif isinstance(event, PasswordChangedEvent):
+        if isinstance(event, PasswordChangedEvent):
             return f"🔐 PASSWORD CHANGED | {user_info} | Verified: {event.old_password_verified}"
 
-        elif isinstance(event, EmailChangedEvent):
+        if isinstance(event, EmailChangedEvent):
             return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
 
-        elif isinstance(event, AccessDeniedEvent):
+        if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"
 
-        elif isinstance(event, RateLimitExceededEvent):
+        if isinstance(event, RateLimitExceededEvent):
             return f"⚠️  RATE LIMIT EXCEEDED | {user_info} | Endpoint: {event.endpoint} | Limit: {event.limit_value}"
 
-        elif isinstance(event, RefreshTokenUsedEvent):
+        if isinstance(event, RefreshTokenUsedEvent):
             return f"🔄 REFRESH TOKEN USED | {user_info} | Token ID: {event.refresh_token_id}"
 
-        elif isinstance(event, RefreshTokenRevokedEvent):
+        if isinstance(event, RefreshTokenRevokedEvent):
             return f"🔒 REFRESH TOKENS REVOKED | {user_info} | Count: {event.tokens_revoked_count} | Reason: {event.reason}"
 
-        else:
-            # Fallback genérico
-            return f"🔐 {event_type} | {user_info} | Severity: {event.severity.value}"
+        # Fallback genérico
+        return f"🔐 {event_type} | {user_info} | Severity: {event.severity.value}"
 
     def _severity_to_log_level(self, severity: SecuritySeverity) -> int:
         """
@@ -575,7 +574,7 @@ def get_security_logger() -> SecurityLogger:
     Returns:
         SecurityLogger configurado
     """
-    global _security_logger_instance
+    global _security_logger_instance  # noqa: PLW0603 - Module-level singleton pattern
     if _security_logger_instance is None:
         _security_logger_instance = SecurityLogger()
     return _security_logger_instance

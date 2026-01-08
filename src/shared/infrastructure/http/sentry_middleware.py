@@ -24,7 +24,6 @@ OWASP Coverage:
 """
 
 import logging
-from typing import Optional
 
 import sentry_sdk
 from fastapi import Request
@@ -44,7 +43,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
     Si no hay token o es inválido, el request se procesa como anónimo.
     """
 
-    def _extract_token_from_request(self, request: Request) -> Optional[str]:
+    def _extract_token_from_request(self, request: Request) -> str | None:
         """
         Extrae el token JWT del request.
 
@@ -70,7 +69,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
 
         return None
 
-    def _decode_token(self, token: str) -> Optional[dict]:
+    def _decode_token(self, token: str) -> dict | None:
         """
         Decodifica el token JWT para extraer el payload.
 
@@ -91,7 +90,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
             return None
 
-    def _get_client_ip(self, request: Request) -> Optional[str]:
+    def _get_client_ip(self, request: Request) -> str | None:
         """
         Extrae la IP del cliente del request.
 

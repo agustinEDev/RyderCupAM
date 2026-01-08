@@ -57,7 +57,7 @@ class LoggerFactory:
         self._loggers: dict[str, Logger] = {}
         self._logger_lock = Lock()
 
-    def __new__(cls, config: LogConfig | None = None):
+    def __new__(cls, config: LogConfig | None = None):  # noqa: ARG004 - config used in __init__ after singleton creation
         """Implementación singleton thread-safe"""
         if cls._instance is None:
             with cls._lock:
@@ -188,7 +188,7 @@ class LoggerFactory:
         """Carga archivo YAML"""
         try:
             import yaml  # noqa: PLC0415 - Optional dependency, lazy import
-            with open(path, encoding='utf-8') as f:
+            with open(path, encoding='utf-8') as f:  # noqa: PTH123 - open() is more readable here
                 return yaml.safe_load(f) or {}
         except ImportError as e:
             raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
@@ -196,7 +196,7 @@ class LoggerFactory:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:  # noqa: PTH123 - open() is more readable here
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:
@@ -233,7 +233,7 @@ def get_logger(name: str) -> Logger:
     Returns:
         Instancia de logger
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     if _default_factory is None:
         _default_factory = LoggerFactory()
     return _default_factory.get_logger(name)
@@ -246,7 +246,7 @@ def configure_logging(config: LogConfig) -> None:
     Args:
         config: Configuración de logging
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory(config)
 
 
@@ -257,18 +257,18 @@ def configure_from_file(config_path: str | Path) -> None:
     Args:
         config_path: Ruta al archivo de configuración
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory.from_file(config_path)
 
 
 def configure_from_environment() -> None:
     """Configura el sistema de logging desde variables de entorno"""
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory.from_environment()
 
 
 def reset_logging() -> None:
     """Resetea la configuración de logging (útil para tests)"""
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = None
     LoggerFactory.reset_instance()

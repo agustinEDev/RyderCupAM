@@ -12,7 +12,7 @@ Valida POST, PUT, PATCH, DELETE.
 Exime GET, HEAD, OPTIONS, rutas de health/docs.
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse

@@ -107,42 +107,38 @@ class Password:
         - V2.1.6: Complejidad (mayús + minús + número + símbolo)
         - V2.1.7: Blacklist de contraseñas comunes
         """
-        # 1. Validar tipo de dato
-        if not isinstance(password, str):
-            return "La contraseña debe ser un texto (string)"
-
-        # 2. Remover espacios leading/trailing (común en copy-paste)
+        # 1. Remover espacios leading/trailing (común en copy-paste)
         password_trimmed = password.strip()
         if password_trimmed != password:
             return "La contraseña no puede tener espacios al inicio o final"
 
-        # 3. Validar longitud mínima (OWASP: 12+ chars)
+        # 2. Validar longitud mínima (OWASP: 12+ chars)
         if len(password) < Password.MIN_LENGTH:
             return f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres (actualmente: {len(password)})"
 
-        # 4. Validar longitud máxima (límite técnico)
+        # 3. Validar longitud máxima (límite técnico)
         if len(password) > Password.MAX_LENGTH:
             return f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres (actualmente: {len(password)})"
 
-        # 5. Validar complejidad: al menos 1 mayúscula
+        # 4. Validar complejidad: al menos 1 mayúscula
         if not any(c.isupper() for c in password):
             return "La contraseña debe contener al menos una letra mayúscula (A-Z)"
 
-        # 6. Validar complejidad: al menos 1 minúscula
+        # 5. Validar complejidad: al menos 1 minúscula
         if not any(c.islower() for c in password):
             return "La contraseña debe contener al menos una letra minúscula (a-z)"
 
-        # 7. Validar complejidad: al menos 1 número
+        # 6. Validar complejidad: al menos 1 número
         if not any(c.isdigit() for c in password):
             return "La contraseña debe contener al menos un número (0-9)"
 
-        # 8. Validar complejidad: al menos 1 carácter especial
+        # 7. Validar complejidad: al menos 1 carácter especial
         # Caracteres especiales permitidos: !@#$%^&*()_+-=[]{}|;:,.<>?
         special_chars_pattern = r'[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]'
         if not re.search(special_chars_pattern, password):
             return "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)"
 
-        # 9. Validar contra blacklist de contraseñas comunes (OWASP V2.1.7)
+        # 8. Validar contra blacklist de contraseñas comunes (OWASP V2.1.7)
         if is_common_password(password):
             return "Esta contraseña es demasiado común y fácil de adivinar. Por favor, elige una contraseña más única"
 

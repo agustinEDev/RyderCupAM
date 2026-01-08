@@ -249,7 +249,7 @@ The Ryder Cup Friends Team
             .strip()
         )
 
-        subject = f"Resetea tu contraseña - Ryder Cup Friends | Reset your password"
+        subject = "Resetea tu contraseña - Ryder Cup Friends | Reset your password"
 
         text_body = f"""
 Hola {safe_user_name},
@@ -424,7 +424,7 @@ The Ryder Cup Friends Team
             .strip()
         )
 
-        subject = f"Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+        subject = "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
 
         text_body = f"""
 Hola {safe_user_name},

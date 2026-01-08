@@ -217,7 +217,7 @@ class LoginUserUseCase:
             access_token=access_token,
             refresh_token=refresh_token_jwt,
             csrf_token=csrf_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
             email_verification_required=not user.is_email_verified()
         )

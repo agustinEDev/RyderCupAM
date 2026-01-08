@@ -546,7 +546,7 @@ async def verify_email(
             access_token=access_token,
             refresh_token=refresh_token,
             csrf_token=csrf_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
             email_verification_required=False
         )
