@@ -1,133 +1,110 @@
-# ADR-022: RAG Chatbot para Asistente de Reglamento de Golf
+# ADR-022: RAG Chatbot for Golf Rules Assistant
 
-**Fecha**: 6 de diciembre de 2025
-**Estado**: Aceptado
-**Decisores**: Equipo de desarrollo
+**Date**: December 6, 2025
+**Status**: Accepted
+**Decision Makers**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-Los usuarios tienen dudas frecuentes sobre reglas de golf durante competiciones. Responder manualmente es ineficiente y escala mal. Se necesita un asistente automatizado que:
+Users have frequent questions about golf rules during competitions. Answering manually is inefficient and scales poorly. We need an automated assistant that:
 
-- Responda preguntas sobre reglas oficiales (R&A/USGA)
-- Explique formatos de juego (match play, foursome, fourball)
-- Aclare conceptos de hándicap (WHS)
-- Solo esté disponible durante competiciones activas (`IN_PROGRESS`)
-- Tenga costo operacional mínimo (~$1-2/mes)
+- Answers questions about official rules (R&A/USGA)
+- Explains game formats (match play, foursome, fourball)
+- Clarifies handicap concepts (WHS)
+- Only available during active competitions (`IN_PROGRESS`)
+- Has minimal operational cost (~$1-2/month)
 
-## Opciones Consideradas
+## Options Considered
 
-1. **FAQ estático** - Documento con preguntas frecuentes
-2. **Chatbot basado en reglas** - Árbol de decisiones predefinido
+1. **Static FAQ** - Document with frequent questions
+2. **Rule-based chatbot** - Predefined decision tree
 3. **RAG (Retrieval-Augmented Generation)** - LLM + vector database
-4. **Fine-tuning de modelo** - Modelo especializado en reglas de golf
+4. **Model fine-tuning** - Model specialized in golf rules
 
-## Decisión
+## Decision
 
-**Adoptamos RAG (Retrieval-Augmented Generation)** con el siguiente stack:
+**We adopt RAG (Retrieval-Augmented Generation)** with the following stack:
 
-- **Vector DB**: Pinecone Free (100K vectores)
+- **Vector DB**: Pinecone Free (100K vectors)
 - **Embeddings**: OpenAI text-embedding-3-small
 - **LLM**: OpenAI GPT-4o-mini
 - **Cache**: Redis Cloud Free (30MB)
-- **Integración**: Mismo backend FastAPI (no servicio separado)
+- **Integration**: Same FastAPI backend (not separate service)
 
-## Justificación
+## Justification
 
-### Ventajas de RAG:
+### RAG Advantages:
 
-1. **Costo mínimo**: $1-2/mes vs fine-tuning ($100-500/mes)
-2. **Respuestas contextuales**: Cita fuentes exactas del reglamento
-3. **Actualizable**: Añadir documentos sin reentrenar modelo
-4. **Arquitectura simple**: 3 capas (Domain, Application, Infrastructure)
-5. **Escalable**: Migrar a servicio separado si crece uso
+1. **Minimal cost**: $1-2/month vs fine-tuning ($100-500/month)
+2. **Contextual answers**: Cites exact sources from regulations
+3. **Updatable**: Add documents without retraining model
+4. **Simple architecture**: 3 layers (Domain, Application, Infrastructure)
+5. **Scalable**: Migrate to separate service if usage grows
 
-### Limitaciones controladas:
+### Controlled limitations:
 
-- **Rate limiting de 3 niveles**:
-  - Por minuto: 10 queries/min (anti-spam)
-  - Global: 10 queries/día por usuario
-  - Por competición: 3 (participante) / 6 (creador)
+- **3-tier rate limiting**:
+  - Per minute: 10 queries/min (anti-spam)
+  - Global: 10 queries/day per user
+  - Per competition: 3 (participant) / 6 (creator)
 
-- **Caché agresivo**: 80% de queries cacheadas (TTL 7 días)
-- **Pre-FAQs**: 20-30 preguntas hardcodeadas (0 costo)
+- **Aggressive cache**: 80% of queries cached (TTL 7 days)
+- **Pre-FAQs**: 20-30 hardcoded questions (0 cost)
 
-## Consecuencias
+## Consequences
 
-### Positivas
+### Positive
 
-- ✅ Reduce carga de soporte manual
-- ✅ Disponible 24/7 durante competiciones
-- ✅ Respuestas consistentes y verificables
-- ✅ Costo predecible y controlado ($1/mes garantizado)
-- ✅ Clean Architecture (testeable, mantenible)
+- ✅ Reduces manual support load
+- ✅ Available 24/7 during competitions
+- ✅ Consistent and verifiable answers
+- ✅ Predictable and controlled cost ($1/month guaranteed)
+- ✅ Clean Architecture (testable, maintainable)
 
-### Negativas
+### Negative
 
-- ⚠️ Depende de servicios externos (Pinecone, OpenAI)
-- ⚠️ Latencia 1-2 seg (vs FAQ instantáneo)
-- ⚠️ Requiere knowledge base bien curada (50 docs iniciales)
+- ⚠️ Depends on external services (Pinecone, OpenAI)
+- ⚠️ Latency 1-2 sec (vs instant FAQ)
+- ⚠️ Requires well-curated knowledge base (50 initial docs)
 
-### Riesgos mitigados
+### Mitigated risks
 
-- **Costo desbordado**: Límites diarios garantizan máximo $1/mes
-- **Baja calidad**: Temperatura 0.3 + caché → respuestas consistentes
-- **Abuso del sistema**: Rate limiting multi-nivel + requiere enrollment
-- **Memoria Render**: No modelos locales (todo vía API, <200MB RAM)
+- **Runaway cost**: Daily limits guarantee maximum $1/month
+- **Low quality**: Temperature 0.3 + cache → consistent answers
+- **System abuse**: Multi-level rate limiting + requires enrollment
+- **Render memory**: No local models (all via API, <200MB RAM)
 
-## Detalles de Implementación
+## Implementation Details
 
-### Reglas de negocio
+### Business Rules
 
-- Solo disponible si `competition.status == IN_PROGRESS`
-- Usuario debe estar `APPROVED` o ser creador
-- Respuestas cacheadas **SÍ** consumen cuota (previene abuso)
+- Only available if `competition.status == IN_PROGRESS`
+- User must be `APPROVED` or be creator
+- Cached responses **DO** consume quota (prevents abuse)
 
-### Arquitectura
+### Architecture
 
-```
-src/modules/ai/
-├── domain/           # Entities, VOs, Interfaces
-├── application/      # Use Cases, DTOs, Ports
-└── infrastructure/   # Pinecone, Redis, OpenAI, API
-```
+Clean Architecture with 3 layers (domain/application/infrastructure) implementing ports: `VectorRepositoryInterface` (knowledge base), `CacheServiceInterface` (Redis 7-day TTL), `DailyQuotaServiceInterface` (rate limiting), `LLMServiceInterface` (generation).
 
-### Ports principales
+### Cost projection
 
-- `VectorRepositoryInterface` - Búsqueda en knowledge base
-- `CacheServiceInterface` - Caché Redis (7 días TTL)
-- `DailyQuotaServiceInterface` - Rate limiting dual-layer
-- `LLMServiceInterface` - Generación de respuestas
+- 10 competitions × 20 participants × 50% usage = 345 queries/day
+- With 80% cache → 69 queries/day to OpenAI
+- **Real cost: ~$0.50/month**
 
-### Proyección de costos
+## Rejected Alternatives
 
-- 10 competiciones × 20 participantes × 50% uso = 345 queries/día
-- Con caché 80% → 69 queries/día a OpenAI
-- **Costo real: ~$0.50/mes**
+- **Static FAQ**: Free but not contextual, poor UX
+- **Rule-based chatbot**: $0 cost but inflexible, complex maintenance
+- **Fine-tuning**: Higher accuracy but costly ($100-500/month), requires retraining
 
-## Alternativas rechazadas
-
-### FAQ estático
-- ❌ No contextual (no entiende intención del usuario)
-- ❌ Difícil encontrar respuesta específica
-- ✅ Gratis pero mala UX
-
-### Chatbot basado en reglas
-- ❌ Mantenimiento complejo (árbol de decisiones crece)
-- ❌ No entiende lenguaje natural
-- ✅ Costo $0 pero inflexible
-
-### Fine-tuning
-- ❌ Costo alto ($100-500/mes)
-- ❌ Requiere reentrenar para actualizar
-- ✅ Mayor precisión pero innecesario para MVP
-
-## Referencias
+## References
 
 - [OpenAI Embeddings Pricing](https://openai.com/pricing)
 - [Pinecone Free Tier](https://www.pinecone.io/pricing/)
 - [Redis Cloud Free Tier](https://redis.com/try-free/)
-- ROADMAP.md - Sección "🤖 IA & RAG"
+- ROADMAP.md - Section "🤖 AI & RAG"
 
 ---
 
-**Próxima revisión**: Después de v1.11.0 (evaluación de métricas reales)
+**Next review**: After v1.11.0 (evaluation of real metrics)

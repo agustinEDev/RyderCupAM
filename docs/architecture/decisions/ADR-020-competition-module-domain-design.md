@@ -1,46 +1,46 @@
 # ADR-020: Competition Module - Domain Design
 
-**Fecha**: 17 de noviembre de 2025
-**Estado**: Aceptado
-**Decisores**: Equipo de desarrollo
+**Date**: November 17, 2025
+**Status**: Accepted
+**Decision Makers**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-Necesitamos implementar el módulo de Competition para gestionar torneos formato Ryder Cup, incluyendo:
-- Ciclo de vida completo del torneo (estados)
-- Sistema de inscripciones (solicitudes, invitaciones, aprobaciones)
-- Configuración de hándicaps
-- Soporte para ubicaciones multipaís con multilenguaje
+We need to implement the Competition module to manage Ryder Cup format tournaments, including:
+- Complete tournament lifecycle (states)
+- Enrollment system (requests, invitations, approvals)
+- Handicap configuration
+- Multi-country location support with multilanguage
 
-### Decisiones Críticas:
-1. ¿Dónde calcular hándicaps? (Competition vs Match)
-2. ¿Cómo distinguir cancelaciones de jugador vs rechazos de creador?
-3. ¿Cómo validar países adyacentes?
+### Critical Decisions:
+1. Where to calculate handicaps? (Competition vs Match)
+2. How to distinguish player cancellations vs creator rejections?
+3. How to validate adjacent countries?
 
-## Opciones Consideradas
+## Options Considered
 
-1. **HandicapSettings**: Cálculo completo vs solo política
-2. **Estados de Enrollment**: 4 estados básicos vs 6 estados con CANCELLED
-3. **Country Management**: Submódulo completo vs shared domain pragmático
+1. **HandicapSettings**: Complete calculation vs policy only
+2. **Enrollment States**: 4 basic states vs 6 states with CANCELLED
+3. **Country Management**: Complete submodule vs pragmatic shared domain
 
-## Decisión
+## Decision
 
-### Agregados Principales
+### Main Aggregates
 
 **Competition (Aggregate Root)**
-- Estados: `DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED/CANCELLED`
-- Factory: `Competition.create()` emite `CompetitionCreatedEvent`
+- States: `DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED/CANCELLED`
+- Factory: `Competition.create()` emits `CompetitionCreatedEvent`
 
-**Enrollment (Aggregate Secundario)**
-- Estados: `REQUESTED/INVITED → APPROVED/REJECTED/CANCELLED → WITHDRAWN`
-- Agregamos **CANCELLED** para distinguir acciones de jugador vs creador:
-  - **CANCELLED**: Jugador cancela solicitud o declina invitación
-  - **REJECTED**: Creador rechaza solicitud
-  - **WITHDRAWN**: Jugador se retira después de estar aprobado
+**Enrollment (Secondary Aggregate)**
+- States: `REQUESTED/INVITED → APPROVED/REJECTED/CANCELLED → WITHDRAWN`
+- We added **CANCELLED** to distinguish player actions vs creator:
+  - **CANCELLED**: Player cancels request or declines invitation
+  - **REJECTED**: Creator rejects request
+  - **WITHDRAWN**: Player withdraws after being approved
 
-### HandicapSettings: Solo Política
+### HandicapSettings: Policy Only
 
-**Decisión**: Almacenar solo tipo (SCRATCH/PERCENTAGE) y porcentaje (90/95/100).
+**Decision**: Store only type (SCRATCH/PERCENTAGE) and percentage (90/95/100).
 
 ```python
 @dataclass(frozen=True)
@@ -49,11 +49,11 @@ class HandicapSettings:
     percentage: Optional[int]  # 90, 95, 100
 ```
 
-**Razón**: Cálculo completo de World Handicap System (Course Rating, Slope Rating) requiere datos específicos del campo y partida. Este cálculo se moverá a la futura entidad **Match**.
+**Reason**: Complete World Handicap System calculation (Course Rating, Slope Rating) requires field-specific and round data. This calculation will move to the future **Match** entity.
 
 ### Country Management: Shared Domain
 
-**Decisión**: Country entity en shared con multilenguaje simple.
+**Decision**: Country entity in shared with simple multilanguage.
 
 ```python
 @dataclass
@@ -64,44 +64,44 @@ class Country:
     active: bool = True
 ```
 
-**Validación de adyacencia**: En Use Case layer (no en VO) consultando ICountryRepository.
+**Adjacency validation**: In Use Case layer (not in VO) by querying ICountryRepository.
 
 ### Domain Events (11 total)
 
 **Competition (7)**: Created, Activated, EnrollmentsClosed, Started, Completed, Cancelled, Updated
 **Enrollment (4)**: Requested, Approved, Cancelled, Withdrawn
 
-## Consecuencias
+## Consequences
 
-### Positivas ✅
-- Semántica clara entre CANCELLED/REJECTED/WITHDRAWN para auditoría
-- HandicapSettings simple permite agregar cálculo completo en Match sin refactorizar
-- Multilenguaje pragmático (columnas name_en, name_es)
-- Clean Architecture: Validación con repositorio en Use Case, VOs puros
+### Positive ✅
+- Clear semantics between CANCELLED/REJECTED/WITHDRAWN for auditing
+- Simple HandicapSettings allows adding complete calculation in Match without refactoring
+- Pragmatic multilanguage (name_en, name_es columns)
+- Clean Architecture: Validation with repository in Use Case, pure VOs
 
-### Negativas ⚠️
-- Lógica de hándicap en dos lugares (Competition policy + Match calculation)
-- Agregar idiomas requiere migración (vs tabla separada)
+### Negative ⚠️
+- Handicap logic in two places (Competition policy + Match calculation)
+- Adding languages requires migration (vs separate table)
 
-## Implementación
+## Implementation
 
-**Fase 1: Domain Layer** ✅ Completado (17 Nov 2025)
-- 2 entidades con máquinas de estado
+**Phase 1: Domain Layer** ✅ Completed (Nov 17, 2025)
+- 2 entities with state machines
 - 9 Value Objects
 - 11 Domain Events
-- 38 tests unitarios (100% cobertura)
+- 38 unit tests (100% coverage)
 
-**Fase 2: Application Layer** 🚧 Pendiente
-- Use Cases y DTOs
+**Phase 2: Application Layer** 🚧 Pending
+- Use Cases and DTOs
 - ICompetitionRepository, IEnrollmentRepository, ICountryRepository
 
-**Fase 3: Infrastructure** ⏳ Pendiente
+**Phase 3: Infrastructure** ⏳ Pending
 - SQLAlchemy repositories
-- Migraciones: competitions, enrollments, countries, country_adjacencies
-- Endpoints REST API
+- Migrations: competitions, enrollments, countries, country_adjacencies
+- REST API endpoints
 
-## Referencias
+## References
 
-- **CLAUDE.md**: Sección Competition Module
+- **CLAUDE.md**: Competition Module Section
 - **CHANGELOG.md**: v1.3.0
 - **Tests**: `tests/unit/modules/competition/domain/`

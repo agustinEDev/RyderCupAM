@@ -336,6 +336,6 @@ Este documento puede **ELIMINARSE** cuando:
 
 ---
 
-**Última actualización:** 6 Diciembre 2025
-**Responsable:** Backend Team
-**Status:** Temporal - Eliminar al completar v1.11.0
+**Last Updated:** 8 January 2026
+**Responsible:** Backend Team
+**Status:** Temporary - Delete upon completing v1.11.0

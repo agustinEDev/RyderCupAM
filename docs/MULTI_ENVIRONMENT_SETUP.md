@@ -348,5 +348,5 @@ uvicorn main:app --reload --port 8001
 
 ---
 
-**Última actualización**: 5 Diciembre 2025
-**Autor**: Agustín Estévez
+**Last Updated**: 8 January 2026
+**Author**: Agustín Estévez

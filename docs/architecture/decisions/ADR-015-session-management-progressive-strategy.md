@@ -1,76 +1,76 @@
 # ADR-015: Session Management Strategy - Progressive Implementation
 
-**Estado**: ✅ Aceptado
-**Fecha**: 9 Nov 2025
+**Status**: ✅ Accepted
+**Date**: Nov 9, 2025
 
 ---
 
-## Contexto
+## Context
 
-Necesitamos definir la estrategia de logout para tokens JWT: **invalidación inmediata vs. expiración natural**.
+We need to define the logout strategy for JWT tokens: **immediate invalidation vs. natural expiration**.
 
-**Alternativas**:
-1. **Token Blacklist**: Invalidación inmediata real (alta complejidad)
-2. **Client-side Logout**: Token válido hasta expiración (baja complejidad) 
-3. **Progressive Approach**: Implementación en fases
-
----
-
-## Decisión
-
-**Implementación progresiva en 2 fases** para balancear time-to-market y seguridad.
-
-### Fase 1: Logout Simple (IMPLEMENTADO)
-- **Enfoque**: Cliente elimina token localmente
-- **Servidor**: Solo auditoría con `UserLoggedOutEvent`
-- **Limitación**: Token técnicamente válido hasta expiración (24h)
-- **Beneficio**: Logout funcional inmediato, arquitectura preparada
-
-### Fase 2: Token Blacklist (FUTURO)
-- **Enfoque**: Invalidación inmediata con blacklist persistente
-- **Componentes**: `TokenBlacklistService`, middleware update
-- **Trigger**: Cuando tengamos >1000 usuarios o requerimientos enterprise
+**Alternatives**:
+1. **Token Blacklist**: Real immediate invalidation (high complexity)
+2. **Client-side Logout**: Token valid until expiration (low complexity) 
+3. **Progressive Approach**: Phased implementation
 
 ---
 
-## Justificación
+## Decision
 
-**¿Por qué no blacklist inmediata?**
-- Complejidad innecesaria para MVP
-- 99% casos cubiertos con Fase 1
-- Validación real de necesidades antes de over-engineering
+**Progressive implementation in 2 phases** to balance time-to-market and security.
 
-**¿Por qué implementación progresiva?**
-- Time-to-market inmediato
-- Arquitectura extensible sin desperdicio
-- Risk mitigation incremental
+### Phase 1: Simple Logout (IMPLEMENTED)
+- **Approach**: Client deletes token locally
+- **Server**: Only auditing with `UserLoggedOutEvent`
+- **Limitation**: Token technically valid until expiration (24h)
+- **Benefit**: Immediate functional logout, architecture prepared
 
----
-
-## Consecuencias
-
-### Positivas
-- ✅ Logout funcional inmediato
-- ✅ Arquitectura preparada para evolución
-- ✅ Balance óptimo complejidad/beneficio
-
-### Negativas  
-- ⚠️ Gap de seguridad temporal (tokens válidos post-logout)
-- ⚠️ Requiere planificación de Fase 2
+### Phase 2: Token Blacklist (FUTURE)
+- **Approach**: Immediate invalidation with persistent blacklist
+- **Components**: `TokenBlacklistService`, middleware update
+- **Trigger**: When we have >1000 users or enterprise requirements
 
 ---
 
-## Criterios de Migración a Fase 2
+## Justification
 
-Migrar cuando se cumpla **cualquiera**:
-- Incidentes de seguridad reportados
-- Demanda de "logout all devices"
-- Requerimientos de compliance
-- +1000 usuarios activos
+**Why not immediate blacklist?**
+- Unnecessary complexity for MVP
+- 99% cases covered with Phase 1
+- Real validation of needs before over-engineering
+
+**Why progressive implementation?**
+- Immediate time-to-market
+- Extensible architecture without waste
+- Incremental risk mitigation
 
 ---
 
-## Referencias
+## Consequences
+
+### Positive
+- ✅ Immediate functional logout
+- ✅ Architecture prepared for evolution
+- ✅ Optimal complexity/benefit balance
+
+### Negative  
+- ⚠️ Temporary security gap (valid tokens post-logout)
+- ⚠️ Requires Phase 2 planning
+
+---
+
+## Migration Criteria to Phase 2
+
+Migrate when **any** is met:
+- Reported security incidents
+- Demand for "logout all devices"
+- Compliance requirements
+- +1000 active users
+
+---
+
+## References
 
 - [ADR-007: Domain Events Pattern](./ADR-007-domain-events-pattern.md)
 - [ADR-006: Unit of Work Pattern](./ADR-006-unit-of-work-pattern.md)

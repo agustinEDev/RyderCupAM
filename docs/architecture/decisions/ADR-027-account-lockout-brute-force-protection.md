@@ -1,106 +1,106 @@
 # ADR-027: Account Lockout - Brute Force Protection
 
-**Fecha**: 7 de enero de 2026
-**Estado**: Aceptado
-**Decisores**: Equipo de desarrollo
+**Date**: January 7, 2026
+**Status**: Accepted
+**Deciders**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-El sistema necesita protección contra ataques de fuerza bruta en el login. Debe cumplir con OWASP A07 (Authentication Failures) sin afectar usabilidad de usuarios legítimos.
+The system needs protection against brute force attacks on login. Must comply with OWASP A07 (Authentication Failures) without affecting legitimate user experience.
 
-## Opciones Consideradas
+## Options Considered
 
-1. **CAPTCHA después de N intentos**: Fricción, accesibilidad
-2. **Solo Rate Limiting por IP**: Bypasseable con proxies
-3. **Account Lockout permanente**: DoS risk, mala UX
-4. **Account Lockout temporal + auto-desbloqueo**: Balance seguridad-usabilidad
+1. **CAPTCHA after N attempts**: Friction, accessibility issues
+2. **IP-based Rate Limiting only**: Bypassable with proxies
+3. **Permanent Account Lockout**: DoS risk, poor UX
+4. **Temporary Account Lockout + Auto-unlock**: Balance security-usability
 
-## Decisión
+## Decision
 
-**Adoptamos Account Lockout Temporal con Auto-Desbloqueo** (Opción 4):
+**Adopt Temporary Account Lockout with Auto-Unlock** (Option 4):
 
 ```
 Flow:
-├── Intentos 1-9: HTTP 401 (registro de fallos)
-├── Intento 10: HTTP 423 Locked (bloqueo 30 min)
-├── Durante bloqueo: HTTP 423 incluso con password correcta
-└── Tras 30 min: Auto-desbloqueo + reset contador en login exitoso
+├── Attempts 1-9: HTTP 401 (failure logging)
+├── Attempt 10: HTTP 423 Locked (30 min lockout)
+├── During lockout: HTTP 423 even with correct password
+└── After 30 min: Auto-unlock + counter reset on successful login
 ```
 
-### Parámetros:
+### Parameters:
 - `MAX_FAILED_ATTEMPTS = 10`
 - `LOCKOUT_DURATION_MINUTES = 30`
 
-### Arquitectura:
-- **Domain**: 4 métodos User entity + 2 eventos (AccountLocked/Unlocked)
-- **Application**: Login modificado + UnlockAccountUseCase + 2 DTOs
-- **Infrastructure**: Migration (2 campos + índice)
-- **API**: POST /unlock-account (pendiente rol Admin v2.1.0)
+### Architecture:
+- **Domain**: 4 User entity methods + 2 events (AccountLocked/Unlocked)
+- **Application**: Modified Login + UnlockAccountUseCase + 2 DTOs
+- **Infrastructure**: Migration (2 fields + index)
+- **API**: POST /unlock-account (pending Admin role v2.1.0)
 
-## Justificación
+## Rationale
 
 ### Security Features:
-1. **Brute Force Prevention (A07)**: 10 intentos máximos
-2. **Auto-Recovery**: Desbloqueo tras 30 min (no requiere admin)
-3. **Persistence**: Estado en BD (no memoria)
+1. **Brute Force Prevention (A07)**: 10 attempts max
+2. **Auto-Recovery**: Unlock after 30 min (no admin required)
+3. **Persistence**: State in database (not memory)
 4. **Dual Check**: Pre-password + post-password verification
-5. **HTTP 423**: Semánticamente correcto para lockout
+5. **HTTP 423**: Semantically correct for lockout
 
-### Decisiones Técnicas:
+### Technical Decisions:
 
-**Integración en User Entity** (vs LoginAttempt separado):
-- Cohesión: Estado pertenece al User
+**Integration in User Entity** (vs separate LoginAttempt):
+- Cohesion: State belongs to User
 - Performance: 1 query vs JOIN
 
 **Naive Datetimes** (vs timezone-aware):
-- Consistencia con codebase (85% usa naive)
-- Migración global pendiente v1.14.0
+- Consistency with codebase (85% uses naive)
+- Global migration pending v1.14.0
 
 **Dual Check Pattern**:
 ```python
 # Pre-check
 if user.is_locked(): raise AccountLockedException
 
-# Post-check (tras record_failed_login)
-if user.is_locked(): raise AccountLockedException  # Intento 10
+# Post-check (after record_failed_login)
+if user.is_locked(): raise AccountLockedException  # Attempt 10
 ```
 
-## Consecuencias
+## Consequences
 
-### Positivas:
-- ✅ Mitigación efectiva fuerza bruta (A07)
-- ✅ 5/5 tests integración pasando
-- ✅ Compatible con rate limiting (defensa en profundidad)
-- ✅ Mínimo impacto usuarios legítimos
+### Positive:
+- ✅ Effective brute force mitigation (A07)
+- ✅ 5/5 integration tests passing
+- ✅ Compatible with rate limiting (defense in depth)
+- ✅ Minimal impact on legitimate users
 
-### Negativas:
-- ❌ Posible DoS (atacante bloquea cuentas)
-- ❌ Timezone naive (trade-off temporal)
+### Negative:
+- ❌ Possible DoS (attacker locks accounts)
+- ❌ Timezone naive (temporary trade-off)
 
-### Riesgos Mitigados:
+### Risks Mitigated:
 - Credential stuffing, dictionary attacks, automated brute force
 
-## Validación
+## Validation
 
-- [x] Tests completos (5/5 passing - 100%)
-- [x] HTTP 423 al alcanzar 10 intentos
-- [x] Auto-desbloqueo funcional
-- [x] Counter reset tras login exitoso
-- [x] Persistencia BD verificada
+- [x] Complete tests (5/5 passing - 100%)
+- [x] HTTP 423 at 10 attempts
+- [x] Auto-unlock functional
+- [x] Counter reset after successful login
+- [x] Database persistence verified
 
-## Referencias
+## References
 
 - [OWASP A07:2021](https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/)
 - [OWASP Auth Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#account-lockout)
 
-## Notas de Implementación
+## Implementation Notes
 
-### Implementado (7 Ene 2026):
+### Implemented (Jan 7, 2026):
 - ✅ 3 commits (domain/app/infra + API/tests + fixes)
-- ✅ 2 Domain Events + 1 excepción
-- ✅ 1 migración BD + 5 tests integración
+- ✅ 2 Domain Events + 1 exception
+- ✅ 1 DB migration + 5 integration tests
 
-### Lecciones Aprendidas:
-- **Dual Check**: Evita retornar 401 cuando debe ser 423 en intento 10
-- **Test Strategy**: `X-Test-Client-ID` header bypassa rate limiting sin modificar producción
-- **Timezone Trade-off**: Consistencia > safety (refactor global pendiente)
+### Lessons Learned:
+- **Dual Check**: Avoids returning 401 when should be 423 on attempt 10
+- **Test Strategy**: `X-Test-Client-ID` header bypasses rate limiting without modifying production
+- **Timezone Trade-off**: Consistency > safety (global refactor pending)

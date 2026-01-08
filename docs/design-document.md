@@ -1,28 +1,28 @@
 # Design Document - Ryder Cup Manager
 
-**v3.0** · 30 Nov 2025 · Fase 2 Completa
+**v1.13.0** · 8 January 2026 · Phase 2 Complete
 
 ---
 
-## Resumen
+## Summary
 
-Sistema de torneos de golf amateur formato Ryder Cup.
+Amateur golf tournament system in Ryder Cup format.
 
 **Stack**: Python 3.11-3.12, FastAPI, PostgreSQL, Clean Architecture + DDD
 
 **Features**:
 - ✅ User management + JWT auth
-- ✅ Email verification (Mailgun, UUID tokens, bilingüe)
+- ✅ Email verification (Mailgun, UUID tokens, bilingual)
 - ✅ Handicap system (RFEG integration)
-- ✅ Competition Module (torneos formato Ryder Cup)
+- ✅ Competition Module (Ryder Cup format tournaments)
 - ✅ CI/CD Pipeline (GitHub Actions)
-- ⏳ Real-time scoring (planeado)
+- ⏳ Real-time scoring (planned)
 
 ---
 
-## Arquitectura
+## Architecture
 
-### Clean Architecture (3 capas)
+### Clean Architecture (3 Layers)
 
 ```
 Infrastructure (FastAPI, SQLAlchemy, RFEG)
@@ -32,15 +32,15 @@ Application (Use Cases, DTOs, Handlers)
 Domain (Entities, VOs, Events, Repos)
 ```
 
-**Regla**: Dependencias hacia adentro.
+**Rule**: Dependencies point inward.
 
-**Patrones**: Repository, UoW, Domain Events, Value Objects, External Services.
+**Patterns**: Repository, UoW, Domain Events, Value Objects, External Services.
 
 > ADRs: [001](architecture/decisions/ADR-001-clean-architecture.md), [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
 ---
 
-## Módulos
+## Modules
 
 ### User Management
 
@@ -50,24 +50,24 @@ Domain (Entities, VOs, Events, Repos)
 - Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`
 - Repos: `UserRepositoryInterface`
 - Services: `HandicapService` (interface)
-- Email Verification: Campo `email_verified`, `verification_token`, evento `EmailVerifiedEvent`
+- Email Verification: Fields `email_verified`, `verification_token`, event `EmailVerifiedEvent`
 
 **Application**:
 - Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
 - DTOs: Request/Response
 - Handlers: `UserRegisteredEventHandler`
-- Email Verification: `VerifyEmailUseCase`, integración en registro
+- Email Verification: `VerifyEmailUseCase`, integrated in registration
 
 **Infrastructure**:
 - Routes: `/auth/*`, `/handicaps/*`, `/users/*`
 - Repos: `SQLAlchemyUserRepository`
 - External: `RFEGHandicapService`, `MockHandicapService`
-- Email Verification: Servicio `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
+- Email Verification: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 **Email Verification**:
-- Domain: Campo `email_verified`, `verification_token`, evento `EmailVerifiedEvent`
-- Application: Use case `VerifyEmailUseCase`, integración en registro
-- Infrastructure: Servicio `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
+- Domain: Fields `email_verified`, `verification_token`, event `EmailVerifiedEvent`
+- Application: Use case `VerifyEmailUseCase`, integrated in registration
+- Infrastructure: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 > ADRs: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
@@ -86,32 +86,32 @@ Domain (Entities, VOs, Events, Repos)
 **Infrastructure**:
 - Routes: `/competitions/*`, `/enrollments/*`, `/countries/*`
 - Repos: `SQLAlchemyCompetitionRepository`, `SQLAlchemyEnrollmentRepository`, `SQLAlchemyCountryRepository`
-- Database: Migraciones Alembic (competitions, enrollments, countries, country_adjacencies)
-- Seed Data: 166 países + 614 relaciones de fronteras
+- Database: Alembic migrations (competitions, enrollments, countries, country_adjacencies)
+- Seed Data: 166 countries + 614 border relations
 
 **Features**:
-- Gestión completa de torneos (CRUD + state machine)
-- Sistema de inscripciones (solicitudes, invitaciones, aprobaciones)
-- Soporte multi-país (hasta 3 países adyacentes)
-- Custom handicaps por enrollment
-- 20 endpoints REST API
+- Complete tournament management (CRUD + state machine)
+- Enrollment system (requests, invitations, approvals)
+- Multi-country support (up to 3 adjacent countries)
+- Custom handicaps per enrollment
+- 20 REST API endpoints
 
 > ADR: [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 
-## Modelos de Datos
+## Data Models
 
 ### User Entity
 
 ```python
 User:
     id: UserId (UUID)
-    email: Email (validado, normalizado)
+    email: Email (validated, normalized)
     password: Password (bcrypt, rounds=12)
     first_name: str
     last_name: str
-    handicap: float? (-10.0 a 54.0)
+    handicap: float? (-10.0 to 54.0)
     handicap_updated_at: datetime?
     created_at: datetime
     updated_at: datetime
@@ -141,9 +141,9 @@ CREATE INDEX idx_users_email ON users(email);
 
 ---
 
-## Flujos de Negocio
+## Business Flows
 
-### 1. Registro Usuario
+### 1. User Registration
 
 ```
 Client → API → UseCase → User.create() → UoW.save() → commit()
@@ -151,11 +151,11 @@ Client → API → UseCase → User.create() → UoW.save() → commit()
                                        EventBus → Handlers
 ```
 
-1. Validar email no existe
-2. `User.create()` genera `UserRegisteredEvent`
-3. UoW guarda + commit
-4. Eventos publicados
-5. Handlers procesan (email, audit)
+1. Validate email does not exist
+2. `User.create()` generates `UserRegisteredEvent`
+3. UoW saves + commits
+4. Events published
+5. Handlers process (email, audit)
 
 > ADR: [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
@@ -169,29 +169,29 @@ API → UseCase → HandicapService.search(name) → RFEG
                   UoW.commit()
 ```
 
-1. Buscar usuario
-2. Consultar RFEG con nombre completo
-3. Actualizar + emitir evento
-4. Commit publica evento
+1. Find user
+2. Query RFEG with full name
+3. Update + emit event
+4. Commit publishes event
 
-**Fallback**: Si RFEG falla, usar `manual_handicap` (opcional)
+**Fallback**: If RFEG fails, use `manual_handicap` (optional)
 
-**Error Handling**: Si jugador no encontrado en RFEG y no hay `manual_handicap`, lanzar `HandicapNotFoundError` (404)
+**Error Handling**: If player not found in RFEG and no `manual_handicap`, throw `HandicapNotFoundError` (404)
 
 > ADR: [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md)
 
 ---
 
-## Integraciones Externas
+## External Integrations
 
-### RFEG (Real Federación Española de Golf)
+### RFEG (Royal Spanish Golf Federation)
 
-**Tipo**: Web scraping (no API pública)
-**Flujo**: Extraer token → Buscar por nombre → Parsear JSON
+**Type**: Web scraping (no public API)
+**Flow**: Extract token → Search by name → Parse JSON
 **Timeout**: 10s
-**Errors**: Log + retornar None
+**Errors**: Log + return None
 
-**Implementación**:
+**Implementation**:
 - Interface: `HandicapService` (domain)
 - Impl: `RFEGHandicapService` (infra)
 - Mock: `MockHandicapService` (tests)
@@ -200,17 +200,17 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ---
 
-## Seguridad
+## Security
 
-### Autenticación
+### Authentication
 
-**JWT**: HS256, exp 60min, secret en env
+**JWT**: HS256, exp 60min, secret in env
 **Password**: bcrypt, rounds=12 (prod), rounds=4 (test)
 
-### Validación
+### Validation
 
-1. Pydantic (API): tipos y formatos
-2. Value Objects (Domain): reglas de negocio
+1. Pydantic (API): types and formats
+2. Value Objects (Domain): business rules
 3. Database: constraints (UNIQUE, NOT NULL)
 
 > ADR: [004](architecture/decisions/ADR-004-tech-stack.md)
@@ -220,28 +220,28 @@ API → UseCase → HandicapService.search(name) → RFEG
 ## API Endpoints
 
 ### Auth
-- `POST /api/v1/auth/register` - Registro de usuario
-- `POST /api/v1/auth/login` - Autenticación JWT + UserLoggedInEvent
-- `POST /api/v1/auth/logout` - Logout con auditoría + UserLoggedOutEvent
-- `POST /api/v1/auth/verify-email` - Verificación de email (token por correo)
+- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/login` - JWT authentication + UserLoggedInEvent
+- `POST /api/v1/auth/logout` - Logout with audit + UserLoggedOutEvent
+- `POST /api/v1/auth/verify-email` - Email verification (token via email)
 
 ### Handicaps
 - `POST /api/v1/handicaps/update` - RFEG lookup + fallback
-- `POST /api/v1/handicaps/update-manual` - Manual directo
+- `POST /api/v1/handicaps/update-manual` - Direct manual update
 - `POST /api/v1/handicaps/update-multiple` - Batch update
 
 ### Users
-- `GET /api/v1/users/search` - Buscar por email o nombre
-- `PATCH /api/v1/users/profile` - Actualizar nombre/apellido (sin password)
-- `PATCH /api/v1/users/security` - Actualizar email/password (con password)
+- `GET /api/v1/users/search` - Search by email or name
+- `PATCH /api/v1/users/profile` - Update name/surname (no password)
+- `PATCH /api/v1/users/security` - Update email/password (with password verification)
 
-> Detalle: [API.md](API.md)
+> Details: [API.md](API.md)
 
 ---
 
 ## Testing
 
-**Estrategia**: Test Pyramid (89% unit, 11% integration)
+**Strategy**: Test Pyramid (89% unit, 11% integration)
 
 ```
 672 tests (100% passing)
@@ -255,12 +255,12 @@ API → UseCase → HandicapService.search(name) → RFEG
     └── Domain Events: ~12 tests
 ```
 
-**Cobertura**: >90% en lógica de negocio
-**Email Verification**: 100% (24 tests en 3 niveles)
-**Competition Module**: 97.6% (174 tests completos)
-**Performance**: ~30s (paralelización con pytest-xdist)
+**Coverage**: >90% in business logic
+**Email Verification**: 100% (24 tests across 3 layers)
+**Competition Module**: 97.6% (174 comprehensive tests)
+**Performance**: ~30s (parallelized with pytest-xdist)
 
-**CI/CD**: Tests ejecutados automáticamente en GitHub Actions (Python 3.11, 3.12)
+**CI/CD**: Tests run automatically on GitHub Actions (Python 3.11, 3.12)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
@@ -270,7 +270,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Platform**: GitHub Actions
 
-**Jobs (7 paralelos)**:
+**Jobs (7 parallel)**:
 1. Preparation (Python 3.11/3.12 setup + cache)
 2. Unit Tests (matrix Python 3.11, 3.12)
 3. Integration Tests (PostgreSQL service container)
@@ -279,91 +279,89 @@ API → UseCase → HandicapService.search(name) → RFEG
 6. Type Checking (Mypy)
 7. Database Migrations (Alembic validation)
 
-**Execution Time**: ~3 minutos
+**Execution Time**: ~3 minutes
 **Trigger**: Push, Pull Request
 **Matrix**: Python 3.11, 3.12
 
 **Configurations**:
-- Mypy: Configuración pragmática para SQLAlchemy imperative mapping
-- Gitleaks: Whitelist para false positives en docs
-- PostgreSQL: Service container para integration tests
-- Caché: pip dependencies
+- Mypy: Pragmatic configuration for SQLAlchemy imperative mapping
+- Gitleaks: Whitelist for false positives in docs
+- PostgreSQL: Service container for integration tests
+- Cache: pip dependencies
 
 > ADR: [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
 ---
 
-## Referencias ADRs
+## ADR References
 
-**Fundación**: [001](architecture/decisions/ADR-001-clean-architecture.md), [004](architecture/decisions/ADR-004-tech-stack.md)
+**Foundation**: [001](architecture/decisions/ADR-001-clean-architecture.md), [004](architecture/decisions/ADR-004-tech-stack.md)
 
-**Patrones**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
+**Patterns**: [002](architecture/decisions/ADR-002-value-objects.md), [005](architecture/decisions/ADR-005-repository-pattern.md), [006](architecture/decisions/ADR-006-unit-of-work-pattern.md), [007](architecture/decisions/ADR-007-domain-events-pattern.md)
 
-**Infra**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
+**Infrastructure**: [009](architecture/decisions/ADR-009-docker-for-development-environment.md), [010](architecture/decisions/ADR-010-alembic-for-database-migrations.md), [021](architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.md)
 
 **Features**: [011](architecture/decisions/ADR-011-application-layer-use-cases.md), [012](architecture/decisions/ADR-012-composition-root.md), [013](architecture/decisions/ADR-013-external-services-pattern.md), [014](architecture/decisions/ADR-014-handicap-management-system.md), [015](architecture/decisions/ADR-015-session-management-progressive-strategy.md), [020](architecture/decisions/ADR-020-competition-module-domain-design.md)
 
 ---
 
-## 📊 Métricas del Proyecto
+## 📊 Project Metrics
 
-**Última actualización**: 30 Nov 2025
+**Last Updated**: 8 January 2026
 
 ### Testing
 
-| Métrica | Valor |
-|---------|-------|
-| Tests totales | 672 (100% passing) |
-| Tests unitarios | 595+ tests |
-| Tests integración | 72+ tests |
-| Cobertura | >90% |
+| Metric | Value |
+|--------|-------|
+| Total tests | 672 (100% passing) |
+| Unit tests | 595+ tests |
+| Integration tests | 72+ tests |
+| Coverage | >90% |
 | Email Verification | 100% (24 tests) |
 | Competition Module | 97.6% (174 tests) |
-| Tiempo ejecución | ~30s (paralelo) |
+| Execution time | ~30s (parallel) |
 | CI/CD Pipeline | ~3 min (7 jobs) |
 
-### Progreso de Módulos
+### Module Progress
 
-| Módulo | Estado | Tests | Endpoints |
+| Module | Status | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Completo + Auth + Email | 308+ | 10 |
-| Competition | ✅ Completo + Enrollments | 174 | 20 |
+| User | ✅ Complete + Auth + Email | 308+ | 10 |
+| Competition | ✅ Complete + Enrollments | 174 | 20 |
 | CI/CD | ✅ GitHub Actions | - | - |
-| Real-time Scoring | ⏳ Pendiente | 0 | 0 |
+| Real-time Scoring | ⏳ Pending | 0 | 0 |
 
-### Value Objects Implementados (69 tests)
+### Implemented Value Objects (69 tests)
 
-- **UserId** (12 tests) - Identificador UUID único
-- **Email** (14 tests) - Email validado y normalizado
-- **Password** (23 tests) - Contraseña bcrypt hasheada
-- **Handicap** (20 tests) - Rango -10.0 a 54.0 (RFEG/EGA)
+- **UserId** (12 tests) - Unique UUID identifier
+- **Email** (14 tests) - Validated and normalized email
+- **Password** (23 tests) - Bcrypt hashed password
+- **Handicap** (20 tests) - Range -10.0 to 54.0 (RFEG/EGA)
 
-### Domain Events Implementados (59 tests)
+### Implemented Domain Events (59 tests)
 
-- **UserRegisteredEvent** (9 tests) - Usuario registrado
-- **HandicapUpdatedEvent** (16 tests) - Handicap actualizado con delta
-- **UserLoggedOutEvent** (7 tests) - Usuario cerró sesión (auditoría)
-- **UserLoggedInEvent** (7 tests) - Usuario inició sesión (auditoría completa)
-- **UserProfileUpdatedEvent** (7 tests) - Perfil de usuario actualizado
-- **UserEmailChangedEvent** (7 tests) - Email cambiado
-- **UserPasswordChangedEvent** (6 tests) - Password cambiado
+- **UserRegisteredEvent** (9 tests) - User registered
+- **HandicapUpdatedEvent** (16 tests) - Handicap updated with delta
+- **UserLoggedOutEvent** (7 tests) - User logged out (audit)
+- **UserLoggedInEvent** (7 tests) - User logged in (complete audit)
+- **UserProfileUpdatedEvent** (7 tests) - User profile updated
+- **UserEmailChangedEvent** (7 tests) - Email changed
+- **UserPasswordChangedEvent** (6 tests) - Password changed
 
-### Use Cases Implementados (68 tests)
+### Implemented Use Cases (68 tests)
 
 **User Module (9 use cases)**:
-- `RegisterUserUseCase` (5 tests) - Registro de usuario
-- `LoginUserUseCase` (5 tests) - Autenticación JWT + eventos
-- `LogoutUserUseCase` (5 tests) - Logout con auditoría completa
-- `UpdateProfileUseCase` (7 tests) - Actualización de nombre/apellido sin password
-- `UpdateSecurityUseCase` (9 tests) - Actualización de email/password con verificación
-- `UpdateUserHandicapUseCase` (10 tests) - Actualización desde RFEG con fallback
-- `UpdateUserHandicapManuallyUseCase` (6 tests) - Actualización manual directa
-- `UpdateMultipleHandicapsUseCase` - Batch update con estadísticas
-- `FindUserUseCase` (10 tests) - Búsqueda por email o nombre
+- `RegisterUserUseCase` (5 tests) - User registration
+- `LoginUserUseCase` (5 tests) - JWT authentication + events
+- `LogoutUserUseCase` (5 tests) - Logout with complete audit
+- `UpdateProfileUseCase` (7 tests) - Update name/surname without password
+- `UpdateSecurityUseCase` (9 tests) - Update email/password with verification
+- `UpdateUserHandicapUseCase` (10 tests) - Update from RFEG with fallback
+- `UpdateUserHandicapManuallyUseCase` (6 tests) - Direct manual update
+- `UpdateMultipleHandicapsUseCase` - Batch update with statistics
+- `FindUserUseCase` (10 tests) - Search by email or name
 
-### API Endpoints Activos (30)
-
-**Auth & Users (10)**:
+### API Endpoints Active (30)
 - `/api/v1/auth/register`, `/login`, `/logout`, `/verify-email`
 - `/api/v1/users/profile`, `/security`, `/search`
 - `/api/v1/handicaps/update`, `/update-manual`, `/update-multiple`
@@ -382,7 +380,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `/api/v1/countries` (GET)
 - `/api/v1/countries/{code}/adjacent` (GET)
 
-### External Services Implementados (18 tests)
+### Implemented External Services (18 tests)
 
-- **RFEGHandicapService** (5 tests integración) - Web scraping RFEG real
-- **MockHandicapService** (13 tests) - Mock determinístico para testing
+- **RFEGHandicapService** (5 integration tests) - Real RFEG web scraping
+- **MockHandicapService** (13 tests) - Deterministic mock for testing
