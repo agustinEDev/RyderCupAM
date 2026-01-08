@@ -1,56 +1,56 @@
-# Módulo: User Management
+# Module: User Management
 
-## 📋 Descripción
+## 📋 Description
 
-Módulo responsable de la gestión de usuarios, incluyendo registro, autenticación JWT, gestión de perfiles, handicaps y verificación de email. Implementa Clean Architecture con DDD.
+Module responsible for user management, including registration, JWT authentication, profile management, handicaps, and email verification. Implements Clean Architecture with DDD.
 
-**📋 Ver API completa:** `docs/API.md`
-
----
-
-## 🎯 Casos de Uso Implementados
-
-### Autenticación
-1. **RegisterUserUseCase** - Registro de nuevo usuario
-2. **LoginUserUseCase** - Autenticación con JWT
-3. **LogoutUserUseCase** - Cierre de sesión con revocación de refresh tokens
-4. **RefreshAccessTokenUseCase** - Renovación de access tokens
-5. **VerifyEmailUseCase** - Verificación de email con token único
-6. **ResendVerificationEmailUseCase** - Reenvío de email de verificación
-
-### Gestión de Perfil
-7. **GetCurrentUserUseCase** - Obtener datos del usuario autenticado
-8. **UpdateProfileUseCase** - Actualizar información personal (nombre, apellido, country_code)
-9. **UpdateSecurityUseCase** - Cambiar email o contraseña
-
-### Gestión de Handicaps
-10. **UpdateUserHandicapManuallyUseCase** - Actualizar handicap manualmente
-11. **UpdateUserHandicapUseCase** - Obtener handicap desde RFEG API
-12. **BatchUpdateHandicapsUseCase** - Actualización masiva de handicaps (cron job)
+**📋 See complete API:** `docs/API.md`
 
 ---
 
-## 🗃️ Modelo de Dominio
+## 🎯 Implemented Use Cases
 
-### Entity: User (Agregado Raíz)
+### Authentication
+1. **RegisterUserUseCase** - New user registration
+2. **LoginUserUseCase** - Authentication with JWT
+3. **LogoutUserUseCase** - Session logout with refresh token revocation
+4. **RefreshAccessTokenUseCase** - Access token renewal
+5. **VerifyEmailUseCase** - Email verification with unique token
+6. **ResendVerificationEmailUseCase** - Resend verification email
 
-**Identificación:**
+### Profile Management
+7. **GetCurrentUserUseCase** - Get authenticated user data
+8. **UpdateProfileUseCase** - Update personal information (name, surname, country_code)
+9. **UpdateSecurityUseCase** - Change email or password
+
+### Handicap Management
+10. **UpdateUserHandicapManuallyUseCase** - Update handicap manually
+11. **UpdateUserHandicapUseCase** - Get handicap from RFEG API
+12. **BatchUpdateHandicapsUseCase** - Batch handicap update (cron job)
+
+---
+
+## 🗃️ Domain Model
+
+### Entity: User (Aggregate Root)
+
+**Identification:**
 - `id`: UserId (Value Object - UUID)
 
-**Datos Personales:**
-- `email`: Email (Value Object con validación RFC 5322)
+**Personal Data:**
+- `email`: Email (Value Object with RFC 5322 validation)
 - `password`: Password (Value Object - bcrypt hashed, OWASP ASVS V2.1)
 - `first_name`: str (100 chars max)
 - `last_name`: str (100 chars max)
-- `country_code`: CountryCode (Value Object - ISO 3166-1 alpha-2, opcional)
+- `country_code`: CountryCode (Value Object - ISO 3166-1 alpha-2, optional)
 
 **Handicap:**
-- `handicap`: Handicap (Value Object - float, rango -10.0 a 54.0, opcional)
+- `handicap`: Handicap (Value Object - float, range -10.0 to 54.0, optional)
 - `handicap_updated_at`: datetime
 
-**Verificación de Email:**
+**Email Verification:**
 - `email_verified`: bool (default False)
-- `verification_token`: str (UUID único, opcional)
+- `verification_token`: str (unique UUID, optional)
 
 **Timestamps:**
 - `created_at`: datetime
@@ -58,47 +58,47 @@ Módulo responsable de la gestión de usuarios, incluyendo registro, autenticaci
 
 ### Value Objects
 
-**Implementados:**
-- `UserId` - UUID único del usuario
-- `Email` - Validación RFC 5322, normalización lowercase
-- `Password` - Validación OWASP ASVS V2.1 (12 chars min, complejidad, blacklist)
-- `Handicap` - Validación de rango [-10.0, 54.0]
-- `CountryCode` - Validación ISO 3166-1 alpha-2
+**Implemented:**
+- `UserId` - Unique user UUID
+- `Email` - RFC 5322 validation, lowercase normalization
+- `Password` - OWASP ASVS V2.1 validation (12 chars min, complexity, blacklist)
+- `Handicap` - Range validation [-10.0, 54.0]
+- `CountryCode` - ISO 3166-1 alpha-2 validation
 
-**📋 Ver implementación:** `src/modules/user/domain/value_objects/`
+**📋 See implementation:** `src/modules/user/domain/value_objects/`
 
 ### Domain Events
 
-**Implementados:**
-1. `UserCreatedEvent` - Usuario registrado
-2. `EmailVerifiedEvent` - Email verificado
-3. `HandicapUpdatedEvent` - Handicap actualizado
-4. `LoginAttemptEvent` - Intento de login (éxito/fallo) - Security
-5. `LogoutEvent` - Logout ejecutado - Security
-6. `RefreshTokenUsedEvent` - Refresh token usado - Security
-7. `RefreshTokenRevokedEvent` - Refresh token revocado - Security
-8. `PasswordChangedEvent` - Contraseña cambiada - Security
-9. `EmailChangedEvent` - Email cambiado - Security
+**Implemented:**
+1. `UserCreatedEvent` - User registered
+2. `EmailVerifiedEvent` - Email verified
+3. `HandicapUpdatedEvent` - Handicap updated
+4. `LoginAttemptEvent` - Login attempt (success/failure) - Security
+5. `LogoutEvent` - Logout executed - Security
+6. `RefreshTokenUsedEvent` - Refresh token used - Security
+7. `RefreshTokenRevokedEvent` - Refresh token revoked - Security
+8. `PasswordChangedEvent` - Password changed - Security
+9. `EmailChangedEvent` - Email changed - Security
 
-**📋 Ver eventos de seguridad:** `src/shared/domain/events/security_events.py`
+**📋 See security events:** `src/shared/domain/events/security_events.py`
 
 ---
 
-## 🏗️ Arquitectura
+## 🏗️ Architecture
 
 ### Repository Pattern
 
 **Interfaces (Domain Layer):**
-- `UserRepositoryInterface` - CRUD de usuarios
+- `UserRepositoryInterface` - User CRUD
   - find_by_id, find_by_email, add, update, delete, exists_by_email
-- `RefreshTokenRepositoryInterface` - Gestión de refresh tokens
+- `RefreshTokenRepositoryInterface` - Refresh token management
   - save, find_by_token_hash, revoke_all_for_user, delete_expired
 
-**Implementaciones (Infrastructure Layer):**
-- `SQLAlchemyUserRepository` - Persistencia async con PostgreSQL
-- `SQLAlchemyRefreshTokenRepository` - Persistencia de refresh tokens
+**Implementations (Infrastructure Layer):**
+- `SQLAlchemyUserRepository` - Async persistence with PostgreSQL
+- `SQLAlchemyRefreshTokenRepository` - Refresh token persistence
 
-**📋 Ver implementación:** `src/modules/user/infrastructure/persistence/sqlalchemy/`
+**📋 See implementation:** `src/modules/user/infrastructure/persistence/sqlalchemy/`
 
 ### Unit of Work Pattern
 
@@ -112,18 +112,18 @@ UserUnitOfWorkInterface
 └── async __aenter__() / __aexit__()
 ```
 
-**Implementación (Infrastructure Layer):**
-- `SQLAlchemyUserUnitOfWork` - Gestión de transacciones atómicas
+**Implementation (Infrastructure Layer):**
+- `SQLAlchemyUserUnitOfWork` - Atomic transaction management
 
-**Beneficios:**
-- Transacciones atómicas (commit/rollback)
-- Múltiples repositorios en una sola transacción
-- Aislamiento de la lógica de negocio de la persistencia
+**Benefits:**
+- Atomic transactions (commit/rollback)
+- Multiple repositories in single transaction
+- Business logic isolation from persistence
 
 ### Domain Services
 
-**Implementados:**
-- `UserFinder` - Búsqueda de usuarios con validaciones de negocio
+**Implemented:**
+- `UserFinder` - User search with business validations
 - `PasswordHasher` (ABC) → `BcryptPasswordHasher` (Infrastructure)
   - hash_password(), verify_password()
   - bcrypt: 12 rounds (prod), 4 rounds (tests)
@@ -131,58 +131,58 @@ UserUnitOfWorkInterface
 ### Application Services (Ports)
 
 **Interfaces (Application Layer):**
-- `IEmailService` - Envío de emails (Port)
-- `ITokenService` - Generación de tokens JWT (Port)
+- `IEmailService` - Email sending (Port)
+- `ITokenService` - JWT token generation (Port)
 
-**Implementaciones (Infrastructure Layer):**
-- `EmailService` - Mailgun API (región EU)
-- `JWTTokenService` - python-jose, algoritmo HS256
+**Implementations (Infrastructure Layer):**
+- `EmailService` - Mailgun API (EU region)
+- `JWTTokenService` - python-jose, HS256 algorithm
 
-**Inyección de Dependencias:**
-- Configurado en `src/config/dependencies.py`
-- Inversión de control completa (IoC)
+**Dependency Injection:**
+- Configured in `src/config/dependencies.py`
+- Complete Inversion of Control (IoC)
 
-**📋 Ver refactorización:** CLAUDE.md - Dependency Injection Refactoring (16 Nov 2025)
+**📋 See refactoring:** CLAUDE.md - Dependency Injection Refactoring (16 Nov 2025)
 
 ---
 
-## 🔐 Seguridad Implementada
+## 🔐 Security Implemented
 
 ### JWT Authentication
-- **Access Token:** 15 minutos (httpOnly cookie)
-- **Refresh Token:** 7 días (httpOnly cookie, SHA256 hash en BD)
-- **Algoritmo:** HS256
-- **Revocación:** Logout invalida refresh tokens en BD
+- **Access Token:** 15 minutes (httpOnly cookie)
+- **Refresh Token:** 7 days (httpOnly cookie, SHA256 hash in DB)
+- **Algorithm:** HS256
+- **Revocation:** Logout invalidates refresh tokens in DB
 
 ### Password Security (OWASP ASVS V2.1)
-- Longitud mínima: 12 caracteres
-- Complejidad: Mayúsculas + Minúsculas + Dígitos + Símbolos
-- Blacklist de contraseñas comunes
+- Minimum length: 12 characters
+- Complexity: Uppercase + Lowercase + Digits + Symbols
+- Common password blacklist
 - Hashing: bcrypt 12 rounds
 
 ### httpOnly Cookies
-- Protección contra XSS (JavaScript no puede acceder)
+- XSS protection (JavaScript cannot access)
 - Flags: httponly=True, secure=production, samesite="lax"
-- Dual support: cookies (prioridad 1) + headers (legacy)
+- Dual support: cookies (priority 1) + headers (legacy)
 
 ### Rate Limiting
-- Login: 5 intentos/minuto por IP
-- Register: 3 intentos/hora por IP
-- RFEG API: 5 llamadas/hora por usuario
+- Login: 5 attempts/minute per IP
+- Register: 3 attempts/hour per IP
+- RFEG API: 5 calls/hour per user
 
 ### Security Logging (Audit Trail)
-- Logs en `logs/security_audit.log` (JSON estructurado)
-- 9 eventos de seguridad auditados
-- Contexto HTTP: IP, User-Agent
+- Logs in `logs/security_audit.log` (structured JSON)
+- 9 audited security events
+- HTTP Context: IP, User-Agent
 - Severity levels: CRITICAL, HIGH, MEDIUM, LOW
 
-**📋 Ver implementación completa:** `docs/SECURITY_IMPLEMENTATION.md`
+**📋 See complete implementation:** `docs/SECURITY_IMPLEMENTATION.md`
 
 ---
 
-## 📊 Esquema de Base de Datos
+## 📊 Database Schema
 
-### Tabla: users
+### Table: users
 ```sql
 CREATE TABLE users (
     id UUID PRIMARY KEY,
@@ -200,7 +200,7 @@ CREATE TABLE users (
 );
 ```
 
-### Tabla: refresh_tokens
+### Table: refresh_tokens
 ```sql
 CREATE TABLE refresh_tokens (
     id VARCHAR(36) PRIMARY KEY,
@@ -216,59 +216,59 @@ CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 ```
 
-**Mappers SQLAlchemy:**
+**SQLAlchemy Mappers:**
 - Imperative Mapping (no declarative base)
-- TypeDecorators para Value Objects de 1 columna
-- Composites para Value Objects de múltiples columnas
+- TypeDecorators for single-column Value Objects
+- Composites for multi-column Value Objects
 
-**📋 Ver mappers:** `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py`
+**📋 See mappers:** `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py`
 
 ---
 
 ## 📡 API Endpoints
 
-### Autenticación
-- `POST /api/v1/auth/register` - Registro de usuario
-- `POST /api/v1/auth/login` - Login con JWT
-- `POST /api/v1/auth/logout` - Logout con revocación
-- `POST /api/v1/auth/refresh-token` - Renovar access token
-- `POST /api/v1/auth/verify-email` - Verificar email con token
-- `POST /api/v1/auth/resend-verification` - Reenviar email de verificación
-- `GET /api/v1/auth/current-user` - Obtener usuario autenticado
+### Authentication
+- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/login` - Login with JWT
+- `POST /api/v1/auth/logout` - Logout with revocation
+- `POST /api/v1/auth/refresh-token` - Renew access token
+- `POST /api/v1/auth/verify-email` - Verify email with token
+- `POST /api/v1/auth/resend-verification` - Resend verification email
+- `GET /api/v1/auth/current-user` - Get authenticated user
 
-### Gestión de Perfil
-- `GET /api/v1/users/profile` - Obtener perfil
-- `PUT /api/v1/users/profile` - Actualizar perfil (nombre, apellido, country_code)
-- `PUT /api/v1/users/security` - Actualizar email o contraseña
+### Profile Management
+- `GET /api/v1/users/profile` - Get profile
+- `PUT /api/v1/users/profile` - Update profile (name, surname, country_code)
+- `PUT /api/v1/users/security` - Update email or password
 
-### Gestión de Handicaps
-- `PUT /api/v1/users/handicaps/manual` - Actualizar handicap manual
-- `POST /api/v1/users/handicaps/update` - Obtener desde RFEG API
-- `POST /api/v1/users/handicaps/batch-update` - Actualización masiva (admin)
+### Handicap Management
+- `PUT /api/v1/users/handicaps/manual` - Update handicap manually
+- `POST /api/v1/users/handicaps/update` - Get from RFEG API
+- `POST /api/v1/users/handicaps/batch-update` - Batch update (admin)
 
-**📋 Ver documentación completa:** `docs/API.md`
+**📋 See complete documentation:** `docs/API.md`
 
-**📋 Ver Postman Collection:** `docs/postman_collection.json`
+**📋 See Postman Collection:** `docs/postman_collection.json`
 
 ---
 
 ## 🧪 Testing
 
-### Stack de Testing
-- **pytest** - Framework de tests
-- **pytest-asyncio** - Tests async
-- **pytest-xdist** - Paralelización
-- **httpx** - Cliente HTTP para tests de integración
+### Testing Stack
+- **pytest** - Testing framework
+- **pytest-asyncio** - Async tests
+- **pytest-xdist** - Parallelization
+- **httpx** - HTTP client for integration tests
 
-### Estadísticas
-- **Total User Module:** 507 tests (100% pasando)
+### Statistics
+- **Total User Module:** 507 tests (100% passing)
 - **Unit Tests:** 308 tests
   - Domain: 49 tests (entities)
-  - Value Objects: Tests de validación completos
+  - Value Objects: Complete validation tests
   - Use Cases: 83 tests
 - **Integration Tests:** 72 tests (API endpoints)
 
-### Estructura
+### Structure
 ```
 tests/
 ├── unit/
@@ -283,93 +283,93 @@ tests/
         └── test_auth_routes.py
 ```
 
-### Ejecución
+### Execution
 ```bash
-# Todos los tests del módulo User
+# All tests for User module
 pytest tests/unit/modules/user/ tests/integration/api/v1/test_user_routes.py -v
 
-# Solo tests unitarios (rápido, no requiere BD)
+# Only unit tests (fast, no DB required)
 pytest tests/unit/modules/user/ -v
 
-# Con paralelización
+# With parallelization
 pytest tests/unit/modules/user/ -n auto
 ```
 
 ### Test Doubles (In-Memory)
-- `InMemoryUserRepository` - Tests sin PostgreSQL
-- `InMemoryRefreshTokenRepository` - Tests de refresh tokens
-- `InMemoryUnitOfWork` - Tests de transacciones
+- `InMemoryUserRepository` - Tests without PostgreSQL
+- `InMemoryRefreshTokenRepository` - Refresh token tests
+- `InMemoryUnitOfWork` - Transaction tests
 
-**📋 Ver test doubles:** `tests/in_memory/`
+**📋 See test doubles:** `tests/in_memory/`
 
 ---
 
-## 🔄 Decisiones Arquitectónicas Clave
+## 🔄 Key Architecture Decisions
 
 ### 1. Handicap Value Object Mapping
-**Decisión:** TypeDecorator (no composite())
+**Decision:** TypeDecorator (not composite())
 
-**Razón:**
-- Handicap es un Value Object de 1 columna opcional (NULL)
-- composite() no maneja NULL correctamente
-- TypeDecorator convierte transparentemente Handicap ↔ float
+**Reason:**
+- Handicap is a single-column optional Value Object (NULL)
+- composite() does not handle NULL correctly
+- TypeDecorator transparently converts Handicap ↔ float
 
-**📋 Ver ADR:** CLAUDE.md - Decisiones Arquitectónicas
+**📋 See ADR:** CLAUDE.md - Architecture Decisions
 
 ### 2. Dependency Injection Refactoring
-**Decisión:** Ports & Adapters (Hexagonal Architecture)
+**Decision:** Ports & Adapters (Hexagonal Architecture)
 
-**Antes (❌):**
-- Use cases importaban directamente EmailService, JWTTokenService
-- Violación del Dependency Inversion Principle
+**Before (❌):**
+- Use cases directly imported EmailService, JWTTokenService
+- Violation of Dependency Inversion Principle
 
-**Después (✅):**
+**After (✅):**
 - Application Layer: IEmailService, ITokenService (Ports)
 - Infrastructure Layer: EmailService, JWTTokenService (Adapters)
-- Use cases dependen de abstracciones
+- Use cases depend on abstractions
 
-**Resultado:** 440/440 tests passing - Clean Architecture 100%
+**Result:** 440/440 tests passing - Clean Architecture 100%
 
 ### 3. Session Timeout with Refresh Tokens
-**Decisión:** Patrón de access token corto + refresh token largo
+**Decision:** Short access token + long refresh token pattern
 
-**Antes (❌):**
-- Access token: 60 minutos
-- No revocación posible
-- Logout solo eliminaba cookie del navegador
+**Before (❌):**
+- Access token: 60 minutes
+- No revocation possible
+- Logout only deleted browser cookie
 
-**Después (✅):**
-- Access token: 15 minutos (-75% window de hijacking)
-- Refresh token: 7 días (SHA256 hash en BD)
-- Revocación en BD al logout
-- 722/722 tests pasando (+35 nuevos)
+**After (✅):**
+- Access token: 15 minutes (-75% hijacking window)
+- Refresh token: 7 days (SHA256 hash in DB)
+- DB revocation on logout
+- 722/722 tests passing (+35 new)
 
-**📋 Ver implementación:** CLAUDE.md - Session Timeout with Refresh Tokens
+**📋 See implementation:** CLAUDE.md - Session Timeout with Refresh Tokens
 
 ### 4. Password Policy (OWASP ASVS V2.1)
-**Decisión:** Actualizar de 8 a 12 caracteres mínimos
+**Decision:** Update from 8 to 12 minimum characters
 
-**Antes (❌):**
-- 8 caracteres mínimos (obsoleto según OWASP 2024)
+**Before (❌):**
+- 8 minimum characters (obsolete according to OWASP 2024)
 
-**Después (✅):**
-- 12 caracteres mínimos
-- Complejidad completa obligatoria
-- Blacklist de contraseñas comunes
-- 681 tests actualizados (100%)
+**After (✅):**
+- 12 minimum characters
+- Full complexity required
+- Common password blacklist
+- 681 tests updated (100%)
 
-**📋 Ver migración:** CLAUDE.md - Password Policy
+**📋 See migration:** CLAUDE.md - Password Policy
 
 ---
 
-## 🔗 Enlaces Relacionados
+## 🔗 Related Links
 
-### Documentación
+### Documentation
 - **API Endpoints:** `docs/API.md`
 - **Security Implementation:** `docs/SECURITY_IMPLEMENTATION.md`
 - **Postman Collection:** `docs/postman_collection.json`
 
-### Código Fuente
+### Source Code
 - **Domain Layer:** `src/modules/user/domain/`
 - **Application Layer:** `src/modules/user/application/`
 - **Infrastructure Layer:** `src/modules/user/infrastructure/`
@@ -384,41 +384,41 @@ pytest tests/unit/modules/user/ -n auto
 - **ADR-019:** Email Verification System
 
 ### Testing
-- **Tests Unitarios:** `tests/unit/modules/user/`
-- **Tests Integración:** `tests/integration/api/v1/`
+- **Unit Tests:** `tests/unit/modules/user/`
+- **Integration Tests:** `tests/integration/api/v1/`
 - **Test Doubles:** `tests/in_memory/`
 
 ---
 
-## 💡 Tips para Desarrollo
+## 💡 Development Tips
 
-### Crear Nuevo Use Case
-1. Definir DTO de Request y Response en `application/dto/`
-2. Crear Use Case en `application/use_cases/`
-3. Inyectar dependencies (UoW, services) en constructor
-4. Implementar lógica en método `execute()`
-5. Usar `async with self._uow:` para transacciones
-6. Emitir domain events si es necesario
-7. Crear tests unitarios + integración
+### Create New Use Case
+1. Define Request and Response DTO in `application/dto/`
+2. Create Use Case in `application/use_cases/`
+3. Inject dependencies (UoW, services) in constructor
+4. Implement logic in `execute()` method
+5. Use `async with self._uow:` for transactions
+6. Emit domain events if necessary
+7. Create unit + integration tests
 
-### Añadir Nuevo Value Object
-1. Crear clase en `domain/value_objects/`
-2. Heredar de clase base si aplica
-3. Implementar validaciones en constructor
-4. Añadir método `__eq__()` para comparaciones
-5. Crear TypeDecorator en mapper (si 1 columna)
-6. Crear tests de validación completos
+### Add New Value Object
+1. Create class in `domain/value_objects/`
+2. Inherit from base class if applicable
+3. Implement validations in constructor
+4. Add `__eq__()` method for comparisons
+5. Create TypeDecorator in mapper (if 1 column)
+6. Create complete validation tests
 
-### Añadir Nuevo Endpoint
-1. Definir route en `infrastructure/api/v1/`
-2. Inyectar Use Case con `Depends()`
-3. Inyectar `get_current_user` si requiere auth
-4. Manejar excepciones de dominio → HTTP status codes
-5. Añadir rate limiting si aplica
-6. Documentar en `docs/API.md`
-7. Actualizar Postman collection
+### Add New Endpoint
+1. Define route in `infrastructure/api/v1/`
+2. Inject Use Case with `Depends()`
+3. Inject `get_current_user` if auth required
+4. Handle domain exceptions → HTTP status codes
+5. Add rate limiting if applicable
+6. Document in `docs/API.md`
+7. Update Postman collection
 
 ---
 
-**Última actualización:** 18 de Diciembre de 2025
-**Versión:** 1.8.0
+**Last Updated:** 8 January 2026
+**Version:** v1.13.0
