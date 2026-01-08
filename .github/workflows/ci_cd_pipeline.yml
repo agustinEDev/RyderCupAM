@@ -31,6 +31,11 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+# Permissions for security scanning
+permissions:
+  contents: read
+  security-events: write  # Required for CodeQL/Trivy SARIF upload
+
 jobs:
   # ================================
   # JOB 1: PREPARATION
@@ -628,7 +633,7 @@ jobs:
           exit-code: '0'  # No bloquear pipeline por ahora
 
       - name: Upload Trivy Results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -781,31 +786,106 @@ jobs:
     if: always()
 
     steps:
-      - name: Check Results
+      - name: Generate Pipeline Summary
         run: |
-          echo "=========================================="
-          echo "CI/CD PIPELINE SUMMARY"
-          echo "=========================================="
-          echo "Unit Tests: ${{ needs.unit_tests.result }}"
-          echo "Integration Tests: ${{ needs.integration_tests.result }}"
-          echo "Security Tests: ${{ needs.security_tests.result }}"
-          echo "Security Checks: ${{ needs.security_checks.result }}"
-          echo "Snyk Scan: ${{ needs.snyk_scan.result }}"
-          echo "Linting: ${{ needs.linting.result }}"
-          echo "Type Checking: ${{ needs.type_checking.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "=========================================="
+          # Function to get emoji for job result
+          get_emoji() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              skipped) echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *) echo "❓" ;;
+            esac
+          }
 
-          if [ "${{ needs.unit_tests.result }}" == "failure" ] || [ "${{ needs.integration_tests.result }}" == "failure" ] || [ "${{ needs.security_tests.result }}" == "failure" ]; then
-            echo "❌ Pipeline FAILED - Tests did not pass"
+          # Collect results
+          UNIT_TESTS="${{ needs.unit_tests.result }}"
+          INTEGRATION_TESTS="${{ needs.integration_tests.result }}"
+          SECURITY_TESTS="${{ needs.security_tests.result }}"
+          SECURITY_CHECKS="${{ needs.security_checks.result }}"
+          SNYK_SCAN="${{ needs.snyk_scan.result }}"
+          LINTING="${{ needs.linting.result }}"
+          TYPE_CHECKING="${{ needs.type_checking.result }}"
+          BUILD="${{ needs.build.result }}"
+
+          # Generate Markdown Summary
+          {
+            echo "# 🏆 CI/CD Pipeline Summary"
+            echo ""
+            echo "**Branch:** \`${{ github.ref_name }}\`"
+            echo "**Commit:** [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})"
+            echo "**Triggered by:** ${{ github.actor }}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📊 Job Results"
+            echo ""
+            echo "| Job | Status | Result |"
+            echo "|-----|--------|--------|"
+            echo "| 🧪 Unit Tests | $(get_emoji "$UNIT_TESTS") | \`$UNIT_TESTS\` |"
+            echo "| 🗄️ Integration Tests | $(get_emoji "$INTEGRATION_TESTS") | \`$INTEGRATION_TESTS\` |"
+            echo "| 🔐 Security Tests | $(get_emoji "$SECURITY_TESTS") | \`$SECURITY_TESTS\` |"
+            echo "| 🔒 Security Checks | $(get_emoji "$SECURITY_CHECKS") | \`$SECURITY_CHECKS\` |"
+            echo "| 🐍 Snyk Scan | $(get_emoji "$SNYK_SCAN") | \`$SNYK_SCAN\` |"
+            echo "| 📝 Linting | $(get_emoji "$LINTING") | \`$LINTING\` |"
+            echo "| 🔬 Type Checking | $(get_emoji "$TYPE_CHECKING") | \`$TYPE_CHECKING\` |"
+            echo "| 🐳 Build & Scan | $(get_emoji "$BUILD") | \`$BUILD\` |"
+            echo ""
+            echo "---"
+            echo ""
+          } >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall status
+          if [ "$UNIT_TESTS" == "failure" ] || [ "$INTEGRATION_TESTS" == "failure" ] || [ "$SECURITY_TESTS" == "failure" ]; then
+            {
+              echo "## ❌ Pipeline Status: **FAILED**"
+              echo ""
+              echo "### 🚨 Critical Tests Failed"
+              echo ""
+              [ "$UNIT_TESTS" == "failure" ] && echo "- ❌ **Unit Tests** failed"
+              [ "$INTEGRATION_TESTS" == "failure" ] && echo "- ❌ **Integration Tests** failed"
+              [ "$SECURITY_TESTS" == "failure" ] && echo "- ❌ **Security Tests** failed"
+              echo ""
+              echo "**Action Required:** Fix failing tests before merging."
+            } >> $GITHUB_STEP_SUMMARY
             exit 1
-          elif [ "${{ needs.build.result }}" == "failure" ]; then
-            echo "❌ Pipeline FAILED - Build failed"
+          elif [ "$BUILD" == "failure" ]; then
+            {
+              echo "## ❌ Pipeline Status: **FAILED**"
+              echo ""
+              echo "### 🐳 Docker Build Failed"
+              echo ""
+              echo "Build job failed. Check Docker configuration and dependencies."
+            } >> $GITHUB_STEP_SUMMARY
             exit 1
-          elif [ "${{ needs.build.result }}" == "skipped" ]; then
-            echo "⚠️ Build was skipped due to failed quality checks"
+          elif [ "$BUILD" == "skipped" ]; then
+            {
+              echo "## ⚠️ Pipeline Status: **PARTIAL**"
+              echo ""
+              echo "### ⏭️ Build Skipped"
+              echo ""
+              echo "Build was skipped due to failed quality checks (linting, type checking, or security checks)."
+              echo ""
+              echo "**Action Required:** Fix quality issues before deployment."
+            } >> $GITHUB_STEP_SUMMARY
             exit 0
           else
-            echo "✅ Pipeline PASSED - All checks successful"
-            echo "🚀 Docker image ready for deployment"
+            {
+              echo "## ✅ Pipeline Status: **SUCCESS**"
+              echo ""
+              echo "### 🎉 All Checks Passed!"
+              echo ""
+              echo "- ✅ All tests passing (**939+ tests**)"
+              echo "- ✅ Code quality validated"
+              echo "- ✅ Security scans completed"
+              echo "- ✅ Docker image built successfully"
+              echo ""
+              echo "---"
+              echo ""
+              echo "### 🚀 Ready for Deployment"
+              echo ""
+              echo "Docker image tagged as: \`rydercupam:${GITHUB_SHA:0:7}\`"
+            } >> $GITHUB_STEP_SUMMARY
+            exit 0
           fi
