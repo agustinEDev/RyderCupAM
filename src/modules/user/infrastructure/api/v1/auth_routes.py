@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 
+from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
@@ -138,7 +139,7 @@ def get_user_agent(request: Request) -> str:
 )
 @limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
 async def register_user(
-    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     register_data: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
@@ -458,7 +459,6 @@ async def refresh_access_token(
     return refresh_response
 
 
-from src.shared.infrastructure.security.jwt_handler import create_access_token
 
 
 @router.post(
@@ -514,7 +514,7 @@ async def verify_email(
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    TOKEN_PREVIEW_LENGTH = 8
+    TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
     token_preview = f"{request.token[:TOKEN_PREVIEW_LENGTH]}..." if len(request.token) > TOKEN_PREVIEW_LENGTH else "***"
     logger.info(f"Email verification attempt with token: {token_preview}")
 
@@ -527,7 +527,6 @@ async def verify_email(
         refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
         # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
-        from src.config.csrf_config import generate_csrf_token
         csrf_token = generate_csrf_token()
 
         # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
@@ -580,7 +579,7 @@ async def verify_email(
 )
 @limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
 async def resend_verification_email(
-    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):
@@ -774,11 +773,11 @@ async def reset_password(
         return response
     except ValueError as e:
         # Token inválido/expirado o password inválido
-        logger.warning(f"Password reset failed: {str(e)}")
+        logger.warning(f"Password reset failed: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
-        )
+        ) from None
 
 
 @router.get(
@@ -810,7 +809,7 @@ async def reset_password(
 )
 @limiter.limit("10/hour")  # 10 intentos por hora por IP
 async def validate_reset_token(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     token: str,
     use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case)
 ) -> ValidateResetTokenResponseDTO:
@@ -850,7 +849,7 @@ async def validate_reset_token(
     tags=["Authentication", "Admin"],
 )
 async def unlock_account(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     unlock_data: UnlockAccountRequestDTO,
     use_case: UnlockAccountUseCase = Depends(get_unlock_account_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -887,12 +886,7 @@ async def unlock_account(
     """
     # TODO (v2.1.0): Verificar que current_user tiene rol ADMIN
     # Por ahora, cualquier usuario autenticado puede desbloquear (MVP)
-    # When roles are implemented:
-    # if current_user.role != "ADMIN":
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Only administrators can unlock accounts"
-    #     )
+    # TODO: When roles are implemented, restrict to ADMIN only
 
     # Establecer unlocked_by_user_id del usuario autenticado
     unlock_data.unlocked_by_user_id = str(current_user.id)

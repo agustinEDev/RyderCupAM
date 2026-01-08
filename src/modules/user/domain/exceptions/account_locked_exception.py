@@ -3,7 +3,7 @@
 from datetime import datetime
 
 
-class AccountLockedException(Exception):
+class AccountLockedException(Exception):  # noqa: N818 - Exception is intentional naming
     """
     Excepción lanzada cuando un usuario intenta hacer login en una cuenta bloqueada
     debido a múltiples intentos fallidos de autenticación.
