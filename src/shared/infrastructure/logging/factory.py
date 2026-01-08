@@ -165,11 +165,11 @@ class LoggerFactory:
 
         # Personalizar según variables de entorno
         if log_level := os.getenv('LOG_LEVEL'):
-            from .logger import LogLevel
+            from .logger import LogLevel  # noqa: PLC0415 - Lazy loading for env customization
             config.level = LogLevel(log_level.upper())
 
         if log_file := os.getenv('LOG_FILE'):
-            from .config import HandlerConfig, LogHandler
+            from .config import HandlerConfig, LogHandler  # noqa: PLC0415, I001 - Lazy loading for env customization
             file_handler = HandlerConfig(
                 type=LogHandler.ROTATING_FILE,
                 filename=log_file
@@ -177,7 +177,7 @@ class LoggerFactory:
             config.handlers.append(file_handler)
 
         if log_format := os.getenv('LOG_FORMAT'):
-            from .config import LogFormat
+            from .config import LogFormat  # noqa: PLC0415 - Lazy loading for env customization
             for handler in config.handlers:
                 handler.format = LogFormat(log_format.lower())
 
@@ -187,7 +187,7 @@ class LoggerFactory:
     def _load_yaml(path: Path) -> dict[str, Any]:
         """Carga archivo YAML"""
         try:
-            import yaml
+            import yaml  # noqa: PLC0415 - Optional dependency, lazy import
             with open(path, encoding='utf-8') as f:
                 return yaml.safe_load(f) or {}
         except ImportError as e:

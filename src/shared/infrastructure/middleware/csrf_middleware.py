@@ -48,7 +48,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             Response: HTTP response (403 si CSRF inválido)
         """
         # Skip CSRF validation during integration tests (but not security tests)
-        import os
+        import os  # noqa: PLC0415 - Avoid circular import with config
         if os.getenv("TESTING") == "true" and os.getenv("TEST_CSRF") != "true":
             return await call_next(request)
 
@@ -85,7 +85,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         Returns:
             bool: True si el token es válido
         """
-        import secrets
+        import secrets  # noqa: PLC0415 - Timing-safe comparison needed here
 
         # Obtener token del header
         header_token = request.headers.get(CSRF_HEADER_NAME)

@@ -18,7 +18,6 @@ Características:
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Any
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
@@ -32,7 +31,7 @@ from ...domain.events.security_events import (
     SecurityAuditEvent,
     SecuritySeverity,
 )
-from .config import HandlerConfig, LogConfig, LogFormat, LogHandler, LogLevel
+from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
 
 
@@ -510,7 +509,7 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetRequestedAuditEvent
+        from src.shared.domain.events.security_events import PasswordResetRequestedAuditEvent  # noqa: PLC0415, I001
 
         event = PasswordResetRequestedAuditEvent(
             user_id=user_id,
@@ -552,7 +551,7 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetCompletedAuditEvent
+        from src.shared.domain.events.security_events import PasswordResetCompletedAuditEvent  # noqa: PLC0415, I001
 
         event = PasswordResetCompletedAuditEvent(
             user_id=user_id,

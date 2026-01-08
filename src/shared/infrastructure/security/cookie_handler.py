@@ -13,10 +13,8 @@ Arquitectura:
 - Patrón: Helper/Utility
 """
 import os
-from typing import Optional
 
 from fastapi import Response
-
 
 # Nombres de las cookies
 COOKIE_NAME = "access_token"          # Access token (15 min)

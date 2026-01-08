@@ -111,7 +111,7 @@ class PythonLogger(Logger):
 
     def _resolve_log_path(self, filename: str):
         """Resuelve la ruta completa del archivo de log"""
-        from pathlib import Path
+        from pathlib import Path  # noqa: PLC0415 - Lazy import for method-level usage
 
         filepath = Path(filename)
         if not filepath.is_absolute() and self.config.log_dir:

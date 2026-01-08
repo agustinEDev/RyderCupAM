@@ -112,7 +112,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         if x_forwarded_for:
             return x_forwarded_for.split(",")[0].strip()
 
-        # X-Real-IP (Nginx)
+        # X-Real-IP header usado por Nginx
         x_real_ip = request.headers.get("X-Real-IP")
         if x_real_ip:
             return x_real_ip
