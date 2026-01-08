@@ -755,16 +755,28 @@ jobs:
 
           echo "=========================================="
 
+      - name: Check if Snyk Reports Exist
+        id: check-snyk-reports
+        if: always()
+        run: |
+          if [ -f snyk-dependencies-report.json ] || [ -f snyk-code-report.json ]; then
+            echo "reports_exist=true" >> $GITHUB_OUTPUT
+            echo "✅ Snyk reports found, will upload as artifacts"
+          else
+            echo "reports_exist=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No Snyk reports generated (no vulnerabilities or scan failed)"
+          fi
+
       - name: Upload Snyk Reports
         uses: actions/upload-artifact@v4
-        if: always()
-        continue-on-error: true
+        if: always() && steps.check-snyk-reports.outputs.reports_exist == 'true'
         with:
           name: snyk-security-reports
           path: |
             snyk-dependencies-report.json
             snyk-code-report.json
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Snyk Monitor (Track in Dashboard)
         uses: snyk/actions/python@master
