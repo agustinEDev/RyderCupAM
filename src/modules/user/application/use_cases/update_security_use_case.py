@@ -16,6 +16,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
     InvalidCredentialsError,
@@ -23,6 +24,7 @@ from src.modules.user.domain.errors.user_errors import (
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 
@@ -63,10 +65,10 @@ class UpdateSecurityUseCase:
 
         if not user:
             raise UserNotFoundError(f"User with id {user_id} not found")
-        
+
         if not user.verify_password(current_password):
             raise InvalidCredentialsError("Current password is incorrect")
-        
+
         return user_id_vo, user
 
     async def _handle_email_change(
@@ -78,10 +80,10 @@ class UpdateSecurityUseCase:
         """Maneja el cambio de email y genera token de verificación."""
         email_vo = Email(new_email)
         existing_user = await self._uow.users.find_by_email(email_vo)
-        
+
         if existing_user and str(existing_user.id.value) != user_id:
             raise DuplicateEmailError(f"Email {new_email} is already in use")
-        
+
         user.change_email(new_email)
         verification_token = user.generate_verification_token()
         return True, verification_token
@@ -93,9 +95,6 @@ class UpdateSecurityUseCase:
         user_id_vo: UserId
     ) -> tuple[bool, int]:
         """Maneja el cambio de password, valida historial y revoca refresh tokens."""
-        from src.modules.user.domain.entities.password_history import PasswordHistory
-        from src.modules.user.domain.value_objects.password import Password
-
         # Validar que la nueva contraseña no esté en el historial (últimas 5)
         recent_history = await self._uow.password_history.find_recent_by_user(
             user_id_vo,
@@ -153,7 +152,7 @@ class UpdateSecurityUseCase:
                 user_agent=user_agent,
                 old_password_verified=True,
             )
-            
+
             if tokens_revoked_count > 0:
                 security_logger.log_refresh_token_revoked(
                     user_id=user_id,
@@ -162,7 +161,7 @@ class UpdateSecurityUseCase:
                     tokens_revoked_count=tokens_revoked_count,
                     reason="password_change",
                 )
-        
+
         if email_changed:
             security_logger.log_email_changed(
                 user_id=user_id,
@@ -180,7 +179,7 @@ class UpdateSecurityUseCase:
         """Envía email de verificación al nuevo correo."""
         if not self._email_service:
             return
-        
+
         try:
             email_sent = self._email_service.send_verification_email(
                 to_email=new_email,

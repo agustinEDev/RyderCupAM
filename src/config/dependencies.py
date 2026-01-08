@@ -82,14 +82,14 @@ from src.modules.user.application.use_cases.register_user_use_case import (
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
 )
+from src.modules.user.application.use_cases.resend_verification_email_use_case import (
+    ResendVerificationEmailUseCase,
+)
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
 )
-from src.modules.user.application.use_cases.validate_reset_token_use_case import (
-    ValidateResetTokenUseCase,
-)
-from src.modules.user.application.use_cases.resend_verification_email_use_case import (
-    ResendVerificationEmailUseCase,
+from src.modules.user.application.use_cases.unlock_account_use_case import (
+    UnlockAccountUseCase,
 )
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
     UpdateMultipleHandicapsUseCase,
@@ -106,8 +106,8 @@ from src.modules.user.application.use_cases.update_user_handicap_manually_use_ca
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
 )
-from src.modules.user.application.use_cases.unlock_account_use_case import (
-    UnlockAccountUseCase,
+from src.modules.user.application.use_cases.validate_reset_token_use_case import (
+    ValidateResetTokenUseCase,
 )
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
