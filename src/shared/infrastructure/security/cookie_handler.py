@@ -2,7 +2,7 @@
 Cookie Handler para Autenticación con httpOnly Cookies.
 
 Este módulo centraliza la configuración de cookies de autenticación seguras
-para proteger contra ataques XSS (Cross-Site Scripting).
+para proteger contra ataques XSS (Cross-Site Scripting) y CSRF.
 
 OWASP A01: Broken Access Control
 OWASP A02: Cryptographic Failures
@@ -21,10 +21,12 @@ from fastapi import Response
 # Nombres de las cookies
 COOKIE_NAME = "access_token"          # Access token (15 min)
 REFRESH_COOKIE_NAME = "refresh_token"  # Refresh token (7 días)
+CSRF_COOKIE_NAME = "csrf_token"        # CSRF token (15 min) - v1.13.0
 
 # Tiempos de expiración (deben coincidir con la expiración de los JWT)
 COOKIE_MAX_AGE = 900           # 15 minutos (access token reducido desde 1 hora)
 REFRESH_COOKIE_MAX_AGE = 604800  # 7 días en segundos (refresh token)
+CSRF_COOKIE_MAX_AGE = 900       # 15 minutos (csrf token - v1.13.0)
 
 
 def is_production() -> bool:
@@ -224,3 +226,98 @@ def get_refresh_cookie_name() -> str:
         'refresh_token'
     """
     return REFRESH_COOKIE_NAME
+
+
+# =============================================================================
+# CSRF Token Cookie Handlers (CSRF Protection - v1.13.0)
+# =============================================================================
+
+
+def set_csrf_cookie(response: Response, csrf_token: str) -> None:
+    """
+    Establece una cookie NO httpOnly con el token CSRF.
+
+    El token CSRF debe ser accesible desde JavaScript (httpOnly=False)
+    para que el frontend pueda leerlo y enviarlo en el header X-CSRF-Token.
+    Esta es la estrategia de doble envío (double-submit cookie).
+
+    Parámetros de Seguridad:
+    - httponly=False: DEBE ser accesible desde JavaScript (requerido para CSRF)
+    - secure=True/False: Solo HTTPS en producción, HTTP permitido en desarrollo
+    - samesite="lax": Protección contra CSRF, permite navegación normal
+    - max_age=900: Expira en 15 minutos (igual que access token)
+    - path="/": Cookie disponible en toda la aplicación
+
+    Args:
+        response: Objeto Response de FastAPI donde se añadirá la cookie
+        csrf_token: Token CSRF de 256 bits a almacenar en la cookie
+
+    Example:
+        >>> from fastapi import Response
+        >>> response = Response()
+        >>> set_csrf_cookie(response, "abc123...")
+        >>> # Cookie csrf_token añadida (httpOnly=False)
+
+    Security Notes:
+        - httponly=False: JavaScript PUEDE leer la cookie (requerido para double-submit)
+        - El atacante NO puede leer cookies de otro dominio (Same-Origin Policy)
+        - El middleware valida que cookie == header (atacante no puede agregar header)
+
+    OWASP Compliance:
+        - A01: Broken Access Control → Double-submit previene CSRF
+        - A07: Authentication Failures → Token único por sesión
+    """
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,              # ✅ Accesible desde JavaScript (REQUERIDO)
+        secure=is_production(),      # ✅ HTTPS en producción
+        samesite="lax",             # ✅ Protección CSRF adicional
+        max_age=CSRF_COOKIE_MAX_AGE, # ✅ Expira en 15 minutos
+        path="/",                    # ✅ Disponible en toda la app
+    )
+
+
+def delete_csrf_cookie(response: Response) -> None:
+    """
+    Elimina la cookie de CSRF token (logout).
+
+    Esta función invalida la cookie estableciendo su valor vacío y
+    expiración en 0 (eliminación inmediata).
+
+    Args:
+        response: Objeto Response de FastAPI donde se eliminará la cookie
+
+    Example:
+        >>> from fastapi import Response
+        >>> response = Response()
+        >>> delete_csrf_cookie(response)
+        >>> # Cookie csrf_token eliminada del navegador
+
+    Note:
+        Esta función solo elimina la cookie del lado del cliente.
+        El token CSRF no se almacena en base de datos (es stateless).
+    """
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        path="/",                    # Mismo path que al crear la cookie
+        httponly=False,              # Mismo httponly que al crear
+        secure=is_production(),      # Mismo secure que al crear
+        samesite="lax",             # Mismo samesite que al crear
+    )
+
+
+def get_csrf_cookie_name() -> str:
+    """
+    Retorna el nombre de la cookie de CSRF token.
+
+    Útil para extraer el token CSRF desde las cookies en endpoints.
+
+    Returns:
+        Nombre de la cookie de CSRF token (constante CSRF_COOKIE_NAME)
+
+    Example:
+        >>> get_csrf_cookie_name()
+        'csrf_token'
+    """
+    return CSRF_COOKIE_NAME

@@ -61,10 +61,12 @@ from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
+    delete_csrf_cookie,
     delete_refresh_token_cookie,
     get_cookie_name,
     get_refresh_cookie_name,
     set_auth_cookie,
+    set_csrf_cookie,
     set_refresh_token_cookie,
 )
 from src.shared.infrastructure.security.jwt_handler import (
@@ -242,6 +244,10 @@ async def login_user(
     # Refresh Token: 7 días (Session Timeout)
     set_refresh_token_cookie(response, login_response.refresh_token)
 
+    # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
+    # CSRF Token: 15 minutos (sincronizado con access token)
+    set_csrf_cookie(response, login_response.csrf_token)
+
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
     return login_response
@@ -360,6 +366,9 @@ async def logout_user(
     # Refresh Token (7 días) - Session Timeout
     delete_refresh_token_cookie(response)
 
+    # ✅ NUEVO (v1.13.0): Eliminar cookie CSRF
+    delete_csrf_cookie(response)
+
     return logout_response
 
 
@@ -441,6 +450,9 @@ async def refresh_access_token(
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)
 
+    # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
+    set_csrf_cookie(response, refresh_response.csrf_token)
+
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
     return refresh_response
@@ -514,9 +526,17 @@ async def verify_email(
         access_token = create_access_token({"sub": str(user.id.value)})
         refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
+        # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
+        from src.config.csrf_config import generate_csrf_token
+        csrf_token = generate_csrf_token()
+
         # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
         set_auth_cookie(response, access_token)
         set_refresh_token_cookie(response, refresh_token)
+
+        # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
+        # CSRF Token: 15 minutos (sincronizado con access token)
+        set_csrf_cookie(response, csrf_token)
 
         # Mapear a DTO
         user_dto = UserResponseDTO.model_validate(user)
@@ -526,6 +546,7 @@ async def verify_email(
         return LoginResponseDTO(
             access_token=access_token,
             refresh_token=refresh_token,
+            csrf_token=csrf_token,
             token_type="bearer",
             user=user_dto,
             email_verification_required=False

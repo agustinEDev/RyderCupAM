@@ -1,19 +1,19 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Versión Actual:** 1.13.0 (en progreso - Account Lockout completado)
-> **Última actualización:** 7 Ene 2026
+> **Versión Actual:** 1.13.0 (en progreso - 3/4 completado)
+> **Última actualización:** 8 Ene 2026
 > **Estado:** ✅ Producción (v1.12.1) + 🚧 Development (v1.13.0)
-> **OWASP Score:** 9.4/10 (mejorado con Account Lockout)
+> **OWASP Score:** 9.5/10 (mejorado con Account Lockout + CSRF + Password History)
 
 ---
 
 ## 📊 Estado Actual
 
 ### Métricas
-- **Tests:** 910 (100% passing, ~60s) - +5 Account Lockout
+- **Tests:** 955 (100% passing, ~60s) - +5 Account Lockout, +40 CSRF/Security
 - **Endpoints:** 37 REST API - +1 unlock-account
 - **Módulos:** User, Competition, Enrollment, Countries
-- **CI/CD:** GitHub Actions (9 jobs paralelos, ~3min) - +1 Snyk Code SAST
+- **CI/CD:** GitHub Actions (10 jobs paralelos, ~3min) - Security Tests + Trivy
 - **Deployment:** Render.com + Docker + PostgreSQL
 
 ### Completado (v1.0.0 - v1.12.1)
@@ -22,24 +22,24 @@
 |-----------|----------|
 | **User Module** | Login, Register, Email Verification, Password Reset, Handicap (RFEG), Profile |
 | **Competition Module** | CRUD, State Machine (6 estados), Enrollments, Countries (166 + 614 fronteras) |
-| **Security (v1.8.0 - v1.12.1)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk Code SAST) |
+| **Security (v1.8.0 - v1.13.0)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk Code SAST), **Account Lockout (v1.13.0)**, **CSRF Protection (v1.13.0)**, **Password History (v1.13.0)** |
 | **Testing** | 905 tests (unit + integration + security), CI/CD automático |
 
 ### OWASP Top 10 Coverage
 
 | Categoría | Score | Protecciones |
 |-----------|-------|--------------|
-| A01: Access Control | 9.5/10 | JWT, Refresh Tokens, Session Timeout, Authorization |
+| A01: Access Control | 9.7/10 | JWT, Refresh Tokens, Session Timeout, Authorization, **CSRF Protection** |
 | A02: Crypto Failures | 10/10 | bcrypt (12 rounds), httpOnly Cookies, HSTS, Tokens seguros |
 | A03: Injection | 10/10 | SQLAlchemy ORM, HTML Sanitization, Pydantic Validation |
 | A04: Insecure Design | 9/10 | Rate Limiting (5/min login), Field Limits, Password Policy |
 | A05: Misconfiguration | 9.5/10 | Security Headers, CORS Whitelist, Secrets Management |
 | A06: Vulnerable Components | 9.0/10 | Triple Audit (Safety + pip-audit + Snyk), Auto-updates, 6 CVEs resueltos |
-| A07: Auth Failures | 9.0/10 | Password Policy (ASVS V2.1), Session Timeout, Rate Limiting |
+| A07: Auth Failures | 9.5/10 | Password Policy (ASVS V2.1), Session Timeout, Rate Limiting, **Account Lockout** |
 | A08: Data Integrity | 7/10 | API Versioning |
 | A09: Logging | 10/10 | Security Audit Trail, Correlation IDs, Sentry (APM + Profiling) |
 | A10: SSRF | 8/10 | Input Validation |
-| **Promedio** | **9.2/10** | Suma: 91.5 puntos / 10 categorías = 9.15 (redondeado a 9.2) |
+| **Promedio** | **9.4/10** | Suma: 94 puntos / 10 categorías = 9.4 |
 
 ---
 
@@ -47,17 +47,24 @@
 
 ### v1.13.0 - Security Hardening (EN PROGRESO - Ene 2026) ⏳
 
-**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** 1/4 completado
+**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** 3/4 completado
 
 | Tarea | Estimación | OWASP | Prioridad | Estado |
 |-------|-----------|-------|-----------|--------|
 | ~~**Account Lockout**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (7 Ene) |
-| **CSRF Protection** | 4-6h | A01 | 🔴 CRÍTICA | ⏳ Pendiente |
+| ~~**CSRF Protection**~~ | ~~4-6h~~ | A01 | 🔴 CRÍTICA | ✅ **COMPLETADO** (8 Ene) |
+| ~~**Password History**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (8 Ene) |
 | **Device Fingerprinting** | 4-6h | A01 | 🟠 Alta | ⏳ Pendiente |
-| **Password History** | 3-4h | A07 | 🟠 Alta | ⏳ Pendiente |
 | ~~**2FA/MFA (TOTP)**~~ | ~~12-16h~~ | A07 | 🔴 CRÍTICA | ❌ **REMOVIDO** (no necesario ahora) |
 
-**Total:** ~14-20 horas (ajustado sin 2FA) | **OWASP Esperado:** 10.0/10 → 10/10
+**Total:** ~10-14 horas (3/4 completados) | **OWASP Actual:** 9.5/10 → 10/10 (pendiente Device Fingerprinting)
+
+#### Cambios clave v1.13.0:
+- **Account Lockout**: Bloqueo tras 10 intentos fallidos, auto-desbloqueo 30 min, endpoint manual, integración total (ver ADR-027)
+- **CSRF Protection**: Triple capa (header, cookie, SameSite), middleware dedicado, tests exhaustivos (ver ADR-028)
+- **Password History**: Previene reutilización últimas 5 contraseñas, bcrypt hashes en BD, GDPR compliant (ver ADR-029)
+- **Security Tests**: 40+ tests nuevos (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
+- **CI/CD Pipeline**: Añadidos jobs de Security Tests y Trivy Container Scan (ver ADR-021)
 
 **Cambios de Scope:**
 - ❌ 2FA/MFA removido: No crítico para app actual (OWASP ya 10.0/10, no hay datos financieros sensibles)
@@ -81,11 +88,16 @@
 - CSRF tokens en forms
 - Tests de CSRF bypass attempts
 
-#### 3. Password History ⏳ PENDIENTE
-- Modelo `PasswordHistory` en BD
-- No reutilizar últimas 5 contraseñas
-- Hash bcrypt de histórico
-- Limpieza automática (1 año)
+#### 3. Password History ✅ COMPLETADO (8 Ene)
+- ✅ Tabla `password_history` con migración Alembic
+- ✅ Prevención de reutilización últimas 5 contraseñas
+- ✅ Bcrypt hashes almacenados (255 chars)
+- ✅ Cascade delete (GDPR compliance)
+- ✅ Domain events (PasswordHistoryRecordedEvent)
+- ✅ 25 unit tests (PasswordHistoryId + PasswordHistory)
+- ✅ Validación en UpdateSecurity + ResetPassword
+- ✅ ADR-029 documentado
+- ⏳ Cleanup automático (diferido a v1.14.0)
 
 #### 4. Device Fingerprinting ⏳ PENDIENTE
 - Modelo `UserDevice` en BD
@@ -257,6 +269,7 @@ src/modules/ai/
 
 ```
 2026 Q1  │ v1.13.0 - Security Hardening (Account Lockout + CSRF + Device Fingerprinting + Password History)
+          │  🔹 Security Tests + Trivy (CI/CD)
 2026 Q2  │ v1.14.0 - Compliance (GDPR, Audit Logging, Avatares)
 2026 Q2  │ v1.15.0 - AI & RAG Module (Golf Rules Assistant)
 2026 Q3  │ v2.1.0 - Competition Module Evolution (7 semanas) ⭐ PRIORIDAD MÁXIMA
@@ -274,7 +287,21 @@ src/modules/ai/
 - **OWASP Top 10:** https://owasp.org/www-project-top-ten/
 - **ASVS:** https://owasp.org/www-project-application-security-verification-standard/
 
+**ADR relevantes:**
+- ADR-027: Account Lockout (Brute Force Protection)
+- ADR-028: CSRF Protection (Cross-Site Request Forgery)
+- ADR-021: GitHub Actions CI/CD Pipeline (evolución security jobs)
+
+**Cobertura de tests de seguridad:**
+- 45+ tests de seguridad (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
+- 100% passing (CI/CD bloquea si falla alguno)
+
+**Cobertura de middleware y cookies:**
+- Middleware CSRF activo en todos los endpoints protegidos
+- Cookie csrf_token (no httpOnly) + header X-CSRF-Token (double-submit)
+- Renovación automática en login y refresh
+
 ---
 
-**Próxima revisión:** Después de completar v1.13.0 (3/4 features pendientes)
+**Próxima revisión:** Después de completar v1.13.0 (1/4 features pendiente: Device Fingerprinting)
 **Responsable:** Equipo Backend

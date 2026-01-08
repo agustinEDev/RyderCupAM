@@ -5,10 +5,12 @@ Caso de uso para autenticar un usuario y generar un token JWT.
 Session Timeout (v1.8.0): Genera access token (15 min) + refresh token (7 días).
 Security Logging (v1.8.0): Registra todos los intentos de login (exitosos y fallidos).
 Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minutos.
+CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
 from datetime import datetime
 
+from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
@@ -205,12 +207,16 @@ class LoginUserUseCase:
             user_agent=user_agent,
         )
 
+        # Generar token CSRF (256 bits, 15 minutos de duración)
+        csrf_token = generate_csrf_token()
+
         # Crear respuesta con tokens y datos de usuario
         user_dto = UserResponseDTO.model_validate(user)
 
         return LoginResponseDTO(
             access_token=access_token,
             refresh_token=refresh_token_jwt,
+            csrf_token=csrf_token,
             token_type="bearer",
             user=user_dto,
             email_verification_required=not user.is_email_verified()

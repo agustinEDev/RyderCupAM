@@ -1,11 +1,11 @@
 # 🌐 API Reference
 
 **Base URL**: `http://localhost:8000`
-**Swagger UI**: `/docs` (auto-generado con ejemplos interactivos)
-**ReDoc**: `/redoc` (documentación alternativa)
-**Total Endpoints**: 34 active
+**Swagger UI**: `/docs` (auto-generated with interactive examples)
+**ReDoc**: `/redoc` (alternative documentation)
+**Total Endpoints**: 37 active
 **Version**: v1.13.0
-**Last Updated**: 7 Ene 2026
+**Last Updated**: 8 January 2026
 
 ---
 
@@ -14,7 +14,7 @@
 ```
 Authentication (11 endpoints)
 ├── POST /api/v1/auth/register           # User registration
-├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, lockout tras 10 intentos)
+├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, lockout after 10 attempts)
 ├── GET  /api/v1/auth/current-user       # Get authenticated user info
 ├── POST /api/v1/auth/logout             # Session logout (revoke refresh tokens)
 ├── POST /api/v1/auth/verify-email       # Email verification
@@ -68,78 +68,80 @@ Country Management (2 endpoints)
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/auth/register` | POST | No | Registro de usuario + email verification |
-| `/auth/login` | POST | No | Login con JWT (httpOnly cookies) - **Lockout tras 10 intentos fallidos** |
-| `/auth/current-user` | GET | Yes | Obtener usuario autenticado |
-| `/auth/logout` | POST | Yes | Logout con revocación de refresh tokens |
-| `/auth/refresh-token` | POST | No | Renovar access token (usa refresh cookie) |
-| `/auth/verify-email` | POST | No | Verificar email con token único |
-| `/auth/resend-verification` | POST | No | Reenviar email de verificación |
-| `/auth/forgot-password` | POST | No | Solicitar reseteo de contraseña (envía email con token) |
-| `/auth/reset-password` | POST | No | Completar reseteo de contraseña usando token |
-| `/auth/validate-reset-token/{token}` | GET | No | Validar token de reseteo antes de mostrar formulario |
-| `/auth/unlock-account` | POST | Yes | Desbloqueo manual de cuenta (Admin) - **v1.13.0** |
+| `/auth/register` | POST | No | User registration + email verification |
+| `/auth/login` | POST | No | Login with JWT (httpOnly cookies) - **Lockout after 10 failed attempts** |
+| `/auth/current-user` | GET | Yes | Get authenticated user |
+| `/auth/logout` | POST | Yes | Logout with refresh token revocation |
+| `/auth/refresh-token` | POST | No | Renew access token (uses refresh cookie) |
+| `/auth/verify-email` | POST | No | Verify email with unique token |
+| `/auth/resend-verification` | POST | No | Resend verification email |
+| `/auth/forgot-password` | POST | No | Request password reset (sends email with token) |
+| `/auth/reset-password` | POST | No | Complete password reset using token |
+| `/auth/validate-reset-token/{token}` | GET | No | Validate reset token before showing form |
+| `/auth/unlock-account` | POST | Yes | Manual account unlock (Admin) - **v1.13.0** |
 
 
-### Campos Principales
+### Main Fields
 
 **Register Request:**
-- `email` (string, requerido, max 254, único)
-- `password` (string, requerido, 12-128 chars, OWASP ASVS V2.1)
-- `first_name` (string, requerido, max 100)
-- `last_name` (string, requerido, max 100)
-- `country_code` (string, opcional, ISO 3166-1 alpha-2)
+- `email` (string, required, max 254, unique)
+- `password` (string, required, 12-128 chars, OWASP ASVS V2.1)
+- `first_name` (string, required, max 100)
+- `last_name` (string, required, max 100)
+- `country_code` (string, optional, ISO 3166-1 alpha-2)
 
 **Login Request:**
-- `email` (string, requerido)
-- `password` (string, requerido)
+- `email` (string, required)
+- `password` (string, required)
 
 **Login Response:**
-- `access_token` (string, JWT) - LEGACY, usar cookie
-- `refresh_token` (string, JWT) - LEGACY, usar cookie
-- `user` (object) - Datos del usuario
-- Cookies httpOnly: `access_token` (15 min), `refresh_token` (7 días)
+- `access_token` (string, JWT) - LEGACY, use cookie
+- `refresh_token` (string, JWT) - LEGACY, use cookie
+- `csrf_token` (string, 256-bit) - CSRF protection token (v1.13.0)
+- `user` (object) - User data
+- httpOnly Cookies: `access_token` (15 min), `refresh_token` (7 days)
+- Cookie NO httpOnly: `csrf_token` (15 min, readable by JS)
 
 **Forgot Password Request:**
-- `email` (string, requerido)
+- `email` (string, required)
 
 **Forgot Password Response:**
-- `message` (string) - Mensaje genérico de éxito
+- `message` (string) - Generic success message
 
 **Reset Password Request:**
-- `token` (string, requerido) - Token recibido por email
-- `new_password` (string, requerido, 12-128 chars, OWASP ASVS V2.1)
+- `token` (string, required) - Token received via email
+- `new_password` (string, required, 12-128 chars, OWASP ASVS V2.1)
 
 **Reset Password Response:**
-- `message` (string) - Mensaje de confirmación
+- `message` (string) - Confirmation message
 
 **Validate Reset Token Response:**
-- `valid` (bool) - Indica si el token es válido
-- `message` (string) - Mensaje explicativo
+- `valid` (bool) - Indicates if token is valid
+- `message` (string) - Explanatory message
 
 **Unlock Account Request:**
-- `user_id` (string, requerido, UUID) - ID del usuario a desbloquear
-- `unlocked_by_user_id` (string, auto-extraído del JWT) - ID del admin que desbloquea
+- `user_id` (string, required, UUID) - ID of user to unlock
+- `unlocked_by_user_id` (string, auto-extracted from JWT) - ID of admin unlocking
 
 **Unlock Account Response:**
-- `success` (bool) - Indica si el desbloqueo fue exitoso
-- `message` (string) - Mensaje de confirmación
-- `user_id` (string) - ID del usuario desbloqueado
-- `unlocked_by` (string) - ID del admin que realizó el desbloqueo
+- `success` (bool) - Indicates if unlock was successful
+- `message` (string) - Confirmation message
+- `user_id` (string) - ID of unlocked user
+- `unlocked_by` (string) - ID of admin who performed unlock
 
 
-### Notas de Seguridad
+### Security Notes
 
-- **httpOnly Cookies:** JWT almacenado en cookies inaccesibles desde JavaScript
-- **Dual Support:** Cookies (prioridad 1) + Headers (legacy)
+- **httpOnly Cookies:** JWT stored in cookies inaccessible from JavaScript
+- **Dual Support:** Cookies (priority 1) + Headers (legacy)
 - **Rate Limiting:** Login 5/min, Register 3/h, Resend 3/h, Forgot/Reset 3/h, Validate 10/h
-- **Password Policy:** 12 chars min, complejidad completa, blacklist
-- **Forgot/Reset:** Mensaje genérico, nunca revela si el email existe (previene user enumeration)
-- **Reset Token:** Token de un solo uso, expira en 24h, invalida todas las sesiones activas tras cambio
-- **Refresh Tokens:** SHA256 hash en BD, revocables en logout
-- **Account Lockout (v1.13.0):** 10 intentos fallidos → bloqueo 30 min, auto-desbloqueo, HTTP 423 Locked
+- **Password Policy:** 12 chars min, full complexity, blacklist
+- **Forgot/Reset:** Generic message, never reveals if email exists (prevents user enumeration)
+- **Reset Token:** Single-use token, expires in 24h, invalidates all active sessions after change
+- **Refresh Tokens:** SHA256 hash in DB, revocable on logout
+- **Account Lockout (v1.13.0):** 10 failed attempts → 30 min lockout, auto-unlock, HTTP 423 Locked
 
-**📋 Ver detalles:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
+**📋 See details:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
 
 ---
 
@@ -147,23 +149,23 @@ Country Management (2 endpoints)
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/users/search` | GET | Yes | Buscar usuarios por email/nombre |
-| `/users/profile` | PATCH | Yes | Actualizar perfil (nombre, apellido, country) |
-| `/users/security` | PATCH | Yes | Cambiar email o contraseña |
+| `/users/search` | GET | Yes | Search users by email/name |
+| `/users/profile` | PATCH | Yes | Update profile (name, surname, country) |
+| `/users/security` | PATCH | Yes | Change email or password |
 
 ### Query Parameters
 
 **GET /users/search:**
-- `query` (string, optional) - Búsqueda parcial en email, first_name, last_name
-- Retorna array de usuarios con datos básicos
+- `query` (string, optional) - Partial search in email, first_name, last_name
+- Returns array of users with basic data
 
-### Notas
+### Notes
 
-- Solo usuarios autenticados pueden buscar
-- No se expone información sensible (passwords, tokens)
-- country_code puede ser null
+- Only authenticated users can search
+- No sensitive information exposed (passwords, tokens)
+- country_code can be null
 
-**📋 Ver módulo completo:** `docs/modules/user-management.md`
+**📋 See complete module:** `docs/modules/user-management.md`
 
 ---
 
@@ -171,26 +173,26 @@ Country Management (2 endpoints)
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/handicaps/update` | POST | Yes | Obtener handicap desde RFEG API (solo españoles) |
-| `/handicaps/update-manual` | POST | Yes | Actualizar handicap manualmente |
-| `/handicaps/update-multiple` | POST | Yes | Actualización masiva (admin, cron job) |
+| `/handicaps/update` | POST | Yes | Get handicap from RFEG API (Spanish players only) |
+| `/handicaps/update-manual` | POST | Yes | Update handicap manually |
+| `/handicaps/update-multiple` | POST | Yes | Batch update (admin, cron job) |
 
-### Campos Principales
+### Main Fields
 
 **Update Manual Request:**
-- `handicap` (float, required, -10.0 a 54.0)
+- `handicap` (float, required, -10.0 to 54.0)
 
 **Update RFEG Request:**
-- `license_number` (string, required) - Licencia RFEG
+- `license_number` (string, required) - RFEG license
 
-### Reglas de Negocio
+### Business Rules
 
-- Solo usuarios españoles (country_code=ES) pueden usar RFEG
-- RFEG API: 5 llamadas/hora por usuario (rate limiting)
-- Handicap se actualiza automáticamente + timestamp
-- Domain event `HandicapUpdatedEvent` emitido
+- Only Spanish users (country_code=ES) can use RFEG
+- RFEG API: 5 calls/hour per user (rate limiting)
+- Handicap updates automatically + timestamp
+- Domain event `HandicapUpdatedEvent` emitted
 
-**📋 Ver módulo completo:** `docs/modules/user-management.md`
+**📋 See complete module:** `docs/modules/user-management.md`
 
 ---
 
@@ -198,22 +200,22 @@ Country Management (2 endpoints)
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/competitions` | POST | Yes | Crear competición (estado DRAFT) |
-| `/competitions` | GET | No | Listar competiciones con filtros |
-| `/competitions/{id}` | GET | No | Obtener competición por ID |
-| `/competitions/{id}` | PUT | Yes | Actualizar (solo DRAFT, solo creador) |
-| `/competitions/{id}` | DELETE | Yes | Eliminar (solo DRAFT, solo creador) |
-| `/competitions/{id}/activate` | POST | Yes | Transición DRAFT → ACTIVE |
-| `/competitions/{id}/close-enrollments` | POST | Yes | Transición ACTIVE → CLOSED |
-| `/competitions/{id}/start` | POST | Yes | Transición CLOSED → IN_PROGRESS |
-| `/competitions/{id}/complete` | POST | Yes | Transición IN_PROGRESS → COMPLETED |
-| `/competitions/{id}/cancel` | POST | Yes | Transición cualquier estado → CANCELLED |
+| `/competitions` | POST | Yes | Create competition (DRAFT status) |
+| `/competitions` | GET | No | List competitions with filters |
+| `/competitions/{id}` | GET | No | Get competition by ID |
+| `/competitions/{id}` | PUT | Yes | Update (DRAFT only, creator only) |
+| `/competitions/{id}` | DELETE | Yes | Delete (DRAFT only, creator only) |
+| `/competitions/{id}/activate` | POST | Yes | Transition DRAFT → ACTIVE |
+| `/competitions/{id}/close-enrollments` | POST | Yes | Transition ACTIVE → CLOSED |
+| `/competitions/{id}/start` | POST | Yes | Transition CLOSED → IN_PROGRESS |
+| `/competitions/{id}/complete` | POST | Yes | Transition IN_PROGRESS → COMPLETED |
+| `/competitions/{id}/cancel` | POST | Yes | Transition any status → CANCELLED |
 
-### Campos Principales (Create/Update)
+### Main Fields (Create/Update)
 
 **Competition Request:**
 - `name` (string, required, 3-100 chars, unique)
-- `start_date` (date, required, formato YYYY-MM-DD)
+- `start_date` (date, required, format YYYY-MM-DD)
 - `end_date` (date, required, >= start_date)
 - `country_code` (string, required, ISO 3166-1 alpha-2, main location)
 - `secondary_country_code` (string, optional, must be adjacent)
@@ -228,21 +230,21 @@ Country Management (2 endpoints)
 ### Query Parameters (List)
 
 **GET /competitions:**
-- `status` (string, optional) - Filtrar por estado (DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED, CANCELLED)
-- `creator_id` (string, optional) - Filtrar por creador
-- `my_competitions` (bool, optional) - Solo competiciones donde usuario es creador o está inscrito
-- `search_name` (string, optional) - Búsqueda parcial en nombre (case-insensitive)
-- `search_creator` (string, optional) - Búsqueda parcial en nombre del creador
+- `status` (string, optional) - Filter by status (DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED, CANCELLED)
+- `creator_id` (string, optional) - Filter by creator
+- `my_competitions` (bool, optional) - Only competitions where user is creator or enrolled
+- `search_name` (string, optional) - Partial search in name (case-insensitive)
+- `search_creator` (string, optional) - Partial search in creator name
 
-### Competition Response (Campos Calculados)
+### Competition Response (Computed Fields)
 
-- `is_creator` (bool) - Si el usuario autenticado es el creador
-- `enrolled_count` (int) - Cantidad de jugadores inscritos (APPROVED)
-- `location` (string) - Nombres de países formateados (ej: "Spain, France")
-- `creator` (object) - Datos completos del creador (nested object)
-- `countries` (array) - Lista de países con detalles (code, name_en, name_es)
+- `is_creator` (bool) - Whether authenticated user is the creator
+- `enrolled_count` (int) - Number of enrolled players (APPROVED)
+- `location` (string) - Formatted country names (e.g.: "Spain, France")
+- `creator` (object) - Complete creator data (nested object)
+- `countries` (array) - List of countries with details (code, name_en, name_es)
 
-### Estados y Transiciones
+### Status and Transitions
 
 ```
 DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
@@ -250,16 +252,16 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
   └────────┴─────────┴───────────┴─→ CANCELLED
 ```
 
-**Reglas:**
-- Solo el creador puede modificar/eliminar/cambiar estado
-- DRAFT: Solo editable, no visible públicamente
-- ACTIVE: Inscripciones abiertas
-- CLOSED: Inscripciones cerradas, equipos configurados
-- IN_PROGRESS: Torneo en curso
-- COMPLETED: Torneo finalizado
-- CANCELLED: Cancelado desde cualquier estado
+**Rules:**
+- Only creator can modify/delete/change status
+- DRAFT: Only editable, not publicly visible
+- ACTIVE: Enrollments open
+- CLOSED: Enrollments closed, teams configured
+- IN_PROGRESS: Tournament in progress
+- COMPLETED: Tournament finished
+- CANCELLED: Cancelled from any status
 
-**📋 Ver módulo completo:** `docs/modules/competition-management.md` (pendiente de crear)
+**📋 See complete module:** `docs/modules/competition-management.md`
 
 ---
 
@@ -267,38 +269,38 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/competitions/{id}/enrollments` | POST | Yes | Solicitar inscripción (REQUESTED) |
-| `/competitions/{id}/enrollments/direct` | POST | Yes | Inscripción directa por creador (APPROVED) |
-| `/competitions/{id}/enrollments` | GET | Yes | Listar inscripciones con filtros |
-| `/enrollments/{id}/approve` | POST | Yes | Aprobar solicitud (solo creador) |
-| `/enrollments/{id}/reject` | POST | Yes | Rechazar solicitud (solo creador) |
-| `/enrollments/{id}/cancel` | POST | Yes | Cancelar solicitud/invitación |
-| `/enrollments/{id}/withdraw` | POST | Yes | Retirarse de competición |
-| `/enrollments/{id}/handicap` | PUT | Yes | Establecer handicap personalizado |
+| `/competitions/{id}/enrollments` | POST | Yes | Request enrollment (REQUESTED) |
+| `/competitions/{id}/enrollments/direct` | POST | Yes | Direct enrollment by creator (APPROVED) |
+| `/competitions/{id}/enrollments` | GET | Yes | List enrollments with filters |
+| `/enrollments/{id}/approve` | POST | Yes | Approve request (creator only) |
+| `/enrollments/{id}/reject` | POST | Yes | Reject request (creator only) |
+| `/enrollments/{id}/cancel` | POST | Yes | Cancel request/invitation |
+| `/enrollments/{id}/withdraw` | POST | Yes | Withdraw from competition |
+| `/enrollments/{id}/handicap` | PUT | Yes | Set custom handicap |
 
-### Campos Principales
+### Main Fields
 
 **Request Enrollment:**
-- Solo requiere autenticación
-- Crea enrollment con estado REQUESTED
-- Usuario puede cancelar antes de aprobación
+- Only requires authentication
+- Creates enrollment with REQUESTED status
+- User can cancel before approval
 
 **Direct Enroll:**
-- `user_id` (string, required) - ID del usuario a inscribir
-- Solo creador puede ejecutar
-- Crea enrollment con estado APPROVED directamente
+- `user_id` (string, required) - ID of user to enroll
+- Only creator can execute
+- Creates enrollment with APPROVED status directly
 
 **Set Custom Handicap:**
-- `custom_handicap` (float, required, -10.0 a 54.0)
-- Solo creador puede establecer
-- Override del handicap oficial del usuario
+- `custom_handicap` (float, required, -10.0 to 54.0)
+- Only creator can set
+- Override of user's official handicap
 
 ### Query Parameters (List)
 
 **GET /competitions/{id}/enrollments:**
-- `status` (string, optional) - Filtrar por estado (REQUESTED, APPROVED, REJECTED, CANCELLED, WITHDRAWN)
+- `status` (string, optional) - Filter by status (REQUESTED, APPROVED, REJECTED, CANCELLED, WITHDRAWN)
 
-### Estados de Enrollment
+### Enrollment States
 
 ```
 REQUESTED → APPROVED → WITHDRAWN
@@ -306,34 +308,34 @@ REQUESTED → APPROVED → WITHDRAWN
 REJECTED    CANCELLED
 ```
 
-**Estados:**
-- `REQUESTED` - Solicitud pendiente de aprobación
-- `INVITED` - Invitado por creador (futuro)
-- `APPROVED` - Inscripción aprobada
-- `REJECTED` - Solicitud rechazada por creador
-- `CANCELLED` - Cancelada por jugador (pre-inscripción)
-- `WITHDRAWN` - Retirado por jugador (post-inscripción)
+**States:**
+- `REQUESTED` - Pending approval request
+- `INVITED` - Invited by creator (future)
+- `APPROVED` - Enrollment approved
+- `REJECTED` - Request rejected by creator
+- `CANCELLED` - Cancelled by player (pre-enrollment)
+- `WITHDRAWN` - Withdrawn by player (post-enrollment)
 
-### Enrollment Response (Campos)
+### Enrollment Response (Fields)
 
-- `id` (string) - UUID del enrollment
-- `competition_id` (string) - ID de la competición
-- `user_id` (string) - ID del usuario
-- `user` (object) - Datos completos del usuario (nested object)
-- `status` (string) - Estado actual
-- `custom_handicap` (float, nullable) - Handicap personalizado
-- `team` (string, nullable) - Equipo asignado (1 o 2)
-- `created_at` (datetime) - Fecha de solicitud
+- `id` (string) - Enrollment UUID
+- `competition_id` (string) - Competition ID
+- `user_id` (string) - User ID
+- `user` (object) - Complete user data (nested object)
+- `status` (string) - Current status
+- `custom_handicap` (float, nullable) - Custom handicap
+- `team` (string, nullable) - Assigned team (1 or 2)
+- `created_at` (datetime) - Request date
 
-### Reglas de Negocio
+### Business Rules
 
-- Competición debe estar en estado ACTIVE para inscripciones
-- No se permiten inscripciones duplicadas
-- Solo creador puede aprobar/rechazar/inscribir directamente
-- Solo dueño puede cancelar/retirarse
-- custom_handicap es opcional, si no se establece usa el oficial
+- Competition must be in ACTIVE status for enrollments
+- No duplicate enrollments allowed
+- Only creator can approve/reject/enroll directly
+- Only owner can cancel/withdraw
+- custom_handicap is optional, if not set uses official handicap
 
-**📋 Ver módulo completo:** `docs/modules/competition-management.md` (pendiente de crear)
+**📋 See complete module:** `docs/modules/competition-management.md` (pending creation)
 
 ---
 
@@ -341,124 +343,124 @@ REJECTED    CANCELLED
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/countries` | GET | No | Listar todos los países activos |
-| `/countries/{code}/adjacent` | GET | No | Listar países adyacentes |
+| `/countries` | GET | No | List all active countries |
+| `/countries/{code}/adjacent` | GET | No | List adjacent countries |
 
 ### Country Response
 
-**Estructura:**
-- `code` (string) - Código ISO 3166-1 alpha-2 (ej: "ES")
-- `name_en` (string) - Nombre en inglés (ej: "Spain")
-- `name_es` (string) - Nombre en español (ej: "España")
+**Structure:**
+- `code` (string) - ISO 3166-1 alpha-2 code (e.g.: "ES")
+- `name_en` (string) - Name in English (e.g.: "Spain")
+- `name_es` (string) - Name in Spanish (e.g.: "España")
 
-**Datos:**
-- 166 países globales (no solo Europa)
-- 614 relaciones bidireccionales de fronteras
-- Soporte para torneos en hasta 3 países adyacentes
+**Data:**
+- 166 global countries (not only Europe)
+- 614 bidirectional border relationships
+- Support for tournaments in up to 3 adjacent countries
 
-### Uso
+### Usage
 
-- Selectores de país en formularios
-- Validación de adyacencia en creación de competiciones
-- Location multi-país con nombres bilingües
+- Country selectors in forms
+- Adjacency validation in competition creation
+- Multi-country location with bilingual names
 
 ---
 
-## 📖 Swagger UI (Documentación Interactiva)
+## 📖 Swagger UI (Interactive Documentation)
 
-### Acceso
+### Access
 
 **URL:** `http://localhost:8000/docs`
-**Autenticación:** HTTP Basic Auth
-**Credenciales:** Configuradas en `.env` (DOCS_USERNAME, DOCS_PASSWORD)
+**Authentication:** HTTP Basic Auth
+**Credentials:** Configured in `.env` (DOCS_USERNAME, DOCS_PASSWORD)
 
 ### Features
 
-- ✅ Ejemplos interactivos de requests/responses JSON completos
-- ✅ "Try it out" - Ejecutar requests directamente desde el navegador
-- ✅ Schemas de Pydantic auto-generados
-- ✅ Validaciones y tipos de datos documentados
-- ✅ Códigos de respuesta HTTP (200, 400, 401, 403, 404, 422, 500)
-- ✅ Authentication con Bearer token o cookies
+- ✅ Complete interactive JSON request/response examples
+- ✅ "Try it out" - Execute requests directly from browser
+- ✅ Auto-generated Pydantic schemas
+- ✅ Documented validations and data types
+- ✅ HTTP response codes (200, 400, 401, 403, 404, 422, 500)
+- ✅ Authentication with Bearer token or cookies
 
-**Recomendación:** Usar Swagger UI para ver ejemplos JSON completos y probar endpoints.
+**Recommendation:** Use Swagger UI to see complete JSON examples and test endpoints.
 
 ---
 
 ## 📬 Postman Collection
 
-**Archivo:** `docs/postman_collection.json`
+**File:** `docs/postman_collection.json`
 
 **Features:**
-- ✅ 33 requests pre-configurados
-- ✅ Variables de entorno (BASE_URL, ACCESS_TOKEN)
-- ✅ Ejemplos de requests/responses
-- ✅ Tests automatizados en algunos endpoints
-- ✅ Organizado por módulos (Auth, Users, Competitions, Enrollments)
+- ✅ 33 pre-configured requests
+- ✅ Environment variables (BASE_URL, ACCESS_TOKEN)
+- ✅ Request/response examples
+- ✅ Automated tests on some endpoints
+- ✅ Organized by modules (Auth, Users, Competitions, Enrollments)
 
-**Importar en Postman:**
-1. Abrir Postman
+**Import in Postman:**
+1. Open Postman
 2. File → Import
-3. Seleccionar `docs/postman_collection.json`
-4. Configurar variable BASE_URL: `http://localhost:8000`
+3. Select `docs/postman_collection.json`
+4. Configure BASE_URL variable: `http://localhost:8000`
 
 ---
 
-## 🔒 Seguridad y Rate Limiting
+## 🔒 Security and Rate Limiting
 
-### Rate Limits por Endpoint
+### Rate Limits per Endpoint
 
-| Endpoint | Límite | Razón |
+| Endpoint | Limit | Reason |
 |----------|--------|-------|
-| Global | 100/minuto | Protección DoS básica |
-| POST /auth/login | 5/minuto | Anti brute-force |
-| POST /auth/register | 3/hora | Anti spam de registros |
-| POST /auth/resend-verification | 3/hora | Proteger Mailgun |
-| POST /handicaps/update | 5/hora | Proteger RFEG API |
-| POST /competitions | 10/hora | Anti spam de competiciones |
+| Global | 100/minute | Basic DoS protection |
+| POST /auth/login | 5/minute | Anti brute-force |
+| POST /auth/register | 3/hour | Anti registration spam |
+| POST /auth/resend-verification | 3/hour | Protect Mailgun |
+| POST /handicaps/update | 5/hour | Protect RFEG API |
+| POST /competitions | 10/hour | Anti competition spam |
 
 ### HTTP Status Codes
 
-| Code | Descripción | Cuándo se usa |
+| Code | Description | When used |
 |------|-------------|---------------|
-| 200 | OK | Request exitoso (GET, PUT, PATCH) |
-| 201 | Created | Recurso creado (POST) |
-| 204 | No Content | Recurso eliminado (DELETE) |
-| 400 | Bad Request | Request inválido (validación Pydantic) |
-| 401 | Unauthorized | No autenticado o token inválido |
-| 403 | Forbidden | Autenticado pero sin permisos |
-| 404 | Not Found | Recurso no encontrado |
-| 409 | Conflict | Recurso duplicado (email, nombre competición) |
-| 422 | Unprocessable Entity | Validación de dominio fallida |
-| 429 | Too Many Requests | Rate limit excedido |
-| 500 | Internal Server Error | Error no controlado del servidor |
+| 200 | OK | Successful request (GET, PUT, PATCH) |
+| 201 | Created | Resource created (POST) |
+| 204 | No Content | Resource deleted (DELETE) |
+| 400 | Bad Request | Invalid request (Pydantic validation) |
+| 401 | Unauthorized | Not authenticated or invalid token |
+| 403 | Forbidden | Authenticated but no permissions |
+| 404 | Not Found | Resource not found |
+| 409 | Conflict | Duplicate resource (email, competition name) |
+| 422 | Unprocessable Entity | Domain validation failed |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Internal Server Error | Unhandled server error |
 
-### Headers de Seguridad
+### Security Headers
 
-**Todos los responses incluyen:**
-- `Strict-Transport-Security` - HSTS (2 años)
-- `X-Frame-Options` - SAMEORIGIN (previene clickjacking)
-- `X-Content-Type-Options` - nosniff (previene MIME-sniffing XSS)
+**All responses include:**
+- `Strict-Transport-Security` - HSTS (2 years)
+- `X-Frame-Options` - SAMEORIGIN (prevents clickjacking)
+- `X-Content-Type-Options` - nosniff (prevents MIME-sniffing XSS)
 - `Referrer-Policy` - no-referrer, strict-origin-when-cross-origin
-- `Cache-Control` - no-store (previene cacheo de datos sensibles)
-- `X-Correlation-ID` - UUID único para trazabilidad
+- `Cache-Control` - no-store (prevents caching sensitive data)
+- `X-Correlation-ID` - Unique UUID for traceability
 
-**📋 Ver implementación completa:** `docs/SECURITY_IMPLEMENTATION.md`
+**📋 See complete implementation:** `docs/SECURITY_IMPLEMENTATION.md`
 
 ---
 
-## 🔗 Enlaces Relacionados
+## 🔗 Related Links
 
-### Documentación de Módulos
+### Module Documentation
 - **User Management:** `docs/modules/user-management.md`
-- **Competition Management:** `docs/modules/competition-management.md` (pendiente)
+- **Competition Management:** `docs/modules/competition-management.md` (pending)
 
-### Documentación Técnica
+### Technical Documentation
 - **Security Implementation:** `docs/SECURITY_IMPLEMENTATION.md`
 - **Multi-Environment Setup:** `docs/MULTI_ENVIRONMENT_SETUP.md`
 - **Deployment:** `DEPLOYMENT.md`
 
-### Código Fuente
+### Source Code
 - **User Module:** `src/modules/user/infrastructure/api/v1/`
 - **Competition Module:** `src/modules/competition/infrastructure/api/v1/`
 
@@ -468,5 +470,5 @@ REJECTED    CANCELLED
 
 ---
 
-**Última actualización:** 18 de Diciembre de 2025
-**Versión:** 1.8.0
+**Last Updated:** 8 January 2026
+**Version:** v1.13.0

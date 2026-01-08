@@ -4,8 +4,10 @@ Refresh Access Token Use Case
 Caso de uso para renovar el access token usando un refresh token válido.
 Implementa el patrón Session Timeout (OWASP A01/A02 - v1.8.0).
 Security Logging (v1.8.0): Registra uso de refresh tokens.
+CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 """
 
+from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
     RefreshAccessTokenResponseDTO,
@@ -143,7 +145,10 @@ class RefreshAccessTokenUseCase:
             data={"sub": str(user.id.value)}
         )
 
-        # 6. Security Logging: Uso exitoso de refresh token
+        # 6. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
+        csrf_token = generate_csrf_token()
+
+        # 7. Security Logging: Uso exitoso de refresh token
         security_logger.log_refresh_token_used(
             user_id=str(user.id.value),
             ip_address=ip_address,
@@ -152,11 +157,12 @@ class RefreshAccessTokenUseCase:
             new_access_token_created=True,
         )
 
-        # 7. Preparar respuesta
+        # 8. Preparar respuesta
         user_dto = UserResponseDTO.model_validate(user)
 
         return RefreshAccessTokenResponseDTO(
             access_token=new_access_token,
+            csrf_token=csrf_token,
             token_type="bearer",
             user=user_dto,
             message="Access token renovado exitosamente"

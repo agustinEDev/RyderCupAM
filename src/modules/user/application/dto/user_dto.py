@@ -202,9 +202,13 @@ class LoginResponseDTO(BaseModel):
     Session Timeout (v1.8.0):
     - access_token: Válido por 15 minutos (operaciones frecuentes)
     - refresh_token: Válido por 7 días (renovar access sin re-login)
+
+    CSRF Protection (v1.13.0):
+    - csrf_token: Token de 256 bits para validación double-submit (15 minutos)
     """
     access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
     refresh_token: str = Field(..., description="Token JWT de renovación (7 días).")
+    csrf_token: str = Field(..., description="Token CSRF para validación double-submit (15 minutos).")
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
     email_verification_required: bool = Field(default=False, description="Indica si el usuario necesita verificar su email.")
@@ -435,8 +439,12 @@ class RefreshAccessTokenResponseDTO(BaseModel):
 
     Retorna un nuevo access token válido por 15 minutos.
     El refresh token NO se renueva (sigue siendo el mismo hasta su expiración).
+
+    CSRF Protection (v1.13.0):
+    - csrf_token: Nuevo token CSRF generado al renovar access token (15 minutos)
     """
     access_token: str = Field(..., description="Nuevo access token JWT válido por 15 minutos.")
+    csrf_token: str = Field(..., description="Nuevo token CSRF para validación double-submit (15 minutos).")
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información básica del usuario autenticado.")
     message: str = Field(

@@ -37,6 +37,7 @@ from src.config.rate_limit import limiter
 from src.config.cors_config import get_cors_config
 from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
 from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware
+from src.shared.infrastructure.middleware.csrf_middleware import CSRFMiddleware
 
 
 @asynccontextmanager
@@ -161,6 +162,14 @@ async def add_security_headers(request: Request, call_next):
 # IMPORTANTE: Debe ir DESPUÉS de security headers para que CORS
 # se aplique ANTES (orden inverso de ejecución)
 app.add_middleware(CORSMiddleware, **get_cors_config())
+
+# ================================
+# CSRF PROTECTION MIDDLEWARE (v1.13.0)
+# ================================
+# Valida CSRF tokens en requests no seguros (POST, PUT, PATCH, DELETE)
+# Exime GET, HEAD, OPTIONS, rutas públicas (/health, /docs)
+# IMPORTANTE: Debe ir ANTES de que los endpoints procesen los requests
+app.add_middleware(CSRFMiddleware)
 
 # Sentry User Context Middleware (captura usuario de JWT para eventos)
 app.add_middleware(SentryUserContextMiddleware)
