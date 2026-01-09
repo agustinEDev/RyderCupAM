@@ -40,7 +40,7 @@ class TestPasswordValidation:
 
     def test_empty_password_raises_error(self):
         """Password vacío debe lanzar InvalidPasswordError"""
-        with pytest.raises(InvalidPasswordError, match="debe tener al menos 12 caracteres"):
+        with pytest.raises(InvalidPasswordError, match="no puede estar vacía"):
             Password.from_plain_text("")  # type: ignore[arg-type]
 
     def test_none_password_raises_error(self):
