@@ -46,10 +46,10 @@ async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
                 "email": "locktest@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-1-{i+1}"}  # Cliente diferente por intento
+            headers={"X-Test-Client-ID": f"test-client-1-{i + 1}"},  # Cliente diferente por intento
         )
         # Then: Todos retornan 401 (credenciales incorrectas)
-        assert response.status_code == 401, f"Attempt {i+1} should return 401"
+        assert response.status_code == 401, f"Attempt {i + 1} should return 401"
 
     # When: Intento 10 (debería bloquear)
     response = await client.post(
@@ -58,7 +58,7 @@ async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
             "email": "locktest@example.com",
             "password": "WrongPassword123!",
         },
-        headers={"X-Test-Client-ID": "test-client-1-10"}
+        headers={"X-Test-Client-ID": "test-client-1-10"},
     )
 
     # Then: Retorna 423 Locked
@@ -95,7 +95,7 @@ async def test_locked_account_cannot_login_even_with_correct_password(client: As
                 "email": "locked@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-2-{i+1}"}
+            headers={"X-Test-Client-ID": f"test-client-2-{i + 1}"},
         )
 
     # When: Intentar login con password CORRECTA
@@ -105,7 +105,7 @@ async def test_locked_account_cannot_login_even_with_correct_password(client: As
             "email": "locked@example.com",
             "password": "CorrectPassword123!",  # ← Password correcta
         },
-        headers={"X-Test-Client-ID": "test-client-2-11"}
+        headers={"X-Test-Client-ID": "test-client-2-11"},
     )
 
     # Then: Sigue bloqueada (423)
@@ -144,7 +144,7 @@ async def test_successful_login_resets_failed_attempts_counter(client: AsyncClie
                 "email": "reset@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-3-{i+1}"}
+            headers={"X-Test-Client-ID": f"test-client-3-{i + 1}"},
         )
 
     # When: Login exitoso
@@ -154,7 +154,7 @@ async def test_successful_login_resets_failed_attempts_counter(client: AsyncClie
             "email": "reset@example.com",
             "password": "ValidPassword123!",  # ← Correcta
         },
-        headers={"X-Test-Client-ID": "test-client-3-6"}
+        headers={"X-Test-Client-ID": "test-client-3-6"},
     )
 
     # Then: Login exitoso
@@ -171,7 +171,7 @@ async def test_successful_login_resets_failed_attempts_counter(client: AsyncClie
                 "email": "reset@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-3-{i+10}"}
+            headers={"X-Test-Client-ID": f"test-client-3-{i + 10}"},
         )
         assert response.status_code == 401  # No bloqueado aún
 
@@ -201,6 +201,7 @@ async def test_admin_can_unlock_account_manually(client: AsyncClient):
 # Edge Cases y Security Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_lockout_persists_across_requests(client: AsyncClient):
     """
@@ -229,7 +230,7 @@ async def test_lockout_persists_across_requests(client: AsyncClient):
                 "email": "persist@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-4-{i+1}"}
+            headers={"X-Test-Client-ID": f"test-client-4-{i + 1}"},
         )
 
     # When: Intentar login desde "nuevo cliente" (simular nueva sesión)
@@ -240,7 +241,7 @@ async def test_lockout_persists_across_requests(client: AsyncClient):
             "email": "persist@example.com",
             "password": "ValidPassword123!",
         },
-        headers={"X-Test-Client-ID": "test-client-4-11"}
+        headers={"X-Test-Client-ID": "test-client-4-11"},
     )
 
     # Then: Sigue bloqueada (persiste en BD)
@@ -277,7 +278,7 @@ async def test_lockout_error_message_includes_locked_until_timestamp(client: Asy
                 "email": "timestamp@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-5-{i+1}"}  # Cliente diferente por intento
+            headers={"X-Test-Client-ID": f"test-client-5-{i + 1}"},  # Cliente diferente por intento
         )
 
     # When: Intentar login
@@ -287,7 +288,7 @@ async def test_lockout_error_message_includes_locked_until_timestamp(client: Asy
             "email": "timestamp@example.com",
             "password": "ValidPassword123!",
         },
-        headers={"X-Test-Client-ID": "test-client-5-11"}
+        headers={"X-Test-Client-ID": "test-client-5-11"},
     )
 
     # Then: Mensaje incluye timestamp en formato ISO

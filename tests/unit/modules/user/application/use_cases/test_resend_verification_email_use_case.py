@@ -45,9 +45,7 @@ class TestResendVerificationEmailUseCase:
         return mock
 
     async def test_execute_with_valid_email_sends_verification_email(
-        self,
-        uow: InMemoryUnitOfWork,
-        email_service_mock: MagicMock
+        self, uow: InMemoryUnitOfWork, email_service_mock: MagicMock
     ):
         """
         Test: Reenviar email con dirección válida
@@ -73,6 +71,7 @@ class TestResendVerificationEmailUseCase:
         # Verificar que se generó un nuevo token
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("juan@test.com")
             updated_user = await uow.users.find_by_email(email)
 
@@ -91,7 +90,10 @@ class TestResendVerificationEmailUseCase:
         use_case = ResendVerificationEmailUseCase(uow)
 
         # Act & Assert
-        with pytest.raises(ResendVerificationError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
+        with pytest.raises(
+            ResendVerificationError,
+            match="Si el email existe y no está verificado, se enviará un email de verificación",
+        ):
             await use_case.execute("noexiste@test.com")
 
     async def test_execute_with_empty_email_raises_error(self, uow: InMemoryUnitOfWork):
@@ -129,13 +131,14 @@ class TestResendVerificationEmailUseCase:
 
         # Act & Assert
         use_case = ResendVerificationEmailUseCase(uow)
-        with pytest.raises(ResendVerificationError, match="Si el email existe y no está verificado, se enviará un email de verificación"):
+        with pytest.raises(
+            ResendVerificationError,
+            match="Si el email existe y no está verificado, se enviará un email de verificación",
+        ):
             await use_case.execute("maria@test.com")
 
     async def test_execute_generates_new_token(
-        self,
-        uow: InMemoryUnitOfWork,
-        email_service_mock: MagicMock
+        self, uow: InMemoryUnitOfWork, email_service_mock: MagicMock
     ):
         """
         Test: Se genera un nuevo token de verificación
@@ -156,6 +159,7 @@ class TestResendVerificationEmailUseCase:
         # Assert - Verificar que el token cambió
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("pedro@test.com")
             updated_user = await uow.users.find_by_email(email)
 
@@ -163,9 +167,7 @@ class TestResendVerificationEmailUseCase:
             assert updated_user.verification_token != old_token
 
     async def test_execute_commits_transaction(
-        self,
-        uow: InMemoryUnitOfWork,
-        email_service_mock: MagicMock
+        self, uow: InMemoryUnitOfWork, email_service_mock: MagicMock
     ):
         """
         Test: Reenvío persiste los cambios
@@ -186,6 +188,7 @@ class TestResendVerificationEmailUseCase:
         # Assert - Verificar que los cambios persisten en nueva transacción
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("ana@test.com")
             persisted_user = await uow.users.find_by_email(email)
 
@@ -193,10 +196,7 @@ class TestResendVerificationEmailUseCase:
             assert persisted_user.verification_token is not None
             assert persisted_user.email_verified is False
 
-    async def test_execute_when_email_service_fails_raises_error(
-        self,
-        uow: InMemoryUnitOfWork
-    ):
+    async def test_execute_when_email_service_fails_raises_error(self, uow: InMemoryUnitOfWork):
         """
         Test: Error al enviar email lanza excepción y NO guarda token
         Given: Un usuario válido pero el servicio de email falla
@@ -215,21 +215,22 @@ class TestResendVerificationEmailUseCase:
 
         # Act & Assert
         use_case = ResendVerificationEmailUseCase(uow, email_service_mock_fail)
-        with pytest.raises(ResendVerificationError, match="Error al enviar el email de verificación"):
+        with pytest.raises(
+            ResendVerificationError, match="Error al enviar el email de verificación"
+        ):
             await use_case.execute("carlos@test.com")
 
         # Verificar que NO se guardó ningún token nuevo en la BD
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("carlos@test.com")
             user_after = await uow.users.find_by_email(email)
             assert user_after is not None
             assert user_after.verification_token == original_token  # Token no cambió
 
     async def test_execute_calls_email_service_with_correct_params(
-        self,
-        uow: InMemoryUnitOfWork,
-        email_service_mock: MagicMock
+        self, uow: InMemoryUnitOfWork, email_service_mock: MagicMock
     ):
         """
         Test: Servicio de email se llama con parámetros correctos
@@ -250,7 +251,7 @@ class TestResendVerificationEmailUseCase:
         # Assert
         call_args = email_service_mock.send_verification_email.call_args
         assert call_args is not None
-        assert call_args.kwargs['to_email'] == "luis@test.com"
-        assert call_args.kwargs['user_name'] == "Luis Fernández"
-        assert isinstance(call_args.kwargs['verification_token'], str)
-        assert len(call_args.kwargs['verification_token']) > 0
+        assert call_args.kwargs["to_email"] == "luis@test.com"
+        assert call_args.kwargs["user_name"] == "Luis Fernández"
+        assert isinstance(call_args.kwargs["verification_token"], str)
+        assert len(call_args.kwargs["verification_token"]) > 0

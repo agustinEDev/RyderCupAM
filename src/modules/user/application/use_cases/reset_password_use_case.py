@@ -51,11 +51,7 @@ class ResetPasswordUseCase:
     - Logout forzado en todos los dispositivos
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        email_service: IEmailService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
         """
         Inicializa el caso de uso.
 
@@ -66,10 +62,7 @@ class ResetPasswordUseCase:
         self._uow = uow
         self._email_service = email_service
 
-    async def execute(
-        self,
-        request: ResetPasswordRequestDTO
-    ) -> ResetPasswordResponseDTO:
+    async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """
         Ejecuta el caso de uso de reseteo de contraseña.
 
@@ -131,7 +124,7 @@ class ResetPasswordUseCase:
                 token=request.token,
                 new_password=request.new_password,
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
         except ValueError as e:
             # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
@@ -153,7 +146,7 @@ class ResetPasswordUseCase:
             password_history = PasswordHistory.create(
                 user_id=user.id,
                 password_hash=user.password.hashed_value,
-                total_history_count=total_history_count
+                total_history_count=total_history_count,
             )
             await self._uow.password_history.save(password_history)
 
@@ -167,8 +160,7 @@ class ResetPasswordUseCase:
 
         # Enviar email de confirmación
         await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value),
-            user_name=user.get_full_name()
+            to_email=str(user.email.value), user_name=user.get_full_name()
         )
 
         # Security Logging: Reseteo exitoso
@@ -184,5 +176,5 @@ class ResetPasswordUseCase:
         # Retornar mensaje de confirmación
         return ResetPasswordResponseDTO(
             message="Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad.",
-            email=str(user.email.value)
+            email=str(user.email.value),
         )

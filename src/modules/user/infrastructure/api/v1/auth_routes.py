@@ -83,6 +83,7 @@ router = APIRouter()
 # HELPER FUNCTIONS - Security Context Extraction
 # ============================================================================
 
+
 def get_client_ip(request: Request) -> str:
     """
     Extrae la dirección IP del cliente del request.
@@ -128,6 +129,7 @@ def get_user_agent(request: Request) -> str:
     """
     user_agent = request.headers.get("User-Agent")
     return user_agent if user_agent else "unknown"
+
 
 @router.post(
     "/register",
@@ -436,8 +438,7 @@ async def refresh_access_token(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     refresh_request = RefreshAccessTokenRequestDTO(
-        ip_address=get_client_ip(request),
-        user_agent=get_user_agent(request)
+        ip_address=get_client_ip(request), user_agent=get_user_agent(request)
     )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 
@@ -457,8 +458,6 @@ async def refresh_access_token(
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
     return refresh_response
-
-
 
 
 @router.post(
@@ -515,7 +514,11 @@ async def verify_email(
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
     TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
-    token_preview = f"{request.token[:TOKEN_PREVIEW_LENGTH]}..." if len(request.token) > TOKEN_PREVIEW_LENGTH else "***"
+    token_preview = (
+        f"{request.token[:TOKEN_PREVIEW_LENGTH]}..."
+        if len(request.token) > TOKEN_PREVIEW_LENGTH
+        else "***"
+    )
     logger.info(f"Email verification attempt with token: {token_preview}")
 
     try:
@@ -548,7 +551,7 @@ async def verify_email(
             csrf_token=csrf_token,
             token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
-            email_verification_required=False
+            email_verification_required=False,
         )
     except ValueError as e:
         logger.warning(
@@ -559,10 +562,7 @@ async def verify_email(
             detail="Unable to verify email. Please check your verification link or request a new one.",
         ) from e
     except Exception as e:
-        logger.error(
-            f"Unexpected error in email verification: {type(e).__name__}",
-            exc_info=True
-        )
+        logger.error(f"Unexpected error in email verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
@@ -624,22 +624,20 @@ async def resend_verification_email(
         # - Error al enviar email
     except Exception as e:
         # Log errores inesperados para monitoreo del sistema
-        logger.error(
-            f"Unexpected error in resend verification: {type(e).__name__}",
-            exc_info=True
-        )
+        logger.error(f"Unexpected error in resend verification: {type(e).__name__}", exc_info=True)
         # Aún así procedemos con respuesta genérica
 
     # Siempre retornamos el mismo mensaje genérico
     return ResendVerificationEmailResponseDTO(
         message="If the email address exists in our system, a verification email has been sent.",
-        email=resend_data.email
+        email=resend_data.email,
     )
 
 
 # ============================================================================
 # PASSWORD RESET ENDPOINTS
 # ============================================================================
+
 
 @router.post(
     "/forgot-password",
@@ -665,13 +663,13 @@ async def resend_verification_email(
     - SIEMPRE retorna 200 OK con mensaje genérico
     - NUNCA revela si el email existe (previene user enumeration)
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("3/hour")  # 3 intentos por hora por IP/email
 async def forgot_password(
     request: Request,
     reset_data: RequestPasswordResetRequestDTO,
-    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case)
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
 ) -> RequestPasswordResetResponseDTO:
     """
     Solicita el reseteo de contraseña enviando un email con token único.
@@ -732,13 +730,13 @@ async def forgot_password(
     - 400: Password no cumple política
     - 429: Rate limit excedido
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("3/hour")  # 3 intentos por hora por IP
 async def reset_password(
     request: Request,
     reset_data: ResetPasswordRequestDTO,
-    use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case)
+    use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case),
 ) -> ResetPasswordResponseDTO:
     """
     Completa el reseteo de contraseña usando el token del email.
@@ -774,10 +772,7 @@ async def reset_password(
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        ) from None
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.get(
@@ -805,13 +800,13 @@ async def reset_password(
     1. Usuario hace clic → Validación → Si expirado: Redirige con mensaje
     2. Si válido: Muestra formulario → Envía → SUCCESS
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("10/hour")  # 10 intentos por hora por IP
 async def validate_reset_token(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     token: str,
-    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case)
+    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case),
 ) -> ValidateResetTokenResponseDTO:
     """
     Valida un token de reseteo antes de mostrar el formulario.
@@ -839,6 +834,7 @@ async def validate_reset_token(
 # ============================================================================
 # ACCOUNT LOCKOUT ENDPOINT (v1.13.0)
 # ============================================================================
+
 
 @router.post(
     "/unlock-account",

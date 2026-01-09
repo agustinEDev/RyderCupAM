@@ -61,6 +61,7 @@ class TestVerifyEmailUseCase:
 
             # Buscar por email y verificar el estado
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("juan@test.com")
             verified_user = await uow.users.find_by_email(email)
             assert verified_user is not None
@@ -136,6 +137,7 @@ class TestVerifyEmailUseCase:
         # Assert - Verificar que los cambios persisten en nueva transacción
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("maria@test.com")
             persisted_user = await uow.users.find_by_email(email)
 
@@ -161,6 +163,7 @@ class TestVerifyEmailUseCase:
         # Generar nuevo token para intentar verificar de nuevo
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("pedro@test.com")
             verified_user = await uow.users.find_by_email(email)
             # El usuario ya no tiene token, así que no se puede verificar de nuevo
@@ -171,7 +174,9 @@ class TestVerifyEmailUseCase:
         with pytest.raises(ValueError):
             await use_case.execute("any_token")
 
-    async def test_execute_with_different_token_than_stored_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_different_token_than_stored_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Token diferente al almacenado lanza error
         Given: Un usuario con token de verificación
@@ -195,6 +200,7 @@ class TestVerifyEmailUseCase:
         # Verificar que el usuario sigue sin verificar
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("ana@test.com")
             unverified_user = await uow.users.find_by_email(email)
             assert unverified_user.email_verified is False
@@ -221,6 +227,7 @@ class TestVerifyEmailUseCase:
         # Assert
         async with uow:
             from src.modules.user.domain.value_objects.email import Email
+
             email = Email("carlos@test.com")
             verified_user = await uow.users.find_by_email(email)
 

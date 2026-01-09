@@ -71,7 +71,9 @@ def check_required_vars() -> tuple[int, int]:
         "MAILGUN_FROM_EMAIL": settings.MAILGUN_FROM_EMAIL,
         "MAILGUN_API_URL": settings.MAILGUN_API_URL,
         "SECRET_KEY": settings.SECRET_KEY,
-        "DATABASE_URL": settings.DATABASE_URL[:30] + "..." if len(settings.DATABASE_URL) > 30 else settings.DATABASE_URL,
+        "DATABASE_URL": settings.DATABASE_URL[:30] + "..."
+        if len(settings.DATABASE_URL) > 30
+        else settings.DATABASE_URL,
     }
 
     total = len(checks)
@@ -120,10 +122,7 @@ def check_frontend_url() -> bool:
     }
 
     if env == "unknown":
-        print_error(
-            "ADVERTENCIA",
-            f"No se pudo detectar el entorno basándose en: {frontend_url}"
-        )
+        print_error("ADVERTENCIA", f"No se pudo detectar el entorno basándose en: {frontend_url}")
         print("\n🔧 URLs esperadas:")
         for env_name, url in env_recommendations.items():
             print(f"   - {env_name.capitalize()}: {url}")
@@ -133,10 +132,7 @@ def check_frontend_url() -> bool:
     if frontend_url == recommended:
         print_check("Consistencia", f"OK - Coincide con entorno {env}", "✅")
         return True
-    print_error(
-        "INCONSISTENCIA",
-        f"Se esperaba '{recommended}' para entorno {env}"
-    )
+    print_error("INCONSISTENCIA", f"Se esperaba '{recommended}' para entorno {env}")
     return False
 
 
@@ -288,5 +284,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ ERROR INESPERADO: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

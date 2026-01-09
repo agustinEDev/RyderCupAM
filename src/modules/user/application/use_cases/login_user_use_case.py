@@ -44,11 +44,7 @@ class LoginUserUseCase:
     - Refresh token almacenado hasheado en BD (OWASP A02)
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        token_service: ITokenService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, token_service: ITokenService):
         """
         Inicializa el caso de uso.
 
@@ -124,7 +120,7 @@ class LoginUserUseCase:
             # Lanzar excepción con información del bloqueo
             raise AccountLockedException(
                 locked_until=user.locked_until,
-                message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}"
+                message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}",
             )
 
         # Verificar contraseña
@@ -149,7 +145,7 @@ class LoginUserUseCase:
                 )
                 raise AccountLockedException(
                     locked_until=user.locked_until,
-                    message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}"
+                    message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}",
                 )
 
             # Security Logging: Login fallido (contraseña incorrecta)
@@ -175,9 +171,7 @@ class LoginUserUseCase:
         )
 
         # Generar access token JWT (15 minutos)
-        access_token = self._token_service.create_access_token(
-            data={"sub": str(user.id.value)}
-        )
+        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
 
         # Generar refresh token JWT (7 días)
         refresh_token_jwt = self._token_service.create_refresh_token(
@@ -186,9 +180,7 @@ class LoginUserUseCase:
 
         # Crear entidad RefreshToken (hashea el JWT antes de guardar)
         refresh_token_entity = RefreshToken.create(
-            user_id=user.id,
-            token=refresh_token_jwt,
-            expires_in_days=7
+            user_id=user.id, token=refresh_token_jwt, expires_in_days=7
         )
 
         # Persistir usuario + refresh token usando Unit of Work
@@ -219,5 +211,5 @@ class LoginUserUseCase:
             csrf_token=csrf_token,
             token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
-            email_verification_required=not user.is_email_verified()
+            email_verification_required=not user.is_email_verified(),
         )

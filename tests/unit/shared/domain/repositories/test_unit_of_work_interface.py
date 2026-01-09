@@ -27,18 +27,12 @@ class TestUnitOfWorkInterface:
 
     def test_unit_of_work_interface_has_all_required_methods(self):
         """Verifica que la interfaz define todos los métodos requeridos."""
-        required_methods = {
-            '__aenter__',
-            '__aexit__',
-            'commit',
-            'rollback',
-            'flush',
-            'is_active'
-        }
+        required_methods = {"__aenter__", "__aexit__", "commit", "rollback", "flush", "is_active"}
 
         interface_methods = {
-            method for method in dir(UnitOfWorkInterface)
-            if not method.startswith('_') or method.startswith('__a')
+            method
+            for method in dir(UnitOfWorkInterface)
+            if not method.startswith("_") or method.startswith("__a")
         }
 
         assert required_methods.issubset(interface_methods)
@@ -48,40 +42,40 @@ class TestUnitOfWorkInterface:
         # __aenter__ debe retornar el propio UnitOfWork
         # En este caso, no podemos verificar el return type específico
         # porque es abstracto, pero podemos verificar que existe
-        assert hasattr(UnitOfWorkInterface, '__aenter__')
+        assert hasattr(UnitOfWorkInterface, "__aenter__")
 
     def test_aexit_method_signature(self):
         """Verifica la signatura del método __aexit__."""
         # __aexit__ debe aceptar exc_type, exc_val, exc_tb
-        assert hasattr(UnitOfWorkInterface, '__aexit__')
+        assert hasattr(UnitOfWorkInterface, "__aexit__")
 
     def test_commit_method_signature(self):
         """Verifica la signatura del método commit."""
         method = UnitOfWorkInterface.commit
         type_hints = get_type_hints(method)
 
-        assert type_hints['return'] == type(None)
+        assert type_hints["return"] == type(None)
 
     def test_rollback_method_signature(self):
         """Verifica la signatura del método rollback."""
         method = UnitOfWorkInterface.rollback
         type_hints = get_type_hints(method)
 
-        assert type_hints['return'] == type(None)
+        assert type_hints["return"] == type(None)
 
     def test_flush_method_signature(self):
         """Verifica la signatura del método flush."""
         method = UnitOfWorkInterface.flush
         type_hints = get_type_hints(method)
 
-        assert type_hints['return'] == type(None)
+        assert type_hints["return"] == type(None)
 
     def test_is_active_method_signature(self):
         """Verifica la signatura del método is_active."""
         method = UnitOfWorkInterface.is_active
         type_hints = get_type_hints(method)
 
-        assert type_hints['return'] == bool
+        assert type_hints["return"] == bool
 
     def test_interface_is_async_context_manager(self):
         """Verifica que la interfaz implementa AsyncContextManager."""
@@ -130,6 +124,7 @@ class TestUnitOfWorkInterface:
 
             async def commit(self) -> None:
                 pass
+
             # Faltan métodos...
 
         # Debe lanzar TypeError por métodos abstractos faltantes

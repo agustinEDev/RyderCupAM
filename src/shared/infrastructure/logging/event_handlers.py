@@ -60,7 +60,7 @@ class EventLoggingHandler(EventHandler[DomainEvent]):
         include_payload: bool = True,
         include_metadata: bool = True,
         event_types: set[type[DomainEvent]] | None = None,
-        logger: Logger | None = None
+        logger: Logger | None = None,
     ):
         """
         Inicializa el handler de logging.
@@ -86,8 +86,8 @@ class EventLoggingHandler(EventHandler[DomainEvent]):
                 "log_level": self.log_level,
                 "include_payload": self.include_payload,
                 "include_metadata": self.include_metadata,
-                "filtered_types": len(self.event_types) if self.event_types else "all"
-            }
+                "filtered_types": len(self.event_types) if self.event_types else "all",
+            },
         )
 
     @property
@@ -137,9 +137,9 @@ class EventLoggingHandler(EventHandler[DomainEvent]):
                     "error": str(e),
                     "event_type": event.__class__.__name__,
                     "event_id": str(event.event_id),
-                    "component": "EventLoggingHandler"
+                    "component": "EventLoggingHandler",
                 },
-                exc_info=True
+                exc_info=True,
             )
 
     def _build_log_data(self, event: DomainEvent) -> dict[str, Any]:
@@ -171,20 +171,25 @@ class EventLoggingHandler(EventHandler[DomainEvent]):
         """Serializa el payload del evento de manera segura"""
         try:
             # Usar to_dict si está disponible
-            if hasattr(event, 'to_dict'):
+            if hasattr(event, "to_dict"):
                 event_dict = event.to_dict()
                 # Remover campos que ya están en metadatos
-                event_dict.pop('event_id', None)
-                event_dict.pop('occurred_at', None)
-                event_dict.pop('version', None)
+                event_dict.pop("event_id", None)
+                event_dict.pop("occurred_at", None)
+                event_dict.pop("version", None)
                 return event_dict
 
             # Fallback: serializar atributos públicos
             payload = {}
             for key, value in event.__dict__.items():
-                if not key.startswith('_') and key not in [
-                    'event_id', 'occurred_at', 'version', 'aggregate_id',
-                    'aggregate_type', 'causation_id', 'correlation_id'
+                if not key.startswith("_") and key not in [
+                    "event_id",
+                    "occurred_at",
+                    "version",
+                    "aggregate_id",
+                    "aggregate_type",
+                    "causation_id",
+                    "correlation_id",
                 ]:
                     payload[key] = self._safe_serialize_value(value)
 
@@ -234,11 +239,7 @@ class AuditEventHandler(EventHandler[DomainEvent]):
     detallada para eventos que requieren trazabilidad completa.
     """
 
-    def __init__(
-        self,
-        critical_events: set[type[DomainEvent]],
-        logger_name: str = "audit.events"
-    ):
+    def __init__(self, critical_events: set[type[DomainEvent]], logger_name: str = "audit.events"):
         """
         Inicializa el handler de auditoría.
 
@@ -253,8 +254,8 @@ class AuditEventHandler(EventHandler[DomainEvent]):
             "🔐 Audit Event Handler iniciado",
             extra={
                 "component": "AuditEventHandler",
-                "critical_events": [e.__name__ for e in critical_events]
-            }
+                "critical_events": [e.__name__ for e in critical_events],
+            },
         )
 
     @property
@@ -277,13 +278,13 @@ class AuditEventHandler(EventHandler[DomainEvent]):
                 "aggregate_id": str(event.aggregate_id) if event.aggregate_id else None,
                 "aggregate_type": event.aggregate_type,
                 "correlation_id": str(event.correlation_id) if event.correlation_id else None,
-                "full_event": event.to_dict() if hasattr(event, 'to_dict') else str(event),
-                "severity": "HIGH"
+                "full_event": event.to_dict() if hasattr(event, "to_dict") else str(event),
+                "severity": "HIGH",
             }
 
             self.logger.info(
                 f"🔐 AUDIT: {event.__class__.__name__} | Aggregate: {event.aggregate_type}",
-                extra=audit_data
+                extra=audit_data,
             )
 
         except Exception as e:
@@ -292,7 +293,7 @@ class AuditEventHandler(EventHandler[DomainEvent]):
                 extra={
                     "error": str(e),
                     "event_type": event.__class__.__name__,
-                    "component": "AuditEventHandler"
+                    "component": "AuditEventHandler",
                 },
-                exc_info=True
+                exc_info=True,
             )

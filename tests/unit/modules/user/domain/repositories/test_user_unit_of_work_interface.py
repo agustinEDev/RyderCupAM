@@ -38,7 +38,7 @@ class TestUserUnitOfWorkInterface:
 
     def test_user_unit_of_work_has_users_property(self):
         """Verifica que la interfaz define la propiedad users."""
-        assert hasattr(UserUnitOfWorkInterface, 'users')
+        assert hasattr(UserUnitOfWorkInterface, "users")
 
     def test_users_property_signature(self):
         """Verifica la signatura de la propiedad users."""
@@ -111,6 +111,7 @@ class TestUserUnitOfWorkInterface:
 
             async def commit(self) -> None:
                 pass
+
             # Falta la propiedad users y otros métodos...
 
         # Debe lanzar TypeError por métodos/propiedades abstractas faltantes
@@ -141,7 +142,9 @@ class TestUserUnitOfWorkContractCompliance:
         assert isinstance(user_repo, UserRepositoryInterface)
 
     @pytest.mark.asyncio
-    async def test_context_manager_with_user_repository(self, mock_user_unit_of_work, mock_user_repository):
+    async def test_context_manager_with_user_repository(
+        self, mock_user_unit_of_work, mock_user_repository
+    ):
         """Verifica que el context manager funciona con el repositorio de usuarios."""
         mock_user_unit_of_work.__aenter__.return_value = mock_user_unit_of_work
         mock_user_unit_of_work.__aexit__.return_value = None
@@ -157,7 +160,6 @@ class TestUserUnitOfWorkContractCompliance:
     @pytest.mark.asyncio
     async def test_typical_use_case_pattern(self):
         """Verifica el patrón típico de uso en casos de uso."""
-
 
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):

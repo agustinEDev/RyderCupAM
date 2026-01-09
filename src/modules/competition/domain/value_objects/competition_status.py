@@ -32,7 +32,7 @@ class CompetitionStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
-    def can_transition_to(self, new_status: 'CompetitionStatus') -> bool:
+    def can_transition_to(self, new_status: "CompetitionStatus") -> bool:
         """
         Verifica si es válida la transición al nuevo estado.
 
@@ -49,21 +49,12 @@ class CompetitionStatus(str, Enum):
             False
         """
         valid_transitions = {
-            CompetitionStatus.DRAFT: {
-                CompetitionStatus.ACTIVE,
-                CompetitionStatus.CANCELLED
-            },
-            CompetitionStatus.ACTIVE: {
-                CompetitionStatus.CLOSED,
-                CompetitionStatus.CANCELLED
-            },
-            CompetitionStatus.CLOSED: {
-                CompetitionStatus.IN_PROGRESS,
-                CompetitionStatus.CANCELLED
-            },
+            CompetitionStatus.DRAFT: {CompetitionStatus.ACTIVE, CompetitionStatus.CANCELLED},
+            CompetitionStatus.ACTIVE: {CompetitionStatus.CLOSED, CompetitionStatus.CANCELLED},
+            CompetitionStatus.CLOSED: {CompetitionStatus.IN_PROGRESS, CompetitionStatus.CANCELLED},
             CompetitionStatus.IN_PROGRESS: {
                 CompetitionStatus.COMPLETED,
-                CompetitionStatus.CANCELLED
+                CompetitionStatus.CANCELLED,
             },
             CompetitionStatus.COMPLETED: set(),  # Estado final
             CompetitionStatus.CANCELLED: set(),  # Estado final

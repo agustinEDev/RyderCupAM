@@ -11,6 +11,7 @@ class HandicapServiceError(Exception):
 
     Todos los errores específicos de hándicap heredan de esta clase.
     """
+
     pass
 
 
@@ -20,6 +21,7 @@ class HandicapNotFoundError(HandicapServiceError):
 
     Se lanza cuando la búsqueda no devuelve resultados.
     """
+
     pass
 
 
@@ -30,4 +32,5 @@ class HandicapServiceUnavailableError(HandicapServiceError):
     Se lanza cuando hay problemas de conectividad o el servicio externo
     no responde correctamente.
     """
+
     pass

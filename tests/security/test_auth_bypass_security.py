@@ -23,8 +23,9 @@ class TestProtectedEndpointsRequireAuth:
         """
         response = await client.get("/api/v1/competitions")
 
-        assert response.status_code in [401, 403], \
+        assert response.status_code in [401, 403], (
             "Listar competiciones sin token debe retornar 401 o 403"
+        )
 
     async def test_search_users_requires_authentication(self, client: AsyncClient):
         """
@@ -34,8 +35,9 @@ class TestProtectedEndpointsRequireAuth:
         """
         response = await client.get("/api/v1/users/search?query=test")
 
-        assert response.status_code in [401, 403, 404, 405], \
+        assert response.status_code in [401, 403, 404, 405], (
             "Buscar usuarios sin token debe retornar 401, 403, 404 o 405"
+        )
 
     async def test_create_competition_without_token_returns_401(self, client: AsyncClient):
         """
@@ -51,13 +53,14 @@ class TestProtectedEndpointsRequireAuth:
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 100,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
 
-        assert response.status_code in [401, 403], \
+        assert response.status_code in [401, 403], (
             "Creación de competición sin token debe retornar 401 o 403"
+        )
 
 
 @pytest.mark.asyncio
@@ -78,19 +81,24 @@ class TestInvalidTokensRejected:
 
         for token in invalid_tokens:
             headers = {"Authorization": f"Bearer {token}"}
-            response = await client.post("/api/v1/competitions", headers=headers, json={
-                "name": "Test",
-                "start_date": "2025-12-25",
-                "end_date": "2025-12-26",
-                "main_country": "ES",
-                "handicap_type": "PERCENTAGE",
-                "handicap_percentage": 95,
-                "max_players": 100,
-                "team_assignment": "MANUAL"
-            })
+            response = await client.post(
+                "/api/v1/competitions",
+                headers=headers,
+                json={
+                    "name": "Test",
+                    "start_date": "2025-12-25",
+                    "end_date": "2025-12-26",
+                    "main_country": "ES",
+                    "handicap_type": "PERCENTAGE",
+                    "handicap_percentage": 95,
+                    "max_players": 100,
+                    "team_assignment": "MANUAL",
+                },
+            )
 
-            assert response.status_code in [401, 403, 422], \
+            assert response.status_code in [401, 403, 422], (
                 f"Token inválido '{token}' debe retornar 401, 403 o 422"
+            )
 
     async def test_expired_token_rejected(self, client: AsyncClient):
         """
@@ -106,19 +114,24 @@ class TestInvalidTokensRejected:
         expired_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.invalid"
 
         headers = {"Authorization": f"Bearer {expired_token}"}
-        response = await client.post("/api/v1/competitions", headers=headers, json={
-            "name": "Test",
-            "start_date": "2025-12-25",
-            "end_date": "2025-12-26",
-            "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
-            "max_players": 100,
-            "team_assignment": "MANUAL"
-        })
+        response = await client.post(
+            "/api/v1/competitions",
+            headers=headers,
+            json={
+                "name": "Test",
+                "start_date": "2025-12-25",
+                "end_date": "2025-12-26",
+                "main_country": "ES",
+                "handicap_type": "PERCENTAGE",
+                "handicap_percentage": 95,
+                "max_players": 100,
+                "team_assignment": "MANUAL",
+            },
+        )
 
-        assert response.status_code in [401, 403, 422], \
+        assert response.status_code in [401, 403, 422], (
             "Token expirado debe retornar 401, 403 o 422"
+        )
 
 
 @pytest.mark.asyncio
@@ -148,19 +161,23 @@ class TestTokenManipulationPrevented:
             client.headers.clear()
             client.headers.update({"Authorization": f"Bearer {modified_token}"})
 
-            response = await client.post("/api/v1/competitions", json={
-                "name": "Test",
-                "start_date": "2025-12-25",
-                "end_date": "2025-12-26",
-                "main_country": "ES",
-                "handicap_type": "PERCENTAGE",
-                "handicap_percentage": 95,
-                "max_players": 100,
-                "team_assignment": "MANUAL"
-            })
+            response = await client.post(
+                "/api/v1/competitions",
+                json={
+                    "name": "Test",
+                    "start_date": "2025-12-25",
+                    "end_date": "2025-12-26",
+                    "main_country": "ES",
+                    "handicap_type": "PERCENTAGE",
+                    "handicap_percentage": 95,
+                    "max_players": 100,
+                    "team_assignment": "MANUAL",
+                },
+            )
 
-            assert response.status_code in [401, 403, 422], \
+            assert response.status_code in [401, 403, 422], (
                 f"Token con payload modificado debe ser rechazado, got {response.status_code}"
+            )
 
     async def test_cannot_use_none_algorithm(self, client: AsyncClient):
         """
@@ -175,19 +192,22 @@ class TestTokenManipulationPrevented:
         none_alg_token = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ."
 
         headers = {"Authorization": f"Bearer {none_alg_token}"}
-        response = await client.post("/api/v1/competitions", headers=headers, json={
-            "name": "Test",
-            "start_date": "2025-12-25",
-            "end_date": "2025-12-26",
-            "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
-            "max_players": 100,
-            "team_assignment": "MANUAL"
-        })
+        response = await client.post(
+            "/api/v1/competitions",
+            headers=headers,
+            json={
+                "name": "Test",
+                "start_date": "2025-12-25",
+                "end_date": "2025-12-26",
+                "main_country": "ES",
+                "handicap_type": "PERCENTAGE",
+                "handicap_percentage": 95,
+                "max_players": 100,
+                "team_assignment": "MANUAL",
+            },
+        )
 
-        assert response.status_code in [401, 403, 422], \
-            "Token con alg=none debe ser rechazado"
+        assert response.status_code in [401, 403, 422], "Token con alg=none debe ser rechazado"
 
 
 @pytest.mark.asyncio
@@ -206,23 +226,24 @@ class TestSessionManagement:
         client, _user_data = authenticated_client
 
         # Verificar que podemos crear una competición antes del logout
-        competition_response = await client.post("/api/v1/competitions", json={
-            "name": "Test Competition",
-            "start_date": "2025-12-25",
-            "end_date": "2025-12-26",
-            "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
-            "max_players": 100,
-            "team_assignment": "MANUAL"
-        })
-        assert competition_response.status_code == 201, \
-            "El token debe funcionar antes del logout"
+        competition_response = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Test Competition",
+                "start_date": "2025-12-25",
+                "end_date": "2025-12-26",
+                "main_country": "ES",
+                "handicap_type": "PERCENTAGE",
+                "handicap_percentage": 95,
+                "max_players": 100,
+                "team_assignment": "MANUAL",
+            },
+        )
+        assert competition_response.status_code == 201, "El token debe funcionar antes del logout"
 
         # Hacer logout (enviar JSON vacío para LogoutRequestDTO)
         logout_response = await client.post("/api/v1/auth/logout", json={})
-        assert logout_response.status_code in [200, 204], \
-            "Logout debe ser exitoso"
+        assert logout_response.status_code in [200, 204], "Logout debe ser exitoso"
 
         # NOTE: El access token puede seguir funcionando hasta que expire
         # pero el refresh token debe estar revocado
@@ -239,15 +260,15 @@ class TestSessionManagement:
 
         # Hacer logout para revocar el refresh token (enviar JSON vacío)
         logout_response = await client.post("/api/v1/auth/logout", json={})
-        assert logout_response.status_code in [200, 204], \
-            "Logout debe ser exitoso"
+        assert logout_response.status_code in [200, 204], "Logout debe ser exitoso"
 
         # Intentar usar el refresh token revocado
         refresh_response = await client.post("/api/v1/auth/refresh-token")
 
         # Debe fallar porque el refresh token fue revocado
-        assert refresh_response.status_code in [401, 403], \
+        assert refresh_response.status_code in [401, 403], (
             "Refresh token revocado no debe permitir renovación"
+        )
 
 
 @pytest.mark.asyncio
@@ -264,27 +285,31 @@ class TestPasswordResetSecurity:
         Si no existe, el test documenta el comportamiento esperado.
         """
         # Intentar reset para email que no existe
-        response_nonexistent = await client.post("/api/v1/auth/password-reset", json={
-            "email": "nonexistent@example.com"
-        })
+        response_nonexistent = await client.post(
+            "/api/v1/auth/password-reset", json={"email": "nonexistent@example.com"}
+        )
 
         # Crear usuario
-        await client.post("/api/v1/auth/register", json={
-            "email": "exists@example.com",
-            "password": "ValidPassword123!",
-            "first_name": "Test",
-            "last_name": "User"
-        })
+        await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "exists@example.com",
+                "password": "ValidPassword123!",
+                "first_name": "Test",
+                "last_name": "User",
+            },
+        )
 
         # Intentar reset para email que sí existe
-        response_existent = await client.post("/api/v1/auth/password-reset", json={
-            "email": "exists@example.com"
-        })
+        response_existent = await client.post(
+            "/api/v1/auth/password-reset", json={"email": "exists@example.com"}
+        )
 
         # Ambas respuestas deben ser iguales (previene enumeración de usuarios)
         # Si el endpoint no existe, ambos retornarán 404
-        assert response_nonexistent.status_code == response_existent.status_code, \
+        assert response_nonexistent.status_code == response_existent.status_code, (
             "El endpoint no debe revelar si un email existe o no"
+        )
 
 
 @pytest.mark.asyncio
@@ -310,8 +335,9 @@ class TestRaceConditions:
         refresh_response = await client.post("/api/v1/auth/refresh-token")
 
         # Debe responder de forma predecible
-        assert refresh_response.status_code in [200, 401], \
+        assert refresh_response.status_code in [200, 401], (
             "Refresh token debe manejarse de forma predecible"
+        )
 
 
 @pytest.mark.asyncio

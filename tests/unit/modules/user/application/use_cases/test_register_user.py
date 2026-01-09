@@ -32,7 +32,9 @@ class TestRegisterUserUseCase:
         mock_repo.exists.return_value = True
         return mock_repo
 
-    async def test_should_register_user_successfully(self, uow: InMemoryUnitOfWork, country_repository):
+    async def test_should_register_user_successfully(
+        self, uow: InMemoryUnitOfWork, country_repository
+    ):
         """
         Verifica que un usuario se registra correctamente cuando los datos son válidos
         y el email no existe previamente.
@@ -112,7 +114,7 @@ class TestRegisterUserUseCase:
             password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
-            manual_handicap=15.5
+            manual_handicap=15.5,
         )
 
         # Act
@@ -134,9 +136,7 @@ class TestRegisterUserUseCase:
         )
 
         # Servicio que devuelve un hándicap para este usuario
-        handicap_service = MockHandicapService(
-            handicaps={"Test User": 3.5}
-        )
+        handicap_service = MockHandicapService(handicaps={"Test User": 3.5})
         use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
@@ -144,7 +144,7 @@ class TestRegisterUserUseCase:
             password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
-            manual_handicap=20.0  # Este será ignorado
+            manual_handicap=20.0,  # Este será ignorado
         )
 
         # Act

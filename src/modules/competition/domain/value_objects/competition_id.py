@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 class InvalidCompetitionIdError(Exception):
     """Excepción lanzada cuando un CompetitionId no es válido."""
+
     pass
 
 
@@ -54,19 +55,17 @@ class CompetitionId:
             try:
                 val = uuid.UUID(value)
             except ValueError as e:
-                raise InvalidCompetitionIdError(
-                    f"'{value}' no es un string UUID válido"
-                ) from e
+                raise InvalidCompetitionIdError(f"'{value}' no es un string UUID válido") from e
         else:
             raise InvalidCompetitionIdError(
                 f"Se esperaba un UUID o un string, pero se recibió {type(value).__name__}"
             )
 
         # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, 'value', val)
+        object.__setattr__(self, "value", val)
 
     @classmethod
-    def generate(cls) -> 'CompetitionId':
+    def generate(cls) -> "CompetitionId":
         """
         Genera un nuevo CompetitionId con un UUID v4 aleatorio.
 

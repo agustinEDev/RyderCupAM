@@ -34,7 +34,7 @@ class AccountUnlockedEvent(DomainEvent):
         unlocked_by: str,
         unlocked_at: datetime,
         previous_locked_until: datetime | None,
-        previous_failed_attempts: int
+        previous_failed_attempts: int,
     ):
         super().__init__()
         self.user_id = user_id

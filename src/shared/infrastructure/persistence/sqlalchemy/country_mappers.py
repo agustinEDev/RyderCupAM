@@ -22,6 +22,7 @@ class CountryCodeDecorator(TypeDecorator):
     - Guardar: CountryCode -> str (2 chars)
     - Cargar: str -> CountryCode
     """
+
     impl = CHAR(2)
     cache_ok = True
 
@@ -62,21 +63,21 @@ class CountryCodeDecorator(TypeDecorator):
 
 # --- Definición de Tabla countries ---
 countries_table = Table(
-    'countries',
+    "countries",
     metadata,
-    Column('code', CountryCodeDecorator, primary_key=True),
-    Column('active', Boolean, nullable=False, default=True),
-    Column('name_en', String(100), nullable=False),
-    Column('name_es', String(100), nullable=False),
+    Column("code", CountryCodeDecorator, primary_key=True),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("name_en", String(100), nullable=False),
+    Column("name_es", String(100), nullable=False),
 )
 
 
 # --- Definición de Tabla country_adjacencies ---
 country_adjacencies_table = Table(
-    'country_adjacencies',
+    "country_adjacencies",
     metadata,
-    Column('country_code_1', CountryCodeDecorator, primary_key=True),
-    Column('country_code_2', CountryCodeDecorator, primary_key=True),
+    Column("country_code_1", CountryCodeDecorator, primary_key=True),
+    Column("country_code_2", CountryCodeDecorator, primary_key=True),
 )
 
 
@@ -99,7 +100,7 @@ def start_country_mappers():
             properties={
                 # Mapeo directo - Country es un dataclass simple
                 # SQLAlchemy mapea automáticamente los campos
-            }
+            },
         )
 
 

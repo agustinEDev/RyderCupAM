@@ -9,6 +9,7 @@ Arquitectura:
 - Módulo: User
 - Feature: Session Timeout with Refresh Tokens
 """
+
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
@@ -74,9 +75,7 @@ class TestRefreshAccessTokenUseCase:
     def refresh_token_entity(self, sample_user, valid_refresh_token_jwt):
         """Fixture que crea una entidad RefreshToken válida."""
         return RefreshToken.create(
-            user_id=sample_user.id,
-            token=valid_refresh_token_jwt,
-            expires_in_days=7
+            user_id=sample_user.id, token=valid_refresh_token_jwt, expires_in_days=7
         )
 
     async def test_execute_with_valid_refresh_token_returns_new_access_token(
@@ -110,7 +109,7 @@ class TestRefreshAccessTokenUseCase:
         # Configurar token_service para que verifique exitosamente el refresh token
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar usuario y refresh token en UoW
@@ -202,7 +201,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": "not-a-valid-uuid",
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # When
@@ -234,7 +233,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Usuario existe, pero refresh token NO
@@ -270,7 +269,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar usuario y refresh token revocado
@@ -307,7 +306,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Crear refresh token entity expirado
@@ -355,7 +354,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar solo refresh token, NO el usuario
@@ -388,7 +387,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         await uow.users.save(sample_user)
@@ -427,7 +426,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         await uow.users.save(sample_user)

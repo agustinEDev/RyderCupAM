@@ -5,7 +5,6 @@ Servicio de dominio para construir y validar el Value Object Location.
 Encapsula la lógica de validación de países y adyacencias.
 """
 
-
 from src.modules.competition.domain.value_objects.location import Location
 from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -13,6 +12,7 @@ from src.shared.domain.value_objects.country_code import CountryCode
 
 class InvalidCountryError(Exception):
     """Excepción lanzada cuando un país no existe o no es válido."""
+
     pass
 
 
@@ -46,7 +46,7 @@ class LocationBuilder:
         self,
         main_country: str,
         adjacent_country_1: str | None = None,
-        adjacent_country_2: str | None = None
+        adjacent_country_2: str | None = None,
     ) -> Location:
         """
         Construye un Location validando países y adyacencias.
@@ -101,14 +101,10 @@ class LocationBuilder:
         """
         country = await self._country_repo.find_by_code(country_code)
         if not country:
-            raise InvalidCountryError(
-                f"El país con código '{country_code.value}' no existe"
-            )
+            raise InvalidCountryError(f"El país con código '{country_code.value}' no existe")
 
     async def _validate_adjacency(
-        self,
-        main_country: CountryCode,
-        adjacent_country: CountryCode
+        self, main_country: CountryCode, adjacent_country: CountryCode
     ) -> None:
         """
         Valida que dos países sean adyacentes.
@@ -120,13 +116,9 @@ class LocationBuilder:
         Raises:
             InvalidCountryError: Si los países no son adyacentes
         """
-        is_adjacent = await self._country_repo.are_adjacent(
-            main_country,
-            adjacent_country
-        )
+        is_adjacent = await self._country_repo.are_adjacent(main_country, adjacent_country)
 
         if not is_adjacent:
             raise InvalidCountryError(
-                f"El país '{adjacent_country.value}' no es adyacente "
-                f"a '{main_country.value}'"
+                f"El país '{adjacent_country.value}' no es adyacente a '{main_country.value}'"
             )

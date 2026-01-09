@@ -39,14 +39,12 @@ class TestCreateCompetition:
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         # Act
         response = await client.post(
-            "/api/v1/competitions",
-            json=competition_data,
-            cookies=user["cookies"]
+            "/api/v1/competitions", json=competition_data, cookies=user["cookies"]
         )
 
         # Assert
@@ -66,7 +64,7 @@ class TestCreateCompetition:
             "main_country": "ES",
             "handicap_type": "SCRATCH",
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
@@ -88,13 +86,11 @@ class TestCreateCompetition:
             "main_country": "ES",
             "handicap_type": "SCRATCH",
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post(
-            "/api/v1/competitions",
-            json=competition_data,
-            cookies=user["cookies"]
+            "/api/v1/competitions", json=competition_data, cookies=user["cookies"]
         )
 
         assert response.status_code == 422  # Validation error
@@ -110,10 +106,7 @@ class TestListCompetitions:
             client, "lister@test.com", "P@ssw0rd123!", "List", "User"
         )
 
-        response = await client.get(
-            "/api/v1/competitions",
-            cookies=user["cookies"]
-        )
+        response = await client.get("/api/v1/competitions", cookies=user["cookies"])
 
         assert response.status_code == 200
         assert response.json() == []
@@ -137,15 +130,12 @@ class TestListCompetitions:
             "main_country": "FR",
             "handicap_type": "SCRATCH",
             "max_players": 16,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
         await create_competition(client, user["cookies"], comp2_data)
 
         # Act
-        response = await client.get(
-            "/api/v1/competitions",
-            cookies=user["cookies"]
-        )
+        response = await client.get("/api/v1/competitions", cookies=user["cookies"])
 
         # Assert
         assert response.status_code == 200
@@ -166,21 +156,22 @@ class TestListCompetitions:
         # Crear otra en DRAFT
         start = date.today() + timedelta(days=90)
         end = start + timedelta(days=3)
-        await create_competition(client, user["cookies"], {
-            "name": "Draft Competition",
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "main_country": "ES",
-            "handicap_type": "SCRATCH",
-            "max_players": 24,
-            "team_assignment": "MANUAL"
-        })
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Draft Competition",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "handicap_type": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
 
         # Filtrar solo ACTIVE
-        response = await client.get(
-            "/api/v1/competitions?status=ACTIVE",
-            cookies=user["cookies"]
-        )
+        response = await client.get("/api/v1/competitions?status=ACTIVE", cookies=user["cookies"])
 
         assert response.status_code == 200
         data = response.json()
@@ -198,38 +189,49 @@ class TestListCompetitions:
         end = start + timedelta(days=3)
 
         # Crear competiciones
-        await create_competition(client, user["cookies"], {
-            "name": "Ryder Cup 2025",
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "main_country": "ES",
-            "handicap_type": "SCRATCH",
-            "max_players": 24,
-            "team_assignment": "MANUAL"
-        })
-        await create_competition(client, user["cookies"], {
-            "name": "Open de España",
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "main_country": "ES",
-            "handicap_type": "SCRATCH",
-            "max_players": 24,
-            "team_assignment": "MANUAL"
-        })
-        await create_competition(client, user["cookies"], {
-            "name": "Ryder Cup Friends",
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "main_country": "ES",
-            "handicap_type": "SCRATCH",
-            "max_players": 24,
-            "team_assignment": "MANUAL"
-        })
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Ryder Cup 2025",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "handicap_type": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Open de España",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "handicap_type": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Ryder Cup Friends",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "handicap_type": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
 
         # Filtrar por "Ryder"
         response = await client.get(
-            "/api/v1/competitions?search_name=Ryder",
-            cookies=user["cookies"]
+            "/api/v1/competitions?search_name=Ryder", cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -237,6 +239,7 @@ class TestListCompetitions:
         assert len(data) == 2
         assert "Ryder Cup 2025" in [c["name"] for c in data]
         assert "Ryder Cup Friends" in [c["name"] for c in data]
+
 
 class TestMyCompetitionsFilter:
     """Tests para el filtro `my_competitions` en GET /api/v1/competitions"""
@@ -257,8 +260,7 @@ class TestMyCompetitionsFilter:
 
         # Act
         response = await client.get(
-            "/api/v1/competitions?my_competitions=true",
-            cookies=creator["cookies"]
+            "/api/v1/competitions?my_competitions=true", cookies=creator["cookies"]
         )
 
         # Assert
@@ -283,14 +285,12 @@ class TestMyCompetitionsFilter:
 
         # Inscribir usuario
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments",
-            cookies=enrolled_user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/enrollments", cookies=enrolled_user["cookies"]
         )
 
         # Act
         response = await client.get(
-            "/api/v1/competitions?my_competitions=true",
-            cookies=enrolled_user["cookies"]
+            "/api/v1/competitions?my_competitions=true", cookies=enrolled_user["cookies"]
         )
 
         # Assert
@@ -312,10 +312,7 @@ class TestGetCompetition:
 
         comp = await create_competition(client, user["cookies"])
 
-        response = await client.get(
-            f"/api/v1/competitions/{comp['id']}",
-            cookies=user["cookies"]
-        )
+        response = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
 
         assert response.status_code == 200
         data = response.json()
@@ -335,10 +332,7 @@ class TestGetCompetition:
         )
 
         fake_id = "00000000-0000-0000-0000-000000000000"
-        response = await client.get(
-            f"/api/v1/competitions/{fake_id}",
-            cookies=user["cookies"]
-        )
+        response = await client.get(f"/api/v1/competitions/{fake_id}", cookies=user["cookies"])
 
         assert response.status_code == 404
 
@@ -359,13 +353,11 @@ class TestUpdateCompetition:
             "name": "Updated Ryder Cup Name",
             "max_players": 50,
             "team_assignment": "AUTOMATIC",
-            "team_1_name": "Team Europe Updated"
+            "team_1_name": "Team Europe Updated",
         }
 
         response = await client.put(
-            f"/api/v1/competitions/{comp['id']}",
-            json=update_data,
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}", json=update_data, cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -376,7 +368,6 @@ class TestUpdateCompetition:
         # team_1_name no está en el response DTO, así que no podemos verificarlo directamente
         # Para verificarlo, necesitaríamos un GET y que el DTO de GET lo incluyera.
         # Por ahora, confiamos en que el cambio se aplicó si el resto funciona.
-
 
     @pytest.mark.asyncio
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):
@@ -393,7 +384,7 @@ class TestUpdateCompetition:
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
             json={"name": "Hacked Name"},
-            cookies=other_user["cookies"]
+            cookies=other_user["cookies"],
         )
 
         assert response.status_code == 403
@@ -412,8 +403,7 @@ class TestDeleteCompetition:
         comp = await create_competition(client, user["cookies"])
 
         response = await client.delete(
-            f"/api/v1/competitions/{comp['id']}",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
         assert response.status_code == 204
@@ -429,8 +419,7 @@ class TestDeleteCompetition:
         await activate_competition(client, user["cookies"], comp["id"])
 
         response = await client.delete(
-            f"/api/v1/competitions/{comp['id']}",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -449,8 +438,7 @@ class TestCompetitionStateTransitions:
         comp = await create_competition(client, user["cookies"])
 
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/activate",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -466,8 +454,7 @@ class TestCompetitionStateTransitions:
         comp = await create_competition(client, user["cookies"])
 
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/cancel",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"]
         )
 
         assert response.status_code == 200
@@ -486,29 +473,25 @@ class TestCompetitionStateTransitions:
 
         # 2. Activar (ACTIVE)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/activate",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
         )
         assert response.json()["status"] == "ACTIVE"
 
         # 3. Cerrar inscripciones (CLOSED)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/close-enrollments",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
         )
         assert response.json()["status"] == "CLOSED"
 
         # 4. Iniciar (IN_PROGRESS)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/start",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
         )
         assert response.json()["status"] == "IN_PROGRESS"
 
         # 5. Completar (COMPLETED)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/complete",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/complete", cookies=user["cookies"]
         )
         assert response.json()["status"] == "COMPLETED"
 
@@ -523,8 +506,7 @@ class TestCompetitionStateTransitions:
 
         # Intentar cerrar inscripciones desde DRAFT (debe ser ACTIVE)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/close-enrollments",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -550,21 +532,15 @@ class TestEdgeCases:
             "main_country": "ES",
             "handicap_type": "SCRATCH",
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         # Primera creación
-        await client.post(
-            "/api/v1/competitions",
-            json=comp_data,
-            cookies=user["cookies"]
-        )
+        await client.post("/api/v1/competitions", json=comp_data, cookies=user["cookies"])
 
         # Segunda con mismo nombre
         response = await client.post(
-            "/api/v1/competitions",
-            json=comp_data,
-            cookies=user["cookies"]
+            "/api/v1/competitions", json=comp_data, cookies=user["cookies"]
         )
 
         assert response.status_code == 409
@@ -580,9 +556,7 @@ class TestEdgeCases:
         await activate_competition(client, user["cookies"], comp["id"])
 
         response = await client.put(
-            f"/api/v1/competitions/{comp['id']}",
-            json={"name": "New Name"},
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}", json={"name": "New Name"}, cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -599,10 +573,7 @@ class TestEdgeCases:
 
         comp = await create_competition(client, creator["cookies"])
 
-        response = await client.get(
-            f"/api/v1/competitions/{comp['id']}",
-            cookies=viewer["cookies"]
-        )
+        response = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=viewer["cookies"])
 
         assert response.status_code == 200
         assert response.json()["is_creator"] is False
@@ -624,20 +595,20 @@ class TestEdgeCases:
             "main_country": "XX",  # País inválido
             "handicap_type": "SCRATCH",
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post(
-            "/api/v1/competitions",
-            json=comp_data,
-            cookies=user["cookies"]
+            "/api/v1/competitions", json=comp_data, cookies=user["cookies"]
         )
 
         # Podría ser 400 o 422 dependiendo de la validación
         assert response.status_code in [400, 422]
 
     @pytest.mark.asyncio
-    async def test_create_competition_with_non_adjacent_countries_returns_400(self, client: AsyncClient):
+    async def test_create_competition_with_non_adjacent_countries_returns_400(
+        self, client: AsyncClient
+    ):
         """Crear competición con países no adyacentes retorna 400."""
         user = await create_authenticated_user(
             client, "nonadjacent@test.com", "P@ssw0rd123!", "Non", "Adjacent"
@@ -654,13 +625,11 @@ class TestEdgeCases:
             "adjacent_country_1": "JP",  # Japón no es adyacente a España
             "handicap_type": "SCRATCH",
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post(
-            "/api/v1/competitions",
-            json=comp_data,
-            cookies=user["cookies"]
+            "/api/v1/competitions", json=comp_data, cookies=user["cookies"]
         )
 
         assert response.status_code == 400
@@ -675,15 +644,11 @@ class TestEdgeCases:
         comp = await create_competition(client, user["cookies"])
 
         # Primera cancelación
-        await client.post(
-            f"/api/v1/competitions/{comp['id']}/cancel",
-            cookies=user["cookies"]
-        )
+        await client.post(f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"])
 
         # Segunda cancelación
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/cancel",
-            cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"]
         )
 
         assert response.status_code == 400

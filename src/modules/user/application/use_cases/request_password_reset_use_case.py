@@ -49,11 +49,7 @@ class RequestPasswordResetUseCase:
     # Previene timing attacks que podrían revelar si el email existe
     FAKE_EMAIL_DELAY_SECONDS = 0.5
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        email_service: IEmailService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
         """
         Inicializa el caso de uso.
 
@@ -65,8 +61,7 @@ class RequestPasswordResetUseCase:
         self._email_service = email_service
 
     async def execute(
-        self,
-        request: RequestPasswordResetRequestDTO
+        self, request: RequestPasswordResetRequestDTO
     ) -> RequestPasswordResetResponseDTO:
         """
         Ejecuta el caso de uso de solicitud de reseteo de contraseña.
@@ -124,15 +119,12 @@ class RequestPasswordResetUseCase:
             # Retornar mensaje genérico (NO revelar que el email no existe)
             return RequestPasswordResetResponseDTO(
                 message="Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña.",
-                email=request.email
+                email=request.email,
             )
 
         # CASO 2: Email existe → Generar token y enviar email
         # Generar token de reseteo (expiración 24h)
-        token = user.generate_password_reset_token(
-            ip_address=ip_address,
-            user_agent=user_agent
-        )
+        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
 
         # Guardar usuario con token de reseteo
         async with self._uow:
@@ -142,9 +134,7 @@ class RequestPasswordResetUseCase:
         # Enviar email con enlace de reseteo (Mailgun)
         reset_link = self._build_reset_link(token)
         await self._email_service.send_password_reset_email(
-            to_email=request.email,
-            reset_link=reset_link,
-            user_name=user.get_full_name()
+            to_email=request.email, reset_link=reset_link, user_name=user.get_full_name()
         )
 
         # Security Logging: Solicitud exitosa
@@ -160,7 +150,7 @@ class RequestPasswordResetUseCase:
         # Retornar el MISMO mensaje genérico (previene enumeración)
         return RequestPasswordResetResponseDTO(
             message="Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña.",
-            email=request.email
+            email=request.email,
         )
 
     def _build_reset_link(self, token: str) -> str:
@@ -181,5 +171,5 @@ class RequestPasswordResetUseCase:
             "http://localhost:5173/reset-password/abc123..."
         """
         settings = Settings()
-        frontend_url = settings.FRONTEND_URL.rstrip('/')
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
         return f"{frontend_url}/reset-password/{token}"

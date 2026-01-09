@@ -47,9 +47,7 @@ class TestCompleteCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_complete_competition_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede completar una competición en estado IN_PROGRESS.
@@ -65,7 +63,7 @@ class TestCompleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -95,9 +93,7 @@ class TestCompleteCompetitionUseCase:
             assert competition.is_completed()
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -118,10 +114,7 @@ class TestCompleteCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_user_is_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId,
-        other_user_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
     ):
         """
         Verifica que solo el creador puede completar la competición.
@@ -137,7 +130,7 @@ class TestCompleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -161,9 +154,7 @@ class TestCompleteCompetitionUseCase:
         assert "Solo el creador puede completar" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_draft(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede completar una competición en DRAFT.
@@ -179,7 +170,7 @@ class TestCompleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -194,9 +185,7 @@ class TestCompleteCompetitionUseCase:
         assert "No se puede completar una competición en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_closed(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede completar una competición en CLOSED.
@@ -212,7 +201,7 @@ class TestCompleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -235,9 +224,7 @@ class TestCompleteCompetitionUseCase:
         assert "No se puede completar una competición en estado CLOSED" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_completed(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se emite el evento CompetitionCompletedEvent.
@@ -253,7 +240,7 @@ class TestCompleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

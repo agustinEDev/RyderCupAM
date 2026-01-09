@@ -36,9 +36,7 @@ pytestmark = pytest.mark.asyncio
 class TestRequestPasswordResetSuccess:
     """Tests para el flujo exitoso de solicitud de reseteo"""
 
-    async def test_request_password_reset_with_existing_email_sends_email(
-        self, sample_user_data
-    ):
+    async def test_request_password_reset_with_existing_email_sends_email(self, sample_user_data):
         """
         Test: Solicitar reseteo con email existente envía email
         Given: Usuario existente en el sistema
@@ -57,7 +55,7 @@ class TestRequestPasswordResetSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         async with uow:
             await uow.users.save(user)
@@ -65,7 +63,7 @@ class TestRequestPasswordResetSuccess:
         request_dto = RequestPasswordResetRequestDTO(
             email=sample_user_data["email"],
             ip_address="192.168.1.100",
-            user_agent="Mozilla/5.0 (Test Browser)"
+            user_agent="Mozilla/5.0 (Test Browser)",
         )
 
         # Act
@@ -73,7 +71,10 @@ class TestRequestPasswordResetSuccess:
 
         # Assert
         # 1. Verificar respuesta con mensaje genérico
-        assert response.message == "Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña."
+        assert (
+            response.message
+            == "Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña."
+        )
         assert response.email == sample_user_data["email"]
 
         # 2. Verificar que se envió el email
@@ -107,14 +108,13 @@ class TestRequestPasswordResetSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         async with uow:
             await uow.users.save(user)
 
         request_dto = RequestPasswordResetRequestDTO(
-            email=sample_user_data["email"],
-            ip_address="10.0.0.1"
+            email=sample_user_data["email"], ip_address="10.0.0.1"
         )
 
         # Act
@@ -126,16 +126,11 @@ class TestRequestPasswordResetSuccess:
             # Token debe ser string no vacío y URL-safe
             assert isinstance(saved_user.password_reset_token, str)
             assert len(saved_user.password_reset_token) > 0
-            assert all(
-                c.isalnum() or c in ['-', '_']
-                for c in saved_user.password_reset_token
-            )
+            assert all(c.isalnum() or c in ["-", "_"] for c in saved_user.password_reset_token)
             # Debe tener expiración
             assert saved_user.reset_token_expires_at is not None
 
-    async def test_request_password_reset_includes_correct_reset_link(
-        self, sample_user_data
-    ):
+    async def test_request_password_reset_includes_correct_reset_link(self, sample_user_data):
         """
         Test: Enlace de reseteo tiene formato correcto
         Given: Usuario solicitando reseteo
@@ -151,14 +146,12 @@ class TestRequestPasswordResetSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         async with uow:
             await uow.users.save(user)
 
-        request_dto = RequestPasswordResetRequestDTO(
-            email=sample_user_data["email"]
-        )
+        request_dto = RequestPasswordResetRequestDTO(email=sample_user_data["email"])
 
         # Act
         await use_case.execute(request_dto)
@@ -192,12 +185,12 @@ class TestRequestPasswordResetEmailNotFound:
         use_case = RequestPasswordResetUseCase(uow, email_service)
 
         request_dto = RequestPasswordResetRequestDTO(
-            email="nonexistent@example.com",
-            ip_address="1.2.3.4"
+            email="nonexistent@example.com", ip_address="1.2.3.4"
         )
 
         # Act
         import time
+
         start_time = time.time()
         response = await use_case.execute(request_dto)
         elapsed_time = time.time() - start_time
@@ -207,7 +200,10 @@ class TestRequestPasswordResetEmailNotFound:
         assert elapsed_time >= 0.4  # 0.5s de delay - tolerancia de 0.1s
 
         # 2. Retorna el MISMO mensaje genérico
-        assert response.message == "Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña."
+        assert (
+            response.message
+            == "Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña."
+        )
         assert response.email == "nonexistent@example.com"
 
         # 3. NO se envió email
@@ -228,16 +224,14 @@ class TestRequestPasswordResetEmailNotFound:
         use_case = RequestPasswordResetUseCase(uow, email_service)
 
         request_existing = RequestPasswordResetRequestDTO(email="exists@test.com")
-        request_nonexistent = RequestPasswordResetRequestDTO(
-            email="nonexistent@test.com"
-        )
+        request_nonexistent = RequestPasswordResetRequestDTO(email="nonexistent@test.com")
 
         # Crear usuario existente
         user = User.create(
             first_name="Test",
             last_name="User",
             email_str="exists@test.com",
-            plain_password="Password123!"
+            plain_password="Password123!",
         )
         async with uow:
             await uow.users.save(user)
@@ -257,7 +251,9 @@ class TestRequestPasswordResetEmailNotFound:
 class TestRequestPasswordResetSecurityFeatures:
     """Tests para features de seguridad"""
 
-    @patch("src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger")
+    @patch(
+        "src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger"
+    )
     async def test_request_password_reset_logs_successful_request(
         self, mock_get_logger, sample_user_data
     ):
@@ -279,15 +275,13 @@ class TestRequestPasswordResetSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         async with uow:
             await uow.users.save(user)
 
         request_dto = RequestPasswordResetRequestDTO(
-            email=sample_user_data["email"],
-            ip_address="192.168.1.1",
-            user_agent="Mozilla/5.0"
+            email=sample_user_data["email"], ip_address="192.168.1.1", user_agent="Mozilla/5.0"
         )
 
         # Act
@@ -302,7 +296,9 @@ class TestRequestPasswordResetSecurityFeatures:
         assert call_args.kwargs["ip_address"] == "192.168.1.1"
         assert call_args.kwargs["user_agent"] == "Mozilla/5.0"
 
-    @patch("src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger")
+    @patch(
+        "src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger"
+    )
     async def test_request_password_reset_logs_failed_request(self, mock_get_logger):
         """
         Test: Email no existente registra security log con failure
@@ -319,9 +315,7 @@ class TestRequestPasswordResetSecurityFeatures:
         use_case = RequestPasswordResetUseCase(uow, email_service)
 
         request_dto = RequestPasswordResetRequestDTO(
-            email="nonexistent@example.com",
-            ip_address="10.0.0.1",
-            user_agent="Chrome/90"
+            email="nonexistent@example.com", ip_address="10.0.0.1", user_agent="Chrome/90"
         )
 
         # Act
@@ -354,15 +348,13 @@ class TestRequestPasswordResetSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         async with uow:
             await uow.users.save(user)
 
         # Request sin campos opcionales
-        request_dto = RequestPasswordResetRequestDTO(
-            email=sample_user_data["email"]
-        )
+        request_dto = RequestPasswordResetRequestDTO(email=sample_user_data["email"])
 
         # Act
         await use_case.execute(request_dto)
@@ -372,9 +364,7 @@ class TestRequestPasswordResetSecurityFeatures:
             saved_user = await uow.users.find_by_id(user.id)
             assert saved_user.password_reset_token is not None
 
-    async def test_request_password_reset_overwrites_previous_token(
-        self, sample_user_data
-    ):
+    async def test_request_password_reset_overwrites_previous_token(self, sample_user_data):
         """
         Test: Nueva solicitud sobrescribe token anterior
         Given: Usuario con token de reseteo previo
@@ -390,16 +380,14 @@ class TestRequestPasswordResetSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         # Generar primer token directamente
         first_token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)
 
-        request_dto = RequestPasswordResetRequestDTO(
-            email=sample_user_data["email"]
-        )
+        request_dto = RequestPasswordResetRequestDTO(email=sample_user_data["email"])
 
         # Act - Segunda solicitud
         await use_case.execute(request_dto)

@@ -16,6 +16,7 @@ Arquitectura:
 - Módulo: User (Authentication)
 - Feature: httpOnly Cookies (v1.8.0)
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -212,14 +213,14 @@ class TestHttpOnlyCookies:
             last_name=test_user_data["last_name"],
         )
         register_response = await client.post(
-            "/api/v1/auth/register",
-            json=register_payload.model_dump()
+            "/api/v1/auth/register", json=register_payload.model_dump()
         )
         assert register_response.status_code == 201
 
         # Obtener token de verificación desde la base de datos
         # (En tests, podemos acceder directamente a la BD)
         from tests.conftest import get_user_by_email
+
         user = await get_user_by_email(client, test_user_data["email"])
         verification_token = user.verification_token
         assert verification_token is not None
@@ -275,8 +276,7 @@ class TestHttpOnlyCookies:
         # El middleware debería usar la cookie (válida) y ignorar el header (inválido)
         fake_token = "fake_invalid_token_12345"
         response = await client.get(
-            "/api/v1/auth/current-user",
-            headers={"Authorization": f"Bearer {fake_token}"}
+            "/api/v1/auth/current-user", headers={"Authorization": f"Bearer {fake_token}"}
         )
 
         # Then: Autenticación exitosa (usó cookie, ignoró header inválido)

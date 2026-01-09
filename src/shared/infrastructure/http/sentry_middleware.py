@@ -80,11 +80,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
             Payload del token o None si falla la decodificación
         """
         try:
-            payload = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             return payload
         except JWTError as e:
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
@@ -142,11 +138,13 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
 
             if payload:
                 # Establecer contexto de usuario en Sentry
-                sentry_sdk.set_user({
-                    "id": payload.get("sub"),  # UUID del usuario
-                    "email": payload.get("email"),  # Email del usuario
-                    "ip_address": self._get_client_ip(request),  # IP del cliente
-                })
+                sentry_sdk.set_user(
+                    {
+                        "id": payload.get("sub"),  # UUID del usuario
+                        "email": payload.get("email"),  # Email del usuario
+                        "ip_address": self._get_client_ip(request),  # IP del cliente
+                    }
+                )
             else:
                 # Token inválido o expirado -> request anónimo
                 sentry_sdk.set_user(None)

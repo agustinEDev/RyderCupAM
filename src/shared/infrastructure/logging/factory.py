@@ -49,7 +49,7 @@ class LoggerFactory:
         logger = factory.get_logger("app.api")
     """
 
-    _instance: Optional['LoggerFactory'] = None
+    _instance: Optional["LoggerFactory"] = None
     _lock = Lock()
 
     def __init__(self, config: LogConfig | None = None):
@@ -109,7 +109,7 @@ class LoggerFactory:
             self._loggers.clear()
 
     @classmethod
-    def from_file(cls, config_path: str | Path) -> 'LoggerFactory':
+    def from_file(cls, config_path: str | Path) -> "LoggerFactory":
         """
         Crea factory desde archivo de configuración.
 
@@ -129,9 +129,9 @@ class LoggerFactory:
             raise FileNotFoundError(f"Archivo de configuración no encontrado: {config_path}")
 
         # Cargar según extensión
-        if config_path.suffix.lower() in ['.yaml', '.yml']:
+        if config_path.suffix.lower() in [".yaml", ".yml"]:
             config_dict = cls._load_yaml(config_path)
-        elif config_path.suffix.lower() == '.json':
+        elif config_path.suffix.lower() == ".json":
             config_dict = cls._load_json(config_path)
         else:
             raise ValueError(f"Formato no soportado: {config_path.suffix}")
@@ -140,7 +140,7 @@ class LoggerFactory:
         return cls(config)
 
     @classmethod
-    def from_environment(cls) -> 'LoggerFactory':
+    def from_environment(cls) -> "LoggerFactory":
         """
         Crea factory basado en variables de entorno.
 
@@ -153,31 +153,31 @@ class LoggerFactory:
         Returns:
             Instancia configurada según entorno
         """
-        env = os.getenv('ENVIRONMENT', 'development').lower()
+        env = os.getenv("ENVIRONMENT", "development").lower()
 
         # Configuración base según entorno
-        if env == 'production':
+        if env == "production":
             config = LogConfig.production()
-        elif env == 'testing':
+        elif env == "testing":
             config = LogConfig.testing()
         else:
             config = LogConfig.development()
 
         # Personalizar según variables de entorno
-        if log_level := os.getenv('LOG_LEVEL'):
+        if log_level := os.getenv("LOG_LEVEL"):
             from .logger import LogLevel  # noqa: PLC0415 - Lazy loading for env customization
+
             config.level = LogLevel(log_level.upper())
 
-        if log_file := os.getenv('LOG_FILE'):
+        if log_file := os.getenv("LOG_FILE"):
             from .config import HandlerConfig, LogHandler  # noqa: PLC0415, I001 - Lazy loading for env customization
-            file_handler = HandlerConfig(
-                type=LogHandler.ROTATING_FILE,
-                filename=log_file
-            )
+
+            file_handler = HandlerConfig(type=LogHandler.ROTATING_FILE, filename=log_file)
             config.handlers.append(file_handler)
 
-        if log_format := os.getenv('LOG_FORMAT'):
+        if log_format := os.getenv("LOG_FORMAT"):
             from .config import LogFormat  # noqa: PLC0415 - Lazy loading for env customization
+
             for handler in config.handlers:
                 handler.format = LogFormat(log_format.lower())
 
@@ -188,7 +188,8 @@ class LoggerFactory:
         """Carga archivo YAML"""
         try:
             import yaml  # noqa: PLC0415 - Optional dependency, lazy import
-            with open(path, encoding='utf-8') as f:  # noqa: PTH123 - open() is more readable here
+
+            with open(path, encoding="utf-8") as f:  # noqa: PTH123 - open() is more readable here
                 return yaml.safe_load(f) or {}
         except ImportError as e:
             raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
@@ -196,16 +197,16 @@ class LoggerFactory:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(path, encoding='utf-8') as f:  # noqa: PTH123 - open() is more readable here
+        with open(path, encoding="utf-8") as f:  # noqa: PTH123 - open() is more readable here
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:
         """Obtiene configuración por defecto según entorno"""
-        env = os.getenv('ENVIRONMENT', 'development').lower()
+        env = os.getenv("ENVIRONMENT", "development").lower()
 
-        if env == 'production':
+        if env == "production":
             return LogConfig.production()
-        if env == 'testing':
+        if env == "testing":
             return LogConfig.testing()
         return LogConfig.development()
 

@@ -62,10 +62,7 @@ def valid_user_credentials():
     Si no existe, los tests de CSRF protection (que requieren autenticación)
     se saltarán automáticamente.
     """
-    return {
-        "email": "testuser@example.com",
-        "password": "SecurePassword123!"
-    }
+    return {"email": "testuser@example.com", "password": "SecurePassword123!"}
 
 
 @pytest.fixture
@@ -92,11 +89,7 @@ def authenticated_session(valid_user_credentials):
     if not all([access_token, refresh_token, csrf_token]):
         pytest.skip("Respuesta de login no contiene todos los tokens requeridos")
 
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "csrf_token": csrf_token
-    }
+    return {"access_token": access_token, "refresh_token": refresh_token, "csrf_token": csrf_token}
 
 
 # ======================================================================================
@@ -157,8 +150,9 @@ def test_health_endpoint_exempt_from_csrf():
     response = client.post("/health")
 
     # No debe ser 403 por CSRF (puede ser 404 o 405 si no existe/acepta POST)
-    assert response.status_code != status.HTTP_403_FORBIDDEN or \
-           "CSRF" not in response.json().get("detail", "")
+    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
+        "detail", ""
+    )
 
 
 def test_docs_endpoint_exempt_from_csrf():
@@ -175,8 +169,9 @@ def test_docs_endpoint_exempt_from_csrf():
     response = client.get("/docs")
 
     # No debe ser 403 por CSRF (puede ser 401 por autenticación)
-    assert response.status_code != status.HTTP_403_FORBIDDEN or \
-           "CSRF" not in response.json().get("detail", "")
+    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
+        "detail", ""
+    )
 
 
 # ======================================================================================
@@ -200,7 +195,7 @@ def test_post_request_without_csrf_token_fails(authenticated_session):
     response = client.put(
         "/api/v1/users/me/profile",
         json={"first_name": "John"},
-        headers={"Authorization": f"Bearer {access_token}"}
+        headers={"Authorization": f"Bearer {access_token}"},
     )
 
     # Debe fallar por falta de CSRF token
@@ -227,9 +222,9 @@ def test_post_request_with_invalid_csrf_token_fails(authenticated_session):
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",
-            CSRF_HEADER_NAME: "invalid_token_12345"  # Token INVÁLIDO
+            CSRF_HEADER_NAME: "invalid_token_12345",  # Token INVÁLIDO
         },
-        cookies={CSRF_COOKIE_NAME: csrf_token}  # Cookie válido pero header no coincide
+        cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie válido pero header no coincide
     )
 
     # Debe fallar por token CSRF inválido
@@ -256,9 +251,9 @@ def test_post_request_with_valid_csrf_token_succeeds(authenticated_session):
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",
-            CSRF_HEADER_NAME: csrf_token  # Token VÁLIDO en header
+            CSRF_HEADER_NAME: csrf_token,  # Token VÁLIDO en header
         },
-        cookies={CSRF_COOKIE_NAME: csrf_token}  # Token VÁLIDO en cookie
+        cookies={CSRF_COOKIE_NAME: csrf_token},  # Token VÁLIDO en cookie
     )
 
     # No debe fallar por CSRF (puede fallar por otras razones como validación de datos)
@@ -309,10 +304,7 @@ def test_refresh_token_generates_new_csrf_token(authenticated_session):
     old_csrf_token = authenticated_session["csrf_token"]
 
     # Refresh token request (cookie enviada automáticamente por TestClient)
-    response = client.post(
-        "/api/v1/auth/refresh-token",
-        cookies={"refresh_token": refresh_token}
-    )
+    response = client.post("/api/v1/auth/refresh-token", cookies={"refresh_token": refresh_token})
 
     if response.status_code != status.HTTP_200_OK:
         pytest.skip("No se pudo renovar token")
@@ -354,7 +346,7 @@ def test_post_request_with_csrf_cookie_but_no_header_fails(authenticated_session
         "/api/v1/users/me/profile",
         json={"first_name": "John"},
         headers={"Authorization": f"Bearer {access_token}"},
-        cookies={CSRF_COOKIE_NAME: csrf_token}  # Cookie presente pero header ausente
+        cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie presente pero header ausente
     )
 
     # Debe fallar por falta de header CSRF
@@ -381,8 +373,8 @@ def test_post_request_with_csrf_header_but_no_cookie_fails(authenticated_session
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",
-            CSRF_HEADER_NAME: csrf_token  # Header presente pero cookie ausente
-        }
+            CSRF_HEADER_NAME: csrf_token,  # Header presente pero cookie ausente
+        },
     )
 
     # Debe fallar por falta de cookie CSRF

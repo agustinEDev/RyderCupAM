@@ -86,5 +86,5 @@ class UnlockAccountUseCase:
             success=True,
             message=f"Account for user {request.user_id} unlocked successfully",
             user_id=request.user_id,
-            unlocked_by=request.unlocked_by_user_id
+            unlocked_by=request.unlocked_by_user_id,
         )

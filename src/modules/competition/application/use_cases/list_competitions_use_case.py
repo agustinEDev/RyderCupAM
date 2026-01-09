@@ -4,7 +4,6 @@ Caso de Uso: Listar Competitions con filtros.
 Permite obtener lista de competiciones con filtros opcionales.
 """
 
-
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -74,7 +73,7 @@ class ListCompetitionsUseCase:
                     search_name=search_name,
                     search_creator=search_creator,
                     status=status,
-                    creator_id=creator_id
+                    creator_id=creator_id,
                 )
 
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
@@ -104,9 +103,7 @@ class ListCompetitionsUseCase:
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:
                 creator_user_id = UserId(creator_id)
-                competitions = [
-                    c for c in competitions if c.creator_id == creator_user_id
-                ]
+                competitions = [c for c in competitions if c.creator_id == creator_user_id]
 
             return competitions
 
@@ -148,5 +145,5 @@ class ListCompetitionsUseCase:
             search_name=search_name,
             search_creator=search_creator,
             status=status_enum,
-            creator_id=creator_user_id
+            creator_id=creator_user_id,
         )

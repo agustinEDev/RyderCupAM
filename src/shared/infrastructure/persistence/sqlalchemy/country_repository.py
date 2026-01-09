@@ -5,7 +5,6 @@ Implementación concreta del repositorio de países usando SQLAlchemy async.
 Este es un repositorio de solo lectura para datos de referencia (seed data).
 """
 
-
 from sqlalchemy import (
     func,
     select,
@@ -61,19 +60,11 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         Returns:
             List[Country]: Lista de países activos ordenados alfabéticamente por nombre en inglés
         """
-        statement = (
-            select(Country)
-            .where(Country.active)
-            .order_by(Country.name_en.asc())
-        )
+        statement = select(Country).where(Country.active).order_by(Country.name_en.asc())
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def are_adjacent(
-        self,
-        country1: CountryCode,
-        country2: CountryCode
-    ) -> bool:
+    async def are_adjacent(self, country1: CountryCode, country2: CountryCode) -> bool:
         """
         Verifica si dos países son adyacentes (comparten frontera).
 
@@ -101,7 +92,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
             .select_from(country_adjacencies_table)
             .where(
                 country_adjacencies_table.c.country_code_1 == country1,
-                country_adjacencies_table.c.country_code_2 == country2
+                country_adjacencies_table.c.country_code_2 == country2,
             )
         )
         result = await self._session.execute(statement)
@@ -131,7 +122,7 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
             select(Country)
             .join(
                 country_adjacencies_table,
-                Country.code == country_adjacencies_table.c.country_code_2
+                Country.code == country_adjacencies_table.c.country_code_2,
             )
             .where(country_adjacencies_table.c.country_code_1 == code)
             .where(Country.active)
@@ -150,10 +141,6 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         Returns:
             bool: True si existe, False si no existe
         """
-        statement = (
-            select(func.count())
-            .select_from(Country)
-            .where(Country.code == code)
-        )
+        statement = select(func.count()).select_from(Country).where(Country.code == code)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0

@@ -12,6 +12,7 @@ class UserFinder:
     Servicio de Dominio para encontrar usuarios.
     Encapsula la lógica de búsqueda y la hace reutilizable.
     """
+
     def __init__(self, user_repository: UserRepositoryInterface):
         self._user_repository = user_repository
 

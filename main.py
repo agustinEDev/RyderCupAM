@@ -3,6 +3,7 @@ Ryder Cup Manager - Main Application
 
 Punto de entrada de la aplicación FastAPI.
 """
+
 import os
 
 from dotenv import load_dotenv
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 # HTTP Basic Security para proteger /docs
 security = HTTPBasic()
 
+
 def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     """
     Verifica las credenciales HTTP Basic para acceder a /docs y /redoc.
@@ -87,14 +89,12 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
 
     # Verificar username
     correct_username = secrets.compare_digest(
-        credentials.username.encode("utf8"),
-        settings.DOCS_USERNAME.encode("utf8")
+        credentials.username.encode("utf8"), settings.DOCS_USERNAME.encode("utf8")
     )
 
     # Verificar password
     correct_password = secrets.compare_digest(
-        credentials.password.encode("utf8"),
-        settings.DOCS_PASSWORD.encode("utf8")
+        credentials.password.encode("utf8"), settings.DOCS_PASSWORD.encode("utf8")
     )
 
     if not (correct_username and correct_password):
@@ -109,11 +109,13 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
 
 class HealthResponse(BaseModel):
     """Response model para el health check."""
+
     message: str
     version: str
     status: str
     docs: str
     description: str
+
 
 # Crear la app, registrando el gestor de ciclo de vida 'lifespan'
 # Deshabilitamos docs_url y redoc_url para crear endpoints protegidos manualmente
@@ -123,7 +125,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Registrar el limiter en la app para que esté disponible en todos los endpoints
@@ -145,6 +147,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Instanciar configuración de security headers
 secure_headers = Secure()
 
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """
@@ -157,6 +160,7 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     secure_headers.framework.fastapi(response)
     return response
+
 
 # ================================
 # CORS MIDDLEWARE (v1.8.0)
@@ -184,28 +188,34 @@ app.add_middleware(CorrelationMiddleware)
 # Este debe ir AL FINAL para que se ejecute PRIMERO y vea todo
 ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
+
     @app.middleware("http")
     async def debug_cors_requests(request, call_next):
-        origin = request.headers.get('origin', 'N/A')
+        origin = request.headers.get("origin", "N/A")
         method = request.method
 
         # Log de peticiones con origen
-        if origin != 'N/A':
+        if origin != "N/A":
             print(f"🌍 {method} request to: {request.url.path}")
             print(f"   Origin: {origin}")
 
             if method == "OPTIONS":
-                print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
-                print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
+                print(
+                    f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}"
+                )
+                print(
+                    f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}"
+                )
 
         response = await call_next(request)
 
         # Log de respuesta CORS
-        if origin != 'N/A':
+        if origin != "N/A":
             print(f"   Response status: {response.status_code}")
             cors_headers = {
-                k: v for k, v in response.headers.items()
-                if 'access-control' in k.lower() or 'vary' in k.lower()
+                k: v
+                for k, v in response.headers.items()
+                if "access-control" in k.lower() or "vary" in k.lower()
             }
             if cors_headers:
                 print(f"   CORS headers: {cors_headers}")
@@ -213,6 +223,7 @@ if ENV != "production":
                 print("   ⚠️  NO CORS headers in response!")
 
         return response
+
 
 # Incluir los routers de la API
 app.include_router(
@@ -250,6 +261,7 @@ app.include_router(
     tags=["Enrollments"],
 )
 
+
 # Endpoints protegidos de documentación con HTTP Basic Auth
 @app.get("/docs", include_in_schema=False)
 async def get_documentation(username: str = Depends(verify_docs_credentials)):  # noqa: ARG001
@@ -271,8 +283,9 @@ async def root() -> HealthResponse:
         version="1.0.0",
         status="running",
         docs="Visita /docs para la documentacion interactiva",
-        description="API para gestion de torneos tipo Ryder Cup entre amigos"
+        description="API para gestion de torneos tipo Ryder Cup entre amigos",
     )
+
 
 if __name__ == "__main__":
     # Para reload=True necesitamos pasar la app como string

@@ -12,19 +12,20 @@ Arquitectura:
 - Responsabilidad: Gestión de cookies HTTP seguras
 - Patrón: Helper/Utility
 """
+
 import os
 
 from fastapi import Response
 
 # Nombres de las cookies
-COOKIE_NAME = "access_token"          # Access token (15 min)
+COOKIE_NAME = "access_token"  # Access token (15 min)
 REFRESH_COOKIE_NAME = "refresh_token"  # Refresh token (7 días)
-CSRF_COOKIE_NAME = "csrf_token"        # CSRF token (15 min) - v1.13.0
+CSRF_COOKIE_NAME = "csrf_token"  # CSRF token (15 min) - v1.13.0
 
 # Tiempos de expiración (deben coincidir con la expiración de los JWT)
-COOKIE_MAX_AGE = 900           # 15 minutos (access token reducido desde 1 hora)
+COOKIE_MAX_AGE = 900  # 15 minutos (access token reducido desde 1 hora)
 REFRESH_COOKIE_MAX_AGE = 604800  # 7 días en segundos (refresh token)
-CSRF_COOKIE_MAX_AGE = 900       # 15 minutos (csrf token - v1.13.0)
+CSRF_COOKIE_MAX_AGE = 900  # 15 minutos (csrf token - v1.13.0)
 
 
 def is_production() -> bool:
@@ -77,11 +78,11 @@ def set_auth_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
-        httponly=True,              # ✅ Protección XSS: No accesible desde JavaScript
-        secure=is_production(),      # ✅ HTTPS en producción, HTTP en desarrollo
-        samesite="lax",             # ✅ Protección CSRF moderada
-        max_age=COOKIE_MAX_AGE,     # ✅ Expira en 1 hora
-        path="/",                    # ✅ Disponible en toda la app
+        httponly=True,  # ✅ Protección XSS: No accesible desde JavaScript
+        secure=is_production(),  # ✅ HTTPS en producción, HTTP en desarrollo
+        samesite="lax",  # ✅ Protección CSRF moderada
+        max_age=COOKIE_MAX_AGE,  # ✅ Expira en 1 hora
+        path="/",  # ✅ Disponible en toda la app
     )
 
 
@@ -108,10 +109,10 @@ def delete_auth_cookie(response: Response) -> None:
     """
     response.delete_cookie(
         key=COOKIE_NAME,
-        path="/",                    # Mismo path que al crear la cookie
-        httponly=True,              # Mismo httponly que al crear
-        secure=is_production(),      # Mismo secure que al crear
-        samesite="lax",             # Mismo samesite que al crear
+        path="/",  # Mismo path que al crear la cookie
+        httponly=True,  # Mismo httponly que al crear
+        secure=is_production(),  # Mismo secure que al crear
+        samesite="lax",  # Mismo samesite que al crear
     )
 
 
@@ -173,11 +174,11 @@ def set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
-        httponly=True,              # ✅ Protección XSS
-        secure=is_production(),      # ✅ HTTPS en producción
-        samesite="lax",             # ✅ Protección CSRF
+        httponly=True,  # ✅ Protección XSS
+        secure=is_production(),  # ✅ HTTPS en producción
+        samesite="lax",  # ✅ Protección CSRF
         max_age=REFRESH_COOKIE_MAX_AGE,  # ✅ Expira en 7 días
-        path="/",                    # ✅ Disponible en toda la app
+        path="/",  # ✅ Disponible en toda la app
     )
 
 
@@ -203,10 +204,10 @@ def delete_refresh_token_cookie(response: Response) -> None:
     """
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
-        path="/",                    # Mismo path que al crear la cookie
-        httponly=True,              # Mismo httponly que al crear
-        secure=is_production(),      # Mismo secure que al crear
-        samesite="lax",             # Mismo samesite que al crear
+        path="/",  # Mismo path que al crear la cookie
+        httponly=True,  # Mismo httponly que al crear
+        secure=is_production(),  # Mismo secure que al crear
+        samesite="lax",  # Mismo samesite que al crear
     )
 
 
@@ -268,11 +269,11 @@ def set_csrf_cookie(response: Response, csrf_token: str) -> None:
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=csrf_token,
-        httponly=False,              # ✅ Accesible desde JavaScript (REQUERIDO)
-        secure=is_production(),      # ✅ HTTPS en producción
-        samesite="lax",             # ✅ Protección CSRF adicional
-        max_age=CSRF_COOKIE_MAX_AGE, # ✅ Expira en 15 minutos
-        path="/",                    # ✅ Disponible en toda la app
+        httponly=False,  # ✅ Accesible desde JavaScript (REQUERIDO)
+        secure=is_production(),  # ✅ HTTPS en producción
+        samesite="lax",  # ✅ Protección CSRF adicional
+        max_age=CSRF_COOKIE_MAX_AGE,  # ✅ Expira en 15 minutos
+        path="/",  # ✅ Disponible en toda la app
     )
 
 
@@ -298,10 +299,10 @@ def delete_csrf_cookie(response: Response) -> None:
     """
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
-        path="/",                    # Mismo path que al crear la cookie
-        httponly=False,              # Mismo httponly que al crear
-        secure=is_production(),      # Mismo secure que al crear
-        samesite="lax",             # Mismo samesite que al crear
+        path="/",  # Mismo path que al crear la cookie
+        httponly=False,  # Mismo httponly que al crear
+        secure=is_production(),  # Mismo secure que al crear
+        samesite="lax",  # Mismo samesite que al crear
     )
 
 

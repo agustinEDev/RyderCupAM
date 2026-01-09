@@ -5,7 +5,6 @@ Lista las inscripciones de una competición con filtros opcionales.
 Retorna entidades (NO DTOs) - siguiendo Clean Architecture.
 """
 
-
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -16,6 +15,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
@@ -44,11 +44,7 @@ class ListEnrollmentsUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self,
-        competition_id: str,
-        status: str | None = None
-    ) -> list[Enrollment]:
+    async def execute(self, competition_id: str, status: str | None = None) -> list[Enrollment]:
         """
         Ejecuta el caso de uso de listado de inscripciones.
 
@@ -68,9 +64,7 @@ class ListEnrollmentsUseCase:
             # 1. Verificar que la competición existe
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
-                raise CompetitionNotFoundError(
-                    f"Competición no encontrada: {competition_id}"
-                )
+                raise CompetitionNotFoundError(f"Competición no encontrada: {competition_id}")
 
             # 2. Obtener enrollments según filtros
             if status:

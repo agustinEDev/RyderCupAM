@@ -46,10 +46,7 @@ class LogoutUserUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: LogoutRequestDTO,
-        user_id: str,
-        token: str | None = None
+        self, request: LogoutRequestDTO, user_id: str, token: str | None = None
     ) -> LogoutResponseDTO | None:
         """
         Ejecuta el caso de uso de logout.
@@ -132,8 +129,4 @@ class LogoutUserUseCase:
                 reason="logout",
             )
 
-        return LogoutResponseDTO(
-            message="Logout exitoso",
-            logged_out_at=logout_time
-        )
-
+        return LogoutResponseDTO(message="Logout exitoso", logged_out_at=logout_time)

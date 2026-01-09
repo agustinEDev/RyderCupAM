@@ -25,7 +25,9 @@ class UpdateProfileUseCase:
     sin necesidad de proporcionar su contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, country_repository: CountryRepositoryInterface):
+    def __init__(
+        self, uow: UserUnitOfWorkInterface, country_repository: CountryRepositoryInterface
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -36,7 +38,9 @@ class UpdateProfileUseCase:
         self._uow = uow
         self._country_repository = country_repository
 
-    async def execute(self, user_id: str, request: UpdateProfileRequestDTO) -> UpdateProfileResponseDTO:
+    async def execute(
+        self, user_id: str, request: UpdateProfileRequestDTO
+    ) -> UpdateProfileResponseDTO:
         """
         Ejecuta el caso de uso de actualización de perfil.
 
@@ -69,7 +73,7 @@ class UpdateProfileUseCase:
             user.update_profile(
                 first_name=request.first_name,
                 last_name=request.last_name,
-                country_code_str=request.country_code
+                country_code_str=request.country_code,
             )
 
             # Guardar cambios
@@ -79,6 +83,5 @@ class UpdateProfileUseCase:
 
         # Construir respuesta
         return UpdateProfileResponseDTO(
-            user=UserResponseDTO.model_validate(user),
-            message="Profile updated successfully"
+            user=UserResponseDTO.model_validate(user), message="Profile updated successfully"
         )

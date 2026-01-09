@@ -250,6 +250,7 @@ class TestCORSConfiguration:
 
         import src.config.cors_config
         from src.config.cors_config import get_allowed_origins
+
         importlib.reload(src.config.cors_config)
 
         allowed_origins = get_allowed_origins()
@@ -258,7 +259,7 @@ class TestCORSConfiguration:
         assert len(allowed_origins) == 2
         assert allowed_origins == [
             "https://app.rydercupfriends.com",
-            "https://www.rydercupfriends.com"
+            "https://www.rydercupfriends.com",
         ]
         # Verificar que NO incluye orígenes de desarrollo
         assert not any(origin.startswith("http://localhost") for origin in allowed_origins)

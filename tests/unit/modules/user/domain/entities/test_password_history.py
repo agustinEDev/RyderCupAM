@@ -9,6 +9,7 @@ Arquitectura:
 - Módulo: User
 - Feature: Password History (OWASP A07)
 """
+
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.entities.password_history import PasswordHistory
@@ -41,9 +42,7 @@ class TestPasswordHistoryCreation:
 
         # When
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash=password_hash,
-            total_history_count=total_count
+            user_id=user_id, password_hash=password_hash, total_history_count=total_count
         )
 
         # Then
@@ -69,9 +68,7 @@ class TestPasswordHistoryCreation:
 
         # When
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash=password_hash,
-            total_history_count=total_count
+            user_id=user_id, password_hash=password_hash, total_history_count=total_count
         )
 
         # Then
@@ -96,11 +93,7 @@ class TestPasswordHistoryCreation:
         password_hash = "$2b$12$explicit_id"
 
         # When
-        history = PasswordHistory(
-            id=history_id,
-            user_id=user_id,
-            password_hash=password_hash
-        )
+        history = PasswordHistory(id=history_id, user_id=user_id, password_hash=password_hash)
 
         # Then
         assert history.id == history_id
@@ -118,11 +111,7 @@ class TestPasswordHistoryCreation:
         password_hash = "$2b$12$auto_id"
 
         # When
-        history = PasswordHistory(
-            id=None,
-            user_id=user_id,
-            password_hash=password_hash
-        )
+        history = PasswordHistory(id=None, user_id=user_id, password_hash=password_hash)
 
         # Then
         assert history.id is not None
@@ -147,7 +136,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=400)
+            created_at=datetime.now() - timedelta(days=400),
         )
 
         # When
@@ -171,7 +160,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=30)
+            created_at=datetime.now() - timedelta(days=30),
         )
 
         # When
@@ -195,7 +184,7 @@ class TestPasswordHistoryAgeValidation:
             id=None,
             user_id=user_id,
             password_hash=password_hash,
-            created_at=datetime.now() - timedelta(days=365)
+            created_at=datetime.now() - timedelta(days=365),
         )
 
         # When
@@ -219,9 +208,7 @@ class TestPasswordHistoryDomainEvents:
         # Given
         user_id = UserId.generate()
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash="$2b$12$test",
-            total_history_count=1
+            user_id=user_id, password_hash="$2b$12$test", total_history_count=1
         )
 
         # When
@@ -243,9 +230,7 @@ class TestPasswordHistoryDomainEvents:
         # Given
         user_id = UserId.generate()
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash="$2b$12$test",
-            total_history_count=1
+            user_id=user_id, password_hash="$2b$12$test", total_history_count=1
         )
         assert history.has_domain_events()
 
@@ -267,9 +252,7 @@ class TestPasswordHistoryDomainEvents:
         # Given
         user_id = UserId.generate()
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash="$2b$12$test",
-            total_history_count=1
+            user_id=user_id, password_hash="$2b$12$test", total_history_count=1
         )
 
         # When & Then
@@ -294,7 +277,7 @@ class TestPasswordHistoryStringRepresentation:
         history = PasswordHistory.create(
             user_id=user_id,
             password_hash="$2b$12$secret_hash_should_not_appear_in_full",
-            total_history_count=1
+            total_history_count=1,
         )
 
         # When
@@ -318,9 +301,7 @@ class TestPasswordHistoryStringRepresentation:
         # Given
         user_id = UserId.generate()
         history = PasswordHistory.create(
-            user_id=user_id,
-            password_hash="$2b$12$test",
-            total_history_count=1
+            user_id=user_id, password_hash="$2b$12$test", total_history_count=1
         )
 
         # When & Then

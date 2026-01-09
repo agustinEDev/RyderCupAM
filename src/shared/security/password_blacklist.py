@@ -28,7 +28,6 @@ COMMON_PASSWORDS = {
     "000000",
     "123123",
     "654321",
-
     # Palabra "password" y variaciones
     "password",
     "password1",
@@ -38,7 +37,6 @@ COMMON_PASSWORDS = {
     "p@ssw0rd",
     "p@ssword",
     "passwd",
-
     # Palabras comunes
     "welcome",
     "welcome1",
@@ -53,7 +51,6 @@ COMMON_PASSWORDS = {
     "guest",
     "test",
     "demo",
-
     # Patrones de teclado
     "qwerty",
     "qwerty123",
@@ -65,7 +62,6 @@ COMMON_PASSWORDS = {
     "qazwsx",
     "abc123",
     "abc123456",
-
     # Nombres comunes
     "monkey",
     "dragon",
@@ -91,7 +87,6 @@ COMMON_PASSWORDS = {
     "temp",
     "temporary",
     "user123",
-
     # Variaciones con años
     "password2024",
     "password2025",
@@ -99,7 +94,6 @@ COMMON_PASSWORDS = {
     "welcome2025",
     "admin2024",
     "admin2025",
-
     # Frases comunes en español (nuestro contexto)
     "contraseña",
     "contrasena",
@@ -110,7 +104,6 @@ COMMON_PASSWORDS = {
     "administrador",
     "usuario",
     "bienvenido",
-
     # Variaciones típicas que intentan "cumplir" requisitos
     "Password1",
     "Password1!",
@@ -126,7 +119,6 @@ COMMON_PASSWORDS = {
     "Abc123!",
     "Abcd1234",
     "Abcd1234!",
-
     # Fechas comunes
     "01011990",
     "01011991",

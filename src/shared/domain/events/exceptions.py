@@ -18,7 +18,7 @@ class EventHandlerError(Exception):
         message: str,
         event_type: str | None = None,
         handler_type: str | None = None,
-        original_error: Exception | None = None
+        original_error: Exception | None = None,
     ):
         super().__init__(message)
         self.event_type = event_type
@@ -60,6 +60,7 @@ class HandlerRegistrationError(EventBusError):
     """
     Error al registrar o desregistrar handlers.
     """
+
     pass
 
 
@@ -67,4 +68,5 @@ class EventPublicationError(EventBusError):
     """
     Error al publicar eventos.
     """
+
     pass

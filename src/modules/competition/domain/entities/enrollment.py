@@ -21,6 +21,7 @@ from ..value_objects.enrollment_status import EnrollmentStatus
 
 class EnrollmentStateError(Exception):
     """Excepción lanzada cuando se intenta una operación en un estado inválido."""
+
     pass
 
 
@@ -62,7 +63,7 @@ class Enrollment:
         custom_handicap: Decimal | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None
+        domain_events: list[DomainEvent] | None = None,
     ):
         """
         Constructor de Enrollment.
@@ -95,11 +96,8 @@ class Enrollment:
 
     @classmethod
     def request(
-        cls,
-        id: EnrollmentId,
-        competition_id: CompetitionId,
-        user_id: UserId
-    ) -> 'Enrollment':
+        cls, id: EnrollmentId, competition_id: CompetitionId, user_id: UserId
+    ) -> "Enrollment":
         """
         Factory method para crear una solicitud de inscripción.
 
@@ -114,17 +112,14 @@ class Enrollment:
             Enrollment: Nueva inscripción con evento emitido
         """
         enrollment = cls(
-            id=id,
-            competition_id=competition_id,
-            user_id=user_id,
-            status=EnrollmentStatus.REQUESTED
+            id=id, competition_id=competition_id, user_id=user_id, status=EnrollmentStatus.REQUESTED
         )
 
         # Emitir evento
         event = EnrollmentRequestedEvent(
             enrollment_id=str(enrollment.id),
             competition_id=str(enrollment.competition_id),
-            user_id=str(enrollment.user_id)
+            user_id=str(enrollment.user_id),
         )
         enrollment._add_domain_event(event)
 
@@ -132,11 +127,8 @@ class Enrollment:
 
     @classmethod
     def invite(
-        cls,
-        id: EnrollmentId,
-        competition_id: CompetitionId,
-        user_id: UserId
-    ) -> 'Enrollment':
+        cls, id: EnrollmentId, competition_id: CompetitionId, user_id: UserId
+    ) -> "Enrollment":
         """
         Factory method para crear una invitación.
 
@@ -151,10 +143,7 @@ class Enrollment:
             Enrollment: Nueva invitación
         """
         enrollment = cls(
-            id=id,
-            competition_id=competition_id,
-            user_id=user_id,
-            status=EnrollmentStatus.INVITED
+            id=id, competition_id=competition_id, user_id=user_id, status=EnrollmentStatus.INVITED
         )
 
         # TODO: Emitir evento EnrollmentInvitedEvent (si se crea)
@@ -167,8 +156,8 @@ class Enrollment:
         id: EnrollmentId,
         competition_id: CompetitionId,
         user_id: UserId,
-        custom_handicap: Decimal | None = None
-    ) -> 'Enrollment':
+        custom_handicap: Decimal | None = None,
+    ) -> "Enrollment":
         """
         Factory method para inscripción directa por el creador.
 
@@ -188,14 +177,14 @@ class Enrollment:
             competition_id=competition_id,
             user_id=user_id,
             status=EnrollmentStatus.APPROVED,
-            custom_handicap=custom_handicap
+            custom_handicap=custom_handicap,
         )
 
         # Emitir evento
         event = EnrollmentApprovedEvent(
             enrollment_id=str(enrollment.id),
             competition_id=str(enrollment.competition_id),
-            user_id=str(enrollment.user_id)
+            user_id=str(enrollment.user_id),
         )
         enrollment._add_domain_event(event)
 
@@ -275,7 +264,7 @@ class Enrollment:
         event = EnrollmentApprovedEvent(
             enrollment_id=str(self.id),
             competition_id=str(self.competition_id),
-            user_id=str(self.user_id)
+            user_id=str(self.user_id),
         )
         self._add_domain_event(event)
 
@@ -326,7 +315,7 @@ class Enrollment:
             enrollment_id=str(self.id),
             competition_id=str(self.competition_id),
             user_id=str(self.user_id),
-            reason=reason
+            reason=reason,
         )
         self._add_domain_event(event)
 
@@ -368,7 +357,7 @@ class Enrollment:
             enrollment_id=str(self.id),
             competition_id=str(self.competition_id),
             user_id=str(self.user_id),
-            reason=reason
+            reason=reason,
         )
         self._add_domain_event(event)
 
@@ -440,19 +429,19 @@ class Enrollment:
         """
         Añade un evento de dominio a la lista, inicializándola si es necesario.
         """
-        if not hasattr(self, '_domain_events') or self._domain_events is None:
+        if not hasattr(self, "_domain_events") or self._domain_events is None:
             self._domain_events: list[DomainEvent] = []
         self._domain_events.append(event)
 
     def get_domain_events(self) -> list[DomainEvent]:
         """Obtiene los eventos de dominio pendientes."""
-        if not hasattr(self, '_domain_events') or self._domain_events is None:
+        if not hasattr(self, "_domain_events") or self._domain_events is None:
             self._domain_events: list[DomainEvent] = []
         return self._domain_events.copy()
 
     def clear_domain_events(self) -> None:
         """Limpia los eventos de dominio después de procesarlos."""
-        if hasattr(self, '_domain_events') and self._domain_events is not None:
+        if hasattr(self, "_domain_events") and self._domain_events is not None:
             self._domain_events.clear()
 
     # ===========================================
@@ -461,7 +450,9 @@ class Enrollment:
 
     def __str__(self) -> str:
         """Representación string legible."""
-        return f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
+        return (
+            f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
+        )
 
     def __eq__(self, other) -> bool:
         """Operador de igualdad - Comparación por identidad (ID)."""

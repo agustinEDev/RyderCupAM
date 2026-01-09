@@ -30,15 +30,13 @@ class TestSQLInjectionLoginEndpoint:
         ]
 
         for payload in malicious_payloads:
-            login_data = {
-                "email": payload,
-                "password": "anypassword"
-            }
+            login_data = {"email": payload, "password": "anypassword"}
             response = await client.post("/api/v1/auth/login", json=login_data)
 
             # Debe fallar con validación de Pydantic (email inválido)
-            assert response.status_code == 422, \
+            assert response.status_code == 422, (
                 f"Payload '{payload}' debe ser rechazado con 422 (validation error)"
+            )
 
     async def test_sql_injection_in_password_field(self, client: AsyncClient):
         """
@@ -51,7 +49,7 @@ class TestSQLInjectionLoginEndpoint:
             "email": "victim@example.com",
             "password": "ValidPassword123!",
             "first_name": "Victim",
-            "last_name": "User"
+            "last_name": "User",
         }
         await client.post("/api/v1/auth/register", json=register_data)
 
@@ -63,15 +61,13 @@ class TestSQLInjectionLoginEndpoint:
         ]
 
         for payload in malicious_passwords:
-            login_data = {
-                "email": "victim@example.com",
-                "password": payload
-            }
+            login_data = {"email": "victim@example.com", "password": payload}
             response = await client.post("/api/v1/auth/login", json=login_data)
 
             # Debe fallar con 401 (credenciales inválidas), NO con error de BD
-            assert response.status_code in [401, 404], \
+            assert response.status_code in [401, 404], (
                 "SQL injection en password debe fallar con 401/404, no con error de BD"
+            )
 
 
 @pytest.mark.asyncio
@@ -90,26 +86,25 @@ class TestSQLInjectionRegisterEndpoint:
             "email": "sqlinjection@example.com",
             "password": "ValidPassword123!",
             "first_name": malicious_name,
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
 
         # El registro puede fallar con 422 (validación) o ser sanitizado
         # Si pasa validación, el payload debe ser sanitizado (sin ejecutar SQL)
-        assert response.status_code in [201, 422], \
+        assert response.status_code in [201, 422], (
             "El registro debe fallar con validación o sanitizar el input"
+        )
 
         if response.status_code == 201:
             # Verificar que el nombre se guardó como texto plano (sin ejecutar SQL)
             # La tabla users debe seguir existiendo (no se ejecutó DROP TABLE)
-            login_data = {
-                "email": "sqlinjection@example.com",
-                "password": "ValidPassword123!"
-            }
+            login_data = {"email": "sqlinjection@example.com", "password": "ValidPassword123!"}
             login_response = await client.post("/api/v1/auth/login", json=login_data)
-            assert login_response.status_code == 200, \
+            assert login_response.status_code == 200, (
                 "La tabla users debe seguir existiendo después del intento de SQL injection"
+            )
 
 
 @pytest.mark.asyncio
@@ -134,20 +129,20 @@ class TestSQLInjectionCompetitionEndpoint:
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 100,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
 
         # El nombre puede ser sanitizado o rechazado por validación
-        assert response.status_code in [201, 400, 422], \
+        assert response.status_code in [201, 400, 422], (
             "El input debe ser sanitizado o rechazado por validación"
+        )
 
         if response.status_code == 201:
             # Verificar que la tabla competitions sigue existiendo
             list_response = await client.get("/api/v1/competitions")
-            assert list_response.status_code == 200, \
-                "La tabla competitions debe seguir existiendo"
+            assert list_response.status_code == 200, "La tabla competitions debe seguir existiendo"
 
 
 @pytest.mark.asyncio
@@ -168,14 +163,15 @@ class TestORMProtection:
             "email": "test';--@example.com",  # Email inválido
             "password": "Password123!",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
 
         # Debe fallar por validación de email, no por error de SQL
-        assert response.status_code == 422, \
+        assert response.status_code == 422, (
             "Debe fallar con validación de Pydantic, no con error de SQL"
+        )
 
     async def test_no_raw_sql_execution(self, client: AsyncClient):
         """
@@ -197,10 +193,14 @@ class TestORMProtection:
         # Intentar en diferentes campos
         for payload in sql_payloads:
             # Intento 1: Login
-            response = await client.post("/api/v1/auth/login", json={
-                "email": f"{payload}@example.com",  # Will fail email validation
-                "password": payload
-            })
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": f"{payload}@example.com",  # Will fail email validation
+                    "password": payload,
+                },
+            )
             # Debe fallar con 422 (validación) o 401 (credenciales), nunca error SQL
-            assert response.status_code in [401, 404, 422], \
+            assert response.status_code in [401, 404, 422], (
                 f"Payload '{payload}' no debe causar error de SQL"
+            )

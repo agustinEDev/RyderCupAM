@@ -57,7 +57,5 @@ class FindUserUseCase:
 
             # Crear y devolver el DTO de respuesta
             return FindUserResponseDTO(
-                user_id=user.id.value,
-                email=user.email.value,
-                full_name=user.get_full_name()
+                user_id=user.id.value, email=user.email.value, full_name=user.get_full_name()
             )

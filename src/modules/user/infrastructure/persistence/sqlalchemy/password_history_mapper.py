@@ -22,14 +22,11 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registr
 # --- TypeDecorator para PasswordHistoryId ---
 class PasswordHistoryIdDecorator(TypeDecorator):
     """TypeDecorator para manejar PasswordHistoryId como CHAR(36) en BD."""
+
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(
-        self,
-        value: PasswordHistoryId | str,
-        dialect
-    ) -> str | None:
+    def process_bind_param(self, value: PasswordHistoryId | str, dialect) -> str | None:
         """Convierte PasswordHistoryId o string a string para BD."""
         if isinstance(value, PasswordHistoryId):
             return str(value.value)
@@ -47,6 +44,7 @@ class PasswordHistoryIdDecorator(TypeDecorator):
 # --- TypeDecorator para UserId (reutilizado) ---
 class UserIdDecorator(TypeDecorator):
     """TypeDecorator para manejar UserId como CHAR(36) en BD."""
+
     impl = CHAR(36)
     cache_ok = True
 
@@ -67,12 +65,12 @@ class UserIdDecorator(TypeDecorator):
 
 # --- Definición de la Tabla ---
 password_history_table = Table(
-    'password_history',
+    "password_history",
     metadata,
-    Column('id', PasswordHistoryIdDecorator, primary_key=True),
-    Column('user_id', UserIdDecorator, ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
-    Column('password_hash', String(255), nullable=False),
-    Column('created_at', DateTime, nullable=False),
+    Column("id", PasswordHistoryIdDecorator, primary_key=True),
+    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("password_hash", String(255), nullable=False),
+    Column("created_at", DateTime, nullable=False),
 )
 
 
@@ -93,5 +91,5 @@ def start_mappers():
             properties={
                 # Mapeo directo de columnas a atributos
                 # Los Value Objects (PasswordHistoryId, UserId) se manejan con TypeDecorators
-            }
+            },
         )

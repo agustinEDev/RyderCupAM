@@ -80,10 +80,11 @@ class UserLoggedInEvent(DomainEvent):
             "user_agent": self.user_agent,
             "session_id": self.session_id,
             "login_method": self.login_method,
-
             # Metadatos base del evento (generados automáticamente)
-            "event_id": getattr(self, '_event_id', None),
-            "occurred_on": getattr(self, '_occurred_on', None).isoformat() if hasattr(self, '_occurred_on') else None,
-            "event_version": getattr(self, '_event_version', None),
-            "aggregate_id": getattr(self, '_aggregate_id', None),
+            "event_id": getattr(self, "_event_id", None),
+            "occurred_on": getattr(self, "_occurred_on", None).isoformat()
+            if hasattr(self, "_occurred_on")
+            else None,
+            "event_version": getattr(self, "_event_version", None),
+            "aggregate_id": getattr(self, "_aggregate_id", None),
         }

@@ -83,4 +83,3 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
 
     def is_active(self) -> bool:
         return self._session.is_active
-

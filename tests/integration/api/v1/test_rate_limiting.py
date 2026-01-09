@@ -27,9 +27,7 @@ class TestRateLimitingLogin:
     """Tests de rate limiting para el endpoint de login."""
 
     @pytest.mark.asyncio
-    async def test_login_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_login_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de login con límite de 5 peticiones/minuto
         WHEN: Se realizan 6 intentos de login desde la misma IP
@@ -38,10 +36,7 @@ class TestRateLimitingLogin:
               Los headers X-RateLimit-* están presentes
         """
         # Payload para login (credenciales inválidas, no importa para rate limiting)
-        payload = {
-            "email": "test@example.com",
-            "password": "wrongpassword"
-        }
+        payload = {"email": "test@example.com", "password": "wrongpassword"}
 
         # Realizar 5 peticiones (dentro del límite)
         responses = []
@@ -50,7 +45,9 @@ class TestRateLimitingLogin:
             responses.append(response)
             # Esperamos 401 porque las credenciales son inválidas
             # Pero el rate limiter NO debe bloquear
-            assert response.status_code in [200, 401], f"Intento {i+1} falló con {response.status_code}"
+            assert response.status_code in [200, 401], (
+                f"Intento {i + 1} falló con {response.status_code}"
+            )
 
         # 6ta petición debe ser bloqueada por rate limiter
         response_blocked = await client.post("/api/v1/auth/login", json=payload)
@@ -69,9 +66,7 @@ class TestRateLimitingLogin:
         )
 
     @pytest.mark.asyncio
-    async def test_login_within_rate_limit_succeeds(
-        self, client: AsyncClient
-    ):
+    async def test_login_within_rate_limit_succeeds(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de login con límite de 5 peticiones/minuto
         WHEN: Se realizan 3 peticiones (dentro del límite)
@@ -80,17 +75,14 @@ class TestRateLimitingLogin:
 
         NOTE: Este test verifica que el rate limiting NO afecta uso normal.
         """
-        payload = {
-            "email": "test@example.com",
-            "password": "t3stp@ssw0rd!"
-        }
+        payload = {"email": "test@example.com", "password": "t3stp@ssw0rd!"}
 
         # Realizar 3 peticiones (dentro del límite de 5/min)
         for i in range(3):
             response = await client.post("/api/v1/auth/login", json=payload)
             # Esperamos 401 (credenciales inválidas) NO 429 (rate limited)
             assert response.status_code in [200, 401], (
-                f"Petición {i+1} fue bloqueada incorrectamente con {response.status_code}"
+                f"Petición {i + 1} fue bloqueada incorrectamente con {response.status_code}"
             )
 
 
@@ -98,9 +90,7 @@ class TestRateLimitingRegister:
     """Tests de rate limiting para el endpoint de registro."""
 
     @pytest.mark.asyncio
-    async def test_register_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_register_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de register con límite de 3 peticiones/hora
         WHEN: Se realizan 4 intentos de registro desde la misma IP
@@ -113,7 +103,7 @@ class TestRateLimitingRegister:
                 "email": f"user{i}@example.com",
                 "password": "TestPassword123!",
                 "first_name": "Test",
-                "last_name": "User"
+                "last_name": "User",
             }
             for i in range(4)
         ]
@@ -126,7 +116,7 @@ class TestRateLimitingRegister:
             # Esperamos 201 (creado) o 409 (ya existe) o 400 (validación)
             # Pero el rate limiter NO debe bloquear
             assert response.status_code in [201, 409, 400], (
-                f"Intento {i+1} falló con {response.status_code}"
+                f"Intento {i + 1} falló con {response.status_code}"
             )
 
         # 4ta petición debe ser bloqueada por rate limiter
@@ -150,9 +140,7 @@ class TestRateLimitingHandicap:
     """Tests de rate limiting para el endpoint de actualización de handicap (RFEG)."""
 
     @pytest.mark.asyncio
-    async def test_handicap_update_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_handicap_update_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de actualización de handicap con límite de 5 peticiones/hora
         WHEN: Se realizan 6 intentos de actualización desde la misma IP
@@ -164,14 +152,11 @@ class TestRateLimitingHandicap:
             "email": "handicap_rate_test@example.com",
             "password": "TestPassword123!",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
         await client.post("/api/v1/auth/register", json=register_payload)
 
-        login_payload = {
-            "email": "handicap_rate_test@example.com",
-            "password": "TestPassword123!"
-        }
+        login_payload = {"email": "handicap_rate_test@example.com", "password": "TestPassword123!"}
         login_response = await client.post("/api/v1/auth/login", json=login_payload)
 
         # Si no podemos autenticar, skip el test
@@ -185,31 +170,24 @@ class TestRateLimitingHandicap:
         limiter.reset()
 
         # Payload para actualización de handicap
-        payload = {
-            "user_id": "123e4567-e89b-12d3-a456-426614174000",
-            "manual_handicap": 15.5
-        }
+        payload = {"user_id": "123e4567-e89b-12d3-a456-426614174000", "manual_handicap": 15.5}
 
         # Realizar 5 peticiones (dentro del límite)
         responses = []
         for i in range(5):
             response = await client.post(
-                "/api/v1/handicaps/update",
-                json=payload,
-                headers=auth_headers
+                "/api/v1/handicaps/update", json=payload, headers=auth_headers
             )
             responses.append(response)
             # Esperamos 404 (usuario no existe) o 503 (RFEG no disponible) o 200/401
             # Pero el rate limiter NO debe bloquear
             assert response.status_code in [200, 401, 404, 503], (
-                f"Intento {i+1} falló con {response.status_code}"
+                f"Intento {i + 1} falló con {response.status_code}"
             )
 
         # 6ta petición debe ser bloqueada por rate limiter
         response_blocked = await client.post(
-            "/api/v1/handicaps/update",
-            json=payload,
-            headers=auth_headers
+            "/api/v1/handicaps/update", json=payload, headers=auth_headers
         )
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
@@ -230,9 +208,7 @@ class TestRateLimitingCompetition:
     """Tests de rate limiting para el endpoint de creación de competiciones."""
 
     @pytest.mark.asyncio
-    async def test_create_competition_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_create_competition_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de creación de competición con límite de 10 peticiones/hora
         WHEN: Se realizan 11 intentos de creación desde la misma IP
@@ -244,13 +220,13 @@ class TestRateLimitingCompetition:
             "email": "competition_rate_test@example.com",
             "password": "TestPassword123!",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
         await client.post("/api/v1/auth/register", json=register_payload)
 
         login_payload = {
             "email": "competition_rate_test@example.com",
-            "password": "TestPassword123!"
+            "password": "TestPassword123!",
         }
         login_response = await client.post("/api/v1/auth/login", json=login_payload)
 
@@ -274,7 +250,7 @@ class TestRateLimitingCompetition:
             "team_assignment": "MANUAL",
             "team_1_name": "Europe",
             "team_2_name": "USA",
-            "handicap_type": "SCRATCH"
+            "handicap_type": "SCRATCH",
         }
 
         # Realizar 10 peticiones (dentro del límite)
@@ -285,24 +261,20 @@ class TestRateLimitingCompetition:
             payload_copy["name"] = f"Test Competition {i}"
 
             response = await client.post(
-                "/api/v1/competitions",
-                json=payload_copy,
-                headers=auth_headers
+                "/api/v1/competitions", json=payload_copy, headers=auth_headers
             )
             responses.append(response)
             # Esperamos 201 (creado) o 400/401/422 (validación/auth)
             # Pero el rate limiter NO debe bloquear
             assert response.status_code in [201, 400, 401, 422], (
-                f"Intento {i+1} falló con {response.status_code}"
+                f"Intento {i + 1} falló con {response.status_code}"
             )
 
         # 11va petición debe ser bloqueada por rate limiter
         payload_blocked = payload.copy()
         payload_blocked["name"] = "Test Competition 11"
         response_blocked = await client.post(
-            "/api/v1/competitions",
-            json=payload_blocked,
-            headers=auth_headers
+            "/api/v1/competitions", json=payload_blocked, headers=auth_headers
         )
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO

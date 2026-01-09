@@ -28,6 +28,7 @@ from src.shared.security.password_blacklist import is_common_password
 
 class InvalidPasswordError(Exception):
     """Excepción lanzada cuando un password no es válido."""
+
     pass
 
 
@@ -50,7 +51,7 @@ class Password:
     hashed_value: str
 
     @classmethod
-    def from_plain_text(cls, plain_password: str) -> 'Password':
+    def from_plain_text(cls, plain_password: str) -> "Password":
         """
         Crea Password desde texto plano.
         Valida fortaleza según OWASP ASVS y hashea automáticamente.
@@ -84,10 +85,10 @@ class Password:
         # Usar rounds mínimo de bcrypt para tests (4 es el mínimo permitido)
         # 4 rounds en tests: ~5ms por hash (ya optimizado vs 12 rounds)
         # 12 rounds en producción: ~200ms por hash (seguro según OWASP)
-        rounds = 4 if os.getenv('TESTING') == 'true' else 12
+        rounds = 4 if os.getenv("TESTING") == "true" else 12
         salt = bcrypt.gensalt(rounds=rounds)
-        hashed = bcrypt.hashpw(plain_password.encode('utf-8'), salt)
-        return hashed.decode('utf-8')
+        hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
+        return hashed.decode("utf-8")
 
     @staticmethod
     def _validate_password_strength(password: str) -> str | None:  # noqa: PLR0911
@@ -138,7 +139,7 @@ class Password:
 
         # 8. Validar complejidad: al menos 1 carácter especial
         # Caracteres especiales permitidos: !@#$%^&*()_+-=[]{}|;:,.<>?
-        special_chars_pattern = r'[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]'
+        special_chars_pattern = r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]"
         if not re.search(special_chars_pattern, password):
             return "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)"
 
@@ -162,10 +163,7 @@ class Password:
     def verify(self, plain_password: str) -> bool:
         """Verifica si un password plano coincide con el hash."""
         try:
-            return bcrypt.checkpw(
-                plain_password.encode('utf-8'),
-                self.hashed_value.encode('utf-8')
-            )
+            return bcrypt.checkpw(plain_password.encode("utf-8"), self.hashed_value.encode("utf-8"))
         except Exception:
             return False
 

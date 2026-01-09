@@ -9,6 +9,7 @@ Arquitectura:
 - Módulo: User
 - Feature: Session Timeout with Refresh Tokens (OWASP A01/A02/A07)
 """
+
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -67,11 +68,7 @@ class TestRefreshTokenCreation:
         expires_in_days = 30
 
         # When
-        refresh_token = RefreshToken.create(
-            user_id,
-            token_jwt,
-            expires_in_days=expires_in_days
-        )
+        refresh_token = RefreshToken.create(user_id, token_jwt, expires_in_days=expires_in_days)
 
         # Then
         expected_expiry = datetime.now() + timedelta(days=expires_in_days)
@@ -239,6 +236,7 @@ class TestRefreshTokenRevocation:
 
         # When - Esperar un momento para asegurar timestamp diferente
         import time
+
         time.sleep(0.01)
         refresh_token.revoke()
 

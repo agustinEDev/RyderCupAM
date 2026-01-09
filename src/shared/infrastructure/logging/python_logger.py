@@ -82,7 +82,7 @@ class PythonLogger(Logger):
                 # Crear directorio si no existe
                 filepath = self._resolve_log_path(config.filename)
                 filepath.parent.mkdir(parents=True, exist_ok=True)
-                handler = logging.FileHandler(str(filepath), encoding='utf-8')
+                handler = logging.FileHandler(str(filepath), encoding="utf-8")
 
         elif config.type == LogHandler.ROTATING_FILE:
             if config.filename:
@@ -92,7 +92,7 @@ class PythonLogger(Logger):
                     str(filepath),
                     maxBytes=config.max_bytes,
                     backupCount=config.backup_count,
-                    encoding='utf-8'
+                    encoding="utf-8",
                 )
 
         elif config.type == LogHandler.NULL:
@@ -126,7 +126,7 @@ class PythonLogger(Logger):
             LogLevel.INFO: logging.INFO,
             LogLevel.WARNING: logging.WARNING,
             LogLevel.ERROR: logging.ERROR,
-            LogLevel.CRITICAL: logging.CRITICAL
+            LogLevel.CRITICAL: logging.CRITICAL,
         }
         return mapping[level]
 
@@ -138,13 +138,13 @@ class PythonLogger(Logger):
         result.update(self.config.default_context)
 
         # Contexto local del thread
-        if hasattr(self._local_context, 'context'):
+        if hasattr(self._local_context, "context"):
             result.update(self._local_context.context)
 
         # Correlation ID
         correlation_id = self._get_correlation_id()
         if correlation_id:
-            result['correlation_id'] = correlation_id
+            result["correlation_id"] = correlation_id
 
         # Datos específicos del log
         if extra:
@@ -154,7 +154,7 @@ class PythonLogger(Logger):
 
     def _get_correlation_id(self) -> str | None:
         """Obtiene el correlation ID actual"""
-        return getattr(self._local_context, 'correlation_id', None)
+        return getattr(self._local_context, "correlation_id", None)
 
     def _set_correlation_id(self, correlation_id: str | None) -> None:
         """Establece el correlation ID"""
@@ -162,32 +162,17 @@ class PythonLogger(Logger):
 
     # Implementación de la interface Logger
 
-    def debug(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def debug(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """Registra un mensaje de debug"""
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.debug(message, extra=prepared_extra, **kwargs)
 
-    def info(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def info(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """Registra un mensaje informativo"""
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.info(message, extra=prepared_extra, **kwargs)
 
-    def warning(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def warning(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """Registra una advertencia"""
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.warning(message, extra=prepared_extra, **kwargs)
@@ -197,39 +182,25 @@ class PythonLogger(Logger):
         message: str,
         extra: dict[str, Any] | None = None,
         exc_info: bool | Exception | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Registra un error"""
         prepared_extra = self._prepare_extra(extra)
-        self._python_logger.error(
-            message,
-            extra=prepared_extra,
-            exc_info=exc_info,
-            **kwargs
-        )
+        self._python_logger.error(message, extra=prepared_extra, exc_info=exc_info, **kwargs)
 
     def critical(
         self,
         message: str,
         extra: dict[str, Any] | None = None,
         exc_info: bool | Exception | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Registra un error crítico"""
         prepared_extra = self._prepare_extra(extra)
-        self._python_logger.critical(
-            message,
-            extra=prepared_extra,
-            exc_info=exc_info,
-            **kwargs
-        )
+        self._python_logger.critical(message, extra=prepared_extra, exc_info=exc_info, **kwargs)
 
     def log(
-        self,
-        level: LogLevel,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
+        self, level: LogLevel, message: str, extra: dict[str, Any] | None = None, **kwargs
     ) -> None:
         """Registra un mensaje con nivel específico"""
         python_level = self._log_level_to_python(level)
@@ -238,23 +209,23 @@ class PythonLogger(Logger):
 
     def set_context(self, context: dict[str, Any]) -> None:
         """Establece contexto global para futuros logs"""
-        if not hasattr(self._local_context, 'context'):
+        if not hasattr(self._local_context, "context"):
             self._local_context.context = {}
         self._local_context.context.update(context)
 
     def clear_context(self) -> None:
         """Limpia el contexto global"""
-        if hasattr(self._local_context, 'context'):
+        if hasattr(self._local_context, "context"):
             self._local_context.context.clear()
 
-    def with_correlation_id(self, correlation_id: str) -> 'Logger':
+    def with_correlation_id(self, correlation_id: str) -> "Logger":
         """Crea un logger con correlation ID específico"""
         # Crear una nueva instancia que comparta la configuración
         new_logger = PythonLogger(self.name, self.config)
         new_logger._set_correlation_id(correlation_id)
 
         # Copiar contexto actual si existe
-        if hasattr(self._local_context, 'context'):
+        if hasattr(self._local_context, "context"):
             new_logger.set_context(self._local_context.context.copy())
 
         return new_logger
@@ -297,7 +268,7 @@ class PythonLogger(Logger):
                 # El log incluirá user_id=123 y action=create
         """
         # Guardar contexto anterior
-        previous_context = getattr(self._local_context, 'context', {}).copy()
+        previous_context = getattr(self._local_context, "context", {}).copy()
 
         try:
             # Establecer nuevo contexto

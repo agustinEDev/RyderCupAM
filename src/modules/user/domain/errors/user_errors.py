@@ -28,6 +28,7 @@ class UserValidationError(UserDomainError):
     Se utiliza para errores de validación en la construcción o modificación
     de entidades User que no están relacionados con Value Objects específicos.
     """
+
     pass
 
 
@@ -38,6 +39,7 @@ class UserNotFoundError(UserDomainError):
     Se utiliza en operaciones de repositorio cuando se intenta acceder
     a un usuario que no existe en el sistema.
     """
+
     pass
 
 
@@ -48,6 +50,7 @@ class UserAlreadyExistsError(UserDomainError):
     Se utiliza principalmente cuando se detecta un conflicto por email duplicado
     durante la creación de nuevos usuarios.
     """
+
     pass
 
 
@@ -58,6 +61,7 @@ class DuplicateEmailError(UserDomainError):
     Se utiliza cuando un usuario intenta cambiar su email a uno que
     ya pertenece a otro usuario en el sistema.
     """
+
     pass
 
 
@@ -68,6 +72,7 @@ class InvalidCredentialsError(UserDomainError):
     Se utiliza durante la autenticación o verificación de contraseña actual
     cuando el password proporcionado no coincide con el almacenado.
     """
+
     pass
 
 
@@ -78,6 +83,7 @@ class RepositoryError(UserDomainError):
     Se utiliza para encapsular errores de persistencia, conexión a base de datos,
     o cualquier problema relacionado con la capa de infraestructura de datos.
     """
+
     pass
 
 
@@ -88,6 +94,7 @@ class RepositoryConnectionError(RepositoryError):
     Se utiliza cuando no se puede establecer o mantener una conexión
     con el sistema de persistencia (base de datos, etc.).
     """
+
     pass
 
 
@@ -98,6 +105,7 @@ class RepositoryOperationError(RepositoryError):
     Se utiliza para errores durante operaciones CRUD como save, update, delete
     que fallan por problemas de integridad, constraints, etc.
     """
+
     pass
 
 
@@ -108,4 +116,5 @@ class RepositoryTimeoutError(RepositoryError):
     Se utiliza cuando las operaciones de base de datos tardan más tiempo
     del configurado como límite máximo.
     """
+
     pass

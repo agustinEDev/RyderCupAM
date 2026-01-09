@@ -26,6 +26,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class CompetitionAlreadyExistsError(Exception):
     """Excepción lanzada cuando ya existe una competición con el mismo nombre."""
+
     pass
 
 
@@ -59,9 +60,7 @@ class CreateCompetitionUseCase:
         self._location_builder = LocationBuilder(self._uow.countries)
 
     async def execute(
-        self,
-        request: CreateCompetitionRequestDTO,
-        creator_id: UserId
+        self, request: CreateCompetitionRequestDTO, creator_id: UserId
     ) -> CreateCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de creación de competición.
@@ -91,20 +90,16 @@ class CreateCompetitionUseCase:
             location = await self._location_builder.build_from_codes(
                 main_country=request.main_country,
                 adjacent_country_1=request.adjacent_country_1,
-                adjacent_country_2=request.adjacent_country_2
+                adjacent_country_2=request.adjacent_country_2,
             )
 
             # 3. Construir HandicapSettings
             handicap_settings = self._build_handicap_settings(
-                request.handicap_type,
-                request.handicap_percentage
+                request.handicap_type, request.handicap_percentage
             )
 
             # 4. Construir DateRange
-            date_range = DateRange(
-                start_date=request.start_date,
-                end_date=request.end_date
-            )
+            date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
 
             # 5. Construir TeamAssignment desde string
             team_assignment_vo = TeamAssignment(request.team_assignment)
@@ -120,7 +115,7 @@ class CreateCompetitionUseCase:
                 team_2_name=request.team_2_name,
                 handicap_settings=handicap_settings,
                 max_players=request.max_players,
-                team_assignment=team_assignment_vo
+                team_assignment=team_assignment_vo,
             )
 
             # 6. Persistir la competición
@@ -139,8 +134,12 @@ class CreateCompetitionUseCase:
             end_date=competition.dates.end_date,
             # Location
             country_code=competition.location.main_country.value,
-            secondary_country_code=competition.location.adjacent_country_1.value if competition.location.adjacent_country_1 else None,
-            tertiary_country_code=competition.location.adjacent_country_2.value if competition.location.adjacent_country_2 else None,
+            secondary_country_code=competition.location.adjacent_country_1.value
+            if competition.location.adjacent_country_1
+            else None,
+            tertiary_country_code=competition.location.adjacent_country_2.value
+            if competition.location.adjacent_country_2
+            else None,
             location=str(competition.location),
             # Handicap
             handicap_type=competition.handicap_settings.type.value,
@@ -153,13 +152,11 @@ class CreateCompetitionUseCase:
             team_assignment=competition.team_assignment.value,
             # Timestamps
             created_at=competition.created_at,
-            updated_at=competition.updated_at
+            updated_at=competition.updated_at,
         )
 
     def _build_handicap_settings(
-        self,
-        handicap_type: str,
-        handicap_percentage: int | None
+        self, handicap_type: str, handicap_percentage: int | None
     ) -> HandicapSettings:
         """
         Construye el Value Object HandicapSettings.

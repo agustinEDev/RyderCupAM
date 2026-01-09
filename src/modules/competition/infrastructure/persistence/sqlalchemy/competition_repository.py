@@ -90,10 +90,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         return await self._session.get(Competition, competition_id)
 
     async def find_by_creator(
-        self,
-        creator_id: UserId,
-        limit: int = 100,
-        offset: int = 0
+        self, creator_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Competition]:
         """
         Busca todas las competiciones creadas por un usuario.
@@ -117,10 +114,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         return list(result.scalars().all())
 
     async def find_by_status(
-        self,
-        status: CompetitionStatus,
-        limit: int = 100,
-        offset: int = 0
+        self, status: CompetitionStatus, limit: int = 100, offset: int = 0
     ) -> list[Competition]:
         """
         Busca todas las competiciones con un estado específico.
@@ -147,9 +141,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         return list(result.scalars().all())
 
     async def find_active_in_date_range(
-        self,
-        start_date: date,
-        end_date: date
+        self, start_date: date, end_date: date
     ) -> list[Competition]:
         """
         Busca competiciones activas que se superpongan con un rango de fechas.
@@ -181,7 +173,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                 and_(
                     Competition._status_value.in_(active_statuses),
                     Competition._start_date <= end_date,
-                    Competition._end_date >= start_date
+                    Competition._end_date >= start_date,
                 )
             )
             .order_by(Competition._start_date.asc())
@@ -189,11 +181,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def exists_with_name(
-        self,
-        name: CompetitionName,
-        creator_id: UserId
-    ) -> bool:
+    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
         """
         Verifica si existe una competición con el nombre especificado para un creador.
 
@@ -212,21 +200,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         statement = (
             select(func.count())
             .select_from(Competition)
-            .where(
-                and_(
-                    Competition._name_value == str(name),
-                    Competition.creator_id == creator_id
-                )
-            )
+            .where(and_(Competition._name_value == str(name), Competition.creator_id == creator_id))
         )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
-    async def find_all(
-        self,
-        limit: int = 100,
-        offset: int = 0
-    ) -> list[Competition]:
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
         """
         Obtiene todas las competiciones con paginación.
 
@@ -271,7 +250,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         status: CompetitionStatus | None = None,
         creator_id: UserId | None = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[Competition]:
         """
         Busca competiciones aplicando múltiples filtros opcionales.
@@ -313,7 +292,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             conditions.append(
                 or_(
                     User.first_name.ilike(f"%{search_creator}%"),
-                    User.last_name.ilike(f"%{search_creator}%")
+                    User.last_name.ilike(f"%{search_creator}%"),
                 )
             )
 
@@ -330,12 +309,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             query = query.where(and_(*conditions))
 
         # Ordenar y paginar
-        query = (
-            query
-            .order_by(Competition.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        query = query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
 
         # Ejecutar query
         result = await self._session.execute(query)

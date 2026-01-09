@@ -11,6 +11,7 @@ from email_validator import EmailNotValidError, validate_email
 
 class InvalidEmailError(Exception):
     """Excepción lanzada cuando un email no es válido."""
+
     pass
 
 
@@ -41,13 +42,11 @@ class Email:
 
             # 3. Asignar el valor normalizado y validado
             # Usar object.__setattr__ porque la clase es frozen
-            object.__setattr__(self, 'value', valid.normalized)
+            object.__setattr__(self, "value", valid.normalized)
 
         except EmailNotValidError as e:
             # Capturar el error de la librería y lanzar nuestra excepción de dominio
             raise InvalidEmailError(f"'{self.value}' no es un email válido: {e}") from e
-
-
 
     def __str__(self) -> str:
         """Representación string legible."""

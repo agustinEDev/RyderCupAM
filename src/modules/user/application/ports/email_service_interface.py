@@ -23,10 +23,7 @@ class IEmailService(ABC):
 
     @abstractmethod
     def send_verification_email(
-        self,
-        to_email: str,
-        user_name: str,
-        verification_token: str
+        self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """
         Envía un email de verificación al usuario.
@@ -43,10 +40,7 @@ class IEmailService(ABC):
 
     @abstractmethod
     async def send_password_reset_email(
-        self,
-        to_email: str,
-        reset_link: str,
-        user_name: str
+        self, to_email: str, reset_link: str, user_name: str
     ) -> bool:
         """
         Envía un email con enlace para resetear contraseña.
@@ -67,11 +61,7 @@ class IEmailService(ABC):
         pass
 
     @abstractmethod
-    async def send_password_changed_notification(
-        self,
-        to_email: str,
-        user_name: str
-    ) -> bool:
+    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 

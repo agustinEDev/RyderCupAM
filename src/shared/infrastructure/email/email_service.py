@@ -31,10 +31,7 @@ class EmailService(IEmailService):
         self.api_url = settings.MAILGUN_API_URL
 
     def send_verification_email(
-        self,
-        to_email: str,
-        user_name: str,
-        verification_token: str
+        self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """
         Envía un email de verificación al usuario.
@@ -50,18 +47,19 @@ class EmailService(IEmailService):
         # Sanitizar user_name para prevenir inyección de headers (RFC 5322)
         # Eliminar caracteres especiales que podrían romper el formato de email headers
         safe_user_name = (
-            user_name
-            .replace('\n', '')
-            .replace('\r', '')
-            .replace('"', '')
-            .replace('<', '')
-            .replace('>', '')
+            user_name.replace("\n", "")
+            .replace("\r", "")
+            .replace('"', "")
+            .replace("<", "")
+            .replace(">", "")
             .strip()
         )
 
         verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
-        subject = f"Bienvenido a Ryder Cup Friends, {safe_user_name}! | Welcome to Ryder Cup Friends!"
+        subject = (
+            f"Bienvenido a Ryder Cup Friends, {safe_user_name}! | Welcome to Ryder Cup Friends!"
+        )
 
         text_body = f"""
 Hola {safe_user_name},
@@ -168,16 +166,10 @@ The Ryder Cup Friends Team
             to=f'"{safe_user_name}" <{to_email}>',  # RFC 5322 format with quotes
             subject=subject,
             text=text_body,
-            html=html_body
+            html=html_body,
         )
 
-    def _send_email(
-        self,
-        to: str,
-        subject: str,
-        text: str,
-        html: str | None = None
-    ) -> bool:
+    def _send_email(self, to: str, subject: str, text: str, html: str | None = None) -> bool:
         """
         Envía un email usando la API de Mailgun.
 
@@ -197,22 +189,12 @@ The Ryder Cup Friends Team
         try:
             url = f"{self.api_url}/{self.domain}/messages"
 
-            data = {
-                "from": self.from_email,
-                "to": to,
-                "subject": subject,
-                "text": text
-            }
+            data = {"from": self.from_email, "to": to, "subject": subject, "text": text}
 
             if html:
                 data["html"] = html
 
-            response = requests.post(
-                url,
-                auth=("api", self.api_key),
-                data=data,
-                timeout=10
-            )
+            response = requests.post(url, auth=("api", self.api_key), data=data, timeout=10)
 
             if response.status_code == status.HTTP_200_OK:
                 logger.info("Email de verificación enviado correctamente")
@@ -228,10 +210,7 @@ The Ryder Cup Friends Team
             return False
 
     async def send_password_reset_email(
-        self,
-        to_email: str,
-        reset_link: str,
-        user_name: str
+        self, to_email: str, reset_link: str, user_name: str
     ) -> bool:
         """
         Envía un email con enlace para resetear contraseña.
@@ -240,12 +219,11 @@ The Ryder Cup Friends Team
         """
         # Sanitizar user_name para prevenir inyección de headers
         safe_user_name = (
-            user_name
-            .replace('\n', '')
-            .replace('\r', '')
-            .replace('"', '')
-            .replace('<', '')
-            .replace('>', '')
+            user_name.replace("\n", "")
+            .replace("\r", "")
+            .replace('"', "")
+            .replace("<", "")
+            .replace(">", "")
             .strip()
         )
 
@@ -403,11 +381,7 @@ The Ryder Cup Friends Team
 
         return self._send_email(to_email, subject, text_body, html_body)
 
-    async def send_password_changed_notification(
-        self,
-        to_email: str,
-        user_name: str
-    ) -> bool:
+    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 
@@ -415,16 +389,17 @@ The Ryder Cup Friends Team
         """
         # Sanitizar user_name para prevenir inyección de headers
         safe_user_name = (
-            user_name
-            .replace('\n', '')
-            .replace('\r', '')
-            .replace('"', '')
-            .replace('<', '')
-            .replace('>', '')
+            user_name.replace("\n", "")
+            .replace("\r", "")
+            .replace('"', "")
+            .replace("<", "")
+            .replace(">", "")
             .strip()
         )
 
-        subject = "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+        subject = (
+            "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+        )
 
         text_body = f"""
 Hola {safe_user_name},

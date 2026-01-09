@@ -149,7 +149,7 @@ class SecurityLogger:
                 "log_file": str(log_path),
                 "max_size_mb": self.MAX_BYTES / (1024 * 1024),
                 "backup_count": self.BACKUP_COUNT,
-            }
+            },
         )
 
         return logger
@@ -189,7 +189,7 @@ class SecurityLogger:
                 "security_event": event_data,
                 "event_class": event.__class__.__name__,
                 "severity": event.severity.value,
-            }
+            },
         )
 
     def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911 - Multiple event types require specific messages
@@ -208,7 +208,9 @@ class SecurityLogger:
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
-            return f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            return (
+                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            )
 
         if isinstance(event, LogoutEvent):
             return f"🚪 LOGOUT | {user_info} | Tokens revoked: {event.refresh_tokens_revoked}"
@@ -246,9 +248,9 @@ class SecurityLogger:
         """
         mapping = {
             SecuritySeverity.CRITICAL: logging.CRITICAL,  # 50
-            SecuritySeverity.HIGH: logging.ERROR,         # 40
-            SecuritySeverity.MEDIUM: logging.WARNING,     # 30
-            SecuritySeverity.LOW: logging.INFO,           # 20
+            SecuritySeverity.HIGH: logging.ERROR,  # 40
+            SecuritySeverity.MEDIUM: logging.WARNING,  # 30
+            SecuritySeverity.LOW: logging.INFO,  # 20
         }
         return mapping.get(severity, logging.INFO)
 

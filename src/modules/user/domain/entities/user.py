@@ -36,7 +36,9 @@ class User:
 
     def _validate_profile_update(self, first_name, last_name, country_code_str):
         if first_name is None and last_name is None and country_code_str is None:
-            raise ValueError("At least one field (first_name, last_name, or country_code) must be provided")
+            raise ValueError(
+                "At least one field (first_name, last_name, or country_code) must be provided"
+            )
         if first_name is not None and first_name.strip() == "":
             raise ValueError("first_name cannot be empty")
         if last_name is not None and last_name.strip() == "":
@@ -53,7 +55,15 @@ class User:
         if country_code_str is not None:
             new_country_code = CountryCode(country_code_str) if country_code_str else None
             country_code_changed = new_country_code != old_country_code
-        return (first_name_changed, last_name_changed, country_code_changed, new_country_code, old_first_name, old_last_name, old_country_code)
+        return (
+            first_name_changed,
+            last_name_changed,
+            country_code_changed,
+            new_country_code,
+            old_first_name,
+            old_last_name,
+            old_country_code,
+        )
 
     def __init__(
         self,
@@ -73,7 +83,7 @@ class User:
         reset_token_expires_at: datetime | None = None,
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None
+        domain_events: list[DomainEvent] | None = None,
     ):
         self.id = id
         self.email = email
@@ -104,10 +114,10 @@ class User:
     def is_valid(self) -> bool:
         """Verifica si el usuario es válido (todos los campos requeridos)."""
         return (
-            self.has_valid_email() and
-            self.first_name.strip() != "" and
-            self.last_name.strip() != "" and
-            self.password is not None
+            self.has_valid_email()
+            and self.first_name.strip() != ""
+            and self.last_name.strip() != ""
+            and self.password is not None
         )
 
     def verify_password(self, plain_password: str) -> bool:
@@ -129,7 +139,7 @@ class User:
         Raises:
             ValueError: Si el hándicap no está en el rango válido
         """
-        old_handicap = getattr(self, 'handicap', None)
+        old_handicap = getattr(self, "handicap", None)
 
         # Validar si es un Handicap válido usando el Value Object
         if new_handicap is not None:
@@ -145,16 +155,24 @@ class User:
 
         # Emitir evento solo si cambió
         if old_handicap != self.handicap:
-            self._add_domain_event(HandicapUpdatedEvent(
-                user_id=str(self.id.value),
-                old_handicap=old_handicap.value if old_handicap else None,
-                new_handicap=self.handicap.value if self.handicap else None,
-                updated_at=self.updated_at
-            ))
+            self._add_domain_event(
+                HandicapUpdatedEvent(
+                    user_id=str(self.id.value),
+                    old_handicap=old_handicap.value if old_handicap else None,
+                    new_handicap=self.handicap.value if self.handicap else None,
+                    updated_at=self.updated_at,
+                )
+            )
 
     @classmethod
-    def create(cls, first_name: str, last_name: str, email_str: str, plain_password: str,
-               country_code_str: str | None = None) -> 'User':
+    def create(
+        cls,
+        first_name: str,
+        last_name: str,
+        email_str: str,
+        plain_password: str,
+        country_code_str: str | None = None,
+    ) -> "User":
         """
         Factory method para crear usuario con Value Objects.
 
@@ -185,16 +203,18 @@ class User:
             handicap_updated_at=None,
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            country_code=country_code
+            country_code=country_code,
         )
 
         # Generar evento de registro
-        user._add_domain_event(UserRegisteredEvent(
-            user_id=str(user_id.value),
-            email=email_str,
-            first_name=first_name,
-            last_name=last_name
-        ))
+        user._add_domain_event(
+            UserRegisteredEvent(
+                user_id=str(user_id.value),
+                email=email_str,
+                first_name=first_name,
+                last_name=last_name,
+            )
+        )
 
         return user
 
@@ -202,25 +222,25 @@ class User:
 
     def _add_domain_event(self, event: DomainEvent) -> None:
         """Agrega un evento de dominio a la colección interna."""
-        if not hasattr(self, '_domain_events'):
+        if not hasattr(self, "_domain_events"):
             self._domain_events = []
         self._domain_events.append(event)
 
     def get_domain_events(self) -> list[DomainEvent]:
         """Obtiene una copia de todos los eventos de dominio pendientes."""
-        if not hasattr(self, '_domain_events'):
+        if not hasattr(self, "_domain_events"):
             self._domain_events = []
         return self._domain_events.copy()
 
     def clear_domain_events(self) -> None:
         """Limpia todos los eventos de dominio de la colección."""
-        if not hasattr(self, '_domain_events'):
+        if not hasattr(self, "_domain_events"):
             self._domain_events = []
         self._domain_events.clear()
 
     def has_domain_events(self) -> bool:
         """Verifica si la entidad tiene eventos de dominio pendientes."""
-        if not hasattr(self, '_domain_events'):
+        if not hasattr(self, "_domain_events"):
             self._domain_events = []
         return len(self._domain_events) > 0
 
@@ -232,14 +252,19 @@ class User:
             logged_out_at: Timestamp del logout
             token_used: Token JWT utilizado (opcional)
         """
-        self._add_domain_event(UserLoggedOutEvent(
-            user_id=str(self.id.value),
-            logged_out_at=logged_out_at,
-            token_used=token_used
-        ))
+        self._add_domain_event(
+            UserLoggedOutEvent(
+                user_id=str(self.id.value), logged_out_at=logged_out_at, token_used=token_used
+            )
+        )
 
-    def record_login(self, logged_in_at: datetime, ip_address: str | None = None,
-                    user_agent: str | None = None, session_id: str | None = None) -> None:
+    def record_login(
+        self,
+        logged_in_at: datetime,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
         """
         Registra un evento de login exitoso para este usuario.
 
@@ -249,17 +274,23 @@ class User:
             user_agent: User agent del browser/app (opcional)
             session_id: ID de la sesión creada (opcional)
         """
-        self._add_domain_event(UserLoggedInEvent(
-            user_id=str(self.id.value),
-            logged_in_at=logged_in_at,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            session_id=session_id,
-            login_method="email"  # Por ahora solo email, preparado para OAuth
-        ))
+        self._add_domain_event(
+            UserLoggedInEvent(
+                user_id=str(self.id.value),
+                logged_in_at=logged_in_at,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                session_id=session_id,
+                login_method="email",  # Por ahora solo email, preparado para OAuth
+            )
+        )
 
-    def update_profile(self, first_name: str | None = None, last_name: str | None = None,
-                       country_code_str: str | None = None) -> None:
+    def update_profile(
+        self,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        country_code_str: str | None = None,
+    ) -> None:
         """
         Actualiza la información personal del usuario (nombre, apellidos y país).
         Solo emite evento si al menos uno de los campos cambió.
@@ -273,7 +304,7 @@ class User:
             new_country_code,
             old_first_name,
             old_last_name,
-            _old_country_code
+            _old_country_code,
         ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
         if not first_name_changed and not last_name_changed and not country_code_changed:
@@ -288,14 +319,16 @@ class User:
 
         self.updated_at = datetime.now()
 
-        self._add_domain_event(UserProfileUpdatedEvent(
-            user_id=str(self.id.value),
-            old_first_name=old_first_name if first_name_changed else None,
-            new_first_name=first_name if first_name_changed else None,
-            old_last_name=old_last_name if last_name_changed else None,
-            new_last_name=last_name if last_name_changed else None,
-            updated_at=self.updated_at
-        ))
+        self._add_domain_event(
+            UserProfileUpdatedEvent(
+                user_id=str(self.id.value),
+                old_first_name=old_first_name if first_name_changed else None,
+                new_first_name=first_name if first_name_changed else None,
+                old_last_name=old_last_name if last_name_changed else None,
+                new_last_name=last_name if last_name_changed else None,
+                updated_at=self.updated_at,
+            )
+        )
 
     def change_email(self, new_email: str) -> None:
         """
@@ -322,12 +355,14 @@ class User:
         self.email_verified = False  # Requiere nueva verificación
         self.updated_at = datetime.now()
 
-        self._add_domain_event(UserEmailChangedEvent(
-            user_id=str(self.id.value),
-            old_email=old_email_str,
-            new_email=new_email,
-            changed_at=self.updated_at
-        ))
+        self._add_domain_event(
+            UserEmailChangedEvent(
+                user_id=str(self.id.value),
+                old_email=old_email_str,
+                new_email=new_email,
+                changed_at=self.updated_at,
+            )
+        )
 
     def change_password(self, new_password: str) -> None:
         """
@@ -343,11 +378,11 @@ class User:
         self.password = new_password_vo
         self.updated_at = datetime.now()
 
-        self._add_domain_event(UserPasswordChangedEvent(
-            user_id=str(self.id.value),
-            changed_at=self.updated_at,
-            changed_from_ip=None
-        ))
+        self._add_domain_event(
+            UserPasswordChangedEvent(
+                user_id=str(self.id.value), changed_at=self.updated_at, changed_from_ip=None
+            )
+        )
 
     def generate_verification_token(self) -> str:
         """
@@ -386,11 +421,11 @@ class User:
         self.updated_at = datetime.now()
 
         # Emitir evento de dominio
-        self._add_domain_event(EmailVerifiedEvent(
-            user_id=str(self.id.value),
-            email=str(self.email.value),
-            verified_at=self.updated_at
-        ))
+        self._add_domain_event(
+            EmailVerifiedEvent(
+                user_id=str(self.id.value), email=str(self.email.value), verified_at=self.updated_at
+            )
+        )
 
         return True
 
@@ -429,9 +464,7 @@ class User:
     # === Password Reset Methods ===
 
     def generate_password_reset_token(
-        self,
-        ip_address: str | None = None,
-        user_agent: str | None = None
+        self, ip_address: str | None = None, user_agent: str | None = None
     ) -> str:
         """
         Genera un token seguro de reseteo de contraseña con expiración de 24 horas.
@@ -469,14 +502,16 @@ class User:
         self.updated_at = now
 
         # Emitir evento de dominio para auditoría
-        self._add_domain_event(PasswordResetRequestedEvent(
-            user_id=str(self.id.value),
-            email=str(self.email.value),
-            requested_at=now,
-            reset_token_expires_at=self.reset_token_expires_at,
-            ip_address=ip_address,
-            user_agent=user_agent
-        ))
+        self._add_domain_event(
+            PasswordResetRequestedEvent(
+                user_id=str(self.id.value),
+                email=str(self.email.value),
+                requested_at=now,
+                reset_token_expires_at=self.reset_token_expires_at,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        )
 
         return token
 
@@ -529,7 +564,7 @@ class User:
         token: str,
         new_password: str,
         ip_address: str | None = None,
-        user_agent: str | None = None
+        user_agent: str | None = None,
     ) -> None:
         """
         Resetea la contraseña del usuario usando un token válido.
@@ -586,13 +621,15 @@ class User:
         self.updated_at = now
 
         # Emitir evento de dominio (trigger para invalidar refresh tokens)
-        self._add_domain_event(PasswordResetCompletedEvent(
-            user_id=str(self.id.value),
-            email=str(self.email.value),
-            completed_at=now,
-            ip_address=ip_address,
-            user_agent=user_agent
-        ))
+        self._add_domain_event(
+            PasswordResetCompletedEvent(
+                user_id=str(self.id.value),
+                email=str(self.email.value),
+                completed_at=now,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        )
 
     # === Account Lockout Methods ===
 
@@ -633,12 +670,14 @@ class User:
             self.locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
 
             # Emitir evento de bloqueo
-            self._add_domain_event(AccountLockedEvent(
-                user_id=str(self.id.value),
-                locked_until=self.locked_until,
-                failed_attempts=self.failed_login_attempts,
-                locked_at=now
-            ))
+            self._add_domain_event(
+                AccountLockedEvent(
+                    user_id=str(self.id.value),
+                    locked_until=self.locked_until,
+                    failed_attempts=self.failed_login_attempts,
+                    locked_at=now,
+                )
+            )
 
     def is_locked(self) -> bool:
         """
@@ -712,13 +751,15 @@ class User:
         self.updated_at = now
 
         # Emitir evento de desbloqueo
-        self._add_domain_event(AccountUnlockedEvent(
-            user_id=str(self.id.value),
-            unlocked_by=unlocked_by_user_id,
-            unlocked_at=now,
-            previous_locked_until=old_locked_until,
-            previous_failed_attempts=old_failed_attempts
-        ))
+        self._add_domain_event(
+            AccountUnlockedEvent(
+                user_id=str(self.id.value),
+                unlocked_by=unlocked_by_user_id,
+                unlocked_at=now,
+                previous_locked_until=old_locked_until,
+                previous_failed_attempts=old_failed_attempts,
+            )
+        )
 
     def reset_failed_attempts(self) -> None:
         """

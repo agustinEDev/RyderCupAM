@@ -42,7 +42,7 @@ class PasswordHistoryId:
             raise ValueError(f"PasswordHistoryId must be UUID or string, got {type(value)}")
 
     @classmethod
-    def generate(cls) -> 'PasswordHistoryId':
+    def generate(cls) -> "PasswordHistoryId":
         """
         Genera un nuevo PasswordHistoryId con UUID v4 aleatorio.
 

@@ -25,16 +25,19 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCompetitionCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
 class CompetitionNotEditableError(Exception):
     """Excepción lanzada cuando la competición no está en estado DRAFT."""
+
     pass
 
 
@@ -66,10 +69,7 @@ class UpdateCompetitionUseCase:
         self._location_builder = LocationBuilder(self._uow.countries)
 
     async def execute(
-        self,
-        competition_id: CompetitionId,
-        request: UpdateCompetitionRequestDTO,
-        user_id: UserId
+        self, competition_id: CompetitionId, request: UpdateCompetitionRequestDTO, user_id: UserId
     ) -> UpdateCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de actualización de competición.
@@ -98,9 +98,7 @@ class UpdateCompetitionUseCase:
 
             # 2. Validar que el usuario es el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede actualizar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
 
             # 3. Validar que está en estado DRAFT (se puede modificar)
             if not competition.allows_modifications():
@@ -116,24 +114,27 @@ class UpdateCompetitionUseCase:
             if request.start_date and request.end_date:
                 dates = DateRange(request.start_date, request.end_date)
             elif request.start_date or request.end_date:
-                raise ValueError("Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas.")
+                raise ValueError(
+                    "Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas."
+                )
 
             location = None
             if request.main_country:
                 location = await self._location_builder.build_from_codes(
                     main_country=request.main_country,
                     adjacent_country_1=request.adjacent_country_1,
-                    adjacent_country_2=request.adjacent_country_2
+                    adjacent_country_2=request.adjacent_country_2,
                 )
 
             handicap_settings = None
             if request.handicap_type:
                 handicap_settings = self._build_handicap_settings(
-                    request.handicap_type,
-                    request.handicap_percentage
+                    request.handicap_type, request.handicap_percentage
                 )
 
-            team_assignment = TeamAssignment(request.team_assignment) if request.team_assignment else None
+            team_assignment = (
+                TeamAssignment(request.team_assignment) if request.team_assignment else None
+            )
 
             # 5. Actualizar la competición usando el método de dominio
             competition.update_info(
@@ -144,7 +145,7 @@ class UpdateCompetitionUseCase:
                 max_players=request.max_players,
                 team_assignment=team_assignment,
                 team_1_name=request.team_1_name,
-                team_2_name=request.team_2_name
+                team_2_name=request.team_2_name,
             )
 
             # 6. Persistir cambios
@@ -153,15 +154,11 @@ class UpdateCompetitionUseCase:
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(
-            id=competition.id.value,
-            name=str(competition.name),
-            updated_at=competition.updated_at
+            id=competition.id.value, name=str(competition.name), updated_at=competition.updated_at
         )
 
     def _build_handicap_settings(
-        self,
-        handicap_type: str,
-        handicap_percentage: int | None
+        self, handicap_type: str, handicap_percentage: int | None
     ) -> HandicapSettings:
         """
         Construye el Value Object HandicapSettings.
@@ -191,8 +188,6 @@ class UpdateCompetitionUseCase:
             return HandicapSettings(h_type, None)
         # PERCENTAGE requiere porcentaje obligatoriamente
         if handicap_percentage is None:
-            raise ValueError(
-                "handicap_percentage es requerido cuando handicap_type es PERCENTAGE"
-            )
+            raise ValueError("handicap_percentage es requerido cuando handicap_type es PERCENTAGE")
         # HandicapSettings validará que sea 90, 95 o 100
         return HandicapSettings(h_type, handicap_percentage)

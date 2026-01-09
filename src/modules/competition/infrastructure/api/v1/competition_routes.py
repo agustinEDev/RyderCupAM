@@ -113,7 +113,10 @@ def _sanitize_creator_id(creator_id: str | None) -> str | None:
         return creator_id
     return None
 
-async def _fetch_competitions_by_status(use_case, status_filter, creator_id, search_name, search_creator):
+
+async def _fetch_competitions_by_status(
+    use_case, status_filter, creator_id, search_name, search_creator
+):
     """
     Obtiene competiciones aplicando filtros de status (soporte para lista o string único).
 
@@ -144,13 +147,15 @@ async def _fetch_competitions_by_status(use_case, status_filter, creator_id, sea
         search_creator=search_creator,
     )
 
+
 def _should_exclude_enrollment(enrollment_status, competition_status):
     """
     Determina si una competición inscrita debe excluirse de los resultados.
 
     LÓGICA DE EXCLUSIÓN: No mostrar competiciones rechazadas si no están ACTIVE.
     """
-    return enrollment_status == EnrollmentStatus.REJECTED and competition_status != 'ACTIVE'
+    return enrollment_status == EnrollmentStatus.REJECTED and competition_status != "ACTIVE"
+
 
 def _matches_status_filter(competition_status, status_filter):
     """
@@ -171,7 +176,10 @@ def _matches_status_filter(competition_status, status_filter):
 
     return competition_status == status_filter.upper()
 
-async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids, status_filter, enrollment_status_map):
+
+async def _fetch_enrolled_competitions(
+    uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
+):
     """
     Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó).
 
@@ -206,7 +214,10 @@ async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids
 
     return enrolled_competitions
 
-async def _get_user_competitions(uow, use_case, current_user_id, status_filter, search_name, search_creator):
+
+async def _get_user_competitions(
+    uow, use_case, current_user_id, status_filter, search_name, search_creator
+):
     """
     Obtiene competiciones donde el usuario es creador O está inscrito.
 
@@ -219,32 +230,27 @@ async def _get_user_competitions(uow, use_case, current_user_id, status_filter, 
     async with uow:
         # Obtener competiciones creadas por el usuario
         created_competitions = await _fetch_competitions_by_status(
-            use_case,
-            status_filter,
-            str(current_user_id.value),
-            search_name,
-            search_creator
+            use_case, status_filter, str(current_user_id.value), search_name, search_creator
         )
 
         # Obtener enrollments del usuario
         enrollments = await uow.enrollments.find_by_user(current_user_id)
 
         # Crear mapa de enrollment_status por competition_id
-        enrollment_status_map = {enrollment.competition_id: enrollment.status for enrollment in enrollments}
+        enrollment_status_map = {
+            enrollment.competition_id: enrollment.status for enrollment in enrollments
+        }
 
         # Obtener IDs de competiciones creadas para evitar duplicados
         created_competition_ids = [c.id for c in created_competitions]
 
         # Obtener competiciones donde el usuario está inscrito
         enrolled_competitions = await _fetch_enrolled_competitions(
-            uow,
-            enrollments,
-            created_competition_ids,
-            status_filter,
-            enrollment_status_map
+            uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
         )
 
         return created_competitions + enrolled_competitions
+
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
     result = []
@@ -256,12 +262,14 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
             result.append(dto)
     return result
 
+
 router = APIRouter()
 
 
 # ======================================================================================
 # HELPER: CompetitionDTOMapper (Presentation Layer Logic)
 # ======================================================================================
+
 
 class CompetitionDTOMapper:
     """
@@ -312,14 +320,21 @@ class CompetitionDTOMapper:
             user_enrollments = await uow.enrollments.find_by_user(current_user_id)
             # Filtrar por esta competición específica
             user_enrollment = next(
-                (e for e in user_enrollments if e.competition_id == competition.id),
-                None
+                (e for e in user_enrollments if e.competition_id == competition.id), None
             )
             if user_enrollment:
-                user_enrollment_status = user_enrollment.status.value if hasattr(user_enrollment.status, 'value') else user_enrollment.status
-                logger.info(f"✅ Found enrollment for user {current_user_id.value} in competition {competition.id.value}: {user_enrollment_status}")
+                user_enrollment_status = (
+                    user_enrollment.status.value
+                    if hasattr(user_enrollment.status, "value")
+                    else user_enrollment.status
+                )
+                logger.info(
+                    f"✅ Found enrollment for user {current_user_id.value} in competition {competition.id.value}: {user_enrollment_status}"
+                )
             else:
-                logger.info(f"[INFO] No enrollment found for user {current_user_id.value} in competition {competition.id.value}")
+                logger.info(
+                    f"[INFO] No enrollment found for user {current_user_id.value} in competition {competition.id.value}"
+                )
         except Exception as e:
             logger.error(f"❌ Error fetching user enrollment: {e}")
             user_enrollment_status = None
@@ -333,7 +348,9 @@ class CompetitionDTOMapper:
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
         if user_uow:
-            creator_dto = await CompetitionDTOMapper._get_creator_dto(competition.creator_id, user_uow)
+            creator_dto = await CompetitionDTOMapper._get_creator_dto(
+                competition.creator_id, user_uow
+            )
 
         # Construir DTO
         return CompetitionResponseDTO(
@@ -366,7 +383,9 @@ class CompetitionDTOMapper:
             handicap_percentage=competition.handicap_settings.percentage,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value if hasattr(competition.team_assignment, 'value') else competition.team_assignment,
+            team_assignment=competition.team_assignment.value
+            if hasattr(competition.team_assignment, "value")
+            else competition.team_assignment,
             # Teams
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,
@@ -443,31 +462,37 @@ class CompetitionDTOMapper:
         # País principal
         main_country = await uow.countries.find_by_code(location.main_country)
         if main_country:
-            countries.append(CountryResponseDTO(
-                code=main_country.code.value,  # Extraer valor primitivo del value object
-                name_en=main_country.name_en,
-                name_es=main_country.name_es
-            ))
+            countries.append(
+                CountryResponseDTO(
+                    code=main_country.code.value,  # Extraer valor primitivo del value object
+                    name_en=main_country.name_en,
+                    name_es=main_country.name_es,
+                )
+            )
 
         # País adyacente 1
         if location.adjacent_country_1:
             country = await uow.countries.find_by_code(location.adjacent_country_1)
             if country:
-                countries.append(CountryResponseDTO(
-                    code=country.code.value,  # Extraer valor primitivo del value object
-                    name_en=country.name_en,
-                    name_es=country.name_es
-                ))
+                countries.append(
+                    CountryResponseDTO(
+                        code=country.code.value,  # Extraer valor primitivo del value object
+                        name_en=country.name_en,
+                        name_es=country.name_es,
+                    )
+                )
 
         # País adyacente 2
         if location.adjacent_country_2:
             country = await uow.countries.find_by_code(location.adjacent_country_2)
             if country:
-                countries.append(CountryResponseDTO(
-                    code=country.code.value,  # Extraer valor primitivo del value object
-                    name_en=country.name_en,
-                    name_es=country.name_es
-                ))
+                countries.append(
+                    CountryResponseDTO(
+                        code=country.code.value,  # Extraer valor primitivo del value object
+                        name_en=country.name_en,
+                        name_es=country.name_es,
+                    )
+                )
 
         return countries
 
@@ -506,6 +531,7 @@ class CompetitionDTOMapper:
 # ======================================================================================
 # CRUD ENDPOINTS
 # ======================================================================================
+
 
 @router.post(
     "",
@@ -556,9 +582,7 @@ async def create_competition(
 
         # Obtener la entidad completa para enriquecer el response
         async with uow:
-            competition = await uow.competitions.find_by_id(
-                CompetitionId(response.id)
-            )
+            competition = await uow.competitions.find_by_id(CompetitionId(response.id))
 
             if not competition:
                 raise HTTPException(
@@ -622,12 +646,9 @@ async def _get_all_competitions(use_case, status_filter, creator_id, search_name
         Lista de competiciones sin duplicados
     """
     return await _fetch_competitions_by_status(
-        use_case,
-        status_filter,
-        creator_id,
-        search_name,
-        search_creator
+        use_case, status_filter, creator_id, search_name, search_creator
     )
+
 
 async def _exclude_user_competitions(competitions, current_user_id, uow):
     """
@@ -647,9 +668,11 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
 
     # Filter out: competitions created by user OR competitions where user has enrollment
     return [
-        comp for comp in competitions
+        comp
+        for comp in competitions
         if comp.creator_id != current_user_id and comp.id not in enrolled_competition_ids
     ]
+
 
 @router.get(
     "",
@@ -664,11 +687,22 @@ async def list_competitions(
     use_case: ListCompetitionsUseCase = Depends(get_list_competitions_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: list[str] | None = Query(None, alias="status", description="Filtrar por estado (puede recibir múltiples valores: DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED)"),
+    status_filter: list[str] | None = Query(
+        None,
+        alias="status",
+        description="Filtrar por estado (puede recibir múltiples valores: DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED)",
+    ),
     creator_id: str | None = Query(None, description="Filtrar por creador (UUID)"),
-    my_competitions: bool | None = Query(None, description="Si es True, devuelve competiciones donde el usuario es creador o está inscrito. Si es False, excluye esas competiciones. Si es None (por defecto), devuelve todas."),
-    search_name: str | None = Query(None, description="Buscar por nombre de competición (parcial, case-insensitive)"),
-    search_creator: str | None = Query(None, description="Buscar por nombre del creador (parcial, case-insensitive)"),
+    my_competitions: bool | None = Query(
+        None,
+        description="Si es True, devuelve competiciones donde el usuario es creador o está inscrito. Si es False, excluye esas competiciones. Si es None (por defecto), devuelve todas.",
+    ),
+    search_name: str | None = Query(
+        None, description="Buscar por nombre de competición (parcial, case-insensitive)"
+    ),
+    search_creator: str | None = Query(
+        None, description="Buscar por nombre del creador (parcial, case-insensitive)"
+    ),
 ):
     """
     Endpoint para listar competiciones con filtros opcionales.
@@ -892,6 +926,7 @@ async def delete_competition(
 # ======================================================================================
 # STATE TRANSITION ENDPOINTS
 # ======================================================================================
+
 
 @router.post(
     "/{competition_id}/activate",

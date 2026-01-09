@@ -4,7 +4,6 @@ Update User Handicap Use Case - Application Layer
 Caso de uso para actualizar el hándicap de un usuario individual.
 """
 
-
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.errors.handicap_errors import (
     HandicapNotFoundError,
@@ -31,11 +30,7 @@ class UpdateUserHandicapUseCase:
     4. Persistir los cambios
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        handicap_service: HandicapService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, handicap_service: HandicapService):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -47,9 +42,7 @@ class UpdateUserHandicapUseCase:
         self._handicap_service = handicap_service
 
     async def execute(
-        self,
-        user_id: UserId,
-        manual_handicap: float | None = None
+        self, user_id: UserId, manual_handicap: float | None = None
     ) -> UserResponseDTO | None:
         """
         Busca y actualiza el hándicap de un usuario.
@@ -72,9 +65,7 @@ class UpdateUserHandicapUseCase:
                 return None
 
             # 2. Buscar hándicap usando el servicio
-            handicap_value = await self._handicap_service.search_handicap(
-                user.get_full_name()
-            )
+            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
 
             # 3. Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None:

@@ -116,10 +116,7 @@ class TestEventHandlerInterface:
         # Arrange
         handler = ConcreteEventHandler()
         event = UserRegisteredEvent(
-            user_id="123",
-            email="test@test.com",
-            first_name="Test",
-            last_name="User"
+            user_id="123", email="test@test.com", first_name="Test", last_name="User"
         )
 
         # Act
@@ -148,6 +145,7 @@ class TestEventHandlerInterface:
 
 class IncompleteEventHandler(EventHandler):
     """Handler incompleto para tests de validación."""
+
     pass
 
 

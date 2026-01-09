@@ -47,13 +47,15 @@ class EmailVerifiedEvent(DomainEvent):
         """
         base_dict = super().to_dict()
         # Actualizar el diccionario 'data' para que todo sea JSON-serializable
-        data = base_dict.get('data', {})
-        data.update({
-            'user_id': self.user_id,
-            'email': self.email,
-            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
-        })
-        base_dict['data'] = data
+        data = base_dict.get("data", {})
+        data.update(
+            {
+                "user_id": self.user_id,
+                "email": self.email,
+                "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            }
+        )
+        base_dict["data"] = data
         return base_dict
 
     def __str__(self) -> str:

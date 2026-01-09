@@ -49,6 +49,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         """
         # Skip CSRF validation during integration tests (but not security tests)
         import os  # noqa: PLC0415 - Avoid circular import with config
+
         if os.getenv("TESTING") == "true" and os.getenv("TEST_CSRF") != "true":
             return await call_next(request)
 

@@ -39,11 +39,7 @@ class UpdateSecurityUseCase:
     requiriendo verificación de la contraseña actual.
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        email_service: IEmailService | None = None
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -55,9 +51,7 @@ class UpdateSecurityUseCase:
         self._email_service = email_service
 
     async def _validate_user_and_password(
-        self,
-        user_id: str,
-        current_password: str
+        self, user_id: str, current_password: str
     ) -> tuple[UserId, object]:
         """Valida que el usuario exista y la contraseña sea correcta."""
         user_id_vo = UserId(user_id)
@@ -72,10 +66,7 @@ class UpdateSecurityUseCase:
         return user_id_vo, user
 
     async def _handle_email_change(
-        self,
-        user: object,
-        new_email: str,
-        user_id: str
+        self, user: object, new_email: str, user_id: str
     ) -> tuple[bool, str | None]:
         """Maneja el cambio de email y genera token de verificación."""
         email_vo = Email(new_email)
@@ -89,25 +80,18 @@ class UpdateSecurityUseCase:
         return True, verification_token
 
     async def _handle_password_change(
-        self,
-        user: object,
-        new_password: str,
-        user_id_vo: UserId
+        self, user: object, new_password: str, user_id_vo: UserId
     ) -> tuple[bool, int]:
         """Maneja el cambio de password, valida historial y revoca refresh tokens."""
         # Validar que la nueva contraseña no esté en el historial (últimas 5)
-        recent_history = await self._uow.password_history.find_recent_by_user(
-            user_id_vo,
-            limit=5
-        )
+        recent_history = await self._uow.password_history.find_recent_by_user(user_id_vo, limit=5)
 
         # Verificar si la nueva contraseña coincide con alguna del historial
         for history_record in recent_history:
             temp_password = Password(history_record.password_hash)
             if temp_password.verify(new_password):
                 raise ValueError(
-                    "Cannot reuse any of your last 5 passwords. "
-                    "Please choose a different password."
+                    "Cannot reuse any of your last 5 passwords. Please choose a different password."
                 )
 
         # Cambiar la contraseña
@@ -118,7 +102,7 @@ class UpdateSecurityUseCase:
         password_history = PasswordHistory.create(
             user_id=user_id_vo,
             password_hash=user.password.hashed_value,
-            total_history_count=total_history_count
+            total_history_count=total_history_count,
         )
         await self._uow.password_history.save(password_history)
 
@@ -142,7 +126,7 @@ class UpdateSecurityUseCase:
         user_id: str,
         ip_address: str,
         user_agent: str,
-        security_logger
+        security_logger,
     ) -> None:
         """Registra los cambios de seguridad en el audit trail."""
         if password_changed:
@@ -171,10 +155,7 @@ class UpdateSecurityUseCase:
             )
 
     def _send_verification_email(
-        self,
-        user: object,
-        new_email: str,
-        verification_token: str
+        self, user: object, new_email: str, verification_token: str
     ) -> None:
         """Envía email de verificación al nuevo correo."""
         if not self._email_service:
@@ -182,25 +163,19 @@ class UpdateSecurityUseCase:
 
         try:
             email_sent = self._email_service.send_verification_email(
-                to_email=new_email,
-                user_name=user.first_name,
-                verification_token=verification_token
+                to_email=new_email, user_name=user.first_name, verification_token=verification_token
             )
             if not email_sent:
                 logger.warning(
-                    "No se pudo enviar el email de verificación para el usuario %s",
-                    user.id.value
+                    "No se pudo enviar el email de verificación para el usuario %s", user.id.value
                 )
         except (requests.RequestException, ValueError, ConnectionError):
             logger.exception(
-                "Error al enviar email de verificación para el usuario %s",
-                user.id.value
+                "Error al enviar email de verificación para el usuario %s", user.id.value
             )
 
     async def execute(
-        self,
-        user_id: str,
-        request: UpdateSecurityRequestDTO
+        self, user_id: str, request: UpdateSecurityRequestDTO
     ) -> UpdateSecurityResponseDTO:
         """
         Ejecuta el caso de uso de actualización de seguridad.
@@ -233,8 +208,7 @@ class UpdateSecurityUseCase:
         async with self._uow:
             # Validar usuario y contraseña actual
             user_id_vo, user = await self._validate_user_and_password(
-                user_id,
-                request.current_password
+                user_id, request.current_password
             )
 
             # Tracking de cambios
@@ -246,17 +220,13 @@ class UpdateSecurityUseCase:
             # Procesar cambio de email
             if request.new_email:
                 email_changed, verification_token = await self._handle_email_change(
-                    user,
-                    request.new_email,
-                    user_id
+                    user, request.new_email, user_id
                 )
 
             # Procesar cambio de password
             if request.new_password:
                 password_changed, tokens_revoked_count = await self._handle_password_change(
-                    user,
-                    request.new_password,
-                    user_id_vo
+                    user, request.new_password, user_id_vo
                 )
 
             # Guardar cambios
@@ -271,7 +241,7 @@ class UpdateSecurityUseCase:
             user_id,
             ip_address,
             user_agent,
-            security_logger
+            security_logger,
         )
 
         # Enviar email de verificación si cambió el email
@@ -281,5 +251,5 @@ class UpdateSecurityUseCase:
         # Construir respuesta
         return UpdateSecurityResponseDTO(
             user=UserResponseDTO.model_validate(user),
-            message="Security settings updated successfully"
+            message="Security settings updated successfully",
         )

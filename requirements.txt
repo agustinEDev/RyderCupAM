@@ -99,9 +99,11 @@ urllib3==2.6.3
 filelock==3.20.1
 
 # authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
-# Fijada explícitamente para resolver CVE-2025-61920 (DoS via large base64 tokens)
-# y CVE-2025-62706 (DoS via zip bomb decompression)
-authlib==1.6.5
+# Fijada explícitamente para resolver:
+# - CVE-2025-61920 (DoS via large base64 tokens)
+# - CVE-2025-62706 (DoS via zip bomb decompression)
+# - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
+authlib==1.6.6
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:

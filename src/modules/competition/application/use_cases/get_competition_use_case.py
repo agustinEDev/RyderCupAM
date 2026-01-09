@@ -4,7 +4,6 @@ Caso de Uso: Obtener Competition.
 Permite obtener los detalles de una competición por su ID.
 """
 
-
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -14,6 +13,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
@@ -38,10 +38,7 @@ class GetCompetitionUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self,
-        competition_id: CompetitionId
-    ) -> Competition | None:
+    async def execute(self, competition_id: CompetitionId) -> Competition | None:
         """
         Ejecuta el caso de uso de consulta de competición.
 

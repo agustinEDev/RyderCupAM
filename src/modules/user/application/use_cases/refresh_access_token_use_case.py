@@ -44,11 +44,7 @@ class RefreshAccessTokenUseCase:
     - A07: Identification and Authentication Failures - Renovación segura
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        token_service: ITokenService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, token_service: ITokenService):
         """
         Inicializa el caso de uso.
 
@@ -60,9 +56,7 @@ class RefreshAccessTokenUseCase:
         self._token_service = token_service
 
     async def execute(  # noqa: PLR0911
-        self,
-        request: RefreshAccessTokenRequestDTO,
-        refresh_token_jwt: str
+        self, request: RefreshAccessTokenRequestDTO, refresh_token_jwt: str
     ) -> RefreshAccessTokenResponseDTO | None:
         """
         Ejecuta el caso de uso de renovación de access token.
@@ -141,9 +135,7 @@ class RefreshAccessTokenUseCase:
             return None
 
         # 5. Generar nuevo access token (15 minutos)
-        new_access_token = self._token_service.create_access_token(
-            data={"sub": str(user.id.value)}
-        )
+        new_access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
 
         # 6. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token()
@@ -165,5 +157,5 @@ class RefreshAccessTokenUseCase:
             csrf_token=csrf_token,
             token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
-            message="Access token renovado exitosamente"
+            message="Access token renovado exitosamente",
         )

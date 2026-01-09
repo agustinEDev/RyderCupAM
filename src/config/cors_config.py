@@ -127,7 +127,9 @@ def _validate_origins(origins: list[str]) -> list[str]:
 
         # Validar esquema HTTP/HTTPS
         if not _has_valid_scheme(origin):
-            _handle_invalid_origin(f"Origen inválido '{origin}'. Solo se permiten esquemas http/https.")
+            _handle_invalid_origin(
+                f"Origen inválido '{origin}'. Solo se permiten esquemas http/https."
+            )
             continue
 
         # Eliminar duplicados (preservando orden)

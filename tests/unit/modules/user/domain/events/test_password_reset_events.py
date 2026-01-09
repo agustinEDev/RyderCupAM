@@ -46,7 +46,7 @@ class TestPasswordResetRequestedEvent:
             requested_at=requested_at,
             reset_token_expires_at=reset_token_expires_at,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         # Assert
@@ -58,8 +58,8 @@ class TestPasswordResetRequestedEvent:
         assert event.user_agent == user_agent
 
         # Verificar que heredó de DomainEvent
-        assert hasattr(event, 'event_id')
-        assert hasattr(event, 'occurred_on')
+        assert hasattr(event, "event_id")
+        assert hasattr(event, "occurred_on")
         assert isinstance(event.occurred_on, datetime)
 
     def test_create_password_reset_requested_event_without_optional_fields(self):
@@ -80,7 +80,7 @@ class TestPasswordResetRequestedEvent:
             user_id=user_id,
             email=email,
             requested_at=requested_at,
-            reset_token_expires_at=reset_token_expires_at
+            reset_token_expires_at=reset_token_expires_at,
         )
 
         # Assert
@@ -106,7 +106,7 @@ class TestPasswordResetRequestedEvent:
             user_id=user_id,
             email=email,
             requested_at=requested_at,
-            reset_token_expires_at=reset_token_expires_at
+            reset_token_expires_at=reset_token_expires_at,
         )
 
         # Act
@@ -133,7 +133,7 @@ class TestPasswordResetRequestedEvent:
             user_id=user_id,
             email="test@example.com",
             requested_at=requested_at,
-            reset_token_expires_at=reset_token_expires_at
+            reset_token_expires_at=reset_token_expires_at,
         )
 
         # Assert
@@ -164,7 +164,7 @@ class TestPasswordResetCompletedEvent:
             email=email,
             completed_at=completed_at,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         # Assert
@@ -175,8 +175,8 @@ class TestPasswordResetCompletedEvent:
         assert event.user_agent == user_agent
 
         # Verificar que heredó de DomainEvent
-        assert hasattr(event, 'event_id')
-        assert hasattr(event, 'occurred_on')
+        assert hasattr(event, "event_id")
+        assert hasattr(event, "occurred_on")
         assert isinstance(event.occurred_on, datetime)
 
     def test_create_password_reset_completed_event_without_optional_fields(self):
@@ -192,11 +192,7 @@ class TestPasswordResetCompletedEvent:
         completed_at = datetime.now()
 
         # Act
-        event = PasswordResetCompletedEvent(
-            user_id=user_id,
-            email=email,
-            completed_at=completed_at
-        )
+        event = PasswordResetCompletedEvent(user_id=user_id, email=email, completed_at=completed_at)
 
         # Assert
         assert event.user_id == user_id
@@ -217,11 +213,7 @@ class TestPasswordResetCompletedEvent:
         email = "test@example.com"
         completed_at = datetime.now()
 
-        event = PasswordResetCompletedEvent(
-            user_id=user_id,
-            email=email,
-            completed_at=completed_at
-        )
+        event = PasswordResetCompletedEvent(user_id=user_id, email=email, completed_at=completed_at)
 
         # Act
         repr_string = repr(event)
@@ -243,9 +235,7 @@ class TestPasswordResetCompletedEvent:
         completed_at = datetime.now()
 
         event = PasswordResetCompletedEvent(
-            user_id=user_id,
-            email="test@example.com",
-            completed_at=completed_at
+            user_id=user_id, email="test@example.com", completed_at=completed_at
         )
 
         # Assert
@@ -265,9 +255,7 @@ class TestPasswordResetCompletedEvent:
 
         # Act
         event = PasswordResetCompletedEvent(
-            user_id=user_id,
-            email="test@example.com",
-            completed_at=completed_at
+            user_id=user_id, email="test@example.com", completed_at=completed_at
         )
 
         # Assert

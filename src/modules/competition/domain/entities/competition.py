@@ -32,6 +32,7 @@ MAX_PLAYERS = 100
 
 class CompetitionStateError(Exception):
     """Excepción lanzada cuando se intenta una operación en un estado inválido."""
+
     pass
 
 
@@ -87,7 +88,7 @@ class Competition:
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-        domain_events: list[DomainEvent] | None = None
+        domain_events: list[DomainEvent] | None = None,
     ):
         """
         Constructor de Competition.
@@ -137,8 +138,8 @@ class Competition:
         team_2_name: str,
         handicap_settings: HandicapSettings,
         max_players: int = 24,
-        team_assignment: TeamAssignment = TeamAssignment.MANUAL
-    ) -> 'Competition':
+        team_assignment: TeamAssignment = TeamAssignment.MANUAL,
+    ) -> "Competition":
         """
         Factory method para crear una nueva competición.
 
@@ -161,14 +162,14 @@ class Competition:
             handicap_settings=handicap_settings,
             max_players=max_players,
             team_assignment=team_assignment,
-            status=CompetitionStatus.DRAFT
+            status=CompetitionStatus.DRAFT,
         )
 
         # Emitir evento de creación
         event = CompetitionCreatedEvent(
             competition_id=str(competition.id),
             creator_id=str(competition.creator_id),
-            name=str(competition.name)
+            name=str(competition.name),
         )
         competition._add_domain_event(event)
 
@@ -273,7 +274,7 @@ class Competition:
         event = CompetitionActivatedEvent(
             competition_id=str(self.id),
             name=str(self.name),
-            start_date=self.dates.start_date.isoformat()
+            start_date=self.dates.start_date.isoformat(),
         )
         self._add_domain_event(event)
 
@@ -299,8 +300,7 @@ class Competition:
 
         # Emitir evento
         event = CompetitionEnrollmentsClosedEvent(
-            competition_id=str(self.id),
-            total_enrollments=total_enrollments
+            competition_id=str(self.id), total_enrollments=total_enrollments
         )
         self._add_domain_event(event)
 
@@ -322,10 +322,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionStartedEvent(
-            competition_id=str(self.id),
-            name=str(self.name)
-        )
+        event = CompetitionStartedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     def complete(self) -> None:
@@ -346,10 +343,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionCompletedEvent(
-            competition_id=str(self.id),
-            name=str(self.name)
-        )
+        event = CompetitionCompletedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     def cancel(self, reason: str | None = None) -> None:
@@ -368,18 +362,14 @@ class Competition:
             )
 
         if not self.status.can_transition_to(CompetitionStatus.CANCELLED):
-            raise CompetitionStateError(
-                f"No se puede cancelar desde estado {self.status.value}"
-            )
+            raise CompetitionStateError(f"No se puede cancelar desde estado {self.status.value}")
 
         self.status = CompetitionStatus.CANCELLED
         self.updated_at = datetime.now()
 
         # Emitir evento
         event = CompetitionCancelledEvent(
-            competition_id=str(self.id),
-            name=str(self.name),
-            reason=reason
+            competition_id=str(self.id), name=str(self.name), reason=reason
         )
         self._add_domain_event(event)
 
@@ -396,7 +386,7 @@ class Competition:
         team_2_name: str | None = None,
         handicap_settings: HandicapSettings | None = None,
         max_players: int | None = None,
-        team_assignment: TeamAssignment | None = None
+        team_assignment: TeamAssignment | None = None,
     ) -> None:
         """
         Actualiza la información del torneo.
@@ -458,10 +448,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionUpdatedEvent(
-            competition_id=str(self.id),
-            name=str(self.name)
-        )
+        event = CompetitionUpdatedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     # ===========================================
@@ -470,7 +457,7 @@ class Competition:
 
     def _ensure_domain_events(self) -> None:
         """Asegura que _domain_events existe (para compatibilidad con SQLAlchemy)."""
-        if not hasattr(self, '_domain_events'):
+        if not hasattr(self, "_domain_events"):
             self._domain_events = []
 
     def _add_domain_event(self, event: DomainEvent) -> None:

@@ -5,7 +5,6 @@ Implementación mock del servicio de hándicap para testing.
 Permite configurar respuestas predefinidas sin hacer llamadas HTTP reales.
 """
 
-
 from src.modules.user.domain.services.handicap_service import HandicapService
 
 
@@ -31,11 +30,7 @@ class MockHandicapService(HandicapService):
         18.0
     """
 
-    def __init__(
-        self,
-        handicaps: dict[str, float] | None = None,
-        default: float | None = 15.0
-    ):
+    def __init__(self, handicaps: dict[str, float] | None = None, default: float | None = 15.0):
         """
         Inicializa el servicio mock.
 

@@ -19,7 +19,7 @@ POSTGRESQL_ASYNC_PREFIX = "postgresql+asyncpg://"
 # --- Configuración Inicial del Entorno de Test ---
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-os.environ['TESTING'] = 'true'
+os.environ["TESTING"] = "true"
 
 # --- Importaciones de la Aplicación ---
 from main import app as fastapi_app
@@ -52,6 +52,7 @@ if not DATABASE_URL:
 # HELPER FUNCTIONS
 # ======================================================================================
 
+
 async def seed_countries_and_adjacencies(conn) -> None:
     """
     Inserta países y adyacencias básicas para tests de integración.
@@ -60,7 +61,8 @@ async def seed_countries_and_adjacencies(conn) -> None:
         conn: Conexión de SQLAlchemy (dentro de un bloque begin())
     """
     # Insertar países esenciales para tests
-    await conn.execute(text("""
+    await conn.execute(
+        text("""
         INSERT INTO countries (code, name_en, name_es, active) VALUES
         ('ES', 'Spain', 'España', true),
         ('PT', 'Portugal', 'Portugal', true),
@@ -72,10 +74,12 @@ async def seed_countries_and_adjacencies(conn) -> None:
         ('AD', 'Andorra', 'Andorra', true),
         ('JP', 'Japan', 'Japón', true)
         ON CONFLICT (code) DO NOTHING;
-    """))
+    """)
+    )
 
     # Insertar adyacencias básicas
-    await conn.execute(text("""
+    await conn.execute(
+        text("""
         INSERT INTO country_adjacencies (country_code_1, country_code_2) VALUES
         ('ES', 'PT'), ('PT', 'ES'),
         ('ES', 'FR'), ('FR', 'ES'),
@@ -84,12 +88,14 @@ async def seed_countries_and_adjacencies(conn) -> None:
         ('FR', 'DE'), ('DE', 'FR'),
         ('FR', 'AD'), ('AD', 'FR')
         ON CONFLICT (country_code_1, country_code_2) DO NOTHING;
-    """))
+    """)
+    )
 
 
 # ======================================================================================
 # HOOKS DE CONFIGURACIÓN GLOBAL DE PYTEST
 # ======================================================================================
+
 
 def pytest_configure(config):
     """
@@ -101,7 +107,9 @@ def pytest_configure(config):
 
     # Solo el proceso maestro (master) o una ejecución sin xdist inicializará los mappers
     if worker_id is None or worker_id == "master":
-        print(f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(
+            f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         print("🚀 Inicializando mappers de SQLAlchemy...")
         start_mappers()  # User module
         start_country_mappers()  # Shared domain (Country)
@@ -110,7 +118,7 @@ def pytest_configure(config):
         config.mappers_initialized = True
 
     # Si los mappers ya fueron iniciados por el maestro, no hacemos nada en los workers
-    elif hasattr(config, 'mappers_initialized') and config.mappers_initialized:
+    elif hasattr(config, "mappers_initialized") and config.mappers_initialized:
         # Mappers already initialized by master process, skip initialization
         return
 
@@ -132,9 +140,11 @@ def pytest_sessionfinish(session, exitstatus):
     else:
         print(f"❌ Algunos tests fallaron. Código de salida: {exitstatus}")
 
+
 # ======================================================================================
 # FIXTURE PARA TESTS UNITARIOS (SIN BASE DE DATOS)
 # ======================================================================================
+
 
 @pytest_asyncio.fixture(scope="function")
 async def unit_client() -> AsyncGenerator[AsyncClient, None]:
@@ -164,15 +174,14 @@ async def unit_client() -> AsyncGenerator[AsyncClient, None]:
     async def test_endpoint():
         return {"status": "ok"}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=minimal_app),
-        base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=minimal_app), base_url="http://test") as ac:
         yield ac
+
 
 # ======================================================================================
 # FIXTURE PRINCIPAL PARA TESTS DE INTEGRACIÓN
 # ======================================================================================
+
 
 @pytest_asyncio.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
@@ -186,7 +195,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     db_name = f"test_db_{worker_id}_{unique_id}"
 
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
-    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    db_url_base = DATABASE_URL.rsplit("/", 1)[0]
     if db_url_base.startswith(POSTGRESQL_PREFIX):
         db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
 
@@ -207,7 +216,11 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         await seed_countries_and_adjacencies(conn)
 
     test_session_local = async_sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession, expire_on_commit=False
+        autocommit=False,
+        autoflush=False,
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
     )
 
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -223,7 +236,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(
         transport=transport,
         base_url="http://test",
-        headers={"X-Test-Client-ID": test_client_id}  # IP simulada única por test
+        headers={"X-Test-Client-ID": test_client_id},  # IP simulada única por test
     ) as ac:
         yield ac
 
@@ -251,7 +264,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
     db_name = f"test_db_module_{worker_id}_{unique_id}"
 
     # URL base para conectarse a PostgreSQL
-    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    db_url_base = DATABASE_URL.rsplit("/", 1)[0]
     if db_url_base.startswith(POSTGRESQL_PREFIX):
         db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
 
@@ -271,7 +284,11 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
         await seed_countries_and_adjacencies(conn)
 
     test_session_local = async_sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine, class_=AsyncSession, expire_on_commit=False
+        autocommit=False,
+        autoflush=False,
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
     )
 
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -284,9 +301,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
 
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        headers={"X-Test-Client-ID": test_client_id}
+        transport=transport, base_url="http://test", headers={"X-Test-Client-ID": test_client_id}
     ) as ac:
         yield ac
 
@@ -304,6 +319,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
 # FIXTURES DE DATOS PARA TESTS
 # ======================================================================================
 
+
 @pytest.fixture(scope="session")
 def sample_user_data() -> dict:
     """Fixture con datos de ejemplo para un usuario."""
@@ -313,6 +329,7 @@ def sample_user_data() -> dict:
         "email": "agustin.estevez@example.com",
     }
 
+
 @pytest.fixture(scope="session")
 def multiple_users_data() -> list[dict]:
     """Fixture con datos para múltiples usuarios."""
@@ -321,6 +338,7 @@ def multiple_users_data() -> list[dict]:
         {"name": "Ana", "surname": "Martínez", "email": "ana.martinez@test.com"},
         {"name": "Luis", "surname": "Rodríguez", "email": "luis.rodriguez@test.com"},
     ]
+
 
 @pytest.fixture(scope="session")
 def invalid_user_data() -> dict:
@@ -340,12 +358,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     # Crear una base de datos temporal para este test específico
     import uuid
+
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     test_id = str(uuid.uuid4())[:8]
     db_name = f"test_db_session_{worker_id}_{test_id}"
 
     # URL base para conectarse a PostgreSQL (sin la base de datos específica)
-    db_url_base = DATABASE_URL.rsplit('/', 1)[0]
+    db_url_base = DATABASE_URL.rsplit("/", 1)[0]
     if db_url_base.startswith(POSTGRESQL_PREFIX):
         db_url_base = db_url_base.replace(POSTGRESQL_PREFIX, POSTGRESQL_ASYNC_PREFIX, 1)
 
@@ -366,11 +385,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await seed_countries_and_adjacencies(conn)
 
     test_session_local = async_sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False
+        autocommit=False, autoflush=False, bind=engine, class_=AsyncSession, expire_on_commit=False
     )
 
     async with test_session_local() as session:
@@ -389,6 +404,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 # AUTHENTICATION HELPERS FOR INTEGRATION TESTS
 # ======================================================================================
 
+
 @pytest_asyncio.fixture
 async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
     """
@@ -402,17 +418,14 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
         "email": "testuser@example.com",
         "password": "TestPass123!",
         "first_name": "Test",
-        "last_name": "User"
+        "last_name": "User",
     }
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code == 201
 
     # Hacer login para obtener el token
-    login_data = {
-        "email": user_data["email"],
-        "password": user_data["password"]
-    }
+    login_data = {"email": user_data["email"], "password": user_data["password"]}
 
     login_response = await client.post("/api/v1/auth/login", json=login_data)
     assert login_response.status_code == 200
@@ -424,14 +437,12 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
     # Agregar el token al cliente como header por defecto
     client.headers.update({"Authorization": f"Bearer {access_token}"})
 
-    return client, {
-        "token": access_token,
-        "user": user_info,
-        "credentials": user_data
-    }
+    return client, {"token": access_token, "user": user_info, "credentials": user_data}
 
 
-async def create_authenticated_user(client: AsyncClient, email: str, password: str, first_name: str, last_name: str) -> dict:
+async def create_authenticated_user(
+    client: AsyncClient, email: str, password: str, first_name: str, last_name: str
+) -> dict:
     """
     Helper para crear un usuario y obtener sus cookies de autenticación.
 
@@ -453,17 +464,16 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
         "email": email,
         "password": password,
         "first_name": first_name,
-        "last_name": last_name
+        "last_name": last_name,
     }
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code == 201
 
     # Login
-    login_response = await client.post("/api/v1/auth/login", json={
-        "email": email,
-        "password": password
-    })
+    login_response = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
     assert login_response.status_code == 200
 
     token = login_response.json()["access_token"]
@@ -478,7 +488,7 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
     return {
         "cookies": cookies,
         "token": token,  # Mantener por compatibilidad
-        "user": user_info
+        "user": user_info,
     }
 
 
@@ -528,7 +538,9 @@ async def get_user_by_email(client: AsyncClient, email: str):
     # El override está configurado en el fixture client()
     db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
     if db_session_override is None:
-        raise RuntimeError("get_db_session no tiene override - el test debe usar el fixture client()")
+        raise RuntimeError(
+            "get_db_session no tiene override - el test debe usar el fixture client()"
+        )
 
     # Usar la sesión overrideada
     # IMPORTANTE: Usar async with para asegurar que la sesión se cierra correctamente
@@ -553,6 +565,7 @@ async def get_user_by_email(client: AsyncClient, email: str):
 # Para tests de integración, mockeamos los servicios en dependencies.py para evitar
 # llamadas reales a Mailgun y mantener los tests rápidos y sin límites de API.
 
+
 @pytest.fixture(autouse=True)
 def mock_external_services():
     """
@@ -570,7 +583,7 @@ def mock_external_services():
     mock_email.send_verification_email.return_value = True
 
     # Patchear el factory en dependencies.py
-    with patch('src.config.dependencies.EmailService', return_value=mock_email):
+    with patch("src.config.dependencies.EmailService", return_value=mock_email):
         yield mock_email
 
 
@@ -582,6 +595,7 @@ def mock_external_services():
 #
 # IMPORTANTE: Estos usuarios NO deben modificarse en los tests (read-only).
 # Si un test necesita modificar un usuario, debe crear uno nuevo.
+
 
 @pytest_asyncio.fixture(scope="module")
 async def module_creator_user(module_client: AsyncClient) -> dict:
@@ -595,11 +609,7 @@ async def module_creator_user(module_client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        module_client,
-        "module_creator@test.com",
-        "CreatorPass123!",
-        "Module",
-        "Creator"
+        module_client, "module_creator@test.com", "CreatorPass123!", "Module", "Creator"
     )
 
 
@@ -615,11 +625,7 @@ async def module_player_user(module_client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        module_client,
-        "module_player@test.com",
-        "PlayerPass123!",
-        "Module",
-        "Player"
+        module_client, "module_player@test.com", "PlayerPass123!", "Module", "Player"
     )
 
 
@@ -635,17 +641,14 @@ async def module_second_player(module_client: AsyncClient) -> dict:
         Dict con user data y cookies de autenticación
     """
     return await create_authenticated_user(
-        module_client,
-        "module_player2@test.com",
-        "Player2Pass123!",
-        "Second",
-        "Player"
+        module_client, "module_player2@test.com", "Player2Pass123!", "Second", "Player"
     )
 
 
 # ======================================================================================
 # COMPETITION MODULE FIXTURES
 # ======================================================================================
+
 
 @pytest.fixture(scope="session")
 def sample_competition_data() -> dict:
@@ -665,14 +668,12 @@ def sample_competition_data() -> dict:
         "handicap_type": "PERCENTAGE",
         "handicap_percentage": 95,
         "max_players": 24,
-        "team_assignment": "MANUAL"
+        "team_assignment": "MANUAL",
     }
 
 
 async def create_competition(
-    client: AsyncClient,
-    cookies: dict,
-    competition_data: dict | None = None
+    client: AsyncClient, cookies: dict, competition_data: dict | None = None
 ) -> dict:
     """
     Helper para crear una competición.
@@ -699,17 +700,14 @@ async def create_competition(
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 24,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
 
-    response = await client.post(
-        "/api/v1/competitions",
-        json=competition_data
-    )
+    response = await client.post("/api/v1/competitions", json=competition_data)
     assert response.status_code == 201, f"Failed to create competition: {response.text}"
     return response.json()
 
@@ -720,8 +718,6 @@ async def activate_competition(client: AsyncClient, cookies: dict, competition_i
     client.cookies.clear()
     client.cookies.update(cookies)
 
-    response = await client.post(
-        f"/api/v1/competitions/{competition_id}/activate"
-    )
+    response = await client.post(f"/api/v1/competitions/{competition_id}/activate")
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"
     return response.json()

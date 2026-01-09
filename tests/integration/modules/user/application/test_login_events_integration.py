@@ -35,13 +35,7 @@ class TestLoginUserUseCaseEventIntegration:
         email = Email("test@example.com")
         password = Password.from_plain_text("P@ssw0rd123!")
 
-        user = User(
-            id=user_id,
-            email=email,
-            password=password,
-            first_name="John",
-            last_name="Doe"
-        )
+        user = User(id=user_id, email=email, password=password, first_name="John", last_name="Doe")
 
         # Mock del UoW
         mock_uow = AsyncMock()
@@ -53,10 +47,7 @@ class TestLoginUserUseCaseEventIntegration:
         token_service = JWTTokenService()
         use_case = LoginUserUseCase(mock_uow, token_service)
 
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="P@ssw0rd123!"
-        )
+        request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
 
         # Act
         response = await use_case.execute(request)
@@ -98,10 +89,7 @@ class TestLoginUserUseCaseEventIntegration:
         token_service = JWTTokenService()
         use_case = LoginUserUseCase(mock_uow, token_service)
 
-        request = LoginRequestDTO(
-            email="noexiste@example.com",
-            password="P@ssw0rd123!"
-        )
+        request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
 
         # Act
         response = await use_case.execute(request)
@@ -125,13 +113,7 @@ class TestLoginUserUseCaseEventIntegration:
         email = Email("test@example.com")
         password = Password.from_plain_text("C0rr3ctP@ss123!")
 
-        user = User(
-            id=user_id,
-            email=email,
-            password=password,
-            first_name="John",
-            last_name="Doe"
-        )
+        user = User(id=user_id, email=email, password=password, first_name="John", last_name="Doe")
 
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
@@ -141,7 +123,7 @@ class TestLoginUserUseCaseEventIntegration:
 
         request = LoginRequestDTO(
             email="test@example.com",
-            password="WrongPass123"  # Password incorrecto
+            password="WrongPass123",  # Password incorrecto
         )
 
         # Act

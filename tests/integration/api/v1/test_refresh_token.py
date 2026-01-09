@@ -18,6 +18,7 @@ Arquitectura:
 - Módulo: User (Authentication)
 - Feature: Session Timeout with Refresh Tokens (v1.8.0)
 """
+
 import pytest
 from httpx import AsyncClient
 

@@ -11,7 +11,7 @@ from typing import Generic, TypeVar
 from .domain_event import DomainEvent
 
 # Type variable para permitir handlers específicos para tipos de eventos
-EventType = TypeVar('EventType', bound=DomainEvent)
+EventType = TypeVar("EventType", bound=DomainEvent)
 
 
 class EventHandler(Generic[EventType], ABC):  # noqa: UP046 - Generic syntax for Python 3.11 compatibility

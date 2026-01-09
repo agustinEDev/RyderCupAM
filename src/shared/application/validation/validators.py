@@ -87,10 +87,7 @@ class EmailValidator:
 
         # Validar que contenga @
         if "@" not in normalized:
-            raise ValueError(
-                "Formato de email inválido. "
-                "Use el formato: usuario@dominio.com"
-            )
+            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
 
         # Validar partes del email (ANTES del regex para mensajes específicos)
         local, domain = normalized.rsplit("@", 1)
@@ -105,10 +102,7 @@ class EmailValidator:
 
         # Validar formato con regex (después de validaciones específicas)
         if not cls.EMAIL_REGEX.match(normalized):
-            raise ValueError(
-                "Formato de email inválido. "
-                "Use el formato: usuario@dominio.com"
-            )
+            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
 
         # Domain debe tener al menos un punto
         if "." not in domain:

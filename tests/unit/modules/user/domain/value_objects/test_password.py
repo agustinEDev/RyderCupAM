@@ -21,7 +21,7 @@ class TestPasswordCreation:
         # Crear hash manualmente
         plain_text = "MyS3cur3P@ss!"
         salt = bcrypt.gensalt()
-        expected_hash = bcrypt.hashpw(plain_text.encode('utf-8'), salt).decode('utf-8')
+        expected_hash = bcrypt.hashpw(plain_text.encode("utf-8"), salt).decode("utf-8")
 
         password = Password(expected_hash)
         assert password.hashed_value == expected_hash
@@ -60,12 +60,16 @@ class TestPasswordValidation:
 
     def test_password_without_uppercase_raises_error(self):
         """Password sin mayúsculas debe lanzar InvalidPasswordError (OWASP V2.1.2)"""
-        with pytest.raises(InvalidPasswordError, match="debe contener al menos una letra mayúscula"):
+        with pytest.raises(
+            InvalidPasswordError, match="debe contener al menos una letra mayúscula"
+        ):
             Password.from_plain_text("mysecure123!")
 
     def test_password_without_lowercase_raises_error(self):
         """Password sin minúsculas debe lanzar InvalidPasswordError (OWASP V2.1.2)"""
-        with pytest.raises(InvalidPasswordError, match="debe contener al menos una letra minúscula"):
+        with pytest.raises(
+            InvalidPasswordError, match="debe contener al menos una letra minúscula"
+        ):
             Password.from_plain_text("MYSECURE123!")
 
     def test_password_without_digit_raises_error(self):
@@ -75,7 +79,9 @@ class TestPasswordValidation:
 
     def test_password_without_special_char_raises_error(self):
         """Password sin carácter especial debe lanzar InvalidPasswordError (OWASP V2.1.2)"""
-        with pytest.raises(InvalidPasswordError, match="debe contener al menos un carácter especial"):
+        with pytest.raises(
+            InvalidPasswordError, match="debe contener al menos un carácter especial"
+        ):
             Password.from_plain_text("MySecurePass123")
 
     def test_common_password_raises_error(self):
@@ -99,11 +105,11 @@ class TestPasswordValidation:
     def test_valid_password_formats(self):
         """Debe aceptar diferentes formatos válidos de password (12+ chars, complejidad completa)"""
         valid_passwords = [
-            "MyS3cur3P@ss!",           # 13 chars, cumple todo
-            "Str0ng!P@ssw0rd",         # 15 chars, cumple todo
-            "C0mpl3x!tyR0cks",         # 15 chars, cumple todo
+            "MyS3cur3P@ss!",  # 13 chars, cumple todo
+            "Str0ng!P@ssw0rd",  # 15 chars, cumple todo
+            "C0mpl3x!tyR0cks",  # 15 chars, cumple todo
             "VeryL0ngP@ssw0rd2025!",  # 21 chars, cumple todo
-            "Sup3r$ecur3#2025",        # 16 chars, cumple todo
+            "Sup3r$ecur3#2025",  # 16 chars, cumple todo
         ]
 
         for valid_password in valid_passwords:
@@ -234,7 +240,9 @@ class TestPasswordStrengthValidation:
             Password.from_plain_text("OnlyLettersHere")
 
         # Tiene mayúscula, minúscula, número pero falta símbolo
-        with pytest.raises(InvalidPasswordError, match="debe contener al menos un carácter especial"):
+        with pytest.raises(
+            InvalidPasswordError, match="debe contener al menos un carácter especial"
+        ):
             Password.from_plain_text("ValidPass1234")
 
         # Cumple todos los requisitos (12+ chars, upper, lower, digit, symbol)

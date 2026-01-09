@@ -8,6 +8,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository impo
 # Marcar todos los tests de este fichero como 'integration'
 pytestmark = pytest.mark.integration
 
+
 async def test_save_and_get_user(db_session):
     """
     Verifica que un usuario se puede guardar y recuperar correctamente.

@@ -89,8 +89,10 @@ def sanitize_html(text: str | None, *, allow_whitespace: bool = True) -> str | N
 def _sanitize_list_items(items: list, exclude: list[str]) -> list:
     """Sanitiza items de una lista recursivamente."""
     return [
-        sanitize_all_fields(item, exclude=exclude) if isinstance(item, dict)
-        else sanitize_html(item) if isinstance(item, str)
+        sanitize_all_fields(item, exclude=exclude)
+        if isinstance(item, dict)
+        else sanitize_html(item)
+        if isinstance(item, str)
         else item
         for item in items
     ]
@@ -107,7 +109,9 @@ def _sanitize_field_value(value: Any, exclude: list[str]) -> Any:
     return value
 
 
-def sanitize_all_fields(data: dict[str, Any], *, exclude: list[str] | None = None) -> dict[str, Any]:
+def sanitize_all_fields(
+    data: dict[str, Any], *, exclude: list[str] | None = None
+) -> dict[str, Any]:
     """
     Sanitiza todos los campos string de un diccionario recursivamente.
 
@@ -185,10 +189,26 @@ def remove_sql_keywords(text: str | None) -> str | None:
 
     # Lista de palabras clave SQL peligrosas
     sql_keywords = [
-        "SELECT", "INSERT", "UPDATE", "DELETE", "DROP",
-        "CREATE", "ALTER", "EXEC", "EXECUTE", "UNION",
-        "DECLARE", "CAST", "CONVERT", "FROM", "WHERE",
-        "--", "/*", "*/", "XP_", "SP_"
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "CREATE",
+        "ALTER",
+        "EXEC",
+        "EXECUTE",
+        "UNION",
+        "DECLARE",
+        "CAST",
+        "CONVERT",
+        "FROM",
+        "WHERE",
+        "--",
+        "/*",
+        "*/",
+        "XP_",
+        "SP_",
     ]
 
     cleaned = text

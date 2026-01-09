@@ -31,21 +31,20 @@ class TestUserRepositoryInterface:
     def test_repository_interface_has_all_required_methods(self):
         """Verifica que la interfaz define todos los métodos requeridos."""
         required_methods = {
-            'save',
-            'find_by_id',
-            'find_by_email',
-            'exists_by_email',
-            'update',
-            'delete_by_id',
-            'find_all',
-            'count_all',
-            'find_by_verification_token',
-            'find_by_password_reset_token'
+            "save",
+            "find_by_id",
+            "find_by_email",
+            "exists_by_email",
+            "update",
+            "delete_by_id",
+            "find_all",
+            "count_all",
+            "find_by_verification_token",
+            "find_by_password_reset_token",
         }
 
         interface_methods = {
-            method for method in dir(UserRepositoryInterface)
-            if not method.startswith('_')
+            method for method in dir(UserRepositoryInterface) if not method.startswith("_")
         }
 
         assert required_methods.issubset(interface_methods)
@@ -55,98 +54,105 @@ class TestUserRepositoryInterface:
         method = UserRepositoryInterface.save
         type_hints = get_type_hints(method)
 
-        assert 'user' in type_hints
-        assert type_hints['user'] == User
-        assert type_hints['return'] == type(None)
+        assert "user" in type_hints
+        assert type_hints["user"] == User
+        assert type_hints["return"] == type(None)
 
     def test_find_by_id_method_signature(self):
         """Verifica la signatura del método find_by_id."""
         method = UserRepositoryInterface.find_by_id
         type_hints = get_type_hints(method)
 
-        assert 'user_id' in type_hints
-        assert type_hints['user_id'] == UserId
+        assert "user_id" in type_hints
+        assert type_hints["user_id"] == UserId
 
     def test_find_by_email_method_signature(self):
         """Verifica la signatura del método find_by_email."""
         method = UserRepositoryInterface.find_by_email
         type_hints = get_type_hints(method)
 
-        assert 'email' in type_hints
-        assert type_hints['email'] == Email
+        assert "email" in type_hints
+        assert type_hints["email"] == Email
 
     def test_exists_by_email_method_signature(self):
         """Verifica la signatura del método exists_by_email."""
         method = UserRepositoryInterface.exists_by_email
         type_hints = get_type_hints(method)
 
-        assert 'email' in type_hints
-        assert type_hints['email'] == Email
-        assert type_hints['return'] == bool
+        assert "email" in type_hints
+        assert type_hints["email"] == Email
+        assert type_hints["return"] == bool
 
     def test_update_method_signature(self):
         """Verifica la signatura del método update."""
         method = UserRepositoryInterface.update
         type_hints = get_type_hints(method)
 
-        assert 'user' in type_hints
-        assert type_hints['user'] == User
-        assert type_hints['return'] == type(None)
+        assert "user" in type_hints
+        assert type_hints["user"] == User
+        assert type_hints["return"] == type(None)
 
     def test_delete_by_id_method_signature(self):
         """Verifica la signatura del método delete_by_id."""
         method = UserRepositoryInterface.delete_by_id
         type_hints = get_type_hints(method)
 
-        assert 'user_id' in type_hints
-        assert type_hints['user_id'] == UserId
-        assert type_hints['return'] == bool
+        assert "user_id" in type_hints
+        assert type_hints["user_id"] == UserId
+        assert type_hints["return"] == bool
 
     def test_find_all_method_signature(self):
         """Verifica la signatura del método find_all."""
         method = UserRepositoryInterface.find_all
         type_hints = get_type_hints(method)
 
-        assert 'limit' in type_hints
-        assert type_hints['limit'] == int
-        assert 'offset' in type_hints
-        assert type_hints['offset'] == int
+        assert "limit" in type_hints
+        assert type_hints["limit"] == int
+        assert "offset" in type_hints
+        assert type_hints["offset"] == int
 
     def test_count_all_method_signature(self):
         """Verifica la signatura del método count_all."""
         method = UserRepositoryInterface.count_all
         type_hints = get_type_hints(method)
 
-        assert type_hints['return'] == int
+        assert type_hints["return"] == int
 
     def test_find_by_verification_token_method_signature(self):
         """Verifica la signatura del método find_by_verification_token."""
         method = UserRepositoryInterface.find_by_verification_token
         type_hints = get_type_hints(method)
 
-        assert 'token' in type_hints
-        assert type_hints['token'] == str
+        assert "token" in type_hints
+        assert type_hints["token"] == str
 
     def test_find_by_password_reset_token_method_signature(self):
         """Verifica la signatura del método find_by_password_reset_token."""
         method = UserRepositoryInterface.find_by_password_reset_token
         type_hints = get_type_hints(method)
 
-        assert 'token' in type_hints
-        assert type_hints['token'] == str
+        assert "token" in type_hints
+        assert type_hints["token"] == str
 
     def test_all_methods_are_async(self):
         """Verifica que todos los métodos públicos son async."""
         methods_to_check = [
-            'save', 'find_by_id', 'find_by_email', 'exists_by_email',
-            'update', 'delete_by_id', 'find_all', 'count_all',
-            'find_by_verification_token', 'find_by_password_reset_token'
+            "save",
+            "find_by_id",
+            "find_by_email",
+            "exists_by_email",
+            "update",
+            "delete_by_id",
+            "find_all",
+            "count_all",
+            "find_by_verification_token",
+            "find_by_password_reset_token",
         ]
 
         for method_name in methods_to_check:
             method = getattr(UserRepositoryInterface, method_name)
             # Los métodos abstractos async tienen __code__.co_flags con CO_COROUTINE
-            assert hasattr(method, '__code__'), f"Method {method_name} should have __code__"
+            assert hasattr(method, "__code__"), f"Method {method_name} should have __code__"
 
     def test_concrete_implementation_can_be_created(self):
         """Verifica que se puede crear una implementación concreta."""
@@ -201,6 +207,7 @@ class TestUserRepositoryInterface:
         class IncompleteRepository(UserRepositoryInterface):
             async def save(self, user: User) -> None:
                 pass
+
             # Faltan métodos...
 
         # Debe lanzar TypeError por métodos abstractos faltantes
