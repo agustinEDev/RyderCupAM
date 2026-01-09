@@ -54,10 +54,10 @@ def discover_tests() -> dict:
     test_root = Path("tests")
     for test_file in sorted(test_root.rglob("test_*.py")):
         parts = test_file.parts
-        if len(parts) > 2:  # noqa: PLR2004 - Path depth index for test structure
+        if len(parts) > 2:
             scope = parts[1].upper()
-            module = parts[3].capitalize() if len(parts) > 3 else "Shared"  # noqa: PLR2004
-            layer = parts[4].capitalize() if len(parts) > 4 else "General"  # noqa: PLR2004
+            module = parts[3].capitalize() if len(parts) > 3 else "Shared"
+            layer = parts[4].capitalize() if len(parts) > 4 else "General"
             test_structure[scope][module][layer].append(test_file)
     return test_structure
 

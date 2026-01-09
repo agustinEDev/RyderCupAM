@@ -22,19 +22,19 @@ sys.path.insert(0, str(project_root))
 os.environ['TESTING'] = 'true'
 
 # --- Importaciones de la Aplicación ---
-from main import app as fastapi_app  # noqa: E402 - Must be after sys.path setup
-from src.config.database import (  # noqa: E402
+from main import app as fastapi_app
+from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
-from src.config.dependencies import get_db_session  # noqa: E402
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
+from src.config.dependencies import get_db_session
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     start_mappers as start_competition_mappers,
 )
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
     start_mappers,
 )
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (  # noqa: E402
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     start_mappers as start_country_mappers,
 )
 
@@ -149,9 +149,9 @@ async def unit_client() -> AsyncGenerator[AsyncClient, None]:
             response = await unit_client.get("/health")
             assert response.status_code == 200
     """
-    from fastapi import FastAPI  # noqa: PLC0415 - Lazy import for fixture isolation
+    from fastapi import FastAPI
 
-    from src.shared.infrastructure.http.correlation_middleware import (  # noqa: PLC0415
+    from src.shared.infrastructure.http.correlation_middleware import (
         CorrelationMiddleware,
     )
 
@@ -339,7 +339,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     usando una base de datos temporal específica para tests.
     """
     # Crear una base de datos temporal para este test específico
-    import uuid  # noqa: PLC0415 - Already imported at top, this is for clarity
+    import uuid
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     test_id = str(uuid.uuid4())[:8]
     db_name = f"test_db_session_{worker_id}_{test_id}"
@@ -516,11 +516,11 @@ async def get_user_by_email(client: AsyncClient, email: str):
     Raises:
         AssertionError: Si el usuario no existe
     """
-    from src.config.dependencies import (  # noqa: PLC0415
+    from src.config.dependencies import (
         get_db_session,
     )
-    from src.modules.user.domain.value_objects.email import Email  # noqa: PLC0415
-    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (  # noqa: PLC0415
+    from src.modules.user.domain.value_objects.email import Email
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
         SQLAlchemyUserRepository,
     )
 
@@ -563,7 +563,7 @@ def mock_external_services():
     - Los tests unitarios usan sus propios mocks
     - Los tests de integración usan estos mocks via dependencies.py
     """
-    from unittest.mock import MagicMock, patch  # noqa: PLC0415 - Lazy import for fixture
+    from unittest.mock import MagicMock, patch
 
     # Mock para EmailService
     mock_email = MagicMock()
@@ -650,7 +650,7 @@ async def module_second_player(module_client: AsyncClient) -> dict:
 @pytest.fixture(scope="session")
 def sample_competition_data() -> dict:
     """Fixture con datos de ejemplo para una competición."""
-    from datetime import date, timedelta  # noqa: PLC0415 - Lazy import for fixture
+    from datetime import date, timedelta
 
     start = date.today() + timedelta(days=30)
     end = start + timedelta(days=3)
@@ -685,8 +685,8 @@ async def create_competition(
     Returns:
         Dict con los datos de la competición creada
     """
-    import uuid  # noqa: PLC0415 - Already imported at top, this is for clarity
-    from datetime import date, timedelta  # noqa: PLC0415
+    import uuid
+    from datetime import date, timedelta
 
     if competition_data is None:
         start = date.today() + timedelta(days=30)
