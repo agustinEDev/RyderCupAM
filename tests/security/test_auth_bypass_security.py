@@ -203,7 +203,7 @@ class TestSessionManagement:
         NOTE: Este test documenta el comportamiento esperado.
         El sistema revoca refresh tokens en logout (implementado en v1.8.0).
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         # Verificar que podemos crear una competición antes del logout
         competition_response = await client.post("/api/v1/competitions", json={
@@ -235,7 +235,7 @@ class TestSessionManagement:
 
         NOTE: El sistema revoca refresh tokens en logout (implementado en v1.8.0).
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         # Hacer logout para revocar el refresh token (enviar JSON vacío)
         logout_response = await client.post("/api/v1/auth/logout", json={})
@@ -300,7 +300,7 @@ class TestRaceConditions:
         NOTE: Este test documenta el comportamiento esperado.
         Race conditions son difíciles de testear de forma determinística.
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         # Este test documenta que el sistema debe manejar
         # renovaciones concurrentes de forma segura

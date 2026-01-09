@@ -10,7 +10,6 @@ Cobertura OWASP:
 """
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 from src.config.rate_limit import limiter

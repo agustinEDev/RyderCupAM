@@ -22,16 +22,19 @@ sys.path.insert(0, str(project_root))
 os.environ['TESTING'] = 'true'
 
 # --- Importaciones de la Aplicación ---
-from main import app as fastapi_app
-from src.config.database import (
+from main import app as fastapi_app  # noqa: E402 - Must be after sys.path setup
+from src.config.database import (  # noqa: E402
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
-from src.config.dependencies import get_db_session
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+from src.config.dependencies import get_db_session  # noqa: E402
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
 )
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import metadata, start_mappers
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
+    metadata,
+    start_mappers,
+)
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (  # noqa: E402
     start_mappers as start_country_mappers,
 )
 
@@ -137,27 +140,30 @@ def pytest_sessionfinish(session, exitstatus):
 async def unit_client() -> AsyncGenerator[AsyncClient, None]:
     """
     Fixture para tests unitarios que NO requieren base de datos.
-    
+
     Crea un cliente HTTP para probar middlewares, handlers y lógica
     que no depende de persistencia. Ideal para tests unitarios puros.
-    
+
     Uso:
         async def test_middleware(unit_client: AsyncClient):
             response = await unit_client.get("/health")
             assert response.status_code == 200
     """
-    from fastapi import FastAPI
-    from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
-    
+    from fastapi import FastAPI  # noqa: PLC0415 - Lazy import for fixture isolation
+
+    from src.shared.infrastructure.http.correlation_middleware import (  # noqa: PLC0415
+        CorrelationMiddleware,
+    )
+
     # Crear una app mínima solo con middlewares (sin BD)
     minimal_app = FastAPI()
     minimal_app.add_middleware(CorrelationMiddleware)
-    
+
     # Endpoint simple para testing
     @minimal_app.get("/test")
     async def test_endpoint():
         return {"status": "ok"}
-    
+
     async with AsyncClient(
         transport=ASGITransport(app=minimal_app),
         base_url="http://test"
@@ -236,7 +242,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
     """
     Fixture de cliente para tests a nivel de módulo.
     Crea una base de datos que se reutiliza para todos los tests del módulo.
-    
+
     Scope: module (creado una vez por módulo de tests)
     Uso: Para fixtures de usuario reutilizables (module_creator_user, etc.)
     """
@@ -333,7 +339,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     usando una base de datos temporal específica para tests.
     """
     # Crear una base de datos temporal para este test específico
-    import uuid
+    import uuid  # noqa: PLC0415 - Already imported at top, this is for clarity
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     test_id = str(uuid.uuid4())[:8]
     db_name = f"test_db_session_{worker_id}_{test_id}"
@@ -462,10 +468,10 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
 
     token = login_response.json()["access_token"]
     user_info = login_response.json()["user"]
-    
+
     # Capturar cookies HTTPOnly del response (como lo haría el navegador)
     cookies = dict(login_response.cookies)
-    
+
     # Limpiar cookies del cliente para evitar conflictos entre usuarios
     client.cookies.clear()
 
@@ -479,14 +485,14 @@ async def create_authenticated_user(client: AsyncClient, email: str, password: s
 def set_auth_cookies(client: AsyncClient, cookies: dict) -> None:
     """
     Helper para establecer cookies de autenticación en el cliente.
-    
+
     Evita el DeprecationWarning de httpx al usar cookies= en cada request.
     Usar antes de requests autenticadas en tests.
-    
+
     Args:
         client: Cliente HTTP de testing
         cookies: Dict de cookies de autenticación
-    
+
     Example:
         set_auth_cookies(client, user["cookies"])
         response = await client.get("/api/v1/protected")
@@ -510,11 +516,13 @@ async def get_user_by_email(client: AsyncClient, email: str):
     Raises:
         AssertionError: Si el usuario no existe
     """
-    from src.modules.user.domain.value_objects.email import Email
-    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
+    from src.config.dependencies import (  # noqa: PLC0415
+        get_db_session,
+    )
+    from src.modules.user.domain.value_objects.email import Email  # noqa: PLC0415
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (  # noqa: PLC0415
         SQLAlchemyUserRepository,
     )
-    from src.config.dependencies import get_db_session
 
     # Obtener la sesión DB desde el override del cliente
     # El override está configurado en el fixture client()
@@ -555,7 +563,7 @@ def mock_external_services():
     - Los tests unitarios usan sus propios mocks
     - Los tests de integración usan estos mocks via dependencies.py
     """
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock, patch  # noqa: PLC0415 - Lazy import for fixture
 
     # Mock para EmailService
     mock_email = MagicMock()
@@ -642,7 +650,7 @@ async def module_second_player(module_client: AsyncClient) -> dict:
 @pytest.fixture(scope="session")
 def sample_competition_data() -> dict:
     """Fixture con datos de ejemplo para una competición."""
-    from datetime import date, timedelta
+    from datetime import date, timedelta  # noqa: PLC0415 - Lazy import for fixture
 
     start = date.today() + timedelta(days=30)
     end = start + timedelta(days=3)
@@ -677,8 +685,8 @@ async def create_competition(
     Returns:
         Dict con los datos de la competición creada
     """
-    from datetime import date, timedelta
-    import uuid
+    import uuid  # noqa: PLC0415 - Already imported at top, this is for clarity
+    from datetime import date, timedelta  # noqa: PLC0415
 
     if competition_data is None:
         start = date.today() + timedelta(days=30)
@@ -697,7 +705,7 @@ async def create_competition(
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
-    
+
     response = await client.post(
         "/api/v1/competitions",
         json=competition_data
@@ -711,7 +719,7 @@ async def activate_competition(client: AsyncClient, cookies: dict, competition_i
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
-    
+
     response = await client.post(
         f"/api/v1/competitions/{competition_id}/activate"
     )

@@ -11,7 +11,6 @@ Uso:
     python scripts/check_config.py
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -52,12 +51,11 @@ def detect_environment() -> str:
 
     if "localhost:5173" in frontend_url:
         return "local"
-    elif "localhost:8080" in frontend_url:
+    if "localhost:8080" in frontend_url:
         return "kubernetes"
-    elif "rydercupfriends.com" in frontend_url or "onrender.com" in frontend_url:
+    if "rydercupfriends.com" in frontend_url or "onrender.com" in frontend_url:
         return "production"
-    else:
-        return "unknown"
+    return "unknown"
 
 
 def check_required_vars() -> tuple[int, int]:
@@ -135,12 +133,11 @@ def check_frontend_url() -> bool:
     if frontend_url == recommended:
         print_check("Consistencia", f"OK - Coincide con entorno {env}", "✅")
         return True
-    else:
-        print_error(
-            "INCONSISTENCIA",
-            f"Se esperaba '{recommended}' para entorno {env}"
-        )
-        return False
+    print_error(
+        "INCONSISTENCIA",
+        f"Se esperaba '{recommended}' para entorno {env}"
+    )
+    return False
 
 
 def check_email_service() -> bool:

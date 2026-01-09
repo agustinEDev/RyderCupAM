@@ -7,7 +7,6 @@ ataques XSS (Cross-Site Scripting).
 OWASP Coverage Test: A03 (Injection)
 """
 
-import pytest
 
 from src.shared.application.validation.sanitizers import (
     normalize_unicode,

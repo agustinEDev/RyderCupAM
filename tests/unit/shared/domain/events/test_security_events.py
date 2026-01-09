@@ -18,8 +18,8 @@ Cobertura:
 - RateLimitExceededEvent (validación request_count)
 """
 
+
 import pytest
-from datetime import datetime
 
 from src.shared.domain.events.security_events import (
     AccessDeniedEvent,

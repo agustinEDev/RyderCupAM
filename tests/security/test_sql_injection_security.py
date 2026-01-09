@@ -71,7 +71,7 @@ class TestSQLInjectionLoginEndpoint:
 
             # Debe fallar con 401 (credenciales inválidas), NO con error de BD
             assert response.status_code in [401, 404], \
-                f"SQL injection en password debe fallar con 401/404, no con error de BD"
+                "SQL injection en password debe fallar con 401/404, no con error de BD"
 
 
 @pytest.mark.asyncio
@@ -122,7 +122,7 @@ class TestSQLInjectionCompetitionEndpoint:
         When: Se crea una competición con nombre malicioso
         Then: El nombre debe ser sanitizado y almacenado de forma segura
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         malicious_name = "Competition'; DROP TABLE competitions--"
 

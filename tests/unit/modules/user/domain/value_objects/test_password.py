@@ -2,7 +2,6 @@ import bcrypt
 import pytest
 
 from src.modules.user.domain.value_objects.password import InvalidPasswordError, Password
-from src.shared.security.password_blacklist import is_common_password
 
 
 class TestPasswordCreation:
@@ -42,12 +41,12 @@ class TestPasswordValidation:
     def test_empty_password_raises_error(self):
         """Password vacío debe lanzar InvalidPasswordError"""
         with pytest.raises(InvalidPasswordError, match="debe tener al menos 12 caracteres"):
-            Password.from_plain_text("")  # type: ignore[arg-type]  # noqa: S5655
+            Password.from_plain_text("")  # type: ignore[arg-type]
 
     def test_none_password_raises_error(self):
         """Password None debe lanzar InvalidPasswordError"""
         with pytest.raises(InvalidPasswordError):
-            Password.from_plain_text(None)  # type: ignore[arg-type]  # noqa: S5655
+            Password.from_plain_text(None)  # type: ignore[arg-type]
 
     def test_short_password_raises_error(self):
         """Password menor a 12 caracteres debe lanzar InvalidPasswordError (OWASP V2.1.1)"""

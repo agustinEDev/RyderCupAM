@@ -9,7 +9,6 @@ Arquitectura:
 - Módulo: User
 - Feature: Session Timeout with Refresh Tokens (OWASP A01/A02/A07)
 """
-import pytest
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken

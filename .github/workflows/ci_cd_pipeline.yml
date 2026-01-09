@@ -432,8 +432,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
           GITLEAKS_ENABLE_COMMENTS: false
-        with:
-          args: --no-git
+          GITLEAKS_NOTIFY_USER_LIST: ""
         continue-on-error: true
 
       - name: Generate Security Summary

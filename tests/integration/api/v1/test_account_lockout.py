@@ -9,12 +9,8 @@ Tests the complete flow:
 - Successful login resets counter
 """
 
-import asyncio
 import pytest
-from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
-
-from src.modules.user.domain.entities.user import MAX_FAILED_ATTEMPTS
 
 
 @pytest.mark.asyncio

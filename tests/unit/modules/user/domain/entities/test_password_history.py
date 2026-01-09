@@ -9,15 +9,14 @@ Arquitectura:
 - Módulo: User
 - Feature: Password History (OWASP A07)
 """
-import pytest
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.entities.password_history import PasswordHistory
+from src.modules.user.domain.events.password_history_recorded_event import (
+    PasswordHistoryRecordedEvent,
+)
 from src.modules.user.domain.value_objects.password_history_id import PasswordHistoryId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.domain.events.password_history_recorded_event import (
-    PasswordHistoryRecordedEvent
-)
 
 
 class TestPasswordHistoryCreation:

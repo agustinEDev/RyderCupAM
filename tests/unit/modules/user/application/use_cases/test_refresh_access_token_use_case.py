@@ -9,9 +9,10 @@ Arquitectura:
 - Módulo: User
 - Feature: Session Timeout with Refresh Tokens
 """
-import pytest
-from unittest.mock import AsyncMock, Mock
 from datetime import datetime, timedelta
+from unittest.mock import Mock
+
+import pytest
 
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
@@ -22,11 +23,8 @@ from src.modules.user.application.use_cases.refresh_access_token_use_case import
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )

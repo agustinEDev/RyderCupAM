@@ -14,7 +14,6 @@ from tests.conftest import (
     activate_competition,
     create_authenticated_user,
     create_competition,
-    set_auth_cookies,
 )
 
 

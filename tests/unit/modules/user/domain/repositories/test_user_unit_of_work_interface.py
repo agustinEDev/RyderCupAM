@@ -10,8 +10,12 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.modules.user.domain.repositories.password_history_repository_interface import PasswordHistoryRepositoryInterface
-from src.modules.user.domain.repositories.refresh_token_repository_interface import RefreshTokenRepositoryInterface
+from src.modules.user.domain.repositories.password_history_repository_interface import (
+    PasswordHistoryRepositoryInterface,
+)
+from src.modules.user.domain.repositories.refresh_token_repository_interface import (
+    RefreshTokenRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface

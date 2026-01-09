@@ -8,40 +8,43 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()  # Cargar variables de entorno desde .env
-import secrets
-from contextlib import asynccontextmanager
 
-import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from secure import Secure
+# All imports below must be after load_dotenv() to access environment variables
+# ruff: noqa: I001 - Import sorting disabled after load_dotenv()
+import secrets  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
 
-from src.config.settings import settings
-from src.config.sentry_config import init_sentry
-from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+import uvicorn  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+from secure import Secure  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
+from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.rate_limit import limiter  # noqa: E402
+from src.config.sentry_config import init_sentry  # noqa: E402
+from src.config.settings import settings  # noqa: E402
+from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes  # noqa: E402
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
 )
-from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers
-from src.shared.infrastructure.api.v1 import country_routes
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes  # noqa: E402
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers  # noqa: E402
+from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
+from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware  # noqa: E402
+from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware  # noqa: E402
+from src.shared.infrastructure.middleware.csrf_middleware import CSRFMiddleware  # noqa: E402
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (  # noqa: E402
     start_mappers as start_country_mappers,
 )
-from src.config.rate_limit import limiter
-from src.config.cors_config import get_cors_config
-from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware
-from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware
-from src.shared.infrastructure.middleware.csrf_middleware import CSRFMiddleware
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signature
     """
     Gestor de ciclo de vida de la aplicación.
     - Inicializa Sentry para error tracking y performance monitoring
@@ -185,30 +188,30 @@ if ENV != "production":
     async def debug_cors_requests(request, call_next):
         origin = request.headers.get('origin', 'N/A')
         method = request.method
-        
+
         # Log de peticiones con origen
         if origin != 'N/A':
             print(f"🌍 {method} request to: {request.url.path}")
             print(f"   Origin: {origin}")
-            
+
             if method == "OPTIONS":
                 print(f"   Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'N/A')}")
                 print(f"   Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'N/A')}")
-        
+
         response = await call_next(request)
-        
+
         # Log de respuesta CORS
         if origin != 'N/A':
             print(f"   Response status: {response.status_code}")
             cors_headers = {
-                k: v for k, v in response.headers.items() 
+                k: v for k, v in response.headers.items()
                 if 'access-control' in k.lower() or 'vary' in k.lower()
             }
             if cors_headers:
                 print(f"   CORS headers: {cors_headers}")
             else:
-                print(f"   ⚠️  NO CORS headers in response!")
-                
+                print("   ⚠️  NO CORS headers in response!")
+
         return response
 
 # Incluir los routers de la API
@@ -249,13 +252,13 @@ app.include_router(
 
 # Endpoints protegidos de documentación con HTTP Basic Auth
 @app.get("/docs", include_in_schema=False)
-async def get_documentation(username: str = Depends(verify_docs_credentials)):
+async def get_documentation(username: str = Depends(verify_docs_credentials)):  # noqa: ARG001
     """Swagger UI protegido con HTTP Basic Auth."""
     return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
 
 
 @app.get("/redoc", include_in_schema=False)
-async def get_redoc_documentation(username: str = Depends(verify_docs_credentials)):
+async def get_redoc_documentation(username: str = Depends(verify_docs_credentials)):  # noqa: ARG001
     """ReDoc UI protegido con HTTP Basic Auth."""
     return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
 

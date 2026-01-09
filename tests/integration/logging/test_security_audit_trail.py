@@ -102,7 +102,7 @@ class TestSecurityAuditTrail:
         await client.post("/api/v1/auth/register", json=register_data)
 
         # Login (genera refresh token)
-        login_response = await client.post(
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "refresh.audit@example.com",

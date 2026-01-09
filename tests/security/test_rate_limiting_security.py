@@ -125,7 +125,7 @@ class TestCompetitionRateLimiting:
         When: Se intentan crear 11 competiciones consecutivas
         Then: La 11va debe ser bloqueada con 429
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         # Realizar 10 intentos (dentro del límite)
         for i in range(10):

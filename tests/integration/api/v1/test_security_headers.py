@@ -223,7 +223,7 @@ class TestSecurityHeaders:
 
             # No importa el status code (puede ser 200, 401, 405 Method Not Allowed, etc.)
             headers = response.headers
-            headers_lower = {k.lower() for k in headers.keys()}
+            headers_lower = {k.lower() for k in headers}
 
             # Verificar que todos los required_headers están presentes
             missing_headers = required_headers - headers_lower

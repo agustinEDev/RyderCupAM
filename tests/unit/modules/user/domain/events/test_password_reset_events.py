@@ -13,8 +13,6 @@ Estructura:
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-import pytest
-
 from src.modules.user.domain.events.password_reset_completed_event import (
     PasswordResetCompletedEvent,
 )

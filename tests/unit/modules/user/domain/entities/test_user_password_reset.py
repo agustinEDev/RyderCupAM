@@ -13,13 +13,16 @@ Estructura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.password_reset_completed_event import PasswordResetCompletedEvent
-from src.modules.user.domain.events.password_reset_requested_event import PasswordResetRequestedEvent
+from src.modules.user.domain.events.password_reset_completed_event import (
+    PasswordResetCompletedEvent,
+)
+from src.modules.user.domain.events.password_reset_requested_event import (
+    PasswordResetRequestedEvent,
+)
 
 
 class TestGeneratePasswordResetToken:

@@ -303,6 +303,7 @@ class TestHttpOnlyCookies:
         # Given: Cliente sin autenticación (sin cookie, sin header)
         # Crear un cliente nuevo sin cookies
         from httpx import AsyncClient as FreshClient
+
         from main import app
 
         async with FreshClient(app=app, base_url="http://test") as fresh_client:

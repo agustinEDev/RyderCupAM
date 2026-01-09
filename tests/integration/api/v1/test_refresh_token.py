@@ -115,6 +115,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Cliente nuevo sin refresh token cookie
         from httpx import AsyncClient as FreshClient
+
         from main import app
 
         async with FreshClient(app=app, base_url="http://test") as fresh_client:

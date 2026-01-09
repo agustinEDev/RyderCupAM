@@ -245,13 +245,12 @@ class TestCORSConfiguration:
         Then: Solo incluye los orígenes de FRONTEND_ORIGINS
         """
         # Arrange & Act
-        from src.config.cors_config import get_allowed_origins
-
         # Necesitamos reimportar el módulo para que lea las nuevas variables
         import importlib
+
         import src.config.cors_config
-        importlib.reload(src.config.cors_config)
         from src.config.cors_config import get_allowed_origins
+        importlib.reload(src.config.cors_config)
 
         allowed_origins = get_allowed_origins()
 
@@ -276,7 +275,7 @@ class TestCORSConfiguration:
         Then: Response incluye headers CORS correctos
         """
         # Arrange
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
         headers = {
             "Origin": "http://localhost:5173",
         }
