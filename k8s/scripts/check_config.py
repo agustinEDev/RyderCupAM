@@ -46,14 +46,21 @@ def detect_environment() -> str:
 
     Returns:
         str: "local", "kubernetes", "production", o "unknown"
-    """
-    frontend_url = settings.FRONTEND_URL
 
-    if "localhost:5173" in frontend_url:
+    Security:
+        Uses startswith() to prevent URL injection attacks (CodeQL CWE-20).
+        Rejects malicious URLs like: http://evil.com?redirect=rydercupfriends.com
+    """
+    frontend_url = settings.FRONTEND_URL.lower()
+
+    # Validación estricta: debe empezar con el protocolo + dominio esperado
+    if frontend_url.startswith("http://localhost:5173"):
         return "local"
-    if "localhost:8080" in frontend_url:
+    if frontend_url.startswith("http://localhost:8080"):
         return "kubernetes"
-    if "rydercupfriends.com" in frontend_url or "onrender.com" in frontend_url:
+    if frontend_url.startswith("https://rydercupfriends.com") or frontend_url.startswith(
+        "https://rydercupam.onrender.com"
+    ):
         return "production"
     return "unknown"
 
