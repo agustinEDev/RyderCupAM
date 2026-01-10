@@ -122,7 +122,7 @@ def start_mappers():
             },
         )
 
-    # Mapear RefreshToken y PasswordHistory entities
+    # Mapear RefreshToken, PasswordHistory y UserDevice entities
     # Imports dinámicos necesarios para evitar circular imports
     from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_mapper import (  # noqa: PLC0415
         start_mappers as start_password_history_mappers,
@@ -130,6 +130,10 @@ def start_mappers():
     from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (  # noqa: PLC0415
         start_mappers as start_refresh_token_mappers,
     )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (  # noqa: PLC0415
+        start_user_device_mappers,
+    )
 
     start_refresh_token_mappers()
     start_password_history_mappers()
+    start_user_device_mappers()

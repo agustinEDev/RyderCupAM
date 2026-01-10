@@ -15,6 +15,9 @@ from ..repositories.password_history_repository_interface import (
 from ..repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from ..repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
+)
 from ..repositories.user_repository_interface import UserRepositoryInterface
 
 
@@ -29,6 +32,7 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
     - users: UserRepositoryInterface
     - refresh_tokens: RefreshTokenRepositoryInterface (Session Timeout)
     - password_history: PasswordHistoryRepositoryInterface (Password History)
+    - user_devices: UserDeviceRepositoryInterface (Device Fingerprinting)
 
     Uso típico en casos de uso:
     ```python
@@ -97,5 +101,25 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             PasswordHistoryRepositoryInterface: Repositorio de password history transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def user_devices(self) -> UserDeviceRepositoryInterface:
+        """
+        Acceso al repositorio de dispositivos de usuario dentro de la transacción.
+
+        Proporciona una instancia del repositorio de user devices que participa
+        en la misma transacción que otros repositorios del Unit of Work.
+
+        Device Fingerprinting (v1.13.0):
+        - Permite registrar/actualizar dispositivos en login/refresh
+        - Permite listar dispositivos activos del usuario
+        - Permite revocar dispositivos sospechosos
+        - Mantiene consistencia transaccional con users
+
+        Returns:
+            UserDeviceRepositoryInterface: Repositorio de user devices transaccional
         """
         pass

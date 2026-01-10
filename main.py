@@ -33,7 +33,7 @@ from src.modules.competition.infrastructure.api.v1 import competition_routes, en
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
 )
-from src.modules.user.infrastructure.api.v1 import auth_routes, handicap_routes, user_routes  # noqa: E402
+from src.modules.user.infrastructure.api.v1 import auth_routes, device_routes, handicap_routes, user_routes  # noqa: E402
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers  # noqa: E402
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware  # noqa: E402
@@ -133,7 +133,8 @@ app.state.limiter = limiter
 
 # Registrar el exception handler para RateLimitExceeded
 # Cuando se excede el límite, se responde automáticamente con HTTP 429
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# slowapi's handler is sync but FastAPI accepts both sync and async
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # ================================
 # MIDDLEWARE STACK
@@ -242,6 +243,12 @@ app.include_router(
     user_routes.router,
     prefix="/api/v1/users",
     tags=["Users"],
+)
+
+app.include_router(
+    device_routes.router,
+    prefix="/api/v1",
+    tags=["Devices"],
 )
 
 app.include_router(

@@ -6,6 +6,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -17,6 +20,9 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_rep
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_repository import (
     SQLAlchemyRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_repository import (
+    SQLAlchemyUserDeviceRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
@@ -31,6 +37,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     - users: SQLAlchemyUserRepository
     - refresh_tokens: SQLAlchemyRefreshTokenRepository (Session Timeout)
     - password_history: SQLAlchemyPasswordHistoryRepository (Password History)
+    - user_devices: SQLAlchemyUserDeviceRepository (Device Fingerprinting)
     """
 
     def __init__(self, session: AsyncSession):
@@ -38,6 +45,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         self._users = SQLAlchemyUserRepository(session)
         self._refresh_tokens = SQLAlchemyRefreshTokenRepository(session)
         self._password_history = SQLAlchemyPasswordHistoryRepository(session)
+        self._user_devices = SQLAlchemyUserDeviceRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
@@ -50,6 +58,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     @property
     def password_history(self) -> PasswordHistoryRepositoryInterface:
         return self._password_history
+
+    @property
+    def user_devices(self) -> UserDeviceRepositoryInterface:
+        return self._user_devices
 
     async def __aenter__(self):
         return self

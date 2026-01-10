@@ -6,7 +6,7 @@ define correctamente los contratos esperados.
 """
 
 from abc import ABC
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -15,6 +15,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 )
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
 )
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
@@ -71,6 +74,10 @@ class TestUserUnitOfWorkInterface:
             @property
             def password_history(self) -> PasswordHistoryRepositoryInterface:
                 return self._password_history
+
+            @property
+            def user_devices(self):
+                return MagicMock()
 
             async def __aenter__(self):
                 self._active = True
@@ -181,6 +188,10 @@ class TestUserUnitOfWorkContractCompliance:
             def password_history(self) -> PasswordHistoryRepositoryInterface:
                 return self._password_history_repo
 
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -252,6 +263,10 @@ class TestUserUnitOfWorkContractCompliance:
             def password_history(self) -> PasswordHistoryRepositoryInterface:
                 return self._password_history_repo
 
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -314,6 +329,10 @@ class TestUserUnitOfWorkIntegration:
             @property
             def password_history(self) -> PasswordHistoryRepositoryInterface:
                 return self._password_history_repo
+
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
 
             async def __aenter__(self):
                 return self

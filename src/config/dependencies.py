@@ -69,6 +69,9 @@ from src.modules.user.application.use_cases.find_user_use_case import FindUserUs
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
 )
+from src.modules.user.application.use_cases.list_user_devices_use_case import (
+    ListUserDevicesUseCase,
+)
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
@@ -87,6 +90,9 @@ from src.modules.user.application.use_cases.resend_verification_email_use_case i
 )
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
+)
+from src.modules.user.application.use_cases.revoke_device_use_case import (
+    RevokeDeviceUseCase,
 )
 from src.modules.user.application.use_cases.unlock_account_use_case import (
     UnlockAccountUseCase,
@@ -794,3 +800,36 @@ def get_unlock_account_use_case(
 ) -> UnlockAccountUseCase:
     """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0 - Account Lockout)."""
     return UnlockAccountUseCase(uow)
+
+
+# ============================================================================
+# Device Fingerprinting Use Cases (v1.13.0)
+# ============================================================================
+
+
+def get_list_user_devices_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListUserDevicesUseCase:
+    """
+    Proveedor del caso de uso ListUserDevicesUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `ListUserDevicesUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint GET /users/me/devices.
+    """
+    return ListUserDevicesUseCase(uow)
+
+
+def get_revoke_device_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RevokeDeviceUseCase:
+    """
+    Proveedor del caso de uso RevokeDeviceUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `RevokeDeviceUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
+    """
+    return RevokeDeviceUseCase(uow)

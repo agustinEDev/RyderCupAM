@@ -4,6 +4,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -15,6 +18,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_password_hi
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_refresh_token_repository import (
     InMemoryRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_device_repository import (
+    InMemoryUserDeviceRepository,
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_repository import (
     InMemoryUserRepository,
@@ -30,6 +36,7 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
         self._users = InMemoryUserRepository()
         self._refresh_tokens = InMemoryRefreshTokenRepository()
         self._password_history = InMemoryPasswordHistoryRepository()
+        self._user_devices = InMemoryUserDeviceRepository()
         self.committed = False
 
     @property
@@ -46,6 +53,11 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
     def password_history(self) -> PasswordHistoryRepositoryInterface:
         """Propiedad para acceder al repositorio de password history."""
         return self._password_history
+
+    @property
+    def user_devices(self) -> UserDeviceRepositoryInterface:
+        """Propiedad para acceder al repositorio de user devices."""
+        return self._user_devices
 
     async def __aenter__(self):
         self.committed = False
