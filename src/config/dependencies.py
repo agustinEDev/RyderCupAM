@@ -255,7 +255,9 @@ def get_register_user_use_case(
     )
 
 
-def get_find_user_use_case(uow: UserUnitOfWorkInterface = Depends(get_uow)) -> FindUserUseCase:
+def get_find_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> FindUserUseCase:
     """
     Proveedor del caso de uso FindUserUseCase.
 
@@ -332,7 +334,9 @@ def get_login_user_use_case(
     return LoginUserUseCase(uow, token_service)
 
 
-def get_logout_user_use_case(uow: UserUnitOfWorkInterface = Depends(get_uow)) -> LogoutUserUseCase:
+def get_logout_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> LogoutUserUseCase:
     """
     Proveedor del caso de uso LogoutUserUseCase.
 

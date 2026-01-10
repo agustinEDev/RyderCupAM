@@ -62,7 +62,9 @@ class ResetPasswordUseCase:
         self._uow = uow
         self._email_service = email_service
 
-    async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
+    async def execute(
+        self, request: ResetPasswordRequestDTO
+    ) -> ResetPasswordResponseDTO:
         """
         Ejecuta el caso de uso de reseteo de contraseña.
 
@@ -142,7 +144,9 @@ class ResetPasswordUseCase:
         # Todas las operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
         async with self._uow:
             # Guardar el nuevo hash en el historial de contraseñas
-            total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
+            total_history_count = (
+                await self._uow.password_history.count_by_user(user.id) + 1
+            )
             password_history = PasswordHistory.create(
                 user_id=user.id,
                 password_hash=user.password.hashed_value,

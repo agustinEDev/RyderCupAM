@@ -240,7 +240,12 @@ class TestSanitizeAllFields:
         Then: Todos los niveles se sanitizan
         """
         # Arrange
-        data = {"user": {"name": "<script>XSS</script>", "address": {"street": "<b>Main St</b>"}}}
+        data = {
+            "user": {
+                "name": "<script>XSS</script>",
+                "address": {"street": "<b>Main St</b>"},
+            }
+        }
 
         # Act
         result = sanitize_all_fields(data)

@@ -41,7 +41,9 @@ class Logger(ABC):
     """
 
     @abstractmethod
-    def debug(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
+    def debug(
+        self, message: str, extra: dict[str, Any] | None = None, **kwargs
+    ) -> None:
         """
         Registra un mensaje de debug.
 
@@ -65,7 +67,9 @@ class Logger(ABC):
         pass
 
     @abstractmethod
-    def warning(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
+    def warning(
+        self, message: str, extra: dict[str, Any] | None = None, **kwargs
+    ) -> None:
         """
         Registra una advertencia.
 
@@ -116,7 +120,11 @@ class Logger(ABC):
 
     @abstractmethod
     def log(
-        self, level: LogLevel, message: str, extra: dict[str, Any] | None = None, **kwargs
+        self,
+        level: LogLevel,
+        message: str,
+        extra: dict[str, Any] | None = None,
+        **kwargs,
     ) -> None:
         """
         Registra un mensaje con nivel específico.

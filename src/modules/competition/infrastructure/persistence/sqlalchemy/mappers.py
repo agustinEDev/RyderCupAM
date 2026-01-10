@@ -8,7 +8,16 @@ Sigue el patrón Imperative Mapping establecido en el módulo User.
 import uuid
 from datetime import date
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Table
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Table,
+)
 from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -18,11 +27,17 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 
 # Value Objects - Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_name import CompetitionName
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_name import (
+    CompetitionName,
+)
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
     HandicapType,
@@ -37,7 +52,10 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 
 # Importar registry y metadata centralizados
-from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata,
+)
 
 COUNTRIES_CODE_FK = "countries.code"
 
@@ -54,7 +72,9 @@ class CompetitionIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: CompetitionId | str | None, dialect) -> str | None:
+    def process_bind_param(
+        self, value: CompetitionId | str | None, dialect
+    ) -> str | None:
         """Convierte CompetitionId o str a string para BD."""
         if isinstance(value, CompetitionId):
             return str(value.value)
@@ -77,7 +97,9 @@ class EnrollmentIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: EnrollmentId | str | None, dialect) -> str | None:
+    def process_bind_param(
+        self, value: EnrollmentId | str | None, dialect
+    ) -> str | None:
         """Convierte EnrollmentId o str a string para BD."""
         if isinstance(value, EnrollmentId):
             return str(value.value)
@@ -124,7 +146,9 @@ class CountryCodeDecorator(TypeDecorator):
     impl = CHAR(2)
     cache_ok = True
 
-    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
+    def process_bind_param(
+        self, value: CountryCode | str | None, dialect
+    ) -> str | None:
         """Convierte CountryCode o str a string para BD."""
         if isinstance(value, CountryCode):
             return str(value.value)
@@ -280,7 +304,9 @@ class HandicapSettingsComposite:
         return (None, None)
 
     def __eq__(self, other):
-        return isinstance(other, HandicapSettingsComposite) and self.value == other.value
+        return (
+            isinstance(other, HandicapSettingsComposite) and self.value == other.value
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -309,7 +335,9 @@ class CompetitionStatusComposite:
         return (self.value.value if self.value else None,)
 
     def __eq__(self, other):
-        return isinstance(other, CompetitionStatusComposite) and self.value == other.value
+        return (
+            isinstance(other, CompetitionStatusComposite) and self.value == other.value
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -336,7 +364,9 @@ class EnrollmentStatusComposite:
         return (self.value.value if self.value else None,)
 
     def __eq__(self, other):
-        return isinstance(other, EnrollmentStatusComposite) and self.value == other.value
+        return (
+            isinstance(other, EnrollmentStatusComposite) and self.value == other.value
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -361,7 +391,10 @@ competitions_table = Table(
     metadata,
     Column("id", CompetitionIdDecorator, primary_key=True),
     Column(
-        "creator_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        "creator_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     ),
     Column("name", String(200), nullable=False),
     Column("start_date", Date, nullable=False),
@@ -410,7 +443,12 @@ enrollments_table = Table(
         ForeignKey("competitions.id", ondelete="CASCADE"),
         nullable=False,
     ),
-    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
     Column("status", String(20), nullable=False),
     Column("team_id", String(10), nullable=True),
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
@@ -448,23 +486,31 @@ def start_competition_mappers():
                 # que SQLAlchemy intente mapear automáticamente los públicos
                 # 1. CompetitionName
                 "_name_value": competitions_table.c.name,
-                "name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
+                "name": composite(
+                    lambda n: CompetitionName(n) if n else None, "_name_value"
+                ),
                 # 2. DateRange
                 "_start_date": competitions_table.c.start_date,
                 "_end_date": competitions_table.c.end_date,
                 "dates": composite(
-                    lambda s, e: DateRange(s, e) if s and e else None, "_start_date", "_end_date"
+                    lambda s, e: DateRange(s, e) if s and e else None,
+                    "_start_date",
+                    "_end_date",
                 ),
                 # 3. Location (3 países)
                 "_country_code": competitions_table.c.country_code,
                 "_secondary_country_code": competitions_table.c.secondary_country_code,
                 "_tertiary_country_code": competitions_table.c.tertiary_country_code,
                 "location": composite(
-                    lambda c1, c2, c3: Location(
-                        main_country=c1, adjacent_country_1=c2, adjacent_country_2=c3
-                    )
-                    if c1
-                    else None,
+                    lambda c1, c2, c3: (
+                        Location(
+                            main_country=c1,
+                            adjacent_country_1=c2,
+                            adjacent_country_2=c3,
+                        )
+                        if c1
+                        else None
+                    ),
                     "_country_code",
                     "_secondary_country_code",
                     "_tertiary_country_code",

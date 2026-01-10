@@ -8,7 +8,9 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -103,7 +105,9 @@ class ListCompetitionsUseCase:
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:
                 creator_user_id = UserId(creator_id)
-                competitions = [c for c in competitions if c.creator_id == creator_user_id]
+                competitions = [
+                    c for c in competitions if c.creator_id == creator_user_id
+                ]
 
             return competitions
 

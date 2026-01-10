@@ -175,7 +175,9 @@ class LogConfig:
             level=LogLevel.DEBUG,
             environment="development",
             handlers=[
-                HandlerConfig(type=LogHandler.CONSOLE, level=LogLevel.DEBUG, format=LogFormat.TEXT)
+                HandlerConfig(
+                    type=LogHandler.CONSOLE, level=LogLevel.DEBUG, format=LogFormat.TEXT
+                )
             ],
         )
 
@@ -187,7 +189,9 @@ class LogConfig:
             environment="production",
             handlers=[
                 HandlerConfig(
-                    type=LogHandler.CONSOLE, level=LogLevel.WARNING, format=LogFormat.JSON
+                    type=LogHandler.CONSOLE,
+                    level=LogLevel.WARNING,
+                    format=LogFormat.JSON,
                 ),
                 HandlerConfig(
                     type=LogHandler.ROTATING_FILE,

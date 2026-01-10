@@ -92,7 +92,9 @@ class DeleteCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError("Solo el creador puede eliminar la competición")
+                raise NotCompetitionCreatorError(
+                    "Solo el creador puede eliminar la competición"
+                )
 
             # 3. Verificar que esté en estado DRAFT
             if not competition.is_draft():
@@ -113,5 +115,8 @@ class DeleteCompetitionUseCase:
 
         # 7. Retornar DTO de respuesta
         return DeleteCompetitionResponseDTO(
-            id=competition_id_value, name=competition_name, deleted=True, deleted_at=datetime.now()
+            id=competition_id_value,
+            name=competition_name,
+            deleted=True,
+            deleted_at=datetime.now(),
         )

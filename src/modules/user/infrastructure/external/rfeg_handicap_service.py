@@ -12,7 +12,9 @@ from typing import ClassVar
 
 import httpx
 
-from src.modules.user.domain.errors.handicap_errors import HandicapServiceUnavailableError
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapServiceUnavailableError,
+)
 from src.modules.user.domain.services.handicap_service import HandicapService
 
 
@@ -171,7 +173,10 @@ class RFEGHandicapService(HandicapService):
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                self.URL_API_HANDICAP, params=params, headers=api_headers, timeout=self._timeout
+                self.URL_API_HANDICAP,
+                params=params,
+                headers=api_headers,
+                timeout=self._timeout,
             )
             response.raise_for_status()
 

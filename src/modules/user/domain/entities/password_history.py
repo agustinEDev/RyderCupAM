@@ -148,9 +148,7 @@ class PasswordHistory:
 
     def __str__(self) -> str:
         """Representación string del historial (sin mostrar hash completo)."""
-        return (
-            f"PasswordHistory(id={self.id}, user_id={self.user_id}, created_at={self.created_at})"
-        )
+        return f"PasswordHistory(id={self.id}, user_id={self.user_id}, created_at={self.created_at})"
 
     def __repr__(self) -> str:
         """Representación para debugging."""

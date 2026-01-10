@@ -196,7 +196,9 @@ class TestRevokeDeviceUseCase:
         Then: Solo 1 aparece en listado activo
         """
         # Arrange
-        from src.modules.user.application.dto.device_dto import ListUserDevicesRequestDTO
+        from src.modules.user.application.dto.device_dto import (
+            ListUserDevicesRequestDTO,
+        )
         from src.modules.user.application.use_cases.list_user_devices_use_case import (
             ListUserDevicesUseCase,
         )

@@ -76,7 +76,9 @@ class CancelEnrollmentUseCase:
             # 1. Obtener enrollment
             enrollment = await self._uow.enrollments.find_by_id(enrollment_id)
             if not enrollment:
-                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
+                raise EnrollmentNotFoundError(
+                    f"Inscripción no encontrada: {request.enrollment_id}"
+                )
 
             # 2. Verificar que es el dueño
             if enrollment.user_id != user_id:

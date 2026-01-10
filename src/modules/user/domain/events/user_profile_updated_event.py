@@ -85,9 +85,13 @@ class UserProfileUpdatedEvent(DomainEvent):
         """Representación string legible del evento."""
         changes = []
         if self.has_first_name_change:
-            changes.append(f"first_name: {self.old_first_name} -> {self.new_first_name}")
+            changes.append(
+                f"first_name: {self.old_first_name} -> {self.new_first_name}"
+            )
         if self.has_last_name_change:
             changes.append(f"last_name: {self.old_last_name} -> {self.new_last_name}")
 
         changes_str = ", ".join(changes)
-        return f"UserProfileUpdatedEvent(user_id={self.user_id}, changes=[{changes_str}])"
+        return (
+            f"UserProfileUpdatedEvent(user_id={self.user_id}, changes=[{changes_str}])"
+        )

@@ -22,7 +22,9 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidCredentialsError,
     UserNotFoundError,
 )
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -39,7 +41,9 @@ class UpdateSecurityUseCase:
     requiriendo verificación de la contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
+    def __init__(
+        self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -84,7 +88,9 @@ class UpdateSecurityUseCase:
     ) -> tuple[bool, int]:
         """Maneja el cambio de password, valida historial y revoca refresh tokens."""
         # Validar que la nueva contraseña no esté en el historial (últimas 5)
-        recent_history = await self._uow.password_history.find_recent_by_user(user_id_vo, limit=5)
+        recent_history = await self._uow.password_history.find_recent_by_user(
+            user_id_vo, limit=5
+        )
 
         # Verificar si la nueva contraseña coincide con alguna del historial
         for history_record in recent_history:
@@ -98,7 +104,9 @@ class UpdateSecurityUseCase:
         user.change_password(new_password)
 
         # Guardar el nuevo hash en el historial
-        total_history_count = await self._uow.password_history.count_by_user(user_id_vo) + 1
+        total_history_count = (
+            await self._uow.password_history.count_by_user(user_id_vo) + 1
+        )
         password_history = PasswordHistory.create(
             user_id=user_id_vo,
             password_hash=user.password.hashed_value,
@@ -163,15 +171,19 @@ class UpdateSecurityUseCase:
 
         try:
             email_sent = self._email_service.send_verification_email(
-                to_email=new_email, user_name=user.first_name, verification_token=verification_token
+                to_email=new_email,
+                user_name=user.first_name,
+                verification_token=verification_token,
             )
             if not email_sent:
                 logger.warning(
-                    "No se pudo enviar el email de verificación para el usuario %s", user.id.value
+                    "No se pudo enviar el email de verificación para el usuario %s",
+                    user.id.value,
                 )
         except (requests.RequestException, ValueError, ConnectionError):
             logger.exception(
-                "Error al enviar email de verificación para el usuario %s", user.id.value
+                "Error al enviar email de verificación para el usuario %s",
+                user.id.value,
             )
 
     async def execute(
@@ -225,8 +237,10 @@ class UpdateSecurityUseCase:
 
             # Procesar cambio de password
             if request.new_password:
-                password_changed, tokens_revoked_count = await self._handle_password_change(
-                    user, request.new_password, user_id_vo
+                password_changed, tokens_revoked_count = (
+                    await self._handle_password_change(
+                        user, request.new_password, user_id_vo
+                    )
                 )
 
             # Guardar cambios

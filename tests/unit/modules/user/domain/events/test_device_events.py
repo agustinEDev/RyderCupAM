@@ -11,7 +11,9 @@ Este archivo contiene tests que verifican:
 from datetime import datetime
 
 from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
-from src.modules.user.domain.events.new_device_detected_event import NewDeviceDetectedEvent
+from src.modules.user.domain.events.new_device_detected_event import (
+    NewDeviceDetectedEvent,
+)
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 

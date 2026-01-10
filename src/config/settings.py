@@ -38,7 +38,8 @@ class Settings:
 
     # Database Configuration
     DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/ryderclub"
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/ryderclub",
     )
 
     # Mailgun Configuration
@@ -63,8 +64,12 @@ class Settings:
     # - SENTRY_PROFILES_SAMPLE_RATE: % de perfiles a capturar (0.0-1.0)
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
     SENTRY_ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
-    SENTRY_PROFILES_SAMPLE_RATE: float = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
+    SENTRY_TRACES_SAMPLE_RATE: float = float(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
+    )
+    SENTRY_PROFILES_SAMPLE_RATE: float = float(
+        os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1")
+    )
 
 
 settings = Settings()

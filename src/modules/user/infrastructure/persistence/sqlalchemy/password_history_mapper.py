@@ -16,7 +16,10 @@ from src.modules.user.domain.value_objects.password_history_id import PasswordHi
 from src.modules.user.domain.value_objects.user_id import UserId
 
 # Importar registry y metadata centralizados
-from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata,
+)
 
 
 # --- TypeDecorator para PasswordHistoryId ---
@@ -68,7 +71,12 @@ password_history_table = Table(
     "password_history",
     metadata,
     Column("id", PasswordHistoryIdDecorator, primary_key=True),
-    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
     Column("password_hash", String(255), nullable=False),
     Column("created_at", DateTime, nullable=False),
 )

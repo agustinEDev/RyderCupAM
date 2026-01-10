@@ -166,7 +166,9 @@ class TestActivateCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await activate_use_case.execute(activate_request, creator_id)
 
-        assert "No se puede activar una competición en estado ACTIVE" in str(exc_info.value)
+        assert "No se puede activar una competición en estado ACTIVE" in str(
+            exc_info.value
+        )
 
     async def test_should_raise_error_when_competition_is_completed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -207,7 +209,9 @@ class TestActivateCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await activate_use_case.execute(activate_request, creator_id)
 
-        assert "No se puede activar una competición en estado COMPLETED" in str(exc_info.value)
+        assert "No se puede activar una competición en estado COMPLETED" in str(
+            exc_info.value
+        )
 
     async def test_should_emit_domain_event_when_activated(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

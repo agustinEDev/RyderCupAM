@@ -102,9 +102,13 @@ class TestDomainEventsIntegration:
 
         # Mock de métodos para todos los handlers
         with (
-            patch.object(UserRegisteredEventHandler, "_send_welcome_email") as mock_email,
+            patch.object(
+                UserRegisteredEventHandler, "_send_welcome_email"
+            ) as mock_email,
             patch.object(UserRegisteredEventHandler, "_log_registration") as mock_log,
-            patch.object(UserRegisteredEventHandler, "_notify_external_systems") as mock_notify,
+            patch.object(
+                UserRegisteredEventHandler, "_notify_external_systems"
+            ) as mock_notify,
         ):
             # Act
             await event_bus.publish_all(user.get_domain_events())

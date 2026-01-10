@@ -10,7 +10,10 @@ from src.shared.domain.entities.country import Country
 from src.shared.domain.value_objects.country_code import CountryCode
 
 # Importar registry y metadata centralizados
-from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata,
+)
 
 
 # --- TypeDecorator para CountryCode ---
@@ -26,7 +29,9 @@ class CountryCodeDecorator(TypeDecorator):
     impl = CHAR(2)
     cache_ok = True
 
-    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
+    def process_bind_param(
+        self, value: CountryCode | str | None, dialect
+    ) -> str | None:
         """
         Convierte CountryCode o str a string para guardar en BD.
 

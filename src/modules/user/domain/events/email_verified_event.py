@@ -52,7 +52,9 @@ class EmailVerifiedEvent(DomainEvent):
             {
                 "user_id": self.user_id,
                 "email": self.email,
-                "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+                "verified_at": (
+                    self.verified_at.isoformat() if self.verified_at else None
+                ),
             }
         )
         base_dict["data"] = data

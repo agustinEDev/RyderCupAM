@@ -61,7 +61,9 @@ class IEmailService(ABC):
         pass
 
     @abstractmethod
-    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
+    async def send_password_changed_notification(
+        self, to_email: str, user_name: str
+    ) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 

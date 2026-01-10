@@ -23,9 +23,10 @@ class TestProtectedEndpointsRequireAuth:
         """
         response = await client.get("/api/v1/competitions")
 
-        assert response.status_code in [401, 403], (
-            "Listar competiciones sin token debe retornar 401 o 403"
-        )
+        assert response.status_code in [
+            401,
+            403,
+        ], "Listar competiciones sin token debe retornar 401 o 403"
 
     async def test_search_users_requires_authentication(self, client: AsyncClient):
         """
@@ -35,11 +36,16 @@ class TestProtectedEndpointsRequireAuth:
         """
         response = await client.get("/api/v1/users/search?query=test")
 
-        assert response.status_code in [401, 403, 404, 405], (
-            "Buscar usuarios sin token debe retornar 401, 403, 404 o 405"
-        )
+        assert response.status_code in [
+            401,
+            403,
+            404,
+            405,
+        ], "Buscar usuarios sin token debe retornar 401, 403, 404 o 405"
 
-    async def test_create_competition_without_token_returns_401(self, client: AsyncClient):
+    async def test_create_competition_without_token_returns_401(
+        self, client: AsyncClient
+    ):
         """
         Given: El endpoint POST /competitions requiere autenticación
         When: Se intenta crear competición sin token
@@ -58,9 +64,10 @@ class TestProtectedEndpointsRequireAuth:
 
         response = await client.post("/api/v1/competitions", json=competition_data)
 
-        assert response.status_code in [401, 403], (
-            "Creación de competición sin token debe retornar 401 o 403"
-        )
+        assert response.status_code in [
+            401,
+            403,
+        ], "Creación de competición sin token debe retornar 401 o 403"
 
 
 @pytest.mark.asyncio
@@ -96,9 +103,11 @@ class TestInvalidTokensRejected:
                 },
             )
 
-            assert response.status_code in [401, 403, 422], (
-                f"Token inválido '{token}' debe retornar 401, 403 o 422"
-            )
+            assert response.status_code in [
+                401,
+                403,
+                422,
+            ], f"Token inválido '{token}' debe retornar 401, 403 o 422"
 
     async def test_expired_token_rejected(self, client: AsyncClient):
         """
@@ -129,9 +138,11 @@ class TestInvalidTokensRejected:
             },
         )
 
-        assert response.status_code in [401, 403, 422], (
-            "Token expirado debe retornar 401, 403 o 422"
-        )
+        assert response.status_code in [
+            401,
+            403,
+            422,
+        ], "Token expirado debe retornar 401, 403 o 422"
 
 
 @pytest.mark.asyncio
@@ -175,9 +186,11 @@ class TestTokenManipulationPrevented:
                 },
             )
 
-            assert response.status_code in [401, 403, 422], (
-                f"Token con payload modificado debe ser rechazado, got {response.status_code}"
-            )
+            assert response.status_code in [
+                401,
+                403,
+                422,
+            ], f"Token con payload modificado debe ser rechazado, got {response.status_code}"
 
     async def test_cannot_use_none_algorithm(self, client: AsyncClient):
         """
@@ -207,7 +220,11 @@ class TestTokenManipulationPrevented:
             },
         )
 
-        assert response.status_code in [401, 403, 422], "Token con alg=none debe ser rechazado"
+        assert response.status_code in [
+            401,
+            403,
+            422,
+        ], "Token con alg=none debe ser rechazado"
 
 
 @pytest.mark.asyncio
@@ -239,7 +256,9 @@ class TestSessionManagement:
                 "team_assignment": "MANUAL",
             },
         )
-        assert competition_response.status_code == 201, "El token debe funcionar antes del logout"
+        assert (
+            competition_response.status_code == 201
+        ), "El token debe funcionar antes del logout"
 
         # Hacer logout (enviar JSON vacío para LogoutRequestDTO)
         logout_response = await client.post("/api/v1/auth/logout", json={})
@@ -266,9 +285,10 @@ class TestSessionManagement:
         refresh_response = await client.post("/api/v1/auth/refresh-token")
 
         # Debe fallar porque el refresh token fue revocado
-        assert refresh_response.status_code in [401, 403], (
-            "Refresh token revocado no debe permitir renovación"
-        )
+        assert refresh_response.status_code in [
+            401,
+            403,
+        ], "Refresh token revocado no debe permitir renovación"
 
 
 @pytest.mark.asyncio
@@ -307,9 +327,9 @@ class TestPasswordResetSecurity:
 
         # Ambas respuestas deben ser iguales (previene enumeración de usuarios)
         # Si el endpoint no existe, ambos retornarán 404
-        assert response_nonexistent.status_code == response_existent.status_code, (
-            "El endpoint no debe revelar si un email existe o no"
-        )
+        assert (
+            response_nonexistent.status_code == response_existent.status_code
+        ), "El endpoint no debe revelar si un email existe o no"
 
 
 @pytest.mark.asyncio
@@ -335,9 +355,10 @@ class TestRaceConditions:
         refresh_response = await client.post("/api/v1/auth/refresh-token")
 
         # Debe responder de forma predecible
-        assert refresh_response.status_code in [200, 401], (
-            "Refresh token debe manejarse de forma predecible"
-        )
+        assert refresh_response.status_code in [
+            200,
+            401,
+        ], "Refresh token debe manejarse de forma predecible"
 
 
 @pytest.mark.asyncio

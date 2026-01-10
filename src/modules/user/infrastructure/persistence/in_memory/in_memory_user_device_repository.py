@@ -5,7 +5,6 @@ Este módulo implementa UserDeviceRepositoryInterface para tests unitarios.
 Los datos se almacenan en diccionarios Python en memoria.
 """
 
-
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,

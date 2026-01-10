@@ -88,7 +88,9 @@ class TestEmailValidator:
         with pytest.raises(ValueError) as exc_info:
             EmailValidator.validate("user@domain")
 
-        assert "TLD" in str(exc_info.value) or "Formato de email inválido" in str(exc_info.value)
+        assert "TLD" in str(exc_info.value) or "Formato de email inválido" in str(
+            exc_info.value
+        )
 
     def test_validate_rejects_too_long_email(self):
         """

@@ -6,7 +6,9 @@ Encapsula la lógica de validación de países y adyacencias.
 """
 
 from src.modules.competition.domain.value_objects.location import Location
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
 
 
@@ -101,7 +103,9 @@ class LocationBuilder:
         """
         country = await self._country_repo.find_by_code(country_code)
         if not country:
-            raise InvalidCountryError(f"El país con código '{country_code.value}' no existe")
+            raise InvalidCountryError(
+                f"El país con código '{country_code.value}' no existe"
+            )
 
     async def _validate_adjacency(
         self, main_country: CountryCode, adjacent_country: CountryCode
@@ -116,7 +120,9 @@ class LocationBuilder:
         Raises:
             InvalidCountryError: Si los países no son adyacentes
         """
-        is_adjacent = await self._country_repo.are_adjacent(main_country, adjacent_country)
+        is_adjacent = await self._country_repo.are_adjacent(
+            main_country, adjacent_country
+        )
 
         if not is_adjacent:
             raise InvalidCountryError(

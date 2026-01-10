@@ -71,9 +71,11 @@ def check_required_vars() -> tuple[int, int]:
         "MAILGUN_FROM_EMAIL": settings.MAILGUN_FROM_EMAIL,
         "MAILGUN_API_URL": settings.MAILGUN_API_URL,
         "SECRET_KEY": settings.SECRET_KEY,
-        "DATABASE_URL": settings.DATABASE_URL[:30] + "..."
-        if len(settings.DATABASE_URL) > 30
-        else settings.DATABASE_URL,
+        "DATABASE_URL": (
+            settings.DATABASE_URL[:30] + "..."
+            if len(settings.DATABASE_URL) > 30
+            else settings.DATABASE_URL
+        ),
     }
 
     total = len(checks)
@@ -122,7 +124,10 @@ def check_frontend_url() -> bool:
     }
 
     if env == "unknown":
-        print_error("ADVERTENCIA", f"No se pudo detectar el entorno basándose en: {frontend_url}")
+        print_error(
+            "ADVERTENCIA",
+            f"No se pudo detectar el entorno basándose en: {frontend_url}",
+        )
         print("\n🔧 URLs esperadas:")
         for env_name, url in env_recommendations.items():
             print(f"   - {env_name.capitalize()}: {url}")
@@ -218,22 +223,30 @@ def print_recommendations() -> None:
         print("   1. Asegúrate de tener el .env configurado")
         print("   2. Ejecuta: uvicorn main:app --reload --port 8000")
         print("   3. Frontend debe correr en: http://localhost:5173")
-        print("   4. Los enlaces de email apuntarán a: http://localhost:5173/verify-email")
+        print(
+            "   4. Los enlaces de email apuntarán a: http://localhost:5173/verify-email"
+        )
 
     elif env == "kubernetes":
         print("📝 Estás en modo KUBERNETES (Kind local)")
         print("   1. Asegúrate de tener el ConfigMap aplicado:")
         print("      kubectl apply -f k8s/api-configmap.yaml")
         print("   2. Port-forward del frontend:")
-        print("      kubectl port-forward svc/rydercup-frontend-service 8080:80 -n rydercupfriends")
+        print(
+            "      kubectl port-forward svc/rydercup-frontend-service 8080:80 -n rydercupfriends"
+        )
         print("   3. Accede al frontend en: http://localhost:8080")
-        print("   4. Los enlaces de email apuntarán a: http://localhost:8080/verify-email")
+        print(
+            "   4. Los enlaces de email apuntarán a: http://localhost:8080/verify-email"
+        )
 
     elif env == "production":
         print("📝 Estás en modo PRODUCCIÓN")
         print("   1. Verifica las variables en Render Dashboard")
         print("   2. URL del frontend: https://rydercupfriends.com")
-        print("   3. Los enlaces de email apuntarán a: https://rydercupfriends.com/verify-email")
+        print(
+            "   3. Los enlaces de email apuntarán a: https://rydercupfriends.com/verify-email"
+        )
         print("   4. Monitorea los logs en: https://dashboard.render.com")
 
     else:

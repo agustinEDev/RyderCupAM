@@ -27,7 +27,11 @@ class AccountLockedEvent(DomainEvent):
     """
 
     def __init__(
-        self, user_id: str, locked_until: datetime, failed_attempts: int, locked_at: datetime
+        self,
+        user_id: str,
+        locked_until: datetime,
+        failed_attempts: int,
+        locked_at: datetime,
     ):
         super().__init__()
         self.user_id = user_id

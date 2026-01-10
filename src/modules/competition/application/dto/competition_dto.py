@@ -41,7 +41,9 @@ class CreatorDTO(BaseModel):
     last_name: str = Field(..., description="Apellido del creador")
     email: str = Field(..., description="Email del creador")
     handicap: float | None = Field(None, description="Handicap actual del creador")
-    country_code: str | None = Field(None, description="Código ISO del país del creador")
+    country_code: str | None = Field(
+        None, description="Código ISO del país del creador"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,19 +63,30 @@ class CreateCompetitionRequestDTO(BaseModel):
         populate_by_name=True,  # Permite usar aliases
     )
 
-    name: str = Field(..., min_length=3, max_length=100, description=COMPETITION_NAME_DESC)
+    name: str = Field(
+        ..., min_length=3, max_length=100, description=COMPETITION_NAME_DESC
+    )
     start_date: date = Field(..., description="Fecha de inicio del torneo.")
     end_date: date = Field(..., description="Fecha de fin del torneo.")
 
     # Location
     main_country: str = Field(
-        ..., min_length=2, max_length=2, description="Código ISO del país principal (ej: 'ES')."
+        ...,
+        min_length=2,
+        max_length=2,
+        description="Código ISO del país principal (ej: 'ES').",
     )
     adjacent_country_1: str | None = Field(
-        None, min_length=2, max_length=2, description="Código ISO del país adyacente 1 (opcional)."
+        None,
+        min_length=2,
+        max_length=2,
+        description="Código ISO del país adyacente 1 (opcional).",
     )
     adjacent_country_2: str | None = Field(
-        None, min_length=2, max_length=2, description="Código ISO del país adyacente 2 (opcional)."
+        None,
+        min_length=2,
+        max_length=2,
+        description="Código ISO del país adyacente 2 (opcional).",
     )
     # Campo adicional para compatibilidad con frontend (se convierte automáticamente)
     countries: list[str] | None = Field(
@@ -81,7 +94,9 @@ class CreateCompetitionRequestDTO(BaseModel):
     )
 
     # Handicap Settings
-    handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
+    handicap_type: str = Field(
+        ..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'."
+    )
     handicap_percentage: int | None = Field(
         None,
         ge=90,
@@ -91,7 +106,11 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     # Competition Config - con alias para compatibilidad con frontend
     max_players: int = Field(
-        default=24, ge=2, le=100, description=MAX_PLAYERS_DESC, alias="number_of_players"
+        default=24,
+        ge=2,
+        le=100,
+        description=MAX_PLAYERS_DESC,
+        alias="number_of_players",
     )
     team_assignment: str = Field(
         default="MANUAL", description="Asignación de equipos: 'MANUAL' o 'AUTOMATIC'."
@@ -105,7 +124,9 @@ class CreateCompetitionRequestDTO(BaseModel):
         default="Team 2", min_length=3, max_length=50, description=TEAM_2_NAME_DESC
     )
 
-    @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
+    @field_validator(
+        "main_country", "adjacent_country_1", "adjacent_country_2", mode="before"
+    )
     @classmethod
     def uppercase_country_codes(cls, v):
         """Convierte códigos de país a mayúsculas."""
@@ -141,7 +162,11 @@ class CreateCompetitionRequestDTO(BaseModel):
     def validate_and_convert_countries(self) -> "CreateCompetitionRequestDTO":
         """Convierte el campo countries del frontend a adjacent_country_1/2 si es necesario."""
         # Si se proporcionó countries pero no adjacent_country_1/2, convertir
-        if self.countries and not self.adjacent_country_1 and not self.adjacent_country_2:
+        if (
+            self.countries
+            and not self.adjacent_country_1
+            and not self.adjacent_country_2
+        ):
             if len(self.countries) > 0:
                 self.adjacent_country_1 = self.countries[0]
             if len(self.countries) > 1:
@@ -162,11 +187,15 @@ class CreateCompetitionRequestDTO(BaseModel):
 
         # Si es PERCENTAGE, handicap_percentage es obligatorio
         if self.handicap_type == "PERCENTAGE" and self.handicap_percentage is None:
-            raise ValueError("handicap_percentage es requerido cuando handicap_type='PERCENTAGE'")
+            raise ValueError(
+                "handicap_percentage es requerido cuando handicap_type='PERCENTAGE'"
+            )
 
         # Si es SCRATCH, handicap_percentage debe ser None
         if self.handicap_type == "SCRATCH" and self.handicap_percentage is not None:
-            raise ValueError("handicap_percentage debe ser None cuando handicap_type='SCRATCH'")
+            raise ValueError(
+                "handicap_percentage debe ser None cuando handicap_type='SCRATCH'"
+            )
 
         # Validar team_assignment
         if self.team_assignment not in ["MANUAL", "AUTOMATIC"]:
@@ -183,7 +212,9 @@ class CreateCompetitionResponseDTO(BaseModel):
 
     id: UUID = Field(..., description="ID único de la competición.")
     creator_id: UUID = Field(..., description="ID del usuario creador.")
-    creator: CreatorDTO | None = Field(None, description="Información completa del creador.")
+    creator: CreatorDTO | None = Field(
+        None, description="Información completa del creador."
+    )
     name: str = Field(..., description=COMPETITION_NAME_DESC)
     status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
 
@@ -193,11 +224,16 @@ class CreateCompetitionResponseDTO(BaseModel):
 
     # Location
     country_code: str = Field(..., description="Código ISO del país principal.")
-    secondary_country_code: str | None = Field(None, description="Código ISO del país secundario.")
-    tertiary_country_code: str | None = Field(None, description="Código ISO del país terciario.")
+    secondary_country_code: str | None = Field(
+        None, description="Código ISO del país secundario."
+    )
+    tertiary_country_code: str | None = Field(
+        None, description="Código ISO del país terciario."
+    )
     location: str = Field(..., description="Ubicación formateada legible.")
     countries: list[CountryResponseDTO] = Field(
-        default_factory=list, description="Lista de países participantes con códigos y nombres."
+        default_factory=list,
+        description="Lista de países participantes con códigos y nombres.",
     )
 
     # Handicap
@@ -218,7 +254,9 @@ class CreateCompetitionResponseDTO(BaseModel):
 
     # Timestamps
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
-    updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
+    updated_at: datetime = Field(
+        ..., description="Fecha y hora de última actualización."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -236,7 +274,10 @@ class UpdateCompetitionRequestDTO(BaseModel):
     """
 
     name: str | None = Field(
-        None, min_length=3, max_length=100, description="Nuevo nombre de la competición."
+        None,
+        min_length=3,
+        max_length=100,
+        description="Nuevo nombre de la competición.",
     )
     start_date: date | None = Field(None, description="Nueva fecha de inicio.")
     end_date: date | None = Field(None, description="Nueva fecha de fin.")
@@ -259,8 +300,12 @@ class UpdateCompetitionRequestDTO(BaseModel):
     )
 
     # Competition Config
-    max_players: int | None = Field(None, ge=2, le=100, description="Nuevo máximo de jugadores.")
-    team_assignment: str | None = Field(None, description="Nueva asignación de equipos.")
+    max_players: int | None = Field(
+        None, ge=2, le=100, description="Nuevo máximo de jugadores."
+    )
+    team_assignment: str | None = Field(
+        None, description="Nueva asignación de equipos."
+    )
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
     )
@@ -268,7 +313,9 @@ class UpdateCompetitionRequestDTO(BaseModel):
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 2."
     )
 
-    @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
+    @field_validator(
+        "main_country", "adjacent_country_1", "adjacent_country_2", mode="before"
+    )
     @classmethod
     def uppercase_country_codes(cls, v):
         """Convierte códigos de país a mayúsculas."""
@@ -322,7 +369,9 @@ class CompetitionResponseDTO(BaseModel):
 
     id: UUID = Field(..., description=COMPETITION_ID_DESC)
     creator_id: UUID = Field(..., description="ID del usuario creador.")
-    creator: CreatorDTO | None = Field(None, description="Información completa del creador.")
+    creator: CreatorDTO | None = Field(
+        None, description="Información completa del creador."
+    )
     name: str = Field(..., description=COMPETITION_NAME_DESC)
     status: str = Field(..., description="Estado actual (DRAFT, ACTIVE, CLOSED, etc.).")
 
@@ -332,8 +381,12 @@ class CompetitionResponseDTO(BaseModel):
 
     # Location - Raw country codes (para backward compatibility con tests)
     country_code: str = Field(..., description="Código ISO del país principal.")
-    secondary_country_code: str | None = Field(None, description="Código ISO del país secundario.")
-    tertiary_country_code: str | None = Field(None, description="Código ISO del país terciario.")
+    secondary_country_code: str | None = Field(
+        None, description="Código ISO del país secundario."
+    )
+    tertiary_country_code: str | None = Field(
+        None, description="Código ISO del país terciario."
+    )
 
     # Location - Formatted string (NUEVO - requerido por frontend)
     location: str = Field(
@@ -342,11 +395,14 @@ class CompetitionResponseDTO(BaseModel):
 
     # Location - Countries array (NUEVO - requerido por frontend)
     countries: list[CountryResponseDTO] = Field(
-        default_factory=list, description="Lista de países participantes con códigos y nombres."
+        default_factory=list,
+        description="Lista de países participantes con códigos y nombres.",
     )
 
     # Handicap Settings
-    handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
+    handicap_type: str = Field(
+        ..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'."
+    )
     handicap_percentage: int | None = Field(
         None, description="Porcentaje de hándicap (90-100) si es PERCENTAGE."
     )
@@ -361,7 +417,8 @@ class CompetitionResponseDTO(BaseModel):
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(
-        ..., description="True si el usuario autenticado es el creador de esta competición."
+        ...,
+        description="True si el usuario autenticado es el creador de esta competición.",
     )
     enrolled_count: int = Field(
         default=0, description="Número de jugadores con enrollment status APPROVED."
@@ -377,7 +434,9 @@ class CompetitionResponseDTO(BaseModel):
 
     # Timestamps
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
-    updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
+    updated_at: datetime = Field(
+        ..., description="Fecha y hora de última actualización."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -461,7 +520,9 @@ class CloseEnrollmentsResponseDTO(BaseModel):
 
     id: UUID = Field(..., description=COMPETITION_ID_DESC)
     status: str = Field(..., description="Nuevo estado (CLOSED).")
-    total_enrollments: int = Field(..., description="Número total de inscripciones aprobadas.")
+    total_enrollments: int = Field(
+        ..., description="Número total de inscripciones aprobadas."
+    )
     closed_at: datetime = Field(..., description="Fecha y hora de cierre.")
 
     model_config = ConfigDict(from_attributes=True)

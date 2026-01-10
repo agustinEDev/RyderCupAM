@@ -43,7 +43,9 @@ class PasswordHistoryRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_recent_by_user(self, user_id: UserId, limit: int = 5) -> list[PasswordHistory]:
+    async def find_recent_by_user(
+        self, user_id: UserId, limit: int = 5
+    ) -> list[PasswordHistory]:
         """
         Obtiene los N registros más recientes de un usuario.
 

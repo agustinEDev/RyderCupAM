@@ -35,7 +35,13 @@ class TestLoginUserUseCaseEventIntegration:
         email = Email("test@example.com")
         password = Password.from_plain_text("P@ssw0rd123!")
 
-        user = User(id=user_id, email=email, password=password, first_name="John", last_name="Doe")
+        user = User(
+            id=user_id,
+            email=email,
+            password=password,
+            first_name="John",
+            last_name="Doe",
+        )
 
         # Mock del UoW
         mock_uow = AsyncMock()
@@ -113,7 +119,13 @@ class TestLoginUserUseCaseEventIntegration:
         email = Email("test@example.com")
         password = Password.from_plain_text("C0rr3ctP@ss123!")
 
-        user = User(id=user_id, email=email, password=password, first_name="John", last_name="Doe")
+        user = User(
+            id=user_id,
+            email=email,
+            password=password,
+            first_name="John",
+            last_name="Doe",
+        )
 
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user

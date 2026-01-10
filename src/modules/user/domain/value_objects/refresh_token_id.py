@@ -30,9 +30,13 @@ class RefreshTokenId:
             try:
                 self._value = uuid.UUID(value)
             except ValueError as e:
-                raise ValueError(f"ID inválido: {value}. Debe ser un UUID válido.") from e
+                raise ValueError(
+                    f"ID inválido: {value}. Debe ser un UUID válido."
+                ) from e
         else:
-            raise ValueError(f"ID debe ser string o UUID. Recibido: {type(value).__name__}")
+            raise ValueError(
+                f"ID debe ser string o UUID. Recibido: {type(value).__name__}"
+            )
 
     @property
     def value(self) -> uuid.UUID:

@@ -179,11 +179,15 @@ class TestHttpOnlyCookies:
         data = response.json()
         assert "message" in data
         # El mensaje puede ser "Logout exitoso" o similar
-        assert "logout" in data["message"].lower() or "exitoso" in data["message"].lower()
+        assert (
+            "logout" in data["message"].lower() or "exitoso" in data["message"].lower()
+        )
 
         # Then: Verificar que cookie fue eliminada
         set_cookie_header = response.headers.get("set-cookie")
-        assert set_cookie_header is not None, "Set-Cookie header debe existir para eliminar cookie"
+        assert (
+            set_cookie_header is not None
+        ), "Set-Cookie header debe existir para eliminar cookie"
 
         # Verificar que la cookie se invalida (Max-Age=0)
         assert "access_token=" in set_cookie_header
@@ -276,7 +280,8 @@ class TestHttpOnlyCookies:
         # El middleware debería usar la cookie (válida) y ignorar el header (inválido)
         fake_token = "fake_invalid_token_12345"
         response = await client.get(
-            "/api/v1/auth/current-user", headers={"Authorization": f"Bearer {fake_token}"}
+            "/api/v1/auth/current-user",
+            headers={"Authorization": f"Bearer {fake_token}"},
         )
 
         # Then: Autenticación exitosa (usó cookie, ignoró header inválido)

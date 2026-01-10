@@ -40,7 +40,9 @@ class TestCORSConfiguration:
         # Assert
         assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
-        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert (
+            response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        )
 
     async def test_cors_allows_multiple_configured_origins(
         self,
@@ -116,7 +118,9 @@ class TestCORSConfiguration:
         # Assert
         assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
-        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert (
+            response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        )
         assert "access-control-allow-methods" in response.headers
         assert "POST" in response.headers["access-control-allow-methods"]
         assert "access-control-allow-headers" in response.headers
@@ -210,7 +214,9 @@ class TestCORSConfiguration:
         with pytest.raises(ValueError) as exc_info:
             get_cors_config()
 
-        assert "FRONTEND_ORIGINS no está configurado en producción" in str(exc_info.value)
+        assert "FRONTEND_ORIGINS no está configurado en producción" in str(
+            exc_info.value
+        )
 
     @patch.dict(os.environ, {"ENVIRONMENT": "production", "FRONTEND_ORIGINS": "*"})
     async def test_cors_rejects_wildcard_in_production(self):
@@ -262,7 +268,9 @@ class TestCORSConfiguration:
             "https://www.rydercupfriends.com",
         ]
         # Verificar que NO incluye orígenes de desarrollo
-        assert not any(origin.startswith("http://localhost") for origin in allowed_origins)
+        assert not any(
+            origin.startswith("http://localhost") for origin in allowed_origins
+        )
 
     async def test_cors_headers_present_in_authenticated_endpoints(
         self,
@@ -287,6 +295,8 @@ class TestCORSConfiguration:
         # Assert
         assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
-        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert (
+            response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        )
         assert "access-control-allow-credentials" in response.headers
         assert response.headers["access-control-allow-credentials"] == "true"

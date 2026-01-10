@@ -12,7 +12,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -44,7 +46,9 @@ class TestUserRepositoryInterface:
         }
 
         interface_methods = {
-            method for method in dir(UserRepositoryInterface) if not method.startswith("_")
+            method
+            for method in dir(UserRepositoryInterface)
+            if not method.startswith("_")
         }
 
         assert required_methods.issubset(interface_methods)
@@ -152,7 +156,9 @@ class TestUserRepositoryInterface:
         for method_name in methods_to_check:
             method = getattr(UserRepositoryInterface, method_name)
             # Los métodos abstractos async tienen __code__.co_flags con CO_COROUTINE
-            assert hasattr(method, "__code__"), f"Method {method_name} should have __code__"
+            assert hasattr(
+                method, "__code__"
+            ), f"Method {method_name} should have __code__"
 
     def test_concrete_implementation_can_be_created(self):
         """Verifica que se puede crear una implementación concreta."""

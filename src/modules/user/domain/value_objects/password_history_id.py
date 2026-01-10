@@ -39,7 +39,9 @@ class PasswordHistoryId:
         elif isinstance(value, uuid.UUID):
             self.value = value
         else:
-            raise ValueError(f"PasswordHistoryId must be UUID or string, got {type(value)}")
+            raise ValueError(
+                f"PasswordHistoryId must be UUID or string, got {type(value)}"
+            )
 
     @classmethod
     def generate(cls) -> "PasswordHistoryId":

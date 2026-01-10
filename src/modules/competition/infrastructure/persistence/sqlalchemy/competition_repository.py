@@ -13,8 +13,12 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
     CompetitionRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_name import CompetitionName
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_name import (
+    CompetitionName,
+)
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -200,7 +204,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         statement = (
             select(func.count())
             .select_from(Competition)
-            .where(and_(Competition._name_value == str(name), Competition.creator_id == creator_id))
+            .where(
+                and_(
+                    Competition._name_value == str(name),
+                    Competition.creator_id == creator_id,
+                )
+            )
         )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
@@ -309,7 +318,9 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             query = query.where(and_(*conditions))
 
         # Ordenar y paginar
-        query = query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
+        query = (
+            query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
+        )
 
         # Ejecutar query
         result = await self._session.execute(query)

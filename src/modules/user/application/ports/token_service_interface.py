@@ -21,7 +21,9 @@ class ITokenService(ABC):
     """
 
     @abstractmethod
-    def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+    def create_access_token(
+        self, data: dict, expires_delta: timedelta | None = None
+    ) -> str:
         """
         Crea un token de acceso.
 

@@ -1,4 +1,7 @@
-from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    FindUserRequestDTO,
+    FindUserResponseDTO,
+)
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -53,9 +56,13 @@ class FindUserUseCase:
                     search_criteria.append(f"nombre completo '{request.full_name}'")
 
                 criteria_str = " o ".join(search_criteria)
-                raise UserNotFoundError(f"No se encontró ningún usuario con {criteria_str}.")
+                raise UserNotFoundError(
+                    f"No se encontró ningún usuario con {criteria_str}."
+                )
 
             # Crear y devolver el DTO de respuesta
             return FindUserResponseDTO(
-                user_id=user.id.value, email=user.email.value, full_name=user.get_full_name()
+                user_id=user.id.value,
+                email=user.email.value,
+                full_name=user.get_full_name(),
             )

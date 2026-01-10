@@ -76,7 +76,9 @@ def run_tests() -> tuple[str, int]:
         f"--json-report-file={report_file}",
         # Nota: -n auto ya está en pytest.ini como addopts por defecto
     ]
-    print(f"{ICONS['ROCKET']} Ejecutando pytest con paralelización automática (pytest.ini)...")
+    print(
+        f"{ICONS['ROCKET']} Ejecutando pytest con paralelización automática (pytest.ini)..."
+    )
     result = subprocess.run(command, check=False, capture_output=True, text=True)
 
     # Contar warnings en stderr
@@ -111,7 +113,9 @@ def run_tests() -> tuple[str, int]:
             json.dump(report_data, f, indent=2)
     except (FileNotFoundError, json.JSONDecodeError):
         print(
-            COLORS["RED"] + "Error: No se pudo leer o formatear el reporte JSON." + COLORS["ENDC"]
+            COLORS["RED"]
+            + "Error: No se pudo leer o formatear el reporte JSON."
+            + COLORS["ENDC"]
         )
         with open(report_file, "w") as f:
             f.write("{}")
@@ -219,7 +223,9 @@ def display_results(test_structure: dict, results_by_file: dict):
     for scope, modules in test_structure.items():
         print_header(f"{scope} TESTS")
         for module, layers in modules.items():
-            print(f"\n  {COLORS['BLUE']}{ICONS['FOLDER']} Módulo: {module}{COLORS['ENDC']}")
+            print(
+                f"\n  {COLORS['BLUE']}{ICONS['FOLDER']} Módulo: {module}{COLORS['ENDC']}"
+            )
             for layer, files in layers.items():
                 print(f"    {COLORS['YELLOW']}Capa: {layer}{COLORS['ENDC']}")
                 for file_path in files:
@@ -232,7 +238,9 @@ def _write_markdown_header(f, success_rate: float, failed: int) -> None:
     """Escribe el encabezado del reporte Markdown."""
     f.write("# 🚀 Resumen de Ejecución de Tests\n\n")
     f.write(f"- **Fecha**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    result_status = "✅ ÉXITO" if (success_rate == 100 and failed == 0) else "❌ FALLIDO"
+    result_status = (
+        "✅ ÉXITO" if (success_rate == 100 and failed == 0) else "❌ FALLIDO"
+    )
     f.write(f"- **Resultado General**: {result_status}\n\n")
 
 
@@ -240,7 +248,9 @@ def _write_warnings_section(f, warning_count: int, warning_lines: list) -> None:
     """Escribe la sección de warnings si las hay."""
     if warning_count > 0:
         f.write("## ⚠️ Warnings\n\n")
-        f.write(f"Se encontraron **{warning_count}** warnings durante la ejecución:\n\n")
+        f.write(
+            f"Se encontraron **{warning_count}** warnings durante la ejecución:\n\n"
+        )
         if warning_lines:
             for warning_line in warning_lines:
                 f.write(f"- `{warning_line}`\n")
@@ -270,11 +280,15 @@ def _write_test_details(
     docstrings = get_docstrings_from_file(filepath)
     for test in sorted(tests, key=lambda x: x["name"]):
         status_icon = ICONS.get(test["outcome"].upper(), "❓")
-        description = " ".join(docstrings.get(test["name"], "No description provided.").split())
+        description = " ".join(
+            docstrings.get(test["name"], "No description provided.").split()
+        )
         test_nodeid = test["nodeid"]
         full_test_data = test_lookup.get(test_nodeid)
         slow_icon = f" {ICONS['SLOW']}" if test_nodeid in slowest_test_nodeids else ""
-        f.write(f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n")
+        f.write(
+            f"- {status_icon} **`{test['name']}`** ({test['duration']:.4f}s){slow_icon}\n"
+        )
         f.write(f"  > _{description}_\n")
         if test["outcome"] == "failed" and full_test_data:
             longrepr = full_test_data.get("call", {}).get("longrepr")
@@ -372,13 +386,19 @@ def main():
 
     total_time = time.time() - start_time
     display_summary(
-        results["summary"], results["tests"], results.get("warning_count", 0), total_time
+        results["summary"],
+        results["tests"],
+        results.get("warning_count", 0),
+        total_time,
     )
 
     # Generar el nuevo reporte en Markdown
     generate_markdown_report(results, total_time)
 
-    if results["summary"].get("failed", 0) > 0 or results["summary"].get("error", 0) > 0:
+    if (
+        results["summary"].get("failed", 0) > 0
+        or results["summary"].get("error", 0) > 0
+    ):
         sys.exit(1)
 
 

@@ -72,11 +72,10 @@ class TestDeviceFingerprintCreation:
         # Arrange
         fingerprint1 = DeviceFingerprint.create(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0",
-            "192.168.1.100"
+            "192.168.1.100",
         )
         fingerprint2 = DeviceFingerprint.create(
-            "Mozilla/5.0 (iPhone) Safari/604.1",
-            "192.168.1.101"
+            "Mozilla/5.0 (iPhone) Safari/604.1", "192.168.1.101"
         )
 
         # Act & Assert
@@ -113,7 +112,7 @@ class TestDeviceFingerprintCreation:
         # Act
         fingerprint = DeviceFingerprint.create(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0",
-            "192.168.1.1"
+            "192.168.1.1",
         )
 
         # Assert
@@ -129,7 +128,7 @@ class TestDeviceFingerprintCreation:
         # Act
         fingerprint = DeviceFingerprint.create(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
-            "192.168.1.2"
+            "192.168.1.2",
         )
 
         # Assert
@@ -145,7 +144,7 @@ class TestDeviceFingerprintCreation:
         # Act
         fingerprint = DeviceFingerprint.create(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
-            "192.168.1.3"
+            "192.168.1.3",
         )
 
         # Assert
@@ -323,8 +322,7 @@ class TestDeviceFingerprintComparison:
         """
         # Arrange
         fp = DeviceFingerprint.create(
-            "Mozilla/5.0 (Macintosh) Chrome/120.0",
-            "192.168.1.1"
+            "Mozilla/5.0 (Macintosh) Chrome/120.0", "192.168.1.1"
         )
 
         # Act & Assert

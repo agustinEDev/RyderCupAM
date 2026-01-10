@@ -4,7 +4,16 @@ SQLAlchemy Imperative Mapping para RefreshToken.
 Mapea la entidad RefreshToken a la tabla refresh_tokens usando Imperative Mapping.
 """
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, TypeDecorator, inspect
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Table,
+    TypeDecorator,
+    inspect,
+)
 from sqlalchemy.exc import NoInspectionAvailable
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken

@@ -44,7 +44,9 @@ class UnlockAccountUseCase:
         """
         self._uow = uow
 
-    async def execute(self, request: UnlockAccountRequestDTO) -> UnlockAccountResponseDTO:
+    async def execute(
+        self, request: UnlockAccountRequestDTO
+    ) -> UnlockAccountResponseDTO:
         """
         Ejecuta el caso de uso de desbloqueo de cuenta.
 

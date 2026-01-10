@@ -2,7 +2,10 @@ import logging
 
 import requests
 
-from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO, UserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    RegisterUserRequestDTO,
+    UserResponseDTO,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
@@ -60,14 +63,18 @@ class RegisterUserUseCase:
             # 1. Validar que el email no existe
             email_vo = Email(request.email)
             if await self._user_finder.by_email(email_vo):
-                raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
+                raise UserAlreadyExistsError(
+                    f"El email '{request.email}' ya está registrado."
+                )
 
             # 1.5 Validar que el country_code existe (si se proporcionó)
             if request.country_code:
                 country_code_vo = CountryCode(request.country_code)
                 country_exists = await self._country_repository.exists(country_code_vo)
                 if not country_exists:
-                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
+                    raise ValueError(
+                        f"El código de país '{request.country_code}' no es válido."
+                    )
 
             # 2. Crear la entidad de dominio User
             new_user = User.create(
@@ -125,7 +132,8 @@ class RegisterUserUseCase:
             except (requests.RequestException, ValueError, ConnectionError):
                 # Capturar excepciones específicas de red y validación
                 logger.exception(
-                    "Error al enviar email de verificación para el usuario %s", new_user.id.value
+                    "Error al enviar email de verificación para el usuario %s",
+                    new_user.id.value,
                 )
                 # No fallar el registro si el email no se pudo enviar
 

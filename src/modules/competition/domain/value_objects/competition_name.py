@@ -55,7 +55,9 @@ class CompetitionName:
 
         # 2. Validar que no esté vacío
         if not normalized_name:
-            raise InvalidCompetitionNameError("El nombre de la competición no puede estar vacío")
+            raise InvalidCompetitionNameError(
+                "El nombre de la competición no puede estar vacío"
+            )
 
         # 3. Validar longitud máxima
         if len(normalized_name) > MAX_COMPETITION_NAME_LENGTH:

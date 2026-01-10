@@ -87,15 +87,22 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     NotCompetitionCreatorError as UpdateNotCreatorError,
     UpdateCompetitionUseCase,
 )
-from src.modules.competition.domain.entities.competition import Competition, CompetitionStateError
+from src.modules.competition.domain.entities.competition import (
+    Competition,
+    CompetitionStateError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.location_builder import InvalidCountryError
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
@@ -154,7 +161,10 @@ def _should_exclude_enrollment(enrollment_status, competition_status):
 
     LÓGICA DE EXCLUSIÓN: No mostrar competiciones rechazadas si no están ACTIVE.
     """
-    return enrollment_status == EnrollmentStatus.REJECTED and competition_status != "ACTIVE"
+    return (
+        enrollment_status == EnrollmentStatus.REJECTED
+        and competition_status != "ACTIVE"
+    )
 
 
 def _matches_status_filter(competition_status, status_filter):
@@ -230,7 +240,11 @@ async def _get_user_competitions(
     async with uow:
         # Obtener competiciones creadas por el usuario
         created_competitions = await _fetch_competitions_by_status(
-            use_case, status_filter, str(current_user_id.value), search_name, search_creator
+            use_case,
+            status_filter,
+            str(current_user_id.value),
+            search_name,
+            search_creator,
         )
 
         # Obtener enrollments del usuario
@@ -246,7 +260,11 @@ async def _get_user_competitions(
 
         # Obtener competiciones donde el usuario está inscrito
         enrolled_competitions = await _fetch_enrolled_competitions(
-            uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
+            uow,
+            enrollments,
+            created_competition_ids,
+            status_filter,
+            enrollment_status_map,
         )
 
         return created_competitions + enrolled_competitions
@@ -320,7 +338,8 @@ class CompetitionDTOMapper:
             user_enrollments = await uow.enrollments.find_by_user(current_user_id)
             # Filtrar por esta competición específica
             user_enrollment = next(
-                (e for e in user_enrollments if e.competition_id == competition.id), None
+                (e for e in user_enrollments if e.competition_id == competition.id),
+                None,
             )
             if user_enrollment:
                 user_enrollment_status = (
@@ -343,7 +362,9 @@ class CompetitionDTOMapper:
         location_str = await CompetitionDTOMapper._format_location(competition, uow)
 
         # Obtener lista de países con detalles
-        countries_list = await CompetitionDTOMapper._get_countries_list(competition, uow)
+        countries_list = await CompetitionDTOMapper._get_countries_list(
+            competition, uow
+        )
 
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
@@ -383,9 +404,11 @@ class CompetitionDTOMapper:
             handicap_percentage=competition.handicap_settings.percentage,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value
-            if hasattr(competition.team_assignment, "value")
-            else competition.team_assignment,
+            team_assignment=(
+                competition.team_assignment.value
+                if hasattr(competition.team_assignment, "value")
+                else competition.team_assignment
+            ),
             # Teams
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,
@@ -524,7 +547,9 @@ class CompetitionDTOMapper:
                 last_name=creator.last_name,
                 email=str(creator.email),
                 handicap=creator.handicap.value if creator.handicap else None,
-                country_code=creator.country_code.value if creator.country_code else None,
+                country_code=(
+                    creator.country_code.value if creator.country_code else None
+                ),
             )
 
 
@@ -638,7 +663,9 @@ async def create_competition(
         ) from e
 
 
-async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
+async def _get_all_competitions(
+    use_case, status_filter, creator_id, search_name, search_creator
+):
     """
     Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
 
@@ -670,7 +697,8 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
     return [
         comp
         for comp in competitions
-        if comp.creator_id != current_user_id and comp.id not in enrolled_competition_ids
+        if comp.creator_id != current_user_id
+        and comp.id not in enrolled_competition_ids
     ]
 
 
@@ -727,24 +755,41 @@ async def list_competitions(
         if my_competitions is True:
             # Return only competitions where user is creator OR enrolled
             competitions = await _get_user_competitions(
-                uow, use_case, current_user_id, status_filter, search_name, search_creator
+                uow,
+                use_case,
+                current_user_id,
+                status_filter,
+                search_name,
+                search_creator,
             )
         elif my_competitions is False:
             # Explicitly exclude competitions where user is creator OR enrolled
             competitions = await _get_all_competitions(
-                use_case, status_filter, sanitized_creator_id, search_name, search_creator
+                use_case,
+                status_filter,
+                sanitized_creator_id,
+                search_name,
+                search_creator,
             )
 
             # Filter out competitions where user is creator or has enrollment
             async with uow:
-                competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
+                competitions = await _exclude_user_competitions(
+                    competitions, current_user_id, uow
+                )
         else:
             # my_competitions is None: return all competitions (no filtering by user relationship)
             competitions = await _get_all_competitions(
-                use_case, status_filter, sanitized_creator_id, search_name, search_creator
+                use_case,
+                status_filter,
+                sanitized_creator_id,
+                search_name,
+                search_creator,
             )
 
-        result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
+        result = await _map_competitions_to_dtos(
+            competitions, current_user_id, uow, user_uow
+        )
         return result
     except ValueError as e:
         raise HTTPException(

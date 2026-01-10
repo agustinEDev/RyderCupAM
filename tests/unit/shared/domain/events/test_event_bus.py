@@ -282,7 +282,11 @@ class TestInMemoryEventBusPublishing:
         handler = MockEventHandler()
         event_bus.register(handler)
 
-        events = [SampleEvent("event 1"), SampleEvent("event 2"), SampleEvent("event 3")]
+        events = [
+            SampleEvent("event 1"),
+            SampleEvent("event 2"),
+            SampleEvent("event 3"),
+        ]
 
         # Act
         await event_bus.publish_all(events)

@@ -37,7 +37,9 @@ class ResendVerificationEmailUseCase:
     y reenviar el email al usuario que lo solicite.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
+    def __init__(
+        self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None
+    ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._email_service = email_service
@@ -90,7 +92,9 @@ class ResendVerificationEmailUseCase:
         )
 
         if not email_sent:
-            logger.error("No se pudo enviar el email de verificación al usuario %s", user_id)
+            logger.error(
+                "No se pudo enviar el email de verificación al usuario %s", user_id
+            )
             raise ResendVerificationError("Error al enviar el email de verificación")
 
         # SEGUNDO: Solo si el email se envió correctamente, guardar el token en BD
@@ -110,6 +114,8 @@ class ResendVerificationEmailUseCase:
             await self._uow.users.save(user)
             # El context manager (__aexit__) hace commit automático
 
-        logger.info("Email de verificación reenviado correctamente al usuario %s", user_id)
+        logger.info(
+            "Email de verificación reenviado correctamente al usuario %s", user_id
+        )
 
         return True

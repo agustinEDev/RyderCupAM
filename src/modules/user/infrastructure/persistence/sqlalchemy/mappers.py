@@ -1,7 +1,17 @@
 # src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, inspect
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    inspect,
+)
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
@@ -13,10 +23,15 @@ from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
 
 # Importar registry y metadata centralizados
-from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata,
+)
 
 # Importar CountryCodeDecorator del shared domain
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import CountryCodeDecorator
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+    CountryCodeDecorator,
+)
 
 
 # --- TypeDecorator para UserId ---

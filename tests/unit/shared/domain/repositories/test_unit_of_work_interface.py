@@ -27,7 +27,14 @@ class TestUnitOfWorkInterface:
 
     def test_unit_of_work_interface_has_all_required_methods(self):
         """Verifica que la interfaz define todos los métodos requeridos."""
-        required_methods = {"__aenter__", "__aexit__", "commit", "rollback", "flush", "is_active"}
+        required_methods = {
+            "__aenter__",
+            "__aexit__",
+            "commit",
+            "rollback",
+            "flush",
+            "is_active",
+        }
 
         interface_methods = {
             method

@@ -10,7 +10,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 
 
 class CompetitionNotFoundError(Exception):
@@ -44,7 +46,9 @@ class ListEnrollmentsUseCase:
         """
         self._uow = uow
 
-    async def execute(self, competition_id: str, status: str | None = None) -> list[Enrollment]:
+    async def execute(
+        self, competition_id: str, status: str | None = None
+    ) -> list[Enrollment]:
         """
         Ejecuta el caso de uso de listado de inscripciones.
 
@@ -64,14 +68,18 @@ class ListEnrollmentsUseCase:
             # 1. Verificar que la competición existe
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
-                raise CompetitionNotFoundError(f"Competición no encontrada: {competition_id}")
+                raise CompetitionNotFoundError(
+                    f"Competición no encontrada: {competition_id}"
+                )
 
             # 2. Obtener enrollments según filtros
             if status:
                 # Filtrar por estado
                 status_enum = EnrollmentStatus(status.upper())
-                enrollments = await self._uow.enrollments.find_by_competition_and_status(
-                    comp_id, status_enum
+                enrollments = (
+                    await self._uow.enrollments.find_by_competition_and_status(
+                        comp_id, status_enum
+                    )
                 )
             else:
                 # Todos los enrollments de la competición

@@ -8,7 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateSecurityRequestDTO
-from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
+from src.modules.user.application.use_cases.update_security_use_case import (
+    UpdateSecurityUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
@@ -157,7 +159,9 @@ class TestUpdateSecurityUseCase:
         )
 
         # Act & Assert
-        with pytest.raises(InvalidCredentialsError, match="Current password is incorrect"):
+        with pytest.raises(
+            InvalidCredentialsError, match="Current password is incorrect"
+        ):
             await use_case.execute(user_id, request)
 
     async def test_update_fails_when_user_not_found(self, uow):
@@ -176,7 +180,9 @@ class TestUpdateSecurityUseCase:
         with pytest.raises(UserNotFoundError):
             await use_case.execute(non_existent_id, request)
 
-    async def test_update_fails_with_duplicate_email(self, uow, existing_user, another_user):
+    async def test_update_fails_with_duplicate_email(
+        self, uow, existing_user, another_user
+    ):
         """Debe lanzar DuplicateEmailError cuando el email ya está en uso."""
         # Arrange
         use_case = UpdateSecurityUseCase(uow)

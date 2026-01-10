@@ -80,9 +80,7 @@ class TestListUserDevicesEndpoint:
 class TestRevokeDeviceEndpoint:
     """Tests de integración para DELETE /api/v1/users/me/devices/{device_id}"""
 
-    async def test_revoke_device_not_found_returns_404(
-        self, authenticated_client
-    ):
+    async def test_revoke_device_not_found_returns_404(self, authenticated_client):
         """
         Test: Revocar dispositivo inexistente retorna 404
         Given: device_id que no existe
@@ -92,12 +90,11 @@ class TestRevokeDeviceEndpoint:
         # Arrange
         client, _user_data = authenticated_client
         from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
         non_existent_id = str(UserDeviceId.generate().value)
 
         # Act
-        response = await client.delete(
-            f"/api/v1/users/me/devices/{non_existent_id}"
-        )
+        response = await client.delete(f"/api/v1/users/me/devices/{non_existent_id}")
 
         # Assert
         assert response.status_code == 404
@@ -112,6 +109,7 @@ class TestRevokeDeviceEndpoint:
         """
         # Arrange
         from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
         device_id = str(UserDeviceId.generate().value)
 
         # Act
@@ -133,9 +131,7 @@ class TestRevokeDeviceEndpoint:
         client, _user_data = authenticated_client
 
         # Act
-        response = await client.delete(
-            "/api/v1/users/me/devices/invalid-uuid-format"
-        )
+        response = await client.delete("/api/v1/users/me/devices/invalid-uuid-format")
 
         # Assert
         assert response.status_code == 404

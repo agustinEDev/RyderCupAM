@@ -6,7 +6,9 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -59,7 +61,9 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de una competición."""
         enrollments = [
-            enr for enr in self._enrollments.values() if enr.competition_id == competition_id
+            enr
+            for enr in self._enrollments.values()
+            if enr.competition_id == competition_id
         ]
         return enrollments[offset : offset + limit]
 
@@ -67,7 +71,9 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         self, user_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de un usuario."""
-        enrollments = [enr for enr in self._enrollments.values() if enr.user_id == user_id]
+        enrollments = [
+            enr for enr in self._enrollments.values() if enr.user_id == user_id
+        ]
         return enrollments[offset : offset + limit]
 
     async def find_by_competition_and_team(
@@ -85,7 +91,8 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         return sum(
             1
             for enr in self._enrollments.values()
-            if enr.competition_id == competition_id and enr.status == EnrollmentStatus.APPROVED
+            if enr.competition_id == competition_id
+            and enr.status == EnrollmentStatus.APPROVED
         )
 
     async def count_pending(self, competition_id: CompetitionId) -> int:
@@ -93,7 +100,8 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         return sum(
             1
             for enr in self._enrollments.values()
-            if enr.competition_id == competition_id and enr.status == EnrollmentStatus.REQUESTED
+            if enr.competition_id == competition_id
+            and enr.status == EnrollmentStatus.REQUESTED
         )
 
     async def count_approved_enrollments(self, competition_id: CompetitionId) -> int:

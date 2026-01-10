@@ -12,7 +12,10 @@ class TestUserRegisteredEvent:
     def test_creates_event_with_required_data(self):
         """Evento se crea con todos los datos requeridos."""
         event = UserRegisteredEvent(
-            user_id="user-123", email="juan@test.com", first_name="Juan", last_name="Pérez"
+            user_id="user-123",
+            email="juan@test.com",
+            first_name="Juan",
+            last_name="Pérez",
         )
         assert event.user_id == "user-123"
         assert event.email == "juan@test.com"
@@ -23,7 +26,10 @@ class TestUserRegisteredEvent:
     def test_inherits_from_domain_event(self):
         """UserRegisteredEvent hereda correctamente de DomainEvent."""
         event = UserRegisteredEvent(
-            user_id="user-456", email="maria@test.com", first_name="María", last_name="García"
+            user_id="user-456",
+            email="maria@test.com",
+            first_name="María",
+            last_name="García",
         )
         assert isinstance(event, DomainEvent)
         assert hasattr(event, "event_id")
@@ -32,22 +38,33 @@ class TestUserRegisteredEvent:
     def test_event_is_immutable(self):
         """Evento es inmutable después de crearse."""
         event = UserRegisteredEvent(
-            user_id="user-789", email="carlos@test.com", first_name="Carlos", last_name="López"
+            user_id="user-789",
+            email="carlos@test.com",
+            first_name="Carlos",
+            last_name="López",
         )
-        with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
+        with pytest.raises(
+            Exception, match="cannot assign to field|can't set attribute"
+        ):
             event.email = "nuevo@test.com"
 
     def test_full_name_property(self):
         """Propiedad full_name concatena nombre y apellido."""
         event = UserRegisteredEvent(
-            user_id="user-1", email="test1@test.com", first_name="Ana", last_name="Martínez"
+            user_id="user-1",
+            email="test1@test.com",
+            first_name="Ana",
+            last_name="Martínez",
         )
         assert event.full_name == "Ana Martínez"
 
     def test_aggregate_id_consistency(self):
         """aggregate_id se genera automáticamente desde user_id."""
         event = UserRegisteredEvent(
-            user_id="user-correct", email="test@test.com", first_name="Test", last_name="User"
+            user_id="user-correct",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User",
         )
         assert event.aggregate_id == "user-correct"
 
@@ -69,7 +86,10 @@ class TestUserRegisteredEvent:
     def test_to_dict_serialization(self):
         """Serialización a diccionario incluye datos específicos del evento."""
         event = UserRegisteredEvent(
-            user_id="user-789", email="serialize@test.com", first_name="Serialize", last_name="Test"
+            user_id="user-789",
+            email="serialize@test.com",
+            first_name="Serialize",
+            last_name="Test",
         )
         result = event.to_dict()
         user_data = result["user_data"]
@@ -91,9 +111,15 @@ class TestUserRegisteredEvent:
     def test_different_events_have_unique_ids(self):
         """Eventos diferentes tienen IDs únicos incluso con mismos datos."""
         event1 = UserRegisteredEvent(
-            user_id="user-same", email="same@test.com", first_name="Same", last_name="User"
+            user_id="user-same",
+            email="same@test.com",
+            first_name="Same",
+            last_name="User",
         )
         event2 = UserRegisteredEvent(
-            user_id="user-same", email="same@test.com", first_name="Same", last_name="User"
+            user_id="user-same",
+            email="same@test.com",
+            first_name="Same",
+            last_name="User",
         )
         assert event1.event_id != event2.event_id

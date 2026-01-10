@@ -79,7 +79,9 @@ class TestResendVerificationEmailUseCase:
             assert updated_user.verification_token is not None
             assert updated_user.verification_token != old_token  # Debe ser diferente
 
-    async def test_execute_with_nonexistent_email_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_nonexistent_email_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Email no encontrado lanza error genérico
         Given: Un email que no existe en la BD
@@ -114,7 +116,9 @@ class TestResendVerificationEmailUseCase:
         with pytest.raises(ResendVerificationError, match="El email es requerido"):
             await use_case.execute("   ")
 
-    async def test_execute_with_verified_email_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_verified_email_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Email ya verificado lanza error genérico
         Given: Un usuario con email ya verificado
@@ -196,7 +200,9 @@ class TestResendVerificationEmailUseCase:
             assert persisted_user.verification_token is not None
             assert persisted_user.email_verified is False
 
-    async def test_execute_when_email_service_fails_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_when_email_service_fails_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Error al enviar email lanza excepción y NO guarda token
         Given: Un usuario válido pero el servicio de email falla

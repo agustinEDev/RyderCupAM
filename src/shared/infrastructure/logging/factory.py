@@ -57,7 +57,9 @@ class LoggerFactory:
         self._loggers: dict[str, Logger] = {}
         self._logger_lock = Lock()
 
-    def __new__(cls, config: LogConfig | None = None):  # noqa: ARG004 - config used in __init__ after singleton creation
+    def __new__(
+        cls, config: LogConfig | None = None
+    ):  # noqa: ARG004 - config used in __init__ after singleton creation
         """Implementación singleton thread-safe"""
         if cls._instance is None:
             with cls._lock:
@@ -126,7 +128,9 @@ class LoggerFactory:
         if not isinstance(config_path, Path):
             config_path = Path(config_path)
         if not config_path.exists():
-            raise FileNotFoundError(f"Archivo de configuración no encontrado: {config_path}")
+            raise FileNotFoundError(
+                f"Archivo de configuración no encontrado: {config_path}"
+            )
 
         # Cargar según extensión
         if config_path.suffix.lower() in [".yaml", ".yml"]:
@@ -165,18 +169,27 @@ class LoggerFactory:
 
         # Personalizar según variables de entorno
         if log_level := os.getenv("LOG_LEVEL"):
-            from .logger import LogLevel  # noqa: PLC0415 - Lazy loading for env customization
+            from .logger import (
+                LogLevel,
+            )  # noqa: PLC0415 - Lazy loading for env customization
 
             config.level = LogLevel(log_level.upper())
 
         if log_file := os.getenv("LOG_FILE"):
-            from .config import HandlerConfig, LogHandler  # noqa: PLC0415, I001 - Lazy loading for env customization
+            from .config import (
+                HandlerConfig,
+                LogHandler,
+            )  # noqa: PLC0415, I001 - Lazy loading for env customization
 
-            file_handler = HandlerConfig(type=LogHandler.ROTATING_FILE, filename=log_file)
+            file_handler = HandlerConfig(
+                type=LogHandler.ROTATING_FILE, filename=log_file
+            )
             config.handlers.append(file_handler)
 
         if log_format := os.getenv("LOG_FORMAT"):
-            from .config import LogFormat  # noqa: PLC0415 - Lazy loading for env customization
+            from .config import (
+                LogFormat,
+            )  # noqa: PLC0415 - Lazy loading for env customization
 
             for handler in config.handlers:
                 handler.format = LogFormat(log_format.lower())
@@ -189,15 +202,21 @@ class LoggerFactory:
         try:
             import yaml  # noqa: PLC0415 - Optional dependency, lazy import
 
-            with open(path, encoding="utf-8") as f:  # noqa: PTH123 - open() is more readable here
+            with open(
+                path, encoding="utf-8"
+            ) as f:  # noqa: PTH123 - open() is more readable here
                 return yaml.safe_load(f) or {}
         except ImportError as e:
-            raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
+            raise ImportError(
+                "PyYAML no está instalado. Instálalo con: pip install pyyaml"
+            ) from e
 
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(path, encoding="utf-8") as f:  # noqa: PTH123 - open() is more readable here
+        with open(
+            path, encoding="utf-8"
+        ) as f:  # noqa: PTH123 - open() is more readable here
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:

@@ -89,11 +89,11 @@ def sanitize_html(text: str | None, *, allow_whitespace: bool = True) -> str | N
 def _sanitize_list_items(items: list, exclude: list[str]) -> list:
     """Sanitiza items de una lista recursivamente."""
     return [
-        sanitize_all_fields(item, exclude=exclude)
-        if isinstance(item, dict)
-        else sanitize_html(item)
-        if isinstance(item, str)
-        else item
+        (
+            sanitize_all_fields(item, exclude=exclude)
+            if isinstance(item, dict)
+            else sanitize_html(item) if isinstance(item, str) else item
+        )
         for item in items
     ]
 

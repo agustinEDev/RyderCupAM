@@ -44,7 +44,9 @@ class TestRequestEnrollment:
         assert data["user_id"] == player["user"]["id"]
 
     @pytest.mark.asyncio
-    async def test_request_enrollment_draft_competition_returns_400(self, client: AsyncClient):
+    async def test_request_enrollment_draft_competition_returns_400(
+        self, client: AsyncClient
+    ):
         """Solicitar inscripción en competición DRAFT retorna 400."""
         creator = await create_authenticated_user(
             client, "creator2@test.com", "P@ssw0rd123!", "Creator", "Two"
@@ -202,7 +204,9 @@ class TestApproveRejectEnrollment:
 
         # Solicitar inscripción
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         # Aprobar
@@ -226,7 +230,9 @@ class TestApproveRejectEnrollment:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         set_auth_cookies(client, creator["cookies"])
@@ -253,7 +259,9 @@ class TestCancelWithdrawEnrollment:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         response = await client.post(f"/api/v1/enrollments/{enrollment_id}/cancel")
@@ -276,7 +284,9 @@ class TestCancelWithdrawEnrollment:
 
         # Solicitar y aprobar
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         set_auth_cookies(client, creator["cookies"])
@@ -306,7 +316,9 @@ class TestCancelWithdrawEnrollment:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         set_auth_cookies(client, other["cookies"])
@@ -367,7 +379,9 @@ class TestEnrollmentEdgeCases:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         # Primera aprobación
@@ -393,7 +407,9 @@ class TestEnrollmentEdgeCases:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         # Intentar withdraw sin aprobar
@@ -415,7 +431,9 @@ class TestEnrollmentEdgeCases:
         await activate_competition(client, creator["cookies"], comp["id"])
 
         set_auth_cookies(client, player["cookies"])
-        enroll_response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments"
+        )
         enrollment_id = enroll_response.json()["id"]
 
         # Aprobar

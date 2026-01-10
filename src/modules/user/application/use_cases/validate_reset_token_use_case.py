@@ -45,7 +45,9 @@ class ValidateResetTokenUseCase:
         """
         self._uow = uow
 
-    async def execute(self, request: ValidateResetTokenRequestDTO) -> ValidateResetTokenResponseDTO:
+    async def execute(
+        self, request: ValidateResetTokenRequestDTO
+    ) -> ValidateResetTokenResponseDTO:
         """
         Ejecuta el caso de uso de validación de token.
 
@@ -85,7 +87,8 @@ class ValidateResetTokenUseCase:
 
         if is_valid:
             return ValidateResetTokenResponseDTO(
-                valid=True, message="Token válido. Puedes proceder con el reseteo de tu contraseña."
+                valid=True,
+                message="Token válido. Puedes proceder con el reseteo de tu contraseña.",
             )
         # Token expirado (> 24 horas)
         return ValidateResetTokenResponseDTO(

@@ -11,9 +11,13 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
 
 
@@ -26,7 +30,9 @@ class UpdateProfileUseCase:
     """
 
     def __init__(
-        self, uow: UserUnitOfWorkInterface, country_repository: CountryRepositoryInterface
+        self,
+        uow: UserUnitOfWorkInterface,
+        country_repository: CountryRepositoryInterface,
     ):
         """
         Inicializa el caso de uso con sus dependencias.
@@ -67,7 +73,9 @@ class UpdateProfileUseCase:
                 country_code_vo = CountryCode(request.country_code)
                 country_exists = await self._country_repository.exists(country_code_vo)
                 if not country_exists:
-                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
+                    raise ValueError(
+                        f"El código de país '{request.country_code}' no es válido."
+                    )
 
             # Actualizar perfil (entity valida y emite eventos)
             user.update_profile(
@@ -83,5 +91,6 @@ class UpdateProfileUseCase:
 
         # Construir respuesta
         return UpdateProfileResponseDTO(
-            user=UserResponseDTO.model_validate(user), message="Profile updated successfully"
+            user=UserResponseDTO.model_validate(user),
+            message="Profile updated successfully",
         )

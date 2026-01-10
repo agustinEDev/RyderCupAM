@@ -12,7 +12,9 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -79,7 +81,9 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         statement = (
             select(Enrollment)
             .where(Enrollment.competition_id == competition_id)
-            .order_by(Enrollment.created_at.asc())  # Primero en inscribirse, primero en lista
+            .order_by(
+                Enrollment.created_at.asc()
+            )  # Primero en inscribirse, primero en lista
             .limit(limit)
             .offset(offset)
         )
@@ -165,7 +169,12 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         statement = (
             select(func.count())
             .select_from(Enrollment)
-            .where(and_(Enrollment.user_id == user_id, Enrollment.competition_id == competition_id))
+            .where(
+                and_(
+                    Enrollment.user_id == user_id,
+                    Enrollment.competition_id == competition_id,
+                )
+            )
         )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
@@ -231,7 +240,12 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         statement = (
             select(Enrollment)
-            .where(and_(Enrollment.competition_id == competition_id, Enrollment.team_id == team_id))
+            .where(
+                and_(
+                    Enrollment.competition_id == competition_id,
+                    Enrollment.team_id == team_id,
+                )
+            )
             .order_by(Enrollment.created_at.asc())
         )
         result = await self._session.execute(statement)

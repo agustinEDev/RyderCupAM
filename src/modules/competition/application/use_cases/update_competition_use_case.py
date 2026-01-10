@@ -13,7 +13,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.competition_name import (
+    CompetitionName,
+)
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
@@ -69,7 +71,10 @@ class UpdateCompetitionUseCase:
         self._location_builder = LocationBuilder(self._uow.countries)
 
     async def execute(
-        self, competition_id: CompetitionId, request: UpdateCompetitionRequestDTO, user_id: UserId
+        self,
+        competition_id: CompetitionId,
+        request: UpdateCompetitionRequestDTO,
+        user_id: UserId,
     ) -> UpdateCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de actualización de competición.
@@ -98,7 +103,9 @@ class UpdateCompetitionUseCase:
 
             # 2. Validar que el usuario es el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
+                raise NotCompetitionCreatorError(
+                    "Solo el creador puede actualizar la competición"
+                )
 
             # 3. Validar que está en estado DRAFT (se puede modificar)
             if not competition.allows_modifications():
@@ -133,7 +140,9 @@ class UpdateCompetitionUseCase:
                 )
 
             team_assignment = (
-                TeamAssignment(request.team_assignment) if request.team_assignment else None
+                TeamAssignment(request.team_assignment)
+                if request.team_assignment
+                else None
             )
 
             # 5. Actualizar la competición usando el método de dominio
@@ -154,7 +163,9 @@ class UpdateCompetitionUseCase:
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(
-            id=competition.id.value, name=str(competition.name), updated_at=competition.updated_at
+            id=competition.id.value,
+            name=str(competition.name),
+            updated_at=competition.updated_at,
         )
 
     def _build_handicap_settings(
@@ -188,6 +199,8 @@ class UpdateCompetitionUseCase:
             return HandicapSettings(h_type, None)
         # PERCENTAGE requiere porcentaje obligatoriamente
         if handicap_percentage is None:
-            raise ValueError("handicap_percentage es requerido cuando handicap_type es PERCENTAGE")
+            raise ValueError(
+                "handicap_percentage es requerido cuando handicap_type es PERCENTAGE"
+            )
         # HandicapSettings validará que sea 90, 95 o 100
         return HandicapSettings(h_type, handicap_percentage)

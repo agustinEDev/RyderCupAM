@@ -29,16 +29,32 @@ from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
-from src.modules.competition.infrastructure.api.v1 import competition_routes, enrollment_routes  # noqa: E402
+from src.modules.competition.infrastructure.api.v1 import (
+    competition_routes,
+    enrollment_routes,
+)  # noqa: E402
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
 )
-from src.modules.user.infrastructure.api.v1 import auth_routes, device_routes, handicap_routes, user_routes  # noqa: E402
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import start_mappers  # noqa: E402
+from src.modules.user.infrastructure.api.v1 import (
+    auth_routes,
+    device_routes,
+    handicap_routes,
+    user_routes,
+)  # noqa: E402
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
+    start_mappers,
+)  # noqa: E402
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
-from src.shared.infrastructure.http.correlation_middleware import CorrelationMiddleware  # noqa: E402
-from src.shared.infrastructure.http.sentry_middleware import SentryUserContextMiddleware  # noqa: E402
-from src.shared.infrastructure.middleware.csrf_middleware import CSRFMiddleware  # noqa: E402
+from src.shared.infrastructure.http.correlation_middleware import (
+    CorrelationMiddleware,
+)  # noqa: E402
+from src.shared.infrastructure.http.sentry_middleware import (
+    SentryUserContextMiddleware,
+)  # noqa: E402
+from src.shared.infrastructure.middleware.csrf_middleware import (
+    CSRFMiddleware,
+)  # noqa: E402
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (  # noqa: E402
     start_mappers as start_country_mappers,
 )
@@ -271,13 +287,17 @@ app.include_router(
 
 # Endpoints protegidos de documentación con HTTP Basic Auth
 @app.get("/docs", include_in_schema=False)
-async def get_documentation(username: str = Depends(verify_docs_credentials)):  # noqa: ARG001
+async def get_documentation(
+    username: str = Depends(verify_docs_credentials),
+):  # noqa: ARG001
     """Swagger UI protegido con HTTP Basic Auth."""
     return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
 
 
 @app.get("/redoc", include_in_schema=False)
-async def get_redoc_documentation(username: str = Depends(verify_docs_credentials)):  # noqa: ARG001
+async def get_redoc_documentation(
+    username: str = Depends(verify_docs_credentials),
+):  # noqa: ARG001
     """ReDoc UI protegido con HTTP Basic Auth."""
     return get_redoc_html(openapi_url="/openapi.json", title="API Docs - ReDoc")
 

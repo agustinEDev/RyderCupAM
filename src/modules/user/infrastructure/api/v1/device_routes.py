@@ -34,7 +34,9 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
 )
-from src.modules.user.application.use_cases.revoke_device_use_case import RevokeDeviceUseCase
+from src.modules.user.application.use_cases.revoke_device_use_case import (
+    RevokeDeviceUseCase,
+)
 from src.modules.user.domain.entities.user import User
 
 logger = logging.getLogger(__name__)

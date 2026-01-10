@@ -58,9 +58,11 @@ async def list_countries(
 
         return [
             CountryResponseDTO(
-                code=str(country.code.value)
-                if hasattr(country.code, "value")
-                else str(country.code),
+                code=(
+                    str(country.code.value)
+                    if hasattr(country.code, "value")
+                    else str(country.code)
+                ),
                 name_en=country.name_en,
                 name_es=country.name_es,
             )
@@ -106,7 +108,8 @@ async def list_adjacent_countries(
         country = await uow.countries.find_by_code(code)
         if not country:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"País no encontrado: {country_code}"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"País no encontrado: {country_code}",
             )
 
         # Obtener países adyacentes

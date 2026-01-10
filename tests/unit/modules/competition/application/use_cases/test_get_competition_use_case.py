@@ -106,7 +106,9 @@ class TestGetCompetitionUseCase:
         assert competition.handicap_settings.type.value == "SCRATCH"
         assert competition.handicap_settings.percentage is None
 
-    async def test_should_raise_error_when_competition_not_found(self, uow: InMemoryUnitOfWork):
+    async def test_should_raise_error_when_competition_not_found(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Verifica que se lanza excepción si la competición no existe.
 

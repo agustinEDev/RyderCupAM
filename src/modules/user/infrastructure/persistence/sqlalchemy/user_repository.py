@@ -79,7 +79,9 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""
         # Para composites, necesitamos usar where() y comparar con el atributo privado
-        statement = select(func.count()).select_from(User).where(User._email == email.value)
+        statement = (
+            select(func.count()).select_from(User).where(User._email == email.value)
+        )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 

@@ -377,7 +377,10 @@ class TestUserIntegration:
 
         # Act
         user = User.create(
-            first_name=first_name, last_name=last_name, email_str=email, plain_password=password
+            first_name=first_name,
+            last_name=last_name,
+            email_str=email,
+            plain_password=password,
         )
         full_name = user.get_full_name()
         is_valid = user.is_valid()
@@ -456,7 +459,9 @@ class TestUserEntityEventCollection:
         assert len(events) == 1
 
         # Verificar que es el evento correcto
-        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        from src.modules.user.domain.events.user_registered_event import (
+            UserRegisteredEvent,
+        )
 
         event = events[0]
         assert isinstance(event, UserRegisteredEvent)
@@ -517,11 +522,16 @@ class TestUserEntityEventCollection:
             plain_password="ValidPassword123!",
         )
         user.clear_domain_events()  # Limpiar evento de creación
-        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        from src.modules.user.domain.events.user_registered_event import (
+            UserRegisteredEvent,
+        )
 
         # Act
         event = UserRegisteredEvent(
-            user_id="test-id-123", email="test@test.com", first_name="Test", last_name="User"
+            user_id="test-id-123",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User",
         )
         user._add_domain_event(event)
 
@@ -844,7 +854,9 @@ class TestUserEmailVerification:
         assert len(events) > 0
 
         # Verificar que hay un EmailVerifiedEvent
-        from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
+        from src.modules.user.domain.events.email_verified_event import (
+            EmailVerifiedEvent,
+        )
 
         email_verified_events = [e for e in events if isinstance(e, EmailVerifiedEvent)]
         assert len(email_verified_events) == 1

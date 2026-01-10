@@ -92,7 +92,9 @@ class TestListAdjacentCountries:
         assert "PT" in codes or "FR" in codes
 
     @pytest.mark.asyncio
-    async def test_adjacent_countries_invalid_code_returns_400(self, client: AsyncClient):
+    async def test_adjacent_countries_invalid_code_returns_400(
+        self, client: AsyncClient
+    ):
         """Código de país inválido retorna 400."""
         user = await create_authenticated_user(
             client, "user5@test.com", "P@ssw0rd123!", "Test", "Five"

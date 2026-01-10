@@ -11,7 +11,9 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 
 
 class TestCompetitionRepositoryInterface:
@@ -44,27 +46,37 @@ class TestCompetitionRepositoryInterface:
     def test_has_find_by_creator_method(self):
         """Debe tener método find_by_creator."""
         assert hasattr(CompetitionRepositoryInterface, "find_by_creator")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.find_by_creator)
+        assert inspect.iscoroutinefunction(
+            CompetitionRepositoryInterface.find_by_creator
+        )
 
     def test_has_find_by_status_method(self):
         """Debe tener método find_by_status."""
         assert hasattr(CompetitionRepositoryInterface, "find_by_status")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.find_by_status)
+        assert inspect.iscoroutinefunction(
+            CompetitionRepositoryInterface.find_by_status
+        )
 
     def test_has_find_active_in_date_range_method(self):
         """Debe tener método find_active_in_date_range."""
         assert hasattr(CompetitionRepositoryInterface, "find_active_in_date_range")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.find_active_in_date_range)
+        assert inspect.iscoroutinefunction(
+            CompetitionRepositoryInterface.find_active_in_date_range
+        )
 
     def test_has_exists_with_name_method(self):
         """Debe tener método exists_with_name."""
         assert hasattr(CompetitionRepositoryInterface, "exists_with_name")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.exists_with_name)
+        assert inspect.iscoroutinefunction(
+            CompetitionRepositoryInterface.exists_with_name
+        )
 
     def test_has_count_by_creator_method(self):
         """Debe tener método count_by_creator."""
         assert hasattr(CompetitionRepositoryInterface, "count_by_creator")
-        assert inspect.iscoroutinefunction(CompetitionRepositoryInterface.count_by_creator)
+        assert inspect.iscoroutinefunction(
+            CompetitionRepositoryInterface.count_by_creator
+        )
 
     def test_cannot_instantiate_directly(self):
         """No se debe poder instanciar directamente (clase abstracta)."""
@@ -97,7 +109,9 @@ class TestEnrollmentRepositoryInterface:
     def test_has_find_by_competition_method(self):
         """Debe tener método find_by_competition."""
         assert hasattr(EnrollmentRepositoryInterface, "find_by_competition")
-        assert inspect.iscoroutinefunction(EnrollmentRepositoryInterface.find_by_competition)
+        assert inspect.iscoroutinefunction(
+            EnrollmentRepositoryInterface.find_by_competition
+        )
 
     def test_has_find_by_competition_and_status_method(self):
         """Debe tener método find_by_competition_and_status."""
@@ -161,7 +175,9 @@ class TestCountryRepositoryInterface:
     def test_has_find_adjacent_countries_method(self):
         """Debe tener método find_adjacent_countries."""
         assert hasattr(CountryRepositoryInterface, "find_adjacent_countries")
-        assert inspect.iscoroutinefunction(CountryRepositoryInterface.find_adjacent_countries)
+        assert inspect.iscoroutinefunction(
+            CountryRepositoryInterface.find_adjacent_countries
+        )
 
     def test_has_exists_method(self):
         """Debe tener método exists."""

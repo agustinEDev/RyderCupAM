@@ -192,7 +192,9 @@ class SecurityLogger:
             },
         )
 
-    def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911 - Multiple event types require specific messages
+    def _build_message(
+        self, event: SecurityAuditEvent
+    ) -> str:  # noqa: PLR0911 - Multiple event types require specific messages
         """
         Construye un mensaje descriptivo para el log.
 
@@ -208,9 +210,7 @@ class SecurityLogger:
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
-            return (
-                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
-            )
+            return f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
 
         if isinstance(event, LogoutEvent):
             return f"🚪 LOGOUT | {user_info} | Tokens revoked: {event.refresh_tokens_revoked}"
@@ -510,7 +510,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetRequestedAuditEvent  # noqa: PLC0415, I001
+        from src.shared.domain.events.security_events import (
+            PasswordResetRequestedAuditEvent,
+        )  # noqa: PLC0415, I001
 
         event = PasswordResetRequestedAuditEvent(
             user_id=user_id,
@@ -552,7 +554,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetCompletedAuditEvent  # noqa: PLC0415, I001
+        from src.shared.domain.events.security_events import (
+            PasswordResetCompletedAuditEvent,
+        )  # noqa: PLC0415, I001
 
         event = PasswordResetCompletedAuditEvent(
             user_id=user_id,

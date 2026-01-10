@@ -124,7 +124,9 @@ class RequestPasswordResetUseCase:
 
         # CASO 2: Email existe → Generar token y enviar email
         # Generar token de reseteo (expiración 24h)
-        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
+        token = user.generate_password_reset_token(
+            ip_address=ip_address, user_agent=user_agent
+        )
 
         # Guardar usuario con token de reseteo
         async with self._uow:
@@ -134,7 +136,9 @@ class RequestPasswordResetUseCase:
         # Enviar email con enlace de reseteo (Mailgun)
         reset_link = self._build_reset_link(token)
         await self._email_service.send_password_reset_email(
-            to_email=request.email, reset_link=reset_link, user_name=user.get_full_name()
+            to_email=request.email,
+            reset_link=reset_link,
+            user_name=user.get_full_name(),
         )
 
         # Security Logging: Solicitud exitosa

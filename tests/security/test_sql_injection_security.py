@@ -34,9 +34,9 @@ class TestSQLInjectionLoginEndpoint:
             response = await client.post("/api/v1/auth/login", json=login_data)
 
             # Debe fallar con validación de Pydantic (email inválido)
-            assert response.status_code == 422, (
-                f"Payload '{payload}' debe ser rechazado con 422 (validation error)"
-            )
+            assert (
+                response.status_code == 422
+            ), f"Payload '{payload}' debe ser rechazado con 422 (validation error)"
 
     async def test_sql_injection_in_password_field(self, client: AsyncClient):
         """
@@ -65,9 +65,10 @@ class TestSQLInjectionLoginEndpoint:
             response = await client.post("/api/v1/auth/login", json=login_data)
 
             # Debe fallar con 401 (credenciales inválidas), NO con error de BD
-            assert response.status_code in [401, 404], (
-                "SQL injection en password debe fallar con 401/404, no con error de BD"
-            )
+            assert response.status_code in [
+                401,
+                404,
+            ], "SQL injection en password debe fallar con 401/404, no con error de BD"
 
 
 @pytest.mark.asyncio
@@ -93,18 +94,22 @@ class TestSQLInjectionRegisterEndpoint:
 
         # El registro puede fallar con 422 (validación) o ser sanitizado
         # Si pasa validación, el payload debe ser sanitizado (sin ejecutar SQL)
-        assert response.status_code in [201, 422], (
-            "El registro debe fallar con validación o sanitizar el input"
-        )
+        assert response.status_code in [
+            201,
+            422,
+        ], "El registro debe fallar con validación o sanitizar el input"
 
         if response.status_code == 201:
             # Verificar que el nombre se guardó como texto plano (sin ejecutar SQL)
             # La tabla users debe seguir existiendo (no se ejecutó DROP TABLE)
-            login_data = {"email": "sqlinjection@example.com", "password": "ValidPassword123!"}
+            login_data = {
+                "email": "sqlinjection@example.com",
+                "password": "ValidPassword123!",
+            }
             login_response = await client.post("/api/v1/auth/login", json=login_data)
-            assert login_response.status_code == 200, (
-                "La tabla users debe seguir existiendo después del intento de SQL injection"
-            )
+            assert (
+                login_response.status_code == 200
+            ), "La tabla users debe seguir existiendo después del intento de SQL injection"
 
 
 @pytest.mark.asyncio
@@ -135,14 +140,18 @@ class TestSQLInjectionCompetitionEndpoint:
         response = await client.post("/api/v1/competitions", json=competition_data)
 
         # El nombre puede ser sanitizado o rechazado por validación
-        assert response.status_code in [201, 400, 422], (
-            "El input debe ser sanitizado o rechazado por validación"
-        )
+        assert response.status_code in [
+            201,
+            400,
+            422,
+        ], "El input debe ser sanitizado o rechazado por validación"
 
         if response.status_code == 201:
             # Verificar que la tabla competitions sigue existiendo
             list_response = await client.get("/api/v1/competitions")
-            assert list_response.status_code == 200, "La tabla competitions debe seguir existiendo"
+            assert (
+                list_response.status_code == 200
+            ), "La tabla competitions debe seguir existiendo"
 
 
 @pytest.mark.asyncio
@@ -169,9 +178,9 @@ class TestORMProtection:
         response = await client.post("/api/v1/auth/register", json=register_data)
 
         # Debe fallar por validación de email, no por error de SQL
-        assert response.status_code == 422, (
-            "Debe fallar con validación de Pydantic, no con error de SQL"
-        )
+        assert (
+            response.status_code == 422
+        ), "Debe fallar con validación de Pydantic, no con error de SQL"
 
     async def test_no_raw_sql_execution(self, client: AsyncClient):
         """
@@ -201,6 +210,8 @@ class TestORMProtection:
                 },
             )
             # Debe fallar con 422 (validación) o 401 (credenciales), nunca error SQL
-            assert response.status_code in [401, 404, 422], (
-                f"Payload '{payload}' no debe causar error de SQL"
-            )
+            assert response.status_code in [
+                401,
+                404,
+                422,
+            ], f"Payload '{payload}' no debe causar error de SQL"

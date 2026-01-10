@@ -14,7 +14,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.competition_name import (
+    CompetitionName,
+)
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.handicap_settings import (
     HandicapSettings,
@@ -80,7 +82,9 @@ class CreateCompetitionUseCase:
         async with self._uow:
             # 1. Validar que el nombre no exista para este creador
             name_vo = CompetitionName(request.name)
-            existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
+            existing = await self._uow.competitions.exists_with_name(
+                name_vo, creator_id
+            )
             if existing:
                 raise CompetitionAlreadyExistsError(
                     f"Ya existe una competición con el nombre '{request.name}'"
@@ -99,7 +103,9 @@ class CreateCompetitionUseCase:
             )
 
             # 4. Construir DateRange
-            date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
+            date_range = DateRange(
+                start_date=request.start_date, end_date=request.end_date
+            )
 
             # 5. Construir TeamAssignment desde string
             team_assignment_vo = TeamAssignment(request.team_assignment)
@@ -134,12 +140,16 @@ class CreateCompetitionUseCase:
             end_date=competition.dates.end_date,
             # Location
             country_code=competition.location.main_country.value,
-            secondary_country_code=competition.location.adjacent_country_1.value
-            if competition.location.adjacent_country_1
-            else None,
-            tertiary_country_code=competition.location.adjacent_country_2.value
-            if competition.location.adjacent_country_2
-            else None,
+            secondary_country_code=(
+                competition.location.adjacent_country_1.value
+                if competition.location.adjacent_country_1
+                else None
+            ),
+            tertiary_country_code=(
+                competition.location.adjacent_country_2.value
+                if competition.location.adjacent_country_2
+                else None
+            ),
             location=str(competition.location),
             # Handicap
             handicap_type=competition.handicap_settings.type.value,
@@ -174,6 +184,8 @@ class CreateCompetitionUseCase:
         h_type = HandicapType(handicap_type)
 
         if h_type == HandicapType.SCRATCH:
-            return HandicapSettings(h_type, None)  # Scratch requiere None explícitamente
+            return HandicapSettings(
+                h_type, None
+            )  # Scratch requiere None explícitamente
         # PERCENTAGE requiere porcentaje
         return HandicapSettings(h_type, handicap_percentage)

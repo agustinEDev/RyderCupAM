@@ -30,7 +30,9 @@ class MockHandicapService(HandicapService):
         18.0
     """
 
-    def __init__(self, handicaps: dict[str, float] | None = None, default: float | None = 15.0):
+    def __init__(
+        self, handicaps: dict[str, float] | None = None, default: float | None = 15.0
+    ):
         """
         Inicializa el servicio mock.
 

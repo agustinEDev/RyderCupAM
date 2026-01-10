@@ -29,8 +29,12 @@ class EnrolledUserDTO(BaseModel):
     last_name: str = Field(..., description="Apellido del usuario")
     email: str = Field(..., description="Email del usuario")
     handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
-    country_code: str | None = Field(None, description="Código ISO del país del usuario")
-    avatar_url: str | None = Field(None, description="URL del avatar del usuario (futuro)")
+    country_code: str | None = Field(
+        None, description="Código ISO del país del usuario"
+    )
+    avatar_url: str | None = Field(
+        None, description="URL del avatar del usuario (futuro)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,7 +52,9 @@ class RequestEnrollmentRequestDTO(BaseModel):
     competition_id: UUID = Field(
         ..., description="ID de la competición a la que se solicita inscripción."
     )
-    user_id: UUID = Field(..., description="ID del usuario que solicita la inscripción.")
+    user_id: UUID = Field(
+        ..., description="ID del usuario que solicita la inscripción."
+    )
 
 
 class RequestEnrollmentResponseDTO(BaseModel):
@@ -184,7 +190,9 @@ class WithdrawEnrollmentRequestDTO(BaseModel):
     """
 
     enrollment_id: UUID = Field(..., description="ID de la inscripción a retirar.")
-    reason: str | None = Field(None, max_length=500, description="Razón del retiro (opcional).")
+    reason: str | None = Field(
+        None, max_length=500, description="Razón del retiro (opcional)."
+    )
 
 
 class WithdrawEnrollmentResponseDTO(BaseModel):
@@ -254,9 +262,13 @@ class EnrollmentResponseDTO(BaseModel):
     )
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
-    custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
+    custom_handicap: Decimal | None = Field(
+        None, description="Hándicap personalizado (si aplica)."
+    )
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
-    updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
+    updated_at: datetime = Field(
+        ..., description="Fecha y hora de última actualización."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -29,7 +29,11 @@ class PasswordHistoryRecordedEvent(DomainEvent):
     """
 
     def __init__(
-        self, user_id: str, history_id: str, recorded_at: datetime, total_history_count: int
+        self,
+        user_id: str,
+        history_id: str,
+        recorded_at: datetime,
+        total_history_count: int,
     ):
         """
         Inicializa el evento de historial de contraseña.

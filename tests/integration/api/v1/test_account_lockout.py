@@ -46,7 +46,9 @@ async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
                 "email": "locktest@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-1-{i + 1}"},  # Cliente diferente por intento
+            headers={
+                "X-Test-Client-ID": f"test-client-1-{i + 1}"
+            },  # Cliente diferente por intento
         )
         # Then: Todos retornan 401 (credenciales incorrectas)
         assert response.status_code == 401, f"Attempt {i + 1} should return 401"
@@ -68,7 +70,9 @@ async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_locked_account_cannot_login_even_with_correct_password(client: AsyncClient):
+async def test_locked_account_cannot_login_even_with_correct_password(
+    client: AsyncClient,
+):
     """
     Test que una cuenta bloqueada NO puede hacer login incluso con password correcta.
 
@@ -249,7 +253,9 @@ async def test_lockout_persists_across_requests(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_lockout_error_message_includes_locked_until_timestamp(client: AsyncClient):
+async def test_lockout_error_message_includes_locked_until_timestamp(
+    client: AsyncClient,
+):
     """
     Test que el mensaje de error incluye el timestamp locked_until.
 
@@ -278,7 +284,9 @@ async def test_lockout_error_message_includes_locked_until_timestamp(client: Asy
                 "email": "timestamp@example.com",
                 "password": "WrongPassword123!",
             },
-            headers={"X-Test-Client-ID": f"test-client-5-{i + 1}"},  # Cliente diferente por intento
+            headers={
+                "X-Test-Client-ID": f"test-client-5-{i + 1}"
+            },  # Cliente diferente por intento
         )
 
     # When: Intentar login

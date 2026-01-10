@@ -10,7 +10,9 @@ import pytest
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateProfileRequestDTO
-from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
+from src.modules.user.application.use_cases.update_profile_use_case import (
+    UpdateProfileUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -119,7 +121,9 @@ class TestUpdateProfileUseCase:
         with pytest.raises(UserNotFoundError):
             await use_case.execute(non_existent_id, request)
 
-    async def test_update_rejects_too_short_names(self, uow, country_repository, existing_user):
+    async def test_update_rejects_too_short_names(
+        self, uow, country_repository, existing_user
+    ):
         """Debe rechazar nombres muy cortos (validación Pydantic)."""
         # Arrange
         UpdateProfileUseCase(uow, country_repository)
@@ -132,7 +136,9 @@ class TestUpdateProfileUseCase:
                 last_name=None,
             )
 
-    async def test_no_update_when_values_are_same(self, uow, country_repository, existing_user):
+    async def test_no_update_when_values_are_same(
+        self, uow, country_repository, existing_user
+    ):
         """Debe retornar sin cambios cuando los valores son los mismos."""
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
@@ -150,7 +156,9 @@ class TestUpdateProfileUseCase:
         assert response.user.first_name == "John"
         assert response.user.last_name == "Doe"
 
-    async def test_update_emits_domain_event(self, uow, country_repository, existing_user):
+    async def test_update_emits_domain_event(
+        self, uow, country_repository, existing_user
+    ):
         """Debe emitir UserProfileUpdatedEvent cuando se actualiza."""
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)

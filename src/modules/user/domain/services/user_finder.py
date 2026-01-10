@@ -2,7 +2,9 @@
 
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
 

@@ -8,8 +8,13 @@ from datetime import datetime
 
 import pytest
 
-from src.modules.user.application.dto.user_dto import LogoutRequestDTO, LogoutResponseDTO
-from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.dto.user_dto import (
+    LogoutRequestDTO,
+    LogoutResponseDTO,
+)
+from src.modules.user.application.use_cases.logout_user_use_case import (
+    LogoutUserUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,

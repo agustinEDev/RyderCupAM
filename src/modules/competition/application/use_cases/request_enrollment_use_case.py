@@ -13,7 +13,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -62,7 +64,9 @@ class RequestEnrollmentUseCase:
         """
         self._uow = uow
 
-    async def execute(self, request: RequestEnrollmentRequestDTO) -> RequestEnrollmentResponseDTO:
+    async def execute(
+        self, request: RequestEnrollmentRequestDTO
+    ) -> RequestEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de solicitud de inscripción.
 
@@ -96,8 +100,10 @@ class RequestEnrollmentUseCase:
                 )
 
             # 3. Verificar que el usuario no está ya inscrito
-            already_enrolled = await self._uow.enrollments.exists_for_user_in_competition(
-                user_id, competition_id
+            already_enrolled = (
+                await self._uow.enrollments.exists_for_user_in_competition(
+                    user_id, competition_id
+                )
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(
@@ -106,7 +112,9 @@ class RequestEnrollmentUseCase:
 
             # 4. Crear enrollment con factory method
             enrollment = Enrollment.request(
-                id=EnrollmentId.generate(), competition_id=competition_id, user_id=user_id
+                id=EnrollmentId.generate(),
+                competition_id=competition_id,
+                user_id=user_id,
             )
 
             # 5. Persistir

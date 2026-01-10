@@ -14,12 +14,17 @@ from sqlalchemy.types import CHAR, TypeDecorator
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
+from src.shared.infrastructure.persistence.sqlalchemy.base import (
+    mapper_registry,
+    metadata,
+)
 
 # --- TypeDecorators ---
 
+
 class UserDeviceIdDecorator(TypeDecorator):
     """TypeDecorator para UserDeviceId → CHAR(36)."""
+
     impl = CHAR(36)
     cache_ok = True
 
@@ -38,6 +43,7 @@ class UserDeviceIdDecorator(TypeDecorator):
 
 class UserIdDecorator(TypeDecorator):
     """TypeDecorator para UserId → CHAR(36)."""
+
     impl = CHAR(36)
     cache_ok = True
 
@@ -60,7 +66,12 @@ user_devices_table = Table(
     "user_devices",
     metadata,
     Column("id", UserDeviceIdDecorator, primary_key=True),
-    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
     Column("device_name", String(200), nullable=False),
     Column("user_agent", Text, nullable=False),
     Column("ip_address", String(45), nullable=False),
@@ -72,6 +83,7 @@ user_devices_table = Table(
 
 
 # --- Mapper ---
+
 
 def start_user_device_mappers():
     """Inicia el mapper imperativo de UserDevice → user_devices."""

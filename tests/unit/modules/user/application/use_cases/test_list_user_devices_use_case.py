@@ -128,7 +128,10 @@ class TestListUserDevicesUseCase:
 
         # Revocar dispositivo 2 (acceso directo al repositorio para test)
         async with uow:
-            from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+            from src.modules.user.domain.value_objects.user_device_id import (
+                UserDeviceId,
+            )
+
             device_id = UserDeviceId(response2.device_id)
             device = await uow.user_devices.find_by_id(device_id)
             device.revoke()

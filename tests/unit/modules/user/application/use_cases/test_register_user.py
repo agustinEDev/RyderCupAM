@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO
-from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
+from src.modules.user.application.use_cases.register_user_use_case import (
+    RegisterUserUseCase,
+)
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (

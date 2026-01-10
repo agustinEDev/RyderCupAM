@@ -16,8 +16,12 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
-from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
-from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
+from src.modules.user.application.use_cases.update_profile_use_case import (
+    UpdateProfileUseCase,
+)
+from src.modules.user.application.use_cases.update_security_use_case import (
+    UpdateSecurityUseCase,
+)
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
     InvalidCredentialsError,
@@ -80,9 +84,13 @@ def get_user_agent(request: Request) -> str:
 )
 async def find_user(
     email: str | None = Query(None, description="Email del usuario a buscar"),
-    full_name: str | None = Query(None, description="Nombre completo del usuario a buscar"),
+    full_name: str | None = Query(
+        None, description="Nombre completo del usuario a buscar"
+    ),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - Reserved for future role checks
+    current_user: UserResponseDTO = Depends(
+        get_current_user
+    ),  # noqa: ARG001 - Reserved for future role checks
 ):
     """
     Endpoint para buscar un usuario por email o nombre completo.

@@ -87,7 +87,10 @@ class TestRefreshTokenEndpoint:
         assert data["user"]["first_name"] == test_user_data["first_name"]
         assert data["user"]["last_name"] == test_user_data["last_name"]
         assert "message" in data
-        assert "renovado" in data["message"].lower() or "refresh" in data["message"].lower()
+        assert (
+            "renovado" in data["message"].lower()
+            or "refresh" in data["message"].lower()
+        )
 
         # Verificar que el access token es un JWT válido
         new_access_token = data["access_token"]
@@ -130,7 +133,14 @@ class TestRefreshTokenEndpoint:
             # El mensaje puede ser variado dependiendo de la validación
             assert any(
                 keyword in data["detail"].lower()
-                for keyword in ["token", "inválido", "invalid", "expirado", "expired", "login"]
+                for keyword in [
+                    "token",
+                    "inválido",
+                    "invalid",
+                    "expirado",
+                    "expired",
+                    "login",
+                ]
             )
 
     async def test_refresh_token_with_invalid_token_returns_401(
@@ -158,7 +168,14 @@ class TestRefreshTokenEndpoint:
         assert "detail" in data
         assert any(
             keyword in data["detail"].lower()
-            for keyword in ["token", "inválido", "invalid", "expirado", "expired", "login"]
+            for keyword in [
+                "token",
+                "inválido",
+                "invalid",
+                "expirado",
+                "expired",
+                "login",
+            ]
         )
 
     async def test_refresh_token_after_logout_returns_401(
@@ -290,7 +307,9 @@ class TestRefreshTokenEndpoint:
         # Then: Response NO contiene nuevo refresh_token
         assert response.status_code == 200
         data = response.json()
-        assert "refresh_token" not in data, "refresh-token NO debe renovar el refresh token"
+        assert (
+            "refresh_token" not in data
+        ), "refresh-token NO debe renovar el refresh token"
 
         # Then: Set-Cookie NO establece nueva cookie refresh_token
         set_cookie_header = response.headers.get("set-cookie", "")

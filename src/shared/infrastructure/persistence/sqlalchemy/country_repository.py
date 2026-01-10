@@ -60,7 +60,9 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         Returns:
             List[Country]: Lista de países activos ordenados alfabéticamente por nombre en inglés
         """
-        statement = select(Country).where(Country.active).order_by(Country.name_en.asc())
+        statement = (
+            select(Country).where(Country.active).order_by(Country.name_en.asc())
+        )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
@@ -141,6 +143,8 @@ class SQLAlchemyCountryRepository(CountryRepositoryInterface):
         Returns:
             bool: True si existe, False si no existe
         """
-        statement = select(func.count()).select_from(Country).where(Country.code == code)
+        statement = (
+            select(func.count()).select_from(Country).where(Country.code == code)
+        )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0

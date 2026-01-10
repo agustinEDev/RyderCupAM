@@ -19,8 +19,12 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
-from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 
@@ -171,8 +175,12 @@ class TestUserUnitOfWorkContractCompliance:
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
-                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(
+                    spec=RefreshTokenRepositoryInterface
+                )
+                self._password_history_repo = AsyncMock(
+                    spec=PasswordHistoryRepositoryInterface
+                )
                 self._active = False
                 self._committed = False
 
@@ -246,8 +254,12 @@ class TestUserUnitOfWorkContractCompliance:
         class TestUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
-                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(
+                    spec=RefreshTokenRepositoryInterface
+                )
+                self._password_history_repo = AsyncMock(
+                    spec=PasswordHistoryRepositoryInterface
+                )
                 self._active = False
                 self._rolled_back = False
 
@@ -313,8 +325,12 @@ class TestUserUnitOfWorkIntegration:
         class IntegrationUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
-                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
+                self._refresh_token_repo = AsyncMock(
+                    spec=RefreshTokenRepositoryInterface
+                )
+                self._password_history_repo = AsyncMock(
+                    spec=PasswordHistoryRepositoryInterface
+                )
                 self._operations = []
                 self._committed = False
 

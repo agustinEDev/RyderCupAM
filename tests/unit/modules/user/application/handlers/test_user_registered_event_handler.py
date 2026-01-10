@@ -50,7 +50,10 @@ class TestUserRegisteredEventHandler:
     async def test_send_welcome_email_logging(self):
         handler = UserRegisteredEventHandler()
         event = UserRegisteredEvent(
-            user_id="test-user-123", email="test@test.com", first_name="Test", last_name="User"
+            user_id="test-user-123",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User",
         )
         with patch.object(handler._logger, "info") as mock_logger:
             await handler._send_welcome_email(event)
@@ -60,7 +63,10 @@ class TestUserRegisteredEventHandler:
     async def test_log_registration_logging(self):
         handler = UserRegisteredEventHandler()
         event = UserRegisteredEvent(
-            user_id="test-user-123", email="test@test.com", first_name="Test", last_name="User"
+            user_id="test-user-123",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User",
         )
         with patch.object(handler._logger, "info") as mock_logger:
             await handler._log_registration(event)
@@ -70,7 +76,10 @@ class TestUserRegisteredEventHandler:
     async def test_notify_external_systems_logging(self):
         handler = UserRegisteredEventHandler()
         event = UserRegisteredEvent(
-            user_id="test-user-123", email="test@test.com", first_name="Test", last_name="User"
+            user_id="test-user-123",
+            email="test@test.com",
+            first_name="Test",
+            last_name="User",
         )
         with patch.object(handler._logger, "info") as mock_logger:
             await handler._notify_external_systems(event)

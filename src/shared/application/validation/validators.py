@@ -87,26 +87,36 @@ class EmailValidator:
 
         # Validar que contenga @
         if "@" not in normalized:
-            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
+            raise ValueError(
+                "Formato de email inválido. Use el formato: usuario@dominio.com"
+            )
 
         # Validar partes del email (ANTES del regex para mensajes específicos)
         local, domain = normalized.rsplit("@", 1)
 
         # Local part no puede exceder 64 caracteres (RFC 5321)
         if len(local) > 64:  # noqa: PLR2004 - RFC 5321 max local part length
-            raise ValueError("La parte local del email (antes de @) no puede exceder 64 caracteres")
+            raise ValueError(
+                "La parte local del email (antes de @) no puede exceder 64 caracteres"
+            )
 
         # Domain no puede exceder 253 caracteres (RFC 5321)
         if len(domain) > 253:  # noqa: PLR2004 - RFC 5321 max domain length
-            raise ValueError("El dominio del email (después de @) no puede exceder 253 caracteres")
+            raise ValueError(
+                "El dominio del email (después de @) no puede exceder 253 caracteres"
+            )
 
         # Validar formato con regex (después de validaciones específicas)
         if not cls.EMAIL_REGEX.match(normalized):
-            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
+            raise ValueError(
+                "Formato de email inválido. Use el formato: usuario@dominio.com"
+            )
 
         # Domain debe tener al menos un punto
         if "." not in domain:
-            raise ValueError("Email debe contener un dominio válido con TLD (ej: .com, .es)")
+            raise ValueError(
+                "Email debe contener un dominio válido con TLD (ej: .com, .es)"
+            )
 
         # Validación opcional: rechazar dominios desechables
         if cls.DISPOSABLE_EMAIL_DOMAINS and domain in cls.DISPOSABLE_EMAIL_DOMAINS:
@@ -217,7 +227,9 @@ class NameValidator:
         if len(normalized) < 2:  # noqa: PLR2004 - Minimum reasonable name length
             raise ValueError(f"{field_name} debe tener al menos 2 caracteres")
 
-        if len(normalized) > 100:  # noqa: PLR2004 - Maximum name length (shared/FieldLimits)
+        if (
+            len(normalized) > 100
+        ):  # noqa: PLR2004 - Maximum name length (shared/FieldLimits)
             raise ValueError(f"{field_name} no puede exceder 100 caracteres")
 
         # Validar formato
@@ -265,7 +277,9 @@ def validate_country_code(code: str | None) -> str | None:
 
     # Validar longitud
     if len(normalized) != 2:  # noqa: PLR2004 - ISO 3166-1 alpha-2 standard
-        raise ValueError("Código de país debe tener exactamente 2 letras (ISO 3166-1 alpha-2)")
+        raise ValueError(
+            "Código de país debe tener exactamente 2 letras (ISO 3166-1 alpha-2)"
+        )
 
     # Validar que solo contenga letras
     if not normalized.isalpha():

@@ -31,7 +31,9 @@ class InMemoryPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         """
         self._history[str(password_history.id.value)] = password_history
 
-    async def find_recent_by_user(self, user_id: UserId, limit: int = 5) -> list[PasswordHistory]:
+    async def find_recent_by_user(
+        self, user_id: UserId, limit: int = 5
+    ) -> list[PasswordHistory]:
         """
         Obtiene los N registros más recientes de un usuario.
 
@@ -73,7 +75,9 @@ class InMemoryPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         Returns:
             Número de registros eliminados
         """
-        to_delete = [h_id for h_id, h in self._history.items() if h.created_at < older_than]
+        to_delete = [
+            h_id for h_id, h in self._history.items() if h.created_at < older_than
+        ]
 
         for h_id in to_delete:
             del self._history[h_id]

@@ -192,7 +192,9 @@ class TestPasswordResetCompletedEvent:
         completed_at = datetime.now()
 
         # Act
-        event = PasswordResetCompletedEvent(user_id=user_id, email=email, completed_at=completed_at)
+        event = PasswordResetCompletedEvent(
+            user_id=user_id, email=email, completed_at=completed_at
+        )
 
         # Assert
         assert event.user_id == user_id
@@ -213,7 +215,9 @@ class TestPasswordResetCompletedEvent:
         email = "test@example.com"
         completed_at = datetime.now()
 
-        event = PasswordResetCompletedEvent(user_id=user_id, email=email, completed_at=completed_at)
+        event = PasswordResetCompletedEvent(
+            user_id=user_id, email=email, completed_at=completed_at
+        )
 
         # Act
         repr_string = repr(event)

@@ -47,7 +47,9 @@ class TestGeneratePasswordResetToken:
         user_agent = "Mozilla/5.0 (Test Browser)"
 
         # Act
-        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
+        token = user.generate_password_reset_token(
+            ip_address=ip_address, user_agent=user_agent
+        )
 
         # Assert
         # 1. Verificar que se generó un token no vacío
@@ -67,7 +69,9 @@ class TestGeneratePasswordResetToken:
         # Verificar que la expiración está entre 23.9 y 24.1 horas desde ahora (tolerancia de 6 minutos)
         now = datetime.now()
         expected_expiration = now + timedelta(hours=24)
-        time_diff = abs((user.reset_token_expires_at - expected_expiration).total_seconds())
+        time_diff = abs(
+            (user.reset_token_expires_at - expected_expiration).total_seconds()
+        )
         assert time_diff < 360  # Menos de 6 minutos de diferencia
 
         # 5. Verificar que se actualizó updated_at
@@ -85,7 +89,9 @@ class TestGeneratePasswordResetToken:
         assert event.user_agent == user_agent
         assert event.reset_token_expires_at == user.reset_token_expires_at
 
-    def test_generate_password_reset_token_overwrites_previous_token(self, sample_user_data):
+    def test_generate_password_reset_token_overwrites_previous_token(
+        self, sample_user_data
+    ):
         """
         Test: Generar nuevo token sobrescribe el anterior
         Given: Usuario con token previo no utilizado
@@ -125,7 +131,9 @@ class TestGeneratePasswordResetToken:
         assert len(events) == 1
         assert isinstance(events[0], PasswordResetRequestedEvent)
 
-    def test_generate_password_reset_token_without_ip_and_user_agent(self, sample_user_data):
+    def test_generate_password_reset_token_without_ip_and_user_agent(
+        self, sample_user_data
+    ):
         """
         Test: Generar token sin IP ni User-Agent (parámetros opcionales)
         Given: Usuario existente
@@ -181,7 +189,9 @@ class TestCanResetPassword:
         # Assert
         assert result is True
 
-    def test_can_reset_password_returns_false_with_invalid_token(self, sample_user_data):
+    def test_can_reset_password_returns_false_with_invalid_token(
+        self, sample_user_data
+    ):
         """
         Test: Validar token incorrecto
         Given: Usuario con token válido
@@ -203,7 +213,9 @@ class TestCanResetPassword:
         # Assert
         assert result is False
 
-    def test_can_reset_password_returns_false_with_expired_token(self, sample_user_data):
+    def test_can_reset_password_returns_false_with_expired_token(
+        self, sample_user_data
+    ):
         """
         Test: Validar token expirado (>24 horas)
         Given: Usuario con token expirado
@@ -228,7 +240,9 @@ class TestCanResetPassword:
         # Assert
         assert result is False
 
-    def test_can_reset_password_raises_error_when_no_active_token(self, sample_user_data):
+    def test_can_reset_password_raises_error_when_no_active_token(
+        self, sample_user_data
+    ):
         """
         Test: Validar sin token activo
         Given: Usuario sin token de reseteo activo
@@ -300,7 +314,10 @@ class TestResetPassword:
         # Act
         new_password = "NewSecurePassword456!"
         user.reset_password(
-            token=token, new_password=new_password, ip_address="10.0.0.1", user_agent="Mozilla/5.0"
+            token=token,
+            new_password=new_password,
+            ip_address="10.0.0.1",
+            user_agent="Mozilla/5.0",
         )
 
         # Assert

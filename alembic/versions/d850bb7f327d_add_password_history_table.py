@@ -5,6 +5,7 @@ Revises: b6d8a1c65bd2
 Create Date: 2026-01-08 13:14:15.355833
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,8 +13,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'd850bb7f327d'
-down_revision: Union[str, None] = 'b6d8a1c65bd2'
+revision: str = "d850bb7f327d"
+down_revision: Union[str, None] = "b6d8a1c65bd2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -30,32 +31,37 @@ def upgrade() -> None:
     """
     # Crear tabla password_history
     op.create_table(
-        'password_history',
-        sa.Column('id', sa.CHAR(length=36), nullable=False),
-        sa.Column('user_id', sa.CHAR(length=36), nullable=False),
-        sa.Column('password_hash', sa.String(length=255), nullable=False),
-        sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        comment='Historial de contraseñas para prevenir reutilización (últimas 5, máx 1 año)'
+        "password_history",
+        sa.Column("id", sa.CHAR(length=36), nullable=False),
+        sa.Column("user_id", sa.CHAR(length=36), nullable=False),
+        sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        comment="Historial de contraseñas para prevenir reutilización (últimas 5, máx 1 año)",
     )
 
     # Índice compuesto: user_id + created_at DESC
     # Optimiza consulta frecuente: "Obtener últimas 5 contraseñas de un usuario"
     op.create_index(
-        'ix_password_history_user_created',
-        'password_history',
-        ['user_id', sa.text('created_at DESC')],
-        unique=False
+        "ix_password_history_user_created",
+        "password_history",
+        ["user_id", sa.text("created_at DESC")],
+        unique=False,
     )
 
     # Índice en created_at para limpieza automática
     # Optimiza query: "Eliminar registros > 1 año"
     op.create_index(
-        'ix_password_history_created_at',
-        'password_history',
-        ['created_at'],
-        unique=False
+        "ix_password_history_created_at",
+        "password_history",
+        ["created_at"],
+        unique=False,
     )
 
 
@@ -68,8 +74,8 @@ def downgrade() -> None:
     2. Tabla (la FK se elimina automáticamente con la tabla)
     """
     # Eliminar índices
-    op.drop_index('ix_password_history_created_at', table_name='password_history')
-    op.drop_index('ix_password_history_user_created', table_name='password_history')
+    op.drop_index("ix_password_history_created_at", table_name="password_history")
+    op.drop_index("ix_password_history_user_created", table_name="password_history")
 
     # Eliminar tabla
-    op.drop_table('password_history')
+    op.drop_table("password_history")

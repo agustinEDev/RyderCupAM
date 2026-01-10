@@ -178,7 +178,9 @@ class TestCloseEnrollmentsUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await close_use_case.execute(close_request, creator_id)
 
-        assert "No se pueden cerrar inscripciones en estado DRAFT" in str(exc_info.value)
+        assert "No se pueden cerrar inscripciones en estado DRAFT" in str(
+            exc_info.value
+        )
 
     async def test_should_raise_error_when_already_closed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -217,7 +219,9 @@ class TestCloseEnrollmentsUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await close_use_case.execute(close_request, creator_id)
 
-        assert "No se pueden cerrar inscripciones en estado CLOSED" in str(exc_info.value)
+        assert "No se pueden cerrar inscripciones en estado CLOSED" in str(
+            exc_info.value
+        )
 
     async def test_should_emit_domain_event_when_closed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

@@ -26,8 +26,12 @@ from sqlalchemy import engine_from_config, pool  # noqa: E402
 # Importar TODOS los mappers para que Alembic detecte todas las tablas
 # IMPORTANTE: Importar los mappers (no solo metadata) para registrar las tablas
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
-from src.shared.infrastructure.persistence.sqlalchemy import country_mappers  # noqa: E402
-from src.modules.user.infrastructure.persistence.sqlalchemy import mappers as user_mappers  # noqa: E402
+from src.shared.infrastructure.persistence.sqlalchemy import (
+    country_mappers,
+)  # noqa: E402
+from src.modules.user.infrastructure.persistence.sqlalchemy import (
+    mappers as user_mappers,
+)  # noqa: E402
 from src.modules.competition.infrastructure.persistence.sqlalchemy import (  # noqa: E402
     mappers as competition_mappers,
 )

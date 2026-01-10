@@ -4,7 +4,9 @@ Tests for MockHandicapService
 
 import pytest
 
-from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+from src.modules.user.infrastructure.external.mock_handicap_service import (
+    MockHandicapService,
+)
 
 
 class TestMockHandicapServiceBasicUsage:

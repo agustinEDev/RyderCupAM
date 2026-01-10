@@ -41,23 +41,33 @@ from src.modules.user.application.dto.user_dto import (
     VerifyEmailRequestDTO,
 )
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
-from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.use_cases.logout_user_use_case import (
+    LogoutUserUseCase,
+)
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
-from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
+from src.modules.user.application.use_cases.register_user_use_case import (
+    RegisterUserUseCase,
+)
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
 )
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
 )
-from src.modules.user.application.use_cases.reset_password_use_case import ResetPasswordUseCase
-from src.modules.user.application.use_cases.unlock_account_use_case import UnlockAccountUseCase
+from src.modules.user.application.use_cases.reset_password_use_case import (
+    ResetPasswordUseCase,
+)
+from src.modules.user.application.use_cases.unlock_account_use_case import (
+    UnlockAccountUseCase,
+)
 from src.modules.user.application.use_cases.validate_reset_token_use_case import (
     ValidateResetTokenUseCase,
 )
-from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
+from src.modules.user.application.use_cases.verify_email_use_case import (
+    VerifyEmailUseCase,
+)
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.shared.infrastructure.security.cookie_handler import (
@@ -562,7 +572,9 @@ async def verify_email(
             detail="Unable to verify email. Please check your verification link or request a new one.",
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error in email verification: {type(e).__name__}", exc_info=True)
+        logger.error(
+            f"Unexpected error in email verification: {type(e).__name__}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
@@ -581,7 +593,9 @@ async def verify_email(
 async def resend_verification_email(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
-    use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
+    use_case: ResendVerificationEmailUseCase = Depends(
+        get_resend_verification_email_use_case
+    ),
 ):
     """
     Endpoint para reenviar el email de verificación.
@@ -624,7 +638,10 @@ async def resend_verification_email(
         # - Error al enviar email
     except Exception as e:
         # Log errores inesperados para monitoreo del sistema
-        logger.error(f"Unexpected error in resend verification: {type(e).__name__}", exc_info=True)
+        logger.error(
+            f"Unexpected error in resend verification: {type(e).__name__}",
+            exc_info=True,
+        )
         # Aún así procedemos con respuesta genérica
 
     # Siempre retornamos el mismo mensaje genérico
@@ -669,7 +686,9 @@ async def resend_verification_email(
 async def forgot_password(
     request: Request,
     reset_data: RequestPasswordResetRequestDTO,
-    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
+    use_case: RequestPasswordResetUseCase = Depends(
+        get_request_password_reset_use_case
+    ),
 ) -> RequestPasswordResetResponseDTO:
     """
     Solicita el reseteo de contraseña enviando un email con token único.
@@ -772,7 +791,9 @@ async def reset_password(
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
 
 
 @router.get(

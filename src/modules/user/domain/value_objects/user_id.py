@@ -30,7 +30,9 @@ class UserId:
             try:
                 val = uuid.UUID(value)
             except ValueError as e:
-                raise InvalidUserIdError(f"'{value}' no es un string UUID válido") from e
+                raise InvalidUserIdError(
+                    f"'{value}' no es un string UUID válido"
+                ) from e
         else:
             raise InvalidUserIdError(
                 f"Se esperaba un UUID o un string, pero se recibió {type(value)}"

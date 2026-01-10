@@ -53,7 +53,9 @@ class User:
         new_country_code = old_country_code
         country_code_changed = False
         if country_code_str is not None:
-            new_country_code = CountryCode(country_code_str) if country_code_str else None
+            new_country_code = (
+                CountryCode(country_code_str) if country_code_str else None
+            )
             country_code_changed = new_country_code != old_country_code
         return (
             first_name_changed,
@@ -244,7 +246,9 @@ class User:
             self._domain_events = []
         return len(self._domain_events) > 0
 
-    def record_logout(self, logged_out_at: datetime, token_used: str | None = None) -> None:
+    def record_logout(
+        self, logged_out_at: datetime, token_used: str | None = None
+    ) -> None:
         """
         Registra un evento de logout para este usuario.
 
@@ -254,7 +258,9 @@ class User:
         """
         self._add_domain_event(
             UserLoggedOutEvent(
-                user_id=str(self.id.value), logged_out_at=logged_out_at, token_used=token_used
+                user_id=str(self.id.value),
+                logged_out_at=logged_out_at,
+                token_used=token_used,
             )
         )
 
@@ -307,7 +313,11 @@ class User:
             _old_country_code,
         ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
-        if not first_name_changed and not last_name_changed and not country_code_changed:
+        if (
+            not first_name_changed
+            and not last_name_changed
+            and not country_code_changed
+        ):
             return
 
         if first_name_changed:
@@ -380,7 +390,9 @@ class User:
 
         self._add_domain_event(
             UserPasswordChangedEvent(
-                user_id=str(self.id.value), changed_at=self.updated_at, changed_from_ip=None
+                user_id=str(self.id.value),
+                changed_at=self.updated_at,
+                changed_from_ip=None,
             )
         )
 
@@ -423,7 +435,9 @@ class User:
         # Emitir evento de dominio
         self._add_domain_event(
             EmailVerifiedEvent(
-                user_id=str(self.id.value), email=str(self.email.value), verified_at=self.updated_at
+                user_id=str(self.id.value),
+                email=str(self.email.value),
+                verified_at=self.updated_at,
             )
         )
 

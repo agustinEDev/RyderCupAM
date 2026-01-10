@@ -55,7 +55,9 @@ class TestCreateCompetition:
         assert "id" in data
 
     @pytest.mark.asyncio
-    async def test_create_competition_without_auth_returns_401(self, client: AsyncClient):
+    async def test_create_competition_without_auth_returns_401(
+        self, client: AsyncClient
+    ):
         """Crear competición sin autenticación retorna 401."""
         competition_data = {
             "name": "Test",
@@ -72,7 +74,9 @@ class TestCreateCompetition:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_create_competition_invalid_dates_returns_400(self, client: AsyncClient):
+    async def test_create_competition_invalid_dates_returns_400(
+        self, client: AsyncClient
+    ):
         """Crear competición con fechas inválidas retorna 400."""
         user = await create_authenticated_user(
             client, "creator2@test.com", "P@ssw0rd123!", "Creator", "Two"
@@ -171,7 +175,9 @@ class TestListCompetitions:
         )
 
         # Filtrar solo ACTIVE
-        response = await client.get("/api/v1/competitions?status=ACTIVE", cookies=user["cookies"])
+        response = await client.get(
+            "/api/v1/competitions?status=ACTIVE", cookies=user["cookies"]
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -285,12 +291,14 @@ class TestMyCompetitionsFilter:
 
         # Inscribir usuario
         await client.post(
-            f"/api/v1/competitions/{comp['id']}/enrollments", cookies=enrolled_user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/enrollments",
+            cookies=enrolled_user["cookies"],
         )
 
         # Act
         response = await client.get(
-            "/api/v1/competitions?my_competitions=true", cookies=enrolled_user["cookies"]
+            "/api/v1/competitions?my_competitions=true",
+            cookies=enrolled_user["cookies"],
         )
 
         # Assert
@@ -312,7 +320,9 @@ class TestGetCompetition:
 
         comp = await create_competition(client, user["cookies"])
 
-        response = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -332,7 +342,9 @@ class TestGetCompetition:
         )
 
         fake_id = "00000000-0000-0000-0000-000000000000"
-        response = await client.get(f"/api/v1/competitions/{fake_id}", cookies=user["cookies"])
+        response = await client.get(
+            f"/api/v1/competitions/{fake_id}", cookies=user["cookies"]
+        )
 
         assert response.status_code == 404
 
@@ -357,7 +369,9 @@ class TestUpdateCompetition:
         }
 
         response = await client.put(
-            f"/api/v1/competitions/{comp['id']}", json=update_data, cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}",
+            json=update_data,
+            cookies=user["cookies"],
         )
 
         assert response.status_code == 200
@@ -370,7 +384,9 @@ class TestUpdateCompetition:
         # Por ahora, confiamos en que el cambio se aplicó si el resto funciona.
 
     @pytest.mark.asyncio
-    async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):
+    async def test_update_competition_not_creator_returns_403(
+        self, client: AsyncClient
+    ):
         """Actualizar competición de otro usuario retorna 403."""
         creator = await create_authenticated_user(
             client, "creator3@test.com", "P@ssw0rd123!", "Creator", "Three"
@@ -479,7 +495,8 @@ class TestCompetitionStateTransitions:
 
         # 3. Cerrar inscripciones (CLOSED)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
         )
         assert response.json()["status"] == "CLOSED"
 
@@ -506,7 +523,8 @@ class TestCompetitionStateTransitions:
 
         # Intentar cerrar inscripciones desde DRAFT (debe ser ACTIVE)
         response = await client.post(
-            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
         )
 
         assert response.status_code == 400
@@ -516,7 +534,9 @@ class TestEdgeCases:
     """Tests de edge cases para Competition"""
 
     @pytest.mark.asyncio
-    async def test_create_competition_duplicate_name_returns_409(self, client: AsyncClient):
+    async def test_create_competition_duplicate_name_returns_409(
+        self, client: AsyncClient
+    ):
         """Crear competición con nombre duplicado retorna 409."""
         user = await create_authenticated_user(
             client, "dupname@test.com", "P@ssw0rd123!", "Dup", "Name"
@@ -536,7 +556,9 @@ class TestEdgeCases:
         }
 
         # Primera creación
-        await client.post("/api/v1/competitions", json=comp_data, cookies=user["cookies"])
+        await client.post(
+            "/api/v1/competitions", json=comp_data, cookies=user["cookies"]
+        )
 
         # Segunda con mismo nombre
         response = await client.post(
@@ -556,7 +578,9 @@ class TestEdgeCases:
         await activate_competition(client, user["cookies"], comp["id"])
 
         response = await client.put(
-            f"/api/v1/competitions/{comp['id']}", json={"name": "New Name"}, cookies=user["cookies"]
+            f"/api/v1/competitions/{comp['id']}",
+            json={"name": "New Name"},
+            cookies=user["cookies"],
         )
 
         assert response.status_code == 400
@@ -573,13 +597,17 @@ class TestEdgeCases:
 
         comp = await create_competition(client, creator["cookies"])
 
-        response = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=viewer["cookies"])
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=viewer["cookies"]
+        )
 
         assert response.status_code == 200
         assert response.json()["is_creator"] is False
 
     @pytest.mark.asyncio
-    async def test_create_competition_with_invalid_country_returns_400(self, client: AsyncClient):
+    async def test_create_competition_with_invalid_country_returns_400(
+        self, client: AsyncClient
+    ):
         """Crear competición con país inválido retorna 400."""
         user = await create_authenticated_user(
             client, "badcountry@test.com", "P@ssw0rd123!", "Bad", "Country"
@@ -635,7 +663,9 @@ class TestEdgeCases:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_cancel_already_cancelled_competition_returns_400(self, client: AsyncClient):
+    async def test_cancel_already_cancelled_competition_returns_400(
+        self, client: AsyncClient
+    ):
         """Cancelar competición ya cancelada retorna 400."""
         user = await create_authenticated_user(
             client, "doublecancel@test.com", "P@ssw0rd123!", "Double", "Cancel"
@@ -644,7 +674,9 @@ class TestEdgeCases:
         comp = await create_competition(client, user["cookies"])
 
         # Primera cancelación
-        await client.post(f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"])
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"]
+        )
 
         # Segunda cancelación
         response = await client.post(

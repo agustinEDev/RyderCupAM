@@ -13,7 +13,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -114,8 +116,10 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 4. Verificar que el jugador no está ya inscrito
-            already_enrolled = await self._uow.enrollments.exists_for_user_in_competition(
-                player_id, competition_id
+            already_enrolled = (
+                await self._uow.enrollments.exists_for_user_in_competition(
+                    player_id, competition_id
+                )
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(

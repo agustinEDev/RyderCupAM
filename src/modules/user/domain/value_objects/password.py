@@ -163,7 +163,9 @@ class Password:
     def verify(self, plain_password: str) -> bool:
         """Verifica si un password plano coincide con el hash."""
         try:
-            return bcrypt.checkpw(plain_password.encode("utf-8"), self.hashed_value.encode("utf-8"))
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"), self.hashed_value.encode("utf-8")
+            )
         except Exception:
             return False
 

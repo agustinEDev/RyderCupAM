@@ -71,13 +71,18 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
         "last_name": "Test",
     }
     register_response = await client.post("/api/v1/auth/register", json=user_data)
-    assert register_response.status_code in [status.HTTP_201_CREATED, status.HTTP_409_CONFLICT]
+    assert register_response.status_code in [
+        status.HTTP_201_CREATED,
+        status.HTTP_409_CONFLICT,
+    ]
 
     # Login to get tokens
     response = await client.post("/api/v1/auth/login", json=valid_user_credentials)
 
     if response.status_code != status.HTTP_200_OK:
-        pytest.skip(f"No se pudo autenticar usuario de prueba (status: {response.status_code})")
+        pytest.skip(
+            f"No se pudo autenticar usuario de prueba (status: {response.status_code})"
+        )
 
     data = response.json()
 
@@ -134,7 +139,10 @@ async def test_options_request_without_csrf_token_succeeds(client: AsyncClient):
     response = await client.options("/api/v1/auth/login")
 
     # No debe fallar por falta de CSRF token (puede ser 200 o 405 dependiendo del endpoint)
-    assert response.status_code in [status.HTTP_200_OK, status.HTTP_405_METHOD_NOT_ALLOWED]
+    assert response.status_code in [
+        status.HTTP_200_OK,
+        status.HTTP_405_METHOD_NOT_ALLOWED,
+    ]
 
 
 # ======================================================================================
@@ -157,8 +165,9 @@ async def test_health_endpoint_exempt_from_csrf(client: AsyncClient):
     response = await client.post("/health")
 
     # No debe ser 403 por CSRF (puede ser 404 o 405 si no existe/acepta POST)
-    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
-        "detail", ""
+    assert (
+        response.status_code != status.HTTP_403_FORBIDDEN
+        or "CSRF" not in response.json().get("detail", "")
     )
 
 
@@ -177,8 +186,9 @@ async def test_docs_endpoint_exempt_from_csrf(client: AsyncClient):
     response = await client.get("/docs")
 
     # No debe ser 403 por CSRF (puede ser 401 por autenticación)
-    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
-        "detail", ""
+    assert (
+        response.status_code != status.HTTP_403_FORBIDDEN
+        or "CSRF" not in response.json().get("detail", "")
     )
 
 
@@ -330,7 +340,9 @@ async def test_refresh_token_generates_new_csrf_token(csrf_authenticated_client)
     old_csrf_token = tokens["csrf_token"]
 
     # Refresh token request (cookie enviada automáticamente)
-    response = await client.post("/api/v1/auth/refresh-token", cookies={"refresh_token": refresh_token})
+    response = await client.post(
+        "/api/v1/auth/refresh-token", cookies={"refresh_token": refresh_token}
+    )
 
     if response.status_code != status.HTTP_200_OK:
         pytest.skip("No se pudo renovar token")
@@ -355,7 +367,9 @@ async def test_refresh_token_generates_new_csrf_token(csrf_authenticated_client)
 
 
 @pytest.mark.asyncio
-async def test_post_request_with_csrf_cookie_but_no_header_fails(csrf_authenticated_client):
+async def test_post_request_with_csrf_cookie_but_no_header_fails(
+    csrf_authenticated_client,
+):
     """
     Test: POST request con cookie CSRF pero SIN header debe fallar.
 
@@ -383,7 +397,9 @@ async def test_post_request_with_csrf_cookie_but_no_header_fails(csrf_authentica
 
 
 @pytest.mark.asyncio
-async def test_post_request_with_csrf_header_but_no_cookie_fails(csrf_authenticated_client):
+async def test_post_request_with_csrf_header_but_no_cookie_fails(
+    csrf_authenticated_client,
+):
     """
     Test: POST request con header CSRF pero SIN cookie debe fallar.
 

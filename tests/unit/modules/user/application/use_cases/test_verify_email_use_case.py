@@ -11,7 +11,9 @@ Este archivo contiene tests que verifican:
 
 import pytest
 
-from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
+from src.modules.user.application.use_cases.verify_email_use_case import (
+    VerifyEmailUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -31,7 +33,9 @@ class TestVerifyEmailUseCase:
         """Fixture que proporciona una Unit of Work en memoria para cada test."""
         return InMemoryUnitOfWork()
 
-    async def test_execute_with_valid_token_verifies_email(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_valid_token_verifies_email(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Verificar email con token válido
         Given: Un usuario registrado con token de verificación
@@ -68,7 +72,9 @@ class TestVerifyEmailUseCase:
             assert verified_user.email_verified is True
             assert verified_user.verification_token is None
 
-    async def test_execute_with_invalid_token_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_invalid_token_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Token inválido lanza error
         Given: Un token que no existe en la BD
@@ -80,7 +86,9 @@ class TestVerifyEmailUseCase:
         invalid_token = "token_que_no_existe_12345"
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Token de verificación inválido o expirado"):
+        with pytest.raises(
+            ValueError, match="Token de verificación inválido o expirado"
+        ):
             await use_case.execute(invalid_token)
 
     async def test_execute_with_empty_token_raises_error(self, uow: InMemoryUnitOfWork):
@@ -113,7 +121,9 @@ class TestVerifyEmailUseCase:
         non_existent_token = "valid_format_but_no_user_abc123xyz"
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Token de verificación inválido o expirado"):
+        with pytest.raises(
+            ValueError, match="Token de verificación inválido o expirado"
+        ):
             await use_case.execute(non_existent_token)
 
     async def test_execute_commits_transaction(self, uow: InMemoryUnitOfWork):
@@ -145,7 +155,9 @@ class TestVerifyEmailUseCase:
             assert persisted_user.email_verified is True
             assert persisted_user.verification_token is None
 
-    async def test_execute_with_already_verified_email_raises_error(self, uow: InMemoryUnitOfWork):
+    async def test_execute_with_already_verified_email_raises_error(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: No se puede verificar un email ya verificado
         Given: Un usuario con email ya verificado
@@ -194,7 +206,9 @@ class TestVerifyEmailUseCase:
         use_case = VerifyEmailUseCase(uow)
         fake_token = "this_is_not_the_real_token"
 
-        with pytest.raises(ValueError, match="Token de verificación inválido o expirado"):
+        with pytest.raises(
+            ValueError, match="Token de verificación inválido o expirado"
+        ):
             await use_case.execute(fake_token)
 
         # Verificar que el usuario sigue sin verificar
@@ -206,7 +220,9 @@ class TestVerifyEmailUseCase:
             assert unverified_user.email_verified is False
             assert unverified_user.verification_token == real_token
 
-    async def test_execute_success_clears_verification_token(self, uow: InMemoryUnitOfWork):
+    async def test_execute_success_clears_verification_token(
+        self, uow: InMemoryUnitOfWork
+    ):
         """
         Test: Verificación exitosa limpia el token
         Given: Un usuario con token de verificación

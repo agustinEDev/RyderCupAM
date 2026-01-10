@@ -16,7 +16,9 @@ import pytest
 
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
-from src.modules.user.domain.events.new_device_detected_event import NewDeviceDetectedEvent
+from src.modules.user.domain.events.new_device_detected_event import (
+    NewDeviceDetectedEvent,
+)
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -34,7 +36,9 @@ class TestUserDeviceCreation:
         """
         # Arrange
         user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "192.168.1.100")
+        fingerprint = DeviceFingerprint.create(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "192.168.1.100"
+        )
 
         # Act
         device = UserDevice.create(user_id, fingerprint)
@@ -78,7 +82,9 @@ class TestUserDeviceCreation:
         """
         # Arrange
         user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0 (Windows NT 10.0)", "192.168.1.102")
+        fingerprint = DeviceFingerprint.create(
+            "Mozilla/5.0 (Windows NT 10.0)", "192.168.1.102"
+        )
 
         # Act
         device = UserDevice.create(user_id, fingerprint)
@@ -128,6 +134,7 @@ class TestUserDeviceUpdateLastUsed:
 
         # Act - Esperar 1ms para asegurar diferencia
         import time
+
         time.sleep(0.001)
         device.update_last_used()
 
@@ -241,7 +248,9 @@ class TestUserDeviceReconstitute:
         # Arrange
         device_id = UserDeviceId.generate()
         user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create("Mozilla/5.0 (Macintosh)", "192.168.1.100")
+        fingerprint = DeviceFingerprint.create(
+            "Mozilla/5.0 (Macintosh)", "192.168.1.100"
+        )
         created_at = datetime(2026, 1, 8, 14, 20, 0)
         last_used_at = datetime(2026, 1, 9, 10, 30, 0)
         is_active = True

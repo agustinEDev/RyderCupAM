@@ -46,7 +46,11 @@ class DomainEvent:
         # como convención (típicamente user_id, team_id, etc.)
         aggregate_id_value = ""
         for field_name, field_value in self.__dict__.items():
-            if field_name.endswith("_id") and field_value and not field_name.startswith("_"):
+            if (
+                field_name.endswith("_id")
+                and field_value
+                and not field_name.startswith("_")
+            ):
                 aggregate_id_value = field_value
                 break
 
@@ -90,15 +94,14 @@ class DomainEvent:
             "data": {
                 key: value
                 for key, value in self.__dict__.items()
-                if key not in ["event_id", "occurred_on", "event_version", "aggregate_id"]
+                if key
+                not in ["event_id", "occurred_on", "event_version", "aggregate_id"]
             },
         }
 
     def __str__(self) -> str:
         """Representación string legible del evento."""
-        return (
-            f"{self.__class__.__name__}(id={self.event_id[:8]}..., aggregate={self.aggregate_id})"
-        )
+        return f"{self.__class__.__name__}(id={self.event_id[:8]}..., aggregate={self.aggregate_id})"
 
     def __repr__(self) -> str:
         """Representación detallada para debugging."""

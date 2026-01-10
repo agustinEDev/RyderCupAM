@@ -112,7 +112,10 @@ class Enrollment:
             Enrollment: Nueva inscripción con evento emitido
         """
         enrollment = cls(
-            id=id, competition_id=competition_id, user_id=user_id, status=EnrollmentStatus.REQUESTED
+            id=id,
+            competition_id=competition_id,
+            user_id=user_id,
+            status=EnrollmentStatus.REQUESTED,
         )
 
         # Emitir evento
@@ -143,7 +146,10 @@ class Enrollment:
             Enrollment: Nueva invitación
         """
         enrollment = cls(
-            id=id, competition_id=competition_id, user_id=user_id, status=EnrollmentStatus.INVITED
+            id=id,
+            competition_id=competition_id,
+            user_id=user_id,
+            status=EnrollmentStatus.INVITED,
         )
 
         # TODO: Emitir evento EnrollmentInvitedEvent (si se crea)
@@ -450,9 +456,7 @@ class Enrollment:
 
     def __str__(self) -> str:
         """Representación string legible."""
-        return (
-            f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
-        )
+        return f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
 
     def __eq__(self, other) -> bool:
         """Operador de igualdad - Comparación por identidad (ID)."""

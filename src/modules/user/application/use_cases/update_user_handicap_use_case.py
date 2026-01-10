@@ -8,7 +8,9 @@ from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.errors.handicap_errors import (
     HandicapNotFoundError,
 )
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -65,7 +67,9 @@ class UpdateUserHandicapUseCase:
                 return None
 
             # 2. Buscar hándicap usando el servicio
-            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
+            handicap_value = await self._handicap_service.search_handicap(
+                user.get_full_name()
+            )
 
             # 3. Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None:

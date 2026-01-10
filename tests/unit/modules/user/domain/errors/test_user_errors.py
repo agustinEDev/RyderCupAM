@@ -122,7 +122,10 @@ class TestExceptionBehavior:
 
         error = UserValidationError("Multiple validation errors", details=details)
 
-        assert error.details["validation_errors"] == ["email format", "password strength"]
+        assert error.details["validation_errors"] == [
+            "email format",
+            "password strength",
+        ]
         assert error.details["user_input"]["email"] == "invalid-email"
         assert "timestamp" in error.details
 
@@ -210,5 +213,7 @@ class TestExceptionCatchingScenarios:
             raise RepositoryTimeoutError("Operation timeout")
 
         # Debe poder capturar y clasificar diferentes errores
-        with pytest.raises((UserNotFoundError, UserAlreadyExistsError, RepositoryError)):
+        with pytest.raises(
+            (UserNotFoundError, UserAlreadyExistsError, RepositoryError)
+        ):
             simulate_repository_operation()

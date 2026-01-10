@@ -8,7 +8,9 @@ from httpx import AsyncClient
 class TestCorrelationMiddleware:
     """Tests del middleware de Correlation ID"""
 
-    async def test_generates_correlation_id_if_not_present(self, unit_client: AsyncClient):
+    async def test_generates_correlation_id_if_not_present(
+        self, unit_client: AsyncClient
+    ):
         """Genera correlation_id si no viene en request"""
         response = await unit_client.get("/test")
 
@@ -16,7 +18,9 @@ class TestCorrelationMiddleware:
         assert "X-Correlation-ID" in response.headers
         assert len(response.headers["X-Correlation-ID"]) == 36  # UUID format
 
-    async def test_propagates_correlation_id_from_request(self, unit_client: AsyncClient):
+    async def test_propagates_correlation_id_from_request(
+        self, unit_client: AsyncClient
+    ):
         """Propaga correlation_id del request a la response"""
         custom_correlation_id = "test-correlation-123"
 

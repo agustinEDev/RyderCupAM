@@ -70,7 +70,9 @@ class InMemoryCountryRepository(CountryRepositoryInterface):
             return []
 
         adjacent_codes = self._adjacencies[country_code]
-        return [self._countries[code] for code in adjacent_codes if code in self._countries]
+        return [
+            self._countries[code] for code in adjacent_codes if code in self._countries
+        ]
 
     async def save(self, country: Country) -> None:
         """Guarda o actualiza un país (para testing)."""

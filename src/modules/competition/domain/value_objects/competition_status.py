@@ -49,9 +49,18 @@ class CompetitionStatus(str, Enum):
             False
         """
         valid_transitions = {
-            CompetitionStatus.DRAFT: {CompetitionStatus.ACTIVE, CompetitionStatus.CANCELLED},
-            CompetitionStatus.ACTIVE: {CompetitionStatus.CLOSED, CompetitionStatus.CANCELLED},
-            CompetitionStatus.CLOSED: {CompetitionStatus.IN_PROGRESS, CompetitionStatus.CANCELLED},
+            CompetitionStatus.DRAFT: {
+                CompetitionStatus.ACTIVE,
+                CompetitionStatus.CANCELLED,
+            },
+            CompetitionStatus.ACTIVE: {
+                CompetitionStatus.CLOSED,
+                CompetitionStatus.CANCELLED,
+            },
+            CompetitionStatus.CLOSED: {
+                CompetitionStatus.IN_PROGRESS,
+                CompetitionStatus.CANCELLED,
+            },
             CompetitionStatus.IN_PROGRESS: {
                 CompetitionStatus.COMPLETED,
                 CompetitionStatus.CANCELLED,
