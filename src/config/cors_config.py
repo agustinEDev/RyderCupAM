@@ -246,6 +246,7 @@ def get_cors_config() -> dict:
             "Origin",
             "X-Requested-With",
             "X-Correlation-ID",
+            "X-CSRF-Token",  # v1.13.0: CSRF Protection
             # Sentry headers para tracing distribuido
             "sentry-trace",
             "baggage",
