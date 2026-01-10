@@ -192,9 +192,7 @@ class SecurityLogger:
             },
         )
 
-    def _build_message(  # noqa: PLR0911
-        self, event: SecurityAuditEvent
-    ) -> str:
+    def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911
         """
         Construye un mensaje descriptivo para el log.
 

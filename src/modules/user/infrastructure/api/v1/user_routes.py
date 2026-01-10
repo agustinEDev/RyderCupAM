@@ -88,9 +88,7 @@ async def find_user(
         None, description="Nombre completo del usuario a buscar"
     ),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
-    current_user: UserResponseDTO = Depends(  # noqa: ARG001
-        get_current_user
-    ),
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
 ):
     """
     Endpoint para buscar un usuario por email o nombre completo.
@@ -137,9 +135,7 @@ async def find_user(
 async def update_profile(
     request: UpdateProfileRequestDTO,
     use_case: UpdateProfileUseCase = Depends(get_update_profile_use_case),
-    current_user: UserResponseDTO = Depends(
-        get_current_user
-    ),
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint para actualizar información personal del usuario.
@@ -182,9 +178,7 @@ async def update_security(
     http_request: Request,
     request: UpdateSecurityRequestDTO,
     use_case: UpdateSecurityUseCase = Depends(get_update_security_use_case),
-    current_user: UserResponseDTO = Depends(
-        get_current_user
-    ),
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint para actualizar datos de seguridad del usuario.

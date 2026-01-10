@@ -57,9 +57,7 @@ class LoggerFactory:
         self._loggers: dict[str, Logger] = {}
         self._logger_lock = Lock()
 
-    def __new__(
-        cls, config: LogConfig | None = None  # noqa: ARG004
-    ):
+    def __new__(cls, config: LogConfig | None = None):  # noqa: ARG004
         """Implementación singleton thread-safe"""
         if cls._instance is None:
             with cls._lock:
@@ -202,9 +200,7 @@ class LoggerFactory:
         try:
             import yaml  # noqa: PLC0415 - Optional dependency, lazy import
 
-            with open(  # noqa: PTH123
-                path, encoding="utf-8"
-            ) as f:
+            with open(path, encoding="utf-8") as f:  # noqa: PTH123
                 return yaml.safe_load(f) or {}
         except ImportError as e:
             raise ImportError(
@@ -214,9 +210,7 @@ class LoggerFactory:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(  # noqa: PTH123
-            path, encoding="utf-8"
-        ) as f:
+        with open(path, encoding="utf-8") as f:  # noqa: PTH123
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:
