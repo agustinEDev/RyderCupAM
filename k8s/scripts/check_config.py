@@ -13,6 +13,7 @@ Uso:
 
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Agregar el directorio raíz al PYTHONPATH
 # Script ubicado en: k8s/scripts/check_config.py
@@ -48,21 +49,28 @@ def detect_environment() -> str:
         str: "local", "kubernetes", "production", o "unknown"
 
     Security:
-        Uses startswith() to prevent URL injection attacks (CodeQL CWE-20).
-        Rejects malicious URLs like: http://evil.com?redirect=rydercupfriends.com
+        Uses urlparse() to extract and validate exact hostname (CodeQL CWE-20).
+        Prevents URL injection attacks like: http://evil.com?redirect=rydercupfriends.com
+        Rejects subdomain attacks like: https://rydercupfriends.com.evil.com
     """
-    frontend_url = settings.FRONTEND_URL.lower()
+    try:
+        parsed = urlparse(settings.FRONTEND_URL)
+        hostname = parsed.hostname  # Extrae solo el hostname (sin puerto, path, query)
 
-    # Validación estricta: debe empezar con el protocolo + dominio esperado
-    if frontend_url.startswith("http://localhost:5173"):
-        return "local"
-    if frontend_url.startswith("http://localhost:8080"):
-        return "kubernetes"
-    if frontend_url.startswith("https://rydercupfriends.com") or frontend_url.startswith(
-        "https://rydercupam.onrender.com"
-    ):
-        return "production"
-    return "unknown"
+        if hostname is None:
+            return "unknown"
+
+        # Validación estricta: hostname exacto (no substrings)
+        if hostname == "localhost" and parsed.port == 5173:
+            return "local"
+        if hostname == "localhost" and parsed.port == 8080:
+            return "kubernetes"
+        if hostname == "rydercupfriends.com" or hostname == "rydercupam.onrender.com":
+            return "production"
+
+        return "unknown"
+    except (ValueError, AttributeError):
+        return "unknown"
 
 
 def check_required_vars() -> tuple[int, int]:
