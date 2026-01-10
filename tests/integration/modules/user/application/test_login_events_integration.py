@@ -51,7 +51,12 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.__aexit__ = AsyncMock(return_value=None)
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
+
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+        mock_register_device.execute.return_value = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
 
         request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
 
@@ -93,7 +98,11 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.users.find_by_email.return_value = None
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
+
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
 
         request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
 
@@ -131,7 +140,11 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.users.find_by_email.return_value = user
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
+
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
 
         request = LoginRequestDTO(
             email="test@example.com",

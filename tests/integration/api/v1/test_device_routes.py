@@ -18,12 +18,16 @@ from httpx import AsyncClient
 class TestListUserDevicesEndpoint:
     """Tests de integración para GET /api/v1/users/me/devices"""
 
-    async def test_list_devices_returns_empty_when_no_devices(self, authenticated_client):
+    async def test_list_devices_returns_login_device(self, authenticated_client):
         """
-        Test: Listar dispositivos sin dispositivos registrados
-        Given: Usuario autenticado sin dispositivos
+        Test: Listar dispositivos incluye el dispositivo del login
+        Given: Usuario autenticado (login automáticamente registra dispositivo)
         When: GET /api/v1/users/me/devices
-        Then: HTTP 200 con lista vacía
+        Then: HTTP 200 con un dispositivo (del login)
+
+        Note (v1.13.0 - Device Fingerprinting):
+            El fixture authenticated_client hace login, lo cual automáticamente
+            registra el dispositivo. Este test verifica que se liste correctamente.
         """
         # Arrange
         client, _user_data = authenticated_client
@@ -34,8 +38,16 @@ class TestListUserDevicesEndpoint:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        assert data["devices"] == []
-        assert data["total_count"] == 0
+        assert len(data["devices"]) == 1  # Login registró 1 dispositivo
+        assert data["total_count"] == 1
+
+        # Verificar estructura del dispositivo
+        device = data["devices"][0]
+        assert "id" in device
+        assert "device_name" in device
+        assert "ip_address" in device
+        assert "last_used_at" in device
+        assert "created_at" in device
 
     async def test_list_devices_requires_authentication(self, client: AsyncClient):
         """

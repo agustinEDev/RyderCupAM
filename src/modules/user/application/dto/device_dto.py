@@ -26,22 +26,18 @@ class RegisterDeviceRequestDTO(BaseModel):
 
     Fields:
         user_id: ID del usuario propietario (extraído del JWT)
-        device_name: Nombre generado del dispositivo (ej: "Chrome on macOS")
         user_agent: User-Agent completo del navegador
         ip_address: IP del cliente (IPv4 o IPv6)
+
+    Note:
+        device_name NO es necesario - DeviceFingerprint.create() lo genera automáticamente
+        parseando el user_agent (ej: "Chrome 120.0 on macOS")
     """
 
     user_id: str = Field(
         ...,
         description="ID del usuario propietario del dispositivo",
         json_schema_extra={"example": "550e8400-e29b-41d4-a716-446655440000"},
-    )
-    device_name: str = Field(
-        ...,
-        min_length=3,
-        max_length=200,
-        description="Nombre del dispositivo (generado automáticamente)",
-        json_schema_extra={"example": "Chrome 120.0 on macOS"},
     )
     user_agent: str = Field(
         ...,
@@ -65,7 +61,6 @@ class RegisterDeviceRequestDTO(BaseModel):
         json_schema_extra={
             "example": {
                 "user_id": "550e8400-e29b-41d4-a716-446655440000",
-                "device_name": "Chrome 120.0 on macOS",
                 "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
                 "ip_address": "192.168.1.100",
             }

@@ -11,7 +11,7 @@ Arquitectura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -52,9 +52,16 @@ class TestRefreshAccessTokenUseCase:
         return service
 
     @pytest.fixture
-    def use_case(self, uow, token_service):
+    def register_device_use_case(self):
+        """Fixture que proporciona un mock del RegisterDeviceUseCase (v1.13.0)."""
+        mock = AsyncMock()
+        mock.execute.return_value = AsyncMock()  # RegisterDeviceResponseDTO mock
+        return mock
+
+    @pytest.fixture
+    def use_case(self, uow, token_service, register_device_use_case):
         """Fixture que proporciona el use case con dependencias mockeadas."""
-        return RefreshAccessTokenUseCase(uow, token_service)
+        return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
 
     @pytest.fixture
     def sample_user(self):

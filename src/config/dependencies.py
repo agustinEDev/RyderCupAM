@@ -79,6 +79,9 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
+from src.modules.user.application.use_cases.register_device_use_case import (
+    RegisterDeviceUseCase,
+)
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
@@ -318,9 +321,29 @@ def get_update_handicap_manually_use_case(
     return UpdateUserHandicapManuallyUseCase(uow)
 
 
+def get_register_device_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RegisterDeviceUseCase:
+    """
+    Proveedor del caso de uso RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `RegisterDeviceUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada internamente por Login y RefreshToken.
+
+    Note:
+        Este use case NO tiene endpoint directo. Se llama internamente desde:
+        - LoginUserUseCase (auto-registro en login exitoso)
+        - RefreshAccessTokenUseCase (auto-registro en refresh exitoso)
+    """
+    return RegisterDeviceUseCase(uow)
+
+
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -328,10 +351,11 @@ def get_login_user_use_case(
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
     2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Crea una instancia de `LoginUserUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
+    4. Crea una instancia de `LoginUserUseCase` con esas dependencias.
+    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LoginUserUseCase(uow, token_service)
+    return LoginUserUseCase(uow, token_service, register_device_use_case)
 
 
 def get_logout_user_use_case(
@@ -351,17 +375,19 @@ def get_logout_user_use_case(
 def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
     Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens).
+    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens + user_devices).
     2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
+    4. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
+    5. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
     """
-    return RefreshAccessTokenUseCase(uow, token_service)
+    return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
 
 
 def get_update_profile_use_case(

@@ -11,12 +11,16 @@ CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double
 from datetime import datetime
 
 from src.config.csrf_config import generate_csrf_token
+from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
     UserResponseDTO,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.register_device_use_case import (
+    RegisterDeviceUseCase,
+)
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -44,16 +48,23 @@ class LoginUserUseCase:
     - Refresh token almacenado hasheado en BD (OWASP A02)
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, token_service: ITokenService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        token_service: ITokenService,
+        register_device_use_case: RegisterDeviceUseCase,
+    ):
         """
         Inicializa el caso de uso.
 
         Args:
-            uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
+            uow: Unit of Work para acceso a repositorios (users + refresh_tokens + user_devices)
             token_service: Servicio para generación de tokens de autenticación
+            register_device_use_case: Caso de uso para registrar/actualizar dispositivos (v1.13.0)
         """
         self._uow = uow
         self._token_service = token_service
+        self._register_device_use_case = register_device_use_case
 
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
@@ -183,11 +194,23 @@ class LoginUserUseCase:
             user_id=user.id, token=refresh_token_jwt, expires_in_days=7
         )
 
+        # Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo
+        # Solo si tenemos user_agent e IP (opcionales en DTO para tests)
+        if request.user_agent and request.ip_address:
+            device_request = RegisterDeviceRequestDTO(
+                user_id=str(user.id.value),
+                user_agent=request.user_agent,
+                ip_address=request.ip_address,
+            )
+            # Registrar dispositivo (crea nuevo o actualiza last_used_at)
+            await self._register_device_use_case.execute(device_request)
+
         # Persistir usuario + refresh token usando Unit of Work
         async with self._uow:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
             # Commit automático al salir del contexto
+            # Nota: Device ya fue persistido en su propio UoW dentro de RegisterDeviceUseCase
 
         # Security Logging: Login exitoso
         security_logger.log_login_attempt(

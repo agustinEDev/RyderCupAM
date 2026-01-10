@@ -114,10 +114,10 @@ class RegisterDeviceUseCase:
                 ip_address=request.ip_address,
             )
 
-            # 3. Buscar dispositivo existente por user_id + fingerprint
+            # 3. Buscar dispositivo existente por user_id + fingerprint_hash
             existing_device = await self._uow.user_devices.find_by_user_and_fingerprint(
                 user_id=user_id,
-                fingerprint=fingerprint,
+                fingerprint_hash=fingerprint.fingerprint_hash,
             )
 
             # 4. Dispositivo conocido → Actualizar last_used_at

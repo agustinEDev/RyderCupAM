@@ -9,7 +9,6 @@ from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
-from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -54,14 +53,14 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         return self._devices.get(device_key)
 
     async def find_by_user_and_fingerprint(
-        self, user_id: UserId, fingerprint: DeviceFingerprint
+        self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:
         """
-        Busca dispositivo activo por usuario y fingerprint.
+        Busca dispositivo activo por usuario y fingerprint hash.
 
         Args:
             user_id: ID del usuario
-            fingerprint: Fingerprint del dispositivo
+            fingerprint_hash: Hash SHA256 del fingerprint del dispositivo
 
         Returns:
             Optional[UserDevice]: Dispositivo activo si existe, None si no
@@ -72,7 +71,7 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         for device in self._devices.values():
             if (
                 device.user_id == user_id
-                and device.fingerprint_hash == fingerprint.fingerprint_hash
+                and device.fingerprint_hash == fingerprint_hash
                 and device.is_active
             ):
                 return device
