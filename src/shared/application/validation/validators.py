@@ -79,10 +79,10 @@ class EmailValidator:
         normalized = email.strip().lower()
 
         # Validar longitud total (RFC 5321)
-        if len(normalized) > 254:  # noqa: PLR2004 - RFC 5321 max email length
+        if len(normalized) > 254:  # noqa: PLR2004
             raise ValueError("Email no puede exceder 254 caracteres")
 
-        if len(normalized) < 5:  # noqa: PLR2004 - "a@b.c" es el mínimo razonable
+        if len(normalized) < 5:  # noqa: PLR2004
             raise ValueError("Email debe tener al menos 5 caracteres")
 
         # Validar que contenga @
@@ -95,13 +95,13 @@ class EmailValidator:
         local, domain = normalized.rsplit("@", 1)
 
         # Local part no puede exceder 64 caracteres (RFC 5321)
-        if len(local) > 64:  # noqa: PLR2004 - RFC 5321 max local part length
+        if len(local) > 64:  # noqa: PLR2004
             raise ValueError(
                 "La parte local del email (antes de @) no puede exceder 64 caracteres"
             )
 
         # Domain no puede exceder 253 caracteres (RFC 5321)
-        if len(domain) > 253:  # noqa: PLR2004 - RFC 5321 max domain length
+        if len(domain) > 253:  # noqa: PLR2004
             raise ValueError(
                 "El dominio del email (después de @) no puede exceder 253 caracteres"
             )
@@ -224,12 +224,10 @@ class NameValidator:
         normalized = name.strip()
 
         # Validar longitud
-        if len(normalized) < 2:  # noqa: PLR2004 - Minimum reasonable name length
+        if len(normalized) < 2:  # noqa: PLR2004
             raise ValueError(f"{field_name} debe tener al menos 2 caracteres")
 
-        if (
-            len(normalized) > 100
-        ):  # noqa: PLR2004 - Maximum name length (shared/FieldLimits)
+        if len(normalized) > 100:  # noqa: PLR2004
             raise ValueError(f"{field_name} no puede exceder 100 caracteres")
 
         # Validar formato
@@ -276,7 +274,7 @@ def validate_country_code(code: str | None) -> str | None:
     normalized = code.strip().upper()
 
     # Validar longitud
-    if len(normalized) != 2:  # noqa: PLR2004 - ISO 3166-1 alpha-2 standard
+    if len(normalized) != 2:  # noqa: PLR2004
         raise ValueError(
             "Código de país debe tener exactamente 2 letras (ISO 3166-1 alpha-2)"
         )

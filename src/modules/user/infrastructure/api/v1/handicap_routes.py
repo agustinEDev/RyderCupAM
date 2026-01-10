@@ -140,9 +140,9 @@ async def update_user_handicap(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     handicap_data: UpdateHandicapRequestDTO,
     use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
-    current_user: UserResponseDTO = Depends(
+    current_user: UserResponseDTO = Depends(  # noqa: ARG001
         get_current_user
-    ),  # noqa: ARG001 - Reserved for future role checks
+    ),
 ):
     """
     Actualiza el hándicap de un usuario buscándolo en la RFEG.
@@ -196,9 +196,9 @@ async def update_multiple_handicaps(
     use_case: UpdateMultipleHandicapsUseCase = Depends(
         get_update_multiple_handicaps_use_case
     ),
-    current_user: UserResponseDTO = Depends(
+    current_user: UserResponseDTO = Depends(  # noqa: ARG001
         get_current_user
-    ),  # noqa: ARG001 - Reserved for future role checks
+    ),
 ):
     """
     Actualiza los hándicaps de múltiples usuarios.
@@ -246,9 +246,9 @@ async def update_user_handicap_manually(
     use_case: UpdateUserHandicapManuallyUseCase = Depends(
         get_update_handicap_manually_use_case
     ),
-    current_user: UserResponseDTO = Depends(
+    current_user: UserResponseDTO = Depends(  # noqa: ARG001
         get_current_user
-    ),  # noqa: ARG001 - Reserved for future role checks
+    ),
 ):
     """
     Actualiza el hándicap de un usuario manualmente (sin consultar RFEG).

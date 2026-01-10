@@ -58,8 +58,8 @@ class LoggerFactory:
         self._logger_lock = Lock()
 
     def __new__(
-        cls, config: LogConfig | None = None
-    ):  # noqa: ARG004 - config used in __init__ after singleton creation
+        cls, config: LogConfig | None = None  # noqa: ARG004
+    ):
         """Implementación singleton thread-safe"""
         if cls._instance is None:
             with cls._lock:
@@ -169,17 +169,17 @@ class LoggerFactory:
 
         # Personalizar según variables de entorno
         if log_level := os.getenv("LOG_LEVEL"):
-            from .logger import (
+            from .logger import (  # noqa: PLC0415
                 LogLevel,
-            )  # noqa: PLC0415 - Lazy loading for env customization
+            )
 
             config.level = LogLevel(log_level.upper())
 
         if log_file := os.getenv("LOG_FILE"):
-            from .config import (
+            from .config import (  # noqa: PLC0415
                 HandlerConfig,
                 LogHandler,
-            )  # noqa: PLC0415, I001 - Lazy loading for env customization
+            )
 
             file_handler = HandlerConfig(
                 type=LogHandler.ROTATING_FILE, filename=log_file
@@ -187,9 +187,9 @@ class LoggerFactory:
             config.handlers.append(file_handler)
 
         if log_format := os.getenv("LOG_FORMAT"):
-            from .config import (
+            from .config import (  # noqa: PLC0415
                 LogFormat,
-            )  # noqa: PLC0415 - Lazy loading for env customization
+            )
 
             for handler in config.handlers:
                 handler.format = LogFormat(log_format.lower())
@@ -202,9 +202,9 @@ class LoggerFactory:
         try:
             import yaml  # noqa: PLC0415 - Optional dependency, lazy import
 
-            with open(
+            with open(  # noqa: PTH123
                 path, encoding="utf-8"
-            ) as f:  # noqa: PTH123 - open() is more readable here
+            ) as f:
                 return yaml.safe_load(f) or {}
         except ImportError as e:
             raise ImportError(
@@ -214,9 +214,9 @@ class LoggerFactory:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(
+        with open(  # noqa: PTH123
             path, encoding="utf-8"
-        ) as f:  # noqa: PTH123 - open() is more readable here
+        ) as f:
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:

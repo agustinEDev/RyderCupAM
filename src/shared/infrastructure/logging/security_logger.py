@@ -192,9 +192,9 @@ class SecurityLogger:
             },
         )
 
-    def _build_message(
+    def _build_message(  # noqa: PLR0911
         self, event: SecurityAuditEvent
-    ) -> str:  # noqa: PLR0911 - Multiple event types require specific messages
+    ) -> str:
         """
         Construye un mensaje descriptivo para el log.
 
@@ -510,9 +510,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import (
+        from src.shared.domain.events.security_events import (  # noqa: PLC0415
             PasswordResetRequestedAuditEvent,
-        )  # noqa: PLC0415, I001
+        )
 
         event = PasswordResetRequestedAuditEvent(
             user_id=user_id,
@@ -554,9 +554,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import (
+        from src.shared.domain.events.security_events import (  # noqa: PLC0415
             PasswordResetCompletedAuditEvent,
-        )  # noqa: PLC0415, I001
+        )
 
         event = PasswordResetCompletedAuditEvent(
             user_id=user_id,
