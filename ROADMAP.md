@@ -104,13 +104,15 @@
 - ✅ ADR-029 documentado
 - ⏳ Cleanup automático (diferido a v1.14.0)
 
-#### 4. ~~Device Fingerprinting~~ ✅ **COMPLETADO (9 Ene 2026)**
+#### 4. ~~Device Fingerprinting~~ ✅ **COMPLETADO (10 Ene 2026)**
 - ✅ UserDevice entity (id, user_id, device_name, user_agent, ip, fingerprint_hash, is_active, last_used_at)
 - ✅ DeviceFingerprint VO: SHA256 hash of User-Agent + IP
-- ✅ Auto-registration on login/refresh token
+- ✅ **Auto-registro integrado** en LoginUserUseCase y RefreshAccessTokenUseCase (condicional)
+- ✅ RegisterDeviceUseCase inyectado via DI (dependencies.py)
 - ✅ 2 endpoints REST (GET /api/v1/users/me/devices list, DELETE revoke)
 - ✅ 3 use cases (List, Register, Revoke)
 - ✅ 99 tests (86 unit + 13 integration) - 100% passing
+- ✅ Integración completa: 10 archivos modificados (LoginUserUseCase, RefreshAccessTokenUseCase, DTOs, tests)
 - ✅ Partial unique index: (user_id, fingerprint_hash) WHERE is_active=TRUE
 - ✅ Soft delete with audit trail
 - ✅ Domain events: NewDeviceDetectedEvent, DeviceRevokedEvent

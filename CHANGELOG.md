@@ -117,12 +117,13 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-### Added - Device Fingerprinting ✅ COMPLETADO (9 Ene 2026)
+### Added - Device Fingerprinting ✅ COMPLETADO (10 Ene 2026)
 
-**📱 Gestión de Dispositivos de Usuario** (OWASP A01)
+**📱 Gestión de Dispositivos de Usuario + Auto-registro en Login/Refresh** (OWASP A01)
 
 #### Features Implementadas:
-- ✅ Detección automática de dispositivos en login/refresh token
+- ✅ **Auto-registro de dispositivos** en LoginUserUseCase y RefreshAccessTokenUseCase
+- ✅ Detección automática de dispositivos en login/refresh token (integración completa)
 - ✅ Listado de dispositivos activos (GET /api/v1/users/me/devices)
 - ✅ Revocación manual de dispositivos (DELETE /api/v1/users/me/devices/{device_id})
 - ✅ Fingerprint único: SHA256(device_name + "|" + user_agent + "|" + ip_address)
@@ -150,14 +151,16 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - ✅ 86 tests unitarios (Domain: 66, Application: 20)
 - ✅ 13 tests de integración (API con PostgreSQL)
 - ✅ Total: 99/99 tests device fingerprinting pasando (100%)
-- ✅ Suite completa: 1021/1023 tests (99.80%, 2 skipped)
+- ✅ Suite completa: 1021/1021 tests (100% pasando)
+- ✅ Integración completa: 10 archivos modificados (dependencies, use cases, DTOs, tests)
 
 #### Decisiones Técnicas (ADR-030):
 - IP incluida en fingerprint (redes diferentes = dispositivos diferentes)
 - Soft delete para audit trail (vs hard delete)
 - Partial unique index (user_id, fingerprint_hash WHERE is_active=TRUE)
-- Auto-registro en login/refresh endpoints
+- **Auto-registro integrado** en LoginUserUseCase y RefreshAccessTokenUseCase (condicional si user_agent + ip_address presentes)
 - Validación de ownership en revocación
+- RegisterDeviceUseCase inyectado via DI en dependencies.py
 
 #### Security:
 - **OWASP A01** mitigado: Session transparency, device management
