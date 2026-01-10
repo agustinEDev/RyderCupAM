@@ -21,6 +21,8 @@ Reglas de Negocio:
 
 from datetime import datetime
 
+from sqlalchemy.orm import reconstructor
+
 from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
 from src.modules.user.domain.events.new_device_detected_event import (
     NewDeviceDetectedEvent,
@@ -104,6 +106,25 @@ class UserDevice:
         self._last_used_at = last_used_at
         self._created_at = created_at
         self._domain_events: list[DomainEvent] = []
+
+    @reconstructor
+    def _init_on_load(self):
+        """
+        Inicializa atributos cuando SQLAlchemy reconstruye la entidad desde BD.
+
+        SQLAlchemy no llama a __init__() al cargar desde la BD, por lo que
+        necesitamos este método para inicializar _domain_events.
+
+        Este es un método especial de SQLAlchemy que se ejecuta automáticamente
+        después de cargar la entidad.
+
+        Note:
+            - Solo se ejecuta cuando SQLAlchemy carga desde BD
+            - NO se ejecuta cuando se crea con __init__() directamente
+            - Necesario para evitar AttributeError en métodos que usan _domain_events
+        """
+        if not hasattr(self, "_domain_events"):
+            self._domain_events = []
 
     @staticmethod
     def create(user_id: UserId, fingerprint: DeviceFingerprint) -> "UserDevice":
