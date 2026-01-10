@@ -25,9 +25,8 @@ import os
 
 import pytest
 from fastapi import status
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-from main import app
 from src.config.csrf_config import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
 
 
@@ -44,37 +43,38 @@ def enable_csrf_validation():
         os.environ["TEST_CSRF"] = original_value
 
 
-# Cliente de prueba para FastAPI
-client = TestClient(app)
-
-
 # ======================================================================================
 # Fixtures
 # ======================================================================================
 
 
 @pytest.fixture
-def valid_user_credentials():
+async def valid_user_credentials():
     """
     Credenciales de un usuario válido para tests de autenticación.
-
-    Nota: Este usuario debe existir en la base de datos de prueba.
-    Si no existe, los tests de CSRF protection (que requieren autenticación)
-    se saltarán automáticamente.
     """
-    return {"email": "testuser@example.com", "password": "SecurePassword123!"}
+    return {"email": "testcsrf@example.com", "password": "SecurePassword123!"}
 
 
 @pytest.fixture
-def authenticated_session(valid_user_credentials):
+async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials):
     """
-    Crea una sesión autenticada y retorna los tokens (access, refresh, csrf).
+    Crea un cliente autenticado y retorna (client, tokens).
 
     Returns:
-        dict: {"access_token", "refresh_token", "csrf_token"} o None si falla el login
+        tuple: (AsyncClient, {"access_token", "refresh_token", "csrf_token"})
     """
-    # Intentar login
-    response = client.post("/api/v1/auth/login", json=valid_user_credentials)
+    # Register user first
+    user_data = {
+        **valid_user_credentials,
+        "first_name": "CSRF",
+        "last_name": "Test",
+    }
+    register_response = await client.post("/api/v1/auth/register", json=user_data)
+    assert register_response.status_code in [status.HTTP_201_CREATED, status.HTTP_409_CONFLICT]
+
+    # Login to get tokens
+    response = await client.post("/api/v1/auth/login", json=valid_user_credentials)
 
     if response.status_code != status.HTTP_200_OK:
         pytest.skip(f"No se pudo autenticar usuario de prueba (status: {response.status_code})")
@@ -89,7 +89,11 @@ def authenticated_session(valid_user_credentials):
     if not all([access_token, refresh_token, csrf_token]):
         pytest.skip("Respuesta de login no contiene todos los tokens requeridos")
 
-    return {"access_token": access_token, "refresh_token": refresh_token, "csrf_token": csrf_token}
+    return client, {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "csrf_token": csrf_token,
+    }
 
 
 # ======================================================================================
@@ -97,7 +101,8 @@ def authenticated_session(valid_user_credentials):
 # ======================================================================================
 
 
-def test_get_request_without_csrf_token_succeeds():
+@pytest.mark.asyncio
+async def test_get_request_without_csrf_token_succeeds(client: AsyncClient):
     """
     Test: GET request sin token CSRF debe tener éxito.
 
@@ -108,13 +113,14 @@ def test_get_request_without_csrf_token_succeeds():
     OWASP: A01 - Los métodos seguros (RFC 7231) no requieren CSRF protection
     """
     # GET request sin token CSRF ni autenticación
-    response = client.get("/")
+    response = await client.get("/")
 
     # No debe fallar por falta de CSRF token
     assert response.status_code == status.HTTP_200_OK
 
 
-def test_options_request_without_csrf_token_succeeds():
+@pytest.mark.asyncio
+async def test_options_request_without_csrf_token_succeeds(client: AsyncClient):
     """
     Test: OPTIONS request sin token CSRF debe tener éxito.
 
@@ -125,7 +131,7 @@ def test_options_request_without_csrf_token_succeeds():
     OWASP: A01 - OPTIONS es método seguro (CORS preflight)
     """
     # OPTIONS request sin token CSRF
-    response = client.options("/api/v1/auth/login")
+    response = await client.options("/api/v1/auth/login")
 
     # No debe fallar por falta de CSRF token (puede ser 200 o 405 dependiendo del endpoint)
     assert response.status_code in [status.HTTP_200_OK, status.HTTP_405_METHOD_NOT_ALLOWED]
@@ -136,7 +142,8 @@ def test_options_request_without_csrf_token_succeeds():
 # ======================================================================================
 
 
-def test_health_endpoint_exempt_from_csrf():
+@pytest.mark.asyncio
+async def test_health_endpoint_exempt_from_csrf(client: AsyncClient):
     """
     Test: Endpoint /health exento de validación CSRF.
 
@@ -147,7 +154,7 @@ def test_health_endpoint_exempt_from_csrf():
     Nota: /health puede no aceptar POST, pero no debe fallar por CSRF
     """
     # POST a /health sin token CSRF
-    response = client.post("/health")
+    response = await client.post("/health")
 
     # No debe ser 403 por CSRF (puede ser 404 o 405 si no existe/acepta POST)
     assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
@@ -155,7 +162,8 @@ def test_health_endpoint_exempt_from_csrf():
     )
 
 
-def test_docs_endpoint_exempt_from_csrf():
+@pytest.mark.asyncio
+async def test_docs_endpoint_exempt_from_csrf(client: AsyncClient):
     """
     Test: Endpoint /docs exento de validación CSRF.
 
@@ -166,7 +174,7 @@ def test_docs_endpoint_exempt_from_csrf():
     Nota: /docs puede requerir autenticación, pero no CSRF
     """
     # GET a /docs sin token CSRF
-    response = client.get("/docs")
+    response = await client.get("/docs")
 
     # No debe ser 403 por CSRF (puede ser 401 por autenticación)
     assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
@@ -179,7 +187,8 @@ def test_docs_endpoint_exempt_from_csrf():
 # ======================================================================================
 
 
-def test_post_request_without_csrf_token_fails(authenticated_session):
+@pytest.mark.asyncio
+async def test_post_request_without_csrf_token_fails(csrf_authenticated_client):
     """
     Test: POST request sin token CSRF debe fallar con 403 Forbidden.
 
@@ -189,11 +198,12 @@ def test_post_request_without_csrf_token_fails(authenticated_session):
 
     OWASP: A01 - CSRF protection previene modificaciones no autorizadas
     """
-    access_token = authenticated_session["access_token"]
+    client, tokens = csrf_authenticated_client
+    access_token = tokens["access_token"]
 
     # POST request con autenticación pero SIN token CSRF
-    response = client.put(
-        "/api/v1/users/me/profile",
+    response = await client.patch(
+        "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={"Authorization": f"Bearer {access_token}"},
     )
@@ -203,7 +213,8 @@ def test_post_request_without_csrf_token_fails(authenticated_session):
     assert "CSRF" in response.json().get("detail", "")
 
 
-def test_post_request_with_invalid_csrf_token_fails(authenticated_session):
+@pytest.mark.asyncio
+async def test_post_request_with_invalid_csrf_token_fails(csrf_authenticated_client):
     """
     Test: POST request con token CSRF inválido debe fallar.
 
@@ -213,16 +224,17 @@ def test_post_request_with_invalid_csrf_token_fails(authenticated_session):
 
     OWASP: A01 - Token CSRF no coincide entre cookie y header
     """
-    access_token = authenticated_session["access_token"]
-    csrf_token = authenticated_session["csrf_token"]
+    client, tokens = csrf_authenticated_client
+    access_token = tokens["access_token"]
+    csrf_token = tokens["csrf_token"]
 
-    # POST request con token CSRF inválido (diferente del cookie)
-    response = client.put(
-        "/api/v1/users/me/profile",
+    # POST request con token CSRF INVÁLIDO (no coincide entre header y cookie)
+    response = await client.patch(
+        "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",
-            CSRF_HEADER_NAME: "invalid_token_12345",  # Token INVÁLIDO
+            CSRF_HEADER_NAME: "invalid_token_12345",  # Token INVÁLIDO en header
         },
         cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie válido pero header no coincide
     )
@@ -232,22 +244,24 @@ def test_post_request_with_invalid_csrf_token_fails(authenticated_session):
     assert "CSRF" in response.json().get("detail", "")
 
 
-def test_post_request_with_valid_csrf_token_succeeds(authenticated_session):
+@pytest.mark.asyncio
+async def test_post_request_with_valid_csrf_token_succeeds(csrf_authenticated_client):
     """
     Test: POST request con token CSRF válido debe tener éxito.
 
-    Given: Un usuario autenticado con access token y CSRF token válidos
-    When: Envía POST request con token CSRF correcto (header == cookie)
-    Then: El servidor procesa el request (200 OK o código apropiado)
+    Given: Un usuario autenticado con access token y csrf token válidos
+    When: Envía POST request con token CSRF CORRECTO (mismo en header y cookie)
+    Then: El servidor responde 200 OK (CSRF validation passed)
 
-    OWASP: A01 - Double-submit pattern validado correctamente
+    OWASP: A01 - Double-submit correcto permite la operación
     """
-    access_token = authenticated_session["access_token"]
-    csrf_token = authenticated_session["csrf_token"]
+    client, tokens = csrf_authenticated_client
+    access_token = tokens["access_token"]
+    csrf_token = tokens["csrf_token"]
 
-    # POST request con token CSRF válido (header == cookie)
-    response = client.put(
-        "/api/v1/users/me/profile",
+    # POST request con token CSRF VÁLIDO (mismo en header y cookie)
+    response = await client.patch(
+        "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",
@@ -256,16 +270,17 @@ def test_post_request_with_valid_csrf_token_succeeds(authenticated_session):
         cookies={CSRF_COOKIE_NAME: csrf_token},  # Token VÁLIDO en cookie
     )
 
-    # No debe fallar por CSRF (puede fallar por otras razones como validación de datos)
-    assert response.status_code != status.HTTP_403_FORBIDDEN
+    # Debe tener éxito (200 OK)
+    assert response.status_code == status.HTTP_200_OK
 
 
 # ======================================================================================
-# Tests: Login y Refresh Token - Generan nuevo CSRF token
+# Tests: Token Generation (Login, Refresh)
 # ======================================================================================
 
 
-def test_login_generates_csrf_token(valid_user_credentials):
+@pytest.mark.asyncio
+async def test_login_generates_csrf_token(client: AsyncClient, valid_user_credentials):
     """
     Test: Login exitoso genera y retorna un token CSRF.
 
@@ -275,7 +290,16 @@ def test_login_generates_csrf_token(valid_user_credentials):
 
     OWASP: A07 - Token CSRF único por sesión
     """
-    response = client.post("/api/v1/auth/login", json=valid_user_credentials)
+    # Register user first
+    user_data = {
+        **valid_user_credentials,
+        "first_name": "CSRF",
+        "last_name": "Test",
+    }
+    await client.post("/api/v1/auth/register", json=user_data)
+
+    # Login
+    response = await client.post("/api/v1/auth/login", json=valid_user_credentials)
 
     if response.status_code != status.HTTP_200_OK:
         pytest.skip("No se pudo autenticar usuario de prueba")
@@ -290,7 +314,8 @@ def test_login_generates_csrf_token(valid_user_credentials):
     assert CSRF_COOKIE_NAME in response.cookies
 
 
-def test_refresh_token_generates_new_csrf_token(authenticated_session):
+@pytest.mark.asyncio
+async def test_refresh_token_generates_new_csrf_token(csrf_authenticated_client):
     """
     Test: Refresh token exitoso genera y retorna un NUEVO token CSRF.
 
@@ -300,11 +325,12 @@ def test_refresh_token_generates_new_csrf_token(authenticated_session):
 
     OWASP: A07 - Nuevo token CSRF por cada renovación de sesión
     """
-    refresh_token = authenticated_session["refresh_token"]
-    old_csrf_token = authenticated_session["csrf_token"]
+    client, tokens = csrf_authenticated_client
+    refresh_token = tokens["refresh_token"]
+    old_csrf_token = tokens["csrf_token"]
 
-    # Refresh token request (cookie enviada automáticamente por TestClient)
-    response = client.post("/api/v1/auth/refresh-token", cookies={"refresh_token": refresh_token})
+    # Refresh token request (cookie enviada automáticamente)
+    response = await client.post("/api/v1/auth/refresh-token", cookies={"refresh_token": refresh_token})
 
     if response.status_code != status.HTTP_200_OK:
         pytest.skip("No se pudo renovar token")
@@ -328,7 +354,8 @@ def test_refresh_token_generates_new_csrf_token(authenticated_session):
 # ======================================================================================
 
 
-def test_post_request_with_csrf_cookie_but_no_header_fails(authenticated_session):
+@pytest.mark.asyncio
+async def test_post_request_with_csrf_cookie_but_no_header_fails(csrf_authenticated_client):
     """
     Test: POST request con cookie CSRF pero SIN header debe fallar.
 
@@ -338,12 +365,13 @@ def test_post_request_with_csrf_cookie_but_no_header_fails(authenticated_session
 
     OWASP: A01 - Double-submit requiere AMBOS (cookie Y header)
     """
-    access_token = authenticated_session["access_token"]
-    csrf_token = authenticated_session["csrf_token"]
+    client, tokens = csrf_authenticated_client
+    access_token = tokens["access_token"]
+    csrf_token = tokens["csrf_token"]
 
     # POST request con cookie CSRF pero SIN header
-    response = client.put(
-        "/api/v1/users/me/profile",
+    response = await client.patch(
+        "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={"Authorization": f"Bearer {access_token}"},
         cookies={CSRF_COOKIE_NAME: csrf_token},  # Cookie presente pero header ausente
@@ -354,7 +382,8 @@ def test_post_request_with_csrf_cookie_but_no_header_fails(authenticated_session
     assert "CSRF" in response.json().get("detail", "")
 
 
-def test_post_request_with_csrf_header_but_no_cookie_fails(authenticated_session):
+@pytest.mark.asyncio
+async def test_post_request_with_csrf_header_but_no_cookie_fails(csrf_authenticated_client):
     """
     Test: POST request con header CSRF pero SIN cookie debe fallar.
 
@@ -364,12 +393,16 @@ def test_post_request_with_csrf_header_but_no_cookie_fails(authenticated_session
 
     OWASP: A01 - Double-submit requiere AMBOS (cookie Y header)
     """
-    access_token = authenticated_session["access_token"]
-    csrf_token = authenticated_session["csrf_token"]
+    client, tokens = csrf_authenticated_client
+    access_token = tokens["access_token"]
+    csrf_token = tokens["csrf_token"]
+
+    # Clear all cookies to simulate request without CSRF cookie
+    client.cookies.clear()
 
     # POST request con header CSRF pero SIN cookie
-    response = client.put(
-        "/api/v1/users/me/profile",
+    response = await client.patch(
+        "/api/v1/users/profile",
         json={"first_name": "John"},
         headers={
             "Authorization": f"Bearer {access_token}",

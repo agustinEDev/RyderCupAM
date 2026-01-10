@@ -44,6 +44,11 @@ EXEMPT_PATHS: Final[set[str]] = {
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/api/v1/auth/register",  # Public endpoint - no existing session
+    "/api/v1/auth/login",  # Public endpoint - generates CSRF token
+    "/api/v1/auth/forgot-password",  # Public endpoint
+    "/api/v1/auth/reset-password",  # Public endpoint (token in URL)
+    "/api/v1/auth/verify-email",  # Public endpoint (token in URL)
 }
 
 # Exempt methods (métodos seguros según RFC 7231)
