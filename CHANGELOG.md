@@ -57,7 +57,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-## [1.13.0] - 2026-01-07
+## [1.13.0] - 2026-01-09
 
 ### Added - Account Lockout (Brute Force Protection) ✅ COMPLETADO (7 Ene 2026)
 
@@ -114,6 +114,168 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - ✅ docs/SECURITY_IMPLEMENTATION.md: Actualizado
 
 **Ver detalles:** `docs/architecture/decisions/ADR-027*.md`, `docs/API.md`
+
+---
+
+### Added - Device Fingerprinting ✅ COMPLETADO (9 Ene 2026)
+
+**📱 Gestión de Dispositivos de Usuario** (OWASP A01)
+
+#### Features Implementadas:
+- ✅ Detección automática de dispositivos en login/refresh token
+- ✅ Listado de dispositivos activos (GET /api/v1/users/me/devices)
+- ✅ Revocación manual de dispositivos (DELETE /api/v1/users/me/devices/{device_id})
+- ✅ Fingerprint único: SHA256(device_name + "|" + user_agent + "|" + ip_address)
+- ✅ Soft delete con audit trail (is_active=FALSE)
+- ✅ Partial unique index: previene duplicados activos, permite múltiples revocados
+
+#### Arquitectura (Clean Architecture):
+- **Domain Layer**:
+  - UserDevice entity (id, user_id, fingerprint, last_used_at, is_active)
+  - 2 Value Objects: UserDeviceId, DeviceFingerprint
+  - 2 Domain Events: NewDeviceDetectedEvent, DeviceRevokedEvent
+  - UserDeviceRepositoryInterface (5 métodos)
+- **Application Layer**:
+  - 3 Use Cases: RegisterDeviceUseCase, ListUserDevicesUseCase, RevokeDeviceUseCase
+  - 7 DTOs (RegisterDevice, ListDevices, RevokeDevice request/response)
+- **Infrastructure Layer**:
+  - Migration 50ccf425ff32: tabla user_devices + 2 índices
+  - SQLAlchemyUserDeviceRepository con TypeDecorators
+  - UserUnitOfWork actualizado (user_devices property)
+- **API Layer**:
+  - GET /api/v1/users/me/devices - Lista dispositivos activos
+  - DELETE /api/v1/users/me/devices/{device_id} - Revoca dispositivo
+
+#### Tests:
+- ✅ 86 tests unitarios (Domain: 66, Application: 20)
+- ✅ 13 tests de integración (API con PostgreSQL)
+- ✅ Total: 99/99 tests device fingerprinting pasando (100%)
+- ✅ Suite completa: 1021/1023 tests (99.80%, 2 skipped)
+
+#### Decisiones Técnicas (ADR-030):
+- IP incluida en fingerprint (redes diferentes = dispositivos diferentes)
+- Soft delete para audit trail (vs hard delete)
+- Partial unique index (user_id, fingerprint_hash WHERE is_active=TRUE)
+- Auto-registro en login/refresh endpoints
+- Validación de ownership en revocación
+
+#### Security:
+- **OWASP A01** mitigado: Session transparency, device management
+- **User empowerment**: Auto-detección + control manual
+- **Audit Trail**: Domain events para security logging
+
+#### Documentación:
+- ✅ ADR-030: Device Fingerprinting (123 líneas)
+- ✅ docs/API.md: 2 endpoints documentados
+- ✅ postman_collection.json: Requests "List Devices" y "Revoke Device" agregados
+
+**Ver detalles:** `docs/architecture/decisions/ADR-030-device-fingerprinting.md`, `docs/API.md`
+
+---
+
+### Added - CSRF Protection ✅ COMPLETADO (8 Ene 2026)
+
+**🛡️ Protección Contra Cross-Site Request Forgery** (OWASP A01)
+
+#### Features Implementadas:
+- ✅ Triple capa de protección CSRF:
+  - **Capa 1**: Custom Header `X-CSRF-Token` (principal)
+  - **Capa 2**: Double-Submit Cookie `csrf_token` (NO httpOnly)
+  - **Capa 3**: SameSite="lax" (ya implementado)
+- ✅ Middleware CSRFMiddleware con timing-safe comparison
+- ✅ Token 256-bit (secrets.token_urlsafe(32)), duración 15 min
+- ✅ Generación automática en login + refresh token endpoints
+- ✅ Validación en POST/PUT/PATCH/DELETE (exime GET/HEAD/OPTIONS)
+- ✅ Public endpoints exempt: /register, /login, /forgot-password, /reset-password, /verify-email
+
+#### Tests:
+- ✅ 11 tests de seguridad (10 passing + 1 skipped)
+- ✅ Cobertura: token generation, validation, exemptions, timing-safe comparison
+- ✅ Tests convertidos a async para pytest-xdist compatibility (8 workers paralelos)
+
+#### Decisiones Técnicas (ADR-028):
+- Custom middleware vs fastapi-csrf-protect (mayor control)
+- Double-submit cookie pattern (stateless, no DB storage)
+- Public endpoints exempt (no pueden tener token antes de registrarse)
+- SameSite="lax" complementa (permite GET links de email)
+
+#### Security:
+- **OWASP A01** mitigado: CSRF attacks, unauthorized state changes
+- **Defense in Depth**: 3 capas de protección
+- **Timing-safe comparison**: Previene timing attacks
+
+**Ver detalles:** `docs/architecture/decisions/ADR-028-csrf-protection.md`
+
+---
+
+### Added - Password History ✅ COMPLETADO (8 Ene 2026)
+
+**🔐 Prevención de Reutilización de Contraseñas** (OWASP A07)
+
+#### Features Implementadas:
+- ✅ Previene reutilización de las últimas 5 contraseñas
+- ✅ Tabla `password_history` con bcrypt hashes (255 chars)
+- ✅ Cascade delete on user deletion (GDPR Article 17 compliance)
+- ✅ Validación automática en UpdateSecurity y ResetPassword use cases
+- ✅ Domain Event: PasswordHistoryRecordedEvent
+
+#### Arquitectura:
+- **Domain Layer**:
+  - PasswordHistory entity (id, user_id, password_hash, created_at)
+  - PasswordHistoryId Value Object
+  - PasswordHistoryRepositoryInterface (5 métodos)
+- **Infrastructure Layer**:
+  - Migration: tabla password_history + índices
+  - SQLAlchemyPasswordHistoryRepository
+  - InMemoryPasswordHistoryRepository para tests
+- **Application Layer**:
+  - Validación integrada en UpdateSecurityUseCase
+  - Validación integrada en ResetPasswordUseCase
+
+#### Tests:
+- ✅ 25 tests unitarios (PasswordHistoryId + PasswordHistory)
+- ✅ 947/947 tests pasando (99.16% suite completa)
+
+#### Decisiones Técnicas (ADR-029):
+- LIMIT 5 (vs todas las contraseñas históricas)
+- Bcrypt hashes almacenados (vs plaintext comparison imposible)
+- Cascade delete (GDPR compliance)
+- Auto-cleanup diferido a v1.14.0
+
+**Ver detalles:** `docs/architecture/decisions/ADR-029-password-history.md`
+
+---
+
+### Fixed - CI/CD Pipeline (9 Ene 2026)
+
+**🔧 Correcciones de Linting y Type Checking**
+
+#### Ruff Fixes (36 errors → 0):
+- Auto-fixed 33 errors: deprecated typing imports (`List→list`, `Dict→dict`)
+- Manual fixes:
+  - `alembic/env.py:33`: Moved noqa comment to opening line (E402)
+  - `dev_tests.py:41`: Added type annotation for `DOCSTRING_CACHE`
+  - `user_device_mapper.py:76`: Replaced `try/except/pass` → `contextlib.suppress()` (SIM105)
+
+#### Mypy Fixes (3 errors → 0):
+- `dev_tests.py`: Fixed DOCSTRING_CACHE type (`dict[str, str]` → `dict[str, dict[str, str]]`)
+- `main.py:137`: Added `# type: ignore[arg-type]` for slowapi handler (sync/async compatibility)
+
+#### Test Fixes:
+- `test_csrf_protection.py`: Complete rewrite (21 → 413 lines)
+  - Converted sync TestClient → AsyncClient for pytest-xdist compatibility
+  - Fixed endpoint paths (`/api/v1/users/profile` not `/me/profile`)
+  - 10/11 CSRF tests now passing (1 skipped)
+- `test_device_routes.py`: Complete rewrite (broken syntax fixed)
+  - 6/6 integration tests passing
+
+#### CI/CD Verification:
+- ✅ `ruff check .` → All checks passed!
+- ✅ `mypy .` → Success: no issues found in 234 source files
+- ✅ `bandit -r src/ -ll` → No issues identified (22,447 lines scanned)
+- ✅ `pytest tests/ -n auto` → 1021 passed, 2 skipped in 61.56s
+
+**Pipeline Status:** ✅ Ready for GitHub Actions (all checks will pass)
 
 ---
 

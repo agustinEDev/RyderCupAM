@@ -1,17 +1,17 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Versión Actual:** 1.13.0 (en progreso - 3/4 completado)
-> **Última actualización:** 8 Ene 2026
-> **Estado:** ✅ Producción (v1.12.1) + 🚧 Development (v1.13.0)
-> **OWASP Score:** 9.5/10 (mejorado con Account Lockout + CSRF + Password History)
+> **Versión Actual:** 1.13.0 (COMPLETADO)
+> **Última actualización:** 9 Ene 2026
+> **Estado:** ✅ Producción (v1.13.0)
+> **OWASP Score:** 9.2/10 (Account Lockout + CSRF + Password History + Device Fingerprinting)
 
 ---
 
 ## 📊 Estado Actual
 
 ### Métricas
-- **Tests:** 955 (100% passing, ~60s) - +5 Account Lockout, +40 CSRF/Security
-- **Endpoints:** 37 REST API - +1 unlock-account
+- **Tests:** 1021 (100% passing, ~61s) - +99 Device Fingerprinting, +11 CSRF, +5 Account Lockout
+- **Endpoints:** 39 REST API - +2 device endpoints (/me/devices GET/DELETE)
 - **Módulos:** User, Competition, Enrollment, Countries
 - **CI/CD:** GitHub Actions (10 jobs paralelos, ~3min) - Security Tests + Trivy
 - **Deployment:** Render.com + Docker + PostgreSQL
@@ -22,24 +22,24 @@
 |-----------|----------|
 | **User Module** | Login, Register, Email Verification, Password Reset, Handicap (RFEG), Profile |
 | **Competition Module** | CRUD, State Machine (6 estados), Enrollments, Countries (166 + 614 fronteras) |
-| **Security (v1.8.0 - v1.13.0)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk Code SAST), **Account Lockout (v1.13.0)**, **CSRF Protection (v1.13.0)**, **Password History (v1.13.0)** |
-| **Testing** | 905 tests (unit + integration + security), CI/CD automático |
+| **Security (v1.8.0 - v1.13.0)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk Code SAST), **Account Lockout (v1.13.0)**, **CSRF Protection (v1.13.0)**, **Password History (v1.13.0)**, **Device Fingerprinting (v1.13.0)** |
+| **Testing** | 1021 tests (unit + integration + security), CI/CD automático |
 
 ### OWASP Top 10 Coverage
 
 | Categoría | Score | Protecciones |
 |-----------|-------|--------------|
-| A01: Access Control | 9.7/10 | JWT, Refresh Tokens, Session Timeout, Authorization, **CSRF Protection** |
+| A01: Access Control | 9.7/10 | JWT, Refresh Tokens, Session Timeout, Authorization, **CSRF Protection**, **Device Fingerprinting** |
 | A02: Crypto Failures | 10/10 | bcrypt (12 rounds), httpOnly Cookies, HSTS, Tokens seguros |
 | A03: Injection | 10/10 | SQLAlchemy ORM, HTML Sanitization, Pydantic Validation |
 | A04: Insecure Design | 9/10 | Rate Limiting (5/min login), Field Limits, Password Policy |
 | A05: Misconfiguration | 9.5/10 | Security Headers, CORS Whitelist, Secrets Management |
 | A06: Vulnerable Components | 9.0/10 | Triple Audit (Safety + pip-audit + Snyk), Auto-updates, 6 CVEs resueltos |
-| A07: Auth Failures | 9.5/10 | Password Policy (ASVS V2.1), Session Timeout, Rate Limiting, **Account Lockout** |
+| A07: Auth Failures | 9.5/10 | Password Policy (ASVS V2.1), Session Timeout, Rate Limiting, **Account Lockout**, **Password History** |
 | A08: Data Integrity | 7/10 | API Versioning |
 | A09: Logging | 10/10 | Security Audit Trail, Correlation IDs, Sentry (APM + Profiling) |
 | A10: SSRF | 8/10 | Input Validation |
-| **Promedio** | **9.4/10** | Suma: 94 puntos / 10 categorías = 9.4 |
+| **Promedio** | **9.2/10** | Suma: 91.7 puntos / 10 categorías = 9.17 |
 
 ---
 
@@ -47,22 +47,23 @@
 
 ### v1.13.0 - Security Hardening (EN PROGRESO - Ene 2026) ⏳
 
-**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** 3/4 completado
+**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** ✅ **COMPLETADO**
 
 | Tarea | Estimación | OWASP | Prioridad | Estado |
 |-------|-----------|-------|-----------|--------|
 | ~~**Account Lockout**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (7 Ene) |
 | ~~**CSRF Protection**~~ | ~~4-6h~~ | A01 | 🔴 CRÍTICA | ✅ **COMPLETADO** (8 Ene) |
 | ~~**Password History**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (8 Ene) |
-| **Device Fingerprinting** | 4-6h | A01 | 🟠 Alta | ⏳ Pendiente |
+| ~~**Device Fingerprinting**~~ | ~~4-6h~~ | A01 | 🟠 Alta | ✅ **COMPLETADO** (9 Ene) |
 | ~~**2FA/MFA (TOTP)**~~ | ~~12-16h~~ | A07 | 🔴 CRÍTICA | ❌ **REMOVIDO** (no necesario ahora) |
 
-**Total:** ~10-14 horas (3/4 completados) | **OWASP Actual:** 9.5/10 → 10/10 (pendiente Device Fingerprinting)
+**Total:** ~14-20 horas (4/4 completados) | **OWASP Actual:** ✅ **9.2/10** (v1.13.0 FINALIZADO)
 
 #### Cambios clave v1.13.0:
 - **Account Lockout**: Bloqueo tras 10 intentos fallidos, auto-desbloqueo 30 min, endpoint manual, integración total (ver ADR-027)
 - **CSRF Protection**: Triple capa (header, cookie, SameSite), middleware dedicado, tests exhaustivos (ver ADR-028)
 - **Password History**: Previene reutilización últimas 5 contraseñas, bcrypt hashes en BD, GDPR compliant (ver ADR-029)
+- **Device Fingerprinting**: SHA256 fingerprint, listado/revocación dispositivos, audit trail completo (ver ADR-030)
 - **Security Tests**: 40+ tests nuevos (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
 - **CI/CD Pipeline**: Añadidos jobs de Security Tests y Trivy Container Scan (ver ADR-021)
 
@@ -82,11 +83,15 @@
 **Implementación:** 3 commits (`a9fe089`, `e499add`, `14ecfd0`)
 **Ver:** `docs/architecture/decisions/ADR-027-account-lockout-brute-force-protection.md`
 
-#### 2. CSRF Protection ⏳ PENDIENTE
-- Implementar `fastapi-csrf-protect`
-- Double-submit cookie pattern
-- CSRF tokens en forms
-- Tests de CSRF bypass attempts
+#### 2. ~~CSRF Protection~~ ✅ **COMPLETADO (8 Ene 2026)**
+- ✅ Triple capa: X-CSRF-Token header + double-submit cookie + SameSite="lax"
+- ✅ Middleware CSRFMiddleware con timing-safe comparison
+- ✅ Token 256-bit (secrets.token_urlsafe), 15 min duración
+- ✅ Generación en login + refresh token
+- ✅ Validación en POST/PUT/PATCH/DELETE (exime GET/HEAD/OPTIONS)
+- ✅ Public endpoints exempt (/register, /login, /forgot-password, etc)
+- ✅ 11 tests de seguridad pasando (10 passing + 1 skipped)
+- ✅ ADR-028 documentado
 
 #### 3. Password History ✅ COMPLETADO (8 Ene)
 - ✅ Tabla `password_history` con migración Alembic
@@ -99,11 +104,19 @@
 - ✅ ADR-029 documentado
 - ⏳ Cleanup automático (diferido a v1.14.0)
 
-#### 4. Device Fingerprinting ⏳ PENDIENTE
-- Modelo `UserDevice` en BD
-- User-Agent + IP tracking
-- Email de notificación (nuevo dispositivo)
-- Endpoint listar/revocar dispositivos
+#### 4. ~~Device Fingerprinting~~ ✅ **COMPLETADO (9 Ene 2026)**
+- ✅ UserDevice entity (id, user_id, device_name, user_agent, ip, fingerprint_hash, is_active, last_used_at)
+- ✅ DeviceFingerprint VO: SHA256 hash of User-Agent + IP
+- ✅ Auto-registration on login/refresh token
+- ✅ 2 endpoints REST (GET /api/v1/users/me/devices list, DELETE revoke)
+- ✅ 3 use cases (List, Register, Revoke)
+- ✅ 99 tests (86 unit + 13 integration) - 100% passing
+- ✅ Partial unique index: (user_id, fingerprint_hash) WHERE is_active=TRUE
+- ✅ Soft delete with audit trail
+- ✅ Domain events: NewDeviceDetectedEvent, DeviceRevokedEvent
+- ✅ Migration: 50ccf425ff32_add_user_devices_table.py
+- ✅ ADR-030 documentado
+- ⏳ Email notificación (diferido a v1.14.0)
 
 ---
 
@@ -303,5 +316,5 @@ src/modules/ai/
 
 ---
 
-**Próxima revisión:** Después de completar v1.13.0 (1/4 features pendiente: Device Fingerprinting)
+**Próxima revisión:** ✅ v1.13.0 COMPLETADO (9 Ene 2026) - Iniciar v1.14.0 (Compliance & Features)
 **Responsable:** Equipo Backend

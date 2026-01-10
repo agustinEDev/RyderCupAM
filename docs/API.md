@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 37 active
+**Total Endpoints**: 39 active
 **Version**: v1.13.0
-**Last Updated**: 8 January 2026
+**Last Updated**: 9 January 2026
 
 ---
 
@@ -29,6 +29,10 @@ User Management (3 endpoints)
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
 └── PATCH /api/v1/users/security         # Update security (email/password)
+
+Device Management (2 endpoints) ⭐ v1.13.0
+├── GET    /api/v1/users/me/devices      # List active devices
+└── DELETE /api/v1/users/me/devices/{id} # Revoke device
 
 Handicap Management (3 endpoints)
 ├── POST /api/v1/handicaps/update        # Update single user handicap (RFEG)
@@ -166,6 +170,77 @@ Country Management (2 endpoints)
 - country_code can be null
 
 **📋 See complete module:** `docs/modules/user-management.md`
+
+---
+
+## 📱 Device Management ⭐ v1.13.0
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/users/me/devices` | GET | Yes | List active devices for authenticated user |
+| `/users/me/devices/{device_id}` | DELETE | Yes | Revoke device (soft delete) |
+
+### Main Fields
+
+**List Devices Response:**
+- `devices` (array) - List of active devices
+  - `id` (string, UUID) - Device ID
+  - `device_name` (string) - Friendly name (e.g., "Chrome 120.0 on macOS")
+  - `ip_address` (string) - Last known IP address
+  - `last_used_at` (datetime) - Last login timestamp
+  - `created_at` (datetime) - First seen timestamp
+  - `is_active` (boolean) - Always `true` (revoked devices not shown)
+- `total_count` (int) - Number of active devices
+
+**Revoke Device Response:**
+- `message` (string) - Success message
+- `device_id` (string) - Revoked device ID
+
+### Business Logic
+
+- **Fingerprint Formula**: `SHA256(device_name + "|" + user_agent + "|" + ip_address)`
+- **Auto-registration**: Devices automatically registered on login/refresh token
+- **Soft delete**: Revoked devices marked as `is_active=FALSE` (audit trail preserved)
+- **Ownership validation**: Users can only revoke their own devices
+- **Partial unique index**: `(user_id, fingerprint_hash) WHERE is_active=TRUE`
+- **Domain Events**: `NewDeviceDetectedEvent`, `DeviceRevokedEvent`
+
+### Status Codes
+
+- `200 OK` - Success (list/revoke)
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Device belongs to another user
+- `404 Not Found` - Device not found or invalid UUID
+- `409 Conflict` - Device already revoked
+
+### Examples
+
+**GET /api/v1/users/me/devices**
+```json
+{
+  "devices": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "device_name": "Chrome 120.0 on macOS",
+      "ip_address": "192.168.1.100",
+      "last_used_at": "2026-01-09T10:30:00Z",
+      "created_at": "2026-01-05T08:15:00Z",
+      "is_active": true
+    }
+  ],
+  "total_count": 1
+}
+```
+
+**DELETE /api/v1/users/me/devices/a1b2c3d4-e5f6-7890-abcd-ef1234567890**
+```json
+{
+  "message": "Dispositivo revocado exitosamente",
+  "device_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**📋 See ADR:** `docs/architecture/decisions/ADR-030-device-fingerprinting.md`
 
 ---
 
