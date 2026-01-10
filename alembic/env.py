@@ -28,18 +28,23 @@ from sqlalchemy import engine_from_config, pool  # noqa: E402
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
 from src.shared.infrastructure.persistence.sqlalchemy import country_mappers  # noqa: E402
 from src.modules.user.infrastructure.persistence.sqlalchemy import mappers as user_mappers  # noqa: E402
-from src.modules.competition.infrastructure.persistence.sqlalchemy import (
+from src.modules.competition.infrastructure.persistence.sqlalchemy import (  # noqa: E402
     mappers as competition_mappers,
-)  # noqa: E402
+)
 
 # Constantes para drivers de PostgreSQL
 ASYNCPG_DRIVER = "postgresql+asyncpg"
 PSYCOPG2_DRIVER = "postgresql+psycopg2"
 
 # Iniciar todos los mappers para registrar las tablas en el metadata
-country_mappers.start_mappers()
-user_mappers.start_mappers()
-competition_mappers.start_mappers()
+# IMPORTANTE: Proteger contra re-inicialización en tests (pytest ya los inicializa)
+try:
+    country_mappers.start_mappers()
+    user_mappers.start_mappers()
+    competition_mappers.start_mappers()
+except Exception:
+    # Mappers ya inicializados (probablemente en tests), ignorar
+    pass
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

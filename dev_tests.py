@@ -38,7 +38,7 @@ ICONS = {
 }
 
 REPORTS_DIR = Path("tests/reports")
-DOCSTRING_CACHE = {}
+DOCSTRING_CACHE: dict[str, dict[str, str]] = {}
 
 # --- Funciones Auxiliares ---
 
@@ -52,7 +52,7 @@ def print_header(title):
 
 def discover_tests() -> dict:
     """Descubre tests y los organiza en una estructura anidada."""
-    test_structure = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    test_structure: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     test_root = Path("tests")
     for test_file in sorted(test_root.rglob("test_*.py")):
         parts = test_file.parts
