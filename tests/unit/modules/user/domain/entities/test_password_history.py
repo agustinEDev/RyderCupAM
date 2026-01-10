@@ -97,9 +97,7 @@ class TestPasswordHistoryCreation:
         password_hash = "$2b$12$explicit_id"
 
         # When
-        history = PasswordHistory(
-            id=history_id, user_id=user_id, password_hash=password_hash
-        )
+        history = PasswordHistory(id=history_id, user_id=user_id, password_hash=password_hash)
 
         # Then
         assert history.id == history_id

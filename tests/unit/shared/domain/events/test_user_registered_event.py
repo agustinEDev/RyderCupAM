@@ -43,9 +43,7 @@ class TestUserRegisteredEvent:
             first_name="Carlos",
             last_name="López",
         )
-        with pytest.raises(
-            Exception, match="cannot assign to field|can't set attribute"
-        ):
+        with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.email = "nuevo@test.com"
 
     def test_full_name_property(self):

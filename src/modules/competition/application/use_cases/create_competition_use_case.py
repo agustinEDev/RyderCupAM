@@ -82,9 +82,7 @@ class CreateCompetitionUseCase:
         async with self._uow:
             # 1. Validar que el nombre no exista para este creador
             name_vo = CompetitionName(request.name)
-            existing = await self._uow.competitions.exists_with_name(
-                name_vo, creator_id
-            )
+            existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
             if existing:
                 raise CompetitionAlreadyExistsError(
                     f"Ya existe una competición con el nombre '{request.name}'"
@@ -103,9 +101,7 @@ class CreateCompetitionUseCase:
             )
 
             # 4. Construir DateRange
-            date_range = DateRange(
-                start_date=request.start_date, end_date=request.end_date
-            )
+            date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
 
             # 5. Construir TeamAssignment desde string
             team_assignment_vo = TeamAssignment(request.team_assignment)
@@ -184,8 +180,6 @@ class CreateCompetitionUseCase:
         h_type = HandicapType(handicap_type)
 
         if h_type == HandicapType.SCRATCH:
-            return HandicapSettings(
-                h_type, None
-            )  # Scratch requiere None explícitamente
+            return HandicapSettings(h_type, None)  # Scratch requiere None explícitamente
         # PERCENTAGE requiere porcentaje
         return HandicapSettings(h_type, handicap_percentage)

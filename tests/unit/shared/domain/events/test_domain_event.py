@@ -72,19 +72,13 @@ class TestDomainEvent:
         event = SampleEvent(user_id="user-123", action="registered")
 
         # Act & Assert - FrozenInstanceError para dataclasses frozen
-        with pytest.raises(
-            Exception, match="cannot assign to field|can't set attribute"
-        ):
+        with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.user_id = "user-456"
 
-        with pytest.raises(
-            Exception, match="cannot assign to field|can't set attribute"
-        ):
+        with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.aggregate_id = "user-999"
 
-        with pytest.raises(
-            Exception, match="cannot assign to field|can't set attribute"
-        ):
+        with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
             event.event_id = "new-id"
 
     def test_each_event_has_unique_id(self):
@@ -128,9 +122,7 @@ class TestDomainEvent:
         # Metadata
         assert event_dict["event_id"] == event.event_id
         assert event_dict["event_type"] == "SampleEvent"
-        assert (
-            event_dict["aggregate_id"] == event.aggregate_id
-        )  # Generado automáticamente
+        assert event_dict["aggregate_id"] == event.aggregate_id  # Generado automáticamente
         assert event_dict["occurred_on"] == event.occurred_on.isoformat()
         assert event_dict["event_version"] == 1
 

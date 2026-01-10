@@ -29,9 +29,7 @@ class CountryCodeDecorator(TypeDecorator):
     impl = CHAR(2)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: CountryCode | str | None, dialect
-    ) -> str | None:
+    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
         """
         Convierte CountryCode o str a string para guardar en BD.
 

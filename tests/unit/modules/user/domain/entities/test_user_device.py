@@ -82,9 +82,7 @@ class TestUserDeviceCreation:
         """
         # Arrange
         user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create(
-            "Mozilla/5.0 (Windows NT 10.0)", "192.168.1.102"
-        )
+        fingerprint = DeviceFingerprint.create("Mozilla/5.0 (Windows NT 10.0)", "192.168.1.102")
 
         # Act
         device = UserDevice.create(user_id, fingerprint)
@@ -248,9 +246,7 @@ class TestUserDeviceReconstitute:
         # Arrange
         device_id = UserDeviceId.generate()
         user_id = UserId.generate()
-        fingerprint = DeviceFingerprint.create(
-            "Mozilla/5.0 (Macintosh)", "192.168.1.100"
-        )
+        fingerprint = DeviceFingerprint.create("Mozilla/5.0 (Macintosh)", "192.168.1.100")
         created_at = datetime(2026, 1, 8, 14, 20, 0)
         last_used_at = datetime(2026, 1, 9, 10, 30, 0)
         is_active = True

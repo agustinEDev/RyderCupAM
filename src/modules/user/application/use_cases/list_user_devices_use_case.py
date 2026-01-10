@@ -60,9 +60,7 @@ class ListUserDevicesUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self, request: ListUserDevicesRequestDTO
-    ) -> ListUserDevicesResponseDTO:
+    async def execute(self, request: ListUserDevicesRequestDTO) -> ListUserDevicesResponseDTO:
         """
         Ejecuta el caso de uso de listado de dispositivos.
 

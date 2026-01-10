@@ -70,9 +70,7 @@ class TestUpdateUserHandicapUseCase:
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         # Act & Assert
-        with pytest.raises(
-            HandicapNotFoundError, match="No se encontró hándicap en RFEG"
-        ):
+        with pytest.raises(HandicapNotFoundError, match="No se encontró hándicap en RFEG"):
             await use_case.execute(user.id)
 
     @pytest.mark.asyncio
@@ -80,9 +78,7 @@ class TestUpdateUserHandicapUseCase:
         """Test: El cambio de hándicap se persiste correctamente."""
         # Arrange
         uow = InMemoryUnitOfWork()
-        user = User.create(
-            "Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!"
-        )
+        user = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!")
         await uow.users.save(user)
         await uow.commit()
 
@@ -152,9 +148,7 @@ class TestUpdateUserHandicapUseCase:
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         # Act & Assert - debe lanzar error porque no hay hándicap en RFEG ni manual
-        with pytest.raises(
-            HandicapNotFoundError, match="No se encontró hándicap en RFEG"
-        ):
+        with pytest.raises(HandicapNotFoundError, match="No se encontró hándicap en RFEG"):
             await use_case.execute(user.id, manual_handicap=None)
 
 
@@ -171,9 +165,7 @@ class TestUpdateMultipleHandicapsUseCase:
         # Arrange
         uow = InMemoryUnitOfWork()
         user1 = User.create("Rafael", "Nadal Parera", "rafa@test.com", "P@ssw0rd123!")
-        user2 = User.create(
-            "Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!"
-        )
+        user2 = User.create("Carlos", "Alcaraz Garfia", "carlos@test.com", "P@ssw0rd123!")
         await uow.users.save(user1)
         await uow.users.save(user2)
         await uow.commit()

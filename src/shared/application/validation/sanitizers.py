@@ -92,7 +92,9 @@ def _sanitize_list_items(items: list, exclude: list[str]) -> list:
         (
             sanitize_all_fields(item, exclude=exclude)
             if isinstance(item, dict)
-            else sanitize_html(item) if isinstance(item, str) else item
+            else sanitize_html(item)
+            if isinstance(item, str)
+            else item
         )
         for item in items
     ]

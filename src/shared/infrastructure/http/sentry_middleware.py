@@ -80,9 +80,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
             Payload del token o None si falla la decodificación
         """
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             return payload
         except JWTError as e:
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")

@@ -171,9 +171,7 @@ class TestDeleteCompetitionUseCase:
         with pytest.raises(CompetitionNotDeletableError) as exc_info:
             await delete_use_case.execute(delete_request, creator_id)
 
-        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(
-            exc_info.value
-        )
+        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(exc_info.value)
         assert "Estado actual: ACTIVE" in str(exc_info.value)
 
     async def test_should_raise_error_when_trying_to_delete_in_progress_competition(
@@ -214,9 +212,7 @@ class TestDeleteCompetitionUseCase:
         with pytest.raises(CompetitionNotDeletableError) as exc_info:
             await delete_use_case.execute(delete_request, creator_id)
 
-        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(
-            exc_info.value
-        )
+        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(exc_info.value)
         assert "Estado actual: IN_PROGRESS" in str(exc_info.value)
 
     async def test_should_raise_error_when_trying_to_delete_completed_competition(
@@ -258,7 +254,5 @@ class TestDeleteCompetitionUseCase:
         with pytest.raises(CompetitionNotDeletableError) as exc_info:
             await delete_use_case.execute(delete_request, creator_id)
 
-        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(
-            exc_info.value
-        )
+        assert "Solo se pueden eliminar competiciones en estado DRAFT" in str(exc_info.value)
         assert "Estado actual: COMPLETED" in str(exc_info.value)

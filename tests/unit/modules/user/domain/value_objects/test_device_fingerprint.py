@@ -30,7 +30,9 @@ class TestDeviceFingerprintCreation:
         Then: Se crea correctamente con device_name auto-generado y hash
         """
         # Arrange
-        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+        user_agent = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+        )
         ip_address = "192.168.1.100"
 
         # Act
@@ -92,9 +94,7 @@ class TestDeviceFingerprintCreation:
         user_agent = "TestAgent"
         ip_address = "127.0.0.1"
 
-        expected_hash = hashlib.sha256(
-            f"{user_agent}|{ip_address}".encode()
-        ).hexdigest()
+        expected_hash = hashlib.sha256(f"{user_agent}|{ip_address}".encode()).hexdigest()
 
         # Act
         fingerprint = DeviceFingerprint.create(user_agent, ip_address)
@@ -321,9 +321,7 @@ class TestDeviceFingerprintComparison:
         Then: Retorna el device_name
         """
         # Arrange
-        fp = DeviceFingerprint.create(
-            "Mozilla/5.0 (Macintosh) Chrome/120.0", "192.168.1.1"
-        )
+        fp = DeviceFingerprint.create("Mozilla/5.0 (Macintosh) Chrome/120.0", "192.168.1.1")
 
         # Act & Assert
         assert str(fp) == "Chrome on macOS"

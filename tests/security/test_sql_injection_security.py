@@ -34,9 +34,9 @@ class TestSQLInjectionLoginEndpoint:
             response = await client.post("/api/v1/auth/login", json=login_data)
 
             # Debe fallar con validación de Pydantic (email inválido)
-            assert (
-                response.status_code == 422
-            ), f"Payload '{payload}' debe ser rechazado con 422 (validation error)"
+            assert response.status_code == 422, (
+                f"Payload '{payload}' debe ser rechazado con 422 (validation error)"
+            )
 
     async def test_sql_injection_in_password_field(self, client: AsyncClient):
         """
@@ -107,9 +107,9 @@ class TestSQLInjectionRegisterEndpoint:
                 "password": "ValidPassword123!",
             }
             login_response = await client.post("/api/v1/auth/login", json=login_data)
-            assert (
-                login_response.status_code == 200
-            ), "La tabla users debe seguir existiendo después del intento de SQL injection"
+            assert login_response.status_code == 200, (
+                "La tabla users debe seguir existiendo después del intento de SQL injection"
+            )
 
 
 @pytest.mark.asyncio
@@ -149,9 +149,7 @@ class TestSQLInjectionCompetitionEndpoint:
         if response.status_code == 201:
             # Verificar que la tabla competitions sigue existiendo
             list_response = await client.get("/api/v1/competitions")
-            assert (
-                list_response.status_code == 200
-            ), "La tabla competitions debe seguir existiendo"
+            assert list_response.status_code == 200, "La tabla competitions debe seguir existiendo"
 
 
 @pytest.mark.asyncio
@@ -178,9 +176,9 @@ class TestORMProtection:
         response = await client.post("/api/v1/auth/register", json=register_data)
 
         # Debe fallar por validación de email, no por error de SQL
-        assert (
-            response.status_code == 422
-        ), "Debe fallar con validación de Pydantic, no con error de SQL"
+        assert response.status_code == 422, (
+            "Debe fallar con validación de Pydantic, no con error de SQL"
+        )
 
     async def test_no_raw_sql_execution(self, client: AsyncClient):
         """

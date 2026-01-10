@@ -18,9 +18,7 @@ from httpx import AsyncClient
 class TestListUserDevicesEndpoint:
     """Tests de integración para GET /api/v1/users/me/devices"""
 
-    async def test_list_devices_returns_empty_when_no_devices(
-        self, authenticated_client
-    ):
+    async def test_list_devices_returns_empty_when_no_devices(self, authenticated_client):
         """
         Test: Listar dispositivos sin dispositivos registrados
         Given: Usuario autenticado sin dispositivos
@@ -52,9 +50,7 @@ class TestListUserDevicesEndpoint:
         # Assert
         assert response.status_code == 401
 
-    async def test_list_devices_contains_all_expected_fields(
-        self, authenticated_client
-    ):
+    async def test_list_devices_contains_all_expected_fields(self, authenticated_client):
         """
         Test: Respuesta de listar dispositivos contiene estructura correcta
         Given: Usuario autenticado
@@ -118,9 +114,7 @@ class TestRevokeDeviceEndpoint:
         # Assert
         assert response.status_code == 401
 
-    async def test_revoke_device_with_invalid_id_returns_404(
-        self, authenticated_client
-    ):
+    async def test_revoke_device_with_invalid_id_returns_404(self, authenticated_client):
         """
         Test: device_id inválido retorna 404
         Given: device_id que no es UUID válido

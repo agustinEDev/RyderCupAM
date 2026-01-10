@@ -113,9 +113,7 @@ class RefreshAccessTokenUseCase:
         # 3. Verificar que el refresh token NO esté revocado en base de datos
         # Nota: find_by_token_hash espera el JWT token original, NO el hash
         # El repositorio se encarga de hashear internamente
-        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(
-            refresh_token_jwt
-        )
+        refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
 
         if not refresh_token_entity:
             # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
@@ -137,9 +135,7 @@ class RefreshAccessTokenUseCase:
             return None
 
         # 5. Generar nuevo access token (15 minutos)
-        new_access_token = self._token_service.create_access_token(
-            data={"sub": str(user.id.value)}
-        )
+        new_access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
 
         # 6. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token()

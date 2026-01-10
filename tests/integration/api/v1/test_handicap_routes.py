@@ -134,10 +134,7 @@ class TestHandicapEndpoints:
         assert data["errors"] == 0
         # Verificar que todos los usuarios están contados en las estadísticas
         total_accounted = (
-            data["updated"]
-            + data["not_found"]
-            + data["no_handicap_found"]
-            + data["errors"]
+            data["updated"] + data["not_found"] + data["no_handicap_found"] + data["errors"]
         )
         assert total_accounted == data["total"]
 

@@ -71,9 +71,7 @@ class TestAuthRoutes:
 
         # Act: Hacer logout
         logout_data = {}  # LogoutRequestDTO está vacío en Fase 1
-        response = await client.post(
-            "/api/v1/auth/logout", json=logout_data, headers=headers
-        )
+        response = await client.post("/api/v1/auth/logout", json=logout_data, headers=headers)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -105,9 +103,7 @@ class TestAuthRoutes:
         logout_data = {}
 
         # Act: Intentar logout con token inválido
-        response = await client.post(
-            "/api/v1/auth/logout", json=logout_data, headers=headers
-        )
+        response = await client.post("/api/v1/auth/logout", json=logout_data, headers=headers)
 
         # Assert
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -212,16 +208,12 @@ class TestAuthRoutes:
 
         # Act - Intentar verificar de nuevo con cualquier token
         verify_data_again = {"token": "any_token"}
-        response = await client.post(
-            "/api/v1/auth/verify-email", json=verify_data_again
-        )
+        response = await client.post("/api/v1/auth/verify-email", json=verify_data_again)
 
         # Assert
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    async def test_resend_verification_email_endpoint_success(
-        self, client: AsyncClient
-    ):
+    async def test_resend_verification_email_endpoint_success(self, client: AsyncClient):
         """
         Test: Reenviar email de verificación exitosamente
         Given: Un usuario registrado sin verificar
@@ -245,9 +237,7 @@ class TestAuthRoutes:
 
         # Act - Reenviar email de verificación (el mock de email está en conftest.py)
         resend_data = {"email": user_data["email"]}
-        response = await client.post(
-            "/api/v1/auth/resend-verification", json=resend_data
-        )
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
@@ -261,9 +251,7 @@ class TestAuthRoutes:
         assert user_after.verification_token != original_token
         assert user_after.email_verified is False
 
-    async def test_resend_verification_email_endpoint_nonexistent_email(
-        self, client: AsyncClient
-    ):
+    async def test_resend_verification_email_endpoint_nonexistent_email(self, client: AsyncClient):
         """
         Test: Reenviar verificación con email no existente
         Given: Un email que no existe en la BD
@@ -274,9 +262,7 @@ class TestAuthRoutes:
         resend_data = {"email": "noexiste@example.com"}
 
         # Act
-        response = await client.post(
-            "/api/v1/auth/resend-verification", json=resend_data
-        )
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
 
         # Assert
         # Por seguridad, siempre retorna 200 OK con mensaje genérico
@@ -284,9 +270,7 @@ class TestAuthRoutes:
         response_data = response.json()
         assert "if the email address exists" in response_data["message"].lower()
 
-    async def test_resend_verification_email_endpoint_already_verified(
-        self, client: AsyncClient
-    ):
+    async def test_resend_verification_email_endpoint_already_verified(self, client: AsyncClient):
         """
         Test: Reenviar verificación a email ya verificado
         Given: Un usuario con email ya verificado
@@ -310,16 +294,12 @@ class TestAuthRoutes:
         verification_token = user.verification_token
 
         verify_data = {"token": verification_token}
-        verify_response = await client.post(
-            "/api/v1/auth/verify-email", json=verify_data
-        )
+        verify_response = await client.post("/api/v1/auth/verify-email", json=verify_data)
         assert verify_response.status_code == status.HTTP_200_OK
 
         # Act - Intentar reenviar verificación
         resend_data = {"email": user_data["email"]}
-        response = await client.post(
-            "/api/v1/auth/resend-verification", json=resend_data
-        )
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
 
         # Assert
         # Por seguridad, siempre retorna 200 OK con mensaje genérico
@@ -340,16 +320,12 @@ class TestAuthRoutes:
         resend_data = {"email": "invalid-email-format"}
 
         # Act
-        response = await client.post(
-            "/api/v1/auth/resend-verification", json=resend_data
-        )
+        response = await client.post("/api/v1/auth/resend-verification", json=resend_data)
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    async def test_login_with_short_password_returns_generic_error(
-        self, client: AsyncClient
-    ):
+    async def test_login_with_short_password_returns_generic_error(self, client: AsyncClient):
         """
         Verifica que el login con contraseña corta devuelve "Credenciales incorrectas"
         en lugar de revelar información sobre validaciones de contraseña.

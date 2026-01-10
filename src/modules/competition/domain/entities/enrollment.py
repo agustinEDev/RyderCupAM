@@ -456,7 +456,9 @@ class Enrollment:
 
     def __str__(self) -> str:
         """Representación string legible."""
-        return f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
+        return (
+            f"Enrollment({self.user_id} → Competition {self.competition_id}, {self.status.value})"
+        )
 
     def __eq__(self, other) -> bool:
         """Operador de igualdad - Comparación por identidad (ID)."""

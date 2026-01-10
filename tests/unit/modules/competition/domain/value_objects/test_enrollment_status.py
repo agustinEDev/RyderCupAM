@@ -22,9 +22,7 @@ class TestEnrollmentStatusTransitions:
 
     def test_requested_cannot_transition_to_withdrawn(self):
         """REQUESTED NO puede ir a WITHDRAWN."""
-        assert not EnrollmentStatus.REQUESTED.can_transition_to(
-            EnrollmentStatus.WITHDRAWN
-        )
+        assert not EnrollmentStatus.REQUESTED.can_transition_to(EnrollmentStatus.WITHDRAWN)
 
     def test_invited_can_transition_to_approved(self):
         """INVITED puede ir a APPROVED."""
@@ -40,36 +38,22 @@ class TestEnrollmentStatusTransitions:
 
     def test_approved_cannot_transition_to_cancelled(self):
         """APPROVED NO puede ir a CANCELLED (solo WITHDRAWN)."""
-        assert not EnrollmentStatus.APPROVED.can_transition_to(
-            EnrollmentStatus.CANCELLED
-        )
+        assert not EnrollmentStatus.APPROVED.can_transition_to(EnrollmentStatus.CANCELLED)
 
     def test_rejected_cannot_transition(self):
         """REJECTED es estado final (no transiciones)."""
-        assert not EnrollmentStatus.REJECTED.can_transition_to(
-            EnrollmentStatus.APPROVED
-        )
-        assert not EnrollmentStatus.REJECTED.can_transition_to(
-            EnrollmentStatus.WITHDRAWN
-        )
+        assert not EnrollmentStatus.REJECTED.can_transition_to(EnrollmentStatus.APPROVED)
+        assert not EnrollmentStatus.REJECTED.can_transition_to(EnrollmentStatus.WITHDRAWN)
 
     def test_cancelled_cannot_transition(self):
         """CANCELLED es estado final (no transiciones)."""
-        assert not EnrollmentStatus.CANCELLED.can_transition_to(
-            EnrollmentStatus.APPROVED
-        )
-        assert not EnrollmentStatus.CANCELLED.can_transition_to(
-            EnrollmentStatus.WITHDRAWN
-        )
+        assert not EnrollmentStatus.CANCELLED.can_transition_to(EnrollmentStatus.APPROVED)
+        assert not EnrollmentStatus.CANCELLED.can_transition_to(EnrollmentStatus.WITHDRAWN)
 
     def test_withdrawn_cannot_transition(self):
         """WITHDRAWN es estado final (no transiciones)."""
-        assert not EnrollmentStatus.WITHDRAWN.can_transition_to(
-            EnrollmentStatus.APPROVED
-        )
-        assert not EnrollmentStatus.WITHDRAWN.can_transition_to(
-            EnrollmentStatus.REQUESTED
-        )
+        assert not EnrollmentStatus.WITHDRAWN.can_transition_to(EnrollmentStatus.APPROVED)
+        assert not EnrollmentStatus.WITHDRAWN.can_transition_to(EnrollmentStatus.REQUESTED)
 
 
 class TestEnrollmentStatusQueries:
@@ -136,12 +120,8 @@ class TestEnrollmentStatusSemantics:
         """CANCELLED (pre-inscripción) vs WITHDRAWN (post-inscripción)."""
         # CANCELLED: antes de estar inscrito
         assert EnrollmentStatus.REQUESTED.can_transition_to(EnrollmentStatus.CANCELLED)
-        assert not EnrollmentStatus.APPROVED.can_transition_to(
-            EnrollmentStatus.CANCELLED
-        )
+        assert not EnrollmentStatus.APPROVED.can_transition_to(EnrollmentStatus.CANCELLED)
 
         # WITHDRAWN: después de estar inscrito
         assert EnrollmentStatus.APPROVED.can_transition_to(EnrollmentStatus.WITHDRAWN)
-        assert not EnrollmentStatus.REQUESTED.can_transition_to(
-            EnrollmentStatus.WITHDRAWN
-        )
+        assert not EnrollmentStatus.REQUESTED.can_transition_to(EnrollmentStatus.WITHDRAWN)

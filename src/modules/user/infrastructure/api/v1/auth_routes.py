@@ -572,9 +572,7 @@ async def verify_email(
             detail="Unable to verify email. Please check your verification link or request a new one.",
         ) from e
     except Exception as e:
-        logger.error(
-            f"Unexpected error in email verification: {type(e).__name__}", exc_info=True
-        )
+        logger.error(f"Unexpected error in email verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
@@ -593,9 +591,7 @@ async def verify_email(
 async def resend_verification_email(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
-    use_case: ResendVerificationEmailUseCase = Depends(
-        get_resend_verification_email_use_case
-    ),
+    use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):
     """
     Endpoint para reenviar el email de verificación.
@@ -686,9 +682,7 @@ async def resend_verification_email(
 async def forgot_password(
     request: Request,
     reset_data: RequestPasswordResetRequestDTO,
-    use_case: RequestPasswordResetUseCase = Depends(
-        get_request_password_reset_use_case
-    ),
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
 ) -> RequestPasswordResetResponseDTO:
     """
     Solicita el reseteo de contraseña enviando un email con token único.
@@ -791,9 +785,7 @@ async def reset_password(
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from None
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.get(

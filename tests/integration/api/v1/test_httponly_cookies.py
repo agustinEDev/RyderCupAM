@@ -179,15 +179,11 @@ class TestHttpOnlyCookies:
         data = response.json()
         assert "message" in data
         # El mensaje puede ser "Logout exitoso" o similar
-        assert (
-            "logout" in data["message"].lower() or "exitoso" in data["message"].lower()
-        )
+        assert "logout" in data["message"].lower() or "exitoso" in data["message"].lower()
 
         # Then: Verificar que cookie fue eliminada
         set_cookie_header = response.headers.get("set-cookie")
-        assert (
-            set_cookie_header is not None
-        ), "Set-Cookie header debe existir para eliminar cookie"
+        assert set_cookie_header is not None, "Set-Cookie header debe existir para eliminar cookie"
 
         # Verificar que la cookie se invalida (Max-Age=0)
         assert "access_token=" in set_cookie_header

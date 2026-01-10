@@ -35,15 +35,15 @@ class TestLoginRateLimiting:
 
         # El 6to intento debe ser bloqueado por rate limit
         response = await client.post("/api/v1/auth/login", json=login_data)
-        assert (
-            response.status_code == 429
-        ), "El 6to intento debe ser bloqueado con 429 Too Many Requests"
+        assert response.status_code == 429, (
+            "El 6to intento debe ser bloqueado con 429 Too Many Requests"
+        )
 
         # Validar que la respuesta contiene información sobre rate limiting
         # SlowAPI puede devolver plain text o JSON dependiendo de la configuración
-        assert (
-            response.text is not None and len(response.text) > 0
-        ), "La respuesta debe contener información sobre rate limit"
+        assert response.text is not None and len(response.text) > 0, (
+            "La respuesta debe contener información sobre rate limit"
+        )
 
     async def test_login_rate_limit_prevents_brute_force(self, client: AsyncClient):
         """
@@ -70,18 +70,14 @@ class TestLoginRateLimiting:
                 blocked_attempts += 1
                 assert idx >= 5, "Rate limit debe activarse después del 5to intento"
 
-        assert (
-            blocked_attempts >= 1
-        ), "Al menos 1 intento debe ser bloqueado por rate limiting"
+        assert blocked_attempts >= 1, "Al menos 1 intento debe ser bloqueado por rate limiting"
 
 
 @pytest.mark.asyncio
 class TestRegisterRateLimiting:
     """Tests de rate limiting en endpoint de registro (3/hora)."""
 
-    async def test_register_rate_limit_blocks_after_3_attempts(
-        self, client: AsyncClient
-    ):
+    async def test_register_rate_limit_blocks_after_3_attempts(self, client: AsyncClient):
         """
         Given: El endpoint /register tiene límite de 3 registros por hora
         When: Se intentan 4 registros consecutivos
@@ -99,9 +95,9 @@ class TestRegisterRateLimiting:
             }
             response = await client.post("/api/v1/auth/register", json=register_data)
             # Puede ser 201 (éxito) o 400 (email ya existe), pero no 429
-            assert (
-                response.status_code != 429
-            ), f"Intento {i + 1} no debe ser bloqueado por rate limit"
+            assert response.status_code != 429, (
+                f"Intento {i + 1} no debe ser bloqueado por rate limit"
+            )
 
         # El 4to intento debe ser bloqueado
         register_data = {
@@ -113,9 +109,9 @@ class TestRegisterRateLimiting:
             "country_code": "ES",
         }
         response = await client.post("/api/v1/auth/register", json=register_data)
-        assert (
-            response.status_code == 429
-        ), "El 4to intento debe ser bloqueado con 429 Too Many Requests"
+        assert response.status_code == 429, (
+            "El 4to intento debe ser bloqueado con 429 Too Many Requests"
+        )
 
 
 @pytest.mark.asyncio
@@ -144,9 +140,9 @@ class TestCompetitionRateLimiting:
             }
             response = await client.post("/api/v1/competitions", json=competition_data)
             # Puede ser 201 (éxito) o 400 (validación), pero no 429
-            assert (
-                response.status_code != 429
-            ), f"Intento {i + 1} no debe ser bloqueado por rate limit"
+            assert response.status_code != 429, (
+                f"Intento {i + 1} no debe ser bloqueado por rate limit"
+            )
 
         # El 11vo intento debe ser bloqueado
         competition_data = {
@@ -160,9 +156,9 @@ class TestCompetitionRateLimiting:
             "team_assignment": "MANUAL",
         }
         response = await client.post("/api/v1/competitions", json=competition_data)
-        assert (
-            response.status_code == 429
-        ), "El 11vo intento debe ser bloqueado con 429 Too Many Requests"
+        assert response.status_code == 429, (
+            "El 11vo intento debe ser bloqueado con 429 Too Many Requests"
+        )
 
 
 @pytest.mark.asyncio
@@ -190,15 +186,13 @@ class TestRateLimitingBypass:
 
         for idx, user_agent in enumerate(user_agents):
             headers = {"User-Agent": user_agent}
-            response = await client.post(
-                "/api/v1/auth/login", json=login_data, headers=headers
-            )
+            response = await client.post("/api/v1/auth/login", json=login_data, headers=headers)
 
             if response.status_code == 429:
                 blocked = True
-                assert (
-                    idx >= 5
-                ), "Rate limit debe aplicar después de 5 intentos independiente del User-Agent"
+                assert idx >= 5, (
+                    "Rate limit debe aplicar después de 5 intentos independiente del User-Agent"
+                )
                 break
 
         assert blocked, "Cambiar User-Agent no debe permitir bypass del rate limiting"
@@ -223,9 +217,7 @@ class TestRateLimitingBypass:
 
         # Debe seguir bloqueado
         response = await client.post("/api/v1/auth/login", json=login_data)
-        assert (
-            response.status_code == 429
-        ), "Rate limit debe persistir después de 1 segundo"
+        assert response.status_code == 429, "Rate limit debe persistir después de 1 segundo"
 
 
 @pytest.mark.asyncio

@@ -91,14 +91,10 @@ class HandleEnrollmentUseCase:
             # 1. Obtener enrollment
             enrollment = await self._uow.enrollments.find_by_id(enrollment_id)
             if not enrollment:
-                raise EnrollmentNotFoundError(
-                    f"Inscripción no encontrada: {request.enrollment_id}"
-                )
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competición
-            competition = await self._uow.competitions.find_by_id(
-                enrollment.competition_id
-            )
+            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competición no encontrada: {enrollment.competition_id}"

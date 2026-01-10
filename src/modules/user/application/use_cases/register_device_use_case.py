@@ -74,9 +74,7 @@ class RegisterDeviceUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self, request: RegisterDeviceRequestDTO
-    ) -> RegisterDeviceResponseDTO:
+    async def execute(self, request: RegisterDeviceRequestDTO) -> RegisterDeviceResponseDTO:
         """
         Ejecuta el caso de uso de registro/actualización de dispositivo.
 

@@ -87,9 +87,7 @@ class CompleteCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede completar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede completar la competición")
 
             # 3. Completar la competición (la entidad valida la transición)
             competition.complete()

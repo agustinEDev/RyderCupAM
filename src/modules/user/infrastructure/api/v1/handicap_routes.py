@@ -169,9 +169,7 @@ async def update_user_handicap(
         return result
 
     except HandicapNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
-        ) from None
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
     except HandicapServiceUnavailableError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -191,9 +189,7 @@ async def update_user_handicap(
 )
 async def update_multiple_handicaps(
     request: UpdateMultipleHandicapsRequestDTO,
-    use_case: UpdateMultipleHandicapsUseCase = Depends(
-        get_update_multiple_handicaps_use_case
-    ),
+    use_case: UpdateMultipleHandicapsUseCase = Depends(get_update_multiple_handicaps_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
 ):
     """
@@ -239,9 +235,7 @@ async def update_multiple_handicaps(
 )
 async def update_user_handicap_manually(
     request: UpdateHandicapManuallyRequestDTO,
-    use_case: UpdateUserHandicapManuallyUseCase = Depends(
-        get_update_handicap_manually_use_case
-    ),
+    use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
 ):
     """
@@ -271,6 +265,4 @@ async def update_user_handicap_manually(
 
         return result
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from None
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None

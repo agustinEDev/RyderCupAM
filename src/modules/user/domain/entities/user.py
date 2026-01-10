@@ -53,9 +53,7 @@ class User:
         new_country_code = old_country_code
         country_code_changed = False
         if country_code_str is not None:
-            new_country_code = (
-                CountryCode(country_code_str) if country_code_str else None
-            )
+            new_country_code = CountryCode(country_code_str) if country_code_str else None
             country_code_changed = new_country_code != old_country_code
         return (
             first_name_changed,
@@ -246,9 +244,7 @@ class User:
             self._domain_events = []
         return len(self._domain_events) > 0
 
-    def record_logout(
-        self, logged_out_at: datetime, token_used: str | None = None
-    ) -> None:
+    def record_logout(self, logged_out_at: datetime, token_used: str | None = None) -> None:
         """
         Registra un evento de logout para este usuario.
 
@@ -313,11 +309,7 @@ class User:
             _old_country_code,
         ) = self._detect_profile_changes(first_name, last_name, country_code_str)
 
-        if (
-            not first_name_changed
-            and not last_name_changed
-            and not country_code_changed
-        ):
+        if not first_name_changed and not last_name_changed and not country_code_changed:
             return
 
         if first_name_changed:

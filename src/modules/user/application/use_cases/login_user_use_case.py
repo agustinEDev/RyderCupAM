@@ -171,9 +171,7 @@ class LoginUserUseCase:
         )
 
         # Generar access token JWT (15 minutos)
-        access_token = self._token_service.create_access_token(
-            data={"sub": str(user.id.value)}
-        )
+        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
 
         # Generar refresh token JWT (7 días)
         refresh_token_jwt = self._token_service.create_refresh_token(

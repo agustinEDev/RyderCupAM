@@ -37,9 +37,7 @@ class UpdateUserHandicapManuallyUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self, user_id: UserId, handicap_value: float
-    ) -> UserResponseDTO | None:
+    async def execute(self, user_id: UserId, handicap_value: float) -> UserResponseDTO | None:
         """
         Actualiza el hándicap de un usuario con un valor manual.
 

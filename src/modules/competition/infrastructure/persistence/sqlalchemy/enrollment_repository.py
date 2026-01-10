@@ -81,9 +81,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         statement = (
             select(Enrollment)
             .where(Enrollment.competition_id == competition_id)
-            .order_by(
-                Enrollment.created_at.asc()
-            )  # Primero en inscribirse, primero en lista
+            .order_by(Enrollment.created_at.asc())  # Primero en inscribirse, primero en lista
             .limit(limit)
             .offset(offset)
         )

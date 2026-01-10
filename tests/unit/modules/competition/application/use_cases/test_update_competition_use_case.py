@@ -78,9 +78,7 @@ class TestUpdateCompetitionUseCase:
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
         assert str(competition.name) == "Updated Name"
 
-    async def test_should_update_multiple_fields(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def test_should_update_multiple_fields(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que se pueden actualizar múltiples campos a la vez.
 
@@ -108,9 +106,7 @@ class TestUpdateCompetitionUseCase:
             main_country="FR",
         )
 
-        await update_use_case.execute(
-            CompetitionId(created.id), update_request, creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
@@ -146,9 +142,7 @@ class TestUpdateCompetitionUseCase:
             handicap_type="PERCENTAGE", handicap_percentage=90
         )
 
-        await update_use_case.execute(
-            CompetitionId(created.id), update_request, creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
@@ -203,9 +197,7 @@ class TestUpdateCompetitionUseCase:
         update_request = UpdateCompetitionRequestDTO(name="Hacked")
 
         with pytest.raises(NotCompetitionCreatorError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id), update_request, other_user
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, other_user)
 
         assert "Solo el creador" in str(exc_info.value)
 
@@ -242,9 +234,7 @@ class TestUpdateCompetitionUseCase:
         update_request = UpdateCompetitionRequestDTO(name="Cannot Update")
 
         with pytest.raises(CompetitionNotEditableError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id), update_request, creator_id
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         assert "Solo se permite en estado DRAFT" in str(exc_info.value)
 
@@ -277,15 +267,11 @@ class TestUpdateCompetitionUseCase:
         )
 
         with pytest.raises(ValueError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id), update_request, creator_id
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         assert "handicap_percentage es requerido" in str(exc_info.value)
 
-    async def test_should_commit_transaction(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que la transacción se hace commit correctamente.
 
@@ -308,9 +294,7 @@ class TestUpdateCompetitionUseCase:
         update_use_case = UpdateCompetitionUseCase(uow)
         update_request = UpdateCompetitionRequestDTO(name="Updated")
 
-        await update_use_case.execute(
-            CompetitionId(created.id), update_request, creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         assert uow.committed is True

@@ -89,9 +89,7 @@ class HandicapSettings:
         if self.type == HandicapType.SCRATCH:
             # SCRATCH no debe tener porcentaje
             if self.percentage is not None:
-                raise InvalidHandicapSettingsError(
-                    "Para tipo SCRATCH, el porcentaje debe ser None"
-                )
+                raise InvalidHandicapSettingsError("Para tipo SCRATCH, el porcentaje debe ser None")
 
         elif self.type == HandicapType.PERCENTAGE:
             # PERCENTAGE debe tener un porcentaje válido

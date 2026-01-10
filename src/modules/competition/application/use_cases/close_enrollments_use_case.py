@@ -88,14 +88,10 @@ class CloseEnrollmentsUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede cerrar las inscripciones"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede cerrar las inscripciones")
 
             # 3. Contar inscripciones aprobadas
-            total_enrollments = await self._uow.enrollments.count_approved(
-                competition_id
-            )
+            total_enrollments = await self._uow.enrollments.count_approved(competition_id)
 
             # 4. Cerrar inscripciones (la entidad valida la transición)
             competition.close_enrollments(total_enrollments=total_enrollments)

@@ -73,9 +73,7 @@ class UpdateProfileUseCase:
                 country_code_vo = CountryCode(request.country_code)
                 country_exists = await self._country_repository.exists(country_code_vo)
                 if not country_exists:
-                    raise ValueError(
-                        f"El código de país '{request.country_code}' no es válido."
-                    )
+                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
 
             # Actualizar perfil (entity valida y emite eventos)
             user.update_profile(

@@ -161,10 +161,7 @@ def _should_exclude_enrollment(enrollment_status, competition_status):
 
     LÓGICA DE EXCLUSIÓN: No mostrar competiciones rechazadas si no están ACTIVE.
     """
-    return (
-        enrollment_status == EnrollmentStatus.REJECTED
-        and competition_status != "ACTIVE"
-    )
+    return enrollment_status == EnrollmentStatus.REJECTED and competition_status != "ACTIVE"
 
 
 def _matches_status_filter(competition_status, status_filter):
@@ -362,9 +359,7 @@ class CompetitionDTOMapper:
         location_str = await CompetitionDTOMapper._format_location(competition, uow)
 
         # Obtener lista de países con detalles
-        countries_list = await CompetitionDTOMapper._get_countries_list(
-            competition, uow
-        )
+        countries_list = await CompetitionDTOMapper._get_countries_list(competition, uow)
 
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
@@ -547,9 +542,7 @@ class CompetitionDTOMapper:
                 last_name=creator.last_name,
                 email=str(creator.email),
                 handicap=creator.handicap.value if creator.handicap else None,
-                country_code=(
-                    creator.country_code.value if creator.country_code else None
-                ),
+                country_code=(creator.country_code.value if creator.country_code else None),
             )
 
 
@@ -663,9 +656,7 @@ async def create_competition(
         ) from e
 
 
-async def _get_all_competitions(
-    use_case, status_filter, creator_id, search_name, search_creator
-):
+async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
     """
     Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
 
@@ -697,8 +688,7 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
     return [
         comp
         for comp in competitions
-        if comp.creator_id != current_user_id
-        and comp.id not in enrolled_competition_ids
+        if comp.creator_id != current_user_id and comp.id not in enrolled_competition_ids
     ]
 
 
@@ -774,9 +764,7 @@ async def list_competitions(
 
             # Filter out competitions where user is creator or has enrollment
             async with uow:
-                competitions = await _exclude_user_competitions(
-                    competitions, current_user_id, uow
-                )
+                competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
         else:
             # my_competitions is None: return all competitions (no filtering by user relationship)
             competitions = await _get_all_competitions(
@@ -787,9 +775,7 @@ async def list_competitions(
                 search_creator,
             )
 
-        result = await _map_competitions_to_dtos(
-            competitions, current_user_id, uow, user_uow
-        )
+        result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
         return result
     except ValueError as e:
         raise HTTPException(

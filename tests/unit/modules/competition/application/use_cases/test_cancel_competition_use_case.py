@@ -69,9 +69,7 @@ class TestCancelCompetitionUseCase:
 
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
-        cancel_request = CancelCompetitionRequestDTO(
-            competition_id=created.id, reason="Mal tiempo"
-        )
+        cancel_request = CancelCompetitionRequestDTO(competition_id=created.id, reason="Mal tiempo")
         response = await cancel_use_case.execute(cancel_request, creator_id)
 
         # Assert
@@ -165,9 +163,7 @@ class TestCancelCompetitionUseCase:
         # Assert
         assert response.status == "CANCELLED"
 
-    async def test_should_cancel_without_reason(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def test_should_cancel_without_reason(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que se puede cancelar sin proporcionar razón.
 
@@ -286,9 +282,7 @@ class TestCancelCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await cancel_use_case.execute(cancel_request, creator_id)
 
-        assert "No se puede cancelar una competición en estado final" in str(
-            exc_info.value
-        )
+        assert "No se puede cancelar una competición en estado final" in str(exc_info.value)
 
     async def test_should_raise_error_when_already_cancelled(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -321,9 +315,7 @@ class TestCancelCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await cancel_use_case.execute(cancel_request, creator_id)
 
-        assert "No se puede cancelar una competición en estado final" in str(
-            exc_info.value
-        )
+        assert "No se puede cancelar una competición en estado final" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_cancelled(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

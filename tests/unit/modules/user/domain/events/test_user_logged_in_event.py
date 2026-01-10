@@ -98,9 +98,7 @@ class TestUserLoggedInEvent:
         - aggregate_id (basado en user_id)
         """
         # Arrange & Act
-        event = UserLoggedInEvent(
-            user_id="user-metadata-test", logged_in_at=datetime.now()
-        )
+        event = UserLoggedInEvent(user_id="user-metadata-test", logged_in_at=datetime.now())
 
         # Assert - Metadatos generados automáticamente
         assert hasattr(event, "_event_id")

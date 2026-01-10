@@ -84,9 +84,7 @@ def get_user_agent(request: Request) -> str:
 )
 async def find_user(
     email: str | None = Query(None, description="Email del usuario a buscar"),
-    full_name: str | None = Query(
-        None, description="Nombre completo del usuario a buscar"
-    ),
+    full_name: str | None = Query(None, description="Nombre completo del usuario a buscar"),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
 ):

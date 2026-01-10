@@ -87,9 +87,7 @@ class StartCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede iniciar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede iniciar la competición")
 
             # 3. Iniciar la competición (la entidad valida la transición)
             competition.start()

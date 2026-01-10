@@ -59,9 +59,7 @@ async def list_countries(
         return [
             CountryResponseDTO(
                 code=(
-                    str(country.code.value)
-                    if hasattr(country.code, "value")
-                    else str(country.code)
+                    str(country.code.value) if hasattr(country.code, "value") else str(country.code)
                 ),
                 name_en=country.name_en,
                 name_es=country.name_es,

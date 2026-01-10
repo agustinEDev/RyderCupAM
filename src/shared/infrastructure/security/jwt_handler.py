@@ -29,9 +29,7 @@ class JWTTokenService(ITokenService):
     - Refresh Token: 7 días (renovación sin re-login)
     """
 
-    def create_access_token(
-        self, data: dict, expires_delta: timedelta | None = None
-    ) -> str:
+    def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         """
         Crea un token JWT de acceso (15 minutos por defecto).
 
@@ -47,21 +45,15 @@ class JWTTokenService(ITokenService):
         if expires_delta:
             expire = datetime.now() + expires_delta
         else:
-            expire = datetime.now() + timedelta(
-                minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-            )
+            expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
         to_encode.update({"exp": expire, "type": "access"})
 
-        encoded_jwt = jwt.encode(
-            to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-        )
+        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
         return encoded_jwt
 
-    def create_refresh_token(
-        self, data: dict, expires_delta: timedelta | None = None
-    ) -> str:
+    def create_refresh_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
         """
         Crea un token JWT de renovación (7 días por defecto).
 
@@ -100,9 +92,7 @@ class JWTTokenService(ITokenService):
             }
         )
 
-        encoded_jwt = jwt.encode(
-            to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-        )
+        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
         return encoded_jwt
 
@@ -117,9 +107,7 @@ class JWTTokenService(ITokenService):
             Payload del token si es válido, None si es inválido o expirado
         """
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
             # Verificar que sea un access token (v1.8.0+)
             if payload.get("type") == "refresh":
@@ -148,9 +136,7 @@ class JWTTokenService(ITokenService):
             >>>     # Generar nuevo access token
         """
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
             # Verificar que sea un refresh token
             if payload.get("type") != "refresh":

@@ -213,7 +213,5 @@ class TestExceptionCatchingScenarios:
             raise RepositoryTimeoutError("Operation timeout")
 
         # Debe poder capturar y clasificar diferentes errores
-        with pytest.raises(
-            (UserNotFoundError, UserAlreadyExistsError, RepositoryError)
-        ):
+        with pytest.raises((UserNotFoundError, UserAlreadyExistsError, RepositoryError)):
             simulate_repository_operation()

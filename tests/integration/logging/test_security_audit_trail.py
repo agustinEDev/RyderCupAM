@@ -40,9 +40,7 @@ class TestSecurityAuditTrail:
         assert "LoginAttemptEvent" in content
         assert "audit.test@example.com" in content
 
-    async def test_login_failure_creates_audit_log_with_reason(
-        self, client: AsyncClient
-    ):
+    async def test_login_failure_creates_audit_log_with_reason(self, client: AsyncClient):
         """Login fallido registra evento con failure_reason"""
         login_data = {
             "email": "nonexistent@example.com",
@@ -57,9 +55,7 @@ class TestSecurityAuditTrail:
         content = log_file.read_text()
         assert "LOGIN FAILED" in content or 'success": false' in content
 
-    async def test_logout_creates_logout_and_revocation_events(
-        self, client: AsyncClient
-    ):
+    async def test_logout_creates_logout_and_revocation_events(self, client: AsyncClient):
         """Logout registra LogoutEvent + RefreshTokenRevokedEvent"""
         # Register + Login
         register_data = {
@@ -92,9 +88,7 @@ class TestSecurityAuditTrail:
         log_file = Path("logs/security_audit.log")
         content = log_file.read_text()
         assert "LOGOUT" in content
-        assert (
-            "REFRESH TOKENS REVOKED" in content or "RefreshTokenRevokedEvent" in content
-        )
+        assert "REFRESH TOKENS REVOKED" in content or "RefreshTokenRevokedEvent" in content
 
     async def test_refresh_token_used_creates_audit_log(self, client: AsyncClient):
         """Uso de refresh token registra RefreshTokenUsedEvent"""

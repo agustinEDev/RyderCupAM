@@ -92,9 +92,7 @@ class DeleteCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede eliminar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede eliminar la competición")
 
             # 3. Verificar que esté en estado DRAFT
             if not competition.is_draft():

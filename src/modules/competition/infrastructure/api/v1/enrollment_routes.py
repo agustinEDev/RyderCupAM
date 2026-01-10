@@ -118,9 +118,7 @@ class EnrollmentDTOMapper:
         # Obtener información del usuario (si user_uow es provisto)
         user_dto = None
         if user_uow:
-            user_dto = await EnrollmentDTOMapper._get_user_dto(
-                enrollment.user_id, user_uow
-            )
+            user_dto = await EnrollmentDTOMapper._get_user_dto(enrollment.user_id, user_uow)
 
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
@@ -199,9 +197,7 @@ async def request_enrollment(
     except RequestCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CompetitionNotActiveError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RequestAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
@@ -240,9 +236,7 @@ async def direct_enroll_player(
     except DirectNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DirectCompetitionNotActiveError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
@@ -258,9 +252,7 @@ async def list_enrollments(
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
     use_case: ListEnrollmentsUseCase = Depends(get_list_enrollments_use_case),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: str | None = Query(
-        None, alias="status", description="Filtrar por estado"
-    ),
+    status_filter: str | None = Query(None, alias="status", description="Filtrar por estado"),
 ):
     """
     Lista inscripciones de una competición.
@@ -289,9 +281,7 @@ async def list_enrollments(
     except ListCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -311,9 +301,7 @@ async def approve_enrollment(
     Solo el creador de la competición puede aprobar.
     """
     try:
-        request_dto = HandleEnrollmentRequestDTO(
-            enrollment_id=enrollment_id, action="APPROVE"
-        )
+        request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="APPROVE")
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)
 
@@ -324,9 +312,7 @@ async def approve_enrollment(
     except HandleNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -346,9 +332,7 @@ async def reject_enrollment(
     Solo el creador de la competición puede rechazar.
     """
     try:
-        request_dto = HandleEnrollmentRequestDTO(
-            enrollment_id=enrollment_id, action="REJECT"
-        )
+        request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="REJECT")
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)
 
@@ -359,9 +343,7 @@ async def reject_enrollment(
     except HandleNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -383,9 +365,7 @@ async def cancel_enrollment(
     Solo válido desde estados REQUESTED o INVITED.
     """
     try:
-        request_dto = CancelEnrollmentRequestDTO(
-            enrollment_id=enrollment_id, reason=reason
-        )
+        request_dto = CancelEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)
 
@@ -394,9 +374,7 @@ async def cancel_enrollment(
     except CancelNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -418,9 +396,7 @@ async def withdraw_enrollment(
     Solo válido desde estado APPROVED.
     """
     try:
-        request_dto = WithdrawEnrollmentRequestDTO(
-            enrollment_id=enrollment_id, reason=reason
-        )
+        request_dto = WithdrawEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)
 
@@ -429,9 +405,7 @@ async def withdraw_enrollment(
     except WithdrawNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except EnrollmentStateError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.put(
@@ -467,6 +441,4 @@ async def set_custom_handicap(
     except HandicapNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

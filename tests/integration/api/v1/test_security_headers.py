@@ -35,49 +35,49 @@ class TestSecurityHeaders:
         headers = response.headers
 
         # 1. Strict-Transport-Security (HSTS)
-        assert (
-            "strict-transport-security" in headers
-        ), "Falta header HSTS - Vulnerable a MITM downgrade attacks"
-        assert (
-            "max-age" in headers["strict-transport-security"].lower()
-        ), "HSTS debe incluir max-age"
-        assert (
-            "includesubdomains" in headers["strict-transport-security"].lower()
-        ), "HSTS debe incluir includeSubdomains para proteger subdominios"
+        assert "strict-transport-security" in headers, (
+            "Falta header HSTS - Vulnerable a MITM downgrade attacks"
+        )
+        assert "max-age" in headers["strict-transport-security"].lower(), (
+            "HSTS debe incluir max-age"
+        )
+        assert "includesubdomains" in headers["strict-transport-security"].lower(), (
+            "HSTS debe incluir includeSubdomains para proteger subdominios"
+        )
 
         # 2. X-Frame-Options
-        assert (
-            "x-frame-options" in headers
-        ), "Falta header X-Frame-Options - Vulnerable a clickjacking"
+        assert "x-frame-options" in headers, (
+            "Falta header X-Frame-Options - Vulnerable a clickjacking"
+        )
         assert headers["x-frame-options"].upper() in [
             "DENY",
             "SAMEORIGIN",
         ], "X-Frame-Options debe ser DENY o SAMEORIGIN"
 
         # 3. X-Content-Type-Options
-        assert (
-            "x-content-type-options" in headers
-        ), "Falta header X-Content-Type-Options - Vulnerable a MIME-sniffing XSS"
-        assert (
-            headers["x-content-type-options"].lower() == "nosniff"
-        ), "X-Content-Type-Options debe ser 'nosniff'"
+        assert "x-content-type-options" in headers, (
+            "Falta header X-Content-Type-Options - Vulnerable a MIME-sniffing XSS"
+        )
+        assert headers["x-content-type-options"].lower() == "nosniff", (
+            "X-Content-Type-Options debe ser 'nosniff'"
+        )
 
         # 4. Referrer-Policy
-        assert (
-            "referrer-policy" in headers
-        ), "Falta header Referrer-Policy - Puede filtrar información sensible"
+        assert "referrer-policy" in headers, (
+            "Falta header Referrer-Policy - Puede filtrar información sensible"
+        )
 
         # 5. Cache-Control
-        assert (
-            "cache-control" in headers
-        ), "Falta header Cache-Control - Puede cachear datos sensibles"
+        assert "cache-control" in headers, (
+            "Falta header Cache-Control - Puede cachear datos sensibles"
+        )
 
         # 6. X-XSS-Protection (opcional, obsoleto pero presente en configuración)
         # Nota: Valor '0' es correcto (desactivado) ya que puede causar vulnerabilidades
         if "x-xss-protection" in headers:
-            assert (
-                headers["x-xss-protection"] == "0"
-            ), "X-XSS-Protection debe ser '0' (desactivado) en navegadores modernos"
+            assert headers["x-xss-protection"] == "0", (
+                "X-XSS-Protection debe ser '0' (desactivado) en navegadores modernos"
+            )
 
     @pytest.mark.asyncio
     async def test_login_endpoint_has_security_headers(self, client: AsyncClient):
@@ -99,17 +99,17 @@ class TestSecurityHeaders:
         headers = response.headers
 
         # X-Frame-Options es CRÍTICO en endpoints de login (previene clickjacking)
-        assert (
-            "x-frame-options" in headers
-        ), "Login DEBE tener X-Frame-Options para prevenir clickjacking"
+        assert "x-frame-options" in headers, (
+            "Login DEBE tener X-Frame-Options para prevenir clickjacking"
+        )
 
         # Cache-Control es CRÍTICO en endpoints de auth (previene cacheo de tokens)
-        assert (
-            "cache-control" in headers
-        ), "Login DEBE tener Cache-Control para prevenir cacheo de tokens"
-        assert (
-            "no-store" in headers["cache-control"].lower()
-        ), "Cache-Control debe incluir 'no-store' para prevenir cacheo"
+        assert "cache-control" in headers, (
+            "Login DEBE tener Cache-Control para prevenir cacheo de tokens"
+        )
+        assert "no-store" in headers["cache-control"].lower(), (
+            "Cache-Control debe incluir 'no-store' para prevenir cacheo"
+        )
 
         # Verificar también HSTS y X-Content-Type-Options
         assert "strict-transport-security" in headers
@@ -159,9 +159,9 @@ class TestSecurityHeaders:
         headers = response.headers
 
         # Incluso en respuestas de error, los security headers deben estar presentes
-        assert (
-            "x-frame-options" in headers
-        ), "Security headers deben estar en respuestas de error también"
+        assert "x-frame-options" in headers, (
+            "Security headers deben estar en respuestas de error también"
+        )
         assert "x-content-type-options" in headers
         assert "strict-transport-security" in headers
 
@@ -189,9 +189,7 @@ class TestSecurityHeaders:
         assert "referrer-policy" in headers
 
     @pytest.mark.asyncio
-    async def test_security_headers_consistency_across_endpoints(
-        self, client: AsyncClient
-    ):
+    async def test_security_headers_consistency_across_endpoints(self, client: AsyncClient):
         """
         GIVEN: Múltiples endpoints diferentes
         WHEN: Se realizan peticiones a cada uno
@@ -225,9 +223,9 @@ class TestSecurityHeaders:
 
             # Verificar que todos los required_headers están presentes
             missing_headers = required_headers - headers_lower
-            assert (
-                not missing_headers
-            ), f"Endpoint {endpoint} está missing headers: {missing_headers}"
+            assert not missing_headers, (
+                f"Endpoint {endpoint} está missing headers: {missing_headers}"
+            )
 
     @pytest.mark.asyncio
     async def test_hsts_max_age_is_sufficient(self, client: AsyncClient):
@@ -252,6 +250,6 @@ class TestSecurityHeaders:
 
         # Verificar que sea >= 1 año (31536000 segundos)
         ONE_YEAR_SECONDS = 31536000
-        assert (
-            max_age_seconds >= ONE_YEAR_SECONDS
-        ), f"HSTS max-age ({max_age_seconds}s) debe ser >= 1 año ({ONE_YEAR_SECONDS}s)"
+        assert max_age_seconds >= ONE_YEAR_SECONDS, (
+            f"HSTS max-age ({max_age_seconds}s) debe ser >= 1 año ({ONE_YEAR_SECONDS}s)"
+        )

@@ -175,12 +175,8 @@ class TestUserUnitOfWorkContractCompliance:
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(
-                    spec=RefreshTokenRepositoryInterface
-                )
-                self._password_history_repo = AsyncMock(
-                    spec=PasswordHistoryRepositoryInterface
-                )
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._active = False
                 self._committed = False
 
@@ -254,12 +250,8 @@ class TestUserUnitOfWorkContractCompliance:
         class TestUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(
-                    spec=RefreshTokenRepositoryInterface
-                )
-                self._password_history_repo = AsyncMock(
-                    spec=PasswordHistoryRepositoryInterface
-                )
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._active = False
                 self._rolled_back = False
 
@@ -325,12 +317,8 @@ class TestUserUnitOfWorkIntegration:
         class IntegrationUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
-                self._refresh_token_repo = AsyncMock(
-                    spec=RefreshTokenRepositoryInterface
-                )
-                self._password_history_repo = AsyncMock(
-                    spec=PasswordHistoryRepositoryInterface
-                )
+                self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._operations = []
                 self._committed = False
 

@@ -162,9 +162,7 @@ class PythonLogger(Logger):
 
     # Implementación de la interface Logger
 
-    def debug(
-        self, message: str, extra: dict[str, Any] | None = None, **kwargs
-    ) -> None:
+    def debug(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """Registra un mensaje de debug"""
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.debug(message, extra=prepared_extra, **kwargs)
@@ -174,9 +172,7 @@ class PythonLogger(Logger):
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.info(message, extra=prepared_extra, **kwargs)
 
-    def warning(
-        self, message: str, extra: dict[str, Any] | None = None, **kwargs
-    ) -> None:
+    def warning(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """Registra una advertencia"""
         prepared_extra = self._prepare_extra(extra)
         self._python_logger.warning(message, extra=prepared_extra, **kwargs)
@@ -190,9 +186,7 @@ class PythonLogger(Logger):
     ) -> None:
         """Registra un error"""
         prepared_extra = self._prepare_extra(extra)
-        self._python_logger.error(
-            message, extra=prepared_extra, exc_info=exc_info, **kwargs
-        )
+        self._python_logger.error(message, extra=prepared_extra, exc_info=exc_info, **kwargs)
 
     def critical(
         self,
@@ -203,9 +197,7 @@ class PythonLogger(Logger):
     ) -> None:
         """Registra un error crítico"""
         prepared_extra = self._prepare_extra(extra)
-        self._python_logger.critical(
-            message, extra=prepared_extra, exc_info=exc_info, **kwargs
-        )
+        self._python_logger.critical(message, extra=prepared_extra, exc_info=exc_info, **kwargs)
 
     def log(
         self,

@@ -180,9 +180,7 @@ class TestStartCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await start_use_case.execute(start_request, creator_id)
 
-        assert "No se puede iniciar una competición en estado DRAFT" in str(
-            exc_info.value
-        )
+        assert "No se puede iniciar una competición en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_active(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -220,9 +218,7 @@ class TestStartCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await start_use_case.execute(start_request, creator_id)
 
-        assert "No se puede iniciar una competición en estado ACTIVE" in str(
-            exc_info.value
-        )
+        assert "No se puede iniciar una competición en estado ACTIVE" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_started(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

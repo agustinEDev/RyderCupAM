@@ -67,9 +67,7 @@ class UpdateUserHandicapUseCase:
                 return None
 
             # 2. Buscar hándicap usando el servicio
-            handicap_value = await self._handicap_service.search_handicap(
-                user.get_full_name()
-            )
+            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
 
             # 3. Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None:

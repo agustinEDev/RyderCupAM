@@ -318,9 +318,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             query = query.where(and_(*conditions))
 
         # Ordenar y paginar
-        query = (
-            query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
-        )
+        query = query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
 
         # Ejecutar query
         result = await self._session.execute(query)

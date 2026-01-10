@@ -45,9 +45,7 @@ class ValidateResetTokenUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self, request: ValidateResetTokenRequestDTO
-    ) -> ValidateResetTokenResponseDTO:
+    async def execute(self, request: ValidateResetTokenRequestDTO) -> ValidateResetTokenResponseDTO:
         """
         Ejecuta el caso de uso de validación de token.
 

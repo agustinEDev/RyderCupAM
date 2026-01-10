@@ -43,9 +43,7 @@ class TestProtectedEndpointsRequireAuth:
             405,
         ], "Buscar usuarios sin token debe retornar 401, 403, 404 o 405"
 
-    async def test_create_competition_without_token_returns_401(
-        self, client: AsyncClient
-    ):
+    async def test_create_competition_without_token_returns_401(self, client: AsyncClient):
         """
         Given: El endpoint POST /competitions requiere autenticación
         When: Se intenta crear competición sin token
@@ -256,9 +254,7 @@ class TestSessionManagement:
                 "team_assignment": "MANUAL",
             },
         )
-        assert (
-            competition_response.status_code == 201
-        ), "El token debe funcionar antes del logout"
+        assert competition_response.status_code == 201, "El token debe funcionar antes del logout"
 
         # Hacer logout (enviar JSON vacío para LogoutRequestDTO)
         logout_response = await client.post("/api/v1/auth/logout", json={})
@@ -327,9 +323,9 @@ class TestPasswordResetSecurity:
 
         # Ambas respuestas deben ser iguales (previene enumeración de usuarios)
         # Si el endpoint no existe, ambos retornarán 404
-        assert (
-            response_nonexistent.status_code == response_existent.status_code
-        ), "El endpoint no debe revelar si un email existe o no"
+        assert response_nonexistent.status_code == response_existent.status_code, (
+            "El endpoint no debe revelar si un email existe o no"
+        )
 
 
 @pytest.mark.asyncio

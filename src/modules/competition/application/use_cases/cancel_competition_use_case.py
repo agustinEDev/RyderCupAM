@@ -93,9 +93,7 @@ class CancelCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede cancelar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede cancelar la competición")
 
             # 3. Cancelar la competición (la entidad valida la transición)
             competition.cancel(reason=request.reason)

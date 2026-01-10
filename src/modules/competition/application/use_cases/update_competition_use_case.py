@@ -103,9 +103,7 @@ class UpdateCompetitionUseCase:
 
             # 2. Validar que el usuario es el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede actualizar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
 
             # 3. Validar que está en estado DRAFT (se puede modificar)
             if not competition.allows_modifications():
@@ -140,9 +138,7 @@ class UpdateCompetitionUseCase:
                 )
 
             team_assignment = (
-                TeamAssignment(request.team_assignment)
-                if request.team_assignment
-                else None
+                TeamAssignment(request.team_assignment) if request.team_assignment else None
             )
 
             # 5. Actualizar la competición usando el método de dominio
@@ -199,8 +195,6 @@ class UpdateCompetitionUseCase:
             return HandicapSettings(h_type, None)
         # PERCENTAGE requiere porcentaje obligatoriamente
         if handicap_percentage is None:
-            raise ValueError(
-                "handicap_percentage es requerido cuando handicap_type es PERCENTAGE"
-            )
+            raise ValueError("handicap_percentage es requerido cuando handicap_type es PERCENTAGE")
         # HandicapSettings validará que sea 90, 95 o 100
         return HandicapSettings(h_type, handicap_percentage)

@@ -80,9 +80,7 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
     response = await client.post("/api/v1/auth/login", json=valid_user_credentials)
 
     if response.status_code != status.HTTP_200_OK:
-        pytest.skip(
-            f"No se pudo autenticar usuario de prueba (status: {response.status_code})"
-        )
+        pytest.skip(f"No se pudo autenticar usuario de prueba (status: {response.status_code})")
 
     data = response.json()
 
@@ -165,9 +163,8 @@ async def test_health_endpoint_exempt_from_csrf(client: AsyncClient):
     response = await client.post("/health")
 
     # No debe ser 403 por CSRF (puede ser 404 o 405 si no existe/acepta POST)
-    assert (
-        response.status_code != status.HTTP_403_FORBIDDEN
-        or "CSRF" not in response.json().get("detail", "")
+    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
+        "detail", ""
     )
 
 
@@ -186,9 +183,8 @@ async def test_docs_endpoint_exempt_from_csrf(client: AsyncClient):
     response = await client.get("/docs")
 
     # No debe ser 403 por CSRF (puede ser 401 por autenticación)
-    assert (
-        response.status_code != status.HTTP_403_FORBIDDEN
-        or "CSRF" not in response.json().get("detail", "")
+    assert response.status_code != status.HTTP_403_FORBIDDEN or "CSRF" not in response.json().get(
+        "detail", ""
     )
 
 

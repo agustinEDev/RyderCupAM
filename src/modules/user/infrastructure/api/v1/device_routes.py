@@ -140,9 +140,7 @@ async def list_user_devices(
         # Ejecutar use case
         response = await use_case.execute(request)
 
-        logger.info(
-            f"User {current_user.id} listed {response.total_count} active devices"
-        )
+        logger.info(f"User {current_user.id} listed {response.total_count} active devices")
 
         return response
 

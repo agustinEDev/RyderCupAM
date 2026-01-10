@@ -63,18 +63,14 @@ class RegisterUserUseCase:
             # 1. Validar que el email no existe
             email_vo = Email(request.email)
             if await self._user_finder.by_email(email_vo):
-                raise UserAlreadyExistsError(
-                    f"El email '{request.email}' ya está registrado."
-                )
+                raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
 
             # 1.5 Validar que el country_code existe (si se proporcionó)
             if request.country_code:
                 country_code_vo = CountryCode(request.country_code)
                 country_exists = await self._country_repository.exists(country_code_vo)
                 if not country_exists:
-                    raise ValueError(
-                        f"El código de país '{request.country_code}' no es válido."
-                    )
+                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
 
             # 2. Crear la entidad de dominio User
             new_user = User.create(

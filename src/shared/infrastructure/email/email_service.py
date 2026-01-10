@@ -55,11 +55,11 @@ class EmailService(IEmailService):
             .strip()
         )
 
-        verification_link = (
-            f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
-        )
+        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
-        subject = f"Bienvenido a Ryder Cup Friends, {safe_user_name}! | Welcome to Ryder Cup Friends!"
+        subject = (
+            f"Bienvenido a Ryder Cup Friends, {safe_user_name}! | Welcome to Ryder Cup Friends!"
+        )
 
         text_body = f"""
 Hola {safe_user_name},
@@ -169,9 +169,7 @@ The Ryder Cup Friends Team
             html=html_body,
         )
 
-    def _send_email(
-        self, to: str, subject: str, text: str, html: str | None = None
-    ) -> bool:
+    def _send_email(self, to: str, subject: str, text: str, html: str | None = None) -> bool:
         """
         Envía un email usando la API de Mailgun.
 
@@ -196,16 +194,12 @@ The Ryder Cup Friends Team
             if html:
                 data["html"] = html
 
-            response = requests.post(
-                url, auth=("api", self.api_key), data=data, timeout=10
-            )
+            response = requests.post(url, auth=("api", self.api_key), data=data, timeout=10)
 
             if response.status_code == status.HTTP_200_OK:
                 logger.info("Email de verificación enviado correctamente")
                 return True
-            logger.error(
-                "Error al enviar email: %s - %s", response.status_code, response.text
-            )
+            logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
             return False
 
         except requests.exceptions.RequestException as e:
@@ -387,9 +381,7 @@ The Ryder Cup Friends Team
 
         return self._send_email(to_email, subject, text_body, html_body)
 
-    async def send_password_changed_notification(
-        self, to_email: str, user_name: str
-    ) -> bool:
+    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 
@@ -405,7 +397,9 @@ The Ryder Cup Friends Team
             .strip()
         )
 
-        subject = "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+        subject = (
+            "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
+        )
 
         text_body = f"""
 Hola {safe_user_name},

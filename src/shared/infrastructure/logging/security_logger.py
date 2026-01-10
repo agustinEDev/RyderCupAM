@@ -208,7 +208,9 @@ class SecurityLogger:
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
-            return f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            return (
+                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            )
 
         if isinstance(event, LogoutEvent):
             return f"🚪 LOGOUT | {user_info} | Tokens revoked: {event.refresh_tokens_revoked}"

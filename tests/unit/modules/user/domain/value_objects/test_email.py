@@ -42,9 +42,7 @@ class TestEmailValidation:
 
     def test_empty_email_raises_error(self):
         """Email vacío debe lanzar InvalidEmailError"""
-        with pytest.raises(
-            InvalidEmailError, match="El email no puede ser nulo o vacío"
-        ):
+        with pytest.raises(InvalidEmailError, match="El email no puede ser nulo o vacío"):
             Email("")
 
     def test_none_email_raises_error(self):
@@ -54,9 +52,7 @@ class TestEmailValidation:
 
     def test_whitespace_only_email_raises_error(self):
         """Email solo con espacios debe lanzar InvalidEmailError"""
-        with pytest.raises(
-            InvalidEmailError, match="El email no puede ser nulo o vacío"
-        ):
+        with pytest.raises(InvalidEmailError, match="El email no puede ser nulo o vacío"):
             Email("   ")
 
     def test_invalid_email_format_raises_error(self):

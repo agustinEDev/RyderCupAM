@@ -49,9 +49,7 @@ class TestFindUserUseCase:
         """Instancia del caso de uso con mock dependencies."""
         return FindUserUseCase(mock_uow)
 
-    async def test_find_user_by_email_successfully(
-        self, use_case, mock_uow, sample_user
-    ):
+    async def test_find_user_by_email_successfully(self, use_case, mock_uow, sample_user):
         """
         Verifica que se puede encontrar un usuario por email correctamente.
         """
@@ -74,9 +72,7 @@ class TestFindUserUseCase:
         call_args = mock_uow.users.find_by_email.call_args[0][0]
         assert call_args.value == "test@example.com"
 
-    async def test_find_user_by_full_name_successfully(
-        self, use_case, mock_uow, sample_user
-    ):
+    async def test_find_user_by_full_name_successfully(self, use_case, mock_uow, sample_user):
         """
         Verifica que se puede encontrar un usuario por nombre completo.
         """
@@ -98,18 +94,14 @@ class TestFindUserUseCase:
         # Verificar que se llamó al método correcto
         mock_uow.users.find_by_full_name.assert_called_once_with("Test User")
 
-    async def test_find_user_prioritizes_email_over_name(
-        self, use_case, mock_uow, sample_user
-    ):
+    async def test_find_user_prioritizes_email_over_name(self, use_case, mock_uow, sample_user):
         """
         Verifica que se prioriza la búsqueda por email cuando ambos parámetros están presentes.
         """
         # Arrange
         mock_uow.users.find_by_email.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email="test@example.com", full_name="Different User"
-        )
+        request = FindUserRequestDTO(email="test@example.com", full_name="Different User")
 
         # Act
         result = await use_case.execute(request)
@@ -131,9 +123,7 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.return_value = None  # No encontrado por email
         mock_uow.users.find_by_full_name.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email="notfound@example.com", full_name="Test User"
-        )
+        request = FindUserRequestDTO(email="notfound@example.com", full_name="Test User")
 
         # Act
         result = await use_case.execute(request)
@@ -175,9 +165,7 @@ class TestFindUserUseCase:
 
         assert "Nonexistent User" in str(exc_info.value)
 
-    async def test_find_user_not_found_by_either_criteria_raises_error(
-        self, use_case, mock_uow
-    ):
+    async def test_find_user_not_found_by_either_criteria_raises_error(self, use_case, mock_uow):
         """
         Verifica que se lanza UserNotFoundError cuando no se encuentra por ningún criterio.
         """
@@ -185,9 +173,7 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.return_value = None
         mock_uow.users.find_by_full_name.return_value = None
 
-        request = FindUserRequestDTO(
-            email="notfound@example.com", full_name="Nonexistent User"
-        )
+        request = FindUserRequestDTO(email="notfound@example.com", full_name="Nonexistent User")
 
         # Act & Assert
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -241,9 +227,7 @@ class TestFindUserUseCase:
 
         mock_uow.users.find_by_full_name.return_value = complex_user
 
-        request = FindUserRequestDTO(
-            email=None, full_name="María José García-López de la Torre"
-        )
+        request = FindUserRequestDTO(email=None, full_name="María José García-López de la Torre")
 
         # Act
         result = await use_case.execute(request)

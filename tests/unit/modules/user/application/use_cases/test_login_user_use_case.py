@@ -73,9 +73,7 @@ class TestLoginUserUseCase:
         assert response.user.last_name == "Doe"
         assert response.user.id == existing_user.id.value
 
-    async def test_login_fails_with_wrong_password(
-        self, uow, token_service, existing_user
-    ):
+    async def test_login_fails_with_wrong_password(self, uow, token_service, existing_user):
         """Debe retornar None cuando la contraseña es incorrecta."""
         # Arrange
         use_case = LoginUserUseCase(uow, token_service)
@@ -91,9 +89,7 @@ class TestLoginUserUseCase:
         """Debe retornar None cuando el email no existe."""
         # Arrange
         use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="nonexistent@example.com", password="S0m3P@ssw0rd!"
-        )
+        request = LoginRequestDTO(email="nonexistent@example.com", password="S0m3P@ssw0rd!")
 
         # Act
         response = await use_case.execute(request)
@@ -117,9 +113,7 @@ class TestLoginUserUseCase:
         response_dict = response.model_dump()
         assert "password" not in response_dict["user"]
 
-    async def test_login_token_contains_user_id_in_subject(
-        self, uow, token_service, existing_user
-    ):
+    async def test_login_token_contains_user_id_in_subject(self, uow, token_service, existing_user):
         """Debe incluir el user_id en el subject del token."""
         # Arrange
         use_case = LoginUserUseCase(uow, token_service)

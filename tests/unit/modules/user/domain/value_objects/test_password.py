@@ -54,15 +54,11 @@ class TestPasswordValidation:
     def test_short_password_raises_error(self):
         """Password menor a 12 caracteres debe lanzar InvalidPasswordError (OWASP V2.1.1)"""
         # 8 caracteres (era válido antes, ahora NO)
-        with pytest.raises(
-            InvalidPasswordError, match="debe tener al menos 12 caracteres"
-        ):
+        with pytest.raises(InvalidPasswordError, match="debe tener al menos 12 caracteres"):
             Password.from_plain_text("Short1!A")
 
         # 11 caracteres (casi)
-        with pytest.raises(
-            InvalidPasswordError, match="debe tener al menos 12 caracteres"
-        ):
+        with pytest.raises(InvalidPasswordError, match="debe tener al menos 12 caracteres"):
             Password.from_plain_text("Short1!AA")
 
     def test_password_without_uppercase_raises_error(self):
@@ -81,9 +77,7 @@ class TestPasswordValidation:
 
     def test_password_without_digit_raises_error(self):
         """Password sin números debe lanzar InvalidPasswordError (OWASP V2.1.2)"""
-        with pytest.raises(
-            InvalidPasswordError, match="debe contener al menos un número"
-        ):
+        with pytest.raises(InvalidPasswordError, match="debe contener al menos un número"):
             Password.from_plain_text("MySecurePass!")
 
     def test_password_without_special_char_raises_error(self):
@@ -227,9 +221,7 @@ class TestPasswordStrengthValidation:
     def test_minimum_length_requirement(self):
         """Password debe tener al menos 12 caracteres (OWASP V2.1.1)"""
         # 11 caracteres - inválido
-        with pytest.raises(
-            InvalidPasswordError, match="debe tener al menos 12 caracteres"
-        ):
+        with pytest.raises(InvalidPasswordError, match="debe tener al menos 12 caracteres"):
             Password.from_plain_text("Short1!AAaa")
 
         # 12 caracteres - válido (con complejidad completa)

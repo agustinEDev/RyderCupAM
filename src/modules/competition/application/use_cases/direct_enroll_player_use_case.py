@@ -116,10 +116,8 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 4. Verificar que el jugador no está ya inscrito
-            already_enrolled = (
-                await self._uow.enrollments.exists_for_user_in_competition(
-                    player_id, competition_id
-                )
+            already_enrolled = await self._uow.enrollments.exists_for_user_in_competition(
+                player_id, competition_id
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(

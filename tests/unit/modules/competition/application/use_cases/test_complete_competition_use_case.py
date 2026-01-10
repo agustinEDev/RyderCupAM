@@ -182,9 +182,7 @@ class TestCompleteCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await complete_use_case.execute(complete_request, creator_id)
 
-        assert "No se puede completar una competición en estado DRAFT" in str(
-            exc_info.value
-        )
+        assert "No se puede completar una competición en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_closed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -223,9 +221,7 @@ class TestCompleteCompetitionUseCase:
         with pytest.raises(CompetitionStateError) as exc_info:
             await complete_use_case.execute(complete_request, creator_id)
 
-        assert "No se puede completar una competición en estado CLOSED" in str(
-            exc_info.value
-        )
+        assert "No se puede completar una competición en estado CLOSED" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_completed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

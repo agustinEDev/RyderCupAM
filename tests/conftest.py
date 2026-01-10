@@ -178,9 +178,7 @@ async def unit_client() -> AsyncGenerator[AsyncClient, None]:
     async def test_endpoint():
         return {"status": "ok"}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=minimal_app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=minimal_app), base_url="http://test") as ac:
         yield ac
 
 
@@ -209,9 +207,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     test_db_url = f"{db_url_base}/{db_name}"
 
     # Motor para crear/eliminar la base de datos
-    engine = create_async_engine(
-        f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT"
-    )
+    engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:
         await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
         await conn.execute(text(f"CREATE DATABASE {db_name}"))
@@ -279,9 +275,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
     test_db_url = f"{db_url_base}/{db_name}"
 
     # Motor para crear la base de datos
-    engine = create_async_engine(
-        f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT"
-    )
+    engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:
         await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
         await conn.execute(text(f"CREATE DATABASE {db_name}"))
@@ -384,9 +378,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     test_db_url = f"{db_url_base}/{db_name}"
 
     # Motor para crear/eliminar la base de datos temporal
-    admin_engine = create_async_engine(
-        f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT"
-    )
+    admin_engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
     async with admin_engine.connect() as conn:
         await conn.execute(text(f"CREATE DATABASE {db_name}"))
     await admin_engine.dispose()
@@ -412,9 +404,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     # Limpieza: eliminar la base de datos temporal completa
     await engine.dispose()
 
-    admin_engine = create_async_engine(
-        f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT"
-    )
+    admin_engine = create_async_engine(f"{db_url_base}/postgres", isolation_level="AUTOCOMMIT")
     async with admin_engine.connect() as conn:
         await conn.execute(text(f"DROP DATABASE {db_name}"))
     await admin_engine.dispose()
@@ -732,16 +722,12 @@ async def create_competition(
     return response.json()
 
 
-async def activate_competition(
-    client: AsyncClient, cookies: dict, competition_id: str
-) -> dict:
+async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
     """Helper para activar una competición (DRAFT -> ACTIVE)."""
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
 
     response = await client.post(f"/api/v1/competitions/{competition_id}/activate")
-    assert (
-        response.status_code == 200
-    ), f"Failed to activate competition: {response.text}"
+    assert response.status_code == 200, f"Failed to activate competition: {response.text}"
     return response.json()

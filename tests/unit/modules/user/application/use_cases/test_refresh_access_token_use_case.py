@@ -129,9 +129,7 @@ class TestRefreshAccessTokenUseCase:
         assert result.message == "Access token renovado exitosamente"
 
         # Verificar que se llamaron los servicios correctos
-        token_service.verify_refresh_token.assert_called_once_with(
-            valid_refresh_token_jwt
-        )
+        token_service.verify_refresh_token.assert_called_once_with(valid_refresh_token_jwt)
         token_service.create_access_token.assert_called_once()
 
     async def test_execute_with_invalid_jwt_returns_none(
@@ -444,9 +442,7 @@ class TestRefreshAccessTokenUseCase:
         assert result is not None
 
         # Verificar que el refresh token NO cambió
-        saved_token = await uow.refresh_tokens.find_by_token_hash(
-            valid_refresh_token_jwt
-        )
+        saved_token = await uow.refresh_tokens.find_by_token_hash(valid_refresh_token_jwt)
         assert saved_token is not None
         assert saved_token.token_hash.value == original_token_hash
         assert saved_token.expires_at == original_expires_at

@@ -72,9 +72,7 @@ class CompetitionIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: CompetitionId | str | None, dialect
-    ) -> str | None:
+    def process_bind_param(self, value: CompetitionId | str | None, dialect) -> str | None:
         """Convierte CompetitionId o str a string para BD."""
         if isinstance(value, CompetitionId):
             return str(value.value)
@@ -97,9 +95,7 @@ class EnrollmentIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: EnrollmentId | str | None, dialect
-    ) -> str | None:
+    def process_bind_param(self, value: EnrollmentId | str | None, dialect) -> str | None:
         """Convierte EnrollmentId o str a string para BD."""
         if isinstance(value, EnrollmentId):
             return str(value.value)
@@ -146,9 +142,7 @@ class CountryCodeDecorator(TypeDecorator):
     impl = CHAR(2)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: CountryCode | str | None, dialect
-    ) -> str | None:
+    def process_bind_param(self, value: CountryCode | str | None, dialect) -> str | None:
         """Convierte CountryCode o str a string para BD."""
         if isinstance(value, CountryCode):
             return str(value.value)
@@ -304,9 +298,7 @@ class HandicapSettingsComposite:
         return (None, None)
 
     def __eq__(self, other):
-        return (
-            isinstance(other, HandicapSettingsComposite) and self.value == other.value
-        )
+        return isinstance(other, HandicapSettingsComposite) and self.value == other.value
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -335,9 +327,7 @@ class CompetitionStatusComposite:
         return (self.value.value if self.value else None,)
 
     def __eq__(self, other):
-        return (
-            isinstance(other, CompetitionStatusComposite) and self.value == other.value
-        )
+        return isinstance(other, CompetitionStatusComposite) and self.value == other.value
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -364,9 +354,7 @@ class EnrollmentStatusComposite:
         return (self.value.value if self.value else None,)
 
     def __eq__(self, other):
-        return (
-            isinstance(other, EnrollmentStatusComposite) and self.value == other.value
-        )
+        return isinstance(other, EnrollmentStatusComposite) and self.value == other.value
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -486,9 +474,7 @@ def start_competition_mappers():
                 # que SQLAlchemy intente mapear automáticamente los públicos
                 # 1. CompetitionName
                 "_name_value": competitions_table.c.name,
-                "name": composite(
-                    lambda n: CompetitionName(n) if n else None, "_name_value"
-                ),
+                "name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
                 # 2. DateRange
                 "_start_date": competitions_table.c.start_date,
                 "_end_date": competitions_table.c.end_date,

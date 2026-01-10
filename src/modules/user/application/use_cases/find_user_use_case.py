@@ -56,9 +56,7 @@ class FindUserUseCase:
                     search_criteria.append(f"nombre completo '{request.full_name}'")
 
                 criteria_str = " o ".join(search_criteria)
-                raise UserNotFoundError(
-                    f"No se encontró ningún usuario con {criteria_str}."
-                )
+                raise UserNotFoundError(f"No se encontró ningún usuario con {criteria_str}.")
 
             # Crear y devolver el DTO de respuesta
             return FindUserResponseDTO(

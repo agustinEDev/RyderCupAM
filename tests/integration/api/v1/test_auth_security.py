@@ -26,9 +26,7 @@ class TestAuthSecurityUserEnumeration:
     en diferentes respuestas del servidor.
     """
 
-    async def test_verify_email_returns_generic_message_for_all_errors(
-        self, client: AsyncClient
-    ):
+    async def test_verify_email_returns_generic_message_for_all_errors(self, client: AsyncClient):
         """
         Test: verify-email no revela información sobre tokens/usuarios
 
@@ -57,14 +55,14 @@ class TestAuthSecurityUserEnumeration:
             )
 
             # Assert
-            assert (
-                response.status_code == status.HTTP_400_BAD_REQUEST
-            ), f"Failed for: {test_case['description']}"
+            assert response.status_code == status.HTTP_400_BAD_REQUEST, (
+                f"Failed for: {test_case['description']}"
+            )
 
             detail = response.json()["detail"].lower()
-            assert (
-                expected_message in detail
-            ), f"Message differs for {test_case['description']}: {detail}"
+            assert expected_message in detail, (
+                f"Message differs for {test_case['description']}: {detail}"
+            )
 
             # Verificar que no contiene información específica
             assert "not found" not in detail.lower()
@@ -72,9 +70,7 @@ class TestAuthSecurityUserEnumeration:
             assert "invalid token" not in detail.lower()
             assert "already verified" not in detail.lower()
 
-    async def test_resend_verification_always_returns_success(
-        self, client: AsyncClient
-    ):
+    async def test_resend_verification_always_returns_success(self, client: AsyncClient):
         """
         Test: resend-verification siempre retorna 200 OK
 
@@ -115,27 +111,25 @@ class TestAuthSecurityUserEnumeration:
             )
 
             # Assert
-            assert (
-                response.status_code == status.HTTP_200_OK
-            ), f"Status code differs for: {test_case['description']}"
+            assert response.status_code == status.HTTP_200_OK, (
+                f"Status code differs for: {test_case['description']}"
+            )
 
             detail = response.json()["message"].lower()
-            assert (
-                expected_message in detail
-            ), f"Message differs for {test_case['description']}: {detail}"
+            assert expected_message in detail, (
+                f"Message differs for {test_case['description']}: {detail}"
+            )
 
             responses.append(response.json())
 
         # Verificar que TODAS las respuestas son idénticas
         first_message = responses[0]["message"]
         for i, resp in enumerate(responses[1:], 1):
-            assert (
-                resp["message"] == first_message
-            ), f"Response {i} differs from first response - potential user enumeration!"
+            assert resp["message"] == first_message, (
+                f"Response {i} differs from first response - potential user enumeration!"
+            )
 
-    async def test_resend_verification_same_response_for_verified_user(
-        self, client: AsyncClient
-    ):
+    async def test_resend_verification_same_response_for_verified_user(self, client: AsyncClient):
         """
         Test: resend-verification retorna el mismo mensaje para usuarios verificados
 
@@ -301,22 +295,16 @@ class TestAuthSecurityLogging:
 
         # Verificar que se loggeó la solicitud
         assert any("Verification email resend requested" in msg for msg in log_messages)
-        assert any(
-            "Verification email resend successful" in msg for msg in log_messages
-        )
+        assert any("Verification email resend successful" in msg for msg in log_messages)
 
         # Verificar que el email está ofuscado (no completo)
-        full_email_exposed = any(
-            "logging.test@example.com" in msg for msg in log_messages
-        )
+        full_email_exposed = any("logging.test@example.com" in msg for msg in log_messages)
         assert not full_email_exposed, "Full email should not be exposed in logs"
 
         # Verificar que se muestra preview del email
         assert any("log***@example.com" in msg for msg in log_messages)
 
-    async def test_error_handling_structure_is_present(
-        self, client: AsyncClient, caplog
-    ):
+    async def test_error_handling_structure_is_present(self, client: AsyncClient, caplog):
         """
         Test: Verificar que la estructura de manejo de errores está implementada
 
@@ -334,13 +322,8 @@ class TestAuthSecurityLogging:
 
         # 1. Verificar que el logger existe en el módulo
 
-        assert hasattr(
-            auth_routes, "logger"
-        ), "Logger should be configured in auth_routes module"
-        assert (
-            auth_routes.logger.name
-            == "src.modules.user.infrastructure.api.v1.auth_routes"
-        )
+        assert hasattr(auth_routes, "logger"), "Logger should be configured in auth_routes module"
+        assert auth_routes.logger.name == "src.modules.user.infrastructure.api.v1.auth_routes"
 
         # 2. Probar con inputs edge case para verify-email
         edge_cases_verify = [
@@ -352,15 +335,12 @@ class TestAuthSecurityLogging:
 
         for token in edge_cases_verify:
             if token:  # Skip vacío (Pydantic lo rechaza antes)
-                response = await client.post(
-                    "/api/v1/auth/verify-email", json={"token": token}
-                )
+                response = await client.post("/api/v1/auth/verify-email", json={"token": token})
                 # Siempre debe retornar mensaje genérico
                 if response.status_code == 400:
                     detail = response.json().get("detail", "")
                     assert (
-                        "unable to verify email" in detail.lower()
-                        or "validation" in detail.lower()
+                        "unable to verify email" in detail.lower() or "validation" in detail.lower()
                     ), f"Should return generic message for token: {token[:20]}..."
 
         # 3. Probar con inputs edge case para resend-verification
@@ -370,9 +350,7 @@ class TestAuthSecurityLogging:
         ]
 
         for email in edge_cases_resend:
-            response = await client.post(
-                "/api/v1/auth/resend-verification", json={"email": email}
-            )
+            response = await client.post("/api/v1/auth/resend-verification", json={"email": email})
             # Siempre debe retornar 200 OK o 422 (validación Pydantic)
             assert response.status_code in [
                 200,
@@ -390,9 +368,7 @@ class TestAuthSecurityLogging:
         # 5. Verificar que ningún log expone datos sensibles completos
         all_log_messages = " ".join([r.message for r in caplog.records])
         # Los tokens deben estar ofuscados (no completos)
-        assert (
-            "x" * 1000 not in all_log_messages
-        ), "Long token should be truncated in logs"
+        assert "x" * 1000 not in all_log_messages, "Long token should be truncated in logs"
 
         print("\n✅ Error handling structure verified:")
         print(f"  - Logger configured: {auth_routes.logger.name}")
@@ -413,20 +389,16 @@ class TestAuthSecurityLogging:
 
         # Simular múltiples intentos fallidos (posible ataque)
         for i in range(3):
-            await client.post(
-                "/api/v1/auth/verify-email", json={"token": f"attack_token_{i}"}
-            )
+            await client.post("/api/v1/auth/verify-email", json={"token": f"attack_token_{i}"})
 
         # Verificar que se puede detectar el patrón en logs
         failed_attempts = [
-            record
-            for record in caplog.records
-            if "verification failed" in record.message.lower()
+            record for record in caplog.records if "verification failed" in record.message.lower()
         ]
 
-        assert (
-            len(failed_attempts) >= 3
-        ), "Should be able to detect multiple failed attempts for security monitoring"
+        assert len(failed_attempts) >= 3, (
+            "Should be able to detect multiple failed attempts for security monitoring"
+        )
 
         # En producción, un sistema de monitoreo podría:
         # - Alertar si hay >10 intentos fallidos en <1 minuto

@@ -126,9 +126,7 @@ class LoggerFactory:
         if not isinstance(config_path, Path):
             config_path = Path(config_path)
         if not config_path.exists():
-            raise FileNotFoundError(
-                f"Archivo de configuración no encontrado: {config_path}"
-            )
+            raise FileNotFoundError(f"Archivo de configuración no encontrado: {config_path}")
 
         # Cargar según extensión
         if config_path.suffix.lower() in [".yaml", ".yml"]:
@@ -179,9 +177,7 @@ class LoggerFactory:
                 LogHandler,
             )
 
-            file_handler = HandlerConfig(
-                type=LogHandler.ROTATING_FILE, filename=log_file
-            )
+            file_handler = HandlerConfig(type=LogHandler.ROTATING_FILE, filename=log_file)
             config.handlers.append(file_handler)
 
         if log_format := os.getenv("LOG_FORMAT"):
@@ -203,9 +199,7 @@ class LoggerFactory:
             with open(path, encoding="utf-8") as f:  # noqa: PTH123
                 return yaml.safe_load(f) or {}
         except ImportError as e:
-            raise ImportError(
-                "PyYAML no está instalado. Instálalo con: pip install pyyaml"
-            ) from e
+            raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
 
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:

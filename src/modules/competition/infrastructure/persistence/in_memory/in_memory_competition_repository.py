@@ -43,11 +43,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
     async def find_by_creator(self, creator_id: UserId) -> list[Competition]:
         """Busca todas las competiciones creadas por un usuario."""
-        return [
-            comp
-            for comp in self._competitions.values()
-            if comp.creator_id == creator_id
-        ]
+        return [comp for comp in self._competitions.values() if comp.creator_id == creator_id]
 
     async def find_by_status(self, status: CompetitionStatus) -> list[Competition]:
         """Busca todas las competiciones con un estado específico."""
@@ -90,9 +86,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
     async def count_by_creator(self, creator_id: UserId) -> int:
         """Cuenta el total de competiciones creadas por un usuario."""
-        return sum(
-            1 for comp in self._competitions.values() if comp.creator_id == creator_id
-        )
+        return sum(1 for comp in self._competitions.values() if comp.creator_id == creator_id)
 
     async def find_by_filters(
         self,
@@ -117,9 +111,7 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         # Apply filter: search by competition name (case-insensitive)
         if search_name:
             search_lower = search_name.lower()
-            results = [
-                comp for comp in results if search_lower in str(comp.name).lower()
-            ]
+            results = [comp for comp in results if search_lower in str(comp.name).lower()]
 
         # Apply filter: filter by competition status
         if status:
@@ -135,8 +127,6 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         # Paginar
         return results[offset : offset + limit]
 
-    def _date_ranges_overlap(
-        self, start1: date, end1: date, start2: date, end2: date
-    ) -> bool:
+    def _date_ranges_overlap(self, start1: date, end1: date, start2: date, end2: date) -> bool:
         """Verifica si dos rangos de fechas se solapan."""
         return start1 <= end2 and end1 >= start2

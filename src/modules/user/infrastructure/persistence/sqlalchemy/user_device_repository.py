@@ -14,7 +14,6 @@ Responsabilidades:
 Patrón: Repository Pattern + Async SQLAlchemy
 """
 
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

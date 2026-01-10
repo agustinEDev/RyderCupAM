@@ -53,9 +53,7 @@ class InMemoryEventBus(EventBus):
         )
 
         if not handlers:
-            self._logger.debug(
-                f"No handlers registered for event type {event_type.__name__}"
-            )
+            self._logger.debug(f"No handlers registered for event type {event_type.__name__}")
             return
 
         # Ejecutar todos los handlers
@@ -76,7 +74,9 @@ class InMemoryEventBus(EventBus):
                         f"Handler {handler.__class__.__name__} cannot handle event {event_type.__name__}"
                     )
             except Exception as e:
-                error_msg = f"Handler {handler.__class__.__name__} failed to process event {event.event_id}"
+                error_msg = (
+                    f"Handler {handler.__class__.__name__} failed to process event {event.event_id}"
+                )
                 self._logger.error(error_msg, exc_info=True)
 
                 handler_error = EventHandlerError(
@@ -89,9 +89,7 @@ class InMemoryEventBus(EventBus):
 
         # Si hay errores, los reportamos pero no interrumpimos el flujo
         if errors:
-            self._logger.error(
-                f"Event processing completed with {len(errors)} handler errors"
-            )
+            self._logger.error(f"Event processing completed with {len(errors)} handler errors")
             # En producción podrías enviar estos errores a un sistema de monitoreo
 
     async def publish_all(self, events: list[DomainEvent]) -> None:
@@ -190,9 +188,7 @@ class InMemoryEventBus(EventBus):
         """
         stats = {
             "total_event_types": len(self._handlers),
-            "total_handlers": sum(
-                len(handlers) for handlers in self._handlers.values()
-            ),
+            "total_handlers": sum(len(handlers) for handlers in self._handlers.values()),
             "handlers_by_event_type": {
                 event_type.__name__: len(handlers)
                 for event_type, handlers in self._handlers.items()

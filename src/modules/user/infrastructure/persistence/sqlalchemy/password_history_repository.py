@@ -51,9 +51,7 @@ class SQLAlchemyPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         self._session.add(password_history)
         await self._session.flush()
 
-    async def find_recent_by_user(
-        self, user_id: UserId, limit: int = 5
-    ) -> list[PasswordHistory]:
+    async def find_recent_by_user(self, user_id: UserId, limit: int = 5) -> list[PasswordHistory]:
         """
         Obtiene los N registros más recientes de un usuario.
 
@@ -87,9 +85,7 @@ class SQLAlchemyPasswordHistoryRepository(PasswordHistoryRepositoryInterface):
         Returns:
             int: Número total de registros
         """
-        stmt = select(PasswordHistory).where(
-            password_history_table.c.user_id == str(user_id.value)
-        )
+        stmt = select(PasswordHistory).where(password_history_table.c.user_id == str(user_id.value))
         result = await self._session.execute(stmt)
         return len(list(result.scalars().all()))
 

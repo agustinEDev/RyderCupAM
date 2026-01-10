@@ -158,9 +158,7 @@ class EventLoggingHandler(EventHandler[DomainEvent]):
                 "aggregate_id": str(event.aggregate_id) if event.aggregate_id else None,
                 "aggregate_type": event.aggregate_type,
                 "causation_id": str(event.causation_id) if event.causation_id else None,
-                "correlation_id": (
-                    str(event.correlation_id) if event.correlation_id else None
-                ),
+                "correlation_id": (str(event.correlation_id) if event.correlation_id else None),
             }
 
         # Payload del evento
@@ -241,9 +239,7 @@ class AuditEventHandler(EventHandler[DomainEvent]):
     detallada para eventos que requieren trazabilidad completa.
     """
 
-    def __init__(
-        self, critical_events: set[type[DomainEvent]], logger_name: str = "audit.events"
-    ):
+    def __init__(self, critical_events: set[type[DomainEvent]], logger_name: str = "audit.events"):
         """
         Inicializa el handler de auditoría.
 
@@ -281,12 +277,8 @@ class AuditEventHandler(EventHandler[DomainEvent]):
                 "timestamp": event.occurred_at.isoformat(),
                 "aggregate_id": str(event.aggregate_id) if event.aggregate_id else None,
                 "aggregate_type": event.aggregate_type,
-                "correlation_id": (
-                    str(event.correlation_id) if event.correlation_id else None
-                ),
-                "full_event": (
-                    event.to_dict() if hasattr(event, "to_dict") else str(event)
-                ),
+                "correlation_id": (str(event.correlation_id) if event.correlation_id else None),
+                "full_event": (event.to_dict() if hasattr(event, "to_dict") else str(event)),
                 "severity": "HIGH",
             }
 

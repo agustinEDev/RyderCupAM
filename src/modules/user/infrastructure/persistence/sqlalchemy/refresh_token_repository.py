@@ -62,9 +62,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             RefreshToken si existe, None si no se encuentra
         """
-        stmt = select(RefreshToken).where(
-            refresh_tokens_table.c.id == str(token_id.value)
-        )
+        stmt = select(RefreshToken).where(refresh_tokens_table.c.id == str(token_id.value))
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -84,9 +82,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             # Hashear el token para buscar en BD
             token_hash = TokenHash.from_token(token)
 
-            stmt = select(RefreshToken).where(
-                refresh_tokens_table.c.token_hash == token_hash.value
-            )
+            stmt = select(RefreshToken).where(refresh_tokens_table.c.token_hash == token_hash.value)
             result = await self._session.execute(stmt)
             return result.scalar_one_or_none()
         except ValueError:
@@ -185,9 +181,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             True si se eliminó, False si no existía
         """
-        stmt = delete(refresh_tokens_table).where(
-            refresh_tokens_table.c.id == str(token_id.value)
-        )
+        stmt = delete(refresh_tokens_table).where(refresh_tokens_table.c.id == str(token_id.value))
 
         result = await self._session.execute(stmt)
         await self._session.flush()

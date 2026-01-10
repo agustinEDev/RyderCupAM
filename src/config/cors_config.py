@@ -41,9 +41,7 @@ def _parse_frontend_origins() -> list[str]:
         list[str]: Lista de orígenes parseados (sin espacios en blanco)
     """
     frontend_origins_raw = os.getenv("FRONTEND_ORIGINS", "")
-    return [
-        origin.strip() for origin in frontend_origins_raw.split(",") if origin.strip()
-    ]
+    return [origin.strip() for origin in frontend_origins_raw.split(",") if origin.strip()]
 
 
 def _get_development_origins() -> list[str]:

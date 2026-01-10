@@ -87,10 +87,7 @@ class TestRefreshTokenEndpoint:
         assert data["user"]["first_name"] == test_user_data["first_name"]
         assert data["user"]["last_name"] == test_user_data["last_name"]
         assert "message" in data
-        assert (
-            "renovado" in data["message"].lower()
-            or "refresh" in data["message"].lower()
-        )
+        assert "renovado" in data["message"].lower() or "refresh" in data["message"].lower()
 
         # Verificar que el access token es un JWT válido
         new_access_token = data["access_token"]
@@ -307,9 +304,7 @@ class TestRefreshTokenEndpoint:
         # Then: Response NO contiene nuevo refresh_token
         assert response.status_code == 200
         data = response.json()
-        assert (
-            "refresh_token" not in data
-        ), "refresh-token NO debe renovar el refresh token"
+        assert "refresh_token" not in data, "refresh-token NO debe renovar el refresh token"
 
         # Then: Set-Cookie NO establece nueva cookie refresh_token
         set_cookie_header = response.headers.get("set-cookie", "")

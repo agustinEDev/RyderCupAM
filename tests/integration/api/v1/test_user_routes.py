@@ -411,9 +411,7 @@ class TestUserRoutes:
         )
         assert login_response.status_code == status.HTTP_200_OK
 
-    async def test_update_security_rejects_wrong_current_password(
-        self, client: AsyncClient
-    ):
+    async def test_update_security_rejects_wrong_current_password(self, client: AsyncClient):
         """Verifica que rechaza password actual incorrecto."""
 
         auth_data = await create_authenticated_user(
@@ -480,9 +478,7 @@ class TestUserRoutes:
         # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
         assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    async def test_update_security_password_confirmation_must_match(
-        self, client: AsyncClient
-    ):
+    async def test_update_security_password_confirmation_must_match(self, client: AsyncClient):
         """Verifica que el password y su confirmación deben coincidir."""
 
         auth_data = await create_authenticated_user(

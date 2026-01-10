@@ -68,9 +68,7 @@ class TestRefreshTokenCreation:
         expires_in_days = 30
 
         # When
-        refresh_token = RefreshToken.create(
-            user_id, token_jwt, expires_in_days=expires_in_days
-        )
+        refresh_token = RefreshToken.create(user_id, token_jwt, expires_in_days=expires_in_days)
 
         # Then
         expected_expiry = datetime.now() + timedelta(days=expires_in_days)

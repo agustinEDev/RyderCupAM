@@ -175,9 +175,7 @@ class LogConfig:
             level=LogLevel.DEBUG,
             environment="development",
             handlers=[
-                HandlerConfig(
-                    type=LogHandler.CONSOLE, level=LogLevel.DEBUG, format=LogFormat.TEXT
-                )
+                HandlerConfig(type=LogHandler.CONSOLE, level=LogLevel.DEBUG, format=LogFormat.TEXT)
             ],
         )
 

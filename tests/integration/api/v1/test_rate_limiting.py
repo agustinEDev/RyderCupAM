@@ -54,17 +54,17 @@ class TestRateLimitingLogin:
         response_blocked = await client.post("/api/v1/auth/login", json=payload)
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
-        assert (
-            response_blocked.status_code == 429
-        ), f"Esperaba HTTP 429 en la 6ta petición, obtuvo {response_blocked.status_code}"
+        assert response_blocked.status_code == 429, (
+            f"Esperaba HTTP 429 en la 6ta petición, obtuvo {response_blocked.status_code}"
+        )
 
         # Verificar que el mensaje indica rate limiting
         response_data = response_blocked.json()
         # SlowAPI usa 'error' en lugar de 'detail'
         assert "error" in response_data, "Respuesta 429 debe contener 'error'"
-        assert (
-            "Rate limit exceeded" in response_data["error"]
-        ), "Mensaje debe indicar 'Rate limit exceeded'"
+        assert "Rate limit exceeded" in response_data["error"], (
+            "Mensaje debe indicar 'Rate limit exceeded'"
+        )
 
     @pytest.mark.asyncio
     async def test_login_within_rate_limit_succeeds(self, client: AsyncClient):
@@ -127,26 +127,24 @@ class TestRateLimitingRegister:
         response_blocked = await client.post("/api/v1/auth/register", json=payloads[3])
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
-        assert (
-            response_blocked.status_code == 429
-        ), f"Esperaba HTTP 429 en la 4ta petición, obtuvo {response_blocked.status_code}"
+        assert response_blocked.status_code == 429, (
+            f"Esperaba HTTP 429 en la 4ta petición, obtuvo {response_blocked.status_code}"
+        )
 
         # Verificar que el mensaje indica rate limiting
         response_data = response_blocked.json()
         # SlowAPI usa 'error' en lugar de 'detail'
         assert "error" in response_data, "Respuesta 429 debe contener 'error'"
-        assert (
-            "Rate limit exceeded" in response_data["error"]
-        ), "Mensaje debe indicar 'Rate limit exceeded'"
+        assert "Rate limit exceeded" in response_data["error"], (
+            "Mensaje debe indicar 'Rate limit exceeded'"
+        )
 
 
 class TestRateLimitingHandicap:
     """Tests de rate limiting para el endpoint de actualización de handicap (RFEG)."""
 
     @pytest.mark.asyncio
-    async def test_handicap_update_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_handicap_update_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de actualización de handicap con límite de 5 peticiones/hora
         WHEN: Se realizan 6 intentos de actualización desde la misma IP
@@ -170,9 +168,7 @@ class TestRateLimitingHandicap:
 
         # Si no podemos autenticar, skip el test
         if login_response.status_code != 200:
-            pytest.skip(
-                "No se pudo autenticar usuario para test de handicap rate limiting"
-            )
+            pytest.skip("No se pudo autenticar usuario para test de handicap rate limiting")
 
         token = login_response.json().get("access_token")
         auth_headers = {"Authorization": f"Bearer {token}"}
@@ -208,26 +204,24 @@ class TestRateLimitingHandicap:
         )
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
-        assert (
-            response_blocked.status_code == 429
-        ), f"Esperaba HTTP 429 en la 6ta petición, obtuvo {response_blocked.status_code}"
+        assert response_blocked.status_code == 429, (
+            f"Esperaba HTTP 429 en la 6ta petición, obtuvo {response_blocked.status_code}"
+        )
 
         # Verificar que el mensaje indica rate limiting
         response_data = response_blocked.json()
         # SlowAPI usa 'error' en lugar de 'detail'
         assert "error" in response_data, "Respuesta 429 debe contener 'error'"
-        assert (
-            "Rate limit exceeded" in response_data["error"]
-        ), "Mensaje debe indicar 'Rate limit exceeded'"
+        assert "Rate limit exceeded" in response_data["error"], (
+            "Mensaje debe indicar 'Rate limit exceeded'"
+        )
 
 
 class TestRateLimitingCompetition:
     """Tests de rate limiting para el endpoint de creación de competiciones."""
 
     @pytest.mark.asyncio
-    async def test_create_competition_rate_limit_exceeded_returns_429(
-        self, client: AsyncClient
-    ):
+    async def test_create_competition_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
         GIVEN: Un endpoint de creación de competición con límite de 10 peticiones/hora
         WHEN: Se realizan 11 intentos de creación desde la misma IP
@@ -251,9 +245,7 @@ class TestRateLimitingCompetition:
 
         # Si no podemos autenticar, skip el test
         if login_response.status_code != 200:
-            pytest.skip(
-                "No se pudo autenticar usuario para test de competition rate limiting"
-            )
+            pytest.skip("No se pudo autenticar usuario para test de competition rate limiting")
 
         token = login_response.json().get("access_token")
         auth_headers = {"Authorization": f"Bearer {token}"}
@@ -302,14 +294,14 @@ class TestRateLimitingCompetition:
         )
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
-        assert (
-            response_blocked.status_code == 429
-        ), f"Esperaba HTTP 429 en la 11va petición, obtuvo {response_blocked.status_code}"
+        assert response_blocked.status_code == 429, (
+            f"Esperaba HTTP 429 en la 11va petición, obtuvo {response_blocked.status_code}"
+        )
 
         # Verificar que el mensaje indica rate limiting
         response_data = response_blocked.json()
         # SlowAPI usa 'error' en lugar de 'detail'
         assert "error" in response_data, "Respuesta 429 debe contener 'error'"
-        assert (
-            "Rate limit exceeded" in response_data["error"]
-        ), "Mensaje debe indicar 'Rate limit exceeded'"
+        assert "Rate limit exceeded" in response_data["error"], (
+            "Mensaje debe indicar 'Rate limit exceeded'"
+        )

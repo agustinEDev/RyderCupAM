@@ -165,9 +165,7 @@ class JsonFormatter(BaseFormatter):
 
         # Información de excepción
         if record.exc_info:
-            log_entry["exception"] = logging.Formatter().formatException(
-                record.exc_info
-            )
+            log_entry["exception"] = logging.Formatter().formatException(record.exc_info)
 
         return json.dumps(log_entry, ensure_ascii=False, separators=(",", ":"))
 

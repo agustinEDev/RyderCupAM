@@ -324,9 +324,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionStartedEvent(
-            competition_id=str(self.id), name=str(self.name)
-        )
+        event = CompetitionStartedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     def complete(self) -> None:
@@ -347,9 +345,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionCompletedEvent(
-            competition_id=str(self.id), name=str(self.name)
-        )
+        event = CompetitionCompletedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     def cancel(self, reason: str | None = None) -> None:
@@ -368,9 +364,7 @@ class Competition:
             )
 
         if not self.status.can_transition_to(CompetitionStatus.CANCELLED):
-            raise CompetitionStateError(
-                f"No se puede cancelar desde estado {self.status.value}"
-            )
+            raise CompetitionStateError(f"No se puede cancelar desde estado {self.status.value}")
 
         self.status = CompetitionStatus.CANCELLED
         self.updated_at = datetime.now()
@@ -436,9 +430,7 @@ class Competition:
 
         if max_players is not None:
             if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
-                raise ValueError(
-                    f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}"
-                )
+                raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
             self.max_players = max_players
 
         if team_assignment is not None:
@@ -458,9 +450,7 @@ class Competition:
         self.updated_at = datetime.now()
 
         # Emitir evento
-        event = CompetitionUpdatedEvent(
-            competition_id=str(self.id), name=str(self.name)
-        )
+        event = CompetitionUpdatedEvent(competition_id=str(self.id), name=str(self.name))
         self._add_domain_event(event)
 
     # ===========================================

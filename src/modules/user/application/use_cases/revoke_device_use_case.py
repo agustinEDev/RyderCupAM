@@ -107,9 +107,7 @@ class RevokeDeviceUseCase:
 
             # 3. Validar que el dispositivo pertenece al usuario (autorización)
             if device.user_id != user_id:
-                raise PermissionError(
-                    f"No autorizado para revocar dispositivo {request.device_id}"
-                )
+                raise PermissionError(f"No autorizado para revocar dispositivo {request.device_id}")
 
             # 4. Revocar dispositivo (lanza DeviceRevokedEvent)
             device.revoke()

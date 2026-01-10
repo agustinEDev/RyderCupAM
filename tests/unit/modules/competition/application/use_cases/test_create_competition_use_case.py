@@ -150,9 +150,7 @@ class TestCreateCompetitionUseCase:
         with pytest.raises(CompetitionAlreadyExistsError) as exc_info:
             await use_case.execute(duplicate_request, creator_id)
 
-        assert "Ya existe una competición con el nombre 'Ryder Cup 2025'" in str(
-            exc_info.value
-        )
+        assert "Ya existe una competición con el nombre 'Ryder Cup 2025'" in str(exc_info.value)
 
     async def test_should_raise_error_when_country_does_not_exist(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -237,9 +235,7 @@ class TestCreateCompetitionUseCase:
         assert competition.handicap_settings.type.value == "PERCENTAGE"
         assert competition.handicap_settings.percentage == 95
 
-    async def test_should_commit_transaction(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que la transacción se hace commit correctamente.
 

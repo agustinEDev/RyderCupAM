@@ -64,9 +64,7 @@ class RequestEnrollmentUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self, request: RequestEnrollmentRequestDTO
-    ) -> RequestEnrollmentResponseDTO:
+    async def execute(self, request: RequestEnrollmentRequestDTO) -> RequestEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de solicitud de inscripción.
 
@@ -100,10 +98,8 @@ class RequestEnrollmentUseCase:
                 )
 
             # 3. Verificar que el usuario no está ya inscrito
-            already_enrolled = (
-                await self._uow.enrollments.exists_for_user_in_competition(
-                    user_id, competition_id
-                )
+            already_enrolled = await self._uow.enrollments.exists_for_user_in_competition(
+                user_id, competition_id
             )
             if already_enrolled:
                 raise AlreadyEnrolledError(

@@ -105,9 +105,7 @@ class ListCompetitionsUseCase:
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:
                 creator_user_id = UserId(creator_id)
-                competitions = [
-                    c for c in competitions if c.creator_id == creator_user_id
-                ]
+                competitions = [c for c in competitions if c.creator_id == creator_user_id]
 
             return competitions
 
