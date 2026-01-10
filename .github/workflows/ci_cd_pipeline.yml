@@ -309,6 +309,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Descargar todo el historial para Gitleaks
 
       - name: Setup Python
         uses: actions/setup-python@v5
