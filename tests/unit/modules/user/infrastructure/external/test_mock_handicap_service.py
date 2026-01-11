@@ -4,7 +4,9 @@ Tests for MockHandicapService
 
 import pytest
 
-from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+from src.modules.user.infrastructure.external.mock_handicap_service import (
+    MockHandicapService,
+)
 
 
 class TestMockHandicapServiceBasicUsage:
@@ -22,10 +24,7 @@ class TestMockHandicapServiceBasicUsage:
     @pytest.mark.asyncio
     async def test_search_handicap_returns_configured_value(self):
         """Test: Buscar hándicap devuelve valor configurado para nombre específico."""
-        handicaps = {
-            "Rafael Nadal Parera": 2.5,
-            "Carlos Alcaraz Garfia": 5.0
-        }
+        handicaps = {"Rafael Nadal Parera": 2.5, "Carlos Alcaraz Garfia": 5.0}
         service = MockHandicapService(handicaps=handicaps)
 
         nadal_handicap = await service.search_handicap("Rafael Nadal Parera")
@@ -91,7 +90,7 @@ class TestMockHandicapServiceConfiguration:
             "Rafael Nadal Parera": 2.5,
             "Carlos Alcaraz Garfia": 5.0,
             "Jon Rahm Rodriguez": 3.2,
-            "Sergio Garcia Fernandez": 4.8
+            "Sergio Garcia Fernandez": 4.8,
         }
         service = MockHandicapService(handicaps=handicaps)
 
@@ -167,6 +166,7 @@ class TestMockHandicapServiceForTesting:
     async def test_mock_service_no_external_calls(self):
         """Test: El servicio mock no hace llamadas externas (es instantáneo)."""
         import time
+
         service = MockHandicapService(default=15.0)
 
         start = time.time()
@@ -182,9 +182,9 @@ class TestMockHandicapServiceForTesting:
         # Configurar casos extremos
         handicaps = {
             "Min Handicap": -10.0,  # Mínimo válido
-            "Max Handicap": 54.0,   # Máximo válido
-            "Zero Handicap": 0.0,   # Cero
-            "No Handicap": None     # Sin hándicap
+            "Max Handicap": 54.0,  # Máximo válido
+            "Zero Handicap": 0.0,  # Cero
+            "No Handicap": None,  # Sin hándicap
         }
         service = MockHandicapService(handicaps=handicaps, default=None)
 
@@ -202,10 +202,7 @@ class TestMockHandicapServiceRealWorldScenarios:
     async def test_search_real_player_names(self):
         """Test: Buscar jugadores reales configurados en el mock."""
         # Configurar con nombres reales de la RFEG
-        handicaps = {
-            "Rafael Nadal Parera": 2.5,
-            "Carlos Alcaraz Garfia": 5.0
-        }
+        handicaps = {"Rafael Nadal Parera": 2.5, "Carlos Alcaraz Garfia": 5.0}
         service = MockHandicapService(handicaps=handicaps)
 
         nadal = await service.search_handicap("Rafael Nadal Parera")
@@ -223,7 +220,7 @@ class TestMockHandicapServiceRealWorldScenarios:
             "Carlos Alcaraz Garfia": 5.0,
             "Amateur Player 1": 15.0,
             "Amateur Player 2": 20.5,
-            "Amateur Player 3": 18.0
+            "Amateur Player 3": 18.0,
         }
         service = MockHandicapService(handicaps=tournament_players)
 
@@ -235,14 +232,10 @@ class TestMockHandicapServiceRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_new_player_gets_default_handicap(self):
         """Test: Jugador nuevo recibe hándicap por defecto."""
-        existing_players = {
-            "Rafael Nadal Parera": 2.5,
-            "Carlos Alcaraz Garfia": 5.0
-        }
+        existing_players = {"Rafael Nadal Parera": 2.5, "Carlos Alcaraz Garfia": 5.0}
         default_new_player_handicap = 28.0
         service = MockHandicapService(
-            handicaps=existing_players,
-            default=default_new_player_handicap
+            handicaps=existing_players, default=default_new_player_handicap
         )
 
         new_player_handicap = await service.search_handicap("New Player Name")

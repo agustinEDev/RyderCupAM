@@ -37,12 +37,12 @@ class EnrollmentStatus(str, Enum):
       APPROVED → WITHDRAWN (retiro voluntario)
     """
 
-    REQUESTED = "REQUESTED"     # Jugador solicitó unirse
-    INVITED = "INVITED"         # Creador invitó al jugador
-    APPROVED = "APPROVED"       # Inscripción aprobada/aceptada
-    REJECTED = "REJECTED"       # Solicitud/invitación rechazada por creador
-    CANCELLED = "CANCELLED"     # Solicitud/invitación cancelada por jugador
-    WITHDRAWN = "WITHDRAWN"     # Jugador inscrito se retiró
+    REQUESTED = "REQUESTED"  # Jugador solicitó unirse
+    INVITED = "INVITED"  # Creador invitó al jugador
+    APPROVED = "APPROVED"  # Inscripción aprobada/aceptada
+    REJECTED = "REJECTED"  # Solicitud/invitación rechazada por creador
+    CANCELLED = "CANCELLED"  # Solicitud/invitación cancelada por jugador
+    WITHDRAWN = "WITHDRAWN"  # Jugador inscrito se retiró
 
     def is_pending(self) -> bool:
         """
@@ -72,10 +72,10 @@ class EnrollmentStatus(str, Enum):
         return self in {
             EnrollmentStatus.REJECTED,
             EnrollmentStatus.CANCELLED,
-            EnrollmentStatus.WITHDRAWN
+            EnrollmentStatus.WITHDRAWN,
         }
 
-    def can_transition_to(self, new_status: 'EnrollmentStatus') -> bool:
+    def can_transition_to(self, new_status: "EnrollmentStatus") -> bool:
         """
         Verifica si es válida la transición al nuevo estado.
 
@@ -93,19 +93,19 @@ class EnrollmentStatus(str, Enum):
         """
         valid_transitions = {
             EnrollmentStatus.REQUESTED: {
-                EnrollmentStatus.APPROVED,    # Creador aprueba
-                EnrollmentStatus.REJECTED,    # Creador rechaza
-                EnrollmentStatus.CANCELLED    # Jugador cancela su solicitud
+                EnrollmentStatus.APPROVED,  # Creador aprueba
+                EnrollmentStatus.REJECTED,  # Creador rechaza
+                EnrollmentStatus.CANCELLED,  # Jugador cancela su solicitud
             },
             EnrollmentStatus.INVITED: {
-                EnrollmentStatus.APPROVED,    # Jugador acepta invitación
-                EnrollmentStatus.REJECTED,    # Creador retira invitación
-                EnrollmentStatus.CANCELLED    # Jugador declina invitación
+                EnrollmentStatus.APPROVED,  # Jugador acepta invitación
+                EnrollmentStatus.REJECTED,  # Creador retira invitación
+                EnrollmentStatus.CANCELLED,  # Jugador declina invitación
             },
             EnrollmentStatus.APPROVED: {
-                EnrollmentStatus.WITHDRAWN    # Jugador se retira
+                EnrollmentStatus.WITHDRAWN  # Jugador se retira
             },
-            EnrollmentStatus.REJECTED: set(),   # Estado final
+            EnrollmentStatus.REJECTED: set(),  # Estado final
             EnrollmentStatus.CANCELLED: set(),  # Estado final
             EnrollmentStatus.WITHDRAWN: set(),  # Estado final
         }

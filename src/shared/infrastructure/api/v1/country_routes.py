@@ -5,7 +5,6 @@ Endpoints FastAPI para consultar países y sus adyacencias.
 Endpoints de solo lectura (seed data).
 """
 
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -22,8 +21,10 @@ router = APIRouter()
 # DTOs para Countries (Presentation Layer)
 # ======================================================================================
 
+
 class CountryResponseDTO(BaseModel):
     """DTO de respuesta para un país."""
+
     code: str = Field(..., description="Código ISO 3166-1 alpha-2 del país")
     name_en: str = Field(..., description="Nombre en inglés")
     name_es: str = Field(..., description="Nombre en español")
@@ -36,11 +37,12 @@ class CountryResponseDTO(BaseModel):
 # ENDPOINTS
 # ======================================================================================
 
+
 @router.get(
     "",
     response_model=list[CountryResponseDTO],
     summary="Listar países activos",
-    description="Obtiene todos los países activos para poblar selectores en el frontend."
+    description="Obtiene todos los países activos para poblar selectores en el frontend.",
 )
 async def list_countries(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
@@ -56,7 +58,9 @@ async def list_countries(
 
         return [
             CountryResponseDTO(
-                code=str(country.code.value) if hasattr(country.code, 'value') else str(country.code),
+                code=(
+                    str(country.code.value) if hasattr(country.code, "value") else str(country.code)
+                ),
                 name_en=country.name_en,
                 name_es=country.name_es,
             )
@@ -68,7 +72,7 @@ async def list_countries(
     "/{country_code}/adjacent",
     response_model=list[CountryResponseDTO],
     summary="Listar países adyacentes",
-    description="Obtiene los países que comparten frontera con el país especificado."
+    description="Obtiene los países que comparten frontera con el país especificado.",
 )
 async def list_adjacent_countries(
     country_code: str,
@@ -96,14 +100,14 @@ async def list_adjacent_countries(
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Código de país inválido: {country_code}"
+                detail=f"Código de país inválido: {country_code}",
             ) from e
 
         country = await uow.countries.find_by_code(code)
         if not country:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"País no encontrado: {country_code}"
+                detail=f"País no encontrado: {country_code}",
             )
 
         # Obtener países adyacentes
@@ -111,7 +115,7 @@ async def list_adjacent_countries(
 
         return [
             CountryResponseDTO(
-                code=str(c.code.value) if hasattr(c.code, 'value') else str(c.code),
+                code=str(c.code.value) if hasattr(c.code, "value") else str(c.code),
                 name_en=c.name_en,
                 name_es=c.name_es,
             )

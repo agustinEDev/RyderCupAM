@@ -23,46 +23,46 @@ EMAIL_DESCRIPTION = "Correo electrónico del usuario."
 # DTO para el Caso de Uso: Registrar Usuario
 # ======================================================================================
 
+
 class RegisterUserRequestDTO(BaseModel):
     """
     DTO de entrada para el caso de uso de registro de usuario.
     Define los datos necesarios para crear un nuevo usuario.
     """
+
     email: EmailStr = Field(
-        ...,
-        max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description=EMAIL_DESCRIPTION
+        ..., max_length=FieldLimits.EMAIL_MAX_LENGTH, description=EMAIL_DESCRIPTION
     )
     password: str = Field(
         ...,
         min_length=12,  # Actualizado según nueva política OWASP
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Contraseña del usuario (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos)."
+        description="Contraseña del usuario (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos).",
     )
     first_name: str = Field(
         ...,
         min_length=2,
         max_length=FieldLimits.NAME_MAX_LENGTH,
-        description="Nombre del usuario."
+        description="Nombre del usuario.",
     )
     last_name: str = Field(
         ...,
         min_length=2,
         max_length=FieldLimits.NAME_MAX_LENGTH,
-        description="Apellido del usuario."
+        description="Apellido del usuario.",
     )
     country_code: str | None = Field(
         None,
         min_length=2,
         max_length=2,
         pattern="^[A-Z]{2}$",
-        description="Código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR', 'PT'). Opcional."
+        description="Código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR', 'PT'). Opcional.",
     )
     manual_handicap: float | None = Field(
         None,
         ge=-10.0,
         le=54.0,
-        description="Hándicap manual (opcional). Solo se usa si no se encuentra en RFEG."
+        description="Hándicap manual (opcional). Solo se usa si no se encuentra en RFEG.",
     )
 
     @field_validator("first_name", "last_name")
@@ -77,28 +77,29 @@ class RegisterUserRequestDTO(BaseModel):
         # Validar formato de nombre (sin números ni caracteres especiales)
         return NameValidator.validate(sanitized)
 
+
 # ======================================================================================
 # DTO para el Caso de Uso: Buscar Usuario
 # ======================================================================================
+
 
 class FindUserRequestDTO(BaseModel):
     """
     DTO de entrada para el caso de uso de búsqueda de usuario.
     Permite buscar por email o nombre completo.
     """
+
     email: EmailStr | None = Field(
-        None,
-        max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description=EMAIL_DESCRIPTION
+        None, max_length=FieldLimits.EMAIL_MAX_LENGTH, description=EMAIL_DESCRIPTION
     )
     full_name: str | None = Field(
         None,
         min_length=3,
         max_length=FieldLimits.FULL_NAME_MAX_LENGTH,
-        description="Nombre completo del usuario."
+        description="Nombre completo del usuario.",
     )
 
-    @field_validator('email', 'full_name', mode='before')
+    @field_validator("email", "full_name", mode="before")
     @classmethod
     def check_at_least_one_field(cls, v):
         """Valida que se proporcione al menos un campo de búsqueda."""
@@ -109,11 +110,13 @@ class FindUserRequestDTO(BaseModel):
         if not self.email and not self.full_name:
             raise ValueError("Debe proporcionar al menos 'email' o 'full_name' para la búsqueda.")
 
+
 class FindUserResponseDTO(BaseModel):
     """
     DTO de respuesta para el caso de uso de búsqueda de usuario.
     Devuelve información básica del usuario encontrado.
     """
+
     user_id: UUID = Field(..., description="ID único del usuario encontrado.")
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
@@ -121,25 +124,32 @@ class FindUserResponseDTO(BaseModel):
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
 
+
 # ======================================================================================
 # DTO de Respuesta Genérico para el Usuario
 # ======================================================================================
+
 
 class UserResponseDTO(BaseModel):
     """
     DTO de salida que representa a un usuario.
     Se utiliza para devolver información del usuario de forma segura (sin contraseña).
     """
+
     id: UUID = Field(..., description="ID único del usuario.")
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
     country_code: str | None = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
     handicap: float | None = Field(None, description="Handicap de golf del usuario.")
-    handicap_updated_at: datetime | None = Field(None, description="Fecha y hora de la última actualización del handicap.")
+    handicap_updated_at: datetime | None = Field(
+        None, description="Fecha y hora de la última actualización del handicap."
+    )
     created_at: datetime = Field(..., description="Fecha y hora de creación del usuario.")
     updated_at: datetime = Field(..., description="Fecha y hora de la última actualización.")
-    email_verified: bool = Field(default=False, description="Indica si el email del usuario ha sido verificado.")
+    email_verified: bool = Field(
+        default=False, description="Indica si el email del usuario ha sido verificado."
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
@@ -162,6 +172,7 @@ class UserResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Login
 # ======================================================================================
 
+
 class LoginRequestDTO(BaseModel):
     """
     DTO de entrada para el caso de uso de login.
@@ -171,27 +182,22 @@ class LoginRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
     """
+
     email: EmailStr = Field(
-        ...,
-        max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description=EMAIL_DESCRIPTION
+        ..., max_length=FieldLimits.EMAIL_MAX_LENGTH, description=EMAIL_DESCRIPTION
     )
     password: str = Field(
         ...,
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Contraseña del usuario."
+        description="Contraseña del usuario.",
     )
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(
         None,
         max_length=45,  # IPv6 máximo: 39 chars (ej: 2001:0db8:85a3:0000:0000:8a2e:0370:7334)
-        description=IP_ADDRESS_DESCRIPTION
+        description=IP_ADDRESS_DESCRIPTION,
     )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class LoginResponseDTO(BaseModel):
@@ -202,17 +208,27 @@ class LoginResponseDTO(BaseModel):
     Session Timeout (v1.8.0):
     - access_token: Válido por 15 minutos (operaciones frecuentes)
     - refresh_token: Válido por 7 días (renovar access sin re-login)
+
+    CSRF Protection (v1.13.0):
+    - csrf_token: Token de 256 bits para validación double-submit (15 minutos)
     """
+
     access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
     refresh_token: str = Field(..., description="Token JWT de renovación (7 días).")
+    csrf_token: str = Field(
+        ..., description="Token CSRF para validación double-submit (15 minutos)."
+    )
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
-    email_verification_required: bool = Field(default=False, description="Indica si el usuario necesita verificar su email.")
+    email_verification_required: bool = Field(
+        default=False, description="Indica si el usuario necesita verificar su email."
+    )
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Logout
 # ======================================================================================
+
 
 class LogoutRequestDTO(BaseModel):
     """
@@ -223,17 +239,10 @@ class LogoutRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
     """
+
     # Security context (opcional, proporcionado por API layer)
-    ip_address: str | None = Field(
-        None,
-        max_length=45,
-        description=IP_ADDRESS_DESCRIPTION
-    )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class LogoutResponseDTO(BaseModel):
@@ -241,6 +250,7 @@ class LogoutResponseDTO(BaseModel):
     DTO de salida para el caso de uso de logout.
     Confirma que el logout se realizó correctamente.
     """
+
     message: str = Field(default="Logout exitoso", description=CONFIRMATION_MESSAGE_DESCRIPTION)
     logged_out_at: datetime = Field(..., description="Timestamp del logout.")
 
@@ -249,29 +259,31 @@ class LogoutResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Update Profile
 # ======================================================================================
 
+
 class UpdateProfileRequestDTO(BaseModel):
     """
     DTO de entrada para actualización de información personal del usuario.
     Al menos uno de los campos debe ser proporcionado.
     """
+
     first_name: str | None = Field(
         None,
         min_length=2,
         max_length=FieldLimits.NAME_MAX_LENGTH,
-        description="Nuevo nombre del usuario."
+        description="Nuevo nombre del usuario.",
     )
     last_name: str | None = Field(
         None,
         min_length=2,
         max_length=FieldLimits.NAME_MAX_LENGTH,
-        description="Nuevo apellido del usuario."
+        description="Nuevo apellido del usuario.",
     )
     country_code: str | None = Field(
         None,
         min_length=2,
         max_length=2,
         pattern="^[A-Z]{2}$",
-        description="Nuevo código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR')."
+        description="Nuevo código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR').",
     )
 
     @field_validator("first_name", "last_name")
@@ -292,18 +304,25 @@ class UpdateProfileRequestDTO(BaseModel):
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo."""
         if not self.first_name and not self.last_name and not self.country_code:
-            raise ValueError("Debe proporcionar al menos 'first_name', 'last_name' o 'country_code'.")
+            raise ValueError(
+                "Debe proporcionar al menos 'first_name', 'last_name' o 'country_code'."
+            )
 
 
 class UpdateProfileResponseDTO(BaseModel):
     """DTO de salida para actualización de perfil."""
+
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Perfil actualizado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
+    message: str = Field(
+        default="Perfil actualizado exitosamente",
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Update Security
 # ======================================================================================
+
 
 class UpdateSecurityRequestDTO(BaseModel):
     """
@@ -314,38 +333,29 @@ class UpdateSecurityRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
     """
+
     current_password: str = Field(
         ...,
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Contraseña actual (requerida)."
+        description="Contraseña actual (requerida).",
     )
     new_email: EmailStr | None = Field(
-        None,
-        max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description="Nuevo email."
+        None, max_length=FieldLimits.EMAIL_MAX_LENGTH, description="Nuevo email."
     )
     new_password: str | None = Field(
         None,
         min_length=12,  # Actualizado según nueva política OWASP
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Nuevo password (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos)."
+        description="Nuevo password (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos).",
     )
     confirm_password: str | None = Field(
         None,
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Confirmación del nuevo password."
+        description="Confirmación del nuevo password.",
     )
     # Security context (opcional, proporcionado por API layer)
-    ip_address: str | None = Field(
-        None,
-        max_length=45,
-        description=IP_ADDRESS_DESCRIPTION
-    )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo y confirma password si aplica."""
@@ -358,51 +368,68 @@ class UpdateSecurityRequestDTO(BaseModel):
 
 class UpdateSecurityResponseDTO(BaseModel):
     """DTO de salida para actualización de seguridad."""
+
     user: UserResponseDTO = Field(..., description="Información actualizada del usuario.")
-    message: str = Field(default="Datos de seguridad actualizados", description=CONFIRMATION_MESSAGE_DESCRIPTION)
+    message: str = Field(
+        default="Datos de seguridad actualizados",
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Verify Email
 # ======================================================================================
 
+
 class VerifyEmailRequestDTO(BaseModel):
     """
     DTO de entrada para verificación de email.
     """
+
     token: str = Field(..., min_length=1, description="Token de verificación de email.")
 
 
 class VerifyEmailResponseDTO(BaseModel):
     """DTO de salida para verificación de email."""
-    message: str = Field(default="Email verificado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
-    email_verified: bool = Field(default=True, description="Confirmación de que el email fue verificado.")
+
+    message: str = Field(
+        default="Email verificado exitosamente",
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
+    email_verified: bool = Field(
+        default=True, description="Confirmación de que el email fue verificado."
+    )
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Resend Verification Email
 # ======================================================================================
 
+
 class ResendVerificationEmailRequestDTO(BaseModel):
     """
     DTO de entrada para reenvío de email de verificación.
     """
+
     email: EmailStr = Field(
-        ...,
-        max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description=EMAIL_DESCRIPTION
+        ..., max_length=FieldLimits.EMAIL_MAX_LENGTH, description=EMAIL_DESCRIPTION
     )
 
 
 class ResendVerificationEmailResponseDTO(BaseModel):
     """DTO de salida para reenvío de email de verificación."""
-    message: str = Field(default="Email de verificación enviado exitosamente", description=CONFIRMATION_MESSAGE_DESCRIPTION)
+
+    message: str = Field(
+        default="Email de verificación enviado exitosamente",
+        description=CONFIRMATION_MESSAGE_DESCRIPTION,
+    )
     email: EmailStr = Field(..., description="Email al que se envió el mensaje de verificación.")
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Refresh Access Token (Session Timeout - v1.8.0)
 # ======================================================================================
+
 
 class RefreshAccessTokenRequestDTO(BaseModel):
     """
@@ -415,18 +442,11 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
     """
+
     # El refresh token se leerá desde la cookie httpOnly, no del body
     # Security context (opcional, proporcionado por API layer)
-    ip_address: str | None = Field(
-        None,
-        max_length=45,
-        description=IP_ADDRESS_DESCRIPTION
-    )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class RefreshAccessTokenResponseDTO(BaseModel):
@@ -435,19 +455,27 @@ class RefreshAccessTokenResponseDTO(BaseModel):
 
     Retorna un nuevo access token válido por 15 minutos.
     El refresh token NO se renueva (sigue siendo el mismo hasta su expiración).
+
+    CSRF Protection (v1.13.0):
+    - csrf_token: Nuevo token CSRF generado al renovar access token (15 minutos)
     """
+
     access_token: str = Field(..., description="Nuevo access token JWT válido por 15 minutos.")
+    csrf_token: str = Field(
+        ..., description="Nuevo token CSRF para validación double-submit (15 minutos)."
+    )
     token_type: str = Field(default="bearer", description="Tipo de token (siempre 'bearer').")
     user: UserResponseDTO = Field(..., description="Información básica del usuario autenticado.")
     message: str = Field(
         default="Access token renovado exitosamente",
-        description="Mensaje de confirmación de renovación."
+        description="Mensaje de confirmación de renovación.",
     )
 
 
 # ======================================================================================
 # DTO para el Caso de Uso: Request Password Reset (Forgot Password)
 # ======================================================================================
+
 
 class RequestPasswordResetRequestDTO(BaseModel):
     """
@@ -467,22 +495,15 @@ class RequestPasswordResetRequestDTO(BaseModel):
     - Si el email existe, se envía el email y se retorna 200 OK con el mismo mensaje
     - Esto previene enumeración de usuarios (OWASP A01)
     """
+
     email: EmailStr = Field(
         ...,
         max_length=FieldLimits.EMAIL_MAX_LENGTH,
-        description="Email del usuario que solicita resetear su contraseña."
+        description="Email del usuario que solicita resetear su contraseña.",
     )
     # Security context (opcional, proporcionado por API layer)
-    ip_address: str | None = Field(
-        None,
-        max_length=45,
-        description=IP_ADDRESS_DESCRIPTION
-    )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class RequestPasswordResetResponseDTO(BaseModel):
@@ -492,9 +513,10 @@ class RequestPasswordResetResponseDTO(BaseModel):
     IMPORTANTE: El mensaje es genérico para prevenir enumeración de usuarios.
     No revela si el email existe o no en el sistema.
     """
+
     message: str = Field(
         default="Si el email existe en nuestro sistema, recibirás un enlace para resetear tu contraseña.",
-        description="Mensaje genérico de confirmación (no revela si el email existe)."
+        description="Mensaje genérico de confirmación (no revela si el email existe).",
     )
     email: EmailStr = Field(..., description="Email al que se envió el enlace (si existe).")
 
@@ -502,6 +524,7 @@ class RequestPasswordResetResponseDTO(BaseModel):
 # ======================================================================================
 # DTO para el Caso de Uso: Reset Password (Completar Reseteo)
 # ======================================================================================
+
 
 class ResetPasswordRequestDTO(BaseModel):
     """
@@ -528,29 +551,22 @@ class ResetPasswordRequestDTO(BaseModel):
     - Password policy aplicada por el Value Object Password
     - ip_address y user_agent opcionales para security audit trail
     """
+
     token: str = Field(
         ...,
         min_length=32,
         max_length=100,
-        description="Token de reseteo único recibido por email (válido 24 horas)."
+        description="Token de reseteo único recibido por email (válido 24 horas).",
     )
     new_password: str = Field(
         ...,
         min_length=12,
         max_length=FieldLimits.PASSWORD_MAX_LENGTH,
-        description="Nueva contraseña (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos)."
+        description="Nueva contraseña (mínimo 12 caracteres, incluir mayúsculas, minúsculas, números y símbolos).",
     )
     # Security context (opcional, proporcionado por API layer)
-    ip_address: str | None = Field(
-        None,
-        max_length=45,
-        description=IP_ADDRESS_DESCRIPTION
-    )
-    user_agent: str | None = Field(
-        None,
-        max_length=500,
-        description=USER_AGENT_DESCRIPTION
-    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class ResetPasswordResponseDTO(BaseModel):
@@ -559,9 +575,10 @@ class ResetPasswordResponseDTO(BaseModel):
 
     Confirma que la contraseña fue cambiada exitosamente.
     """
+
     message: str = Field(
         default="Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad.",
-        description="Mensaje de confirmación de reseteo exitoso."
+        description="Mensaje de confirmación de reseteo exitoso.",
     )
     email: EmailStr = Field(..., description="Email del usuario que completó el reseteo.")
 
@@ -569,6 +586,7 @@ class ResetPasswordResponseDTO(BaseModel):
 # ======================================================================================
 # DTO para el Caso de Uso: Validate Reset Token (Validación Previa - Opcional)
 # ======================================================================================
+
 
 class ValidateResetTokenRequestDTO(BaseModel):
     """
@@ -584,11 +602,9 @@ class ValidateResetTokenRequestDTO(BaseModel):
     - NO revela información sobre el usuario (solo valida token)
     - Rate limiting: 10 intentos/hora por IP
     """
+
     token: str = Field(
-        ...,
-        min_length=32,
-        max_length=100,
-        description="Token de reseteo a validar."
+        ..., min_length=32, max_length=100, description="Token de reseteo a validar."
     )
 
 
@@ -598,6 +614,48 @@ class ValidateResetTokenResponseDTO(BaseModel):
 
     Retorna si el token es válido y no ha expirado.
     """
+
     valid: bool = Field(..., description="True si el token es válido y no expiró.")
     message: str = Field(..., description="Mensaje descriptivo del estado del token.")
     # NO incluir email del usuario por seguridad (no revelar información)
+
+
+# ======================================================================================
+# DTOs para Account Lockout (v1.13.0)
+# ======================================================================================
+
+
+class UnlockAccountRequestDTO(BaseModel):
+    """
+    DTO de entrada para desbloquear manualmente una cuenta (solo Admin).
+
+    Security (OWASP A01, A09):
+    - Solo Admin puede ejecutar este endpoint
+    - Se registra quién desbloqueó en AccountUnlockedEvent
+    """
+
+    user_id: str = Field(
+        ...,
+        min_length=36,
+        max_length=36,
+        description="UUID del usuario cuya cuenta se va a desbloquear.",
+    )
+    unlocked_by_user_id: str = Field(
+        ...,
+        min_length=36,
+        max_length=36,
+        description="UUID del admin que realiza el desbloqueo (para auditoría).",
+    )
+
+
+class UnlockAccountResponseDTO(BaseModel):
+    """
+    DTO de salida para desbloqueo de cuenta.
+
+    Retorna el resultado de la operación de desbloqueo.
+    """
+
+    success: bool = Field(..., description="True si la cuenta fue desbloqueada exitosamente.")
+    message: str = Field(..., description="Mensaje descriptivo del resultado.")
+    user_id: str = Field(..., description="UUID del usuario cuya cuenta fue desbloqueada.")
+    unlocked_by: str = Field(..., description="UUID del admin que realizó el desbloqueo.")

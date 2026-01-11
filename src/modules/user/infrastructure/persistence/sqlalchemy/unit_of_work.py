@@ -1,7 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.user.domain.repositories.password_history_repository_interface import (
+    PasswordHistoryRepositoryInterface,
+)
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
 )
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -9,8 +15,14 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_repository import (
+    SQLAlchemyPasswordHistoryRepository,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_repository import (
     SQLAlchemyRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_repository import (
+    SQLAlchemyUserDeviceRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
@@ -21,15 +33,19 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     """
     Implementación asíncrona de la Unit of Work con SQLAlchemy.
 
-    Repositorios incluidos (v1.8.0):
+    Repositorios incluidos (v1.13.0):
     - users: SQLAlchemyUserRepository
     - refresh_tokens: SQLAlchemyRefreshTokenRepository (Session Timeout)
+    - password_history: SQLAlchemyPasswordHistoryRepository (Password History)
+    - user_devices: SQLAlchemyUserDeviceRepository (Device Fingerprinting)
     """
 
     def __init__(self, session: AsyncSession):
         self._session = session
         self._users = SQLAlchemyUserRepository(session)
         self._refresh_tokens = SQLAlchemyRefreshTokenRepository(session)
+        self._password_history = SQLAlchemyPasswordHistoryRepository(session)
+        self._user_devices = SQLAlchemyUserDeviceRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
@@ -38,6 +54,14 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     @property
     def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
         return self._refresh_tokens
+
+    @property
+    def password_history(self) -> PasswordHistoryRepositoryInterface:
+        return self._password_history
+
+    @property
+    def user_devices(self) -> UserDeviceRepositoryInterface:
+        return self._user_devices
 
     async def __aenter__(self):
         return self
@@ -71,4 +95,3 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
 
     def is_active(self) -> bool:
         return self._session.is_active
-

@@ -65,13 +65,32 @@ unfixable = []
 [lint.per-file-ignores]
 # Tests pueden tener imports sin usar, funciones largas, etc.
 "tests/**/*.py" = [
-    "ARG",     # unused arguments (fixtures)
-    "PLR2004", # magic-value-comparison
-    "S101",    # use of assert
+    "ARG",      # unused arguments (fixtures)
+    "PLR2004",  # magic-value-comparison
+    "S101",     # use of assert
+    "PLC0415",  # import-outside-toplevel (lazy imports in fixtures)
+    "E721",     # type-comparison (comparing types in tests)
+    "PTH123",   # open-builtin (Path.open not always needed in tests)
+    "B017",     # assert-raises-exception (pytest.raises patterns)
+    "RUF043",   # implicit-raw-string (regex patterns in pytest.raises)
+    "SIM105",   # suppressible-exception (contextlib.suppress usage)
+    "UP035",    # deprecated-import (typing.AsyncContextManager in tests)
+    "SIM102",   # collapsible-if (nested ifs can be clearer in tests)
+    "RUF003",   # ambiguous-unicode-character (intentional in homograph tests)
+    "PLC0206",  # dict-index-missing-items (intentional in error tests)
+    "N806",     # non-lowercase-variable-in-function (test data naming)
+    "ERA001",   # commented-out-code (example code in docstrings)
+    "E402",     # module-level-import-not-at-top-of-file (setup imports)
 ]
 
 # Archivos de configuración pueden tener imports no ordenados
-"alembic/env.py" = ["I"]
+"alembic/env.py" = ["I", "ERA001"]
+
+# dev_tests.py puede tener errores de linting (es un script utilitario)
+"dev_tests.py" = ["PTH123", "SIM102", "PLR2004"]
+
+# K8s scripts pueden tener imports después de sys.path setup
+"k8s/scripts/*.py" = ["E402", "PLR2004"]
 
 [lint.isort]
 # Configuración de ordenamiento de imports (compatible con Black)

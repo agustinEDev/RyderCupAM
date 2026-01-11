@@ -10,7 +10,7 @@ OWASP Coverage:
 """
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 
 class EmailValidator:
@@ -38,7 +38,7 @@ class EmailValidator:
 
     # Lista negra de dominios temporales/desechables (opcional)
     # Descomentada por defecto, pero disponible para uso futuro
-    DISPOSABLE_EMAIL_DOMAINS = [
+    DISPOSABLE_EMAIL_DOMAINS: ClassVar[list[str]] = [
         # "tempmail.com",
         # "guerrillamail.com",
         # "10minutemail.com",
@@ -75,49 +75,42 @@ class EmailValidator:
         if not email:
             raise ValueError("Email no puede estar vacío")
 
-        # Normalizar: lowercase + trim
+        # Normalizar email a lowercase y eliminar espacios
         normalized = email.strip().lower()
 
         # Validar longitud total (RFC 5321)
-        if len(normalized) > 254:
+        if len(normalized) > 254:  # noqa: PLR2004
             raise ValueError("Email no puede exceder 254 caracteres")
 
-        if len(normalized) < 5:  # "a@b.c" es el mínimo
+        if len(normalized) < 5:  # noqa: PLR2004
             raise ValueError("Email debe tener al menos 5 caracteres")
 
         # Validar que contenga @
         if "@" not in normalized:
-            raise ValueError(
-                "Formato de email inválido. "
-                "Use el formato: usuario@dominio.com"
-            )
+            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
 
         # Validar partes del email (ANTES del regex para mensajes específicos)
         local, domain = normalized.rsplit("@", 1)
 
         # Local part no puede exceder 64 caracteres (RFC 5321)
-        if len(local) > 64:
+        if len(local) > 64:  # noqa: PLR2004
             raise ValueError("La parte local del email (antes de @) no puede exceder 64 caracteres")
 
         # Domain no puede exceder 253 caracteres (RFC 5321)
-        if len(domain) > 253:
+        if len(domain) > 253:  # noqa: PLR2004
             raise ValueError("El dominio del email (después de @) no puede exceder 253 caracteres")
 
         # Validar formato con regex (después de validaciones específicas)
         if not cls.EMAIL_REGEX.match(normalized):
-            raise ValueError(
-                "Formato de email inválido. "
-                "Use el formato: usuario@dominio.com"
-            )
+            raise ValueError("Formato de email inválido. Use el formato: usuario@dominio.com")
 
         # Domain debe tener al menos un punto
         if "." not in domain:
             raise ValueError("Email debe contener un dominio válido con TLD (ej: .com, .es)")
 
         # Validación opcional: rechazar dominios desechables
-        if cls.DISPOSABLE_EMAIL_DOMAINS:
-            if domain in cls.DISPOSABLE_EMAIL_DOMAINS:
-                raise ValueError("No se permiten emails de dominios temporales")
+        if cls.DISPOSABLE_EMAIL_DOMAINS and domain in cls.DISPOSABLE_EMAIL_DOMAINS:
+            raise ValueError("No se permiten emails de dominios temporales")
 
         return normalized
 
@@ -221,10 +214,10 @@ class NameValidator:
         normalized = name.strip()
 
         # Validar longitud
-        if len(normalized) < 2:
+        if len(normalized) < 2:  # noqa: PLR2004
             raise ValueError(f"{field_name} debe tener al menos 2 caracteres")
 
-        if len(normalized) > 100:
+        if len(normalized) > 100:  # noqa: PLR2004
             raise ValueError(f"{field_name} no puede exceder 100 caracteres")
 
         # Validar formato
@@ -271,7 +264,7 @@ def validate_country_code(code: str | None) -> str | None:
     normalized = code.strip().upper()
 
     # Validar longitud
-    if len(normalized) != 2:
+    if len(normalized) != 2:  # noqa: PLR2004
         raise ValueError("Código de país debe tener exactamente 2 letras (ISO 3166-1 alpha-2)")
 
     # Validar que solo contenga letras

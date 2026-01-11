@@ -18,6 +18,7 @@ Arquitectura:
 - Módulo: User (Authentication)
 - Feature: Session Timeout with Refresh Tokens (v1.8.0)
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -115,6 +116,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Cliente nuevo sin refresh token cookie
         from httpx import AsyncClient as FreshClient
+
         from main import app
 
         async with FreshClient(app=app, base_url="http://test") as fresh_client:
@@ -128,7 +130,14 @@ class TestRefreshTokenEndpoint:
             # El mensaje puede ser variado dependiendo de la validación
             assert any(
                 keyword in data["detail"].lower()
-                for keyword in ["token", "inválido", "invalid", "expirado", "expired", "login"]
+                for keyword in [
+                    "token",
+                    "inválido",
+                    "invalid",
+                    "expirado",
+                    "expired",
+                    "login",
+                ]
             )
 
     async def test_refresh_token_with_invalid_token_returns_401(
@@ -156,7 +165,14 @@ class TestRefreshTokenEndpoint:
         assert "detail" in data
         assert any(
             keyword in data["detail"].lower()
-            for keyword in ["token", "inválido", "invalid", "expirado", "expired", "login"]
+            for keyword in [
+                "token",
+                "inválido",
+                "invalid",
+                "expirado",
+                "expired",
+                "login",
+            ]
         )
 
     async def test_refresh_token_after_logout_returns_401(

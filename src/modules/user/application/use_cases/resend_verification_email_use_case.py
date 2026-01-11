@@ -19,11 +19,14 @@ logger = logging.getLogger(__name__)
 
 class ResendVerificationError(ValueError):
     """Exception raised when resend verification fails due to security constraints."""
+
     pass
 
 
 # Generic error message to prevent user enumeration
-GENERIC_ERROR_MESSAGE = "Si el email existe y no está verificado, se enviará un email de verificación"
+GENERIC_ERROR_MESSAGE = (
+    "Si el email existe y no está verificado, se enviará un email de verificación"
+)
 
 
 class ResendVerificationEmailUseCase:
@@ -34,11 +37,7 @@ class ResendVerificationEmailUseCase:
     y reenviar el email al usuario que lo solicite.
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        email_service: IEmailService | None = None
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._email_service = email_service
@@ -87,9 +86,7 @@ class ResendVerificationEmailUseCase:
             raise ResendVerificationError("Servicio de email no disponible")
 
         email_sent = self._email_service.send_verification_email(
-            to_email=email,
-            user_name=user_name,
-            verification_token=verification_token
+            to_email=email, user_name=user_name, verification_token=verification_token
         )
 
         if not email_sent:
@@ -113,9 +110,6 @@ class ResendVerificationEmailUseCase:
             await self._uow.users.save(user)
             # El context manager (__aexit__) hace commit automático
 
-        logger.info(
-            "Email de verificación reenviado correctamente al usuario %s",
-            user_id
-        )
+        logger.info("Email de verificación reenviado correctamente al usuario %s", user_id)
 
         return True

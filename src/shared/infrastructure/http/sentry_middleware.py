@@ -24,7 +24,6 @@ OWASP Coverage:
 """
 
 import logging
-from typing import Optional
 
 import sentry_sdk
 from fastapi import Request
@@ -44,7 +43,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
     Si no hay token o es inválido, el request se procesa como anónimo.
     """
 
-    def _extract_token_from_request(self, request: Request) -> Optional[str]:
+    def _extract_token_from_request(self, request: Request) -> str | None:
         """
         Extrae el token JWT del request.
 
@@ -70,7 +69,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
 
         return None
 
-    def _decode_token(self, token: str) -> Optional[dict]:
+    def _decode_token(self, token: str) -> dict | None:
         """
         Decodifica el token JWT para extraer el payload.
 
@@ -81,17 +80,13 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
             Payload del token o None si falla la decodificación
         """
         try:
-            payload = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             return payload
         except JWTError as e:
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
             return None
 
-    def _get_client_ip(self, request: Request) -> Optional[str]:
+    def _get_client_ip(self, request: Request) -> str | None:
         """
         Extrae la IP del cliente del request.
 
@@ -112,7 +107,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         if x_forwarded_for:
             return x_forwarded_for.split(",")[0].strip()
 
-        # X-Real-IP (Nginx)
+        # X-Real-IP header usado por Nginx
         x_real_ip = request.headers.get("X-Real-IP")
         if x_real_ip:
             return x_real_ip
@@ -143,11 +138,13 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
 
             if payload:
                 # Establecer contexto de usuario en Sentry
-                sentry_sdk.set_user({
-                    "id": payload.get("sub"),  # UUID del usuario
-                    "email": payload.get("email"),  # Email del usuario
-                    "ip_address": self._get_client_ip(request),  # IP del cliente
-                })
+                sentry_sdk.set_user(
+                    {
+                        "id": payload.get("sub"),  # UUID del usuario
+                        "email": payload.get("email"),  # Email del usuario
+                        "ip_address": self._get_client_ip(request),  # IP del cliente
+                    }
+                )
             else:
                 # Token inválido o expirado -> request anónimo
                 sentry_sdk.set_user(None)

@@ -30,7 +30,7 @@ class TestCreateCompetitionRequestDTO:
             main_country="ES",
             handicap_type="SCRATCH",
             max_players=24,
-            team_assignment="MANUAL"
+            team_assignment="MANUAL",
         )
 
         assert dto.name == "Ryder Cup 2025"
@@ -45,7 +45,7 @@ class TestCreateCompetitionRequestDTO:
             end_date=date(2025, 6, 3),
             main_country="es",
             adjacent_country_1="pt",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
 
         assert dto.main_country == "ES"
@@ -58,7 +58,7 @@ class TestCreateCompetitionRequestDTO:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="scratch"
+            handicap_type="scratch",
         )
 
         assert dto.handicap_type == "SCRATCH"
@@ -71,7 +71,7 @@ class TestCreateCompetitionRequestDTO:
                 start_date=date(2025, 6, 1),
                 end_date=date(2025, 6, 3),
                 main_country="ES",
-                handicap_type="PERCENTAGE"
+                handicap_type="PERCENTAGE",
             )
 
     def test_percentage_with_valid_percentage(self):
@@ -82,7 +82,7 @@ class TestCreateCompetitionRequestDTO:
             end_date=date(2025, 6, 3),
             main_country="ES",
             handicap_type="PERCENTAGE",
-            handicap_percentage=90
+            handicap_percentage=90,
         )
 
         assert dto.handicap_type == "PERCENTAGE"
@@ -97,7 +97,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="SCRATCH",
-                handicap_percentage=90
+                handicap_percentage=90,
             )
 
     def test_start_date_must_be_before_end_date(self):
@@ -108,7 +108,7 @@ class TestCreateCompetitionRequestDTO:
                 start_date=date(2025, 6, 3),
                 end_date=date(2025, 6, 1),
                 main_country="ES",
-                handicap_type="SCRATCH"
+                handicap_type="SCRATCH",
             )
 
     def test_invalid_handicap_type(self):
@@ -119,7 +119,7 @@ class TestCreateCompetitionRequestDTO:
                 start_date=date(2025, 6, 1),
                 end_date=date(2025, 6, 3),
                 main_country="ES",
-                handicap_type="INVALID"
+                handicap_type="INVALID",
             )
 
     def test_invalid_team_assignment(self):
@@ -131,7 +131,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="SCRATCH",
-                team_assignment="INVALID"
+                team_assignment="INVALID",
             )
 
     def test_name_too_short(self):
@@ -142,7 +142,7 @@ class TestCreateCompetitionRequestDTO:
                 start_date=date(2025, 6, 1),
                 end_date=date(2025, 6, 3),
                 main_country="ES",
-                handicap_type="SCRATCH"
+                handicap_type="SCRATCH",
             )
 
     def test_name_too_long(self):
@@ -153,7 +153,7 @@ class TestCreateCompetitionRequestDTO:
                 start_date=date(2025, 6, 1),
                 end_date=date(2025, 6, 3),
                 main_country="ES",
-                handicap_type="SCRATCH"
+                handicap_type="SCRATCH",
             )
 
     def test_max_players_below_minimum(self):
@@ -165,7 +165,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="SCRATCH",
-                max_players=1
+                max_players=1,
             )
 
     def test_max_players_above_maximum(self):
@@ -177,7 +177,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="SCRATCH",
-                max_players=101
+                max_players=101,
             )
 
     def test_handicap_percentage_below_90(self):
@@ -189,7 +189,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="PERCENTAGE",
-                handicap_percentage=89
+                handicap_percentage=89,
             )
 
     def test_handicap_percentage_above_100(self):
@@ -201,7 +201,7 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 handicap_type="PERCENTAGE",
-                handicap_percentage=101
+                handicap_percentage=101,
             )
 
 
@@ -224,9 +224,7 @@ class TestUpdateCompetitionRequestDTO:
     def test_uppercase_conversions(self):
         """Debe convertir strings a mayúsculas."""
         dto = UpdateCompetitionRequestDTO(
-            main_country="fr",
-            handicap_type="percentage",
-            team_assignment="automatic"
+            main_country="fr", handicap_type="percentage", team_assignment="automatic"
         )
 
         assert dto.main_country == "FR"
@@ -237,6 +235,7 @@ class TestUpdateCompetitionRequestDTO:
 # ======================================================================================
 # Tests para DTOs de Transiciones de Estado
 # ======================================================================================
+
 
 class TestActivateCompetitionRequestDTO:
     """Tests para ActivateCompetitionRequestDTO."""
@@ -306,6 +305,7 @@ class TestCompleteCompetitionRequestDTO:
 # Tests para DTOs de Delete y Cancel
 # ======================================================================================
 
+
 class TestDeleteCompetitionRequestDTO:
     """Tests para DeleteCompetitionRequestDTO."""
 
@@ -336,10 +336,7 @@ class TestCancelCompetitionRequestDTO:
     def test_create_with_reason(self):
         """Debe crear DTO con reason opcional."""
         comp_id = uuid4()
-        dto = CancelCompetitionRequestDTO(
-            competition_id=comp_id,
-            reason="Mal tiempo"
-        )
+        dto = CancelCompetitionRequestDTO(competition_id=comp_id, reason="Mal tiempo")
 
         assert dto.competition_id == comp_id
         assert dto.reason == "Mal tiempo"
@@ -350,20 +347,14 @@ class TestCancelCompetitionRequestDTO:
         long_reason = "x" * 501
 
         with pytest.raises(ValidationError):
-            CancelCompetitionRequestDTO(
-                competition_id=comp_id,
-                reason=long_reason
-            )
+            CancelCompetitionRequestDTO(competition_id=comp_id, reason=long_reason)
 
     def test_reason_accepts_500_characters(self):
         """reason debe aceptar exactamente 500 caracteres."""
         comp_id = uuid4()
         valid_reason = "x" * 500
 
-        dto = CancelCompetitionRequestDTO(
-            competition_id=comp_id,
-            reason=valid_reason
-        )
+        dto = CancelCompetitionRequestDTO(competition_id=comp_id, reason=valid_reason)
 
         assert len(dto.reason) == 500
 

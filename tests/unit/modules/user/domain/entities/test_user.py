@@ -8,7 +8,6 @@ Este archivo contiene tests que verifican:
 - Casos de borde y errores
 """
 
-
 import pytest
 
 from src.modules.user.domain.entities.user import User
@@ -33,7 +32,7 @@ class TestUserCreation:
             first_name=data["name"],
             last_name=data["surname"],
             email_str=data["email"],
-            plain_password="DefaultPassword123!"
+            plain_password="DefaultPassword123!",
         )
 
         # Assert
@@ -58,7 +57,7 @@ class TestUserCreation:
             first_name=first_name,
             last_name=last_name,
             email_str=email,
-            plain_password="DefaultPassword123!"
+            plain_password="DefaultPassword123!",
         )
 
         # Assert
@@ -80,7 +79,7 @@ class TestUserCreation:
                 first_name=data["name"],
                 last_name=data["surname"],
                 email_str=data["email"],
-                plain_password="DefaultPassword123!"
+                plain_password="DefaultPassword123!",
             )
             users.append(user)
 
@@ -106,7 +105,7 @@ class TestUserMethods:
             first_name="Carlos",
             last_name="Rodríguez",
             email_str="carlos@test.com",
-            plain_password="DefaultPassword123!"
+            plain_password="DefaultPassword123!",
         )
 
         # Act
@@ -127,7 +126,7 @@ class TestUserMethods:
             first_name="María José",
             last_name="García López",
             email_str="maria@test.com",
-            plain_password="DefaultPassword123!"
+            plain_password="DefaultPassword123!",
         )
 
         # Act
@@ -148,7 +147,7 @@ class TestUserMethods:
             first_name="Ana",
             last_name="Martín",
             email_str="ana@test.com",
-            plain_password="DefaultPassword123!"
+            plain_password="DefaultPassword123!",
         )
 
         # Act
@@ -173,7 +172,7 @@ class TestUserValidation:
             first_name="Pedro",
             last_name="Sánchez",
             email_str="pedro.sanchez@test.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Act
@@ -194,7 +193,7 @@ class TestUserValidation:
             first_name="Laura",
             last_name="González",
             email_str="laura@test.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Act
@@ -216,7 +215,7 @@ class TestUserValidation:
                 first_name="Miguel",
                 last_name="Ruiz",
                 email_str="email-sin-arroba.com",
-                plain_password="ValidPassword123!"
+                plain_password="ValidPassword123!",
             )
 
     def test_is_valid_with_invalid_email_no_domain(self):
@@ -232,7 +231,7 @@ class TestUserValidation:
                 first_name="Carmen",
                 last_name="López",
                 email_str="carmen@",
-                plain_password="ValidPassword123!"
+                plain_password="ValidPassword123!",
             )
 
     def test_is_valid_with_empty_email(self):
@@ -248,7 +247,7 @@ class TestUserValidation:
                 first_name="Roberto",
                 last_name="Martínez",
                 email_str="",
-                plain_password="ValidPassword123!"
+                plain_password="ValidPassword123!",
             )
 
     def test_is_valid_with_complex_valid_email(self):
@@ -263,7 +262,7 @@ class TestUserValidation:
             first_name="Antonio",
             last_name="García",
             email_str="antonio.garcia123+test@empresa.co.es",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Assert
@@ -286,7 +285,7 @@ class TestUserEdgeCases:
             first_name="",
             last_name="Pérez",
             email_str="test@example.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Assert
@@ -305,7 +304,7 @@ class TestUserEdgeCases:
             first_name="Juan",
             last_name="",
             email_str="test@example.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Assert
@@ -324,7 +323,7 @@ class TestUserEdgeCases:
             first_name="",
             last_name="Rodríguez",
             email_str="test@example.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Act
@@ -345,7 +344,7 @@ class TestUserEdgeCases:
             first_name="Carlos",
             last_name="",
             email_str="test@example.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
 
         # Act
@@ -358,6 +357,7 @@ class TestUserEdgeCases:
 # ================================
 # TESTS DE INTEGRACIÓN LOCAL
 # ================================
+
 
 class TestUserIntegration:
     """Tests de integración para flujos completos con User"""
@@ -380,7 +380,7 @@ class TestUserIntegration:
             first_name=first_name,
             last_name=last_name,
             email_str=email,
-            plain_password=password
+            plain_password=password,
         )
         full_name = user.get_full_name()
         is_valid = user.is_valid()
@@ -409,7 +409,7 @@ class TestUserIntegration:
                 first_name=data["name"],
                 last_name=data["surname"],
                 email_str=data["email"],
-                plain_password="ValidPassword123!"
+                plain_password="ValidPassword123!",
             )
 
 
@@ -428,7 +428,7 @@ class TestUserEntityEventCollection:
             first_name="Test",
             last_name="User",
             email_str="test@test.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
         # Limpiamos el evento de creación para este test específico
         user.clear_domain_events()
@@ -459,7 +459,10 @@ class TestUserEntityEventCollection:
         assert len(events) == 1
 
         # Verificar que es el evento correcto
-        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        from src.modules.user.domain.events.user_registered_event import (
+            UserRegisteredEvent,
+        )
+
         event = events[0]
         assert isinstance(event, UserRegisteredEvent)
         assert event.user_id == str(user.id.value)
@@ -516,17 +519,19 @@ class TestUserEntityEventCollection:
             first_name="Test",
             last_name="User",
             email_str="test@test.com",
-            plain_password="ValidPassword123!"
+            plain_password="ValidPassword123!",
         )
-        user.clear_domain_events() # Limpiar evento de creación
-        from src.modules.user.domain.events.user_registered_event import UserRegisteredEvent
+        user.clear_domain_events()  # Limpiar evento de creación
+        from src.modules.user.domain.events.user_registered_event import (
+            UserRegisteredEvent,
+        )
 
         # Act
         event = UserRegisteredEvent(
             user_id="test-id-123",
             email="test@test.com",
             first_name="Test",
-            last_name="User"
+            last_name="User",
         )
         user._add_domain_event(event)
 
@@ -642,6 +647,7 @@ class TestUserUpdateHandicap:
         original_updated_at = user.updated_at
 
         import time
+
         time.sleep(0.01)  # Pequeña espera para asegurar diferencia de timestamp
 
         user.update_handicap(15.5)
@@ -848,7 +854,10 @@ class TestUserEmailVerification:
         assert len(events) > 0
 
         # Verificar que hay un EmailVerifiedEvent
-        from src.modules.user.domain.events.email_verified_event import EmailVerifiedEvent
+        from src.modules.user.domain.events.email_verified_event import (
+            EmailVerifiedEvent,
+        )
+
         email_verified_events = [e for e in events if isinstance(e, EmailVerifiedEvent)]
         assert len(email_verified_events) == 1
 

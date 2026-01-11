@@ -77,7 +77,9 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 )
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,7 @@ router = APIRouter()
 # ======================================================================================
 # HELPER: EnrollmentDTOMapper (Presentation Layer Logic)
 # ======================================================================================
+
 
 class EnrollmentDTOMapper:
     """
@@ -100,8 +103,7 @@ class EnrollmentDTOMapper:
 
     @staticmethod
     async def to_response_dto(
-        enrollment,
-        user_uow: UserUnitOfWorkInterface | None = None
+        enrollment, user_uow: UserUnitOfWorkInterface | None = None
     ) -> EnrollmentResponseDTO:
         """
         Convierte una entidad Enrollment a EnrollmentResponseDTO.
@@ -127,7 +129,7 @@ class EnrollmentDTOMapper:
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
             created_at=enrollment.created_at,
-            updated_at=enrollment.updated_at
+            updated_at=enrollment.updated_at,
         )
 
     @staticmethod
@@ -159,7 +161,7 @@ class EnrollmentDTOMapper:
                 email=str(user.email),
                 handicap=user.handicap.value if user.handicap else None,
                 country_code=user.country_code.value if user.country_code else None,
-                avatar_url=None  # TODO: Implementar cuando tengamos sistema de avatares
+                avatar_url=None,  # TODO: Implementar cuando tengamos sistema de avatares
             )
 
 
@@ -167,12 +169,13 @@ class EnrollmentDTOMapper:
 # ENDPOINTS
 # ======================================================================================
 
+
 @router.post(
     "/competitions/{competition_id}/enrollments",
     response_model=RequestEnrollmentResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Solicitar inscripción",
-    description="El usuario actual solicita inscribirse en una competición."
+    description="El usuario actual solicita inscribirse en una competición.",
 )
 async def request_enrollment(
     competition_id: UUID,
@@ -187,8 +190,7 @@ async def request_enrollment(
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(
-            competition_id=competition_id,
-            user_id=current_user.id
+            competition_id=competition_id, user_id=current_user.id
         )
         return await use_case.execute(request_dto)
 
@@ -205,7 +207,7 @@ async def request_enrollment(
     response_model=DirectEnrollPlayerResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Inscripción directa por creador",
-    description="El creador inscribe directamente a un jugador (estado APPROVED)."
+    description="El creador inscribe directamente a un jugador (estado APPROVED).",
 )
 async def direct_enroll_player(
     competition_id: UUID,
@@ -224,7 +226,7 @@ async def direct_enroll_player(
         request_dto = DirectEnrollPlayerRequestDTO(
             competition_id=competition_id,
             user_id=request.user_id,
-            custom_handicap=request.custom_handicap
+            custom_handicap=request.custom_handicap,
         )
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)
@@ -243,7 +245,7 @@ async def direct_enroll_player(
     "/competitions/{competition_id}/enrollments",
     response_model=list[EnrollmentResponseDTO],
     summary="Listar inscripciones",
-    description="Lista las inscripciones de una competición con filtros opcionales."
+    description="Lista las inscripciones de una competición con filtros opcionales.",
 )
 async def list_enrollments(
     competition_id: UUID,
@@ -265,8 +267,7 @@ async def list_enrollments(
     """
     try:
         enrollments = await use_case.execute(
-            competition_id=str(competition_id),
-            status=status_filter
+            competition_id=str(competition_id), status=status_filter
         )
 
         # Convertir entidades a DTOs enriquecidos con datos de usuario
@@ -287,7 +288,7 @@ async def list_enrollments(
     "/enrollments/{enrollment_id}/approve",
     response_model=HandleEnrollmentResponseDTO,
     summary="Aprobar inscripción",
-    description="El creador aprueba una solicitud de inscripción."
+    description="El creador aprueba una solicitud de inscripción.",
 )
 async def approve_enrollment(
     enrollment_id: UUID,
@@ -300,10 +301,7 @@ async def approve_enrollment(
     Solo el creador de la competición puede aprobar.
     """
     try:
-        request_dto = HandleEnrollmentRequestDTO(
-            enrollment_id=enrollment_id,
-            action="APPROVE"
-        )
+        request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="APPROVE")
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)
 
@@ -321,7 +319,7 @@ async def approve_enrollment(
     "/enrollments/{enrollment_id}/reject",
     response_model=HandleEnrollmentResponseDTO,
     summary="Rechazar inscripción",
-    description="El creador rechaza una solicitud de inscripción."
+    description="El creador rechaza una solicitud de inscripción.",
 )
 async def reject_enrollment(
     enrollment_id: UUID,
@@ -334,10 +332,7 @@ async def reject_enrollment(
     Solo el creador de la competición puede rechazar.
     """
     try:
-        request_dto = HandleEnrollmentRequestDTO(
-            enrollment_id=enrollment_id,
-            action="REJECT"
-        )
+        request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="REJECT")
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)
 
@@ -355,7 +350,7 @@ async def reject_enrollment(
     "/enrollments/{enrollment_id}/cancel",
     response_model=CancelEnrollmentResponseDTO,
     summary="Cancelar inscripción",
-    description="El usuario cancela su solicitud de inscripción o declina una invitación."
+    description="El usuario cancela su solicitud de inscripción o declina una invitación.",
 )
 async def cancel_enrollment(
     enrollment_id: UUID,
@@ -370,10 +365,7 @@ async def cancel_enrollment(
     Solo válido desde estados REQUESTED o INVITED.
     """
     try:
-        request_dto = CancelEnrollmentRequestDTO(
-            enrollment_id=enrollment_id,
-            reason=reason
-        )
+        request_dto = CancelEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)
 
@@ -389,7 +381,7 @@ async def cancel_enrollment(
     "/enrollments/{enrollment_id}/withdraw",
     response_model=WithdrawEnrollmentResponseDTO,
     summary="Retirarse de competición",
-    description="El usuario se retira después de haber sido aprobado."
+    description="El usuario se retira después de haber sido aprobado.",
 )
 async def withdraw_enrollment(
     enrollment_id: UUID,
@@ -404,10 +396,7 @@ async def withdraw_enrollment(
     Solo válido desde estado APPROVED.
     """
     try:
-        request_dto = WithdrawEnrollmentRequestDTO(
-            enrollment_id=enrollment_id,
-            reason=reason
-        )
+        request_dto = WithdrawEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)
 
@@ -423,7 +412,7 @@ async def withdraw_enrollment(
     "/enrollments/{enrollment_id}/handicap",
     response_model=SetCustomHandicapResponseDTO,
     summary="Establecer hándicap personalizado",
-    description="El creador establece un hándicap personalizado para un jugador."
+    description="El creador establece un hándicap personalizado para un jugador.",
 )
 async def set_custom_handicap(
     enrollment_id: UUID,
@@ -440,8 +429,7 @@ async def set_custom_handicap(
     try:
         # Asegurar que el enrollment_id del path se use
         request_dto = SetCustomHandicapRequestDTO(
-            enrollment_id=enrollment_id,
-            custom_handicap=request.custom_handicap
+            enrollment_id=enrollment_id, custom_handicap=request.custom_handicap
         )
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)

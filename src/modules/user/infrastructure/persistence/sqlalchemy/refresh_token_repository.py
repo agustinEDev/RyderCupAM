@@ -3,9 +3,10 @@ SQLAlchemy Refresh Token Repository.
 
 Implementación del repositorio de Refresh Tokens usando SQLAlchemy (async).
 """
+
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -61,9 +62,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             RefreshToken si existe, None si no se encuentra
         """
-        stmt = select(RefreshToken).where(
-            refresh_tokens_table.c.id == str(token_id.value)
-        )
+        stmt = select(RefreshToken).where(refresh_tokens_table.c.id == str(token_id.value))
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -83,9 +82,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             # Hashear el token para buscar en BD
             token_hash = TokenHash.from_token(token)
 
-            stmt = select(RefreshToken).where(
-                refresh_tokens_table.c.token_hash == token_hash.value
-            )
+            stmt = select(RefreshToken).where(refresh_tokens_table.c.token_hash == token_hash.value)
             result = await self._session.execute(stmt)
             return result.scalar_one_or_none()
         except ValueError:
@@ -102,9 +99,11 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Lista de RefreshTokens (puede estar vacía)
         """
-        stmt = select(RefreshToken).where(
-            refresh_tokens_table.c.user_id == str(user_id.value)
-        ).order_by(refresh_tokens_table.c.created_at.desc())
+        stmt = (
+            select(RefreshToken)
+            .where(refresh_tokens_table.c.user_id == str(user_id.value))
+            .order_by(refresh_tokens_table.c.created_at.desc())
+        )
 
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -123,12 +122,9 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
             update(refresh_tokens_table)
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
-                refresh_tokens_table.c.revoked == False  # noqa: E712
+                refresh_tokens_table.c.revoked == False,  # noqa: E712
             )
-            .values(
-                revoked=True,
-                revoked_at=datetime.now()
-            )
+            .values(revoked=True, revoked_at=datetime.now())
         )
 
         result = await self._session.execute(stmt)
@@ -162,15 +158,13 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Número de tokens activos
         """
-        from sqlalchemy import func
-
         stmt = (
             select(func.count())
             .select_from(refresh_tokens_table)
             .where(
                 refresh_tokens_table.c.user_id == str(user_id.value),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
-                refresh_tokens_table.c.expires_at > datetime.now()
+                refresh_tokens_table.c.expires_at > datetime.now(),
             )
         )
 
@@ -187,9 +181,7 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             True si se eliminó, False si no existía
         """
-        stmt = delete(refresh_tokens_table).where(
-            refresh_tokens_table.c.id == str(token_id.value)
-        )
+        stmt = delete(refresh_tokens_table).where(refresh_tokens_table.c.id == str(token_id.value))
 
         result = await self._session.execute(stmt)
         await self._session.flush()

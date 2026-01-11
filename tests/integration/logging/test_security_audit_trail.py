@@ -53,7 +53,7 @@ class TestSecurityAuditTrail:
         # Verificar log contiene failure
         log_file = Path("logs/security_audit.log")
         content = log_file.read_text()
-        assert "LOGIN FAILED" in content or "success\": false" in content
+        assert "LOGIN FAILED" in content or 'success": false' in content
 
     async def test_logout_creates_logout_and_revocation_events(self, client: AsyncClient):
         """Logout registra LogoutEvent + RefreshTokenRevokedEvent"""
@@ -102,7 +102,7 @@ class TestSecurityAuditTrail:
         await client.post("/api/v1/auth/register", json=register_data)
 
         # Login (genera refresh token)
-        login_response = await client.post(
+        await client.post(
             "/api/v1/auth/login",
             json={
                 "email": "refresh.audit@example.com",

@@ -20,6 +20,7 @@ from src.config.settings import settings
 # SETUP DE CLIENTE DE PRUEBAS
 # ================================
 
+
 @pytest.fixture
 def client():
     """
@@ -34,6 +35,7 @@ def client():
 # ================================
 # TESTS DE HEALTH CHECK
 # ================================
+
 
 class TestHealthEndpoint:
     """Tests para el endpoint de health check"""
@@ -123,6 +125,7 @@ class TestHealthEndpoint:
 # TESTS DE DOCUMENTACIÓN
 # ================================
 
+
 class TestAPIDocumentation:
     """Tests para endpoints de documentación automática"""
 
@@ -189,6 +192,7 @@ class TestAPIDocumentation:
 # TESTS DE ERRORES Y CASOS BORDE
 # ================================
 
+
 class TestErrorHandling:
     """Tests para manejo de errores y casos borde"""
 
@@ -240,6 +244,7 @@ class TestErrorHandling:
 # ================================
 # TESTS DE RENDIMIENTO BÁSICO
 # ================================
+
 
 class TestBasicPerformance:
     """Tests básicos de rendimiento"""

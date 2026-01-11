@@ -1,264 +1,123 @@
-# ADR-008: Sistema de Logging Avanzado
+# ADR-008: Advanced Logging System
 
-## Estado
-**ACEPTADO** - 03 Noviembre 2025
+## Status
+**ACCEPTED** - November 3, 2025
 
-## Contexto
+## Context
 
-El Ryder Cup Manager necesita un sistema de logging robusto que proporcione:
-- **Observabilidad completa** del sistema en producción
-- **Trazabilidad** de requests y operaciones
-- **Debugging eficiente** durante desarrollo
-- **Auditoría** de eventos críticos de dominio
-- **Correlación** entre eventos y operaciones
-- **Formateo flexible** para diferentes entornos
+The Ryder Cup Manager needs a robust logging system that provides:
+- **Complete observability** of the system in production
+- **Traceability** of requests and operations
+- **Efficient debugging** during development
+- **Auditing** of critical domain events
+- **Correlation** between events and operations
+- **Flexible formatting** for different environments
 
-### Problemas Identificados
+### Identified Problems
 
-1. **Logging básico**: El logging estándar de Python es insuficiente para sistemas complejos
-2. **Falta de contexto**: Difícil correlacionar logs relacionados
-3. **Formatos inconsistentes**: Diferentes partes del sistema loggean de forma distinta
-4. **Sin integración**: No hay conexión entre Domain Events y logging
-5. **Configuración rígida**: Difícil adaptar a diferentes entornos
+1. **Basic logging**: Python's standard logging is insufficient for complex systems
+2. **Lack of context**: Difficult to correlate related logs
+3. **Inconsistent formats**: Different parts of the system log in different ways
+4. **No integration**: No connection between Domain Events and logging
+5. **Rigid configuration**: Difficult to adapt to different environments
 
-## Decisión
+## Decision
 
-Implementamos un **Sistema de Logging Avanzado** basado en Clean Architecture con los siguientes componentes:
+We implement an **Advanced Logging System** based on Clean Architecture with the following components:
 
-### Arquitectura del Sistema
+### System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    LOGGING SYSTEM                           │
-├─────────────────────────────────────────────────────────────┤
-│  Application Layer                                          │
-│  ┌─────────────────┐    ┌──────────────────┐               │
-│  │ LoggerFactory   │    │ get_logger()     │               │
-│  │ (Singleton)     │    │ (Convenience)    │               │
-│  └─────────────────┘    └──────────────────┘               │
-├─────────────────────────────────────────────────────────────┤
-│  Domain Layer                                               │
-│  ┌─────────────────┐    ┌──────────────────┐               │
-│  │ Logger          │    │ LogConfig        │               │
-│  │ (Interface)     │    │ (Configuration)  │               │
-│  └─────────────────┘    └──────────────────┘               │
-├─────────────────────────────────────────────────────────────┤
-│  Infrastructure Layer                                       │
-│  ┌─────────────────┐ ┌──────────────────┐ ┌──────────────┐ │
-│  │ PythonLogger    │ │ Formatters       │ │ EventHandlers│ │
-│  │ (Implementation)│ │ (Text/JSON/Str.) │ │ (Integration)│ │
-│  └─────────────────┘ └──────────────────┘ └──────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
+**Application Layer**: LoggerFactory (Singleton), get_logger() convenience function
+**Domain Layer**: Logger interface, LogConfig configuration
+**Infrastructure Layer**: PythonLogger implementation, Formatters (Text/JSON/Structured), EventHandlers
 
-### Componentes Principales
+### Main Components
 
-#### 1. Logger Interface
-```python
-class Logger(ABC):
-    def debug(self, message: str, extra: Dict[str, Any] = None) -> None
-    def info(self, message: str, extra: Dict[str, Any] = None) -> None
-    def warning(self, message: str, extra: Dict[str, Any] = None) -> None
-    def error(self, message: str, extra: Dict[str, Any] = None, exc_info=None) -> None
-    def critical(self, message: str, extra: Dict[str, Any] = None, exc_info=None) -> None
-    
-    def set_context(self, context: Dict[str, Any]) -> None
-    def with_correlation_id(self, correlation_id: str) -> 'Logger'
-```
+**1. Logger Interface**
+- Methods: debug, info, warning, error, critical
+- Context management: set_context(), with_correlation_id()
+- Thread-safe by design
 
-#### 2. Configuración Flexible
-```python
-@dataclass
-class LogConfig:
-    level: LogLevel = LogLevel.INFO
-    handlers: List[HandlerConfig] = field(default_factory=list)
-    app_name: str = "ryder-cup-manager"
-    environment: str = "development"
-    
-    @classmethod
-    def development(cls) -> 'LogConfig'
-    @classmethod
-    def production(cls) -> 'LogConfig'
-    @classmethod
-    def testing(cls) -> 'LogConfig'
-```
+**2. Flexible Configuration**
+- Predefined configs: development(), production(), testing()
+- Customizable per environment
+- Multiple handlers support
 
-#### 3. Formatters Especializados
-- **TextFormatter**: Legible para desarrollo
-- **JsonFormatter**: Estructurado para producción
-- **StructuredFormatter**: Híbrido con tree-view
+**3. Specialized Formatters**
+- TextFormatter: Readable for development
+- JsonFormatter: Structured for production
+- StructuredFormatter: Hybrid with tree-view
 
-#### 4. Integración con Domain Events
-```python
-class EventLoggingHandler(EventHandler[DomainEvent]):
-    # Logging automático de todos los eventos de dominio
-    # Metadatos enriquecidos y contexto completo
-    # Filtrado por tipos de evento
-```
+**4. Integration with Domain Events**
+- EventLoggingHandler: Automatic logging of domain events
+- Enriched metadata and complete context
+- Filtering by event type
 
-### Patrones Implementados
+### Implemented Patterns
 
-1. **Dependency Inversion**: Interface Logger + implementaciones concretas
-2. **Factory Pattern**: LoggerFactory para creación centralizada
-3. **Singleton Pattern**: Gestión global de configuración
-4. **Strategy Pattern**: Diferentes formatters intercambiables
-5. **Observer Pattern**: Handlers de eventos para logging automático
+1. **Dependency Inversion**: Logger interface + concrete implementations
+2. **Factory Pattern**: LoggerFactory for centralized creation
+3. **Singleton Pattern**: Global configuration management
+4. **Strategy Pattern**: Different interchangeable formatters
+5. **Observer Pattern**: Event handlers for automatic logging
 
-## Alternativas Consideradas
+## Alternatives Considered
 
-### Opción 1: Logging Estándar de Python
-**Pros**: Simple, bien conocido, sin dependencias
-**Contras**: Limitado, sin contexto, formatos básicos
-**Decisión**: Rechazado por insuficiente
+### Option 1: Python Standard Logging
+**Decision**: Rejected - Limited features, no context, basic formats
 
-### Opción 2: Librerías Externas (loguru, structlog)
-**Pros**: Funcionalidades avanzadas, bien mantenidas
-**Contras**: Dependencias externas, menos control, curva aprendizaje
-**Decisión**: Rechazado por dependencias
+### Option 2: External Libraries (loguru, structlog)
+**Decision**: Rejected - External dependencies, less control
 
-### Opción 3: Sistema Personalizado (ELEGIDO)
-**Pros**: Control total, integración perfecta, sin dependencias extra
-**Contras**: Más código a mantener
-**Decisión**: Aceptado por flexibilidad y control
+### Option 3: Custom System (CHOSEN)
+**Decision**: Accepted - Full control, perfect integration, no extra dependencies
 
-## Consecuencias
+## Consequences
 
-### Positivas ✅
+### Positive ✅
 
-1. **Observabilidad Completa**
-   - Logs estructurados en JSON para análisis automático
-   - Correlation IDs para trazabilidad end-to-end
-   - Contexto enriquecido automáticamente
+1. **Complete Observability**: Structured JSON logs, correlation IDs, enriched context
+2. **Configuration Flexibility**: Different configs per environment, multiple handlers
+3. **Perfect Integration**: Automatic Domain Events logging, shared context
+4. **Developer Experience**: Simple APIs, context managers, robust error handling
+5. **Production Ready**: Thread-safe, file rotation, environment variables
 
-2. **Flexibilidad de Configuración**
-   - Diferentes configuraciones por entorno
-   - Múltiples handlers simultáneos
-   - Formateo personalizable
+### Negative ⚠️
 
-3. **Integración Perfecta**
-   - Logging automático de Domain Events
-   - Contexto compartido entre capas
-   - Sin acoplamiento con frameworks externos
+1. **Additional Maintenance**: More custom code to maintain
+2. **Learning Curve**: Project-specific APIs
 
-4. **Developer Experience**
-   - APIs simples e intuitivas
-   - Context managers para correlation
-   - Error handling robusto
+### Mitigations 🛡️
 
-5. **Producción Ready**
-   - Thread-safe por diseño
-   - Rotación de archivos automática
-   - Configuración por variables de entorno
+- Complete documentation with examples
+- Exhaustive test coverage
+- Predefined configurations per environment
 
-### Negativas ⚠️
+## Implementation
 
-1. **Mantenimiento Adicional**
-   - Más código propio a mantener
-   - Necesidad de tests exhaustivos
+**Location**: `src/shared/infrastructure/logging/`
 
-2. **Curva de Aprendizaje**
-   - APIs específicas del proyecto
-   - Conceptos de correlation y contexto
+**Configuration per Environment**:
+- Development: DEBUG level, console text format
+- Production: INFO level, rotating file + JSON format (50MB rotation)
+- Testing: WARNING level, null handler (silent)
 
-### Mitigaciones 🛡️
+**Usage**: `get_logger("module.name")` with context managers for correlation
 
-1. **Documentación Completa**: Guías, ejemplos en código, APIs docs
-2. **Tests Exhaustivos**: Cobertura completa de funcionalidades
-3. **Configuraciones Predefinidas**: Templates por entorno
+## Success Metrics
 
-## Implementación
+### Functional ✅
+- 100% test coverage
+- 3 formatters working (Text, JSON, Structured)
+- Domain Events automatically logged
 
-### Estructura de Archivos
-```
-src/shared/infrastructure/logging/
-├── __init__.py              # Re-exportaciones principales
-├── logger.py                # Interface Logger y LogLevel
-├── config.py                # LogConfig y configuraciones
-├── formatters.py            # Text/JSON/Structured formatters
-├── python_logger.py         # Implementación principal
-├── factory.py               # LoggerFactory y helpers
-└── event_handlers.py        # Integración Domain Events
-```
+### Non-Functional ✅
+- Performance: <1ms overhead per log
+- Thread Safety: Thread-local context
+- Memory: No leaks in long tests
+- Configuration: 3 predefined environments
 
-### Configuración por Entorno
-
-#### Desarrollo
-```python
-config = LogConfig.development()
-# - Nivel: DEBUG
-# - Handler: Console con formato texto
-# - Incluye stack traces completos
-```
-
-#### Producción
-```python
-config = LogConfig.production()
-# - Nivel: INFO
-# - Handlers: Console (WARNING+) + File rotativo (INFO+)
-# - Formato: JSON estructurado
-# - Rotación: 50MB, 10 backups
-```
-
-#### Testing
-```python
-config = LogConfig.testing()
-# - Nivel: WARNING
-# - Handler: NULL (silencioso)
-# - Solo errores críticos
-```
-
-### Ejemplos de Uso
-
-#### Logging Básico
-```python
-from src.shared.infrastructure.logging import get_logger
-
-logger = get_logger("users.service")
-logger.info("Usuario creado", extra={"user_id": 123})
-```
-
-#### Con Contexto y Correlation
-```python
-logger.set_context({"service": "user-management"})
-
-with logger.correlation_context("req-456"):
-    logger.info("Procesando request")
-    with logger.context(user_id=123):
-        logger.info("Validando usuario")
-```
-
-#### Integración Domain Events
-```python
-# Automático: todos los eventos se loggean
-event_handler = EventLoggingHandler()
-event_bus.register(event_handler)
-
-# Al publicar evento: logging automático con metadatos completos
-await event_bus.publish(UserRegisteredEvent(...))
-```
-
-## Métricas de Éxito
-
-### Funcionales ✅
-- **100% Cobertura**: Tests unitarios completos
-- **3 Formatters**: Texto, JSON, Estructurado funcionando
-- **Integración**: Domain Events loggeados automáticamente
-
-### No Funcionales ✅
-- **Performance**: <1ms overhead por log
-- **Thread Safety**: Contexto thread-local
-- **Memory**: Sin memory leaks en tests largos
-- **Configuración**: 3 entornos predefinidos
-
-## Referencias
+## References
 
 - [Clean Architecture Logging Patterns](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [Structured Logging Best Practices](https://stackify.com/what-is-structured-logging-and-why-developers-need-it/)
-- [Python Logging Documentation](https://docs.python.org/3/library/logging.html)
 - [12-Factor App Logging](https://12factor.net/logs)
-
-## Historial
-
-- **2025-11-03**: Decisión inicial y implementación completa
-- **2025-11-03**: Validación con tests automatizados
-- **2025-11-03**: Integración exitosa con Domain Events

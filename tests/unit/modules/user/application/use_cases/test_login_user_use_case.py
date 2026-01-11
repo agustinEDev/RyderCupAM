@@ -4,6 +4,8 @@ Tests para LoginUserUseCase
 Tests unitarios para el caso de uso de login de usuario.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
@@ -28,6 +30,14 @@ def token_service():
 
 
 @pytest.fixture
+def register_device_use_case():
+    """Fixture que proporciona un mock del RegisterDeviceUseCase (v1.13.0)."""
+    mock = AsyncMock()
+    mock.execute.return_value = AsyncMock()  # RegisterDeviceResponseDTO mock
+    return mock
+
+
+@pytest.fixture
 async def existing_user(uow):
     """
     Fixture que crea un usuario existente en el sistema.
@@ -38,7 +48,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="V@l1dP@ss123!"
+        plain_password="V@l1dP@ss123!",
     )
 
     async with uow:
@@ -52,14 +62,13 @@ async def existing_user(uow):
 class TestLoginUserUseCase:
     """Tests para el caso de uso de login."""
 
-    async def test_login_successful_with_correct_credentials(self, uow, token_service, existing_user):
+    async def test_login_successful_with_correct_credentials(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
         """Debe retornar token JWT cuando las credenciales son correctas."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="V@l1dP@ss123!"
-        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
         response = await use_case.execute(request)
@@ -74,14 +83,13 @@ class TestLoginUserUseCase:
         assert response.user.last_name == "Doe"
         assert response.user.id == existing_user.id.value
 
-    async def test_login_fails_with_wrong_password(self, uow, token_service, existing_user):
+    async def test_login_fails_with_wrong_password(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
         """Debe retornar None cuando la contraseña es incorrecta."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="Wr0ngP@ssw0rd!"
-        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
         # Act
         response = await use_case.execute(request)
@@ -89,14 +97,13 @@ class TestLoginUserUseCase:
         # Assert
         assert response is None
 
-    async def test_login_fails_with_non_existent_email(self, uow, token_service):
+    async def test_login_fails_with_non_existent_email(
+        self, uow, token_service, register_device_use_case
+    ):
         """Debe retornar None cuando el email no existe."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="nonexistent@example.com",
-            password="S0m3P@ssw0rd!"
-        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="nonexistent@example.com", password="S0m3P@ssw0rd!")
 
         # Act
         response = await use_case.execute(request)
@@ -104,14 +111,13 @@ class TestLoginUserUseCase:
         # Assert
         assert response is None
 
-    async def test_login_response_does_not_include_password(self, uow, token_service, existing_user):
+    async def test_login_response_does_not_include_password(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
         """Debe asegurarse que la respuesta NO incluye la contraseña."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="V@l1dP@ss123!"
-        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
         response = await use_case.execute(request)
@@ -121,14 +127,13 @@ class TestLoginUserUseCase:
         response_dict = response.model_dump()
         assert "password" not in response_dict["user"]
 
-    async def test_login_token_contains_user_id_in_subject(self, uow, token_service, existing_user):
+    async def test_login_token_contains_user_id_in_subject(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
         """Debe incluir el user_id en el subject del token."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service)
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="V@l1dP@ss123!"
-        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
         response = await use_case.execute(request)
@@ -138,6 +143,7 @@ class TestLoginUserUseCase:
 
         # Verificar que el token se puede decodificar
         from src.shared.infrastructure.security.jwt_handler import verify_access_token
+
         payload = verify_access_token(response.access_token)
 
         assert payload is not None

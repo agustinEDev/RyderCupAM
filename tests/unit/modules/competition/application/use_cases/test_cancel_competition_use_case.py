@@ -47,9 +47,7 @@ class TestCancelCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_cancel_competition_from_draft(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede cancelar una competición en estado DRAFT.
@@ -65,16 +63,13 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
-        cancel_request = CancelCompetitionRequestDTO(
-            competition_id=created.id,
-            reason="Mal tiempo"
-        )
+        cancel_request = CancelCompetitionRequestDTO(competition_id=created.id, reason="Mal tiempo")
         response = await cancel_use_case.execute(cancel_request, creator_id)
 
         # Assert
@@ -90,9 +85,7 @@ class TestCancelCompetitionUseCase:
             assert competition.is_cancelled()
 
     async def test_should_cancel_competition_from_active(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede cancelar una competición en estado ACTIVE.
@@ -108,7 +101,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -122,8 +115,7 @@ class TestCancelCompetitionUseCase:
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
         cancel_request = CancelCompetitionRequestDTO(
-            competition_id=created.id,
-            reason="Falta de participantes"
+            competition_id=created.id, reason="Falta de participantes"
         )
         response = await cancel_use_case.execute(cancel_request, creator_id)
 
@@ -132,9 +124,7 @@ class TestCancelCompetitionUseCase:
         assert response.reason == "Falta de participantes"
 
     async def test_should_cancel_competition_from_in_progress(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede cancelar una competición en estado IN_PROGRESS.
@@ -150,7 +140,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -166,19 +156,14 @@ class TestCancelCompetitionUseCase:
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
         cancel_request = CancelCompetitionRequestDTO(
-            competition_id=created.id,
-            reason="Condiciones del campo inadecuadas"
+            competition_id=created.id, reason="Condiciones del campo inadecuadas"
         )
         response = await cancel_use_case.execute(cancel_request, creator_id)
 
         # Assert
         assert response.status == "CANCELLED"
 
-    async def test_should_cancel_without_reason(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
-    ):
+    async def test_should_cancel_without_reason(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que se puede cancelar sin proporcionar razón.
 
@@ -193,7 +178,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -207,9 +192,7 @@ class TestCancelCompetitionUseCase:
         assert response.reason is None
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -230,10 +213,7 @@ class TestCancelCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_user_is_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId,
-        other_user_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
     ):
         """
         Verifica que solo el creador puede cancelar la competición.
@@ -249,7 +229,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -264,9 +244,7 @@ class TestCancelCompetitionUseCase:
         assert "Solo el creador puede cancelar" in str(exc_info.value)
 
     async def test_should_raise_error_when_already_completed(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede cancelar una competición COMPLETED.
@@ -282,7 +260,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -307,9 +285,7 @@ class TestCancelCompetitionUseCase:
         assert "No se puede cancelar una competición en estado final" in str(exc_info.value)
 
     async def test_should_raise_error_when_already_cancelled(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede cancelar una competición ya CANCELLED.
@@ -325,7 +301,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -342,9 +318,7 @@ class TestCancelCompetitionUseCase:
         assert "No se puede cancelar una competición en estado final" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_cancelled(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se emite el evento CompetitionCancelledEvent.
@@ -360,7 +334,7 @@ class TestCancelCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -374,8 +348,7 @@ class TestCancelCompetitionUseCase:
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
         cancel_request = CancelCompetitionRequestDTO(
-            competition_id=created.id,
-            reason="Evento cancelado por el organizador"
+            competition_id=created.id, reason="Evento cancelado por el organizador"
         )
         await cancel_use_case.execute(cancel_request, creator_id)
 

@@ -14,29 +14,41 @@ sys.path.insert(0, str(project_root))
 #    - Docker Compose: Las variables del docker-compose.yml prevalecen sobre .env
 #    - Desarrollo local: Se usan las del fichero .env (si no hay otras definidas)
 #    - CI/CD: Variables del pipeline tienen precedencia sobre .env
-from dotenv import load_dotenv
-load_dotenv(dotenv_path=project_root / '.env', override=False)
+from dotenv import load_dotenv  # noqa: E402 - Must be after sys.path setup
+
+load_dotenv(dotenv_path=project_root / ".env", override=False)
 # --- Fin de la Configuración del Entorno ---
 
-from logging.config import fileConfig
-from alembic import context
-from sqlalchemy import engine_from_config, pool
+from logging.config import fileConfig  # noqa: E402
+from alembic import context  # noqa: E402
+from sqlalchemy import engine_from_config, pool  # noqa: E402
 
 # Importar TODOS los mappers para que Alembic detecte todas las tablas
 # IMPORTANTE: Importar los mappers (no solo metadata) para registrar las tablas
-from src.shared.infrastructure.persistence.sqlalchemy.base import metadata
-from src.shared.infrastructure.persistence.sqlalchemy import country_mappers
-from src.modules.user.infrastructure.persistence.sqlalchemy import mappers as user_mappers
-from src.modules.competition.infrastructure.persistence.sqlalchemy import mappers as competition_mappers
+from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
+from src.shared.infrastructure.persistence.sqlalchemy import (  # noqa: E402
+    country_mappers,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy import (  # noqa: E402
+    mappers as user_mappers,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy import (  # noqa: E402
+    mappers as competition_mappers,
+)
 
 # Constantes para drivers de PostgreSQL
 ASYNCPG_DRIVER = "postgresql+asyncpg"
 PSYCOPG2_DRIVER = "postgresql+psycopg2"
 
 # Iniciar todos los mappers para registrar las tablas en el metadata
-country_mappers.start_mappers()
-user_mappers.start_mappers()
-competition_mappers.start_mappers()
+# IMPORTANTE: Proteger contra re-inicialización en tests (pytest ya los inicializa)
+try:
+    country_mappers.start_mappers()
+    user_mappers.start_mappers()
+    competition_mappers.start_mappers()
+except Exception:
+    # Mappers ya inicializados (probablemente en tests), ignorar
+    pass
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -54,14 +66,14 @@ target_metadata = metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# Example: config.get_main_option("my_important_option")
+# etc.
 
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     # Priorizar DATABASE_URL de entorno sobre alembic.ini
-    url = os.getenv('DATABASE_URL')
+    url = os.getenv("DATABASE_URL")
     if not url:
         url = config.get_main_option("sqlalchemy.url")
 
@@ -82,7 +94,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    db_url = os.getenv('DATABASE_URL')
+    db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
@@ -90,7 +102,7 @@ def run_migrations_online() -> None:
     if ASYNCPG_DRIVER in db_url:
         db_url = db_url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER)
 
-    config.set_main_option('sqlalchemy.url', db_url)
+    config.set_main_option("sqlalchemy.url", db_url)
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -99,9 +111,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -26,10 +26,7 @@ class TestUserLoggedOutEvent:
         logged_out_at = datetime.now()
 
         # Act
-        event = UserLoggedOutEvent(
-            user_id=user_id,
-            logged_out_at=logged_out_at
-        )
+        event = UserLoggedOutEvent(user_id=user_id, logged_out_at=logged_out_at)
 
         # Assert
         assert event.user_id == user_id
@@ -59,7 +56,7 @@ class TestUserLoggedOutEvent:
             logged_out_at=logged_out_at,
             token_used=token_used,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         # Assert
@@ -78,10 +75,7 @@ class TestUserLoggedOutEvent:
         Then: Lanza excepción de inmutabilidad
         """
         # Arrange
-        event = UserLoggedOutEvent(
-            user_id="test-user",
-            logged_out_at=datetime.now()
-        )
+        event = UserLoggedOutEvent(user_id="test-user", logged_out_at=datetime.now())
 
         # Act & Assert
         with pytest.raises(AttributeError):
@@ -100,9 +94,7 @@ class TestUserLoggedOutEvent:
         token_used = "jwt-token-abc"
 
         event = UserLoggedOutEvent(
-            user_id=user_id,
-            logged_out_at=logged_out_at,
-            token_used=token_used
+            user_id=user_id, logged_out_at=logged_out_at, token_used=token_used
         )
 
         # Act
@@ -121,10 +113,7 @@ class TestUserLoggedOutEvent:
         Then: Indica que no hay token presente
         """
         # Arrange
-        event = UserLoggedOutEvent(
-            user_id="test-user",
-            logged_out_at=datetime.now()
-        )
+        event = UserLoggedOutEvent(user_id="test-user", logged_out_at=datetime.now())
 
         # Act
         str_repr = str(event)
@@ -151,7 +140,7 @@ class TestUserLoggedOutEvent:
             logged_out_at=logged_out_at,
             token_used=token_used,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         # Act
@@ -178,13 +167,10 @@ class TestUserLoggedOutEvent:
         before_creation = datetime.now()
 
         # Act
-        event = UserLoggedOutEvent(
-            user_id="test-user",
-            logged_out_at=datetime.now()
-        )
+        event = UserLoggedOutEvent(user_id="test-user", logged_out_at=datetime.now())
 
         after_creation = datetime.now()
 
         # Assert
-        assert hasattr(event, 'occurred_on')
+        assert hasattr(event, "occurred_on")
         assert before_creation <= event.occurred_on <= after_creation

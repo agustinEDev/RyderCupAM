@@ -4,7 +4,6 @@ Get Current User Use Case
 Caso de uso para obtener el usuario actual desde un JWT token.
 """
 
-
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,

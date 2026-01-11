@@ -9,7 +9,9 @@ from src.modules.user.application.use_cases.update_user_handicap_use_case import
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.infrastructure.external.mock_handicap_service import MockHandicapService
+from src.modules.user.infrastructure.external.mock_handicap_service import (
+    MockHandicapService,
+)
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -27,9 +29,7 @@ class TestUpdateUserHandicapUseCase:
         await uow.users.save(user)
         await uow.commit()
 
-        handicap_service = MockHandicapService(
-            handicaps={"Rafael Nadal Parera": 2.5}
-        )
+        handicap_service = MockHandicapService(handicaps={"Rafael Nadal Parera": 2.5})
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         # Act
@@ -82,9 +82,7 @@ class TestUpdateUserHandicapUseCase:
         await uow.users.save(user)
         await uow.commit()
 
-        handicap_service = MockHandicapService(
-            handicaps={"Carlos Alcaraz Garfia": 5.0}
-        )
+        handicap_service = MockHandicapService(handicaps={"Carlos Alcaraz Garfia": 5.0})
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         # Act
@@ -124,9 +122,7 @@ class TestUpdateUserHandicapUseCase:
         await uow.commit()
 
         # Servicio que devuelve un valor
-        handicap_service = MockHandicapService(
-            handicaps={"Rafael Nadal Parera": 2.5}
-        )
+        handicap_service = MockHandicapService(handicaps={"Rafael Nadal Parera": 2.5})
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         # Act - proporcionar hándicap manual pero RFEG tiene valor
@@ -175,10 +171,7 @@ class TestUpdateMultipleHandicapsUseCase:
         await uow.commit()
 
         handicap_service = MockHandicapService(
-            handicaps={
-                "Rafael Nadal Parera": 2.5,
-                "Carlos Alcaraz Garfia": 5.0
-            }
+            handicaps={"Rafael Nadal Parera": 2.5, "Carlos Alcaraz Garfia": 5.0}
         )
         use_case = UpdateMultipleHandicapsUseCase(uow, handicap_service)
 
@@ -186,11 +179,11 @@ class TestUpdateMultipleHandicapsUseCase:
         stats = await use_case.execute([user1.id, user2.id])
 
         # Assert
-        assert stats['total'] == 2
-        assert stats['updated'] == 2
-        assert stats['not_found'] == 0
-        assert stats['no_handicap_found'] == 0
-        assert stats['errors'] == 0
+        assert stats["total"] == 2
+        assert stats["updated"] == 2
+        assert stats["not_found"] == 0
+        assert stats["no_handicap_found"] == 0
+        assert stats["errors"] == 0
 
     @pytest.mark.asyncio
     async def test_update_multiple_with_non_existent_users(self):
@@ -214,11 +207,11 @@ class TestUpdateMultipleHandicapsUseCase:
         stats = await use_case.execute([user1.id, non_existent_id])
 
         # Assert
-        assert stats['total'] == 2
-        assert stats['updated'] == 1
-        assert stats['not_found'] == 1
-        assert stats['no_handicap_found'] == 0
-        assert stats['errors'] == 0
+        assert stats["total"] == 2
+        assert stats["updated"] == 1
+        assert stats["not_found"] == 1
+        assert stats["no_handicap_found"] == 0
+        assert stats["errors"] == 0
 
     @pytest.mark.asyncio
     async def test_update_multiple_empty_list(self):
@@ -236,8 +229,8 @@ class TestUpdateMultipleHandicapsUseCase:
         stats = await use_case.execute([])
 
         # Assert
-        assert stats['total'] == 0
-        assert stats['updated'] == 0
-        assert stats['not_found'] == 0
-        assert stats['no_handicap_found'] == 0
-        assert stats['errors'] == 0
+        assert stats["total"] == 0
+        assert stats["updated"] == 0
+        assert stats["not_found"] == 0
+        assert stats["no_handicap_found"] == 0
+        assert stats["errors"] == 0

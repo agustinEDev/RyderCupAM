@@ -51,17 +51,18 @@ class TestAuthSecurityUserEnumeration:
         for test_case in test_cases:
             # Act
             response = await client.post(
-                "/api/v1/auth/verify-email",
-                json={"token": test_case["token"]}
+                "/api/v1/auth/verify-email", json={"token": test_case["token"]}
             )
 
             # Assert
-            assert response.status_code == status.HTTP_400_BAD_REQUEST, \
+            assert response.status_code == status.HTTP_400_BAD_REQUEST, (
                 f"Failed for: {test_case['description']}"
+            )
 
             detail = response.json()["detail"].lower()
-            assert expected_message in detail, \
+            assert expected_message in detail, (
                 f"Message differs for {test_case['description']}: {detail}"
+            )
 
             # Verificar que no contiene información específica
             assert "not found" not in detail.lower()
@@ -94,7 +95,10 @@ class TestAuthSecurityUserEnumeration:
         test_cases = [
             {"email": "security.test@example.com", "description": "Email existente"},
             {"email": "noexiste@example.com", "description": "Email no existente"},
-            {"email": "otro.noexiste@example.com", "description": "Otro email no existente"},
+            {
+                "email": "otro.noexiste@example.com",
+                "description": "Otro email no existente",
+            },
         ]
 
         expected_message = "if the email address exists in our system"
@@ -103,25 +107,27 @@ class TestAuthSecurityUserEnumeration:
         for test_case in test_cases:
             # Act
             response = await client.post(
-                "/api/v1/auth/resend-verification",
-                json={"email": test_case["email"]}
+                "/api/v1/auth/resend-verification", json={"email": test_case["email"]}
             )
 
             # Assert
-            assert response.status_code == status.HTTP_200_OK, \
+            assert response.status_code == status.HTTP_200_OK, (
                 f"Status code differs for: {test_case['description']}"
+            )
 
             detail = response.json()["message"].lower()
-            assert expected_message in detail, \
+            assert expected_message in detail, (
                 f"Message differs for {test_case['description']}: {detail}"
+            )
 
             responses.append(response.json())
 
         # Verificar que TODAS las respuestas son idénticas
         first_message = responses[0]["message"]
         for i, resp in enumerate(responses[1:], 1):
-            assert resp["message"] == first_message, \
+            assert resp["message"] == first_message, (
                 f"Response {i} differs from first response - potential user enumeration!"
+            )
 
     async def test_resend_verification_same_response_for_verified_user(self, client: AsyncClient):
         """
@@ -145,15 +151,13 @@ class TestAuthSecurityUserEnumeration:
         # Obtener token y verificar
         user = await get_user_by_email(client, user_data["email"])
         verify_response = await client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": user.verification_token}
+            "/api/v1/auth/verify-email", json={"token": user.verification_token}
         )
         assert verify_response.status_code == status.HTTP_200_OK
 
         # Act - Intentar reenviar verificación a usuario ya verificado
         response = await client.post(
-            "/api/v1/auth/resend-verification",
-            json={"email": user_data["email"]}
+            "/api/v1/auth/resend-verification", json={"email": user_data["email"]}
         )
 
         # Assert
@@ -192,7 +196,7 @@ class TestAuthSecurityUserEnumeration:
         start = time.time()
         response_exists = await client.post(
             "/api/v1/auth/resend-verification",
-            json={"email": "timing.test@example.com"}
+            json={"email": "timing.test@example.com"},
         )
         time_exists = time.time() - start
 
@@ -200,7 +204,7 @@ class TestAuthSecurityUserEnumeration:
         start = time.time()
         response_not_exists = await client.post(
             "/api/v1/auth/resend-verification",
-            json={"email": "noexiste.timing@example.com"}
+            json={"email": "noexiste.timing@example.com"},
         )
         time_not_exists = time.time() - start
 
@@ -240,8 +244,7 @@ class TestAuthSecurityLogging:
 
         # Act - Intentar verificar con token inválido
         response = await client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": "invalid_token_12345"}
+            "/api/v1/auth/verify-email", json={"token": "invalid_token_12345"}
         )
 
         # Assert
@@ -282,7 +285,7 @@ class TestAuthSecurityLogging:
         # Act - Solicitar reenvío para email existente
         response_exists = await client.post(
             "/api/v1/auth/resend-verification",
-            json={"email": "logging.test@example.com"}
+            json={"email": "logging.test@example.com"},
         )
 
         # Assert
@@ -319,7 +322,7 @@ class TestAuthSecurityLogging:
 
         # 1. Verificar que el logger existe en el módulo
 
-        assert hasattr(auth_routes, 'logger'), "Logger should be configured in auth_routes module"
+        assert hasattr(auth_routes, "logger"), "Logger should be configured in auth_routes module"
         assert auth_routes.logger.name == "src.modules.user.infrastructure.api.v1.auth_routes"
 
         # 2. Probar con inputs edge case para verify-email
@@ -332,15 +335,13 @@ class TestAuthSecurityLogging:
 
         for token in edge_cases_verify:
             if token:  # Skip vacío (Pydantic lo rechaza antes)
-                response = await client.post(
-                    "/api/v1/auth/verify-email",
-                    json={"token": token}
-                )
+                response = await client.post("/api/v1/auth/verify-email", json={"token": token})
                 # Siempre debe retornar mensaje genérico
                 if response.status_code == 400:
                     detail = response.json().get("detail", "")
-                    assert "unable to verify email" in detail.lower() or "validation" in detail.lower(), \
-                        f"Should return generic message for token: {token[:20]}..."
+                    assert (
+                        "unable to verify email" in detail.lower() or "validation" in detail.lower()
+                    ), f"Should return generic message for token: {token[:20]}..."
 
         # 3. Probar con inputs edge case para resend-verification
         edge_cases_resend = [
@@ -349,13 +350,12 @@ class TestAuthSecurityLogging:
         ]
 
         for email in edge_cases_resend:
-            response = await client.post(
-                "/api/v1/auth/resend-verification",
-                json={"email": email}
-            )
+            response = await client.post("/api/v1/auth/resend-verification", json={"email": email})
             # Siempre debe retornar 200 OK o 422 (validación Pydantic)
-            assert response.status_code in [200, 422], \
-                f"Should handle edge case gracefully for: {email[:30]}..."
+            assert response.status_code in [
+                200,
+                422,
+            ], f"Should handle edge case gracefully for: {email[:30]}..."
 
             if response.status_code == 200:
                 # Si pasa validación, debe retornar mensaje genérico
@@ -389,22 +389,21 @@ class TestAuthSecurityLogging:
 
         # Simular múltiples intentos fallidos (posible ataque)
         for i in range(3):
-            await client.post(
-                "/api/v1/auth/verify-email",
-                json={"token": f"attack_token_{i}"}
-            )
+            await client.post("/api/v1/auth/verify-email", json={"token": f"attack_token_{i}"})
 
         # Verificar que se puede detectar el patrón en logs
         failed_attempts = [
-            record for record in caplog.records
-            if "verification failed" in record.message.lower()
+            record for record in caplog.records if "verification failed" in record.message.lower()
         ]
 
-        assert len(failed_attempts) >= 3, \
+        assert len(failed_attempts) >= 3, (
             "Should be able to detect multiple failed attempts for security monitoring"
+        )
 
         # En producción, un sistema de monitoreo podría:
         # - Alertar si hay >10 intentos fallidos en <1 minuto
         # - Bloquear IPs con comportamiento sospechoso
         # - Generar reportes de seguridad
-        print(f"\n[Security] Detected {len(failed_attempts)} failed attempts - potential attack pattern")
+        print(
+            f"\n[Security] Detected {len(failed_attempts)} failed attempts - potential attack pattern"
+        )

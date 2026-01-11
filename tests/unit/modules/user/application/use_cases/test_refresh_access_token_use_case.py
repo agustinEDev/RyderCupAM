@@ -9,9 +9,11 @@ Arquitectura:
 - Módulo: User
 - Feature: Session Timeout with Refresh Tokens
 """
-import pytest
-from unittest.mock import AsyncMock, Mock
+
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
@@ -22,11 +24,8 @@ from src.modules.user.application.use_cases.refresh_access_token_use_case import
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -53,9 +52,16 @@ class TestRefreshAccessTokenUseCase:
         return service
 
     @pytest.fixture
-    def use_case(self, uow, token_service):
+    def register_device_use_case(self):
+        """Fixture que proporciona un mock del RegisterDeviceUseCase (v1.13.0)."""
+        mock = AsyncMock()
+        mock.execute.return_value = AsyncMock()  # RegisterDeviceResponseDTO mock
+        return mock
+
+    @pytest.fixture
+    def use_case(self, uow, token_service, register_device_use_case):
         """Fixture que proporciona el use case con dependencias mockeadas."""
-        return RefreshAccessTokenUseCase(uow, token_service)
+        return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
 
     @pytest.fixture
     def sample_user(self):
@@ -76,9 +82,7 @@ class TestRefreshAccessTokenUseCase:
     def refresh_token_entity(self, sample_user, valid_refresh_token_jwt):
         """Fixture que crea una entidad RefreshToken válida."""
         return RefreshToken.create(
-            user_id=sample_user.id,
-            token=valid_refresh_token_jwt,
-            expires_in_days=7
+            user_id=sample_user.id, token=valid_refresh_token_jwt, expires_in_days=7
         )
 
     async def test_execute_with_valid_refresh_token_returns_new_access_token(
@@ -112,7 +116,7 @@ class TestRefreshAccessTokenUseCase:
         # Configurar token_service para que verifique exitosamente el refresh token
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar usuario y refresh token en UoW
@@ -204,7 +208,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": "not-a-valid-uuid",
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # When
@@ -236,7 +240,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Usuario existe, pero refresh token NO
@@ -272,7 +276,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar usuario y refresh token revocado
@@ -309,7 +313,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Crear refresh token entity expirado
@@ -357,7 +361,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         # Guardar solo refresh token, NO el usuario
@@ -390,7 +394,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         await uow.users.save(sample_user)
@@ -429,7 +433,7 @@ class TestRefreshAccessTokenUseCase:
 
         token_service.verify_refresh_token.return_value = {
             "sub": str(sample_user.id.value),
-            "type": "refresh"
+            "type": "refresh",
         }
 
         await uow.users.save(sample_user)

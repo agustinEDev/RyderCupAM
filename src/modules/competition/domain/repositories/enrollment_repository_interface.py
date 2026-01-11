@@ -74,10 +74,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_competition(
-        self,
-        competition_id: CompetitionId,
-        limit: int = 100,
-        offset: int = 0
+        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición específica.
@@ -103,7 +100,7 @@ class EnrollmentRepositoryInterface(ABC):
         competition_id: CompetitionId,
         status: EnrollmentStatus,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[Enrollment]:
         """
         Busca inscripciones de una competición filtradas por estado.
@@ -126,10 +123,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_user(
-        self,
-        user_id: UserId,
-        limit: int = 100,
-        offset: int = 0
+        self, user_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario específico.
@@ -151,9 +145,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def exists_for_user_in_competition(
-        self,
-        user_id: UserId,
-        competition_id: CompetitionId
+        self, user_id: UserId, competition_id: CompetitionId
     ) -> bool:
         """
         Verifica si existe una inscripción para un usuario en una competición específica.
@@ -210,9 +202,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_competition_and_team(
-        self,
-        competition_id: CompetitionId,
-        team_id: str
+        self, competition_id: CompetitionId, team_id: str
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones asignadas a un equipo específico.

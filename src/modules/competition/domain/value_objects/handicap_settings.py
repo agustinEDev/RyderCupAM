@@ -22,12 +22,14 @@ class HandicapType(str, Enum):
     - SCRATCH: Torneo scratch (sin aplicar hándicap). Para jugadores de nivel similar.
     - PERCENTAGE: Torneo con hándicap. Se aplicará un porcentaje del Course Handicap.
     """
+
     SCRATCH = "SCRATCH"
     PERCENTAGE = "PERCENTAGE"
 
 
 class InvalidHandicapSettingsError(Exception):
     """Excepción lanzada cuando la configuración de hándicap no es válida."""
+
     pass
 
 
@@ -87,9 +89,7 @@ class HandicapSettings:
         if self.type == HandicapType.SCRATCH:
             # SCRATCH no debe tener porcentaje
             if self.percentage is not None:
-                raise InvalidHandicapSettingsError(
-                    "Para tipo SCRATCH, el porcentaje debe ser None"
-                )
+                raise InvalidHandicapSettingsError("Para tipo SCRATCH, el porcentaje debe ser None")
 
         elif self.type == HandicapType.PERCENTAGE:
             # PERCENTAGE debe tener un porcentaje válido
@@ -158,9 +158,9 @@ class HandicapSettings:
         Dos HandicapSettings son iguales si tienen el mismo tipo y porcentaje.
         """
         return (
-            isinstance(other, HandicapSettings) and
-            self.type == other.type and
-            self.percentage == other.percentage
+            isinstance(other, HandicapSettings)
+            and self.type == other.type
+            and self.percentage == other.percentage
         )
 
     def __hash__(self) -> int:

@@ -63,13 +63,8 @@ class TestAuthRoutes:
         """
         # Arrange: Crear y autenticar un usuario
 
-
         auth_data = await create_authenticated_user(
-            client,
-            "logout.test@example.com",
-            "V@l1dP@ss123!",
-            "Logout",
-            "Test"
+            client, "logout.test@example.com", "V@l1dP@ss123!", "Logout", "Test"
         )
         token = auth_data["token"]
         headers = {"Authorization": f"Bearer {token}"}
@@ -294,6 +289,7 @@ class TestAuthRoutes:
 
         # Verificar el email
         from tests.conftest import get_user_by_email
+
         user = await get_user_by_email(client, user_data["email"])
         verification_token = user.verification_token
 
@@ -311,7 +307,9 @@ class TestAuthRoutes:
         response_data = response.json()
         assert "if the email address exists" in response_data["message"].lower()
 
-    async def test_resend_verification_email_endpoint_invalid_email_format(self, client: AsyncClient):
+    async def test_resend_verification_email_endpoint_invalid_email_format(
+        self, client: AsyncClient
+    ):
         """
         Test: Reenviar verificación con formato de email inválido
         Given: Un email con formato inválido
@@ -338,7 +336,7 @@ class TestAuthRoutes:
         # Arrange
         login_data = {
             "email": "any@example.com",
-            "password": "short"  # Contraseña de solo 5 caracteres (< 8 requeridos)
+            "password": "short",  # Contraseña de solo 5 caracteres (< 8 requeridos)
         }
 
         # Act

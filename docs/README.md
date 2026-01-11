@@ -228,5 +228,5 @@ Si encuentras errores o quieres mejorar la documentación:
 
 ---
 
-**Última actualización:** 3 Diciembre 2025
-**Versión:** 1.0.0
+**Last Updated:** 8 January 2026
+**Version:** v1.13.0

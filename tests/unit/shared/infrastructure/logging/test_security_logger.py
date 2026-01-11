@@ -9,7 +9,6 @@ import pytest
 
 from src.shared.domain.events.security_events import (
     LoginAttemptEvent,
-    LogoutEvent,
     SecuritySeverity,
 )
 from src.shared.infrastructure.logging.security_logger import (

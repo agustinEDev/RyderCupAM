@@ -6,13 +6,25 @@ define correctamente los contratos esperados.
 """
 
 from abc import ABC
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
-from src.modules.user.domain.repositories.refresh_token_repository_interface import RefreshTokenRepositoryInterface
-from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.password_history_repository_interface import (
+    PasswordHistoryRepositoryInterface,
+)
+from src.modules.user.domain.repositories.refresh_token_repository_interface import (
+    RefreshTokenRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_device_repository_interface import (
+    UserDeviceRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 
@@ -33,7 +45,7 @@ class TestUserUnitOfWorkInterface:
 
     def test_user_unit_of_work_has_users_property(self):
         """Verifica que la interfaz define la propiedad users."""
-        assert hasattr(UserUnitOfWorkInterface, 'users')
+        assert hasattr(UserUnitOfWorkInterface, "users")
 
     def test_users_property_signature(self):
         """Verifica la signatura de la propiedad users."""
@@ -46,11 +58,13 @@ class TestUserUnitOfWorkInterface:
 
         mock_user_repo = AsyncMock(spec=UserRepositoryInterface)
         mock_refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+        mock_password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
 
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._users = mock_user_repo
                 self._refresh_tokens = mock_refresh_token_repo
+                self._password_history = mock_password_history_repo
                 self._active = False
 
             @property
@@ -60,6 +74,14 @@ class TestUserUnitOfWorkInterface:
             @property
             def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
                 return self._refresh_tokens
+
+            @property
+            def password_history(self) -> PasswordHistoryRepositoryInterface:
+                return self._password_history
+
+            @property
+            def user_devices(self):
+                return MagicMock()
 
             async def __aenter__(self):
                 self._active = True
@@ -89,6 +111,7 @@ class TestUserUnitOfWorkInterface:
         assert isinstance(mock_uow, UnitOfWorkInterface)
         assert isinstance(mock_uow.users, UserRepositoryInterface)
         assert isinstance(mock_uow.refresh_tokens, RefreshTokenRepositoryInterface)
+        assert isinstance(mock_uow.password_history, PasswordHistoryRepositoryInterface)
 
     def test_incomplete_implementation_fails(self):
         """Verifica que una implementación incompleta falla."""
@@ -99,6 +122,7 @@ class TestUserUnitOfWorkInterface:
 
             async def commit(self) -> None:
                 pass
+
             # Falta la propiedad users y otros métodos...
 
         # Debe lanzar TypeError por métodos/propiedades abstractas faltantes
@@ -129,7 +153,9 @@ class TestUserUnitOfWorkContractCompliance:
         assert isinstance(user_repo, UserRepositoryInterface)
 
     @pytest.mark.asyncio
-    async def test_context_manager_with_user_repository(self, mock_user_unit_of_work, mock_user_repository):
+    async def test_context_manager_with_user_repository(
+        self, mock_user_unit_of_work, mock_user_repository
+    ):
         """Verifica que el context manager funciona con el repositorio de usuarios."""
         mock_user_unit_of_work.__aenter__.return_value = mock_user_unit_of_work
         mock_user_unit_of_work.__aexit__.return_value = None
@@ -146,11 +172,11 @@ class TestUserUnitOfWorkContractCompliance:
     async def test_typical_use_case_pattern(self):
         """Verifica el patrón típico de uso en casos de uso."""
 
-
         class MockUserUnitOfWork(UserUnitOfWorkInterface):
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
                 self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._active = False
                 self._committed = False
 
@@ -161,6 +187,14 @@ class TestUserUnitOfWorkContractCompliance:
             @property
             def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
                 return self._refresh_token_repo
+
+            @property
+            def password_history(self) -> PasswordHistoryRepositoryInterface:
+                return self._password_history_repo
+
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -217,6 +251,7 @@ class TestUserUnitOfWorkContractCompliance:
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
                 self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._active = False
                 self._rolled_back = False
 
@@ -227,6 +262,14 @@ class TestUserUnitOfWorkContractCompliance:
             @property
             def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
                 return self._refresh_token_repo
+
+            @property
+            def password_history(self) -> PasswordHistoryRepositoryInterface:
+                return self._password_history_repo
+
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -275,6 +318,7 @@ class TestUserUnitOfWorkIntegration:
             def __init__(self):
                 self._user_repo = AsyncMock(spec=UserRepositoryInterface)
                 self._refresh_token_repo = AsyncMock(spec=RefreshTokenRepositoryInterface)
+                self._password_history_repo = AsyncMock(spec=PasswordHistoryRepositoryInterface)
                 self._operations = []
                 self._committed = False
 
@@ -285,6 +329,14 @@ class TestUserUnitOfWorkIntegration:
             @property
             def refresh_tokens(self) -> RefreshTokenRepositoryInterface:
                 return self._refresh_token_repo
+
+            @property
+            def password_history(self) -> PasswordHistoryRepositoryInterface:
+                return self._password_history_repo
+
+            @property
+            def user_devices(self) -> UserDeviceRepositoryInterface:
+                return AsyncMock(spec=UserDeviceRepositoryInterface)
 
             async def __aenter__(self):
                 return self

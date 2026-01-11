@@ -47,13 +47,15 @@ class UserEmailChangedEvent(DomainEvent):
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
-        base_dict.update({
-            'email_change': {
-                'old_email': self.old_email,
-                'new_email': self.new_email,
-                'changed_at': self.changed_at.isoformat()
+        base_dict.update(
+            {
+                "email_change": {
+                    "old_email": self.old_email,
+                    "new_email": self.new_email,
+                    "changed_at": self.changed_at.isoformat(),
+                }
             }
-        })
+        )
         return base_dict
 
     def __str__(self) -> str:

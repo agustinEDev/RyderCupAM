@@ -1,118 +1,118 @@
-# ADR-001: Adopción de Clean Architecture
+# ADR-001: Clean Architecture Adoption
 
-**Fecha**: 31 de octubre de 2025  
-**Estado**: Aceptado  
-**Decisores**: Equipo de desarrollo  
+**Date**: October 31, 2025
+**Status**: Accepted
+**Deciders**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-Necesitamos establecer una arquitectura escalable y mantenible para el sistema de gestión de torneos Ryder Cup. El sistema debe ser:
+We need to establish a scalable and maintainable architecture for the Ryder Cup tournament management system. The system must be:
 
-- Fácil de testear unitariamente
-- Independiente de frameworks externos
-- Independiente de la base de datos
-- Independiente de la interfaz de usuario
-- Escalable conforme crezca el proyecto
+- Easy to unit test
+- Independent of external frameworks
+- Independent of the database
+- Independent of the user interface
+- Scalable as the project grows
 
-## Opciones Consideradas
+## Options Considered
 
-1. **Arquitectura en Capas Tradicional**: Controlador → Servicio → Repositorio
-2. **Clean Architecture**: Separación de responsabilidades con inversión de dependencias
-3. **Arquitectura Hexagonal**: Puertos y adaptadores
-4. **Arquitectura MVC Simple**: Modelo-Vista-Controlador básico
+1. **Traditional Layered Architecture**: Controller → Service → Repository
+2. **Clean Architecture**: Separation of concerns with dependency inversion
+3. **Hexagonal Architecture**: Ports and adapters
+4. **Simple MVC Architecture**: Basic Model-View-Controller
 
-## Decisión
+## Decision
 
-**Adoptamos Clean Architecture** con la siguiente estructura de capas:
+**We adopt Clean Architecture** with the following layer structure:
 
 ```
 src/modules/{domain}/
-├── domain/                 # Capa de Dominio (independiente)
-│   ├── entities/           # Entidades de negocio
-│   ├── value_objects/      # Value Objects inmutables
-│   └── repositories/       # Interfaces de repositorio
-├── application/            # Capa de Aplicación
-│   ├── use_cases/          # Casos de uso
-│   └── services/           # Servicios de aplicación
-└── infrastructure/         # Capa de Infraestructura
-    ├── repositories/       # Implementaciones concretas
-    ├── adapters/           # Adaptadores externos
-    └── config/             # Configuraciones
+├── domain/                 # Domain Layer (independent)
+│   ├── entities/           # Business entities
+│   ├── value_objects/      # Immutable Value Objects
+│   └── repositories/       # Repository interfaces
+├── application/            # Application Layer
+│   ├── use_cases/          # Use cases
+│   └── services/           # Application services
+└── infrastructure/         # Infrastructure Layer
+    ├── repositories/       # Concrete implementations
+    ├── adapters/           # External adapters
+    └── config/             # Configuration
 ```
 
-## Justificación
+## Justification
 
-### Ventajas de Clean Architecture:
+### Advantages of Clean Architecture:
 
-1. **Testabilidad Superior**
-   - Cada capa se puede testear independientemente
-   - Fácil creación de mocks para dependencias externas
-   - Tests unitarios rápidos y confiables
+1. **Superior Testability**
+   - Each layer can be tested independently
+   - Easy creation of mocks for external dependencies
+   - Fast and reliable unit tests
 
-2. **Inversión de Dependencias**
-   - El dominio no depende de infraestructura
-   - Fácil intercambio de implementaciones (BD, APIs externas)
-   - Cumple principio SOLID (Dependency Inversion)
+2. **Dependency Inversion**
+   - Domain doesn't depend on infrastructure
+   - Easy to swap implementations (DB, external APIs)
+   - Complies with SOLID principle (Dependency Inversion)
 
-3. **Mantenibilidad**
-   - Separación clara de responsabilidades
-   - Cambios en infraestructura no afectan lógica de negocio
-   - Código más limpio y comprensible
+3. **Maintainability**
+   - Clear separation of concerns
+   - Infrastructure changes don't affect business logic
+   - Cleaner and more understandable code
 
-4. **Escalabilidad**
-   - Estructura preparada para múltiples módulos
-   - Fácil agregar nuevas funcionalidades
-   - Permite equipos trabajando en paralelo
+4. **Scalability**
+   - Structure ready for multiple modules
+   - Easy to add new features
+   - Enables parallel team work
 
-### Implementación Específica:
+### Specific Implementation:
 
-- **Framework Web**: FastAPI (capa de infraestructura)
-- **Testing**: pytest con organización por capas
-- **Módulos**: Separados por dominio de negocio (user, team, tournament)
+- **Web Framework**: FastAPI (infrastructure layer)
+- **Testing**: pytest with organization by layers
+- **Modules**: Separated by business domain (user, team, tournament)
 
-## Consecuencias
+## Consequences
 
-### Positivas:
-- ✅ Mayor calidad del código
-- ✅ Tests más rápidos y confiables  
-- ✅ Facilita futuras migraciones tecnológicas
-- ✅ Onboarding más claro para nuevos desarrolladores
+### Positive:
+- ✅ Higher code quality
+- ✅ Faster and more reliable tests
+- ✅ Facilitates future technology migrations
+- ✅ Clearer onboarding for new developers
 
-### Negativas:
-- ❌ Mayor complejidad inicial
-- ❌ Más archivos y estructura
-- ❌ Curva de aprendizaje para el equipo
-- ❌ Puede ser over-engineering para proyectos muy simples
+### Negative:
+- ❌ Higher initial complexity
+- ❌ More files and structure
+- ❌ Learning curve for the team
+- ❌ May be over-engineering for very simple projects
 
-### Riesgos Mitigados:
-- **Complejidad**: Documentación detallada y ejemplos claros
-- **Over-engineering**: Implementación gradual, empezando simple
-- **Curva de aprendizaje**: Desarrollo paso a paso guiado
+### Mitigated Risks:
+- **Complexity**: Detailed documentation and clear examples
+- **Over-engineering**: Gradual implementation, starting simple
+- **Learning curve**: Step-by-step guided development
 
-## Validación
+## Validation
 
-La decisión se considera exitosa si:
-- [ ] Tests unitarios ejecutan en < 2 segundos
-- [x] Lógica de dominio independiente de frameworks (✅ Implementado)
-- [x] Fácil agregar nuevos casos de uso (✅ Demostrado)
-- [x] Cambios en BD no requieren modificar entidades (✅ Arquitectura preparada)
+The decision is considered successful if:
+- [ ] Unit tests execute in < 2 seconds
+- [x] Domain logic independent of frameworks (✅ Implemented)
+- [x] Easy to add new use cases (✅ Demonstrated)
+- [x] DB changes don't require entity modifications (✅ Architecture ready)
 
-## Referencias
+## References
 
 - [Clean Architecture by Robert Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [Implementing Clean Architecture in Python](https://github.com/cosmicpython/book)
 - [FastAPI Best Practices](https://fastapi.tiangolo.com/tutorial/bigger-applications/)
 
-## Notas de Implementación
+## Implementation Notes
 
-### Ya Implementado (31 Oct 2025):
-- ✅ Estructura de carpetas establecida
-- ✅ Entidad User en capa de dominio
+### Already Implemented (Oct 31, 2025):
+- ✅ Folder structure established
+- ✅ User entity in domain layer
 - ✅ Value Objects (UserId, Email, Password)
-- ✅ Tests organizados por capas
-- ✅ 80 tests ejecutándose en 0.54s
+- ✅ Tests organized by layers
+- ✅ 80 tests running in 0.54s
 
-### Próximo:
-- 🔄 Interfaces de repositorio (domain)
-- ⏳ Implementaciones concretas (infrastructure)
-- ⏳ Casos de uso (application)
+### Next:
+- 🔄 Repository interfaces (domain)
+- ⏳ Concrete implementations (infrastructure)
+- ⏳ Use cases (application)

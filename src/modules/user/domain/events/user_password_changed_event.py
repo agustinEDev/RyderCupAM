@@ -50,12 +50,14 @@ class UserPasswordChangedEvent(DomainEvent):
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
-        base_dict.update({
-            'password_change': {
-                'changed_at': self.changed_at.isoformat(),
-                'changed_from_ip': self.changed_from_ip
+        base_dict.update(
+            {
+                "password_change": {
+                    "changed_at": self.changed_at.isoformat(),
+                    "changed_from_ip": self.changed_from_ip,
+                }
             }
-        })
+        )
         return base_dict
 
     def __str__(self) -> str:

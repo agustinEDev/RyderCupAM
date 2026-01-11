@@ -1,6 +1,8 @@
 """Tests para EnrollmentStatus Value Object."""
 
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 
 
 class TestEnrollmentStatusTransitions:

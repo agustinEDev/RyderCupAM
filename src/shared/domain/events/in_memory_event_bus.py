@@ -48,8 +48,8 @@ class InMemoryEventBus(EventBus):
                 "event_type": event_type.__name__,
                 "event_id": event.event_id,
                 "aggregate_id": event.aggregate_id,
-                "handlers_count": len(handlers)
-            }
+                "handlers_count": len(handlers),
+            },
         )
 
         if not handlers:
@@ -66,22 +66,24 @@ class InMemoryEventBus(EventBus):
                         f"Handler {handler.__class__.__name__} processed event {event.event_id}",
                         extra={
                             "handler_type": handler.__class__.__name__,
-                            "event_id": event.event_id
-                        }
+                            "event_id": event.event_id,
+                        },
                     )
                 else:
                     self._logger.warning(
                         f"Handler {handler.__class__.__name__} cannot handle event {event_type.__name__}"
                     )
             except Exception as e:
-                error_msg = f"Handler {handler.__class__.__name__} failed to process event {event.event_id}"
+                error_msg = (
+                    f"Handler {handler.__class__.__name__} failed to process event {event.event_id}"
+                )
                 self._logger.error(error_msg, exc_info=True)
 
                 handler_error = EventHandlerError(
                     message=error_msg,
                     event_type=event_type.__name__,
                     handler_type=handler.__class__.__name__,
-                    original_error=e
+                    original_error=e,
                 )
                 errors.append(handler_error)
 
@@ -104,8 +106,7 @@ class InMemoryEventBus(EventBus):
                 await self.publish(event)
             except Exception:
                 self._logger.error(
-                    f"Failed to publish event {event.event_id} in batch",
-                    exc_info=True
+                    f"Failed to publish event {event.event_id} in batch", exc_info=True
                 )
                 # Continuamos con los siguientes eventos
 
@@ -131,8 +132,8 @@ class InMemoryEventBus(EventBus):
             extra={
                 "handler_type": handler.__class__.__name__,
                 "event_type": event_type.__name__,
-                "total_handlers": len(self._handlers[event_type])
-            }
+                "total_handlers": len(self._handlers[event_type]),
+            },
         )
 
     def unregister(self, handler: EventHandler) -> None:
@@ -191,6 +192,6 @@ class InMemoryEventBus(EventBus):
             "handlers_by_event_type": {
                 event_type.__name__: len(handlers)
                 for event_type, handlers in self._handlers.items()
-            }
+            },
         }
         return stats

@@ -18,16 +18,19 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class EnrollmentNotFoundError(Exception):
     """Excepción lanzada cuando la inscripción no existe."""
+
     pass
 
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
@@ -58,9 +61,7 @@ class SetCustomHandicapUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: SetCustomHandicapRequestDTO,
-        creator_id: UserId
+        self, request: SetCustomHandicapRequestDTO, creator_id: UserId
     ) -> SetCustomHandicapResponseDTO:
         """
         Ejecuta el caso de uso de establecer hándicap personalizado.
@@ -84,9 +85,7 @@ class SetCustomHandicapUseCase:
             # 1. Obtener enrollment
             enrollment = await self._uow.enrollments.find_by_id(enrollment_id)
             if not enrollment:
-                raise EnrollmentNotFoundError(
-                    f"Inscripción no encontrada: {request.enrollment_id}"
-                )
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competición
             competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
@@ -120,5 +119,5 @@ class SetCustomHandicapUseCase:
         return SetCustomHandicapResponseDTO(
             id=enrollment.id.value,
             custom_handicap=enrollment.custom_handicap,
-            updated_at=enrollment.updated_at
+            updated_at=enrollment.updated_at,
         )

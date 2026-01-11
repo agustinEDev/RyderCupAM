@@ -17,21 +17,25 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class EnrollmentNotFoundError(Exception):
     """Excepción lanzada cuando la inscripción no existe."""
+
     pass
 
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
 class InvalidActionError(Exception):
     """Excepción lanzada cuando la acción no es válida."""
+
     pass
 
 
@@ -62,9 +66,7 @@ class HandleEnrollmentUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: HandleEnrollmentRequestDTO,
-        creator_id: UserId
+        self, request: HandleEnrollmentRequestDTO, creator_id: UserId
     ) -> HandleEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de manejo de inscripción.
@@ -89,9 +91,7 @@ class HandleEnrollmentUseCase:
             # 1. Obtener enrollment
             enrollment = await self._uow.enrollments.find_by_id(enrollment_id)
             if not enrollment:
-                raise EnrollmentNotFoundError(
-                    f"Inscripción no encontrada: {request.enrollment_id}"
-                )
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competición
             competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
@@ -128,5 +128,5 @@ class HandleEnrollmentUseCase:
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
             status=enrollment.status.value,
-            updated_at=enrollment.updated_at
+            updated_at=enrollment.updated_at,
         )
