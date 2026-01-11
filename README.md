@@ -2,12 +2,12 @@
 
 > REST API para gestión de torneos de golf amateur formato Ryder Cup
 
-[![Tests](https://img.shields.io/badge/tests-853%20passing-success)](.)
+[![Tests](https://img.shields.io/badge/tests-1021%20passing-success)](.)
 [![Python](https://img.shields.io/badge/python-3.11--3.12-blue)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125-009688)](.)
 [![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-green)](.)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF)](.)
-[![Security](https://img.shields.io/badge/security-10.0%2F10-success)](.)
+[![Security](https://img.shields.io/badge/security-9.2%2F10-success)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-ASVS%20V2.1-blue)](https://owasp.org/www-project-application-security-verification-standard/)
 
 ## 🌐 Frontend
@@ -69,11 +69,11 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## ✨ Features API
 
 - ✅ **User Management** - Registro, autenticación JWT, gestión de perfil, verificación email (Mailgun)
-- ✅ **Security** (v1.10.0) - httpOnly cookies, session timeout, security logging, Sentry monitoring
+- ✅ **Security** (v1.13.0) - httpOnly cookies, session timeout, account lockout, CSRF protection, password history, **device fingerprinting con auto-registro**, security logging, Sentry monitoring
 - ✅ **Handicap System** - Integración RFEG, actualización manual y batch
 - ✅ **Competition Module** - CRUD completo, state transitions, enrollment system (20 endpoints)
 - ✅ **Countries** - 166 países con 614 relaciones de fronteras, soporte multilenguaje
-- ⏳ **RAG Chatbot** - Asistente de reglamento de golf (v1.11.0 planeado)
+- ⏳ **RAG Chatbot** - Asistente de reglamento de golf (v1.15.0 planeado)
 - ⏳ **Real-time Scoring** - Resultados en vivo (planeado)
 
 ## 🏗️ Arquitectura
@@ -88,26 +88,26 @@ Python 3.12+ · FastAPI · PostgreSQL 15+ · SQLAlchemy 2.0 · Clean Architectur
 ## 🧪 Testing
 
 ```bash
-python dev_tests.py          # Full suite (853 tests, ~54s con paralelización)
-pytest tests/unit/           # Unit tests (662 tests)
-pytest tests/integration/    # Integration tests (157 tests)
-pytest tests/security/       # Security tests (34 tests)
+python dev_tests.py          # Full suite (1021 tests, ~61s con paralelización)
+pytest tests/unit/           # Unit tests (800+ tests)
+pytest tests/integration/    # Integration tests (180+ tests)
+pytest tests/security/       # Security tests (40+ tests)
 pytest --cov=src             # Con cobertura
 ```
 
 **Estadísticas**:
-- **853 tests** pasando (100% ✅) en ~54 segundos ⭐ Actualizado (19 Dic 2025)
+- **1021 tests** pasando (100% ✅) en ~61 segundos ⭐ Actualizado (10 Ene 2026)
 - **Competition Module**: 174 tests completos (domain, application, infrastructure)
-- **User Module**: 507 tests (incluye password policy + session timeout)
-- **Security Tests**: 34 tests (rate limiting + security headers + httpOnly cookies + XSS + SQL injection)
+- **User Module**: 680+ tests (incluye password policy + session timeout + account lockout + device fingerprinting)
+- **Security Tests**: 45+ tests (rate limiting + CSRF + account lockout + XSS + SQL injection + auth bypass)
 - **Cobertura**: >90% en lógica de negocio
 - **Fix de paralelización**: UUID único por BD de test (pytest-xdist)
 
 ## 🔐 Seguridad
 
-**Puntuación OWASP Top 10 2021**: 10.0/10 ✅ (+1.8 tras v1.8.0-v1.10.0)
+**Puntuación OWASP Top 10 2021**: 9.2/10 ✅ (+2.0 tras v1.8.0-v1.13.0)
 
-**Protecciones Implementadas (v1.10.0)**:
+**Protecciones Implementadas (v1.13.0)**:
 - ✅ **httpOnly Cookies** (dual support) - Previene XSS en tokens (A01, A02)
   - Cookies httpOnly para access_token y refresh_token
   - Compatibilidad transitoria con Authorization header
@@ -140,10 +140,13 @@ pytest --cov=src             # Con cobertura
 - ✅ **HTTPS** obligatorio en producción (Render.com)
 - ✅ **SQL Injection Protection** (SQLAlchemy ORM parameterizado)
 - ✅ **JWT Authentication** con tokens seguros
+- ✅ **Account Lockout** (v1.13.0) - Bloqueo tras 10 intentos fallidos, auto-desbloqueo 30min (A07)
+- ✅ **CSRF Protection** (v1.13.0) - Triple capa: header + cookie + SameSite (A01)
+- ✅ **Password History** (v1.13.0) - Previene reutilización últimas 5 contraseñas (A07)
+- ✅ **Device Fingerprinting** (v1.13.0) - Auto-registro en login/refresh, gestión dispositivos (A01)
 
 **Pendiente**:
-- ⏳ 2FA/MFA (v2.0.0)
-- ⏳ CSRF Tokens (v2.0.0)
+- ⏳ 2FA/MFA (no crítico, OWASP score ya 9.2/10)
 
 Ver [docs/SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) para detalles completos.
 

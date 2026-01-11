@@ -117,12 +117,15 @@ class TestExceptionBehavior:
         details = {
             "validation_errors": ["email format", "password strength"],
             "user_input": {"email": "invalid-email", "password": "123"},
-            "timestamp": "2025-11-01T10:00:00Z"
+            "timestamp": "2025-11-01T10:00:00Z",
         }
 
         error = UserValidationError("Multiple validation errors", details=details)
 
-        assert error.details["validation_errors"] == ["email format", "password strength"]
+        assert error.details["validation_errors"] == [
+            "email format",
+            "password strength",
+        ]
         assert error.details["user_input"]["email"] == "invalid-email"
         assert "timestamp" in error.details
 
@@ -172,7 +175,7 @@ class TestExceptionCatchingScenarios:
             RepositoryConnectionError("Connection lost"),
             RepositoryOperationError("Constraint violation"),
             RepositoryTimeoutError("Query timeout"),
-            RepositoryError("Generic repository error")
+            RepositoryError("Generic repository error"),
         ]
 
         for error in repository_errors:
@@ -185,7 +188,7 @@ class TestExceptionCatchingScenarios:
             UserValidationError("Validation failed"),
             UserNotFoundError("Not found"),
             UserAlreadyExistsError("Already exists"),
-            RepositoryError("Repository error")
+            RepositoryError("Repository error"),
         ]
 
         for error in domain_errors:
@@ -194,9 +197,11 @@ class TestExceptionCatchingScenarios:
 
     def test_specific_error_handling_workflow(self):
         """Verifica un flujo realista de manejo de errores específicos."""
+
         def simulate_repository_operation():
             # Simula diferentes tipos de errores que pueden ocurrir
             import random
+
             error_type = random.choice([1, 2, 3, 4])
 
             if error_type == 1:

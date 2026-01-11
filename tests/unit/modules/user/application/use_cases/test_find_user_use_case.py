@@ -3,7 +3,10 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    FindUserRequestDTO,
+    FindUserResponseDTO,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
@@ -13,6 +16,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 # Marcar todos los tests para ejecutarse con asyncio
 pytestmark = pytest.mark.asyncio
+
 
 class TestFindUserUseCase:
     """
@@ -36,7 +40,7 @@ class TestFindUserUseCase:
             email=Email("test@example.com"),
             password=Password.from_plain_text("s3cur3P@ssw0rd!"),
             first_name="Test",
-            last_name="User"
+            last_name="User",
         )
         return user
 
@@ -52,10 +56,7 @@ class TestFindUserUseCase:
         # Arrange
         mock_uow.users.find_by_email.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email="test@example.com",
-            full_name=None
-        )
+        request = FindUserRequestDTO(email="test@example.com", full_name=None)
 
         # Act
         result = await use_case.execute(request)
@@ -79,10 +80,7 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.return_value = None  # No encontrado por email
         mock_uow.users.find_by_full_name.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email=None,
-            full_name="Test User"
-        )
+        request = FindUserRequestDTO(email=None, full_name="Test User")
 
         # Act
         result = await use_case.execute(request)
@@ -103,10 +101,7 @@ class TestFindUserUseCase:
         # Arrange
         mock_uow.users.find_by_email.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email="test@example.com",
-            full_name="Different User"
-        )
+        request = FindUserRequestDTO(email="test@example.com", full_name="Different User")
 
         # Act
         result = await use_case.execute(request)
@@ -118,7 +113,9 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.assert_called_once()
         mock_uow.users.find_by_full_name.assert_not_called()
 
-    async def test_find_user_falls_back_to_name_when_email_not_found(self, use_case, mock_uow, sample_user):
+    async def test_find_user_falls_back_to_name_when_email_not_found(
+        self, use_case, mock_uow, sample_user
+    ):
         """
         Verifica que se busca por nombre cuando no se encuentra por email.
         """
@@ -126,10 +123,7 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.return_value = None  # No encontrado por email
         mock_uow.users.find_by_full_name.return_value = sample_user
 
-        request = FindUserRequestDTO(
-            email="notfound@example.com",
-            full_name="Test User"
-        )
+        request = FindUserRequestDTO(email="notfound@example.com", full_name="Test User")
 
         # Act
         result = await use_case.execute(request)
@@ -148,10 +142,7 @@ class TestFindUserUseCase:
         # Arrange
         mock_uow.users.find_by_email.return_value = None
 
-        request = FindUserRequestDTO(
-            email="notfound@example.com",
-            full_name=None
-        )
+        request = FindUserRequestDTO(email="notfound@example.com", full_name=None)
 
         # Act & Assert
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -166,10 +157,7 @@ class TestFindUserUseCase:
         # Arrange
         mock_uow.users.find_by_full_name.return_value = None
 
-        request = FindUserRequestDTO(
-            email=None,
-            full_name="Nonexistent User"
-        )
+        request = FindUserRequestDTO(email=None, full_name="Nonexistent User")
 
         # Act & Assert
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -185,10 +173,7 @@ class TestFindUserUseCase:
         mock_uow.users.find_by_email.return_value = None
         mock_uow.users.find_by_full_name.return_value = None
 
-        request = FindUserRequestDTO(
-            email="notfound@example.com",
-            full_name="Nonexistent User"
-        )
+        request = FindUserRequestDTO(email="notfound@example.com", full_name="Nonexistent User")
 
         # Act & Assert
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -216,13 +201,13 @@ class TestFindUserUseCase:
         response = FindUserResponseDTO(
             user_id=sample_user.id.value,
             email=sample_user.email.value,
-            full_name=sample_user.get_full_name()
+            full_name=sample_user.get_full_name(),
         )
 
         # Assert
-        assert hasattr(response, 'user_id')
-        assert hasattr(response, 'email')
-        assert hasattr(response, 'full_name')
+        assert hasattr(response, "user_id")
+        assert hasattr(response, "email")
+        assert hasattr(response, "full_name")
         assert response.user_id == sample_user.id.value
         assert response.email == sample_user.email.value
         assert response.full_name == "Test User"
@@ -237,19 +222,18 @@ class TestFindUserUseCase:
             email=Email("complex@example.com"),
             password=Password.from_plain_text("s3cur3P@ssw0rd!"),
             first_name="María José",
-            last_name="García-López de la Torre"
+            last_name="García-López de la Torre",
         )
 
         mock_uow.users.find_by_full_name.return_value = complex_user
 
-        request = FindUserRequestDTO(
-            email=None,
-            full_name="María José García-López de la Torre"
-        )
+        request = FindUserRequestDTO(email=None, full_name="María José García-López de la Torre")
 
         # Act
         result = await use_case.execute(request)
 
         # Assert
         assert result.full_name == "María José García-López de la Torre"
-        mock_uow.users.find_by_full_name.assert_called_once_with("María José García-López de la Torre")
+        mock_uow.users.find_by_full_name.assert_called_once_with(
+            "María José García-López de la Torre"
+        )

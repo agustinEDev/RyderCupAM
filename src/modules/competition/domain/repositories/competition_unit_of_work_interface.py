@@ -7,7 +7,9 @@ Esta interfaz extiende la base añadiendo acceso a los repositorios de competici
 
 from abc import abstractmethod
 
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 from .competition_repository_interface import CompetitionRepositoryInterface

@@ -70,11 +70,13 @@ class UserLoggedOutEvent(DomainEvent):
         """
         # Obtener diccionario base y agregar campos específicos
         base_dict = super().to_dict()
-        base_dict.update({
-            "user_id": self.user_id,
-            "logged_out_at": self.logged_out_at.isoformat(),
-            "token_used": self.token_used,
-            "ip_address": self.ip_address,
-            "user_agent": self.user_agent,
-        })
+        base_dict.update(
+            {
+                "user_id": self.user_id,
+                "logged_out_at": self.logged_out_at.isoformat(),
+                "token_used": self.token_used,
+                "ip_address": self.ip_address,
+                "user_agent": self.user_agent,
+            }
+        )
         return base_dict

@@ -21,9 +21,7 @@ class TestListCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries"
-        )
+        response = await client.get("/api/v1/countries")
 
         assert response.status_code == 200
         data = response.json()
@@ -39,9 +37,7 @@ class TestListCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries"
-        )
+        response = await client.get("/api/v1/countries")
 
         assert response.status_code == 200
         data = response.json()
@@ -62,9 +58,7 @@ class TestListCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries"
-        )
+        response = await client.get("/api/v1/countries")
 
         assert response.status_code == 200
         data = response.json()
@@ -86,9 +80,7 @@ class TestListAdjacentCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries/ES/adjacent"
-        )
+        response = await client.get("/api/v1/countries/ES/adjacent")
 
         assert response.status_code == 200
         data = response.json()
@@ -107,9 +99,7 @@ class TestListAdjacentCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries/INVALID/adjacent"
-        )
+        response = await client.get("/api/v1/countries/INVALID/adjacent")
 
         assert response.status_code == 400
 
@@ -121,9 +111,7 @@ class TestListAdjacentCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries/XX/adjacent"
-        )
+        response = await client.get("/api/v1/countries/XX/adjacent")
 
         assert response.status_code == 404
 
@@ -135,9 +123,7 @@ class TestListAdjacentCountries:
         )
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            "/api/v1/countries/FR/adjacent"
-        )
+        response = await client.get("/api/v1/countries/FR/adjacent")
 
         assert response.status_code == 200
         data = response.json()

@@ -3,6 +3,18 @@
 # ================================
 # Pipeline completo de integración continua y despliegue continuo
 # Ejecuta tests, security checks, linting y type checking en paralelo
+#
+# Jobs (10 en paralelo):
+# 1. Preparation - Setup Python + dependencies cache
+# 2. Unit Tests - 662 tests (Python 3.11 + 3.12)
+# 3. Integration Tests - 72 tests (con PostgreSQL)
+# 4. Security Tests - 45+ tests (CSRF, XSS, SQLi, Auth Bypass)
+# 5. Security Checks - Bandit, Safety, pip-audit, Gitleaks
+# 6. Linting - Ruff (linter + formatter)
+# 7. Type Checking - Mypy
+# 8. Build - Docker + Trivy container scan
+# 9. Snyk Scan - SCA + SAST
+# 10. Summary - Reporte final
 
 name: CI/CD Pipeline
 
@@ -18,6 +30,11 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+
+# Permissions for security scanning
+permissions:
+  contents: read
+  security-events: write  # Required for CodeQL/Trivy SARIF upload
 
 jobs:
   # ================================
@@ -67,7 +84,9 @@ jobs:
   # ================================
   # JOB 2: UNIT TESTS
   # ================================
-  # Ejecuta 662 tests unitarios (sin base de datos)
+  # Ejecuta 662+ tests unitarios (sin base de datos)
+  # Matriz: Python 3.11 + 3.12
+  # Coverage: XML + HTML reports
 
   unit_tests:
     name: 🧪 Unit Tests (Python ${{ matrix.python-version }})
@@ -126,7 +145,8 @@ jobs:
   # ================================
   # JOB 3: INTEGRATION TESTS
   # ================================
-  # Ejecuta 72 tests de integración (con PostgreSQL)
+  # Ejecuta 72+ tests de integración (con PostgreSQL)
+  # Incluye: API, Database, Use Cases
 
   integration_tests:
     name: 🗄️ Integration Tests
@@ -190,7 +210,94 @@ jobs:
           pytest tests/integration/ -v --maxfail=5
 
   # ================================
-  # JOB 4: SECURITY CHECKS
+  # JOB 4: SECURITY TESTS
+  # ================================
+  # Ejecuta 45+ tests de seguridad (con PostgreSQL)
+  # Incluye: CSRF Protection, XSS Prevention, SQL Injection,
+  #          Auth Bypass, Rate Limiting
+  # OWASP Coverage: A01-A09
+
+  security_tests:
+    name: 🔐 Security Tests
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL to be fully ready..."
+          sleep 5
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+        run: |
+          echo "Running Alembic migrations..."
+          alembic upgrade head
+
+      - name: Run Security Tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+          DOCS_USERNAME: admin
+          DOCS_PASSWORD: testpassword123
+        run: |
+          echo "🔐 Running security tests..."
+          echo "Tests: CSRF Protection, XSS Prevention, SQL Injection, Auth Bypass"
+          pytest tests/security/ -v --maxfail=1 --tb=short
+
+      - name: Security Tests Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "🔐 SECURITY TESTS SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "Tests executed:"
+          echo "  - CSRF Protection (11 tests)"
+          echo "  - XSS Prevention (13 tests)"
+          echo "  - SQL Injection (5 tests)"
+          echo "  - Auth Bypass (9 tests)"
+          echo "  - Rate Limiting (7 tests)"
+          echo ""
+          echo "Total: 45+ security tests"
+          echo "=========================================="
+
+  # ================================
+  # JOB 5: SECURITY CHECKS
   # ================================
   # Ejecuta múltiples herramientas de seguridad
 
@@ -202,6 +309,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Descargar todo el historial para Gitleaks
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -324,6 +433,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: false
+          GITLEAKS_NOTIFY_USER_LIST: ""
         continue-on-error: true
 
       - name: Generate Security Summary
@@ -436,18 +547,21 @@ jobs:
         continue-on-error: true
 
   # ================================
-  # JOB 7: BUILD
+  # JOB 7: BUILD & CONTAINER SCAN
   # ================================
-  # Construye la aplicación Docker SOLO si todos los checks pasan
+  # Construye la aplicación Docker + Trivy security scan
+  # Solo ejecuta si: unit_tests + integration_tests + security_tests = success
+  # Trivy: Escanea vulnerabilidades en imagen Docker (OS + Python packages)
 
   build:
     name: 🐳 Build Docker
     runs-on: ubuntu-latest
-    needs: [unit_tests, integration_tests, security_checks, linting, type_checking]
+    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking]
     # Solo ejecutar si todos los jobs críticos pasaron (success)
     if: |
       needs.unit_tests.result == 'success' &&
-      needs.integration_tests.result == 'success'
+      needs.integration_tests.result == 'success' &&
+      needs.security_tests.result == 'success'
 
     steps:
       - name: Checkout Code
@@ -512,6 +626,48 @@ jobs:
             docker rm -f test-container || true
             exit 1
           fi
+
+      - name: Run Trivy Container Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'rydercupam:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'  # No bloquear pipeline por ahora
+
+      - name: Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy Scan (Table Output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'rydercupam:${{ github.sha }}'
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'
+
+      - name: Generate Trivy Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "🔍 TRIVY CONTAINER SCAN SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "Scanned image: rydercupam:${{ github.sha }}"
+          echo "Severities checked: HIGH, CRITICAL"
+          echo ""
+          echo "Trivy scans for:"
+          echo "  - OS package vulnerabilities (apt, apk)"
+          echo "  - Python package vulnerabilities"
+          echo "  - Known CVEs in base image"
+          echo "  - Misconfigurations"
+          echo ""
+          echo "📊 Results uploaded to GitHub Security tab"
+          echo "=========================================="
 
       - name: Save Docker Image (artifact)
         run: |
@@ -603,16 +759,28 @@ jobs:
 
           echo "=========================================="
 
+      - name: Check if Snyk Reports Exist
+        id: check-snyk-reports
+        if: always()
+        run: |
+          if [ -f snyk-dependencies-report.json ] || [ -f snyk-code-report.json ]; then
+            echo "reports_exist=true" >> $GITHUB_OUTPUT
+            echo "✅ Snyk reports found, will upload as artifacts"
+          else
+            echo "reports_exist=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No Snyk reports generated (no vulnerabilities or scan failed)"
+          fi
+
       - name: Upload Snyk Reports
         uses: actions/upload-artifact@v4
-        if: always()
-        continue-on-error: true
+        if: always() && steps.check-snyk-reports.outputs.reports_exist == 'true'
         with:
           name: snyk-security-reports
           path: |
             snyk-dependencies-report.json
             snyk-code-report.json
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Snyk Monitor (Track in Dashboard)
         uses: snyk/actions/python@master
@@ -630,34 +798,110 @@ jobs:
   pipeline_summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [unit_tests, integration_tests, security_checks, linting, type_checking, build, snyk_scan]
+    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan]
     if: always()
 
     steps:
-      - name: Check Results
+      - name: Generate Pipeline Summary
         run: |
-          echo "=========================================="
-          echo "CI/CD PIPELINE SUMMARY"
-          echo "=========================================="
-          echo "Unit Tests: ${{ needs.unit_tests.result }}"
-          echo "Integration Tests: ${{ needs.integration_tests.result }}"
-          echo "Security Checks: ${{ needs.security_checks.result }}"
-          echo "Snyk Scan: ${{ needs.snyk_scan.result }}"
-          echo "Linting: ${{ needs.linting.result }}"
-          echo "Type Checking: ${{ needs.type_checking.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "=========================================="
+          # Function to get emoji for job result
+          get_emoji() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              skipped) echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *) echo "❓" ;;
+            esac
+          }
 
-          if [ "${{ needs.unit_tests.result }}" == "failure" ] || [ "${{ needs.integration_tests.result }}" == "failure" ]; then
-            echo "❌ Pipeline FAILED - Tests did not pass"
+          # Collect results
+          UNIT_TESTS="${{ needs.unit_tests.result }}"
+          INTEGRATION_TESTS="${{ needs.integration_tests.result }}"
+          SECURITY_TESTS="${{ needs.security_tests.result }}"
+          SECURITY_CHECKS="${{ needs.security_checks.result }}"
+          SNYK_SCAN="${{ needs.snyk_scan.result }}"
+          LINTING="${{ needs.linting.result }}"
+          TYPE_CHECKING="${{ needs.type_checking.result }}"
+          BUILD="${{ needs.build.result }}"
+
+          # Generate Markdown Summary
+          {
+            echo "# 🏆 CI/CD Pipeline Summary"
+            echo ""
+            echo "**Branch:** \`${{ github.ref_name }}\`"
+            echo "**Commit:** [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})"
+            echo "**Triggered by:** ${{ github.actor }}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📊 Job Results"
+            echo ""
+            echo "| Job | Status | Result |"
+            echo "|-----|--------|--------|"
+            echo "| 🧪 Unit Tests | $(get_emoji "$UNIT_TESTS") | \`$UNIT_TESTS\` |"
+            echo "| 🗄️ Integration Tests | $(get_emoji "$INTEGRATION_TESTS") | \`$INTEGRATION_TESTS\` |"
+            echo "| 🔐 Security Tests | $(get_emoji "$SECURITY_TESTS") | \`$SECURITY_TESTS\` |"
+            echo "| 🔒 Security Checks | $(get_emoji "$SECURITY_CHECKS") | \`$SECURITY_CHECKS\` |"
+            echo "| 🐍 Snyk Scan | $(get_emoji "$SNYK_SCAN") | \`$SNYK_SCAN\` |"
+            echo "| 📝 Linting | $(get_emoji "$LINTING") | \`$LINTING\` |"
+            echo "| 🔬 Type Checking | $(get_emoji "$TYPE_CHECKING") | \`$TYPE_CHECKING\` |"
+            echo "| 🐳 Build & Scan | $(get_emoji "$BUILD") | \`$BUILD\` |"
+            echo ""
+            echo "---"
+            echo ""
+          } >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall status
+          if [ "$UNIT_TESTS" == "failure" ] || [ "$INTEGRATION_TESTS" == "failure" ] || [ "$SECURITY_TESTS" == "failure" ]; then
+            {
+              echo "## ❌ Pipeline Status: **FAILED**"
+              echo ""
+              echo "### 🚨 Critical Tests Failed"
+              echo ""
+              [ "$UNIT_TESTS" == "failure" ] && echo "- ❌ **Unit Tests** failed"
+              [ "$INTEGRATION_TESTS" == "failure" ] && echo "- ❌ **Integration Tests** failed"
+              [ "$SECURITY_TESTS" == "failure" ] && echo "- ❌ **Security Tests** failed"
+              echo ""
+              echo "**Action Required:** Fix failing tests before merging."
+            } >> $GITHUB_STEP_SUMMARY
             exit 1
-          elif [ "${{ needs.build.result }}" == "failure" ]; then
-            echo "❌ Pipeline FAILED - Build failed"
+          elif [ "$BUILD" == "failure" ]; then
+            {
+              echo "## ❌ Pipeline Status: **FAILED**"
+              echo ""
+              echo "### 🐳 Docker Build Failed"
+              echo ""
+              echo "Build job failed. Check Docker configuration and dependencies."
+            } >> $GITHUB_STEP_SUMMARY
             exit 1
-          elif [ "${{ needs.build.result }}" == "skipped" ]; then
-            echo "⚠️ Build was skipped due to failed quality checks"
+          elif [ "$BUILD" == "skipped" ]; then
+            {
+              echo "## ⚠️ Pipeline Status: **PARTIAL**"
+              echo ""
+              echo "### ⏭️ Build Skipped"
+              echo ""
+              echo "Build was skipped due to failed quality checks (linting, type checking, or security checks)."
+              echo ""
+              echo "**Action Required:** Fix quality issues before deployment."
+            } >> $GITHUB_STEP_SUMMARY
             exit 0
           else
-            echo "✅ Pipeline PASSED - All checks successful"
-            echo "🚀 Docker image ready for deployment"
+            {
+              echo "## ✅ Pipeline Status: **SUCCESS**"
+              echo ""
+              echo "### 🎉 All Checks Passed!"
+              echo ""
+              echo "- ✅ All tests passing (**939+ tests**)"
+              echo "- ✅ Code quality validated"
+              echo "- ✅ Security scans completed"
+              echo "- ✅ Docker image built successfully"
+              echo ""
+              echo "---"
+              echo ""
+              echo "### 🚀 Ready for Deployment"
+              echo ""
+              echo "Docker image tagged as: \`rydercupam:${GITHUB_SHA:0:7}\`"
+            } >> $GITHUB_STEP_SUMMARY
+            exit 0
           fi

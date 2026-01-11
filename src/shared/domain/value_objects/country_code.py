@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 class InvalidCountryCodeError(Exception):
     """Excepción lanzada cuando un código de país no es válido."""
+
     pass
 
 
@@ -71,12 +72,11 @@ class CountryCode:
         # 3. Validar que solo contenga letras
         if not normalized.isalpha():
             raise InvalidCountryCodeError(
-                f"El código de país solo puede contener letras (A-Z). "
-                f"Se recibió: '{self.value}'"
+                f"El código de país solo puede contener letras (A-Z). Se recibió: '{self.value}'"
             )
 
         # 4. Asignar valor normalizado (usar object.__setattr__ porque es frozen)
-        object.__setattr__(self, 'value', normalized)
+        object.__setattr__(self, "value", normalized)
 
     def __str__(self) -> str:
         """Representación string legible."""

@@ -13,6 +13,7 @@ MAX_COMPETITION_NAME_LENGTH = 100
 
 class InvalidCompetitionNameError(Exception):
     """Excepción lanzada cuando el nombre de una competición no es válido."""
+
     pass
 
 
@@ -69,7 +70,7 @@ class CompetitionName:
 
         # 5. Asignar el valor normalizado y validado
         # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, 'value', capitalized_name)
+        object.__setattr__(self, "value", capitalized_name)
 
     def __str__(self) -> str:
         """Representación string legible."""

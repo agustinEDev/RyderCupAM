@@ -1,4 +1,3 @@
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +13,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     """
     Implementación asíncrona del repositorio de usuarios con SQLAlchemy.
     """
+
     MIN_NAME_PARTS = 2
 
     def __init__(self, session: AsyncSession):
@@ -67,7 +67,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
             statement = select(User).filter(
                 func.lower(User.first_name) == func.lower(first_name),
-                func.lower(User.last_name) == func.lower(last_name)
+                func.lower(User.last_name) == func.lower(last_name),
             )
             result = await self._session.execute(statement)
             user = result.scalar_one_or_none()

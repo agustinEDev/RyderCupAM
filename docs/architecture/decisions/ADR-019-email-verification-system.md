@@ -1,159 +1,91 @@
 # ADR-019: Email Verification System
 
-**Estado**: ✅ Aceptado
-**Fecha**: 12 Nov 2025
+**Status**: ✅ Accepted
+**Date**: Nov 12, 2025
 
 ---
 
-## Contexto
+## Context
 
-Necesitamos verificar que los emails de los usuarios son reales y pertenecen a quien se registra.
+We need to verify that user emails are real and belong to the person registering.
 
-**Requisitos**:
-- Validar propiedad del email
-- Prevenir spam y cuentas falsas
-- Bajo friction en UX (no obligatorio para usar app)
-- Testeable sin enviar emails reales
-- Soporte multiidioma (ES/EN)
-
----
-
-## Decisión
-
-**Sistema de verificación por email con tokens UUID únicos persistidos** + **Mailgun como proveedor**.
-
-### Arquitectura
-
-**Domain Layer**:
-- `User.generate_verification_token()`: Genera UUID4
-- `User.verify_email()`: Marca verificado, emite `EmailVerifiedEvent`
-- Campos: `email_verified: bool`, `verification_token: Optional[str]`
-
-**Application Layer**:
-- `RegisterUserUseCase`: Genera token, envía email en registro
-- `VerifyEmailUseCase`: Valida token, marca usuario como verificado
-
-**Infrastructure Layer**:
-- `EmailService`: Implementación Mailgun API
-- `UserRepository.find_by_verification_token()`: Búsqueda por token
-- Endpoint: `POST /api/v1/auth/verify-email`
-
-**Flujo**:
-1. Registro → genera token UUID → envía email bilingüe
-2. Usuario click link → frontend extrae token
-3. `POST /auth/verify-email` → valida token → marca verificado
-4. Emite `EmailVerifiedEvent` para auditoría
+**Requirements**:
+- Validate email ownership
+- Prevent spam and fake accounts
+- Low UX friction (not mandatory to use app)
+- Testable without sending real emails
+- Multilingual support (ES/EN)
 
 ---
 
-## Alternativas Rechazadas
+## Decision
 
-**1. JWT Firmados como Tokens**
-- ❌ No revocables sin blacklist adicional
-- ✅ **Elegido**: UUID en DB (revocable, testeable)
+**Email verification system with persisted unique UUID tokens** + **Mailgun as provider**.
 
-**2. SendGrid / AWS SES**
-- ❌ SendGrid: Más caro ($15/mes vs gratis)
-- ❌ AWS SES: Requiere verificación de dominio previa
-- ✅ **Elegido**: Mailgun (12k emails/mes gratis, API simple)
+### Architecture
 
-**3. Verificación Obligatoria (Bloquea Login)**
-- ❌ Alta fricción UX (usuarios sin acceso inmediato)
-- ✅ **Elegido**: Opcional (pueden usar app, features limitadas sin verificar)
+**Domain Layer**: User.generate_verification_token(), User.verify_email(), EmailVerifiedEvent
+**Application Layer**: RegisterUserUseCase (generates token, sends email), VerifyEmailUseCase (validates token)
+**Infrastructure Layer**: EmailService (Mailgun API), UserRepository.find_by_verification_token()
+**Endpoint**: POST /api/v1/auth/verify-email
 
-**4. Magic Links (Sin Password)**
-- ❌ Cambia paradigma completo de autenticación
-- ✅ **Elegido**: Email verification separado de auth
+**Flow**:
+1. Registration → UUID token → bilingual email
+2. User clicks link → frontend extracts token
+3. POST /auth/verify-email → validates → marks verified
+4. Emits EmailVerifiedEvent for auditing
 
 ---
 
-## Consecuencias
+## Rejected Alternatives
 
-### Positivas
-✅ **Seguridad**: Solo quien controla el email puede verificar
-✅ **Revocable**: Token en DB, eliminable si necesario
-✅ **Testeable**: Mock email service en tests
-✅ **Clean Architecture**: EmailService en infrastructure
-✅ **UX Flexible**: No bloquea uso de app
-✅ **Bilingüe**: ES/EN desde inicio
-✅ **Auditable**: `EmailVerifiedEvent` registra verificaciones
-
-### Negativas
-⚠️ **Cuentas No Verificadas**: Usuarios pueden usar app sin verificar
-⚠️ **Tokens Sin Expirar**: Implementación actual no expira tokens
-⚠️ **Sin Reenvío**: No hay endpoint para reenviar email
-⚠️ **Dependencia Externa**: Requiere Mailgun disponible
-
-**Mitigaciones**:
-- Limitar features premium a usuarios verificados
-- Fase 2: Expiración (7 días) y reenvío de emails
+**1. Signed JWTs as Tokens**: Not revocable - **UUID in DB chosen** (revocable, testable)
+**2. SendGrid / AWS SES**: More expensive / complex setup - **Mailgun chosen** (12k free emails/month)
+**3. Mandatory Verification**: High UX friction - **Optional chosen** (can use app, limited features)
+**4. Magic Links**: Changes auth paradigm - **Separate verification chosen**
 
 ---
 
-## Configuración
+## Consequences
 
-### Variables de Entorno
-```env
-MAILGUN_API_KEY=...
-MAILGUN_DOMAIN=rydercupfriends.com
-MAILGUN_FROM_EMAIL=noreply@rydercupfriends.com
-MAILGUN_API_URL=https://api.eu.mailgun.net/v3
-FRONTEND_URL=http://localhost:5173  # Vite default port
-```
+### Positive
+✅ **Security**: Only email owner can verify
+✅ **Revocable**: Token in DB, deletable
+✅ **Testable**: Mock email service
+✅ **Clean Architecture**: EmailService in infrastructure
+✅ **Flexible UX**: Doesn't block app usage
+✅ **Bilingual**: ES/EN from start
+✅ **Auditable**: EmailVerifiedEvent
 
-### Migración de Base de Datos
-```sql
-ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN verification_token VARCHAR(255) NULL;
-CREATE INDEX idx_verification_token ON users(verification_token);
-```
+### Negative
+⚠️ **Unverified Accounts**: Users can use app without verification
+⚠️ **Non-Expiring Tokens**: No current expiration
+⚠️ **No Resend**: No resend endpoint
+⚠️ **External Dependency**: Requires Mailgun
 
----
-
-## Integración Frontend
-
-**Componentes Nuevos**:
-- `VerifyEmailPage` (`src/pages/VerifyEmail.jsx`): Página de destino del enlace de verificación
-- `EmailVerificationBanner` (`src/components/EmailVerificationBanner.jsx`): Warning para usuarios no verificados
-
-**Timing UX Optimizado**:
-- 1.5s spinner después de verificación exitosa (feedback visual)
-- 3s mensaje de confirmación antes de redirect (tiempo de lectura)
-- Prevención de ejecución doble (React Strict Mode guard)
-- Actualización automática de localStorage
-
-**Estados Manejados**:
-- `verifying`: Spinner visible durante llamada API
-- `success`: Email verificado → auto-redirect a dashboard
-- `error`: Token inválido/expirado → botones de navegación
-- `invalid`: Token missing → mensaje de error
-
-**Indicadores Visuales**:
-- Dashboard: Banner amarillo si `email_verified === false`
-- Profile: Badge verde/amarillo según estado de verificación
-- Login: Log en consola si `email_verification_required === true`
-
-**Referencias**: Ver `RyderCupWeb/CLAUDE.md` para detalles completos de implementación frontend.
+**Mitigations**: Limit premium features to verified users, Phase 2: token expiration (7 days) + resend
 
 ---
 
-## Métricas
+## Configuration
 
-**Backend**:
-- **Archivos nuevos**: 3 (EmailService, VerifyEmailUseCase, EmailVerifiedEvent)
-- **Archivos modificados**: 8 (User entity, DTOs, repositories, routes, mappers)
-- **Tests añadidos**: 15+ (unit + integration)
-- **Endpoints**: +1 (`POST /auth/verify-email`)
-- **Domain Events**: +1 (`EmailVerifiedEvent`)
+**Environment Variables**: MAILGUN_API_KEY, MAILGUN_DOMAIN, MAILGUN_FROM_EMAIL, MAILGUN_API_URL, FRONTEND_URL
 
-**Frontend**:
-- **Componentes nuevos**: 2 (VerifyEmailPage, EmailVerificationBanner)
-- **Páginas modificadas**: 4 (App, Dashboard, Login, Profile, EditProfile)
-- **Rutas añadidas**: 1 (`/verify-email`)
+**Database Migration**: Added email_verified (bool), verification_token (varchar), index on verification_token
 
 ---
 
-## Referencias
+## Frontend Integration
+
+**New Components**: VerifyEmailPage, EmailVerificationBanner
+**Modified Pages**: Dashboard, Profile, Login
+**Optimized UX**: 1.5s spinner + 3s confirmation + auto-redirect
+**States**: verifying, success, error, invalid
+**Visual Indicators**: Yellow banner if unverified, badges in profile
+
+---
+
+## References
 
 - [ADR-007: Domain Events Pattern](./ADR-007-domain-events-pattern.md)
 - [ADR-013: External Services Pattern](./ADR-013-external-services-pattern.md)

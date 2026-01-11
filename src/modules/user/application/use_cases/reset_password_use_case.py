@@ -23,6 +23,7 @@ from src.modules.user.application.dto.user_dto import (
     ResetPasswordResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -50,11 +51,7 @@ class ResetPasswordUseCase:
     - Logout forzado en todos los dispositivos
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        email_service: IEmailService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
         """
         Inicializa el caso de uso.
 
@@ -65,10 +62,7 @@ class ResetPasswordUseCase:
         self._uow = uow
         self._email_service = email_service
 
-    async def execute(
-        self,
-        request: ResetPasswordRequestDTO
-    ) -> ResetPasswordResponseDTO:
+    async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """
         Ejecuta el caso de uso de reseteo de contraseña.
 
@@ -130,7 +124,7 @@ class ResetPasswordUseCase:
                 token=request.token,
                 new_password=request.new_password,
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
         except ValueError as e:
             # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
@@ -144,21 +138,29 @@ class ResetPasswordUseCase:
             )
             raise  # Re-lanzar la excepción para que el API layer la maneje
 
-        # Guardar usuario con nueva contraseña y revocar todos los refresh tokens
-        # Ambas operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
+        # Guardar usuario con nueva contraseña, historial y revocar todos los refresh tokens
+        # Todas las operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
         async with self._uow:
+            # Guardar el nuevo hash en el historial de contraseñas
+            total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
+            password_history = PasswordHistory.create(
+                user_id=user.id,
+                password_hash=user.password.hashed_value,
+                total_history_count=total_history_count,
+            )
+            await self._uow.password_history.save(password_history)
+
             # Revocar TODOS los refresh tokens del usuario (logout forzado)
             # Esto asegura que todas las sesiones activas se cierren
             await self._uow.refresh_tokens.revoke_all_for_user(user.id)
 
             # Guardar usuario con nueva contraseña y token invalidado
             await self._uow.users.save(user)
-            # Commit automático al salir del contexto (ambas operaciones atomicas)
+            # Commit automático al salir del contexto (todas las operaciones atomicas)
 
         # Enviar email de confirmación
         await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value),
-            user_name=user.get_full_name()
+            to_email=str(user.email.value), user_name=user.get_full_name()
         )
 
         # Security Logging: Reseteo exitoso
@@ -174,5 +176,5 @@ class ResetPasswordUseCase:
         # Retornar mensaje de confirmación
         return ResetPasswordResponseDTO(
             message="Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad.",
-            email=str(user.email.value)
+            email=str(user.email.value),
         )

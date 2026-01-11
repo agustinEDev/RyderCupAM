@@ -10,7 +10,9 @@ import pytest
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateProfileRequestDTO
-from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
+from src.modules.user.application.use_cases.update_profile_use_case import (
+    UpdateProfileUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -43,7 +45,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="V@l1dP@ss123!"
+        plain_password="V@l1dP@ss123!",
     )
 
     async with uow:
@@ -62,10 +64,7 @@ class TestUpdateProfileUseCase:
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
-        request = UpdateProfileRequestDTO(
-            first_name="Jane",
-            last_name=None
-        )
+        request = UpdateProfileRequestDTO(first_name="Jane", last_name=None)
 
         # Act
         response = await use_case.execute(user_id, request)
@@ -85,10 +84,7 @@ class TestUpdateProfileUseCase:
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
-        request = UpdateProfileRequestDTO(
-            first_name=None,
-            last_name="Smith"
-        )
+        request = UpdateProfileRequestDTO(first_name=None, last_name="Smith")
 
         # Act
         response = await use_case.execute(user_id, request)
@@ -104,10 +100,7 @@ class TestUpdateProfileUseCase:
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
-        request = UpdateProfileRequestDTO(
-            first_name="Jane",
-            last_name="Smith"
-        )
+        request = UpdateProfileRequestDTO(first_name="Jane", last_name="Smith")
 
         # Act
         response = await use_case.execute(user_id, request)
@@ -122,10 +115,7 @@ class TestUpdateProfileUseCase:
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         non_existent_id = "00000000-0000-0000-0000-000000000000"
-        request = UpdateProfileRequestDTO(
-            first_name="Jane",
-            last_name=None
-        )
+        request = UpdateProfileRequestDTO(first_name="Jane", last_name=None)
 
         # Act & Assert
         with pytest.raises(UserNotFoundError):
@@ -141,7 +131,7 @@ class TestUpdateProfileUseCase:
         with pytest.raises(ValidationError):
             UpdateProfileRequestDTO(
                 first_name="A",  # Muy corto
-                last_name=None
+                last_name=None,
             )
 
     async def test_no_update_when_values_are_same(self, uow, country_repository, existing_user):
@@ -151,7 +141,7 @@ class TestUpdateProfileUseCase:
         user_id = str(existing_user.id.value)
         request = UpdateProfileRequestDTO(
             first_name="John",  # Mismo valor
-            last_name="Doe"     # Mismo valor
+            last_name="Doe",  # Mismo valor
         )
 
         # Act
@@ -167,10 +157,7 @@ class TestUpdateProfileUseCase:
         # Arrange
         use_case = UpdateProfileUseCase(uow, country_repository)
         user_id = str(existing_user.id.value)
-        request = UpdateProfileRequestDTO(
-            first_name="Jane",
-            last_name=None
-        )
+        request = UpdateProfileRequestDTO(first_name="Jane", last_name=None)
 
         # Act
         response = await use_case.execute(user_id, request)

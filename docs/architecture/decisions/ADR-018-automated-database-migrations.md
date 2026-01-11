@@ -1,160 +1,114 @@
 # ADR-018: Automated Database Migrations in Production
 
-**Estado**: ✅ Aceptado
-**Fecha**: 11 Nov 2025
+**Status**: ✅ Accepted
+**Date**: Nov 11, 2025
 
 ---
 
-## Contexto
+## Context
 
-Necesitamos sincronizar schema de base de datos con código en cada deployment a producción.
+We need to synchronize database schema with code on each production deployment.
 
-**Problema**: Migraciones manuales son propensas a errores y requieren intervención humana en deploys.
+**Problem**: Manual migrations are error-prone and require human intervention in deploys.
 
-**Alternativas**:
-1. **Manual Migrations**: Ejecutar `alembic upgrade head` manualmente vía SSH/Shell
-2. **Separate CD Pipeline**: Migrations como step independiente antes de deploy
-3. **Automated in Entrypoint**: Migrations ejecutadas automáticamente al iniciar app
-4. **Blue-Green Deployment**: Migrations en pre-deploy hook
-
----
-
-## Decisión
-
-**Ejecutar migraciones automáticamente en `entrypoint.sh` antes de iniciar la aplicación.**
-
-### Implementación (`entrypoint.sh`):
-
-```bash
-#!/bin/bash
-set -e
-
-echo "🚀 Iniciando Ryder Cup Manager API..."
-
-# 1. Wait for PostgreSQL
-echo "⏳ Esperando PostgreSQL..."
-while ! pg_isready -h $DB_HOST -p $DB_PORT; do
-  sleep 1
-done
-echo "✅ PostgreSQL está disponible"
-
-# 2. Run Migrations
-echo "🔄 Ejecutando migraciones de base de datos..."
-alembic upgrade head
-echo "✅ Migraciones completadas exitosamente"
-
-# 3. Start Application
-echo "🎯 Iniciando aplicación FastAPI en puerto $PORT..."
-exec uvicorn main:app --host 0.0.0.0 --port $PORT
-```
-
-### Comportamiento en Deploy:
-
-1. **Render detecta push** → Trigger build
-2. **Docker build** → Crea imagen
-3. **Container start** → Ejecuta `entrypoint.sh`
-4. **Wait for DB** → Verifica conectividad
-5. **Run migrations** → `alembic upgrade head`
-   - ✅ **Si éxito**: Continuar a paso 6
-   - ❌ **Si falla**: Deploy se detiene, container no inicia
-6. **Start app** → FastAPI disponible
+**Alternatives**:
+1. **Manual Migrations**: Run `alembic upgrade head` manually via SSH/Shell
+2. **Separate CD Pipeline**: Migrations as independent step before deploy
+3. **Automated in Entrypoint**: Migrations executed automatically when starting app
+4. **Blue-Green Deployment**: Migrations in pre-deploy hook
 
 ---
 
-## Justificación
+## Decision
 
-**¿Por qué automático?**
-- ✅ Zero intervención manual
-- ✅ Deploy atómico (schema + código sincronizados)
-- ✅ Rollback simple (redeploy commit anterior)
-- ✅ Fail-safe: app no inicia si migración falla
+**Execute migrations automatically in `entrypoint.sh` before starting the application.**
 
-**¿Por qué en entrypoint.sh?**
-- Integración nativa con Docker
-- Sin dependencias de CI/CD externo
-- Portable a cualquier plataforma
+### Implementation
 
-**¿Por qué NOT separate pipeline?**
-- Complejidad innecesaria para MVP
-- Mayor time-to-deploy
-- Dos puntos de fallo vs uno
+**entrypoint.sh flow**:
+1. Wait for PostgreSQL (pg_isready)
+2. Run migrations (alembic upgrade head)
+3. Start application (uvicorn main:app)
 
----
-
-## Consecuencias
-
-### Positivas
-- ✅ Deployment totalmente automatizado
-- ✅ Seguridad: app no inicia con schema incorrecto
-- ✅ Logs claros de éxito/fallo de migrations
-- ✅ Consistencia: mismo proceso dev/prod
-
-### Negativas
-- ⚠️ Downtime durante migraciones (si son lentas)
-- ⚠️ Migraciones destructivas sin rollback automático
-- ⚠️ Sin backups automáticos (plan Free de Render)
-
-### Mitigaciones
-- **Downtime**: Migraciones deben ser no-bloqueantes (expand-contract pattern)
-- **Destructivas**: Testing local obligatorio, revisión de código estricta
-- **Backups**: Plan upgrade ($7/mes) o backups manuales antes de deploys críticos
+**Deployment Behavior**:
+1. Render detects push → Trigger build
+2. Docker build → Create image
+3. Container start → Execute entrypoint.sh
+4. Wait for DB → Verify connectivity
+5. Run migrations → Success continues / Failure stops deploy
+6. Start app → FastAPI available
 
 ---
 
-## Restricciones de Migraciones
+## Justification
 
-Para garantizar zero-downtime:
+**Why automatic?**
+- ✅ Zero manual intervention
+- ✅ Atomic deploy (schema + code synchronized)
+- ✅ Simple rollback (redeploy previous commit)
+- ✅ Fail-safe: app doesn't start if migration fails
 
-1. **NUNCA** eliminar columnas directamente
-   - ✅ Usar expand-contract: agregar nueva → migrar datos → eliminar vieja
-2. **NUNCA** renombrar tablas en una migración
-   - ✅ Dividir en: crear nueva → copiar datos → eliminar vieja
-3. **SIEMPRE** hacer cambios de schema backward-compatible
-   - ✅ Agregar columnas como `nullable=True`
-   - ✅ Usar defaults para columnas NOT NULL nuevas
-
----
-
-## Validación en Cada Deploy
-
-Verificar en logs de Render:
-- [ ] `⏳ Esperando PostgreSQL...`
-- [ ] `✅ PostgreSQL está disponible`
-- [ ] `🔄 Ejecutando migraciones de base de datos...`
-- [ ] `✅ Migraciones completadas exitosamente`
-- [ ] `🎯 Iniciando aplicación FastAPI...`
-
-Si falta cualquiera → **Deploy falló**
+**Why in entrypoint.sh?**
+- Native Docker integration
+- No external CI/CD dependencies
+- Portable to any platform
 
 ---
 
-## Rollback de Migraciones
+## Consequences
 
-**Si migración causa problemas en producción**:
+### Positive
+- ✅ Fully automated deployment
+- ✅ Security: app doesn't start with incorrect schema
+- ✅ Clear logs of migration success/failure
+- ✅ Consistency: same process dev/prod
 
-**Opción 1: Revert commit + push**
-```bash
-git revert HEAD
-git push origin develop
-# Auto-deploy ejecuta migración inversa (downgrade)
-```
+### Negative
+- ⚠️ Downtime during migrations (if slow)
+- ⚠️ Destructive migrations without automatic rollback
+- ⚠️ No automatic backups (Render Free plan)
 
-**Opción 2: Downgrade manual** (Shell de Render)
-```bash
-alembic downgrade -1
-# Redeploy commit anterior
-```
-
-**Opción 3: Rollback a versión específica**
-```bash
-alembic downgrade <revision_id>
-```
+### Mitigations
+- **Downtime**: Use expand-contract pattern (non-blocking migrations)
+- **Destructive**: Mandatory local testing, strict code review
+- **Backups**: Plan upgrade or manual backups before critical deploys
 
 ---
 
-## Referencias
+## Migration Restrictions
+
+**To ensure zero-downtime:**
+
+1. NEVER delete columns directly → Use expand-contract (add new → migrate → delete old)
+2. NEVER rename tables in one migration → Split into: create new → copy data → delete old
+3. ALWAYS make schema changes backward-compatible → Add columns as nullable, use defaults for NOT NULL
+
+---
+
+## Validation on Each Deploy
+
+Verify in Render logs:
+- [ ] ⏳ Waiting for PostgreSQL...
+- [ ] ✅ PostgreSQL is available
+- [ ] 🔄 Running database migrations...
+- [ ] ✅ Migrations completed successfully
+- [ ] 🎯 Starting FastAPI application...
+
+---
+
+## Migration Rollback
+
+**If migration causes problems:**
+
+**Option 1: Revert commit + push** → Auto-deploy executes inverse migration
+**Option 2: Manual downgrade** (Render Shell) → `alembic downgrade -1` + redeploy
+**Option 3: Rollback to specific version** → `alembic downgrade <revision_id>`
+
+---
+
+## References
 
 - [Alembic Documentation](https://alembic.sqlalchemy.org/)
 - [Expand-Contract Pattern](https://www.martinfowler.com/bliki/ParallelChange.html)
 - [ADR-016: Render Deployment Strategy](./ADR-016-render-deployment-strategy.md)
-- `entrypoint.sh` - Implementación actual
+- `entrypoint.sh` - Current implementation

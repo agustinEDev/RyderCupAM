@@ -20,11 +20,7 @@ class TestUserRoutes:
         # Primero registramos un usuario y obtenemos su token
 
         auth_data = await create_authenticated_user(
-            client,
-            "test_user@example.com",
-            "s3cur3P@ssw0rd!",
-            "Test",
-            "User"
+            client, "test_user@example.com", "s3cur3P@ssw0rd!", "Test", "User"
         )
         token = auth_data["token"]
 
@@ -32,7 +28,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"email": "test_user@example.com"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -49,11 +45,7 @@ class TestUserRoutes:
         # Primero registramos un usuario
 
         auth_data = await create_authenticated_user(
-            client,
-            "john.doe@example.com",
-            "s3cur3P@ssw0rd!",
-            "John",
-            "Doe"
+            client, "john.doe@example.com", "s3cur3P@ssw0rd!", "John", "Doe"
         )
         token = auth_data["token"]
 
@@ -61,7 +53,7 @@ class TestUserRoutes:
         search_response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "John Doe"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -78,11 +70,7 @@ class TestUserRoutes:
         # Registramos dos usuarios
 
         auth_data1 = await create_authenticated_user(
-            client,
-            "user1@example.com",
-            "s3cur3P@ssw0rd!",
-            "Jane",
-            "Smith"
+            client, "user1@example.com", "s3cur3P@ssw0rd!", "Jane", "Smith"
         )
         token = auth_data1["token"]
 
@@ -90,7 +78,7 @@ class TestUserRoutes:
             "email": "user2@example.com",
             "password": "s3cur3P@ssw0rd!",
             "first_name": "John",
-            "last_name": "Smith"
+            "last_name": "Smith",
         }
 
         await client.post("/api/v1/auth/register", json=user2_data)
@@ -98,11 +86,8 @@ class TestUserRoutes:
         # Buscamos con email de user1 pero nombre de user2
         search_response = await client.get(
             "/api/v1/users/search",
-            params={
-                "email": "user1@example.com",
-                "full_name": "John Smith"
-            },
-            headers={"Authorization": f"Bearer {token}"}
+            params={"email": "user1@example.com", "full_name": "John Smith"},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_response.status_code == status.HTTP_200_OK
@@ -119,18 +104,14 @@ class TestUserRoutes:
         # Crear usuario autenticado para hacer la búsqueda
 
         auth_data = await create_authenticated_user(
-            client,
-            "searcher@example.com",
-            "s3cur3P@ssw0rd!",
-            "Searcher",
-            "User"
+            client, "searcher@example.com", "s3cur3P@ssw0rd!", "Searcher", "User"
         )
         token = auth_data["token"]
 
         search_response = await client.get(
             "/api/v1/users/search",
             params={"email": "nonexistent@example.com"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
@@ -146,18 +127,14 @@ class TestUserRoutes:
         # Crear usuario autenticado para hacer la búsqueda
 
         auth_data = await create_authenticated_user(
-            client,
-            "searcher2@example.com",
-            "s3cur3P@ssw0rd!",
-            "Searcher",
-            "User"
+            client, "searcher2@example.com", "s3cur3P@ssw0rd!", "Searcher", "User"
         )
         token = auth_data["token"]
 
         search_response = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Nonexistent User"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_response.status_code == status.HTTP_404_NOT_FOUND
@@ -173,17 +150,12 @@ class TestUserRoutes:
         # Crear usuario autenticado para hacer la búsqueda
 
         auth_data = await create_authenticated_user(
-            client,
-            "searcher3@example.com",
-            "s3cur3P@ssw0rd!",
-            "Searcher",
-            "Third"
+            client, "searcher3@example.com", "s3cur3P@ssw0rd!", "Searcher", "Third"
         )
         token = auth_data["token"]
 
         search_response = await client.get(
-            "/api/v1/users/search",
-            headers={"Authorization": f"Bearer {token}"}
+            "/api/v1/users/search", headers={"Authorization": f"Bearer {token}"}
         )
 
         assert search_response.status_code == status.HTTP_400_BAD_REQUEST
@@ -199,11 +171,7 @@ class TestUserRoutes:
         # Registramos un usuario y obtenemos su token
 
         auth_data = await create_authenticated_user(
-            client,
-            "case.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "Case",
-            "Test"
+            client, "case.test@example.com", "s3cur3P@ssw0rd!", "Case", "Test"
         )
         token = auth_data["token"]
 
@@ -214,7 +182,7 @@ class TestUserRoutes:
             search_response = await client.get(
                 "/api/v1/users/search",
                 params={"full_name": search_name},
-                headers={"Authorization": f"Bearer {token}"}
+                headers={"Authorization": f"Bearer {token}"},
             )
 
             assert search_response.status_code == status.HTTP_200_OK
@@ -229,11 +197,7 @@ class TestUserRoutes:
         # Registramos a Rafael Nadal y obtenemos su token
 
         auth_data = await create_authenticated_user(
-            client,
-            "rafa_nadal@prueba.com",
-            "s3cur3P@ssw0rd!",
-            "Rafael",
-            "Nadal Parera"
+            client, "rafa_nadal@prueba.com", "s3cur3P@ssw0rd!", "Rafael", "Nadal Parera"
         )
         token = auth_data["token"]
 
@@ -241,7 +205,7 @@ class TestUserRoutes:
         search_by_email = await client.get(
             "/api/v1/users/search",
             params={"email": "rafa_nadal@prueba.com"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_by_email.status_code == status.HTTP_200_OK
@@ -252,7 +216,7 @@ class TestUserRoutes:
         search_by_name = await client.get(
             "/api/v1/users/search",
             params={"full_name": "Rafael Nadal Parera"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert search_by_name.status_code == status.HTTP_200_OK
@@ -270,11 +234,7 @@ class TestUserRoutes:
         """Verifica que se puede actualizar solo el nombre."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "profile.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "Original",
-            "Name"
+            client, "profile.test@example.com", "s3cur3P@ssw0rd!", "Original", "Name"
         )
         token = auth_data["token"]
 
@@ -282,7 +242,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "Updated", "last_name": None},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -295,11 +255,7 @@ class TestUserRoutes:
         """Verifica que se puede actualizar solo el apellido."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "profile2.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "John",
-            "Original"
+            client, "profile2.test@example.com", "s3cur3P@ssw0rd!", "John", "Original"
         )
         token = auth_data["token"]
 
@@ -307,7 +263,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": None, "last_name": "Updated"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -319,11 +275,7 @@ class TestUserRoutes:
         """Verifica que se pueden actualizar ambos campos."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "profile3.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "Old",
-            "Names"
+            client, "profile3.test@example.com", "s3cur3P@ssw0rd!", "Old", "Names"
         )
         token = auth_data["token"]
 
@@ -331,7 +283,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "New", "last_name": "Names"},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -342,8 +294,7 @@ class TestUserRoutes:
     async def test_update_profile_requires_authentication(self, client: AsyncClient):
         """Verifica que se requiere autenticación."""
         update_response = await client.patch(
-            "/api/v1/users/profile",
-            json={"first_name": "New", "last_name": None}
+            "/api/v1/users/profile", json={"first_name": "New", "last_name": None}
         )
 
         # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
@@ -353,11 +304,7 @@ class TestUserRoutes:
         """Verifica que no se aceptan strings vacíos (validación Pydantic)."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "profile4.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "Test",
-            "User"
+            client, "profile4.test@example.com", "s3cur3P@ssw0rd!", "Test", "User"
         )
         token = auth_data["token"]
 
@@ -365,7 +312,7 @@ class TestUserRoutes:
         update_response = await client.patch(
             "/api/v1/users/profile",
             json={"first_name": "", "last_name": None},
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         # Pydantic devuelve 422 para errores de validación
@@ -379,11 +326,7 @@ class TestUserRoutes:
         """Verifica que se puede actualizar solo el email."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "security.test@example.com",
-            "s3cur3P@ssw0rd!",
-            "Security",
-            "Test"
+            client, "security.test@example.com", "s3cur3P@ssw0rd!", "Security", "Test"
         )
         token = auth_data["token"]
 
@@ -394,9 +337,9 @@ class TestUserRoutes:
                 "current_password": "s3cur3P@ssw0rd!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
-                "confirm_password": None
+                "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -408,11 +351,7 @@ class TestUserRoutes:
         """Verifica que se puede actualizar solo el password."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "security2.test@example.com",
-            "0ldP@ssw0rd!",
-            "SecurityTwo",
-            "Test"
+            client, "security2.test@example.com", "0ldP@ssw0rd!", "SecurityTwo", "Test"
         )
         token = auth_data["token"]
 
@@ -423,9 +362,9 @@ class TestUserRoutes:
                 "current_password": "0ldP@ssw0rd!",
                 "new_email": None,
                 "new_password": "n3wP@ssw0rd!",
-                "confirm_password": "n3wP@ssw0rd!"
+                "confirm_password": "n3wP@ssw0rd!",
             },
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -433,10 +372,7 @@ class TestUserRoutes:
         # Verificar que el nuevo password funciona
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "security2.test@example.com",
-                "password": "n3wP@ssw0rd!"
-            }
+            json={"email": "security2.test@example.com", "password": "n3wP@ssw0rd!"},
         )
         assert login_response.status_code == status.HTTP_200_OK
 
@@ -448,7 +384,7 @@ class TestUserRoutes:
             "security3.test@example.com",
             "0ldP@ssw0rd!",
             "SecurityThree",
-            "Test"
+            "Test",
         )
         token = auth_data["token"]
 
@@ -459,9 +395,9 @@ class TestUserRoutes:
                 "current_password": "0ldP@ssw0rd!",
                 "new_email": "newemail3@example.com",
                 "new_password": "n3wP@ssw0rd!9",
-                "confirm_password": "n3wP@ssw0rd!9"
+                "confirm_password": "n3wP@ssw0rd!9",
             },
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_200_OK
@@ -471,10 +407,7 @@ class TestUserRoutes:
         # Verificar login con nuevo email y password
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "newemail3@example.com",
-                "password": "n3wP@ssw0rd!9"
-            }
+            json={"email": "newemail3@example.com", "password": "n3wP@ssw0rd!9"},
         )
         assert login_response.status_code == status.HTTP_200_OK
 
@@ -482,11 +415,7 @@ class TestUserRoutes:
         """Verifica que rechaza password actual incorrecto."""
 
         auth_data = await create_authenticated_user(
-            client,
-            "security4.test@example.com",
-            "C0rr3ctP@ss!",
-            "SecurityFour",
-            "Test"
+            client, "security4.test@example.com", "C0rr3ctP@ss!", "SecurityFour", "Test"
         )
         token = auth_data["token"]
 
@@ -497,9 +426,9 @@ class TestUserRoutes:
                 "current_password": "Wr0ngP@ssw0rd!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
-                "confirm_password": None
+                "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -510,19 +439,11 @@ class TestUserRoutes:
 
         # Crear dos usuarios
         auth_data1 = await create_authenticated_user(
-            client,
-            "user1@example.com",
-            "S3cur3P@ss123!",
-            "UserOne",
-            "Test"
+            client, "user1@example.com", "S3cur3P@ss123!", "UserOne", "Test"
         )
 
         await create_authenticated_user(
-            client,
-            "user2@example.com",
-            "S3cur3P@ss123!",
-            "UserTwo",
-            "Test"
+            client, "user2@example.com", "S3cur3P@ss123!", "UserTwo", "Test"
         )
 
         token1 = auth_data1["token"]
@@ -534,9 +455,9 @@ class TestUserRoutes:
                 "current_password": "S3cur3P@ss123!",
                 "new_email": "user2@example.com",  # Ya existe
                 "new_password": None,
-                "confirm_password": None
+                "confirm_password": None,
             },
-            headers={"Authorization": f"Bearer {token1}"}
+            headers={"Authorization": f"Bearer {token1}"},
         )
 
         assert update_response.status_code == status.HTTP_409_CONFLICT
@@ -550,8 +471,8 @@ class TestUserRoutes:
                 "current_password": "p@ssw0rd1234!",
                 "new_email": "newemail@example.com",
                 "new_password": None,
-                "confirm_password": None
-            }
+                "confirm_password": None,
+            },
         )
 
         # Con HTTPOnly Cookies, devuelve 401 cuando no hay autenticación
@@ -565,7 +486,7 @@ class TestUserRoutes:
             "security5.test@example.com",
             "S3cur3P@ss123!",
             "SecurityFive",
-            "Test"
+            "Test",
         )
         token = auth_data["token"]
 
@@ -576,9 +497,9 @@ class TestUserRoutes:
                 "current_password": "S3cur3P@ss123!",
                 "new_email": None,
                 "new_password": "N3wS3cur3P@ss!",
-                "confirm_password": "D1ff3r3ntP@ss!"
+                "confirm_password": "D1ff3r3ntP@ss!",
             },
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

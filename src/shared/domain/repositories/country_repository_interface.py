@@ -59,11 +59,7 @@ class CountryRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def are_adjacent(
-        self,
-        country1: CountryCode,
-        country2: CountryCode
-    ) -> bool:
+    async def are_adjacent(self, country1: CountryCode, country2: CountryCode) -> bool:
         """
         Verifica si dos países son adyacentes (comparten frontera).
 

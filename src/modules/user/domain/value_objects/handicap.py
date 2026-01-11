@@ -25,6 +25,7 @@ class Handicap:
         >>> Handicap(60.0)  # Lanza ValueError (rango inválido)
         >>> Handicap("15.5")  # Lanza TypeError (tipo inválido)
     """
+
     MIN_HANDICAP = -10.0
     MAX_HANDICAP = 54.0
     value: float
@@ -51,7 +52,7 @@ class Handicap:
         return self.value
 
     @classmethod
-    def from_optional(cls, value: float | None) -> Optional['Handicap']:
+    def from_optional(cls, value: float | None) -> Optional["Handicap"]:
         """
         Crea un Handicap desde un valor opcional.
 

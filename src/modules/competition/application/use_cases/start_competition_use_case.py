@@ -18,11 +18,13 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCompetitionCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
@@ -56,9 +58,7 @@ class StartCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: StartCompetitionRequestDTO,
-        user_id: UserId
+        self, request: StartCompetitionRequestDTO, user_id: UserId
     ) -> StartCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de inicio de competición.
@@ -87,9 +87,7 @@ class StartCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede iniciar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede iniciar la competición")
 
             # 3. Iniciar la competición (la entidad valida la transición)
             competition.start()
@@ -104,5 +102,5 @@ class StartCompetitionUseCase:
         return StartCompetitionResponseDTO(
             id=competition.id.value,
             status=competition.status.value,
-            started_at=competition.updated_at
+            started_at=competition.updated_at,
         )

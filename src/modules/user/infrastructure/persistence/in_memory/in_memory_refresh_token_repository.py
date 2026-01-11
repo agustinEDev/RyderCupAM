@@ -3,6 +3,7 @@ In-Memory Refresh Token Repository for Testing.
 
 Implementación en memoria del repositorio de refresh tokens para tests unitarios.
 """
+
 from datetime import datetime
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -80,11 +81,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Lista de RefreshTokens
         """
-        return [
-            token
-            for token in self._tokens.values()
-            if token.user_id.value == user_id.value
-        ]
+        return [token for token in self._tokens.values() if token.user_id.value == user_id.value]
 
     async def revoke_all_for_user(self, user_id: UserId) -> int:
         """
@@ -110,11 +107,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         Returns:
             Número de tokens eliminados
         """
-        expired_ids = [
-            token_id
-            for token_id, token in self._tokens.items()
-            if token.is_expired()
-        ]
+        expired_ids = [token_id for token_id, token in self._tokens.items() if token.is_expired()]
 
         for token_id in expired_ids:
             del self._tokens[token_id]
@@ -135,9 +128,7 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         return sum(
             1
             for token in self._tokens.values()
-            if token.user_id.value == user_id.value
-            and not token.revoked
-            and token.expires_at > now
+            if token.user_id.value == user_id.value and not token.revoked and token.expires_at > now
         )
 
     async def delete(self, token_id: RefreshTokenId) -> bool:

@@ -18,11 +18,13 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCompetitionCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
@@ -56,9 +58,7 @@ class CompleteCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: CompleteCompetitionRequestDTO,
-        user_id: UserId
+        self, request: CompleteCompetitionRequestDTO, user_id: UserId
     ) -> CompleteCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de completar competición.
@@ -87,9 +87,7 @@ class CompleteCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede completar la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede completar la competición")
 
             # 3. Completar la competición (la entidad valida la transición)
             competition.complete()
@@ -104,5 +102,5 @@ class CompleteCompetitionUseCase:
         return CompleteCompetitionResponseDTO(
             id=competition.id.value,
             status=competition.status.value,
-            completed_at=competition.updated_at
+            completed_at=competition.updated_at,
         )

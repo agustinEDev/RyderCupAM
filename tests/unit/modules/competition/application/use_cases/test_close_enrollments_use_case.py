@@ -47,9 +47,7 @@ class TestCloseEnrollmentsUseCase:
         return UserId(uuid4())
 
     async def test_should_close_enrollments_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se pueden cerrar inscripciones de una competición ACTIVE.
@@ -65,7 +63,7 @@ class TestCloseEnrollmentsUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -93,9 +91,7 @@ class TestCloseEnrollmentsUseCase:
             assert competition.status.value == "CLOSED"
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -116,10 +112,7 @@ class TestCloseEnrollmentsUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_user_is_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId,
-        other_user_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
     ):
         """
         Verifica que solo el creador puede cerrar inscripciones.
@@ -135,7 +128,7 @@ class TestCloseEnrollmentsUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -157,9 +150,7 @@ class TestCloseEnrollmentsUseCase:
         assert "Solo el creador puede cerrar las inscripciones" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_draft(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se pueden cerrar inscripciones si está en DRAFT.
@@ -175,7 +166,7 @@ class TestCloseEnrollmentsUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -190,9 +181,7 @@ class TestCloseEnrollmentsUseCase:
         assert "No se pueden cerrar inscripciones en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_already_closed(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se pueden cerrar inscripciones si ya están cerradas.
@@ -208,7 +197,7 @@ class TestCloseEnrollmentsUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -231,9 +220,7 @@ class TestCloseEnrollmentsUseCase:
         assert "No se pueden cerrar inscripciones en estado CLOSED" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_closed(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se emite el evento CompetitionEnrollmentsClosedEvent.
@@ -249,7 +236,7 @@ class TestCloseEnrollmentsUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

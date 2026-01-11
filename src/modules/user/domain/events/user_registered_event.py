@@ -60,20 +60,22 @@ class UserRegisteredEvent(DomainEvent):
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
-        base_dict.update({
-            'user_data': {
-                'user_id': self.user_id,
-                'email': self.email,
-                'first_name': self.first_name,
-                'last_name': self.last_name,
-                'full_name': self.full_name,
-            },
-            'registration_context': {
-                'method': self.registration_method,
-                'email_verified': self.is_email_verified,
-                'ip_address': self.registration_ip,
+        base_dict.update(
+            {
+                "user_data": {
+                    "user_id": self.user_id,
+                    "email": self.email,
+                    "first_name": self.first_name,
+                    "last_name": self.last_name,
+                    "full_name": self.full_name,
+                },
+                "registration_context": {
+                    "method": self.registration_method,
+                    "email_verified": self.is_email_verified,
+                    "ip_address": self.registration_ip,
+                },
             }
-        })
+        )
         return base_dict
 
     def __str__(self) -> str:

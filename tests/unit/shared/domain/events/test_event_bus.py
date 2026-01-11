@@ -285,7 +285,7 @@ class TestInMemoryEventBusPublishing:
         events = [
             SampleEvent("event 1"),
             SampleEvent("event 2"),
-            SampleEvent("event 3")
+            SampleEvent("event 3"),
         ]
 
         # Act

@@ -97,14 +97,13 @@ def init_sentry() -> None:
     # Captura automáticamente logs de nivel ERROR o superior
     logging_integration = LoggingIntegration(
         level=logging.INFO,  # Captura breadcrumbs de nivel INFO+
-        event_level=logging.ERROR  # Envía eventos solo para ERROR+
+        event_level=logging.ERROR,  # Envía eventos solo para ERROR+
     )
 
     # Inicializar Sentry SDK
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
-
         # Integraciones automáticas
         integrations=[
             FastApiIntegration(
@@ -113,23 +112,17 @@ def init_sentry() -> None:
             SqlalchemyIntegration(),
             logging_integration,
         ],
-
         # Performance Monitoring (APM)
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-
         # Profiling (código CPU/memoria)
         profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
-
         # Hook para filtrar/modificar eventos
         before_send=before_send,
-
         # Metadata
         release="rydercup-backend@1.8.0",  # Versión actual del backend
-
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
         max_breadcrumbs=50,  # Máximo de breadcrumbs por evento
-
         # Debug mode (solo para desarrollo)
         debug=(settings.SENTRY_ENVIRONMENT == "development"),
     )

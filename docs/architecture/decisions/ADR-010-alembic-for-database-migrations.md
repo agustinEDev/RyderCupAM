@@ -1,40 +1,40 @@
-# ADR-010: Uso de Alembic para Migraciones de Base de Datos
+# ADR-010: Use of Alembic for Database Migrations
 
-- **Estado**: Aceptado
-- **Fecha**: 2025-11-04
+- **Status**: Accepted
+- **Date**: 2025-11-04
 
-## Contexto
+## Context
 
-Con la introducción de una base de datos persistente (PostgreSQL) gestionada por SQLAlchemy, necesitamos una forma sistemática y controlada de gestionar los cambios en el esquema de la base de datos a lo largo del tiempo. A medida que la aplicación evolucione, necesitaremos añadir nuevas tablas, modificar columnas o crear índices.
+With the introduction of a persistent database (PostgreSQL) managed by SQLAlchemy, we need a systematic and controlled way to manage changes to the database schema over time. As the application evolves, we will need to add new tables, modify columns, or create indexes.
 
-Gestionar estos cambios manualmente (ejecutando scripts SQL a mano) es propenso a errores, difícil de versionar y no es reproducible entre diferentes entornos (desarrollo, testing, producción).
+Managing these changes manually (by running SQL scripts by hand) is error-prone, difficult to version, and not reproducible across different environments (development, testing, production).
 
-## Decisión
+## Decision
 
-Se ha decidido adoptar **Alembic** como la herramienta para gestionar las migraciones de la base de datos.
+We have decided to adopt **Alembic** as the tool for managing database migrations.
 
-Alembic se integrará con SQLAlchemy para:
-1.  **Autogenerar scripts de migración**: Comparará los modelos de SQLAlchemy definidos en nuestro código con el estado actual de la base de datos para generar automáticamente los cambios necesarios.
-2.  **Versionar el esquema**: Cada cambio en el esquema se guardará en un fichero de migración versionado, creando un historial auditable de la evolución de la base de datos.
-3.  **Aplicar y revertir migraciones**: Proporcionará comandos (`upgrade`, `downgrade`) para aplicar los cambios de forma segura y predecible en cualquier entorno.
+Alembic will integrate with SQLAlchemy to:
+1.  **Autogenerate migration scripts**: It will compare the SQLAlchemy models defined in our code with the current state of the database to automatically generate the necessary changes.
+2.  **Version the schema**: Each change to the schema will be saved in a versioned migration file, creating an auditable history of the database evolution.
+3.  **Apply and revert migrations**: It will provide commands (`upgrade`, `downgrade`) to apply changes safely and predictably in any environment.
 
-## Justificación
+## Justification
 
-1.  **Control de Versiones para la Base de Datos**: Trata el esquema de la base de datos como código, permitiéndonos guardarlo en Git junto con el resto de la aplicación. Esto asegura que una versión específica del código siempre se corresponda con una versión específica del esquema de la base de datos.
+1.  **Version Control for the Database**: Treats the database schema as code, allowing us to store it in Git alongside the rest of the application. This ensures that a specific version of the code always corresponds to a specific version of the database schema.
 
-2.  **Automatización y Fiabilidad**: El proceso de `autogenerate` reduce drásticamente el riesgo de errores humanos al escribir SQL para DDL (Data Definition Language). Los comandos `upgrade` y `downgrade` hacen que la aplicación de cambios sea un proceso repetible y fiable.
+2.  **Automation and Reliability**: The `autogenerate` process drastically reduces the risk of human errors when writing SQL for DDL (Data Definition Language). The `upgrade` and `downgrade` commands make applying changes a repeatable and reliable process.
 
-3.  **Facilidad de Despliegue**: Simplifica enormemente el proceso de despliegue. Al desplegar una nueva versión de la aplicación, simplemente se ejecuta `alembic upgrade head` para llevar la base de datos de producción al estado requerido por el nuevo código.
+3.  **Ease of Deployment**: Greatly simplifies the deployment process. When deploying a new version of the application, simply run `alembic upgrade head` to bring the production database to the state required by the new code.
 
-4.  **Integración con SQLAlchemy**: Alembic es el estándar de facto para migraciones en el ecosistema de SQLAlchemy, lo que garantiza una integración perfecta y un amplio soporte de la comunidad.
+4.  **Integration with SQLAlchemy**: Alembic is the de facto standard for migrations in the SQLAlchemy ecosystem, which ensures seamless integration and broad community support.
 
-## Consecuencias
+## Consequences
 
--   **Positivas**:
-    -   Proceso de gestión de cambios de la base de datos robusto y auditable.
-    -   Despliegues más seguros y predecibles.
-    -   Facilita la colaboración en equipo, ya que todos los cambios de esquema están en el control de versiones.
+-   **Positive**:
+    -   Robust and auditable database change management process.
+    -   Safer and more predictable deployments.
+    -   Facilitates team collaboration, as all schema changes are in version control.
 
--   **Negativas**:
-    -   Añade una nueva herramienta y una capa de complejidad al proyecto que el equipo debe aprender y mantener.
-    -   Requiere una configuración inicial cuidadosa para integrarse correctamente con la estructura del proyecto (como hemos visto con la configuración del `PYTHONPATH`).
+-   **Negative**:
+    -   Adds a new tool and layer of complexity to the project that the team must learn and maintain.
+    -   Requires careful initial configuration to integrate correctly with the project structure (as we have seen with the `PYTHONPATH` configuration).

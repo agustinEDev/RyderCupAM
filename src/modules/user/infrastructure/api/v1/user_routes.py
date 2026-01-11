@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
@@ -17,8 +16,12 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
-from src.modules.user.application.use_cases.update_profile_use_case import UpdateProfileUseCase
-from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
+from src.modules.user.application.use_cases.update_profile_use_case import (
+    UpdateProfileUseCase,
+)
+from src.modules.user.application.use_cases.update_security_use_case import (
+    UpdateSecurityUseCase,
+)
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
     InvalidCredentialsError,
@@ -31,6 +34,7 @@ router = APIRouter()
 # ============================================================================
 # HELPER FUNCTIONS - Security Context Extraction
 # ============================================================================
+
 
 def get_client_ip(request: Request) -> str:
     """
@@ -69,6 +73,7 @@ def get_user_agent(request: Request) -> str:
     user_agent = request.headers.get("User-Agent")
     return user_agent if user_agent else "unknown"
 
+
 @router.get(
     "/search",
     response_model=FindUserResponseDTO,
@@ -81,7 +86,7 @@ async def find_user(
     email: str | None = Query(None, description="Email del usuario a buscar"),
     full_name: str | None = Query(None, description="Nombre completo del usuario a buscar"),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
 ):
     """
     Endpoint para buscar un usuario por email o nombre completo.
@@ -97,14 +102,11 @@ async def find_user(
         if not email and not full_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Debe proporcionar al menos 'email' o 'full_name' para la búsqueda."
+                detail="Debe proporcionar al menos 'email' o 'full_name' para la búsqueda.",
             )
 
         # Crear el DTO de request
-        request = FindUserRequestDTO(
-            email=email,
-            full_name=full_name
-        )
+        request = FindUserRequestDTO(email=email, full_name=full_name)
 
         # Ejecutar el caso de uso
         return await use_case.execute(request)
@@ -131,7 +133,7 @@ async def find_user(
 async def update_profile(
     request: UpdateProfileRequestDTO,
     use_case: UpdateProfileUseCase = Depends(get_update_profile_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint para actualizar información personal del usuario.
@@ -174,7 +176,7 @@ async def update_security(
     http_request: Request,
     request: UpdateSecurityRequestDTO,
     use_case: UpdateSecurityUseCase = Depends(get_update_security_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user)
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint para actualizar datos de seguridad del usuario.

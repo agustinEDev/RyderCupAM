@@ -32,9 +32,7 @@ pytestmark = pytest.mark.asyncio
 class TestValidateResetTokenValid:
     """Tests para tokens válidos"""
 
-    async def test_validate_reset_token_with_valid_token_returns_true(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_with_valid_token_returns_true(self, sample_user_data):
         """
         Test: Token válido retorna valid=True
         Given: Usuario con token recién generado
@@ -50,7 +48,7 @@ class TestValidateResetTokenValid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -66,9 +64,7 @@ class TestValidateResetTokenValid:
         assert response.valid is True
         assert response.message == "Token válido. Puedes proceder con el reseteo de tu contraseña."
 
-    async def test_validate_reset_token_with_valid_token_not_expired(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_with_valid_token_not_expired(self, sample_user_data):
         """
         Test: Token válido dentro del plazo de 24h retorna valid=True
         Given: Usuario con token generado hace 12 horas
@@ -83,7 +79,7 @@ class TestValidateResetTokenValid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -128,9 +124,7 @@ class TestValidateResetTokenInvalid:
         assert response.valid is False
         assert response.message == "Token de reseteo inválido o expirado. Solicita un nuevo enlace."
 
-    async def test_validate_reset_token_with_expired_token_returns_false(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_with_expired_token_returns_false(self, sample_user_data):
         """
         Test: Token expirado (>24h) retorna valid=False
         Given: Usuario con token expirado hace 2 horas
@@ -145,7 +139,7 @@ class TestValidateResetTokenInvalid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -162,11 +156,12 @@ class TestValidateResetTokenInvalid:
 
         # Assert
         assert response.valid is False
-        assert response.message == "Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace."
+        assert (
+            response.message
+            == "Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace."
+        )
 
-    async def test_validate_reset_token_at_exact_expiration_boundary(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_at_exact_expiration_boundary(self, sample_user_data):
         """
         Test: Token exactamente en el momento de expiración retorna valid=False
         Given: Usuario con token que expira justo ahora
@@ -181,7 +176,7 @@ class TestValidateResetTokenInvalid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -199,9 +194,7 @@ class TestValidateResetTokenInvalid:
         # Assert
         assert response.valid is False
 
-    async def test_validate_reset_token_without_active_token_returns_false(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_without_active_token_returns_false(self, sample_user_data):
         """
         Test: Usuario sin token activo retorna valid=False (edge case)
         Given: Usuario que tuvo token pero fue invalidado
@@ -216,7 +209,7 @@ class TestValidateResetTokenInvalid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -236,9 +229,7 @@ class TestValidateResetTokenInvalid:
         assert response.valid is False
         assert response.message == "Token de reseteo inválido o expirado. Solicita un nuevo enlace."
 
-    async def test_validate_reset_token_with_wrong_token_for_existing_user(
-        self, sample_user_data
-    ):
+    async def test_validate_reset_token_with_wrong_token_for_existing_user(self, sample_user_data):
         """
         Test: Token incorrecto para usuario existente retorna valid=False
         Given: Usuario con token válido
@@ -253,7 +244,7 @@ class TestValidateResetTokenInvalid:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         # Generar token pero usar uno diferente para validar
         user.generate_password_reset_token()

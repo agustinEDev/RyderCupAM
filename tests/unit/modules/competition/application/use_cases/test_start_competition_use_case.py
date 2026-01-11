@@ -47,9 +47,7 @@ class TestStartCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_start_competition_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede iniciar una competición en estado CLOSED.
@@ -65,7 +63,7 @@ class TestStartCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -94,9 +92,7 @@ class TestStartCompetitionUseCase:
             assert competition.is_in_progress()
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -117,10 +113,7 @@ class TestStartCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_user_is_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId,
-        other_user_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
     ):
         """
         Verifica que solo el creador puede iniciar la competición.
@@ -136,7 +129,7 @@ class TestStartCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -159,9 +152,7 @@ class TestStartCompetitionUseCase:
         assert "Solo el creador puede iniciar" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_draft(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede iniciar una competición en DRAFT.
@@ -177,7 +168,7 @@ class TestStartCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -192,9 +183,7 @@ class TestStartCompetitionUseCase:
         assert "No se puede iniciar una competición en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_active(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se puede iniciar una competición en ACTIVE.
@@ -210,7 +199,7 @@ class TestStartCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -232,9 +221,7 @@ class TestStartCompetitionUseCase:
         assert "No se puede iniciar una competición en estado ACTIVE" in str(exc_info.value)
 
     async def test_should_emit_domain_event_when_started(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se emite el evento CompetitionStartedEvent.
@@ -250,7 +237,7 @@ class TestStartCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

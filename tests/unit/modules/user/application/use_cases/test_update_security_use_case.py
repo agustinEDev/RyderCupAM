@@ -8,7 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from src.modules.user.application.dto.user_dto import UpdateSecurityRequestDTO
-from src.modules.user.application.use_cases.update_security_use_case import UpdateSecurityUseCase
+from src.modules.user.application.use_cases.update_security_use_case import (
+    UpdateSecurityUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
     DuplicateEmailError,
@@ -38,7 +40,7 @@ async def existing_user(uow):
         first_name="John",
         last_name="Doe",
         email_str="test@example.com",
-        plain_password="V@l1dP@ss123!"
+        plain_password="V@l1dP@ss123!",
     )
 
     async with uow:
@@ -58,7 +60,7 @@ async def another_user(uow):
         first_name="Jane",
         last_name="Smith",
         email_str="another@example.com",
-        plain_password="An0th3rP@ss!"
+        plain_password="An0th3rP@ss!",
     )
 
     async with uow:
@@ -81,7 +83,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password=None,
-            confirm_password=None
+            confirm_password=None,
         )
 
         # Act
@@ -105,7 +107,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email=None,
             new_password="N3wS3cur3P@ss!",
-            confirm_password="N3wS3cur3P@ss!"
+            confirm_password="N3wS3cur3P@ss!",
         )
 
         # Act
@@ -129,7 +131,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password="N3wS3cur3P@ss!",
-            confirm_password="N3wS3cur3P@ss!"
+            confirm_password="N3wS3cur3P@ss!",
         )
 
         # Act
@@ -153,7 +155,7 @@ class TestUpdateSecurityUseCase:
             current_password="Wr0ngP@ssw0rd!",
             new_email="newemail@example.com",
             new_password=None,
-            confirm_password=None
+            confirm_password=None,
         )
 
         # Act & Assert
@@ -169,7 +171,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password=None,
-            confirm_password=None
+            confirm_password=None,
         )
 
         # Act & Assert
@@ -185,7 +187,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="another@example.com",  # Ya existe
             new_password=None,
-            confirm_password=None
+            confirm_password=None,
         )
 
         # Act & Assert
@@ -201,7 +203,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="test@example.com",  # Mismo email
             new_password=None,
-            confirm_password=None
+            confirm_password=None,
         )
 
         # Act
@@ -221,7 +223,7 @@ class TestUpdateSecurityUseCase:
                 current_password="V@l1dP@ss123!",
                 new_email="invalid-email",  # Sin @
                 new_password=None,
-                confirm_password=None
+                confirm_password=None,
             )
 
     async def test_update_emits_domain_events(self, uow, existing_user):
@@ -233,7 +235,7 @@ class TestUpdateSecurityUseCase:
             current_password="V@l1dP@ss123!",
             new_email="newemail@example.com",
             new_password="N3wP@ss456!0",
-            confirm_password="N3wP@ss456!0"
+            confirm_password="N3wP@ss456!0",
         )
 
         # Act

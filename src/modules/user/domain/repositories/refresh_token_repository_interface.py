@@ -3,6 +3,7 @@ RefreshToken Repository Interface.
 
 Define el contrato para persistencia de refresh tokens.
 """
+
 from abc import ABC, abstractmethod
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken

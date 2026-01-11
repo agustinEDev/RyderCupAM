@@ -39,9 +39,7 @@ class TestGetCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_get_competition_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede obtener una competición por su ID.
@@ -59,7 +57,7 @@ class TestGetCompetitionUseCase:
             main_country="ES",
             adjacent_country_1="PT",
             handicap_type="PERCENTAGE",
-            handicap_percentage=90
+            handicap_percentage=90,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -80,9 +78,7 @@ class TestGetCompetitionUseCase:
         assert competition.handicap_settings.percentage == 90
 
     async def test_should_get_competition_with_scratch_handicap(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se obtiene correctamente una competición con hándicap SCRATCH.
@@ -98,7 +94,7 @@ class TestGetCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="FR",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -110,10 +106,7 @@ class TestGetCompetitionUseCase:
         assert competition.handicap_settings.type.value == "SCRATCH"
         assert competition.handicap_settings.percentage is None
 
-    async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork
-    ):
+    async def test_should_raise_error_when_competition_not_found(self, uow: InMemoryUnitOfWork):
         """
         Verifica que se lanza excepción si la competición no existe.
 
@@ -132,9 +125,7 @@ class TestGetCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_get_competition_without_adjacent_countries(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se obtiene correctamente una competición sin países adyacentes.
@@ -150,7 +141,7 @@ class TestGetCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="IT",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

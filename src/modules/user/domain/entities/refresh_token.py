@@ -3,6 +3,7 @@ RefreshToken Entity.
 
 Entidad que representa un token de renovación (refresh token) para autenticación.
 """
+
 from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId

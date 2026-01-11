@@ -47,9 +47,7 @@ class TestDeleteCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_delete_competition_in_draft_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede eliminar una competición en estado DRAFT.
@@ -65,7 +63,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -86,9 +84,7 @@ class TestDeleteCompetitionUseCase:
             assert competition is None
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -109,10 +105,7 @@ class TestDeleteCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_user_is_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId,
-        other_user_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
     ):
         """
         Verifica que solo el creador puede eliminar la competición.
@@ -128,7 +121,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -143,9 +136,7 @@ class TestDeleteCompetitionUseCase:
         assert "Solo el creador puede eliminar" in str(exc_info.value)
 
     async def test_should_raise_error_when_competition_is_not_draft(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que solo se pueden eliminar competiciones en estado DRAFT.
@@ -161,7 +152,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -184,9 +175,7 @@ class TestDeleteCompetitionUseCase:
         assert "Estado actual: ACTIVE" in str(exc_info.value)
 
     async def test_should_raise_error_when_trying_to_delete_in_progress_competition(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se pueden eliminar competiciones en curso.
@@ -202,7 +191,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -227,9 +216,7 @@ class TestDeleteCompetitionUseCase:
         assert "Estado actual: IN_PROGRESS" in str(exc_info.value)
 
     async def test_should_raise_error_when_trying_to_delete_completed_competition(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que no se pueden eliminar competiciones completadas.
@@ -245,7 +232,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

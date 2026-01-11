@@ -49,7 +49,7 @@ class LoggerFactory:
         logger = factory.get_logger("app.api")
     """
 
-    _instance: Optional['LoggerFactory'] = None
+    _instance: Optional["LoggerFactory"] = None
     _lock = Lock()
 
     def __init__(self, config: LogConfig | None = None):
@@ -57,7 +57,7 @@ class LoggerFactory:
         self._loggers: dict[str, Logger] = {}
         self._logger_lock = Lock()
 
-    def __new__(cls, config: LogConfig | None = None):
+    def __new__(cls, config: LogConfig | None = None):  # noqa: ARG004
         """Implementación singleton thread-safe"""
         if cls._instance is None:
             with cls._lock:
@@ -109,7 +109,7 @@ class LoggerFactory:
             self._loggers.clear()
 
     @classmethod
-    def from_file(cls, config_path: str | Path) -> 'LoggerFactory':
+    def from_file(cls, config_path: str | Path) -> "LoggerFactory":
         """
         Crea factory desde archivo de configuración.
 
@@ -129,9 +129,9 @@ class LoggerFactory:
             raise FileNotFoundError(f"Archivo de configuración no encontrado: {config_path}")
 
         # Cargar según extensión
-        if config_path.suffix.lower() in ['.yaml', '.yml']:
+        if config_path.suffix.lower() in [".yaml", ".yml"]:
             config_dict = cls._load_yaml(config_path)
-        elif config_path.suffix.lower() == '.json':
+        elif config_path.suffix.lower() == ".json":
             config_dict = cls._load_json(config_path)
         else:
             raise ValueError(f"Formato no soportado: {config_path.suffix}")
@@ -140,7 +140,7 @@ class LoggerFactory:
         return cls(config)
 
     @classmethod
-    def from_environment(cls) -> 'LoggerFactory':
+    def from_environment(cls) -> "LoggerFactory":
         """
         Crea factory basado en variables de entorno.
 
@@ -153,31 +153,38 @@ class LoggerFactory:
         Returns:
             Instancia configurada según entorno
         """
-        env = os.getenv('ENVIRONMENT', 'development').lower()
+        env = os.getenv("ENVIRONMENT", "development").lower()
 
         # Configuración base según entorno
-        if env == 'production':
+        if env == "production":
             config = LogConfig.production()
-        elif env == 'testing':
+        elif env == "testing":
             config = LogConfig.testing()
         else:
             config = LogConfig.development()
 
         # Personalizar según variables de entorno
-        if log_level := os.getenv('LOG_LEVEL'):
-            from .logger import LogLevel
+        if log_level := os.getenv("LOG_LEVEL"):
+            from .logger import (  # noqa: PLC0415
+                LogLevel,
+            )
+
             config.level = LogLevel(log_level.upper())
 
-        if log_file := os.getenv('LOG_FILE'):
-            from .config import HandlerConfig, LogHandler
-            file_handler = HandlerConfig(
-                type=LogHandler.ROTATING_FILE,
-                filename=log_file
+        if log_file := os.getenv("LOG_FILE"):
+            from .config import (  # noqa: PLC0415
+                HandlerConfig,
+                LogHandler,
             )
+
+            file_handler = HandlerConfig(type=LogHandler.ROTATING_FILE, filename=log_file)
             config.handlers.append(file_handler)
 
-        if log_format := os.getenv('LOG_FORMAT'):
-            from .config import LogFormat
+        if log_format := os.getenv("LOG_FORMAT"):
+            from .config import (  # noqa: PLC0415
+                LogFormat,
+            )
+
             for handler in config.handlers:
                 handler.format = LogFormat(log_format.lower())
 
@@ -187,8 +194,9 @@ class LoggerFactory:
     def _load_yaml(path: Path) -> dict[str, Any]:
         """Carga archivo YAML"""
         try:
-            import yaml
-            with open(path, encoding='utf-8') as f:
+            import yaml  # noqa: PLC0415 - Optional dependency, lazy import
+
+            with open(path, encoding="utf-8") as f:  # noqa: PTH123
                 return yaml.safe_load(f) or {}
         except ImportError as e:
             raise ImportError("PyYAML no está instalado. Instálalo con: pip install pyyaml") from e
@@ -196,16 +204,16 @@ class LoggerFactory:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
         """Carga archivo JSON"""
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:  # noqa: PTH123
             return json.load(f)
 
     def _get_default_config(self) -> LogConfig:
         """Obtiene configuración por defecto según entorno"""
-        env = os.getenv('ENVIRONMENT', 'development').lower()
+        env = os.getenv("ENVIRONMENT", "development").lower()
 
-        if env == 'production':
+        if env == "production":
             return LogConfig.production()
-        if env == 'testing':
+        if env == "testing":
             return LogConfig.testing()
         return LogConfig.development()
 
@@ -233,7 +241,7 @@ def get_logger(name: str) -> Logger:
     Returns:
         Instancia de logger
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     if _default_factory is None:
         _default_factory = LoggerFactory()
     return _default_factory.get_logger(name)
@@ -246,7 +254,7 @@ def configure_logging(config: LogConfig) -> None:
     Args:
         config: Configuración de logging
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory(config)
 
 
@@ -257,18 +265,18 @@ def configure_from_file(config_path: str | Path) -> None:
     Args:
         config_path: Ruta al archivo de configuración
     """
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory.from_file(config_path)
 
 
 def configure_from_environment() -> None:
     """Configura el sistema de logging desde variables de entorno"""
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = LoggerFactory.from_environment()
 
 
 def reset_logging() -> None:
     """Resetea la configuración de logging (útil para tests)"""
-    global _default_factory
+    global _default_factory  # noqa: PLW0603 - Module-level singleton pattern
     _default_factory = None
     LoggerFactory.reset_instance()

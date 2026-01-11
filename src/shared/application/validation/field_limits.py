@@ -106,7 +106,9 @@ class FieldLimits:
         }
 
     @classmethod
-    def validate_limit(cls, field_name: str, value: str | None, min_length: int, max_length: int) -> None:
+    def validate_limit(
+        cls, field_name: str, value: str | None, min_length: int, max_length: int
+    ) -> None:
         """
         Valida que un campo cumple con los límites de longitud.
 

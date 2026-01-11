@@ -97,6 +97,7 @@ class TestUpdateUserHandicapManuallyUseCase:
 
         # Act
         import asyncio
+
         await asyncio.sleep(0.01)  # Pequeña pausa para asegurar cambio de timestamp
         result = await use_case.execute(user.id, 10.0)
 

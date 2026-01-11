@@ -39,7 +39,7 @@ class TestCompetitionNameValidation:
         """Nombre vacío debe lanzar InvalidCompetitionNameError."""
         with pytest.raises(
             InvalidCompetitionNameError,
-            match="El nombre de la competición no puede estar vacío"
+            match="El nombre de la competición no puede estar vacío",
         ):
             CompetitionName("")
 
@@ -47,17 +47,14 @@ class TestCompetitionNameValidation:
         """Nombre con solo espacios debe lanzar error."""
         with pytest.raises(
             InvalidCompetitionNameError,
-            match="El nombre de la competición no puede estar vacío"
+            match="El nombre de la competición no puede estar vacío",
         ):
             CompetitionName("   ")
 
     def test_name_exceeds_max_length_raises_error(self):
         """Nombre mayor a 100 caracteres debe lanzar error."""
         long_name = "A" * 101
-        with pytest.raises(
-            InvalidCompetitionNameError,
-            match="no puede exceder 100 caracteres"
-        ):
+        with pytest.raises(InvalidCompetitionNameError, match="no puede exceder 100 caracteres"):
             CompetitionName(long_name)
 
     def test_name_exactly_100_chars_is_valid(self):
@@ -69,10 +66,7 @@ class TestCompetitionNameValidation:
 
     def test_non_string_raises_error(self):
         """Tipo no string debe lanzar error."""
-        with pytest.raises(
-            InvalidCompetitionNameError,
-            match="El nombre debe ser un string"
-        ):
+        with pytest.raises(InvalidCompetitionNameError, match="El nombre debe ser un string"):
             CompetitionName(123)
 
 

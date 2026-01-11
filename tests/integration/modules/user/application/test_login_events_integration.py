@@ -40,7 +40,7 @@ class TestLoginUserUseCaseEventIntegration:
             email=email,
             password=password,
             first_name="John",
-            last_name="Doe"
+            last_name="Doe",
         )
 
         # Mock del UoW
@@ -51,12 +51,14 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.__aexit__ = AsyncMock(return_value=None)
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
 
-        request = LoginRequestDTO(
-            email="test@example.com",
-            password="P@ssw0rd123!"
-        )
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+        mock_register_device.execute.return_value = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
+
+        request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
 
         # Act
         response = await use_case.execute(request)
@@ -96,12 +98,13 @@ class TestLoginUserUseCaseEventIntegration:
         mock_uow.users.find_by_email.return_value = None
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
 
-        request = LoginRequestDTO(
-            email="noexiste@example.com",
-            password="P@ssw0rd123!"
-        )
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
+
+        request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
 
         # Act
         response = await use_case.execute(request)
@@ -114,10 +117,11 @@ class TestLoginUserUseCaseEventIntegration:
 
     async def test_login_wrong_password_does_not_register_event(self):
         """
-        Test: Login con password incorrecto no registra eventos.
+        Test: Login con password incorrecto no registra eventos de login exitoso.
 
         Verifica que cuando existe el usuario pero el password es incorrecto,
-        no se registran eventos de login exitoso.
+        no se registran eventos de login exitoso (pero SÍ se guarda para
+        incrementar el contador de intentos fallidos - Account Lockout v1.13.0).
         """
         # Arrange
         user_id = UserId.generate()
@@ -129,18 +133,22 @@ class TestLoginUserUseCaseEventIntegration:
             email=email,
             password=password,
             first_name="John",
-            last_name="Doe"
+            last_name="Doe",
         )
 
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
 
         token_service = JWTTokenService()
-        use_case = LoginUserUseCase(mock_uow, token_service)
+
+        # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
+        mock_register_device = AsyncMock()
+
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
 
         request = LoginRequestDTO(
             email="test@example.com",
-            password="WrongPass123"  # Password incorrecto
+            password="WrongPass123",  # Password incorrecto
         )
 
         # Act
@@ -149,8 +157,8 @@ class TestLoginUserUseCaseEventIntegration:
         # Assert
         assert response is None
 
-        # Verificar que el usuario NO tiene eventos de dominio
+        # Verificar que el usuario NO tiene eventos de dominio (no hay LoginSuccessEvent)
         assert not user.has_domain_events()
 
-        # Verificar que no se llamó save
-        mock_uow.users.save.assert_not_called()
+        # Account Lockout (v1.13.0): SÍ se llama save para incrementar failed_login_attempts
+        mock_uow.users.save.assert_called_once_with(user)

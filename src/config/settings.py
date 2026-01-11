@@ -27,7 +27,9 @@ class Settings:
     # Session Timeout (v1.8.0)
     # Access Token: Corto (15 min) para operaciones frecuentes
     # Refresh Token: Largo (7 días) para renovación sin re-login
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))  # Reducido de 60 a 15
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")
+    )  # Reducido de 60 a 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # Swagger/Docs HTTP Basic Auth (sin defaults - DEBE estar en .env)
@@ -37,13 +39,15 @@ class Settings:
     # Database Configuration
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/ryderclub"
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/ryderclub",
     )
 
     # Mailgun Configuration
     MAILGUN_API_KEY: str = os.getenv("MAILGUN_API_KEY", "")
     MAILGUN_DOMAIN: str = os.getenv("MAILGUN_DOMAIN", "rydercupfriends.com")
-    MAILGUN_FROM_EMAIL: str = os.getenv("MAILGUN_FROM_EMAIL", "Ryder Cup Friends <noreply@rydercupfriends.com>")
+    MAILGUN_FROM_EMAIL: str = os.getenv(
+        "MAILGUN_FROM_EMAIL", "Ryder Cup Friends <noreply@rydercupfriends.com>"
+    )
     MAILGUN_API_URL: str = os.getenv("MAILGUN_API_URL", "https://api.eu.mailgun.net/v3")
     # Frontend URL - Cambia según el entorno:
     # - Local (directo): http://localhost:5173 (Vite default)

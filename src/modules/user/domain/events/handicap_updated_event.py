@@ -65,15 +65,17 @@ class HandicapUpdatedEvent(DomainEvent):
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
-        base_dict.update({
-            'handicap_change': {
-                'user_id': self.user_id,
-                'old_value': self.old_handicap,
-                'new_value': self.new_handicap,
-                'delta': self.handicap_delta,
-                'updated_at': self.updated_at.isoformat(),
+        base_dict.update(
+            {
+                "handicap_change": {
+                    "user_id": self.user_id,
+                    "old_value": self.old_handicap,
+                    "new_value": self.new_handicap,
+                    "delta": self.handicap_delta,
+                    "updated_at": self.updated_at.isoformat(),
+                }
             }
-        })
+        )
         return base_dict
 
     def __str__(self) -> str:

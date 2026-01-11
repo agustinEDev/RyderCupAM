@@ -17,11 +17,13 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class EnrollmentNotFoundError(Exception):
     """Excepción lanzada cuando la inscripción no existe."""
+
     pass
 
 
 class NotOwnerError(Exception):
     """Excepción lanzada cuando el usuario no es el dueño de la inscripción."""
+
     pass
 
 
@@ -51,9 +53,7 @@ class WithdrawEnrollmentUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: WithdrawEnrollmentRequestDTO,
-        user_id: UserId
+        self, request: WithdrawEnrollmentRequestDTO, user_id: UserId
     ) -> WithdrawEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de retiro de inscripción.
@@ -76,15 +76,11 @@ class WithdrawEnrollmentUseCase:
             # 1. Obtener enrollment
             enrollment = await self._uow.enrollments.find_by_id(enrollment_id)
             if not enrollment:
-                raise EnrollmentNotFoundError(
-                    f"Inscripción no encontrada: {request.enrollment_id}"
-                )
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 2. Verificar que es el dueño
             if enrollment.user_id != user_id:
-                raise NotOwnerError(
-                    "Solo puedes retirarte de tu propia inscripción"
-                )
+                raise NotOwnerError("Solo puedes retirarte de tu propia inscripción")
 
             # 3. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
@@ -101,5 +97,5 @@ class WithdrawEnrollmentUseCase:
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
             status=enrollment.status.value,
-            updated_at=enrollment.updated_at
+            updated_at=enrollment.updated_at,
         )

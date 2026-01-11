@@ -17,7 +17,6 @@ from src.modules.user.domain.value_objects.user_id import UserId
 logger = logging.getLogger(__name__)
 
 
-
 class UpdateMultipleHandicapsUseCase:
     """
     Caso de uso para actualizar hándicaps de múltiples usuarios.
@@ -31,11 +30,7 @@ class UpdateMultipleHandicapsUseCase:
     pero si un usuario falla, continúa con los demás.
     """
 
-    def __init__(
-        self,
-        uow: UserUnitOfWorkInterface,
-        handicap_service: HandicapService
-    ):
+    def __init__(self, uow: UserUnitOfWorkInterface, handicap_service: HandicapService):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -68,11 +63,11 @@ class UpdateMultipleHandicapsUseCase:
             Si hay errores individuales, continúa con los demás usuarios.
         """
         stats = {
-            'total': len(user_ids),
-            'updated': 0,
-            'not_found': 0,
-            'no_handicap_found': 0,
-            'errors': 0
+            "total": len(user_ids),
+            "updated": 0,
+            "not_found": 0,
+            "no_handicap_found": 0,
+            "errors": 0,
         }
 
         async with self._uow:
@@ -80,7 +75,7 @@ class UpdateMultipleHandicapsUseCase:
                 # 1. Buscar usuario
                 user = await self._uow.users.find_by_id(user_id)
                 if not user:
-                    stats['not_found'] += 1
+                    stats["not_found"] += 1
                     continue
 
                 # 2. Intentar actualizar hándicap
@@ -92,15 +87,22 @@ class UpdateMultipleHandicapsUseCase:
                     if handicap_value is not None:
                         user.update_handicap(handicap_value)
                         await self._uow.users.save(user)
-                        stats['updated'] += 1
+                        stats["updated"] += 1
                     else:
                         # Hándicap no encontrado en RFEG (respuesta válida)
-                        stats['no_handicap_found'] += 1
-                        logger.info("No se encontró hándicap en RFEG para %s", user.get_full_name())
+                        stats["no_handicap_found"] += 1
+                        logger.info(
+                            "No se encontró hándicap en RFEG para %s",
+                            user.get_full_name(),
+                        )
 
                 except HandicapServiceError as e:
-                    stats['errors'] += 1
-                    logger.error("Error actualizando hándicap para %s: %s", user.get_full_name(), e)
+                    stats["errors"] += 1
+                    logger.error(
+                        "Error actualizando hándicap para %s: %s",
+                        user.get_full_name(),
+                        e,
+                    )
 
             # El context manager (__aexit__) hace commit automático al final (transacción única)
 

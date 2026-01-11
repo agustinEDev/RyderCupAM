@@ -1,35 +1,35 @@
 # ADR-005: Repository Pattern Implementation
 
 ## Status
-**ACCEPTED** - 1 Noviembre 2025
+**ACCEPTED** - November 1, 2025
 
 ## Context
-Tras implementar la capa de dominio con Clean Architecture, necesitamos definir contratos claros para la persistencia de datos. El patrón Repository nos permite abstraer el acceso a datos y mantener la independencia de la lógica de negocio respecto a las tecnologías de persistencia específicas.
+After implementing the domain layer with Clean Architecture, we need to define clear contracts for data persistence. The Repository pattern allows us to abstract data access and maintain the independence of business logic from specific persistence technologies.
 
-### Problemas Identificados
-1. **Acoplamiento directo**: Los casos de uso no deben depender de implementaciones concretas de bases de datos
-2. **Testabilidad**: Necesitamos poder mockear fácilmente el acceso a datos en tests unitarios
-3. **Flexibilidad**: El sistema debe permitir cambios de base de datos sin afectar la lógica de negocio
-4. **Principio de Inversión de Dependencias**: Las capas superiores deben depender de abstracciones, no de implementaciones
+### Identified Problems
+1. **Direct coupling**: Use cases should not depend on concrete database implementations
+2. **Testability**: We need to easily mock data access in unit tests
+3. **Flexibility**: The system must allow database changes without affecting business logic
+4. **Dependency Inversion Principle**: Upper layers should depend on abstractions, not implementations
 
-### Alternativas Consideradas
-1. **Active Record**: Lógica de persistencia en las entidades
-   - ❌ Viola Single Responsibility Principle
-   - ❌ Acopla entidades con tecnología de BD
+### Alternatives Considered
+1. **Active Record**: Persistence logic in entities
+   - ❌ Violates Single Responsibility Principle
+   - ❌ Couples entities with DB technology
 
-2. **Data Mapper directo**: Usar ORM directamente en casos de uso
-   - ❌ Viola Dependency Inversion Principle
-   - ❌ Dificulta testing unitario
+2. **Direct Data Mapper**: Use ORM directly in use cases
+   - ❌ Violates Dependency Inversion Principle
+   - ❌ Hinders unit testing
 
-3. **Repository Pattern**: Interfaces de repositorio con implementaciones concretas
-   - ✅ Desacoplamiento total
-   - ✅ Fácil testing con mocks
-   - ✅ Cumple principios SOLID
+3. **Repository Pattern**: Repository interfaces with concrete implementations
+   - ✅ Complete decoupling
+   - ✅ Easy testing with mocks
+   - ✅ Complies with SOLID principles
 
 ## Decision
-Implementaremos el **patrón Repository** con interfaces en la capa de dominio e implementaciones en la capa de infraestructura.
+We will implement the **Repository pattern** with interfaces in the domain layer and implementations in the infrastructure layer.
 
-### Estructura de Interfaces
+### Interface Structure
 ```python
 # Domain Layer - Interfaces
 @abstractmethod
@@ -44,41 +44,41 @@ class UserRepositoryInterface(ABC):
     async def update(self, user: User) -> None: ...
 ```
 
-### Principios Aplicados
-1. **Métodos async**: Soporte nativo para operaciones asíncronas
-2. **Type Safety**: Type hints completos para mejor desarrollo
-3. **Domain Objects**: Parámetros y retornos usan objetos de dominio
-4. **Single Responsibility**: Cada método tiene una responsabilidad específica
+### Applied Principles
+1. **Async methods**: Native support for asynchronous operations
+2. **Type Safety**: Complete type hints for better development
+3. **Domain Objects**: Parameters and returns use domain objects
+4. **Single Responsibility**: Each method has a specific responsibility
 
 ## Consequences
 
-### Beneficios
-- ✅ **Testabilidad mejorada**: Mocks simples con interfaces claras
-- ✅ **Desacoplamiento**: Lógica de negocio independiente de tecnología de BD
-- ✅ **Flexibilidad**: Cambio de base de datos sin afectar casos de uso
-- ✅ **Principios SOLID**: Cumplimiento completo de Dependency Inversion
-- ✅ **Consistencia**: API uniforme para todas las operaciones de persistencia
+### Benefits
+- ✅ **Improved testability**: Simple mocks with clear interfaces
+- ✅ **Decoupling**: Business logic independent of DB technology
+- ✅ **Flexibility**: Database change without affecting use cases
+- ✅ **SOLID principles**: Complete compliance with Dependency Inversion
+- ✅ **Consistency**: Uniform API for all persistence operations
 
-### Desafíos
-- ⚠️ **Complejidad inicial**: Más código boilerplate
-- ⚠️ **Curva de aprendizaje**: Requiere entendimiento de Clean Architecture
-- ⚠️ **Múltiples archivos**: Separación entre interfaces e implementaciones
+### Challenges
+- ⚠️ **Initial complexity**: More boilerplate code
+- ⚠️ **Learning curve**: Requires understanding of Clean Architecture
+- ⚠️ **Multiple files**: Separation between interfaces and implementations
 
-### Impacto en el Proyecto
-- **Testing**: 31 tests específicos para interfaces de repositorio
-- **Arquitectura**: Separación clara entre capas
-- **Desarrollo futuro**: Base sólida para implementaciones con diferentes tecnologías
+### Project Impact
+- **Testing**: 31 specific tests for repository interfaces
+- **Architecture**: Clear separation between layers
+- **Future development**: Solid foundation for implementations with different technologies
 
 ## Implementation Status
-- ✅ **UserRepositoryInterface**: 8 métodos async completamente definidos
-- ✅ **Tests unitarios**: 31 tests verificando contratos de interfaces
-- ✅ **Documentation**: Documentación completa en Design Document
-- ⏳ **Implementaciones concretas**: Pendiente para fase de Infrastructure
+- ✅ **UserRepositoryInterface**: 8 async methods fully defined
+- ✅ **Unit tests**: 31 tests verifying interface contracts
+- ✅ **Documentation**: Complete documentation in Design Document
+- ⏳ **Concrete implementations**: Pending for Infrastructure phase
 
 ## Related ADRs
-- **ADR-001**: Clean Architecture - Establece la base arquitectónica
-- **ADR-006**: Unit of Work Pattern - Complementa con gestión transaccional
-- **ADR-003**: Testing Strategy - Define como testear las interfaces
+- **ADR-001**: Clean Architecture - Establishes the architectural foundation
+- **ADR-006**: Unit of Work Pattern - Complements with transactional management
+- **ADR-003**: Testing Strategy - Defines how to test interfaces
 
 ## Notes
-Esta decisión establece la base para la implementación de la capa de infraestructura y garantiza que el proyecto mantenga los principios de Clean Architecture a medida que crezca.
+This decision establishes the foundation for implementing the infrastructure layer and ensures that the project maintains Clean Architecture principles as it grows.

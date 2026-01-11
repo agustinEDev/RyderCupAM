@@ -1,4 +1,7 @@
-from src.modules.user.application.dto.user_dto import FindUserRequestDTO, FindUserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    FindUserRequestDTO,
+    FindUserResponseDTO,
+)
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -59,5 +62,5 @@ class FindUserUseCase:
             return FindUserResponseDTO(
                 user_id=user.id.value,
                 email=user.email.value,
-                full_name=user.get_full_name()
+                full_name=user.get_full_name(),
             )

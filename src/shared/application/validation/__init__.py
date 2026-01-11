@@ -10,14 +10,14 @@ OWASP Coverage:
 """
 
 from .field_limits import FieldLimits
-from .sanitizers import sanitize_html, sanitize_all_fields
+from .sanitizers import sanitize_all_fields, sanitize_html
 from .validators import EmailValidator, NameValidator, validate_email_strict
 
 __all__ = [
-    "FieldLimits",
-    "sanitize_html",
-    "sanitize_all_fields",
     "EmailValidator",
+    "FieldLimits",
     "NameValidator",
+    "sanitize_all_fields",
+    "sanitize_html",
     "validate_email_strict",
 ]

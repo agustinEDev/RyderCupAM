@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 class InvalidUserIdError(Exception):
     """Excepción lanzada cuando un UserId no es válido."""
+
     pass
+
 
 @dataclass(frozen=True)
 class UserId:
@@ -13,6 +15,7 @@ class UserId:
     Value Object para identificadores únicos de usuario.
     Almacena internamente un objeto UUID, garantizando siempre un estado válido.
     """
+
     value: uuid.UUID
 
     def __init__(self, value: uuid.UUID | str):
@@ -29,13 +32,15 @@ class UserId:
             except ValueError as e:
                 raise InvalidUserIdError(f"'{value}' no es un string UUID válido") from e
         else:
-            raise InvalidUserIdError(f"Se esperaba un UUID o un string, pero se recibió {type(value)}")
+            raise InvalidUserIdError(
+                f"Se esperaba un UUID o un string, pero se recibió {type(value)}"
+            )
 
         # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, 'value', val)
+        object.__setattr__(self, "value", val)
 
     @classmethod
-    def generate(cls) -> 'UserId':
+    def generate(cls) -> "UserId":
         """Genera un nuevo UserId con un UUID v4 aleatorio."""
         return cls(uuid.uuid4())
 

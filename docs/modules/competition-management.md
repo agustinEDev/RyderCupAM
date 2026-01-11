@@ -1,78 +1,78 @@
-# Módulo: Competition Management
+# Module: Competition Management
 
-## 📋 Descripción
+## 📋 Description
 
-Módulo responsable de la gestión de torneos formato Ryder Cup, incluyendo inscripciones (enrollments), equipos y configuración de handicaps. Implementa Clean Architecture con DDD.
+Module responsible for managing Ryder Cup format tournaments, including enrollments, teams, and handicap configuration. Implements Clean Architecture with DDD.
 
-**📋 Ver API completa:** `docs/API.md`
+**📋 See complete API:** `docs/API.md`
 
 ---
 
-## 🎯 Casos de Uso Implementados
+## 🎯 Implemented Use Cases
 
 ### Competition Management (10 use cases)
-1. **CreateCompetitionUseCase** - Crear torneo en estado DRAFT
-2. **GetCompetitionUseCase** - Obtener detalles de un torneo
-3. **ListCompetitionsUseCase** - Listar torneos con filtros
-4. **UpdateCompetitionUseCase** - Actualizar torneo (solo DRAFT)
-5. **DeleteCompetitionUseCase** - Eliminar torneo (solo DRAFT)
-6. **ActivateCompetitionUseCase** - Transición DRAFT → ACTIVE
-7. **CloseEnrollmentsUseCase** - Transición ACTIVE → CLOSED
-8. **StartCompetitionUseCase** - Transición CLOSED → IN_PROGRESS
-9. **CompleteCompetitionUseCase** - Transición IN_PROGRESS → COMPLETED
-10. **CancelCompetitionUseCase** - Transición a CANCELLED desde cualquier estado
+1. **CreateCompetitionUseCase** - Create tournament in DRAFT status
+2. **GetCompetitionUseCase** - Get tournament details
+3. **ListCompetitionsUseCase** - List tournaments with filters
+4. **UpdateCompetitionUseCase** - Update tournament (DRAFT only)
+5. **DeleteCompetitionUseCase** - Delete tournament (DRAFT only)
+6. **ActivateCompetitionUseCase** - Transition DRAFT → ACTIVE
+7. **CloseEnrollmentsUseCase** - Transition ACTIVE → CLOSED
+8. **StartCompetitionUseCase** - Transition CLOSED → IN_PROGRESS
+9. **CompleteCompetitionUseCase** - Transition IN_PROGRESS → COMPLETED
+10. **CancelCompetitionUseCase** - Transition to CANCELLED from any status
 
 ### Enrollment Management (7 use cases)
-11. **RequestEnrollmentUseCase** - Solicitar inscripción (REQUESTED)
-12. **DirectEnrollPlayerUseCase** - Inscripción directa por creador (APPROVED)
-13. **ListEnrollmentsUseCase** - Listar inscripciones con filtros
-14. **HandleEnrollmentUseCase** - Aprobar/rechazar solicitudes
-15. **CancelEnrollmentUseCase** - Cancelar solicitud/invitación
-16. **WithdrawEnrollmentUseCase** - Retirarse de competición
-17. **SetCustomHandicapUseCase** - Establecer handicap personalizado
+11. **RequestEnrollmentUseCase** - Request enrollment (REQUESTED)
+12. **DirectEnrollPlayerUseCase** - Direct enrollment by creator (APPROVED)
+13. **ListEnrollmentsUseCase** - List enrollments with filters
+14. **HandleEnrollmentUseCase** - Approve/reject requests
+15. **CancelEnrollmentUseCase** - Cancel request/invitation
+16. **WithdrawEnrollmentUseCase** - Withdraw from competition
+17. **SetCustomHandicapUseCase** - Set custom handicap
 
 ---
 
-## 🗃️ Modelo de Dominio
+## 🗃️ Domain Model
 
-### Entity: Competition (Agregado Raíz)
+### Entity: Competition (Aggregate Root)
 
-**Identificación:**
+**Identification:**
 - `id`: CompetitionId (Value Object - UUID)
 
-**Datos Principales:**
+**Main Data:**
 - `name`: CompetitionName (Value Object - 3-100 chars, unique)
 - `dates`: DateRange (Value Object - start_date, end_date)
-- `location`: Location (Value Object - hasta 3 países adyacentes)
-- `creator_id`: UserId (Value Object - creador del torneo)
-- `max_players`: int (2-100 jugadores)
+- `location`: Location (Value Object - up to 3 adjacent countries)
+- `creator_id`: UserId (Value Object - tournament creator)
+- `max_players`: int (2-100 players)
 - `status`: CompetitionStatus (enum - DRAFT/ACTIVE/CLOSED/IN_PROGRESS/COMPLETED/CANCELLED)
 
-**Configuración de Handicap:**
+**Handicap Configuration:**
 - `handicap_settings`: HandicapSettings (Value Object)
-  - `type`: HandicapType (SCRATCH o PERCENTAGE)
-  - `percentage`: int (90/95/100, opcional si PERCENTAGE)
+  - `type`: HandicapType (SCRATCH or PERCENTAGE)
+  - `percentage`: int (90/95/100, optional if PERCENTAGE)
 
-**Configuración de Equipos:**
-- `team_assignment`: TeamAssignment (RANDOM o MANUAL)
-- `team_1_name`: str (opcional, max 50)
-- `team_2_name`: str (opcional, max 50)
+**Team Configuration:**
+- `team_assignment`: TeamAssignment (RANDOM or MANUAL)
+- `team_1_name`: str (optional, max 50)
+- `team_2_name`: str (optional, max 50)
 
 **Timestamps:**
 - `created_at`: datetime
 - `updated_at`: datetime
 
-### Entity: Enrollment (Agregado Secundario)
+### Entity: Enrollment (Secondary Aggregate)
 
-**Identificación:**
+**Identification:**
 - `id`: EnrollmentId (Value Object - UUID)
 - `competition_id`: CompetitionId
 - `user_id`: UserId
 
-**Estado y Configuración:**
+**Status and Configuration:**
 - `status`: EnrollmentStatus (REQUESTED/INVITED/APPROVED/REJECTED/CANCELLED/WITHDRAWN)
-- `custom_handicap`: float (opcional, -10.0 a 54.0)
-- `team_id`: str (opcional, "1" o "2")
+- `custom_handicap`: float (optional, -10.0 to 54.0)
+- `team_id`: str (optional, "1" or "2")
 
 **Timestamps:**
 - `created_at`: datetime
@@ -80,71 +80,71 @@ Módulo responsable de la gestión de torneos formato Ryder Cup, incluyendo insc
 
 ### Entity: Country (Shared Domain)
 
-**Identificación:**
+**Identification:**
 - `code`: CountryCode (Value Object - ISO 3166-1 alpha-2)
 
-**Datos:**
-- `name_en`: str (nombre en inglés)
-- `name_es`: str (nombre en español)
-- `active`: bool (si está disponible para selección)
+**Data:**
+- `name_en`: str (name in English)
+- `name_es`: str (name in Spanish)
+- `active`: bool (if available for selection)
 
 ---
 
-## 🏗️ Value Objects Implementados
+## 🏭 Value Objects Implemented
 
 ### Competition Module (9 VOs)
-- `CompetitionId` - UUID único de la competición
-- `CompetitionName` - Nombre validado (3-100 chars, unique)
-- `DateRange` - Rango de fechas (start_date ≤ end_date)
-- `Location` - Hasta 3 países adyacentes (main + 2 optional)
-- `HandicapSettings` - Tipo de handicap + porcentaje
-- `CompetitionStatus` - Estado del torneo (6 estados posibles)
-- `EnrollmentId` - UUID único del enrollment
-- `EnrollmentStatus` - Estado de la inscripción (6 estados posibles)
-- `CountryCode` - Código ISO 3166-1 alpha-2 (shared)
+- `CompetitionId` - Unique competition UUID
+- `CompetitionName` - Validated name (3-100 chars, unique)
+- `DateRange` - Date range (start_date ≤ end_date)
+- `Location` - Up to 3 adjacent countries (main + 2 optional)
+- `HandicapSettings` - Handicap type + percentage
+- `CompetitionStatus` - Tournament status (6 possible states)
+- `EnrollmentId` - Unique enrollment UUID
+- `EnrollmentStatus` - Enrollment status (6 possible states)
+- `CountryCode` - ISO 3166-1 alpha-2 code (shared)
 
 ---
 
-## 🔄 Domain Events Implementados
+## 🔄 Domain Events Implemented
 
-### Competition Events (11 eventos)
-1. `CompetitionCreatedEvent` - Torneo creado
-2. `CompetitionUpdatedEvent` - Torneo actualizado
-3. `CompetitionActivatedEvent` - Transición a ACTIVE
-4. `EnrollmentsClosedEvent` - Transición a CLOSED
-5. `CompetitionStartedEvent` - Transición a IN_PROGRESS
-6. `CompetitionCompletedEvent` - Transición a COMPLETED
-7. `CompetitionCancelledEvent` - Torneo cancelado
-8. `CompetitionDeletedEvent` - Torneo eliminado
+### Competition Events (11 events)
+1. `CompetitionCreatedEvent` - Tournament created
+2. `CompetitionUpdatedEvent` - Tournament updated
+3. `CompetitionActivatedEvent` - Transition to ACTIVE
+4. `EnrollmentsClosedEvent` - Transition to CLOSED
+5. `CompetitionStartedEvent` - Transition to IN_PROGRESS
+6. `CompetitionCompletedEvent` - Transition to COMPLETED
+7. `CompetitionCancelledEvent` - Tournament cancelled
+8. `CompetitionDeletedEvent` - Tournament deleted
 
-### Enrollment Events (4 eventos)
-9. `EnrollmentRequestedEvent` - Solicitud de inscripción
-10. `EnrollmentApprovedEvent` - Inscripción aprobada
-11. `EnrollmentCancelledEvent` - Inscripción cancelada
-12. `EnrollmentWithdrawnEvent` - Jugador retirado
+### Enrollment Events (4 events)
+9. `EnrollmentRequestedEvent` - Enrollment request
+10. `EnrollmentApprovedEvent` - Enrollment approved
+11. `EnrollmentCancelledEvent` - Enrollment cancelled
+12. `EnrollmentWithdrawnEvent` - Player withdrawn
 
 ---
 
-## 🏛️ Arquitectura
+## 🏛️ Architecture
 
 ### Repository Pattern
 
 **Interfaces (Domain Layer):**
-- `CompetitionRepositoryInterface` - CRUD de competiciones
+- `CompetitionRepositoryInterface` - Competition CRUD
   - find_by_id, find_by_creator, find_by_status, find_active_in_date_range
   - add, update, delete, exists_with_name, count_by_creator
-- `EnrollmentRepositoryInterface` - CRUD de enrollments
+- `EnrollmentRepositoryInterface` - Enrollment CRUD
   - find_by_id, find_by_competition, find_by_competition_and_status, find_by_user
   - add, update, exists_for_user_in_competition, count_approved, find_by_competition_and_team
-- `CountryRepositoryInterface` - Consultas de países (shared)
+- `CountryRepositoryInterface` - Country queries (shared)
   - find_by_code, find_all_active, are_adjacent, find_adjacent_countries, exists
 
-**Implementaciones (Infrastructure Layer):**
-- `SQLAlchemyCompetitionRepository` - Persistencia async con PostgreSQL
-- `SQLAlchemyEnrollmentRepository` - Persistencia de enrollments
-- `SQLAlchemyCountryRepository` - Consultas de países (seed data)
+**Implementations (Infrastructure Layer):**
+- `SQLAlchemyCompetitionRepository` - Async persistence with PostgreSQL
+- `SQLAlchemyEnrollmentRepository` - Enrollment persistence
+- `SQLAlchemyCountryRepository` - Country queries (seed data)
 
-**📋 Ver implementación:** `src/modules/competition/infrastructure/persistence/sqlalchemy/`
+**📋 See implementation:** `src/modules/competition/infrastructure/persistence/sqlalchemy/`
 
 ### Unit of Work Pattern
 
@@ -159,12 +159,12 @@ CompetitionUnitOfWorkInterface
 └── async __aenter__() / __aexit__()
 ```
 
-**Implementación (Infrastructure Layer):**
-- `SQLAlchemyCompetitionUnitOfWork` - Gestión de transacciones atómicas
+**Implementation (Infrastructure Layer):**
+- `SQLAlchemyCompetitionUnitOfWork` - Atomic transaction management
 
 ---
 
-## 📊 Esquema de Base de Datos
+## 📊 Database Schema
 
 ### Tabla: competitions
 ```sql
@@ -192,7 +192,7 @@ CREATE INDEX idx_competitions_status ON competitions(status);
 CREATE INDEX idx_competitions_dates ON competitions(start_date, end_date);
 ```
 
-### Tabla: enrollments
+### Table: enrollments
 ```sql
 CREATE TABLE enrollments (
     id UUID PRIMARY KEY,
@@ -210,7 +210,7 @@ CREATE INDEX idx_enrollments_user_id ON enrollments(user_id);
 CREATE INDEX idx_enrollments_status ON enrollments(status);
 ```
 
-### Tabla: countries (Shared - Seed Data)
+### Table: countries (Shared - Seed Data)
 ```sql
 CREATE TABLE countries (
     code VARCHAR(2) PRIMARY KEY,
@@ -220,7 +220,7 @@ CREATE TABLE countries (
 );
 ```
 
-### Tabla: country_adjacencies (Relaciones Bidireccionales)
+### Table: country_adjacencies (Bidirectional Relationships)
 ```sql
 CREATE TABLE country_adjacencies (
     country_code VARCHAR(2) REFERENCES countries(code),
@@ -230,99 +230,99 @@ CREATE TABLE country_adjacencies (
 ```
 
 **Seed Data:**
-- 166 países globales (no solo Europa)
-- 614 relaciones bidireccionales de fronteras (Wikipedia)
-- Nombres bilingües (inglés/español)
+- 166 global countries (not only Europe)
+- 614 bidirectional border relationships (Wikipedia)
+- Bilingual names (English/Spanish)
 
-**📋 Ver mappers:** `src/modules/competition/infrastructure/persistence/sqlalchemy/mappers.py`
+**📋 See mappers:** `src/modules/competition/infrastructure/persistence/sqlalchemy/mappers.py`
 
 ---
 
 ## 📡 API Endpoints
 
 ### Competition Management (10 endpoints)
-- `POST /api/v1/competitions` - Crear competición
-- `GET /api/v1/competitions` - Listar competiciones con filtros
-- `GET /api/v1/competitions/{id}` - Obtener competición
-- `PUT /api/v1/competitions/{id}` - Actualizar competición (solo DRAFT)
-- `DELETE /api/v1/competitions/{id}` - Eliminar competición (solo DRAFT)
+- `POST /api/v1/competitions` - Create competition
+- `GET /api/v1/competitions` - List competitions with filters
+- `GET /api/v1/competitions/{id}` - Get competition
+- `PUT /api/v1/competitions/{id}` - Update competition (DRAFT only)
+- `DELETE /api/v1/competitions/{id}` - Delete competition (DRAFT only)
 - `POST /api/v1/competitions/{id}/activate` - DRAFT → ACTIVE
 - `POST /api/v1/competitions/{id}/close-enrollments` - ACTIVE → CLOSED
 - `POST /api/v1/competitions/{id}/start` - CLOSED → IN_PROGRESS
 - `POST /api/v1/competitions/{id}/complete` - IN_PROGRESS → COMPLETED
-- `POST /api/v1/competitions/{id}/cancel` - Cualquier estado → CANCELLED
+- `POST /api/v1/competitions/{id}/cancel` - Any status → CANCELLED
 
 ### Enrollment Management (8 endpoints)
-- `POST /api/v1/competitions/{id}/enrollments` - Solicitar inscripción
-- `POST /api/v1/competitions/{id}/enrollments/direct` - Inscripción directa (creador)
-- `GET /api/v1/competitions/{id}/enrollments` - Listar inscripciones
-- `POST /api/v1/enrollments/{id}/approve` - Aprobar solicitud
-- `POST /api/v1/enrollments/{id}/reject` - Rechazar solicitud
-- `POST /api/v1/enrollments/{id}/cancel` - Cancelar solicitud
-- `POST /api/v1/enrollments/{id}/withdraw` - Retirarse de competición
-- `PUT /api/v1/enrollments/{id}/handicap` - Establecer handicap personalizado
+- `POST /api/v1/competitions/{id}/enrollments` - Request enrollment
+- `POST /api/v1/competitions/{id}/enrollments/direct` - Direct enrollment (creator)
+- `GET /api/v1/competitions/{id}/enrollments` - List enrollments
+- `POST /api/v1/enrollments/{id}/approve` - Approve request
+- `POST /api/v1/enrollments/{id}/reject` - Reject request
+- `POST /api/v1/enrollments/{id}/cancel` - Cancel request
+- `POST /api/v1/enrollments/{id}/withdraw` - Withdraw from competition
+- `PUT /api/v1/enrollments/{id}/handicap` - Set custom handicap
 
 ### Country Management (2 endpoints - Shared)
-- `GET /api/v1/countries` - Lista países activos
-- `GET /api/v1/countries/{code}/adjacent` - Países adyacentes
+- `GET /api/v1/countries` - List active countries
+- `GET /api/v1/countries/{code}/adjacent` - Adjacent countries
 
-**📋 Ver documentación completa:** `docs/API.md`
+**📋 See complete documentation:** `docs/API.md`
 
 ---
 
-## 🔐 Seguridad y Rate Limiting
+## 🔐 Security and Rate Limiting
 
 ### Rate Limits
-- `POST /api/v1/competitions` - 10 torneos/hora (anti-spam)
+- `POST /api/v1/competitions` - 10 tournaments/hour (anti-spam)
 
-### Autorización
-- **Solo creador** puede actualizar, eliminar o cambiar estado de torneo
-- **Solo creador** puede aprobar/rechazar solicitudes de inscripción
-- **Solo creador** puede inscribir jugadores directamente
-- **Solo creador** puede establecer custom handicaps
-- **Solo dueño** puede cancelar/retirarse de su propia inscripción
+### Authorization
+- **Only creator** can update, delete or change tournament status
+- **Only creator** can approve/reject enrollment requests
+- **Only creator** can enroll players directly
+- **Only creator** can set custom handicaps
+- **Only owner** can cancel/withdraw from their own enrollment
 
 ---
 
 ## 🧪 Testing
 
-### Estadísticas
-- **Total Competition Module:** 174 tests (97.6% pasando)
+### Statistics
+- **Total Competition Module:** 174 tests (97.6% passing)
 - **Unit Tests (Domain):** 38 tests (entities, value objects, repositories)
 - **Unit Tests (Application):** 58 tests (use cases)
-- **Unit Tests (DTOs):** 48 tests (validaciones)
-- **Integration Tests:** Incluidos en test suite general (API endpoints)
+- **Unit Tests (DTOs):** 48 tests (validations)
+- **Integration Tests:** Included in general test suite (API endpoints)
 
-### Estructura
+### Structure
 ```
 tests/unit/modules/competition/
 ├── domain/value_objects/test_*.py (38 tests)
 ├── application/dto/test_*.py (48 tests)
 ├── application/use_cases/test_*.py (58 tests)
-└── infrastructure/ (pendiente)
+└── infrastructure/ (pending)
 
 tests/integration/api/v1/
 ├── test_competition_routes.py
 └── test_enrollment_routes.py
 ```
 
-### Ejecución
+### Execution
 ```bash
-# Todos los tests del módulo Competition
+# All tests for Competition module
 pytest tests/unit/modules/competition/ -v
 
-# Solo tests unitarios (rápido)
+# Only unit tests (fast)
 pytest tests/unit/modules/competition/domain/ -v
 
-# Con paralelización
+# With parallelization
 pytest tests/unit/modules/competition/ -n auto
 ```
 
 ---
 
-## 🔄 Estados y Transiciones
+## 🔄 States and Transitions
 
-### Competition Status (Estado de Torneo)
+### Competition Status (Tournament Status)
 
 ```
 DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
@@ -330,20 +330,20 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
   └────────┴─────────┴───────────┴─→ CANCELLED
 ```
 
-**Estados:**
-- `DRAFT` - Borrador, solo visible para creador, editable
-- `ACTIVE` - Activo, inscripciones abiertas
-- `CLOSED` - Inscripciones cerradas, equipos configurados
-- `IN_PROGRESS` - Torneo en curso
-- `COMPLETED` - Torneo finalizado
-- `CANCELLED` - Cancelado desde cualquier estado
+**States:**
+- `DRAFT` - Draft, only visible to creator, editable
+- `ACTIVE` - Active, enrollments open
+- `CLOSED` - Enrollments closed, teams configured
+- `IN_PROGRESS` - Tournament in progress
+- `COMPLETED` - Tournament finished
+- `CANCELLED` - Cancelled from any status
 
-**Reglas:**
-- Solo DRAFT es editable/eliminable
-- Solo ACTIVE acepta inscripciones
-- Solo creador puede cambiar estados
+**Rules:**
+- Only DRAFT is editable/deletable
+- Only ACTIVE accepts enrollments
+- Only creator can change states
 
-### Enrollment Status (Estado de Inscripción)
+### Enrollment Status (Enrollment Status)
 
 ```
 REQUESTED → APPROVED → WITHDRAWN
@@ -351,67 +351,67 @@ REQUESTED → APPROVED → WITHDRAWN
 REJECTED    CANCELLED
 ```
 
-**Estados:**
-- `REQUESTED` - Solicitud pendiente
-- `INVITED` - Invitado por creador (futuro)
-- `APPROVED` - Inscripción aprobada
-- `REJECTED` - Solicitud rechazada
-- `CANCELLED` - Cancelada por jugador (pre-aprobación)
-- `WITHDRAWN` - Retirado por jugador (post-aprobación)
+**States:**
+- `REQUESTED` - Pending request
+- `INVITED` - Invited by creator (future)
+- `APPROVED` - Enrollment approved
+- `REJECTED` - Request rejected
+- `CANCELLED` - Cancelled by player (pre-approval)
+- `WITHDRAWN` - Withdrawn by player (post-approval)
 
 ---
 
-## 🏛️ Decisiones Arquitectónicas
+## 🏛️ Architecture Decisions
 
 ### 1. Location Value Object - Multi-Country Support
-**Decisión:** Soporte para hasta 3 países adyacentes en una competición
+**Decision:** Support for up to 3 adjacent countries in a competition
 
-**Razón:**
-- Torneos transfronterizos son comunes en Europa
-- Validación automática de adyacencia geográfica
-- Base de datos local con seed data (sin API externa)
+**Reason:**
+- Cross-border tournaments are common in Europe
+- Automatic validation of geographical adjacency
+- Local database with seed data (no external API)
 
-**Implementación:**
+**Implementation:**
 - Composite Value Object: Location(main, secondary, tertiary)
-- Validación de adyacencia contra tabla country_adjacencies
-- 614 relaciones bidireccionales precargadas
+- Adjacency validation against country_adjacencies table
+- 614 bidirectional relationships preloaded
 
 ### 2. Custom Handicap Override
-**Decisión:** Permitir override del handicap oficial por enrollment
+**Decision:** Allow override of official handicap per enrollment
 
-**Razón:**
-- Flexibilidad para organizadores
-- Casos especiales (jugadores lesionados, categorías especiales)
-- No modifica el handicap oficial del usuario
+**Reason:**
+- Flexibility for organizers
+- Special cases (injured players, special categories)
+- Does not modify user's official handicap
 
-**Implementación:**
-- Campo `custom_handicap` opcional en Enrollment entity
-- Solo creador puede establecer
-- Si NULL, usa handicap oficial del usuario
+**Implementation:**
+- Optional `custom_handicap` field in Enrollment entity
+- Only creator can set
+- If NULL, uses user's official handicap
 
 ### 3. Competition State Machine
-**Decisión:** Estados explícitos con validaciones estrictas
+**Decision:** Explicit states with strict validations
 
-**Razón:**
-- Prevenir inconsistencias (ej: iniciar torneo sin cerrar inscripciones)
-- Trazabilidad completa con Domain Events
-- Seguridad (solo creador puede cambiar estados)
+**Reason:**
+- Prevent inconsistencies (e.g.: starting tournament without closing enrollments)
+- Complete traceability with Domain Events
+- Security (only creator can change states)
 
-**Implementación:**
-- CompetitionStatus enum con 6 estados
-- Métodos de transición en entidad (activate, close, start, complete, cancel)
-- Domain Events emitidos en cada transición
+**Implementation:**
+- CompetitionStatus enum with 6 states
+- Transition methods in entity (activate, close, start, complete, cancel)
+- Domain Events emitted on each transition
 
 ---
 
-## 🔗 Enlaces Relacionados
+## 🔗 Related Links
 
-### Documentación
+### Documentation
 - **API Endpoints:** `docs/API.md`
 - **User Management Module:** `docs/modules/user-management.md`
 - **Security Implementation:** `docs/SECURITY_IMPLEMENTATION.md`
 
-### Código Fuente
+### Source Code
 - **Domain Layer:** `src/modules/competition/domain/`
 - **Application Layer:** `src/modules/competition/application/`
 - **Infrastructure Layer:** `src/modules/competition/infrastructure/`
@@ -423,38 +423,38 @@ REJECTED    CANCELLED
 - **ADR-007:** Domain Events Pattern
 
 ### Testing
-- **Tests Unitarios:** `tests/unit/modules/competition/`
-- **Tests Integración:** `tests/integration/api/v1/`
+- **Unit Tests:** `tests/unit/modules/competition/`
+- **Integration Tests:** `tests/integration/api/v1/`
 
 ---
 
-## 💡 Tips para Desarrollo
+## 💡 Development Tips
 
-### Crear Nuevo Use Case de Competition
-1. Definir DTO de Request y Response en `application/dto/competition_dto.py`
-2. Crear Use Case en `application/use_cases/`
-3. Inyectar CompetitionUnitOfWork en constructor
-4. Implementar lógica en método `execute()`
-5. Usar `async with self._uow:` para transacciones
-6. Emitir domain events si es necesario
-7. Crear tests unitarios + integración
+### Create New Competition Use Case
+1. Define Request and Response DTO in `application/dto/competition_dto.py`
+2. Create Use Case in `application/use_cases/`
+3. Inject CompetitionUnitOfWork in constructor
+4. Implement logic in `execute()` method
+5. Use `async with self._uow:` for transactions
+6. Emit domain events if necessary
+7. Create unit + integration tests
 
-### Añadir Nueva Transición de Estado
-1. Crear método en Competition entity (`def transition_name(self)`)
-2. Validar estado actual con `_ensure_state(CompetitionStatus.XXX)`
-3. Cambiar estado y emitir Domain Event
-4. Crear Use Case wrapper (opcional, recomendado)
-5. Añadir endpoint en `competition_routes.py`
-6. Crear tests de transición válida/inválida
+### Add New State Transition
+1. Create method in Competition entity (`def transition_name(self)`)
+2. Validate current state with `_ensure_state(CompetitionStatus.XXX)`
+3. Change state and emit Domain Event
+4. Create Use Case wrapper (optional, recommended)
+5. Add endpoint in `competition_routes.py`
+6. Create valid/invalid transition tests
 
-### Trabajar con Enrollments
-1. Validar siempre que competition.status == ACTIVE
-2. Verificar que no existe enrollment duplicado
-3. Usar `custom_handicap` solo si necesario (NULL usa oficial)
-4. Emitir eventos de dominio para trazabilidad
-5. Validar permisos (solo creador/dueño según acción)
+### Working with Enrollments
+1. Always validate that competition.status == ACTIVE
+2. Verify no duplicate enrollment exists
+3. Use `custom_handicap` only if necessary (NULL uses official)
+4. Emit domain events for traceability
+5. Validate permissions (only creator/owner depending on action)
 
 ---
 
-**Última actualización:** 18 de Diciembre de 2025
-**Versión:** 1.8.0
+**Last Updated:** 8 January 2026
+**Version:** v1.13.0

@@ -18,11 +18,13 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class NotCompetitionCreatorError(Exception):
     """Excepción lanzada cuando el usuario no es el creador de la competición."""
+
     pass
 
 
@@ -57,9 +59,7 @@ class CloseEnrollmentsUseCase:
         self._uow = uow
 
     async def execute(
-        self,
-        request: CloseEnrollmentsRequestDTO,
-        user_id: UserId
+        self, request: CloseEnrollmentsRequestDTO, user_id: UserId
     ) -> CloseEnrollmentsResponseDTO:
         """
         Ejecuta el caso de uso de cierre de inscripciones.
@@ -88,9 +88,7 @@ class CloseEnrollmentsUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede cerrar las inscripciones"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede cerrar las inscripciones")
 
             # 3. Contar inscripciones aprobadas
             total_enrollments = await self._uow.enrollments.count_approved(competition_id)
@@ -109,5 +107,5 @@ class CloseEnrollmentsUseCase:
             id=competition.id.value,
             status=competition.status.value,
             total_enrollments=total_enrollments,
-            closed_at=competition.updated_at
+            closed_at=competition.updated_at,
         )

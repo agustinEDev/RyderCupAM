@@ -56,7 +56,7 @@ class TestResetPasswordSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token(ip_address="1.1.1.1")
         old_password_hash = user.password.hashed_value
@@ -68,7 +68,7 @@ class TestResetPasswordSuccess:
             token=token,
             new_password="NewSecurePassword456!",
             ip_address="192.168.1.100",
-            user_agent="Mozilla/5.0 (Test Browser)"
+            user_agent="Mozilla/5.0 (Test Browser)",
         )
 
         # Act
@@ -76,7 +76,10 @@ class TestResetPasswordSuccess:
 
         # Assert
         # 1. Verificar respuesta exitosa
-        assert response.message == "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad."
+        assert (
+            response.message
+            == "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad."
+        )
 
         # 2. Verificar que la contraseña cambió
         async with uow:
@@ -110,25 +113,19 @@ class TestResetPasswordSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)
 
-        request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act: Primer reseteo (exitoso)
         await use_case.execute(request_dto)
 
         # Assert: Segundo intento con el mismo token falla
-        second_request = ResetPasswordRequestDTO(
-            token=token,
-            new_password="AnotherPassword789!"
-        )
+        second_request = ResetPasswordRequestDTO(token=token, new_password="AnotherPassword789!")
 
         # El segundo intento falla porque el token ya fue invalidado
         # Puede fallar con diferentes mensajes dependiendo de la validación
@@ -151,16 +148,13 @@ class TestResetPasswordSuccess:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)
 
-        request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act
         await use_case.execute(request_dto)
@@ -192,10 +186,7 @@ class TestResetPasswordInvalidToken:
         # Generar un token válido de al menos 32 caracteres (pero que no existe en BD)
         fake_token = "a" * 43  # Longitud típica de token URL-safe
 
-        request_dto = ResetPasswordRequestDTO(
-            token=fake_token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=fake_token, new_password="NewPassword456!")
 
         # Act & Assert
         # Cuando el token no existe, puede fallar en validación de security event
@@ -222,7 +213,7 @@ class TestResetPasswordInvalidToken:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         old_password_hash = user.password.hashed_value
@@ -233,10 +224,7 @@ class TestResetPasswordInvalidToken:
         async with uow:
             await uow.users.save(user)
 
-        request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act & Assert
         with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):
@@ -263,7 +251,7 @@ class TestResetPasswordInvalidToken:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         old_password_hash = user.password.hashed_value
@@ -274,7 +262,7 @@ class TestResetPasswordInvalidToken:
         # Password que pasa validación de Pydantic (12+ chars) pero falla en Password VO
         request_dto = ResetPasswordRequestDTO(
             token=token,
-            new_password="weakpassword"  # 12 chars pero sin mayúsculas, números, símbolos
+            new_password="weakpassword",  # 12 chars pero sin mayúsculas, números, símbolos
         )
 
         # Act & Assert
@@ -291,9 +279,7 @@ class TestResetPasswordSecurityFeatures:
     """Tests para features de seguridad"""
 
     @patch("src.modules.user.application.use_cases.reset_password_use_case.get_security_logger")
-    async def test_reset_password_logs_successful_reset(
-        self, mock_get_logger, sample_user_data
-    ):
+    async def test_reset_password_logs_successful_reset(self, mock_get_logger, sample_user_data):
         """
         Test: Reseteo exitoso registra security log
         Given: Usuario con token válido
@@ -312,7 +298,7 @@ class TestResetPasswordSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         async with uow:
@@ -322,7 +308,7 @@ class TestResetPasswordSecurityFeatures:
             token=token,
             new_password="NewPassword456!",
             ip_address="192.168.1.1",
-            user_agent="Mozilla/5.0"
+            user_agent="Mozilla/5.0",
         )
 
         # Act
@@ -338,9 +324,7 @@ class TestResetPasswordSecurityFeatures:
         assert call_args.kwargs["user_agent"] == "Mozilla/5.0"
 
     @patch("src.modules.user.application.use_cases.reset_password_use_case.get_security_logger")
-    async def test_reset_password_logs_failed_reset_invalid_token(
-        self, mock_get_logger
-    ):
+    async def test_reset_password_logs_failed_reset_invalid_token(self, mock_get_logger):
         """
         Test: Token inválido registra security log con failure
         Given: Token que no existe
@@ -362,7 +346,7 @@ class TestResetPasswordSecurityFeatures:
             token=fake_token,
             new_password="NewPassword456!",
             ip_address="10.0.0.1",
-            user_agent="Chrome/90"
+            user_agent="Chrome/90",
         )
 
         # Act
@@ -401,7 +385,7 @@ class TestResetPasswordSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         # Expirar el token
@@ -410,9 +394,7 @@ class TestResetPasswordSecurityFeatures:
             await uow.users.save(user)
 
         request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!",
-            ip_address="10.0.0.1"
+            token=token, new_password="NewPassword456!", ip_address="10.0.0.1"
         )
 
         # Act
@@ -427,9 +409,7 @@ class TestResetPasswordSecurityFeatures:
         assert call_args.kwargs["success"] is False
         assert "Token de reseteo inválido o expirado" in call_args.kwargs["failure_reason"]
 
-    async def test_reset_password_uses_default_values_for_optional_fields(
-        self, sample_user_data
-    ):
+    async def test_reset_password_uses_default_values_for_optional_fields(self, sample_user_data):
         """
         Test: Campos opcionales usan valores por defecto
         Given: Request sin ip_address ni user_agent
@@ -445,23 +425,23 @@ class TestResetPasswordSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)
 
         # Request sin campos opcionales
-        request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act
         response = await use_case.execute(request_dto)
 
         # Assert - Verificar que el reseteo fue exitoso
-        assert response.message == "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad."
+        assert (
+            response.message
+            == "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas por seguridad."
+        )
 
     async def test_reset_password_sends_confirmation_email(self, sample_user_data):
         """
@@ -481,16 +461,13 @@ class TestResetPasswordSecurityFeatures:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)
 
-        request_dto = ResetPasswordRequestDTO(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act
         await use_case.execute(request_dto)

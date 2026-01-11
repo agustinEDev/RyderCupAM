@@ -1,168 +1,94 @@
 # ADR-007: Domain Events Pattern
 
-**Estado**: ✅ Aceptado
-**Fecha**: 1 Nov 2025
+**Status**: ✅ Accepted
+**Date**: Nov 1, 2025
 
 ---
 
-## Contexto
+## Context
 
-Necesitamos manejar efectos secundarios y comunicación entre módulos sin acoplar use cases. El sistema Ryder Cup es event-driven por naturaleza: registros, actualizaciones de handicap, torneos, etc.
+We need to handle side effects and communication between modules without coupling use cases.
 
-**Problemas**:
-- Use cases acoplados (lógica principal + efectos secundarios)
-- Violación SRP (un use case hace múltiples cosas)
-- Tests complejos con múltiples mocks
-- Difícil extender sin modificar código existente
-- Falta de auditoría
+**Problems**:
+- Coupled use cases (main logic + side effects)
+- SRP violation
+- Complex tests with multiple mocks
+- Difficult to extend
+- Lack of auditing
 
-**Eventos del Sistema**:
-```python
-UserRegisteredEvent         → Email bienvenida, auditoría
-HandicapUpdatedEvent        → Auditoría, notificaciones
-TournamentCreatedEvent      → Invitaciones
-MatchCompletedEvent         → Leaderboard, resultados
-```
+**System Events**: UserRegisteredEvent, HandicapUpdatedEvent, TournamentCreatedEvent, MatchCompletedEvent
 
 ---
 
-## Decisión
+## Decision
 
-**Domain Events Pattern** con event bus en memoria.
+**Domain Events Pattern** with in-memory event bus.
 
-### Componentes
+### Components
 
 **1. DomainEvent Base**
-```python
-@dataclass(frozen=True)
-class DomainEvent(ABC):
-    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    occurred_on: datetime = field(default_factory=datetime.now)
-    aggregate_id: str
-    event_version: int = 1
-```
+- Fields: event_id, occurred_on, aggregate_id, event_version
+- Immutable frozen dataclass
 
-**2. Eventos Específicos**
-```python
-@dataclass(frozen=True)
-class UserRegisteredEvent(DomainEvent):
-    user_id: str
-    email: str
-    full_name: str
+**2. Specific Events**
+- UserRegisteredEvent: user_id, email, full_name
+- HandicapUpdatedEvent: user_id, old/new handicap, handicap_delta property
 
-@dataclass(frozen=True)
-class HandicapUpdatedEvent(DomainEvent):
-    user_id: str
-    old_handicap: float?
-    new_handicap: float?
-    updated_at: datetime
-
-    @property
-    def handicap_delta(self) -> float?:
-        if self.old_handicap and self.new_handicap:
-            return self.new_handicap - self.old_handicap
-        return None
-```
-
-**3. Event Collection en Entidades**
-```python
-class User:
-    def __init__(self, ...):
-        self._domain_events: List[DomainEvent] = []
-
-    @classmethod
-    def create(cls, ...) -> 'User':
-        user = cls(...)
-        user._add_domain_event(UserRegisteredEvent(...))
-        return user
-
-    def update_handicap(self, new_handicap: float?) -> None:
-        old = self.handicap
-        # ... actualizar ...
-        if old != self.handicap:
-            self._add_domain_event(HandicapUpdatedEvent(...))
-```
+**3. Event Collection in Entities**
+- Entities maintain _domain_events list
+- Events added on create/update operations
+- Example: User.create() generates UserRegisteredEvent
 
 **4. Event Bus + Handlers**
-```python
-class EventBus(ABC):
-    @abstractmethod
-    async def publish(self, event: DomainEvent) -> None:
-        pass
+- EventBus: publish(), subscribe() methods
+- EventHandler: handle() method
+- Async support for all operations
 
-    @abstractmethod
-    def subscribe(self, event_type: Type, handler: EventHandler) -> None:
-        pass
-
-class EventHandler(ABC):
-    @abstractmethod
-    async def handle(self, event: DomainEvent) -> None:
-        pass
-```
-
-**5. Integración con Unit of Work**
-```python
-class RegisterUserUseCase:
-    async def execute(self, command: RegisterUserCommand):
-        async with self._uow:
-            user = User.create(...)  # Genera UserRegisteredEvent
-            await self._uow.users.save(user)
-            await self._uow.commit()
-
-            # Publicar eventos después del commit exitoso
-            await self._uow.publish_events(self._event_bus)
-
-        return UserResponse(...)
-```
+**5. Integration with Unit of Work**
+- Use cases collect domain events from entities
+- Events published after successful commit
+- Ensures transactional consistency
 
 ---
 
-## Alternativas Rechazadas
+## Rejected Alternatives
 
-**1. Callbacks directos**
-- ❌ Acoplamiento entre capas
-- ❌ Difícil testing
-
-**2. Observer Pattern tradicional**
-- ❌ Viola Clean Architecture
-- ❌ Domain conoce infraestructura
-
-**3. Message Queues (RabbitMQ, Redis)**
-- ❌ Complejidad innecesaria para monolito
-- ❌ Overhead configuración
+**1. Direct Callbacks**: Coupling between layers
+**2. Traditional Observer Pattern**: Violates Clean Architecture
+**3. Message Queues (RabbitMQ, Redis)**: Unnecessary complexity for monolith
 
 ---
 
-## Consecuencias
+## Consequences
 
-### Positivas
-✅ **Single Responsibility**: Use cases enfocados en lógica de negocio
-✅ **Desacoplamiento**: Handlers independientes
-✅ **Testabilidad**: Tests aislados
-✅ **Extensibilidad**: Nuevo handler = nueva funcionalidad
-✅ **Auditoría**: Trazabilidad completa
-✅ **Performance**: Eventos en memoria, sin red
-✅ **Transaccionalidad**: Eventos solo después de commit
+### Positive
+✅ **Single Responsibility**: Use cases focused on business logic
+✅ **Decoupling**: Independent handlers
+✅ **Testability**: Isolated tests
+✅ **Extensibility**: New handler = new functionality
+✅ **Auditing**: Complete traceability
+✅ **Performance**: In-memory events, no network
+✅ **Transactionality**: Events only after commit
 
-### Negativas
-⚠️ **Complejidad**: Más abstracciones
-⚠️ **Debugging**: Flujo indirecto
-⚠️ **Error handling**: Manejo de fallos en handlers
-
----
-
-## Implementación
-
-### Componentes
-- `DomainEvent` base class (Domain Layer)
-- `EventHandler` interface (Application Layer)
-- `EventBus` interface + `InMemoryEventBus` (Shared)
-- Eventos específicos de dominio (ej: `UserRegisteredEvent`, `HandicapUpdatedEvent`)
-- Handlers específicos (Application)
+### Negative
+⚠️ **Complexity**: More abstractions
+⚠️ **Debugging**: Indirect flow
+⚠️ **Error handling**: Handling failures in handlers
 
 ---
 
-## Referencias
+## Implementation
+
+**Components**:
+- DomainEvent base class (Domain Layer)
+- EventHandler interface (Application Layer)
+- EventBus interface + InMemoryEventBus (Shared)
+- Domain-specific events (UserRegisteredEvent, HandicapUpdatedEvent)
+- Specific handlers (Application)
+
+---
+
+## References
 
 - [ADR-001: Clean Architecture](./ADR-001-clean-architecture.md)
 - [ADR-002: Value Objects](./ADR-002-value-objects.md)
@@ -170,4 +96,4 @@ class RegisterUserUseCase:
 - [ADR-006: Unit of Work](./ADR-006-unit-of-work-pattern.md)
 - [ADR-008: Logging System](./ADR-008-logging-system.md)
 - [ADR-014: Handicap System](./ADR-014-handicap-management-system.md)
-- [Design Document](../design-document.md) - Ver sección Métricas para eventos implementados
+- [Design Document](../design-document.md) - See Metrics section for implemented events

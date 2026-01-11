@@ -11,9 +11,9 @@ Uso:
     python scripts/check_config.py
 """
 
-import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Agregar el directorio raíz al PYTHONPATH
 # Script ubicado en: k8s/scripts/check_config.py
@@ -47,16 +47,29 @@ def detect_environment() -> str:
 
     Returns:
         str: "local", "kubernetes", "production", o "unknown"
-    """
-    frontend_url = settings.FRONTEND_URL
 
-    if "localhost:5173" in frontend_url:
-        return "local"
-    elif "localhost:8080" in frontend_url:
-        return "kubernetes"
-    elif "rydercupfriends.com" in frontend_url or "onrender.com" in frontend_url:
-        return "production"
-    else:
+    Security:
+        Uses urlparse() to extract and validate exact hostname (CodeQL CWE-20).
+        Prevents URL injection attacks like: http://evil.com?redirect=rydercupfriends.com
+        Rejects subdomain attacks like: https://rydercupfriends.com.evil.com
+    """
+    try:
+        parsed = urlparse(settings.FRONTEND_URL)
+        hostname = parsed.hostname  # Extrae solo el hostname (sin puerto, path, query)
+
+        if hostname is None:
+            return "unknown"
+
+        # Validación estricta: hostname exacto (no substrings)
+        if hostname == "localhost" and parsed.port == 5173:
+            return "local"
+        if hostname == "localhost" and parsed.port == 8080:
+            return "kubernetes"
+        if hostname == "rydercupfriends.com" or hostname == "rydercupam.onrender.com":
+            return "production"
+
+        return "unknown"
+    except (ValueError, AttributeError):
         return "unknown"
 
 
@@ -73,7 +86,11 @@ def check_required_vars() -> tuple[int, int]:
         "MAILGUN_FROM_EMAIL": settings.MAILGUN_FROM_EMAIL,
         "MAILGUN_API_URL": settings.MAILGUN_API_URL,
         "SECRET_KEY": settings.SECRET_KEY,
-        "DATABASE_URL": settings.DATABASE_URL[:30] + "..." if len(settings.DATABASE_URL) > 30 else settings.DATABASE_URL,
+        "DATABASE_URL": (
+            settings.DATABASE_URL[:30] + "..."
+            if len(settings.DATABASE_URL) > 30
+            else settings.DATABASE_URL
+        ),
     }
 
     total = len(checks)
@@ -124,7 +141,7 @@ def check_frontend_url() -> bool:
     if env == "unknown":
         print_error(
             "ADVERTENCIA",
-            f"No se pudo detectar el entorno basándose en: {frontend_url}"
+            f"No se pudo detectar el entorno basándose en: {frontend_url}",
         )
         print("\n🔧 URLs esperadas:")
         for env_name, url in env_recommendations.items():
@@ -135,12 +152,8 @@ def check_frontend_url() -> bool:
     if frontend_url == recommended:
         print_check("Consistencia", f"OK - Coincide con entorno {env}", "✅")
         return True
-    else:
-        print_error(
-            "INCONSISTENCIA",
-            f"Se esperaba '{recommended}' para entorno {env}"
-        )
-        return False
+    print_error("INCONSISTENCIA", f"Se esperaba '{recommended}' para entorno {env}")
+    return False
 
 
 def check_email_service() -> bool:
@@ -225,22 +238,30 @@ def print_recommendations() -> None:
         print("   1. Asegúrate de tener el .env configurado")
         print("   2. Ejecuta: uvicorn main:app --reload --port 8000")
         print("   3. Frontend debe correr en: http://localhost:5173")
-        print("   4. Los enlaces de email apuntarán a: http://localhost:5173/verify-email")
+        print(
+            "   4. Los enlaces de email apuntarán a: http://localhost:5173/verify-email"
+        )
 
     elif env == "kubernetes":
         print("📝 Estás en modo KUBERNETES (Kind local)")
         print("   1. Asegúrate de tener el ConfigMap aplicado:")
         print("      kubectl apply -f k8s/api-configmap.yaml")
         print("   2. Port-forward del frontend:")
-        print("      kubectl port-forward svc/rydercup-frontend-service 8080:80 -n rydercupfriends")
+        print(
+            "      kubectl port-forward svc/rydercup-frontend-service 8080:80 -n rydercupfriends"
+        )
         print("   3. Accede al frontend en: http://localhost:8080")
-        print("   4. Los enlaces de email apuntarán a: http://localhost:8080/verify-email")
+        print(
+            "   4. Los enlaces de email apuntarán a: http://localhost:8080/verify-email"
+        )
 
     elif env == "production":
         print("📝 Estás en modo PRODUCCIÓN")
         print("   1. Verifica las variables en Render Dashboard")
         print("   2. URL del frontend: https://rydercupfriends.com")
-        print("   3. Los enlaces de email apuntarán a: https://rydercupfriends.com/verify-email")
+        print(
+            "   3. Los enlaces de email apuntarán a: https://rydercupfriends.com/verify-email"
+        )
         print("   4. Monitorea los logs en: https://dashboard.render.com")
 
     else:
@@ -291,5 +312,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ ERROR INESPERADO: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

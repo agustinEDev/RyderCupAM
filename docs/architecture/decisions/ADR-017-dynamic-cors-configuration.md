@@ -1,38 +1,38 @@
 # ADR-017: Dynamic CORS Configuration Based on Environment
 
-**Estado**: ✅ Aceptado
-**Fecha**: 11 Nov 2025
+**Status**: ✅ Accepted
+**Date**: Nov 11, 2025
 
 ---
 
-## Contexto
+## Context
 
-Backend API necesita permitir requests desde frontend, pero los orígenes difieren entre entornos:
-- **Desarrollo**: `http://localhost:5173` (Vite dev server)
-- **Producción**: `https://www.rydercupfriends.com` (dominio custom)
+Backend API needs to allow requests from frontend, but origins differ between environments:
+- **Development**: `http://localhost:5173` (Vite dev server)
+- **Production**: `https://www.rydercupfriends.com` (custom domain)
 
-**Problema**: CORS hardcodeado requiere cambios manuales en código al deployar.
+**Problem**: Hardcoded CORS requires manual code changes when deploying.
 
-**Alternativas**:
-1. **CORS Permisivo** (`allow_origins=["*"]`): Inseguro en producción
-2. **Config Files Separados**: Duplicación, propenso a errores
-3. **Environment Variables**: Configuración dinámica desde deployment
-4. **Reverse Proxy**: Complejidad innecesaria para MVP
+**Alternatives**:
+1. **Permissive CORS** (`allow_origins=["*"]`): Insecure in production
+2. **Separate Config Files**: Duplication, error-prone
+3. **Environment Variables**: Dynamic configuration from deployment
+4. **Reverse Proxy**: Unnecessary complexity for MVP
 
 ---
 
-## Decisión
+## Decision
 
-**Configurar CORS dinámicamente desde variables de entorno** con lógica según `ENVIRONMENT`.
+**Configure CORS dynamically from environment variables** with logic based on `ENVIRONMENT`.
 
-### Implementación (`main.py:100-130`):
+### Implementation (`main.py:100-130`):
 
 ```python
-# Leer orígenes desde variable de entorno
+# Read origins from environment variable
 FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
 allowed_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",")]
 
-# Incluir localhost SOLO en desarrollo
+# Include localhost ONLY in development
 ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
     allowed_origins.extend([
@@ -40,22 +40,22 @@ if ENV != "production":
         "http://127.0.0.1:5173",
     ])
 
-# Fallback seguro si no hay orígenes configurados
+# Secure fallback if no origins configured
 if not allowed_origins:
     allowed_origins = ["http://localhost:5173"]
 
 print(f"🔒 CORS allowed_origins: {allowed_origins}")
 ```
 
-### Variables de Entorno:
+### Environment Variables:
 
-**Desarrollo** (local):
+**Development** (local):
 ```bash
 ENVIRONMENT=development
-# No requiere FRONTEND_ORIGINS (localhost se agrega automáticamente)
+# No FRONTEND_ORIGINS required (localhost added automatically)
 ```
 
-**Producción** (Render):
+**Production** (Render):
 ```bash
 ENVIRONMENT=production
 FRONTEND_ORIGINS=https://www.rydercupfriends.com
@@ -63,56 +63,56 @@ FRONTEND_ORIGINS=https://www.rydercupfriends.com
 
 ---
 
-## Justificación
+## Justification
 
-**¿Por qué dinámico?**
-- ✅ Zero cambios en código entre dev/prod
-- ✅ Seguridad mejorada (prod no permite localhost)
-- ✅ Fácil agregar múltiples orígenes (CSV)
-- ✅ Visible en logs (`🔒 CORS allowed_origins: [...]`)
+**Why dynamic?**
+- ✅ Zero code changes between dev/prod
+- ✅ Improved security (prod doesn't allow localhost)
+- ✅ Easy to add multiple origins (CSV)
+- ✅ Visible in logs (`🔒 CORS allowed_origins: [...]`)
 
-**¿Por qué variable `ENVIRONMENT`?**
-- Controla múltiples comportamientos (no solo CORS)
-- Convención estándar en ecosistema Python
-- Fail-safe: default a `development` (más permisivo para devs)
+**Why `ENVIRONMENT` variable?**
+- Controls multiple behaviors (not just CORS)
+- Standard convention in Python ecosystem
+- Fail-safe: defaults to `development` (more permissive for devs)
 
-**¿Por qué NOT `*` en desarrollo?**
-- Credentials (`allow_credentials=True`) incompatible con `*`
-- Mantiene consistencia dev/prod
-
----
-
-## Consecuencias
-
-### Positivas
-- ✅ Deployment sin cambios en código
-- ✅ Seguridad mejorada (localhost bloqueado en prod)
-- ✅ Debugging fácil (orígenes visibles en logs)
-- ✅ Extensible (agregar staging u otros frontends)
-
-### Negativas
-- ⚠️ Variable mal configurada → CORS errors en producción
-- ⚠️ Logs exponen configuración (no es sensible, pero visible)
-
-### Mitigaciones
-- Documentación clara en `CLAUDE.md` y `RENDER_DEPLOYMENT.md`
-- Logs obligatorios en startup (`print(f"🔒 CORS...")`)
-- Validación en troubleshooting checklist
+**Why NOT `*` in development?**
+- Credentials (`allow_credentials=True`) incompatible with `*`
+- Maintains dev/prod consistency
 
 ---
 
-## Validación
+## Consequences
 
-Verificar en cada deploy:
-- [ ] Logs muestran `🔒 CORS allowed_origins: [...]`
-- [ ] Frontend puede hacer login/register sin CORS errors
-- [ ] Producción NO incluye localhost en allowed_origins
+### Positive
+- ✅ Deployment without code changes
+- ✅ Improved security (localhost blocked in prod)
+- ✅ Easy debugging (origins visible in logs)
+- ✅ Extensible (add staging or other frontends)
+
+### Negative
+- ⚠️ Misconfigured variable → CORS errors in production
+- ⚠️ Logs expose configuration (not sensitive, but visible)
+
+### Mitigations
+- Clear documentation in `CLAUDE.md` and `RENDER_DEPLOYMENT.md`
+- Mandatory startup logs (`print(f"🔒 CORS...")`)
+- Validation in troubleshooting checklist
 
 ---
 
-## Referencias
+## Validation
+
+Verify on each deploy:
+- [ ] Logs show `🔒 CORS allowed_origins: [...]`
+- [ ] Frontend can login/register without CORS errors
+- [ ] Production does NOT include localhost in allowed_origins
+
+---
+
+## References
 
 - [FastAPI CORS Docs](https://fastapi.tiangolo.com/tutorial/cors/)
 - [MDN CORS Guide](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 - [ADR-016: Render Deployment Strategy](./ADR-016-render-deployment-strategy.md)
-- `main.py:100-130` - Implementación actual
+- `main.py:100-130` - Current implementation

@@ -11,9 +11,13 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
-from src.modules.user.domain.repositories.user_unit_of_work_interface import UserUnitOfWorkInterface
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.repositories.country_repository_interface import CountryRepositoryInterface
+from src.shared.domain.repositories.country_repository_interface import (
+    CountryRepositoryInterface,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
 
 
@@ -25,7 +29,11 @@ class UpdateProfileUseCase:
     sin necesidad de proporcionar su contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, country_repository: CountryRepositoryInterface):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        country_repository: CountryRepositoryInterface,
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -36,7 +44,9 @@ class UpdateProfileUseCase:
         self._uow = uow
         self._country_repository = country_repository
 
-    async def execute(self, user_id: str, request: UpdateProfileRequestDTO) -> UpdateProfileResponseDTO:
+    async def execute(
+        self, user_id: str, request: UpdateProfileRequestDTO
+    ) -> UpdateProfileResponseDTO:
         """
         Ejecuta el caso de uso de actualización de perfil.
 
@@ -69,7 +79,7 @@ class UpdateProfileUseCase:
             user.update_profile(
                 first_name=request.first_name,
                 last_name=request.last_name,
-                country_code_str=request.country_code
+                country_code_str=request.country_code,
             )
 
             # Guardar cambios
@@ -80,5 +90,5 @@ class UpdateProfileUseCase:
         # Construir respuesta
         return UpdateProfileResponseDTO(
             user=UserResponseDTO.model_validate(user),
-            message="Profile updated successfully"
+            message="Profile updated successfully",
         )

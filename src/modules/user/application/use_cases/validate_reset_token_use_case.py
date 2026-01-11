@@ -45,10 +45,7 @@ class ValidateResetTokenUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self,
-        request: ValidateResetTokenRequestDTO
-    ) -> ValidateResetTokenResponseDTO:
+    async def execute(self, request: ValidateResetTokenRequestDTO) -> ValidateResetTokenResponseDTO:
         """
         Ejecuta el caso de uso de validación de token.
 
@@ -73,7 +70,7 @@ class ValidateResetTokenUseCase:
         if not user:
             return ValidateResetTokenResponseDTO(
                 valid=False,
-                message="Token de reseteo inválido o expirado. Solicita un nuevo enlace."
+                message="Token de reseteo inválido o expirado. Solicita un nuevo enlace.",
             )
 
         # CASO 2: Token encontrado → Validar expiración
@@ -83,17 +80,16 @@ class ValidateResetTokenUseCase:
             # No hay token de reseteo activo (caso edge)
             return ValidateResetTokenResponseDTO(
                 valid=False,
-                message="Token de reseteo inválido o expirado. Solicita un nuevo enlace."
+                message="Token de reseteo inválido o expirado. Solicita un nuevo enlace.",
             )
 
         if is_valid:
             return ValidateResetTokenResponseDTO(
                 valid=True,
-                message="Token válido. Puedes proceder con el reseteo de tu contraseña."
+                message="Token válido. Puedes proceder con el reseteo de tu contraseña.",
             )
-        else:
-            # Token expirado (> 24 horas)
-            return ValidateResetTokenResponseDTO(
-                valid=False,
-                message="Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace."
-            )
+        # Token expirado (> 24 horas)
+        return ValidateResetTokenResponseDTO(
+            valid=False,
+            message="Token de reseteo expirado. Los tokens son válidos por 24 horas. Solicita un nuevo enlace.",
+        )

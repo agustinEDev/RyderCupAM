@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 class InvalidEnrollmentIdError(Exception):
     """Excepción lanzada cuando un EnrollmentId no es válido."""
+
     pass
 
 
@@ -48,19 +49,17 @@ class EnrollmentId:
             try:
                 val = uuid.UUID(value)
             except ValueError as e:
-                raise InvalidEnrollmentIdError(
-                    f"'{value}' no es un string UUID válido"
-                ) from e
+                raise InvalidEnrollmentIdError(f"'{value}' no es un string UUID válido") from e
         else:
             raise InvalidEnrollmentIdError(
                 f"Se esperaba un UUID o un string, pero se recibió {type(value).__name__}"
             )
 
         # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, 'value', val)
+        object.__setattr__(self, "value", val)
 
     @classmethod
-    def generate(cls) -> 'EnrollmentId':
+    def generate(cls) -> "EnrollmentId":
         """
         Genera un nuevo EnrollmentId con un UUID v4 aleatorio.
 

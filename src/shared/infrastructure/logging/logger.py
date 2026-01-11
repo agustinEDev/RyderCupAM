@@ -18,6 +18,7 @@ from typing import Any
 
 class LogLevel(Enum):
     """Niveles de logging disponibles"""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -40,12 +41,7 @@ class Logger(ABC):
     """
 
     @abstractmethod
-    def debug(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def debug(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """
         Registra un mensaje de debug.
 
@@ -57,12 +53,7 @@ class Logger(ABC):
         pass
 
     @abstractmethod
-    def info(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def info(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """
         Registra un mensaje informativo.
 
@@ -74,12 +65,7 @@ class Logger(ABC):
         pass
 
     @abstractmethod
-    def warning(
-        self,
-        message: str,
-        extra: dict[str, Any] | None = None,
-        **kwargs
-    ) -> None:
+    def warning(self, message: str, extra: dict[str, Any] | None = None, **kwargs) -> None:
         """
         Registra una advertencia.
 
@@ -96,7 +82,7 @@ class Logger(ABC):
         message: str,
         extra: dict[str, Any] | None = None,
         exc_info: bool | Exception | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Registra un error.
@@ -115,7 +101,7 @@ class Logger(ABC):
         message: str,
         extra: dict[str, Any] | None = None,
         exc_info: bool | Exception | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Registra un error crítico.
@@ -134,7 +120,7 @@ class Logger(ABC):
         level: LogLevel,
         message: str,
         extra: dict[str, Any] | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Registra un mensaje con nivel específico.
@@ -163,7 +149,7 @@ class Logger(ABC):
         pass
 
     @abstractmethod
-    def with_correlation_id(self, correlation_id: str) -> 'Logger':
+    def with_correlation_id(self, correlation_id: str) -> "Logger":
         """
         Crea un logger con correlation ID específico.
 
