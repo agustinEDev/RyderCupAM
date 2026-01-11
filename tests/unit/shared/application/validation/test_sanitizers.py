@@ -7,8 +7,6 @@ ataques XSS (Cross-Site Scripting).
 OWASP Coverage Test: A03 (Injection)
 """
 
-import pytest
-
 from src.shared.application.validation.sanitizers import (
     normalize_unicode,
     remove_sql_keywords,
@@ -150,14 +148,14 @@ class TestSanitizeHTML:
         Then: Los caracteres de control se eliminan
         """
         # Arrange
-        text = "Hello\x00World\x1F"  # NULL byte + Unit Separator
+        text = "Hello\x00World\x1f"  # NULL byte + Unit Separator
 
         # Act
         result = sanitize_html(text)
 
         # Assert
         assert "\x00" not in result
-        assert "\x1F" not in result
+        assert "\x1f" not in result
         assert result == "HelloWorld"
 
     def test_sanitize_html_handles_complex_xss_attempt(self):
@@ -201,7 +199,7 @@ class TestSanitizeAllFields:
         data = {
             "name": "<script>XSS</script>",
             "email": "user@example.com",
-            "bio": "Hello <b>world</b>"
+            "bio": "Hello <b>world</b>",
         }
 
         # Act
@@ -245,9 +243,7 @@ class TestSanitizeAllFields:
         data = {
             "user": {
                 "name": "<script>XSS</script>",
-                "address": {
-                    "street": "<b>Main St</b>"
-                }
+                "address": {"street": "<b>Main St</b>"},
             }
         }
 
@@ -267,9 +263,7 @@ class TestSanitizeAllFields:
         Then: Todos los strings de la lista se sanitizan
         """
         # Arrange
-        data = {
-            "tags": ["<script>XSS</script>", "normal", "<b>bold</b>"]
-        }
+        data = {"tags": ["<script>XSS</script>", "normal", "<b>bold</b>"]}
 
         # Act
         result = sanitize_all_fields(data)

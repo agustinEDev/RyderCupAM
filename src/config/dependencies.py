@@ -69,6 +69,9 @@ from src.modules.user.application.use_cases.find_user_use_case import FindUserUs
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
 )
+from src.modules.user.application.use_cases.list_user_devices_use_case import (
+    ListUserDevicesUseCase,
+)
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
@@ -76,11 +79,26 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
+from src.modules.user.application.use_cases.register_device_use_case import (
+    RegisterDeviceUseCase,
+)
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
+from src.modules.user.application.use_cases.request_password_reset_use_case import (
+    RequestPasswordResetUseCase,
+)
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
+)
+from src.modules.user.application.use_cases.reset_password_use_case import (
+    ResetPasswordUseCase,
+)
+from src.modules.user.application.use_cases.revoke_device_use_case import (
+    RevokeDeviceUseCase,
+)
+from src.modules.user.application.use_cases.unlock_account_use_case import (
+    UnlockAccountUseCase,
 )
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
     UpdateMultipleHandicapsUseCase,
@@ -96,6 +114,9 @@ from src.modules.user.application.use_cases.update_user_handicap_manually_use_ca
 )
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
+)
+from src.modules.user.application.use_cases.validate_reset_token_use_case import (
+    ValidateResetTokenUseCase,
 )
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
@@ -137,6 +158,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         yield session
 
+
 def get_uow(
     session: AsyncSession = Depends(get_db_session),
 ) -> UserUnitOfWorkInterface:
@@ -149,6 +171,7 @@ def get_uow(
     3. Devuelve la instancia, cumpliendo con la interfaz `UserUnitOfWorkInterface`.
     """
     return SQLAlchemyUnitOfWork(session)
+
 
 def get_handicap_service() -> HandicapService:
     """
@@ -164,6 +187,7 @@ def get_handicap_service() -> HandicapService:
     """
     return RFEGHandicapService(timeout=10)
 
+
 def get_email_service() -> IEmailService:
     """
     Proveedor del servicio de email.
@@ -177,6 +201,7 @@ def get_email_service() -> IEmailService:
     """
     return EmailService()
 
+
 def get_token_service() -> ITokenService:
     """
     Proveedor del servicio de tokens.
@@ -189,6 +214,7 @@ def get_token_service() -> ITokenService:
         Implementación concreta del servicio de tokens (JWT)
     """
     return JWTTokenService()
+
 
 def get_country_repository(
     session: AsyncSession = Depends(get_db_session),
@@ -206,11 +232,12 @@ def get_country_repository(
     """
     return SQLAlchemyCountryRepository(session)
 
+
 def get_register_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository),
     handicap_service: HandicapService = Depends(get_handicap_service),
-    email_service: IEmailService = Depends(get_email_service)
+    email_service: IEmailService = Depends(get_email_service),
 ) -> RegisterUserUseCase:
     """
     Proveedor del caso de uso RegisterUserUseCase.
@@ -227,11 +254,12 @@ def get_register_user_use_case(
         uow=uow,
         country_repository=country_repository,
         handicap_service=handicap_service,
-        email_service=email_service
+        email_service=email_service,
     )
 
+
 def get_find_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> FindUserUseCase:
     """
     Proveedor del caso de uso FindUserUseCase.
@@ -243,9 +271,10 @@ def get_find_user_use_case(
     """
     return FindUserUseCase(uow)
 
+
 def get_update_handicap_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    handicap_service: HandicapService = Depends(get_handicap_service)
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> UpdateUserHandicapUseCase:
     """
     Proveedor del caso de uso UpdateUserHandicapUseCase.
@@ -258,9 +287,10 @@ def get_update_handicap_use_case(
     """
     return UpdateUserHandicapUseCase(uow, handicap_service)
 
+
 def get_update_multiple_handicaps_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    handicap_service: HandicapService = Depends(get_handicap_service)
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> UpdateMultipleHandicapsUseCase:
     """
     Proveedor del caso de uso UpdateMultipleHandicapsUseCase.
@@ -272,6 +302,7 @@ def get_update_multiple_handicaps_use_case(
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return UpdateMultipleHandicapsUseCase(uow, handicap_service)
+
 
 def get_update_handicap_manually_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
@@ -289,9 +320,30 @@ def get_update_handicap_manually_use_case(
     """
     return UpdateUserHandicapManuallyUseCase(uow)
 
+
+def get_register_device_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RegisterDeviceUseCase:
+    """
+    Proveedor del caso de uso RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `RegisterDeviceUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada internamente por Login y RefreshToken.
+
+    Note:
+        Este use case NO tiene endpoint directo. Se llama internamente desde:
+        - LoginUserUseCase (auto-registro en login exitoso)
+        - RefreshAccessTokenUseCase (auto-registro en refresh exitoso)
+    """
+    return RegisterDeviceUseCase(uow)
+
+
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    token_service: ITokenService = Depends(get_token_service)
+    token_service: ITokenService = Depends(get_token_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -299,13 +351,15 @@ def get_login_user_use_case(
     Esta función:
     1. Depende de `get_uow` para obtener una Unit of Work.
     2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Crea una instancia de `LoginUserUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
+    4. Crea una instancia de `LoginUserUseCase` con esas dependencias.
+    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LoginUserUseCase(uow, token_service)
+    return LoginUserUseCase(uow, token_service, register_device_use_case)
+
 
 def get_logout_user_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> LogoutUserUseCase:
     """
     Proveedor del caso de uso LogoutUserUseCase.
@@ -317,24 +371,28 @@ def get_logout_user_use_case(
     """
     return LogoutUserUseCase(uow)
 
+
 def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    token_service: ITokenService = Depends(get_token_service)
+    token_service: ITokenService = Depends(get_token_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
     Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens).
+    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens + user_devices).
     2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
-    4. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
+    4. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
+    5. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
     """
-    return RefreshAccessTokenUseCase(uow, token_service)
+    return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
+
 
 def get_update_profile_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    country_repository: CountryRepositoryInterface = Depends(get_country_repository)
+    country_repository: CountryRepositoryInterface = Depends(get_country_repository),
 ) -> UpdateProfileUseCase:
     """
     Proveedor del caso de uso UpdateProfileUseCase.
@@ -347,9 +405,10 @@ def get_update_profile_use_case(
     """
     return UpdateProfileUseCase(uow, country_repository)
 
+
 def get_update_security_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    email_service: IEmailService = Depends(get_email_service)
+    email_service: IEmailService = Depends(get_email_service),
 ) -> UpdateSecurityUseCase:
     """
     Proveedor del caso de uso UpdateSecurityUseCase.
@@ -362,10 +421,12 @@ def get_update_security_use_case(
     """
     return UpdateSecurityUseCase(uow, email_service)
 
+
 # Esquema de seguridad HTTP Bearer para Swagger
 # IMPORTANTE: auto_error=False permite que el endpoint no falle si no hay header Authorization
 # Esto es necesario para el middleware dual (cookies + headers)
 security = HTTPBearer(auto_error=False)
+
 
 async def get_current_user(
     request: Request,
@@ -463,8 +524,9 @@ async def get_current_user(
 
     return user
 
+
 def get_verify_email_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> VerifyEmailUseCase:
     """
     Proveedor del caso de uso VerifyEmailUseCase.
@@ -476,9 +538,10 @@ def get_verify_email_use_case(
     """
     return VerifyEmailUseCase(uow)
 
+
 def get_resend_verification_email_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    email_service: IEmailService = Depends(get_email_service)
+    email_service: IEmailService = Depends(get_email_service),
 ) -> ResendVerificationEmailUseCase:
     """
     Proveedor del caso de uso ResendVerificationEmailUseCase.
@@ -494,7 +557,7 @@ def get_resend_verification_email_use_case(
 
 def get_request_password_reset_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    email_service: IEmailService = Depends(get_email_service)
+    email_service: IEmailService = Depends(get_email_service),
 ):
     """
     Proveedor del caso de uso RequestPasswordResetUseCase.
@@ -505,15 +568,12 @@ def get_request_password_reset_use_case(
     3. Crea una instancia de `RequestPasswordResetUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.request_password_reset_use_case import (
-        RequestPasswordResetUseCase,
-    )
     return RequestPasswordResetUseCase(uow, email_service)
 
 
 def get_reset_password_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
-    email_service: IEmailService = Depends(get_email_service)
+    email_service: IEmailService = Depends(get_email_service),
 ):
     """
     Proveedor del caso de uso ResetPasswordUseCase.
@@ -524,15 +584,10 @@ def get_reset_password_use_case(
     3. Crea una instancia de `ResetPasswordUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.reset_password_use_case import (
-        ResetPasswordUseCase,
-    )
     return ResetPasswordUseCase(uow, email_service)
 
 
-def get_validate_reset_token_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow)
-):
+def get_validate_reset_token_use_case(uow: UserUnitOfWorkInterface = Depends(get_uow)):
     """
     Proveedor del caso de uso ValidateResetTokenUseCase.
 
@@ -541,9 +596,6 @@ def get_validate_reset_token_use_case(
     2. Crea una instancia de `ValidateResetTokenUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    from src.modules.user.application.use_cases.validate_reset_token_use_case import (
-        ValidateResetTokenUseCase,
-    )
     return ValidateResetTokenUseCase(uow)
 
 
@@ -718,6 +770,7 @@ def get_cancel_competition_use_case(
 # ENROLLMENT USE CASE PROVIDERS
 # ======================================================================================
 
+
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
 ) -> RequestEnrollmentUseCase:
@@ -765,3 +818,48 @@ def get_list_enrollments_use_case(
 ) -> ListEnrollmentsUseCase:
     """Proveedor del caso de uso ListEnrollmentsUseCase."""
     return ListEnrollmentsUseCase(uow)
+
+
+# ============================================================================
+# Account Lockout Use Cases (v1.13.0)
+# ============================================================================
+
+
+def get_unlock_account_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UnlockAccountUseCase:
+    """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0 - Account Lockout)."""
+    return UnlockAccountUseCase(uow)
+
+
+# ============================================================================
+# Device Fingerprinting Use Cases (v1.13.0)
+# ============================================================================
+
+
+def get_list_user_devices_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListUserDevicesUseCase:
+    """
+    Proveedor del caso de uso ListUserDevicesUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `ListUserDevicesUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint GET /users/me/devices.
+    """
+    return ListUserDevicesUseCase(uow)
+
+
+def get_revoke_device_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RevokeDeviceUseCase:
+    """
+    Proveedor del caso de uso RevokeDeviceUseCase (v1.13.0 - Device Fingerprinting).
+
+    Esta función:
+    1. Depende de `get_uow` para obtener una Unit of Work (user_devices repository).
+    2. Crea una instancia de `RevokeDeviceUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
+    """
+    return RevokeDeviceUseCase(uow)

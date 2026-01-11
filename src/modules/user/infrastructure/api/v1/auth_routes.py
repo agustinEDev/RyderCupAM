@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 
+from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
@@ -12,6 +13,7 @@ from src.config.dependencies import (
     get_request_password_reset_use_case,
     get_resend_verification_email_use_case,
     get_reset_password_use_case,
+    get_unlock_account_use_case,
     get_validate_reset_token_use_case,
     get_verify_email_use_case,
     security,
@@ -31,35 +33,51 @@ from src.modules.user.application.dto.user_dto import (
     ResendVerificationEmailResponseDTO,
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
+    UnlockAccountRequestDTO,
+    UnlockAccountResponseDTO,
     UserResponseDTO,
     ValidateResetTokenRequestDTO,
     ValidateResetTokenResponseDTO,
     VerifyEmailRequestDTO,
 )
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
-from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.use_cases.logout_user_use_case import (
+    LogoutUserUseCase,
+)
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
-from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
+from src.modules.user.application.use_cases.register_user_use_case import (
+    RegisterUserUseCase,
+)
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
 )
 from src.modules.user.application.use_cases.resend_verification_email_use_case import (
     ResendVerificationEmailUseCase,
 )
-from src.modules.user.application.use_cases.reset_password_use_case import ResetPasswordUseCase
+from src.modules.user.application.use_cases.reset_password_use_case import (
+    ResetPasswordUseCase,
+)
+from src.modules.user.application.use_cases.unlock_account_use_case import (
+    UnlockAccountUseCase,
+)
 from src.modules.user.application.use_cases.validate_reset_token_use_case import (
     ValidateResetTokenUseCase,
 )
-from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
+from src.modules.user.application.use_cases.verify_email_use_case import (
+    VerifyEmailUseCase,
+)
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.modules.user.domain.exceptions import AccountLockedException
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
+    delete_csrf_cookie,
     delete_refresh_token_cookie,
     get_cookie_name,
     get_refresh_cookie_name,
     set_auth_cookie,
+    set_csrf_cookie,
     set_refresh_token_cookie,
 )
 from src.shared.infrastructure.security.jwt_handler import (
@@ -74,6 +92,7 @@ router = APIRouter()
 # ============================================================================
 # HELPER FUNCTIONS - Security Context Extraction
 # ============================================================================
+
 
 def get_client_ip(request: Request) -> str:
     """
@@ -121,6 +140,7 @@ def get_user_agent(request: Request) -> str:
     user_agent = request.headers.get("User-Agent")
     return user_agent if user_agent else "unknown"
 
+
 @router.post(
     "/register",
     response_model=UserResponseDTO,
@@ -131,7 +151,7 @@ def get_user_agent(request: Request) -> str:
 )
 @limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
 async def register_user(
-    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     register_data: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
@@ -214,7 +234,14 @@ async def login_user(
     login_data.ip_address = get_client_ip(request)
     login_data.user_agent = get_user_agent(request)
 
-    login_response = await use_case.execute(login_data)
+    try:
+        login_response = await use_case.execute(login_data)
+    except AccountLockedException as e:
+        # Account Lockout (v1.13.0): Cuenta bloqueada por intentos fallidos
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
+        ) from e
 
     if not login_response:
         raise HTTPException(
@@ -229,6 +256,10 @@ async def login_user(
 
     # Refresh Token: 7 días (Session Timeout)
     set_refresh_token_cookie(response, login_response.refresh_token)
+
+    # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
+    # CSRF Token: 15 minutos (sincronizado con access token)
+    set_csrf_cookie(response, login_response.csrf_token)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -348,6 +379,9 @@ async def logout_user(
     # Refresh Token (7 días) - Session Timeout
     delete_refresh_token_cookie(response)
 
+    # ✅ NUEVO (v1.13.0): Eliminar cookie CSRF
+    delete_csrf_cookie(response)
+
     return logout_response
 
 
@@ -414,8 +448,7 @@ async def refresh_access_token(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     refresh_request = RefreshAccessTokenRequestDTO(
-        ip_address=get_client_ip(request),
-        user_agent=get_user_agent(request)
+        ip_address=get_client_ip(request), user_agent=get_user_agent(request)
     )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 
@@ -429,12 +462,12 @@ async def refresh_access_token(
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)
 
+    # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
+    set_csrf_cookie(response, refresh_response.csrf_token)
+
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
     return refresh_response
-
-
-from src.shared.infrastructure.security.jwt_handler import create_access_token
 
 
 @router.post(
@@ -490,8 +523,12 @@ async def verify_email(
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    TOKEN_PREVIEW_LENGTH = 8
-    token_preview = f"{request.token[:TOKEN_PREVIEW_LENGTH]}..." if len(request.token) > TOKEN_PREVIEW_LENGTH else "***"
+    TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
+    token_preview = (
+        f"{request.token[:TOKEN_PREVIEW_LENGTH]}..."
+        if len(request.token) > TOKEN_PREVIEW_LENGTH
+        else "***"
+    )
     logger.info(f"Email verification attempt with token: {token_preview}")
 
     try:
@@ -502,9 +539,16 @@ async def verify_email(
         access_token = create_access_token({"sub": str(user.id.value)})
         refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
+        # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
+        csrf_token = generate_csrf_token()
+
         # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
         set_auth_cookie(response, access_token)
         set_refresh_token_cookie(response, refresh_token)
+
+        # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
+        # CSRF Token: 15 minutos (sincronizado con access token)
+        set_csrf_cookie(response, csrf_token)
 
         # Mapear a DTO
         user_dto = UserResponseDTO.model_validate(user)
@@ -514,9 +558,10 @@ async def verify_email(
         return LoginResponseDTO(
             access_token=access_token,
             refresh_token=refresh_token,
-            token_type="bearer",
+            csrf_token=csrf_token,
+            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
-            email_verification_required=False
+            email_verification_required=False,
         )
     except ValueError as e:
         logger.warning(
@@ -527,10 +572,7 @@ async def verify_email(
             detail="Unable to verify email. Please check your verification link or request a new one.",
         ) from e
     except Exception as e:
-        logger.error(
-            f"Unexpected error in email verification: {type(e).__name__}",
-            exc_info=True
-        )
+        logger.error(f"Unexpected error in email verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
@@ -547,7 +589,7 @@ async def verify_email(
 )
 @limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
 async def resend_verification_email(
-    request: Request,  # Requerido por SlowAPI limiter (no renombrar)
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
     use_case: ResendVerificationEmailUseCase = Depends(get_resend_verification_email_use_case),
 ):
@@ -594,20 +636,21 @@ async def resend_verification_email(
         # Log errores inesperados para monitoreo del sistema
         logger.error(
             f"Unexpected error in resend verification: {type(e).__name__}",
-            exc_info=True
+            exc_info=True,
         )
         # Aún así procedemos con respuesta genérica
 
     # Siempre retornamos el mismo mensaje genérico
     return ResendVerificationEmailResponseDTO(
         message="If the email address exists in our system, a verification email has been sent.",
-        email=resend_data.email
+        email=resend_data.email,
     )
 
 
 # ============================================================================
 # PASSWORD RESET ENDPOINTS
 # ============================================================================
+
 
 @router.post(
     "/forgot-password",
@@ -633,13 +676,13 @@ async def resend_verification_email(
     - SIEMPRE retorna 200 OK con mensaje genérico
     - NUNCA revela si el email existe (previene user enumeration)
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("3/hour")  # 3 intentos por hora por IP/email
 async def forgot_password(
     request: Request,
     reset_data: RequestPasswordResetRequestDTO,
-    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case)
+    use_case: RequestPasswordResetUseCase = Depends(get_request_password_reset_use_case),
 ) -> RequestPasswordResetResponseDTO:
     """
     Solicita el reseteo de contraseña enviando un email con token único.
@@ -700,13 +743,13 @@ async def forgot_password(
     - 400: Password no cumple política
     - 429: Rate limit excedido
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("3/hour")  # 3 intentos por hora por IP
 async def reset_password(
     request: Request,
     reset_data: ResetPasswordRequestDTO,
-    use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case)
+    use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case),
 ) -> ResetPasswordResponseDTO:
     """
     Completa el reseteo de contraseña usando el token del email.
@@ -741,11 +784,8 @@ async def reset_password(
         return response
     except ValueError as e:
         # Token inválido/expirado o password inválido
-        logger.warning(f"Password reset failed: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        logger.warning(f"Password reset failed: {e!s}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.get(
@@ -773,13 +813,13 @@ async def reset_password(
     1. Usuario hace clic → Validación → Si expirado: Redirige con mensaje
     2. Si válido: Muestra formulario → Envía → SUCCESS
     """,
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 @limiter.limit("10/hour")  # 10 intentos por hora por IP
 async def validate_reset_token(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     token: str,
-    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case)
+    use_case: ValidateResetTokenUseCase = Depends(get_validate_reset_token_use_case),
 ) -> ValidateResetTokenResponseDTO:
     """
     Valida un token de reseteo antes de mostrar el formulario.
@@ -802,3 +842,70 @@ async def validate_reset_token(
     response = await use_case.execute(request_dto)
 
     return response
+
+
+# ============================================================================
+# ACCOUNT LOCKOUT ENDPOINT (v1.13.0)
+# ============================================================================
+
+
+@router.post(
+    "/unlock-account",
+    response_model=UnlockAccountResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Desbloquear cuenta manualmente (Admin)",
+    description="Permite a un administrador desbloquear una cuenta bloqueada por intentos fallidos antes de la expiración de 30 minutos.",
+    tags=["Authentication", "Admin"],
+)
+async def unlock_account(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    unlock_data: UnlockAccountRequestDTO,
+    use_case: UnlockAccountUseCase = Depends(get_unlock_account_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+):
+    """
+    Desbloquea manualmente una cuenta bloqueada (solo Admin).
+
+    Account Lockout (v1.13.0):
+    - Permite desbloquear cuentas antes de expiración automática (30 min)
+    - Resetea failed_login_attempts a 0
+    - Elimina locked_until (None)
+    - Emite AccountUnlockedEvent para auditoría
+
+    Security (OWASP A01, A09):
+    - Solo Admin puede ejecutar este endpoint
+    - Requiere autenticación JWT válida
+    - Registra quién desbloqueó en evento de auditoría
+    - TODO: Verificar rol Admin cuando se implemente sistema de roles (v2.1.0)
+
+    Args:
+        request: Request de FastAPI
+        unlock_data: DTO con user_id (a desbloquear) y unlocked_by_user_id (admin)
+        use_case: Caso de uso de desbloqueo
+        current_user: Usuario autenticado (de JWT)
+
+    Returns:
+        UnlockAccountResponseDTO con resultado de la operación
+
+    Raises:
+        HTTPException 401: Si no está autenticado
+        HTTPException 403: Si no es Admin (cuando se implemente verificación de rol)
+        HTTPException 404: Si el usuario no existe
+        HTTPException 400: Si la cuenta no está bloqueada
+    """
+    # TODO (v2.1.0): Verificar que current_user tiene rol ADMIN
+    # Por ahora, cualquier usuario autenticado puede desbloquear (MVP)
+    # TODO: When roles are implemented, restrict to ADMIN only
+
+    # Establecer unlocked_by_user_id del usuario autenticado
+    unlock_data.unlocked_by_user_id = str(current_user.id)
+
+    try:
+        response = await use_case.execute(unlock_data)
+        return response
+    except ValueError as e:
+        # Usuario no existe o cuenta no está bloqueada
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e

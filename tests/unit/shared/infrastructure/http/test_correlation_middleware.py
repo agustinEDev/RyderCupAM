@@ -21,14 +21,15 @@ class TestCorrelationMiddleware:
         custom_correlation_id = "test-correlation-123"
 
         response = await unit_client.get(
-            "/test",
-            headers={"X-Correlation-ID": custom_correlation_id}
+            "/test", headers={"X-Correlation-ID": custom_correlation_id}
         )
 
         assert response.status_code == 200
         assert response.headers["X-Correlation-ID"] == custom_correlation_id
 
-    async def test_different_requests_have_different_correlation_ids(self, unit_client: AsyncClient):
+    async def test_different_requests_have_different_correlation_ids(
+        self, unit_client: AsyncClient
+    ):
         """Cada request tiene correlation_id único"""
         response1 = await unit_client.get("/test")
         response2 = await unit_client.get("/test")

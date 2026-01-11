@@ -3,13 +3,22 @@ SQLAlchemy Imperative Mapping para RefreshToken.
 
 Mapea la entidad RefreshToken a la tabla refresh_tokens usando Imperative Mapping.
 """
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, TypeDecorator, inspect
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Table,
+    TypeDecorator,
+    inspect,
+)
 from sqlalchemy.exc import NoInspectionAvailable
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
-from src.modules.user.domain.value_objects.user_id import UserId
 
 # Importar metadata, registry y UserIdDecorator compartidos del mapper principal de users
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
@@ -25,6 +34,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
 
 class RefreshTokenIdDecorator(TypeDecorator):
     """TypeDecorator para RefreshTokenId."""
+
     impl = String(36)
     cache_ok = True
 
@@ -43,6 +53,7 @@ class RefreshTokenIdDecorator(TypeDecorator):
 
 class TokenHashDecorator(TypeDecorator):
     """TypeDecorator para TokenHash."""
+
     impl = String(64)
     cache_ok = True
 
@@ -67,7 +78,13 @@ refresh_tokens_table = Table(
     "refresh_tokens",
     metadata,
     Column("id", RefreshTokenIdDecorator, primary_key=True),
-    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
     Column("token_hash", TokenHashDecorator, nullable=False, unique=True, index=True),
     Column("expires_at", DateTime, nullable=False, index=True),
     Column("created_at", DateTime, nullable=False),
@@ -79,6 +96,7 @@ refresh_tokens_table = Table(
 # ============================================================================
 # Mapper de RefreshToken Entity
 # ============================================================================
+
 
 def start_mappers():
     """

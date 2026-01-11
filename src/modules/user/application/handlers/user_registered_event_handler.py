@@ -20,18 +20,14 @@ class UserRegisteredEventHandler(EventHandler[UserRegisteredEvent]):
 
     async def handle(self, event: UserRegisteredEvent) -> None:
         """Procesa el evento de registro de usuario."""
-        self._logger.info(
-            f"Processing user registration for {event.full_name} ({event.email})"
-        )
+        self._logger.info(f"Processing user registration for {event.full_name} ({event.email})")
 
         # Aquí irían las acciones concretas:
         await self._send_welcome_email(event)
         await self._log_registration(event)
         await self._notify_external_systems(event)
 
-        self._logger.info(
-            f"Successfully processed user registration for {event.email}"
-        )
+        self._logger.info(f"Successfully processed user registration for {event.email}")
 
     async def _send_welcome_email(self, event: UserRegisteredEvent) -> None:
         """Simula el envío de un email de bienvenida."""

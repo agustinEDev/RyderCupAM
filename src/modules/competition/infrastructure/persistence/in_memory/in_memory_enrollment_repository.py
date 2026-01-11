@@ -1,13 +1,14 @@
 """In-Memory Enrollment Repository para testing."""
 
-
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -37,20 +38,17 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         return self._enrollments.get(enrollment_id)
 
     async def find_by_competition_and_status(
-        self,
-        competition_id: CompetitionId,
-        status: EnrollmentStatus
+        self, competition_id: CompetitionId, status: EnrollmentStatus
     ) -> list[Enrollment]:
         """Busca inscripciones de una competición con un estado específico."""
         return [
-            enr for enr in self._enrollments.values()
+            enr
+            for enr in self._enrollments.values()
             if enr.competition_id == competition_id and enr.status == status
         ]
 
     async def exists_for_user_in_competition(
-        self,
-        user_id: UserId,
-        competition_id: CompetitionId
+        self, user_id: UserId, competition_id: CompetitionId
     ) -> bool:
         """Verifica si un usuario ya tiene una inscripción en una competición."""
         return any(
@@ -59,62 +57,48 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         )
 
     async def find_by_competition(
-        self,
-        competition_id: CompetitionId,
-        limit: int = 100,
-        offset: int = 0
+        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de una competición."""
         enrollments = [
-            enr for enr in self._enrollments.values()
-            if enr.competition_id == competition_id
+            enr for enr in self._enrollments.values() if enr.competition_id == competition_id
         ]
-        return enrollments[offset:offset + limit]
+        return enrollments[offset : offset + limit]
 
     async def find_by_user(
-        self,
-        user_id: UserId,
-        limit: int = 100,
-        offset: int = 0
+        self, user_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de un usuario."""
-        enrollments = [
-            enr for enr in self._enrollments.values()
-            if enr.user_id == user_id
-        ]
-        return enrollments[offset:offset + limit]
+        enrollments = [enr for enr in self._enrollments.values() if enr.user_id == user_id]
+        return enrollments[offset : offset + limit]
 
     async def find_by_competition_and_team(
-        self,
-        competition_id: CompetitionId,
-        team_id: str
+        self, competition_id: CompetitionId, team_id: str
     ) -> list[Enrollment]:
         """Busca inscripciones de una competición filtradas por equipo."""
         return [
-            enr for enr in self._enrollments.values()
+            enr
+            for enr in self._enrollments.values()
             if enr.competition_id == competition_id and enr.team_id == team_id
         ]
 
     async def count_approved(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones aprobadas (nuevo nombre de método)."""
         return sum(
-            1 for enr in self._enrollments.values()
-            if enr.competition_id == competition_id and
-            enr.status == EnrollmentStatus.APPROVED
+            1
+            for enr in self._enrollments.values()
+            if enr.competition_id == competition_id and enr.status == EnrollmentStatus.APPROVED
         )
 
     async def count_pending(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones pendientes (REQUESTED)."""
         return sum(
-            1 for enr in self._enrollments.values()
-            if enr.competition_id == competition_id and
-            enr.status == EnrollmentStatus.REQUESTED
+            1
+            for enr in self._enrollments.values()
+            if enr.competition_id == competition_id and enr.status == EnrollmentStatus.REQUESTED
         )
 
-    async def count_approved_enrollments(
-        self,
-        competition_id: CompetitionId
-    ) -> int:
+    async def count_approved_enrollments(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones aprobadas para una competición (alias)."""
         return await self.count_approved(competition_id)
 

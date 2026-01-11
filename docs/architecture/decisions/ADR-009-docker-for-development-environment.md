@@ -1,47 +1,47 @@
-# ADR-009: Uso de Docker para el Entorno de Desarrollo
+# ADR-009: Use of Docker for Development Environment
 
-- **Estado**: Aceptado
-- **Fecha**: 2025-11-04
+- **Status**: Accepted
+- **Date**: 2025-11-04
 
-## Contexto
+## Context
 
-A medida que el proyecto evoluciona, introduce dependencias de servicios externos, siendo la primera y más crítica una base de datos PostgreSQL. Para desarrollar y probar la aplicación de manera fiable, necesitamos una forma de gestionar estas dependencias que sea consistente, reproducible y aislada del sistema operativo del desarrollador.
+As the project evolves, it introduces dependencies on external services, with the first and most critical being a PostgreSQL database. To develop and test the application reliably, we need a way to manage these dependencies that is consistent, reproducible, and isolated from the developer's operating system.
 
-Las alternativas a la gestión de estas dependencias incluyen:
-1.  **Instalación local**: Cada desarrollador instala y configura PostgreSQL manualmente en su máquina.
-2.  **Base de datos compartida en la nube**: Todos los desarrolladores apuntan a una única base de datos remota.
-3.  **Contenerización**: Se utiliza una tecnología de contenedores para empaquetar los servicios y ejecutarlos localmente.
+Alternatives for managing these dependencies include:
+1.  **Local installation**: Each developer manually installs and configures PostgreSQL on their machine.
+2.  **Shared cloud database**: All developers point to a single remote database.
+3.  **Containerization**: A container technology is used to package services and run them locally.
 
-## Decisión
+## Decision
 
-Se ha decidido adoptar **Docker** y **Docker Compose** como la herramienta estándar para gestionar el entorno de desarrollo local.
+We have decided to adopt **Docker** and **Docker Compose** as the standard tool for managing the local development environment.
 
-Esto implica:
--   Un `Dockerfile` que define la imagen de nuestra aplicación Python/FastAPI.
--   Un `docker-compose.yml` que orquesta el levantamiento de los servicios necesarios: la aplicación (`app`) y la base de datos PostgreSQL (`db`).
--   El uso de un fichero `.env` para gestionar las credenciales y la configuración, manteniéndolas fuera del control de versiones.
+This implies:
+-   A `Dockerfile` that defines the image of our Python/FastAPI application.
+-   A `docker-compose.yml` that orchestrates the startup of necessary services: the application (`app`) and the PostgreSQL database (`db`).
+-   The use of a `.env` file to manage credentials and configuration, keeping them out of version control.
 
-## Justificación
+## Justification
 
-Esta decisión se basa en las siguientes ventajas clave:
+This decision is based on the following key advantages:
 
-1.  **Consistencia del Entorno**: Garantiza que todos los desarrolladores, así como los sistemas de integración continua, ejecuten la aplicación y sus dependencias (como la versión exacta de PostgreSQL) en un entorno idéntico. Esto elimina por completo los problemas del tipo "en mi máquina funciona".
+1.  **Environment Consistency**: Ensures that all developers, as well as continuous integration systems, run the application and its dependencies (such as the exact version of PostgreSQL) in an identical environment. This completely eliminates "works on my machine" problems.
 
-2.  **Aislamiento**: Los servicios se ejecutan en contenedores aislados, lo que evita conflictos con otras bases de datos u otras versiones de servicios que un desarrollador pueda tener instaladas localmente para otros proyectos.
+2.  **Isolation**: Services run in isolated containers, which prevents conflicts with other databases or other versions of services that a developer may have locally installed for other projects.
 
-3.  **Facilidad de Configuración (Onboarding)**: Un nuevo desarrollador puede tener todo el entorno de desarrollo funcionando con un único comando (`docker-compose up`). Esto reduce drásticamente el tiempo y la complejidad de la configuración inicial.
+3.  **Ease of Setup (Onboarding)**: A new developer can have the entire development environment running with a single command (`docker-compose up`). This drastically reduces the time and complexity of initial setup.
 
-4.  **Paridad Desarrollo-Producción**: Nos permite desarrollar en un entorno que se asemeja mucho al entorno de producción final, siguiendo las mejores prácticas de DevOps.
+4.  **Development-Production Parity**: Allows us to develop in an environment that closely resembles the final production environment, following DevOps best practices.
 
-5.  **Portabilidad**: La configuración es completamente portable entre diferentes sistemas operativos (macOS, Windows, Linux) sin necesidad de cambios.
+5.  **Portability**: The configuration is completely portable across different operating systems (macOS, Windows, Linux) without requiring changes.
 
-## Consecuencias
+## Consequences
 
--   **Positivas**:
-    -   Mayor fiabilidad y reproducibilidad de los builds.
-    -   Simplificación del proceso de onboarding para nuevos miembros del equipo.
-    -   Entorno de desarrollo limpio y sin conflictos.
+-   **Positive**:
+    -   Greater reliability and reproducibility of builds.
+    -   Simplified onboarding process for new team members.
+    -   Clean development environment without conflicts.
 
--   **Negativas**:
-    -   Introduce una dependencia de Docker Desktop, que debe ser instalado por cada desarrollador.
-    -   Ligera sobrecarga en el uso de recursos (CPU/RAM) en comparación con la ejecución nativa, aunque es marginal en el hardware moderno.
+-   **Negative**:
+    -   Introduces a dependency on Docker Desktop, which must be installed by each developer.
+    -   Slight overhead in resource usage (CPU/RAM) compared to native execution, although it is marginal on modern hardware.

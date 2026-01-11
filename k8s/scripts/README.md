@@ -1,329 +1,478 @@
-# 🛠️ Scripts de Kubernetes - Ryder Cup Friends
+# 🛠️ Kubernetes Scripts - Ryder Cup Friends
 
-Scripts de automatización para gestionar el cluster de Kubernetes.
+Automation scripts to manage the Kubernetes cluster.
 
 ---
 
-## 📜 Scripts Disponibles
+## 📜 Available Scripts
 
-### 1. `deploy-cluster.sh` - Deployment Automático
+### 1. `deploy-cluster.sh` - Full Cluster Deployment
 
-Despliega la aplicación completa en Kubernetes con un solo comando.
+Deploys the complete application to Kubernetes with a single command.
 
-**Uso:**
+**Usage:**
 ```bash
 ./scripts/deploy-cluster.sh
 ```
 
-**Lo que hace:**
-- ✅ Verifica prerrequisitos (Docker, kubectl, Kind)
-- ✅ Crea el cluster Kind (o usa uno existente)
-- ✅ Aplica ConfigMaps y Secrets
-- ✅ Crea almacenamiento persistente (PVC)
-- ✅ Despliega PostgreSQL
-- ✅ Despliega Backend (FastAPI)
-- ✅ Despliega Frontend (React + nginx)
-- ✅ Espera a que todos los pods estén listos
-- ✅ Muestra instrucciones para acceder
+**What it does:**
+- ✅ Verifies prerequisites (Docker, kubectl, Kind)
+- ✅ Creates Kind cluster (or uses existing one)
+- ✅ Applies ConfigMaps and Secrets
+- ✅ Creates persistent storage (PVC)
+- ✅ Deploys PostgreSQL
+- ✅ Deploys Backend (FastAPI)
+- ✅ Deploys Frontend (React + nginx)
+- ✅ Waits for all pods to be ready
+- ✅ Shows access instructions
 
-**Tiempo estimado:** ~3-5 minutos
+**Estimated time:** ~3-5 minutes
 
 ---
 
-### 2. `deploy-api.sh` - Actualizar Backend API
+### 2. `deploy-api.sh` - Update Backend API
 
-Actualiza solo el backend (API) con los últimos cambios de código, reconstruyendo y desplegando la imagen Docker.
+Updates only the backend (API) with latest code changes, rebuilding and deploying the Docker image.
 
-**Uso:**
+**Usage:**
 ```bash
-# Actualizar con tag "latest"
+# Update with "latest" tag
 ./scripts/deploy-api.sh
 
-# Actualizar con versión específica
+# Update with specific version
 ./scripts/deploy-api.sh v1.0.1
 ```
 
-**Lo que hace:**
-- ✅ Verifica prerrequisitos (Docker, kubectl, cluster)
-- ✅ Construye nueva imagen Docker del backend
-- ✅ Sube la imagen a Docker Hub
-- ✅ Actualiza el deployment en Kubernetes
-- ✅ Realiza rolling update sin downtime
-- ✅ Espera a que todos los pods estén listos
-- ✅ Muestra logs y estado final
+**What it does:**
+- ✅ Verifies prerequisites (Docker, kubectl, cluster)
+- ✅ Builds new Docker image for backend
+- ✅ Pushes image to Docker Hub
+- ✅ Updates deployment in Kubernetes
+- ✅ Performs rolling update with zero downtime
+- ✅ Waits for all pods to be ready
+- ✅ Shows logs and final status
 
-**Características:**
-- 🔄 **Rolling update:** Mantiene alta disponibilidad (cero downtime)
-- 🎨 **Output colorizado:** Fácil de seguir el proceso
-- ✅ **Validaciones:** Verifica cada paso antes de continuar
-- 📊 **Verificación post-deployment:** Muestra estado de pods y logs
-- ↩️ **Rollback fácil:** Incluye comando para deshacer cambios
+**Features:**
+- 🔄 **Rolling update:** Maintains high availability (zero downtime)
+- 🎨 **Colorized output:** Easy to follow the process
+- ✅ **Validations:** Verifies each step before continuing
+- 📊 **Post-deployment verification:** Shows pod status and logs
+- ↩️ **Easy rollback:** Includes command to undo changes
 
-**Cuándo usarlo:**
-- Después de hacer cambios en el código del backend
-- Para desplegar correcciones de bugs
-- Para actualizar dependencias de Python
-- Para desplegar nuevas features del API
+**When to use:**
+- After making backend code changes
+- To deploy bug fixes
+- To update Python dependencies
+- To deploy new API features
 
-**Tiempo estimado:** ~2-4 minutos (depende de la conexión a Docker Hub)
-
-**Ejemplo de output:**
-```
-🚀 ==================================================
-   Ryder Cup Manager - API Deployment
-   ==================================================
-
-Docker Image: agustinedev/rydercupam-app:latest
-Deployment:   rydercup-api
-Container:    fastapi
-
-¿Continuar con el deployment? (y/n) y
-
-━━ Verificando prerrequisitos... ━━
-✅ Docker: OK
-✅ kubectl: OK
-✅ Cluster: OK
-✅ Deployment 'rydercup-api': OK
-
-━━ Construyendo imagen Docker... ━━
-✅ Imagen construida exitosamente
-
-━━ Subiendo imagen a Docker Hub... ━━
-✅ Imagen subida exitosamente
-
-━━ Actualizando deployment en Kubernetes... ━━
-✅ Comando de actualización ejecutado
-
-━━ Esperando a que se complete el rollout... ━━
-✅ Rollout completado exitosamente
-
-🎉 ¡Deployment completado con éxito! 🎉
-```
+**Estimated time:** ~2-4 minutes (depends on Docker Hub connection)
 
 ---
 
-### 3. `cluster-status.sh` - Diagnóstico Completo
+### 3. `deploy-front.sh` - Update Frontend
 
-Muestra el estado completo del cluster de forma visual.
+Updates only the frontend with latest code changes.
 
-**Uso:**
+**Usage:**
+```bash
+./scripts/deploy-front.sh [version]
+```
+
+**What it does:**
+- ✅ Builds new frontend Docker image
+- ✅ Pushes image to Docker Hub
+- ✅ Updates frontend deployment
+- ✅ Performs rolling update
+
+**Estimated time:** ~2-4 minutes
+
+---
+
+### 4. `deploy-db.sh` - Deploy Database with Migrations
+
+Restarts PostgreSQL database and applies pending Alembic migrations.
+
+**Usage:**
+```bash
+# Interactive mode (asks for confirmation)
+./scripts/deploy-db.sh
+
+# Force mode (skips confirmation)
+./scripts/deploy-db.sh --force
+```
+
+**What it does:**
+- ✅ Creates automatic backup before restart (saved in `k8s/backups/`)
+- ✅ Restarts PostgreSQL deployment (scale 0→1)
+- ✅ Applies all pending Alembic migrations
+- ✅ Verifies deployment and database connection
+- ⚠️ API connections reconnect automatically (no restart needed)
+
+**Features:**
+- 💾 **Automatic backup:** Uses `pg_dump` before any changes
+- 🔐 **Safe confirmation:** Requires explicit `y` to proceed (default: N)
+- ⚡ **Quick downtime:** ~30-60 seconds
+- 🔄 **Auto-reconnect:** API connections restore automatically
+
+**When to use:**
+- After creating new Alembic migrations
+- To apply pending database schema changes
+- To restart PostgreSQL for maintenance
+
+**Estimated time:** ~1-2 minutes
+
+---
+
+### 5. `restore-db.sh` - Restore Database from Backup
+
+Restores PostgreSQL database from a backup file.
+
+**Usage:**
+```bash
+./scripts/restore-db.sh
+```
+
+**What it does:**
+- 📋 Lists all available backups in `k8s/backups/`
+- ✍️ Prompts for backup filename
+- ✅ Validates backup file exists and is not empty
+- ⚠️ Shows clear warning: **ALL CURRENT DATA WILL BE LOST**
+- 🗄️ Drops current database and recreates it
+- 📥 Restores data from backup using `psql`
+- 🔧 Applies Alembic migrations
+- 🔄 Restarts API pods
+
+**Features:**
+- 🔒 **Safe confirmation:** Requires explicit `y` to proceed
+- 📋 **Interactive selection:** Shows backup list with size and date
+- ✅ **Validation:** Checks file exists and is not empty
+- 🔧 **Migration sync:** Applies migrations after restore
+
+**When to use:**
+- To restore from a previous backup
+- To revert database to known good state
+- To recover from data corruption
+
+**Estimated time:** ~2-3 minutes
+
+---
+
+### 6. `cluster-status.sh` - Complete Diagnostics
+
+Shows complete cluster status visually.
+
+**Usage:**
 ```bash
 ./scripts/cluster-status.sh
 ```
 
-**Lo que muestra:**
-- 📊 Información del cluster
-- 🖥️ Estado de los nodos
-- 📦 Estado de todos los pods
-- 🌐 Services y endpoints
-- 🚀 Deployments y réplicas
-- ⚙️ ConfigMaps y Secrets
-- 💾 Almacenamiento persistente
-- 📋 Eventos recientes
+**What it shows:**
+- 📊 Cluster information
+- 🖥️ Node status
+- 📦 All pods status
+- 🌐 Services and endpoints
+- 🚀 Deployments and replicas
+- ⚙️ ConfigMaps and Secrets
+- 💾 Persistent storage
+- 📋 Recent events
 - ❤️ Health checks (backend + frontend)
-- 🔌 Port-forwards activos
-- 📊 Resumen general
+- 🔌 Active port-forwards
+- 📊 General summary
 
-**Cuándo usarlo:**
-- Para verificar que todo está corriendo
-- Para diagnosticar problemas
-- Para ver el estado antes/después de cambios
+**When to use:**
+- To verify everything is running
+- To diagnose problems
+- To check status before/after changes
 
 ---
 
-### 4. `start-port-forwards.sh` - Iniciar Port-Forwards
+### 7. `start-port-forwards.sh` - Start Port-Forwards
 
-Inicia automáticamente los port-forwards necesarios para acceder a la aplicación.
+Automatically starts port-forwards needed to access the application.
 
-**Uso:**
+**Usage:**
 ```bash
 ./scripts/start-port-forwards.sh
 ```
 
-**Lo que hace:**
-- ✅ Inicia port-forward del backend (8000:80)
-- ✅ Inicia port-forward del frontend (8080:80)
-- ✅ Corre en background
-- ✅ Guarda PIDs para poder detenerlos después
+**What it does:**
+- ✅ Starts backend port-forward (8000:80)
+- ✅ Starts frontend port-forward (8080:80)
+- ✅ Runs in background
+- ✅ Saves PIDs to stop later
 
 ---
 
-### 5. `stop-port-forwards.sh` - Detener Port-Forwards
+### 8. `stop-port-forwards.sh` - Stop Port-Forwards
 
-Detiene todos los port-forwards activos.
+Stops all active port-forwards.
 
-**Uso:**
+**Usage:**
 ```bash
 ./scripts/stop-port-forwards.sh
 ```
 
 ---
 
-### 6. `destroy-cluster.sh` - Eliminación del Cluster
+### 9. `destroy-cluster.sh` - Delete Cluster
 
-Elimina completamente el cluster de Kubernetes.
+Completely deletes the Kubernetes cluster.
 
-**Uso:**
+**Usage:**
 ```bash
 ./scripts/destroy-cluster.sh
 ```
 
-**Lo que hace:**
-- ⚠️ Pide confirmación
-- 🗑️ Elimina el cluster completo
-- 🐳 Opcionalmente elimina imágenes Docker de Kind
+**What it does:**
+- ⚠️ Asks for confirmation
+- 🗑️ Deletes the complete cluster
+- 🐳 Optionally deletes Kind Docker images
 
-**⚠️ ADVERTENCIA:** Esta acción eliminará:
-- Todos los pods
-- Todos los datos de PostgreSQL
-- Todas las configuraciones
-- El cluster completo
+**⚠️ WARNING:** This action will delete:
+- All pods
+- All PostgreSQL data
+- All configurations
+- The complete cluster
 
 ---
 
-## 🚀 Flujo de Trabajo Típico
+## 🚀 Typical Workflows
 
-### Primer Uso
+### First Time Setup
 
 ```bash
-# 1. Desplegar el cluster completo
+# 1. Deploy complete cluster
 ./scripts/deploy-cluster.sh
 
-# 2. Verificar que todo está corriendo
+# 2. Verify everything is running
 ./scripts/cluster-status.sh
 
-# 3. Iniciar port-forwards
+# 3. Start port-forwards
 ./scripts/start-port-forwards.sh
 
-# 4. Abrir navegador
+# 4. Open browser
 open http://localhost:8080
 ```
 
-### Actualizar Backend (Después de Hacer Cambios en el Código)
+### Update Backend (After Code Changes)
 
 ```bash
-# 1. Haz tus cambios en el código del backend
-vim main.py  # o cualquier archivo
+# 1. Make your backend code changes
+vim main.py  # or any file
 
-# 2. Despliega la actualización
+# 2. Deploy the update
 ./scripts/deploy-api.sh
 
-# 3. Verifica que la actualización funcionó
+# 3. Verify the update worked
 ./scripts/cluster-status.sh
 
-# 4. Revisa los logs si es necesario
+# 4. Check logs if needed
 kubectl logs deployment/rydercup-api -f
 ```
 
-### Verificación Diaria
+### Apply Database Migrations
 
 ```bash
-# Ver estado rápido
+# 1. Create your Alembic migration
+alembic revision --autogenerate -m "Add new field"
+
+# 2. Deploy database changes
+./scripts/deploy-db.sh
+
+# 3. Verify migrations applied
+kubectl exec -it deployment/rydercup-api -- alembic current
+
+# 4. Backup is automatically saved in k8s/backups/
+```
+
+### Restore from Backup
+
+```bash
+# 1. Run restore script
+./scripts/restore-db.sh
+
+# 2. Select backup from list
+# Enter backup filename: db_backup_20260109_160929.sql
+
+# 3. Confirm restore (type 'y')
+# ⚠️  ALL CURRENT DATA WILL BE LOST
+
+# 4. Verify restore succeeded
+./scripts/cluster-status.sh
+```
+
+### Daily Verification
+
+```bash
+# View quick status
 ./scripts/cluster-status.sh
 
-# Ver logs en tiempo real
+# View logs in real-time
 kubectl logs -f deployment/rydercup-frontend
 kubectl logs -f deployment/rydercup-api
 
-# Verificar endpoints
+# Check endpoints
 curl http://localhost:8000/
 curl http://localhost:8080/health
 ```
 
-### Rollback si Algo Sale Mal
+### Rollback if Something Goes Wrong
 
 ```bash
-# Ver historial de deployments
+# View deployment history
 kubectl rollout history deployment/rydercup-api
 
-# Volver a la versión anterior
+# Return to previous version
 kubectl rollout undo deployment/rydercup-api
 
-# Verificar que el rollback funcionó
+# Verify rollback worked
 ./scripts/cluster-status.sh
 ```
 
-### Limpieza
+### Cleanup
 
 ```bash
-# Detener port-forwards
+# Stop port-forwards
 ./scripts/stop-port-forwards.sh
 
-# Eliminar cluster completo
+# Delete complete cluster
 ./scripts/destroy-cluster.sh
 ```
 
 ---
 
-## 📚 Documentación Adicional
+## 💾 Database Backup Management
 
-- **Guía Completa:** `docs/KUBERNETES_DEPLOYMENT_GUIDE.md` (80+ páginas)
-- **Guía Rápida:** `docs/KUBERNETES_QUICK_START.md` (referencia de 1 página)
+### Backup Location
+
+All backups are stored in `k8s/backups/` directory:
+```
+k8s/
+  backups/
+    db_backup_20260109_160929.sql
+    db_backup_20260109_143052.sql
+    ...
+```
+
+### Automatic Backups
+
+`deploy-db.sh` automatically creates a backup before applying migrations:
+- Filename format: `db_backup_YYYYMMDD_HHMMSS.sql`
+- Location: `k8s/backups/`
+- Uses `pg_dump` with correct credentials from Kubernetes secrets
+
+### Manual Backup
+
+```bash
+# Get database pod
+DB_POD=$(kubectl get pods -n rydercupfriends -l component=database -o jsonpath='{.items[0].metadata.name}')
+
+# Get credentials
+POSTGRES_USER=$(kubectl get secret rydercup-api-secret -n rydercupfriends -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
+
+# Create backup
+kubectl exec -n rydercupfriends $DB_POD -- pg_dump -U $POSTGRES_USER rcfdevdb > k8s/backups/manual_backup_$(date +%Y%m%d_%H%M%S).sql
+```
 
 ---
 
-## 🛠️ Personalización
+## 📚 Additional Documentation
 
-### Modificar el Nombre del Cluster
+- **Complete Guide:** `k8s/docs/KUBERNETES_DEPLOYMENT_GUIDE.md`
+- **Quick Guide:** `k8s/docs/KUBERNETES_QUICK_START.md`
 
-Edita la variable `CLUSTER_NAME` en cada script:
+---
+
+## 🛠️ Customization
+
+### Modify Cluster Name
+
+Edit the `CLUSTER_NAME` variable in each script:
 
 ```bash
-CLUSTER_NAME="mi-cluster-custom"
+CLUSTER_NAME="my-custom-cluster"
 ```
 
-### Añadir Más Verificaciones a cluster-status.sh
+### Add More Checks to cluster-status.sh
 
-El script `cluster-status.sh` es modular, puedes añadir secciones adicionales:
+The `cluster-status.sh` script is modular, you can add additional sections:
 
 ```bash
 # ==========================================
-# X. Nueva sección
+# X. New Section
 # ==========================================
-print_header "🆕 MI NUEVA SECCIÓN"
+print_header "🆕 MY NEW SECTION"
 
-# Tu código aquí
+# Your code here
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Script falla con "Permission denied"
+### Script fails with "Permission denied"
 
 ```bash
-# Hacer los scripts ejecutables
-chmod +x scripts/*.sh
+# Make scripts executable
+chmod +x k8s/scripts/*.sh
 ```
 
-### Script falla con "docker: command not found"
+### Script fails with "docker: command not found"
 
-Asegúrate de que Docker Desktop está instalado y corriendo:
+Make sure Docker Desktop is installed and running:
 
 ```bash
 docker --version
 docker info
 ```
 
-### Script falla con "cluster already exists"
+### Script fails with "cluster already exists"
 
-El script `deploy-cluster.sh` detecta clusters existentes y pregunta si quieres eliminarlo.
+The `deploy-cluster.sh` script detects existing clusters and asks if you want to delete it.
 
-Si quieres forzar recreación:
+To force recreation:
 
 ```bash
 kind delete cluster --name rydercupam-cluster
 ./scripts/deploy-cluster.sh
 ```
 
+### Backup fails with "role does not exist"
+
+The scripts automatically get the correct PostgreSQL user from Kubernetes secrets. If you see this error, verify your secrets:
+
+```bash
+kubectl get secret rydercup-api-secret -n rydercupfriends -o yaml
+```
+
+### Database restore fails
+
+1. Verify backup file exists and is not empty:
+```bash
+ls -lh k8s/backups/
+```
+
+2. Check database pod is running:
+```bash
+kubectl get pods -n rydercupfriends -l component=database
+```
+
+3. Check logs:
+```bash
+kubectl logs -n rydercupfriends -l component=database --tail=50
+```
+
 ---
 
-## 📝 Notas
+## 📝 Notes
 
-- Todos los scripts usan `set -e` para detenerse ante el primer error
-- Los scripts colorean la salida para mejor legibilidad
-- Los scripts son idempotentes (puedes ejecutarlos múltiples veces)
+- All scripts use `set -e` to stop on first error
+- Scripts colorize output for better readability
+- Scripts are idempotent (can be executed multiple times)
+- Database backups are never committed to Git (in `.gitignore`)
+- Confirmation prompts default to `N` for safety
 
 ---
 
-**Última actualización:** 3 Diciembre 2025
+**Last updated:** January 9, 2026  
+**Version:** v1.13.0

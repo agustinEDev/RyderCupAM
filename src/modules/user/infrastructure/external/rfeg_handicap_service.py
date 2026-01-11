@@ -12,7 +12,9 @@ from typing import ClassVar
 
 import httpx
 
-from src.modules.user.domain.errors.handicap_errors import HandicapServiceUnavailableError
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapServiceUnavailableError,
+)
 from src.modules.user.domain.services.handicap_service import HandicapService
 
 
@@ -40,7 +42,7 @@ class RFEGHandicapService(HandicapService):
             "Version/26.0.1 Safari/605.1.15"
         ),
         "Origin": "https://rfegolf.es",
-        "Referer": "https://rfegolf.es/"
+        "Referer": "https://rfegolf.es/",
     }
 
     def __init__(self, timeout: int = 10):
@@ -73,12 +75,12 @@ class RFEGHandicapService(HandicapService):
         texto_limpio = texto.strip()
 
         # 2. Reemplazar múltiples espacios por uno solo
-        texto_limpio = re.sub(r'\s+', ' ', texto_limpio)
+        texto_limpio = re.sub(r"\s+", " ", texto_limpio)
 
         # 3. NFD descompone caracteres acentuados en base + acento
         #    Luego filtramos los caracteres de categoría Mn (Nonspacing_Mark)
-        nfd = unicodedata.normalize('NFD', texto_limpio)
-        return ''.join(char for char in nfd if unicodedata.category(char) != 'Mn')
+        nfd = unicodedata.normalize("NFD", texto_limpio)
+        return "".join(char for char in nfd if unicodedata.category(char) != "Mn")
 
     async def search_handicap(self, full_name: str) -> float | None:
         """
@@ -133,9 +135,7 @@ class RFEGHandicapService(HandicapService):
         """
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                self.URL_PAGINA_PRINCIPAL,
-                headers=self.HEADERS,
-                timeout=self._timeout
+                self.URL_PAGINA_PRINCIPAL, headers=self.HEADERS, timeout=self._timeout
             )
             response.raise_for_status()
 
@@ -148,11 +148,7 @@ class RFEGHandicapService(HandicapService):
 
             return None
 
-    async def _buscar_en_api(
-        self,
-        full_name: str,
-        bearer_token: str
-    ) -> float | None:
+    async def _buscar_en_api(self, full_name: str, bearer_token: str) -> float | None:
         """
         Realiza la búsqueda en la API de la RFEG.
 
@@ -165,20 +161,22 @@ class RFEGHandicapService(HandicapService):
         """
         # Preparar headers con el token de autorización
         api_headers = self.HEADERS.copy()
-        api_headers.update({
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Authorization": bearer_token
-        })
+        api_headers.update(
+            {
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Authorization": bearer_token,
+            }
+        )
 
         # Parámetros de búsqueda
-        params = {'q': full_name}
+        params = {"q": full_name}
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 self.URL_API_HANDICAP,
                 params=params,
                 headers=api_headers,
-                timeout=self._timeout
+                timeout=self._timeout,
             )
             response.raise_for_status()
 
@@ -186,16 +184,16 @@ class RFEGHandicapService(HandicapService):
 
             # Buscar coincidencia exacta en todos los resultados
             # La API de RFEG devuelve la estructura: {"data": {"hits": [{"document": {...}}]}}
-            if datos and 'data' in datos:
-                hits = datos['data'].get('hits') or []
+            if datos and "data" in datos:
+                hits = datos["data"].get("hits") or []
                 nombre_buscado = full_name.upper()
 
                 for hit in hits:
-                    jugador = (hit or {}).get('document', {})
-                    nombre_encontrado = jugador.get('full_name', '').upper()
+                    jugador = (hit or {}).get("document", {})
+                    nombre_encontrado = jugador.get("full_name", "").upper()
 
                     if nombre_encontrado == nombre_buscado:
-                        handicap = jugador.get('handicap')
+                        handicap = jugador.get("handicap")
                         if handicap is not None:
                             return float(handicap)
 

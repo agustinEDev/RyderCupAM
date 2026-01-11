@@ -18,7 +18,6 @@ Características:
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Any
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
@@ -32,7 +31,7 @@ from ...domain.events.security_events import (
     SecurityAuditEvent,
     SecuritySeverity,
 )
-from .config import HandlerConfig, LogConfig, LogFormat, LogHandler, LogLevel
+from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
 
 
@@ -150,7 +149,7 @@ class SecurityLogger:
                 "log_file": str(log_path),
                 "max_size_mb": self.MAX_BYTES / (1024 * 1024),
                 "backup_count": self.BACKUP_COUNT,
-            }
+            },
         )
 
         return logger
@@ -190,10 +189,10 @@ class SecurityLogger:
                 "security_event": event_data,
                 "event_class": event.__class__.__name__,
                 "severity": event.severity.value,
-            }
+            },
         )
 
-    def _build_message(self, event: SecurityAuditEvent) -> str:
+    def _build_message(self, event: SecurityAuditEvent) -> str:  # noqa: PLR0911
         """
         Construye un mensaje descriptivo para el log.
 
@@ -209,32 +208,33 @@ class SecurityLogger:
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
-            return f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            return (
+                f"🔑 LOGIN {status} | {user_info} | Email: {event.email} | IP: {event.ip_address}"
+            )
 
-        elif isinstance(event, LogoutEvent):
+        if isinstance(event, LogoutEvent):
             return f"🚪 LOGOUT | {user_info} | Tokens revoked: {event.refresh_tokens_revoked}"
 
-        elif isinstance(event, PasswordChangedEvent):
+        if isinstance(event, PasswordChangedEvent):
             return f"🔐 PASSWORD CHANGED | {user_info} | Verified: {event.old_password_verified}"
 
-        elif isinstance(event, EmailChangedEvent):
+        if isinstance(event, EmailChangedEvent):
             return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
 
-        elif isinstance(event, AccessDeniedEvent):
+        if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"
 
-        elif isinstance(event, RateLimitExceededEvent):
+        if isinstance(event, RateLimitExceededEvent):
             return f"⚠️  RATE LIMIT EXCEEDED | {user_info} | Endpoint: {event.endpoint} | Limit: {event.limit_value}"
 
-        elif isinstance(event, RefreshTokenUsedEvent):
+        if isinstance(event, RefreshTokenUsedEvent):
             return f"🔄 REFRESH TOKEN USED | {user_info} | Token ID: {event.refresh_token_id}"
 
-        elif isinstance(event, RefreshTokenRevokedEvent):
+        if isinstance(event, RefreshTokenRevokedEvent):
             return f"🔒 REFRESH TOKENS REVOKED | {user_info} | Count: {event.tokens_revoked_count} | Reason: {event.reason}"
 
-        else:
-            # Fallback genérico
-            return f"🔐 {event_type} | {user_info} | Severity: {event.severity.value}"
+        # Fallback genérico
+        return f"🔐 {event_type} | {user_info} | Severity: {event.severity.value}"
 
     def _severity_to_log_level(self, severity: SecuritySeverity) -> int:
         """
@@ -248,9 +248,9 @@ class SecurityLogger:
         """
         mapping = {
             SecuritySeverity.CRITICAL: logging.CRITICAL,  # 50
-            SecuritySeverity.HIGH: logging.ERROR,         # 40
-            SecuritySeverity.MEDIUM: logging.WARNING,     # 30
-            SecuritySeverity.LOW: logging.INFO,           # 20
+            SecuritySeverity.HIGH: logging.ERROR,  # 40
+            SecuritySeverity.MEDIUM: logging.WARNING,  # 30
+            SecuritySeverity.LOW: logging.INFO,  # 20
         }
         return mapping.get(severity, logging.INFO)
 
@@ -510,7 +510,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetRequestedAuditEvent
+        from src.shared.domain.events.security_events import (  # noqa: PLC0415
+            PasswordResetRequestedAuditEvent,
+        )
 
         event = PasswordResetRequestedAuditEvent(
             user_id=user_id,
@@ -552,7 +554,9 @@ class SecurityLogger:
             ...     user_agent="Mozilla/5.0..."
             ... )
         """
-        from src.shared.domain.events.security_events import PasswordResetCompletedAuditEvent
+        from src.shared.domain.events.security_events import (  # noqa: PLC0415
+            PasswordResetCompletedAuditEvent,
+        )
 
         event = PasswordResetCompletedAuditEvent(
             user_id=user_id,
@@ -576,7 +580,7 @@ def get_security_logger() -> SecurityLogger:
     Returns:
         SecurityLogger configurado
     """
-    global _security_logger_instance
+    global _security_logger_instance  # noqa: PLW0603 - Module-level singleton pattern
     if _security_logger_instance is None:
         _security_logger_instance = SecurityLogger()
     return _security_logger_instance

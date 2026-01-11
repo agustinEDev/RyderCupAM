@@ -2,7 +2,10 @@ import logging
 
 import requests
 
-from src.modules.user.application.dto.user_dto import RegisterUserRequestDTO, UserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    RegisterUserRequestDTO,
+    UserResponseDTO,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
@@ -19,7 +22,6 @@ from src.shared.domain.repositories.country_repository_interface import (
 from src.shared.domain.value_objects.country_code import CountryCode
 
 logger = logging.getLogger(__name__)
-
 
 
 class RegisterUserUseCase:
@@ -88,7 +90,11 @@ class RegisterUserUseCase:
                     )
                 except HandicapServiceError as e:
                     # No falla el registro si no se encuentra el hándicap
-                    logger.warning("No se pudo obtener hándicap inicial para %s: %s", new_user.get_full_name(), e)
+                    logger.warning(
+                        "No se pudo obtener hándicap inicial para %s: %s",
+                        new_user.get_full_name(),
+                        e,
+                    )
 
             # 2.6 Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
             if handicap_value is None and request.manual_handicap is not None:
@@ -112,18 +118,18 @@ class RegisterUserUseCase:
                 email_sent = self._email_service.send_verification_email(
                     to_email=request.email,
                     user_name=new_user.first_name,
-                    verification_token=verification_token
+                    verification_token=verification_token,
                 )
                 if not email_sent:
                     logger.warning(
                         "No se pudo enviar el email de verificación para el usuario %s",
-                        new_user.id.value
+                        new_user.id.value,
                     )
             except (requests.RequestException, ValueError, ConnectionError):
                 # Capturar excepciones específicas de red y validación
                 logger.exception(
                     "Error al enviar email de verificación para el usuario %s",
-                    new_user.id.value
+                    new_user.id.value,
                 )
                 # No fallar el registro si el email no se pudo enviar
 

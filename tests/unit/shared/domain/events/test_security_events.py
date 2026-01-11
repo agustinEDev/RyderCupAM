@@ -19,7 +19,6 @@ Cobertura:
 """
 
 import pytest
-from datetime import datetime
 
 from src.shared.domain.events.security_events import (
     AccessDeniedEvent,

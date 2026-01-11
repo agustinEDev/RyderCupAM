@@ -27,10 +27,7 @@ class TestUserLoggedInEvent:
         logged_in_at = datetime(2024, 1, 15, 10, 30, 45)
 
         # Act
-        event = UserLoggedInEvent(
-            user_id=user_id,
-            logged_in_at=logged_in_at
-        )
+        event = UserLoggedInEvent(user_id=user_id, logged_in_at=logged_in_at)
 
         # Assert
         assert event.user_id == user_id
@@ -62,7 +59,7 @@ class TestUserLoggedInEvent:
             ip_address=ip_address,
             user_agent=user_agent,
             session_id=session_id,
-            login_method=login_method
+            login_method=login_method,
         )
 
         # Assert
@@ -81,10 +78,7 @@ class TestUserLoggedInEvent:
         ser modificados (principio de inmutabilidad de eventos de dominio).
         """
         # Arrange
-        event = UserLoggedInEvent(
-            user_id="user-789",
-            logged_in_at=datetime.now()
-        )
+        event = UserLoggedInEvent(user_id="user-789", logged_in_at=datetime.now())
 
         # Act & Assert
         with pytest.raises(Exception):  # FrozenInstanceError en dataclasses
@@ -104,16 +98,13 @@ class TestUserLoggedInEvent:
         - aggregate_id (basado en user_id)
         """
         # Arrange & Act
-        event = UserLoggedInEvent(
-            user_id="user-metadata-test",
-            logged_in_at=datetime.now()
-        )
+        event = UserLoggedInEvent(user_id="user-metadata-test", logged_in_at=datetime.now())
 
         # Assert - Metadatos generados automáticamente
-        assert hasattr(event, '_event_id')
-        assert hasattr(event, '_occurred_on')
-        assert hasattr(event, '_event_version')
-        assert hasattr(event, '_aggregate_id')
+        assert hasattr(event, "_event_id")
+        assert hasattr(event, "_occurred_on")
+        assert hasattr(event, "_event_version")
+        assert hasattr(event, "_aggregate_id")
 
         assert event._event_id is not None
         assert event._occurred_on is not None
@@ -137,7 +128,7 @@ class TestUserLoggedInEvent:
             user_id=user_id,
             logged_in_at=logged_in_at,
             ip_address=ip_address,
-            login_method=login_method
+            login_method=login_method,
         )
 
         # Act
@@ -171,7 +162,7 @@ class TestUserLoggedInEvent:
             ip_address=ip_address,
             user_agent=user_agent,
             session_id=session_id,
-            login_method=login_method
+            login_method=login_method,
         )
 
         # Act
@@ -204,15 +195,9 @@ class TestUserLoggedInEvent:
         diferentes event_id para garantizar unicidad.
         """
         # Arrange & Act
-        event1 = UserLoggedInEvent(
-            user_id="user-1",
-            logged_in_at=datetime.now()
-        )
+        event1 = UserLoggedInEvent(user_id="user-1", logged_in_at=datetime.now())
 
-        event2 = UserLoggedInEvent(
-            user_id="user-2",
-            logged_in_at=datetime.now()
-        )
+        event2 = UserLoggedInEvent(user_id="user-2", logged_in_at=datetime.now())
 
         # Assert
         assert event1._event_id != event2._event_id

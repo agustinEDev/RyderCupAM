@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # Nested DTO para representar datos de usuario
 # ======================================================================================
 
+
 class EnrolledUserDTO(BaseModel):
     """
     DTO para representar información básica de un usuario inscrito.
@@ -22,6 +23,7 @@ class EnrolledUserDTO(BaseModel):
     - Datos de juego: handicap, country_code
     - Personalización: avatar_url (null por ahora)
     """
+
     id: UUID = Field(..., description="ID único del usuario")
     first_name: str = Field(..., description="Nombre del usuario")
     last_name: str = Field(..., description="Apellido del usuario")
@@ -37,11 +39,15 @@ class EnrolledUserDTO(BaseModel):
 # DTO para el Caso de Uso: Solicitar Inscripción (Request Enrollment)
 # ======================================================================================
 
+
 class RequestEnrollmentRequestDTO(BaseModel):
     """
     DTO de entrada para que un jugador solicite inscribirse a una competición.
     """
-    competition_id: UUID = Field(..., description="ID de la competición a la que se solicita inscripción.")
+
+    competition_id: UUID = Field(
+        ..., description="ID de la competición a la que se solicita inscripción."
+    )
     user_id: UUID = Field(..., description="ID del usuario que solicita la inscripción.")
 
 
@@ -49,6 +55,7 @@ class RequestEnrollmentResponseDTO(BaseModel):
     """
     DTO de salida para solicitud de inscripción.
     """
+
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
@@ -62,17 +69,19 @@ class RequestEnrollmentResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Inscripción Directa por Creador
 # ======================================================================================
 
+
 class DirectEnrollPlayerRequestDTO(BaseModel):
     """
     DTO de entrada para que el creador inscriba directamente a un jugador.
     """
+
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del jugador a inscribir.")
     custom_handicap: Decimal | None = Field(
         None,
         ge=Decimal("-10.0"),
         le=Decimal("54.0"),
-        description="Hándicap personalizado (opcional). Override del hándicap oficial."
+        description="Hándicap personalizado (opcional). Override del hándicap oficial.",
     )
 
 
@@ -80,11 +89,14 @@ class DirectEnrollPlayerResponseDTO(BaseModel):
     """
     DTO de salida para inscripción directa.
     """
+
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del jugador.")
     status: str = Field(..., description="Estado de la inscripción (APPROVED).")
-    custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado si se especificó.")
+    custom_handicap: Decimal | None = Field(
+        None, description="Hándicap personalizado si se especificó."
+    )
     created_at: datetime = Field(..., description="Fecha y hora de la inscripción.")
 
     model_config = ConfigDict(from_attributes=True)
@@ -94,14 +106,16 @@ class DirectEnrollPlayerResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Manejar Solicitud de Inscripción (Approve/Reject)
 # ======================================================================================
 
+
 class HandleEnrollmentRequestDTO(BaseModel):
     """
     DTO de entrada para que el creador apruebe o rechace una solicitud.
     """
+
     enrollment_id: UUID = Field(..., description="ID de la inscripción a procesar.")
     action: str = Field(..., description="Acción a realizar: 'APPROVE' o 'REJECT'.")
 
-    @field_validator('action', mode='before')
+    @field_validator("action", mode="before")
     @classmethod
     def uppercase_action(cls, v):
         """Convierte action a mayúsculas."""
@@ -119,6 +133,7 @@ class HandleEnrollmentResponseDTO(BaseModel):
     """
     DTO de salida para manejar solicitud de inscripción.
     """
+
     id: UUID = Field(..., description="ID de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
@@ -132,18 +147,23 @@ class HandleEnrollmentResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Cancelar Inscripción (Player Cancels)
 # ======================================================================================
 
+
 class CancelEnrollmentRequestDTO(BaseModel):
     """
     DTO de entrada para que un jugador cancele su solicitud o decline invitación.
     """
+
     enrollment_id: UUID = Field(..., description="ID de la inscripción a cancelar.")
-    reason: str | None = Field(None, max_length=500, description="Razón de la cancelación (opcional).")
+    reason: str | None = Field(
+        None, max_length=500, description="Razón de la cancelación (opcional)."
+    )
 
 
 class CancelEnrollmentResponseDTO(BaseModel):
     """
     DTO de salida para cancelación de inscripción.
     """
+
     id: UUID = Field(..., description="ID de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
@@ -157,10 +177,12 @@ class CancelEnrollmentResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Retirar Inscripción (Player Withdraws)
 # ======================================================================================
 
+
 class WithdrawEnrollmentRequestDTO(BaseModel):
     """
     DTO de entrada para que un jugador se retire después de estar aprobado.
     """
+
     enrollment_id: UUID = Field(..., description="ID de la inscripción a retirar.")
     reason: str | None = Field(None, max_length=500, description="Razón del retiro (opcional).")
 
@@ -169,6 +191,7 @@ class WithdrawEnrollmentResponseDTO(BaseModel):
     """
     DTO de salida para retiro de inscripción.
     """
+
     id: UUID = Field(..., description="ID de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
@@ -182,16 +205,18 @@ class WithdrawEnrollmentResponseDTO(BaseModel):
 # DTO para el Caso de Uso: Establecer Hándicap Personalizado
 # ======================================================================================
 
+
 class SetCustomHandicapRequestDTO(BaseModel):
     """
     DTO de entrada para que el creador establezca un hándicap personalizado.
     """
+
     enrollment_id: UUID = Field(..., description="ID de la inscripción.")
     custom_handicap: Decimal = Field(
         ...,
         ge=Decimal("-10.0"),
         le=Decimal("54.0"),
-        description="Hándicap personalizado (override del oficial)."
+        description="Hándicap personalizado (override del oficial).",
     )
 
 
@@ -199,6 +224,7 @@ class SetCustomHandicapResponseDTO(BaseModel):
     """
     DTO de salida para establecer hándicap personalizado.
     """
+
     id: UUID = Field(..., description="ID de la inscripción.")
     custom_handicap: Decimal = Field(..., description="Nuevo hándicap personalizado.")
     updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
@@ -210,6 +236,7 @@ class SetCustomHandicapResponseDTO(BaseModel):
 # DTO de Respuesta Genérico para Enrollment
 # ======================================================================================
 
+
 class EnrollmentResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una inscripción.
@@ -218,10 +245,13 @@ class EnrollmentResponseDTO(BaseModel):
     NOTA: El campo 'user' es calculado dinámicamente en la capa de presentación
     y NO existe en la entidad de dominio.
     """
+
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
-    user: EnrolledUserDTO | None = Field(None, description="Información completa del usuario inscrito.")
+    user: EnrolledUserDTO | None = Field(
+        None, description="Información completa del usuario inscrito."
+    )
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")

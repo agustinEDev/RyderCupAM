@@ -1,123 +1,123 @@
 # ADR-025: Competition Module Evolution - v2.1.0
 
-**Fecha**: 7 de enero de 2026
-**Estado**: Aceptado
-**Decisores**: Equipo de desarrollo
+**Date**: January 9, 2026
+**Status**: Accepted
+**Decision Makers**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-El Competition Module actual permite crear torneos y gestionar inscripciones, pero carece de:
-- Gestión de campos de golf (tees, hoyos, slope/course rating)
-- Planificación de jornadas con matches específicos
-- Live scoring con anotación hoyo a hoyo
-- Validación dual (jugador vs marcador)
-- Sistema de invitaciones para jugadores
+The current Competition Module allows creating tournaments and managing enrollments, but lacks:
+- Golf course management (tees, holes, slope/course rating)
+- Round planning with specific matches
+- Live scoring with hole-by-hole annotation
+- Dual validation (player vs marker)
+- Invitation system for players
 
-**Necesidad:** Sistema completo para torneos Ryder Cup amateur profesionales.
+**Need:** Complete system for professional amateur Ryder Cup tournaments.
 
-## Decisiones
+## Decisions
 
-### 1. Sistema de Roles Formal
+### 1. Formal Role System
 
-**Decisión**: Implementar roles con tablas dedicadas (no flags booleanos).
+**Decision**: Implement roles with dedicated tables (not boolean flags).
 
 ```python
 RoleName = Enum("ADMIN", "CREATOR", "PLAYER")
-# Tablas: roles, user_roles (many-to-many)
+# Tables: roles, user_roles (many-to-many)
 ```
 
-**Razón**: Escalabilidad para futuros roles y permisos granulares.
+**Reason**: Scalability for future roles and granular permissions.
 
-### 2. Tees con Categoría Normalizada
+### 2. Tees with Normalized Category
 
-**Decisión**: Híbrido entre nomenclatura libre y categoría interna.
+**Decision**: Hybrid between free nomenclature and internal category.
 
 ```python
 class Tee:
-    identifier: str          # "60", "Blancas", "Championship" (libre)
+    identifier: str          # "60", "Blancas", "Championship" (free)
     category: TeeCategory    # CHAMPIONSHIP_MALE, AMATEUR_MALE, etc.
     slope_rating: float
     course_rating: float
     gender: Gender
 ```
 
-**Razón**: Flexibilidad internacional + normalización para estadísticas.
+**Reason**: International flexibility + normalization for statistics.
 
-### 3. Playing Handicap Pre-calculado
+### 3. Pre-calculated Playing Handicap
 
-**Decisión**: Calcular y almacenar playing handicap al asignar tee al jugador.
+**Decision**: Calculate and store playing handicap when assigning tee to player.
 
 ```python
 playing_handicap = (handicap_index × slope_rating / 113) + (course_rating - par)
-# Storage: 4 campos en Match entity (team_a_player_1_playing_handicap, etc.)
+# Storage: 4 fields in Match entity (team_a_player_1_playing_handicap, etc.)
 ```
 
-**Razón**: Eficiencia en cálculos + auditoría (saber qué handicap se usó en cada match).
+**Reason**: Efficiency in calculations + auditing (know what handicap was used in each match).
 
-### 4. Validación Dual Independiente
+### 4. Independent Dual Validation
 
-**Decisión**: Cada jugador valida SOLO su propia tarjeta.
+**Decision**: Each player validates ONLY their own card.
 
 ```python
 def can_submit_scorecard(player: Player) -> bool:
     for hole in 1..18:
         if player.score[hole] != marker.annotation_for_player[hole]:
-            return False  # ❌ Bloqueo
-    return True  # ✅ Puede entregar
+            return False  # ❌ Block
+    return True  # ✅ Can submit
 ```
 
-**Razón**: Player A puede entregar independientemente de la tarjeta de Player B. Refleja proceso real de golf.
+**Reason**: Player A can submit independently of Player B's card. Reflects real golf process.
 
 ### 5. Course Approval Workflow
 
-**Decisión**: Creator crea campos → PENDING_APPROVAL → Admin aprueba/rechaza.
+**Decision**: Creator creates courses → PENDING_APPROVAL → Admin approves/rejects.
 
 ```python
 ApprovalStatus = Enum("PENDING_APPROVAL", "APPROVED", "REJECTED")
 ```
 
-**Razón**: No bloquea al Creator + control de calidad de datos.
+**Reason**: Doesn't block Creator + data quality control.
 
-### 6. Invitaciones con Token Seguro
+### 6. Invitations with Secure Token
 
-**Decisión**: Sistema de invitaciones con token para registro directo.
+**Decision**: Invitation system with token for direct registration.
 
 ```python
 class Invitation:
     invitee_email: Email
-    invitee_user_id: UserId | None  # null si no registrado
-    token: str  # 256-bit, expira 7 días
+    invitee_user_id: UserId | None  # null if not registered
+    token: str  # 256-bit, expires 7 days
     status: InvitationStatus
 ```
 
-**Razón**: UX fluida (buscar por email + auto-inscripción al registrarse).
+**Reason**: Smooth UX (search by email + auto-enrollment on registration).
 
-## Agregados Principales
+## Main Aggregates
 
-**Nuevos:**
+**New:**
 - `GolfCourse` (name, country, type, tees[], holes[])
 - `Round` (date, golf_course, session_type)
 - `Match` (format, players, tees, playing_handicaps, status)
 - `Invitation` (competition, email, token, status)
 - `HoleScore` (match, hole_number, player, gross, net, status)
 
-**Enums clave:**
+**Key Enums:**
 - `RoleName`, `TeeCategory`, `GolfCourseType`, `MatchFormat`, `MatchStatus`, `InvitationStatus`, `ScoreStatus`
 
-## Consecuencias
+## Consequences
 
-### Positivas ✅
-- Sistema profesional completo para torneos Ryder Cup
-- Playing handicap auditable
-- Validación dual refleja proceso real de golf
-- Escalable: roles formales, tees normalizados
-- UX fluida con invitaciones
+### Positive ✅
+- Complete professional system for Ryder Cup tournaments
+- Auditable playing handicap
+- Dual validation reflects real golf process
+- Scalable: formal roles, normalized tees
+- Smooth UX with invitations
 
-### Negativas ⚠️
-- Alta complejidad (+9 tablas, +14 entidades)
-- Playing handicap duplicado (Competition policy + Match calculation)
+### Negative ⚠️
+- High complexity (+9 tables, +14 entities)
+- Duplicated playing handicap (Competition policy + Match calculation)
 
-## Referencias
+## References
 
-- **ROADMAP.md**: Detalles de implementación v2.1.0
+- **ROADMAP.md**: v2.1.0 implementation details
 - **ADR-026**: Playing Handicap WHS Calculation

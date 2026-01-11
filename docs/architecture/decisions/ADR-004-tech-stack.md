@@ -1,307 +1,104 @@
-# ADR-004: Stack Tecnológico y Herramientas
+# ADR-004: Technology Stack and Tools
 
-**Fecha**: 31 de octubre de 2025  
-**Estado**: Aceptado  
-**Decisores**: Equipo de desarrollo  
+**Date**: October 31, 2025  
+**Status**: Accepted  
+**Deciders**: Development Team  
 
-## Contexto y Problema
+## Context and Problem
 
-Necesitamos seleccionar un stack tecnológico para el sistema de gestión de torneos Ryder Cup que sea:
-- **Moderno**: Tecnologías actuales y con futuro
-- **Productivo**: Desarrollo rápido y eficiente
-- **Escalable**: Capaz de crecer con el proyecto  
-- **Mantenible**: Fácil de mantener y actualizar
-- **Compatible**: Integración fluida entre componentes
+We need to select a technology stack for the Ryder Cup tournament management system that is:
+- **Modern**: Current and future-proof technologies
+- **Productive**: Fast and efficient development
+- **Scalable**: Able to grow with the project  
+- **Maintainable**: Easy to maintain and update
+- **Compatible**: Smooth integration between components
 
-## Opciones Consideradas
+## Considered Options
 
-### Framework Web:
-1. **FastAPI**: Framework moderno con type hints y documentación automática
-2. **Django**: Framework completo con ORM integrado
-3. **Flask**: Framework minimalista y flexible
-4. **Starlette**: Framework ASGI ligero
+**Web Framework**: FastAPI (modern + docs), Django (full-featured), Flask (minimalist), Starlette (lightweight)
+**Language**: Python 3.12 (stable), TypeScript (type safety), Go/Rust (performance)
+**Security**: bcrypt (standard), argon2 (modern), scrypt/PBKDF2 (alternatives)
 
-### Lenguaje:
-1. **Python 3.12**: Última versión estable
-2. **TypeScript**: Para mayor type safety
-3. **Go**: Para máxima performance
-4. **Rust**: Para performance extrema
+## Decision
 
-### Seguridad:
-1. **bcrypt**: Hashing de passwords estándar de la industria
-2. **argon2**: Algoritmo más moderno
-3. **scrypt**: Alternativa robusta
-4. **PBKDF2**: Estándar más antiguo
-
-## Decisión
-
-**Stack Tecnológico Seleccionado:**
+**Selected Technology Stack:**
 
 ### Core Framework:
-- **Python 3.12.12**: Lenguaje principal
-- **FastAPI 0.115.0**: Framework web principal  
-- **Uvicorn 0.30.0**: Servidor ASGI de producción
+- **Python 3.12.12**: Main language
+- **FastAPI 0.115.0**: Main web framework  
+- **Uvicorn 0.30.0**: Production ASGI server
 
-### Seguridad:
-- **bcrypt 4.1.2**: Hashing de passwords seguro
+### Security:
+- **bcrypt 4.1.2**: Secure password hashing
 
 ### Testing:
-- **pytest 8.3.0**: Framework de testing
-- **pytest-xdist 3.8.0**: Paralelización de tests
-- **httpx 0.27.0**: Cliente HTTP para tests
+- **pytest 8.3.0**: Testing framework
+- **pytest-xdist 3.8.0**: Test parallelization
+- **httpx 0.27.0**: HTTP client for tests
 
-### Desarrollo:
-- **Python 3.12 con Type Hints**: Tipado estático
-- **dataclasses**: Para Value Objects y entidades
-- **Pathlib**: Manejo moderno de rutas
+### Development:
+- **Python 3.12 with Type Hints**: Static typing
+- **dataclasses**: For Value Objects and entities
+- **Pathlib**: Modern path handling
 
-## Justificación Detallada
+## Detailed Justification
 
-### 1. FastAPI como Framework Web
+### 1. FastAPI as Web Framework
 
-**Ventajas Específicas**:
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
+**Benefits Achieved**:
+- ✅ **Automatic documentation**: OpenAPI/Swagger generated
+- ✅ **Automatic validation**: Integrated Pydantic  
+- ✅ **Performance**: One of the fastest in Python
+- ✅ **Type safety**: Based on Python type hints
+- ✅ **Native async**: Full support for async/await
 
-# Documentación automática + validación
-class UserCreate(BaseModel):
-    name: str
-    email: str
-    
-@app.post("/users/", response_model=User)
-async def create_user(user: UserCreate):
-    # Type hints automáticos
-    # Validación automática  
-    # Documentación OpenAPI generada
-    pass
-```
+**vs Alternatives**:
+- **Django**: Too "heavy" for pure REST API
+- **Flask**: Requires a lot of manual configuration
+- **Starlette**: Too basic, lacks ecosystem
 
-**Beneficios Obtenidos**:
-- ✅ **Documentación automática**: OpenAPI/Swagger generado
-- ✅ **Validación automática**: Pydantic integrado  
-- ✅ **Performance**: Una de las más rápidas en Python
-- ✅ **Type safety**: Basado en type hints de Python
-- ✅ **Async nativo**: Soporte completo para async/await
+### 2. Python 3.12 as Base Language
 
-**vs Alternativas**:
-- **Django**: Demasiado "pesado" para API REST pura
-- **Flask**: Requiere mucha configuración manual
-- **Starlette**: Muy básico, falta ecosistema
+**Benefits**:
+- ✅ **Productivity**: Clear and expressive syntax
+- ✅ **Ecosystem**: Mature libraries available  
+- ✅ **Type safety**: Type hints are mandatory in the project
+- ✅ **Debugging**: Excellent tooling available
+- ✅ **Team velocity**: Moderate learning curve
 
-### 2. Python 3.12 como Lenguaje Base
+### 3. bcrypt for Password Security
 
-**Características Aprovechadas**:
-```python
-# Type hints avanzados
-from typing import Optional, List, Dict
+**bcrypt Justification**: Industry standard (20+ years), attack-resistant with automatic salt, configurable rounds for performance/security. Preferred over Argon2 (less adopted), scrypt (complex config), and PBKDF2 (older/vulnerable).
 
-# Pattern matching (Python 3.10+)
-match result:
-    case {"type": "success", "data": data}:
-        return data
-    case {"type": "error", "message": msg}:
-        raise Exception(msg)
+### 4. pytest as Testing Framework
 
-# Dataclasses para Value Objects
-@dataclass(frozen=True)
-class Email:
-    value: str
-```
+**pytest Advantages**: Simple syntax, powerful fixtures, plugin ecosystem, parallelization (pytest-xdist), clear reporting.
+## Consequences
 
-**Beneficios**:
-- ✅ **Productividad**: Sintaxis clara y expresiva
-- ✅ **Ecosistema**: Librerías maduras disponibles  
-- ✅ **Type safety**: Type hints obligatorios en el proyecto
-- ✅ **Debugging**: Excelente tooling disponible
-- ✅ **Team velocity**: Curva de aprendizaje moderada
+### Positive:
+- ✅ **Fast development**: FastAPI + Python high productivity
+- ✅ **Automatic documentation**: OpenAPI with no extra effort
+- ✅ **Type safety**: Fewer runtime bugs
+- ✅ **Fast testing**: 0.54s for 80 tests
+- ✅ **Robust security**: bcrypt industry standard
+- ✅ **Scalability**: Native async/await
 
-### 3. bcrypt para Seguridad de Passwords
+### Negative:
+- ❌ **Performance limits**: Python is not the fastest
+- ❌ **Memory usage**: Higher than compiled languages
+- ❌ **GIL limitations**: For CPU-intensive tasks
+- ❌ **Deployment**: Requires Python runtime
 
-**Implementación**:
-```python
-import bcrypt
+### Risks Mitigated:
+- **Performance**: FastAPI is one of the fastest frameworks in Python
+- **Memory**: Specific optimizations applied
+- **Deployment**: Uvicorn + Docker for production
+- **Scaling**: async/await for concurrency
 
-def _hash_password(plain_password: str) -> str:
-    # Configuración inteligente por entorno
-    rounds = 4 if os.getenv('TESTING') == 'true' else 12
-    salt = bcrypt.gensalt(rounds=rounds)
-    return bcrypt.hashpw(plain_password.encode('utf-8'), salt).decode('utf-8')
-```
-
-**Justificación de bcrypt**:
-- ✅ **Estándar de industria**: Usado por millones de aplicaciones
-- ✅ **Resistente a ataques**: Diseñado contra rainbow tables
-- ✅ **Configurable**: Rounds ajustables por performance/seguridad
-- ✅ **Probado en tiempo**: 20+ años de uso en producción
-- ✅ **Salt automático**: Previene ataques de diccionario
-
-**vs Alternativas**:
-- **Argon2**: Más nuevo pero menos adoptado
-- **scrypt**: Bueno pero más complejo de configurar
-- **PBKDF2**: Más antiguo y potencialmente más vulnerable
-
-### 4. pytest como Framework de Testing
-
-**Ecosystem de Testing**:
-```python
-# Test simple y expresivo
-def test_user_creation():
-    user = User.create("Juan", "Pérez", "juan@test.com", "Password123")
-    assert user.get_full_name() == "Juan Pérez"
-    
-# Fixtures reutilizables
-@pytest.fixture
-def sample_user():
-    return User.create("Test", "User", "test@example.com", "Pass123")
-```
-
-**Ventajas pytest**:
-- ✅ **Sintaxis simple**: Tests más legibles que unittest
-- ✅ **Fixtures potentes**: Reutilización de setup/teardown
-- ✅ **Plugin ecosystem**: Extensible con plugins
-- ✅ **Paralelización**: pytest-xdist para tests rápidos
-- ✅ **Reporting**: Salida clara de errores y fallos
-
-## Implementación Específica
-
-### 1. Estructura del Proyecto:
-```
-requirements.txt:
-# WEB FRAMEWORK Y SERVIDOR
-fastapi==0.115.0       # Framework web moderno  
-uvicorn[standard]==0.30.0  # Servidor ASGI
-
-# TESTING Y DESARROLLO
-pytest==8.3.0         # Framework de testing
-pytest-xdist==3.8.0   # Paralelización 
-httpx==0.27.0          # Cliente HTTP para tests
-
-# SEGURIDAD
-bcrypt==4.1.2          # Hashing de passwords
-```
-
-### 2. Configuración del Entorno:
-```python
-# main.py - Aplicación FastAPI
-from fastapi import FastAPI
-
-app = FastAPI(
-    title="Ryder Cup Manager API",
-    description="Sistema de gestión para torneos Ryder Cup",
-    version="1.0.0"
-)
-
-@app.get("/")
-async def health():
-    return {
-        "status": "healthy",
-        "service": "ryder-cup-manager", 
-        "version": "1.0.0"
-    }
-```
-
-### 3. Value Objects con dataclasses:
-```python
-from dataclasses import dataclass
-import bcrypt
-
-@dataclass(frozen=True)  # Inmutabilidad
-class Password:
-    hashed_value: str
-    
-    @classmethod
-    def from_plain_text(cls, plain: str) -> 'Password':
-        # Validación + hashing automático
-        if not cls._is_strong(plain):
-            raise InvalidPasswordError("Password débil")
-        return cls(cls._hash_password(plain))
-```
-
-## Consecuencias
-
-### Positivas:
-- ✅ **Desarrollo rápido**: FastAPI + Python productividad alta
-- ✅ **Documentación automática**: OpenAPI sin esfuerzo extra
-- ✅ **Type safety**: Menos bugs en runtime
-- ✅ **Testing rápido**: 0.54s para 80 tests
-- ✅ **Seguridad robusta**: bcrypt industry standard
-- ✅ **Escalabilidad**: async/await nativo
-
-### Negativas:
-- ❌ **Performance límites**: Python no es el más rápido
-- ❌ **Memory usage**: Mayor que lenguajes compilados
-- ❌ **GIL limitations**: Para CPU-intensive tasks
-- ❌ **Deployment**: Requiere runtime Python
-
-### Riesgos Mitigados:
-- **Performance**: FastAPI es uno de los frameworks más rápidos en Python
-- **Memory**: Optimizaciones específicas aplicadas
-- **Deployment**: Uvicorn + Docker para producción
-- **Scaling**: async/await para concurrencia
-
-## Validación de Decisiones
-
-### Métricas de Éxito (31 Oct 2025):
-
-#### Performance:
-- ✅ **API Response**: <100ms para endpoints simples
-- ✅ **Test Suite**: 80 tests en 0.54s  
-- ✅ **Memory usage**: <50MB para desarrollo
-- ✅ **Startup time**: <2s para la aplicación
-
-#### Productividad:
-- ✅ **Lines of code**: Código conciso y expresivo
-- ✅ **Bug rate**: Cero bugs relacionados con tipos
-- ✅ **Documentation**: OpenAPI automática funcionando
-- ✅ **Developer experience**: Feedback rápido y claro
-
-#### Seguridad:
-- ✅ **Password hashing**: bcrypt con rounds=12 en producción
-- ✅ **Type validation**: Automática con Pydantic
-- ✅ **No secrets**: Configuración por variables de entorno
-
-## Alternativas Futuras
-
-### Posibles Migraciones:
-1. **Performance crítica**: Rust + axum para microservicios específicos
-2. **Type safety extrema**: TypeScript + Deno para frontend
-3. **Scaling masivo**: Go + Gin para servicios de alta carga
-4. **ML Integration**: Continuar con Python + FastML
-
-### Extensiones Planificadas:
-- **FastAPI + SQLAlchemy**: Para persistencia de datos
-- **FastAPI + Celery**: Para tareas asíncronas  
-- **FastAPI + Redis**: Para caching y sesiones
-- **FastAPI + Prometheus**: Para métricas y monitoring
-
-## Referencias
+## References
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Python 3.12 What's New](https://docs.python.org/3/whatsnew/3.12.html)
 - [bcrypt vs Alternatives](https://security.stackexchange.com/questions/4781/)
 - [pytest Documentation](https://docs.pytest.org/)
 - [Python Type Hints Guide](https://docs.python.org/3/library/typing.html)
-
-## Configuración Actual
-
-### Entorno Verificado:
-```bash
-# Python version
-Python 3.12.12
-
-# Dependencias principales
-fastapi==0.115.0       ✅ Instalado
-uvicorn[standard]==0.30.0  ✅ Instalado  
-pytest==8.3.0         ✅ Instalado
-bcrypt==4.1.2          ✅ Instalado
-
-# Performance testing
-80 tests ejecutándose en 0.54s  ✅ Óptimo
-```
-
-### Archivos de Configuración:
-- `requirements.txt`: Dependencias documentadas
-- `main.py`: FastAPI app funcional
-- `tests/conftest.py`: Configuración pytest optimizada
-- `.gitignore`: Configurado para Python/FastAPI

@@ -1,4 +1,3 @@
-
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -39,7 +38,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             Lista de usuarios paginada
         """
         all_users = list(self._users.values())
-        return all_users[offset:offset + limit]
+        return all_users[offset : offset + limit]
 
     async def delete_by_id(self, user_id: UserId) -> None:
         if user_id in self._users:

@@ -23,7 +23,7 @@ class TestHandicapUpdatedEventCreation:
             user_id=user_id,
             old_handicap=old_handicap,
             new_handicap=new_handicap,
-            updated_at=updated_at
+            updated_at=updated_at,
         )
 
         assert event.user_id == user_id
@@ -37,7 +37,7 @@ class TestHandicapUpdatedEventCreation:
             user_id="123",
             old_handicap=None,
             new_handicap=20.0,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.old_handicap is None
@@ -49,7 +49,7 @@ class TestHandicapUpdatedEventCreation:
             user_id="123",
             old_handicap=15.0,
             new_handicap=None,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.old_handicap == 15.0
@@ -61,13 +61,13 @@ class TestHandicapUpdatedEventCreation:
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
         event2 = HandicapUpdatedEvent(
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event1.event_id != event2.event_id
@@ -83,7 +83,7 @@ class TestHandicapUpdatedEventProperties:
             user_id=user_id,
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.aggregate_id == user_id
@@ -94,7 +94,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.has_changed is True
@@ -105,7 +105,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=15.0,
             new_handicap=15.0,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.has_changed is False
@@ -116,7 +116,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=None,
             new_handicap=None,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.has_changed is False
@@ -127,7 +127,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.handicap_delta == 3.5
@@ -138,7 +138,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=20.0,
             new_handicap=15.0,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.handicap_delta == -5.0
@@ -149,7 +149,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=None,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.handicap_delta is None
@@ -160,7 +160,7 @@ class TestHandicapUpdatedEventProperties:
             user_id="123",
             old_handicap=15.0,
             new_handicap=None,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.handicap_delta is None
@@ -180,17 +180,17 @@ class TestHandicapUpdatedEventSerialization:
             user_id=user_id,
             old_handicap=old_handicap,
             new_handicap=new_handicap,
-            updated_at=updated_at
+            updated_at=updated_at,
         )
 
         event_dict = event.to_dict()
 
-        assert 'handicap_change' in event_dict
-        assert event_dict['handicap_change']['user_id'] == user_id
-        assert event_dict['handicap_change']['old_value'] == old_handicap
-        assert event_dict['handicap_change']['new_value'] == new_handicap
-        assert event_dict['handicap_change']['delta'] == 3.5
-        assert event_dict['handicap_change']['updated_at'] == updated_at.isoformat()
+        assert "handicap_change" in event_dict
+        assert event_dict["handicap_change"]["user_id"] == user_id
+        assert event_dict["handicap_change"]["old_value"] == old_handicap
+        assert event_dict["handicap_change"]["new_value"] == new_handicap
+        assert event_dict["handicap_change"]["delta"] == 3.5
+        assert event_dict["handicap_change"]["updated_at"] == updated_at.isoformat()
 
     def test_str_representation(self):
         """Test: Representación string del evento."""
@@ -198,7 +198,7 @@ class TestHandicapUpdatedEventSerialization:
             user_id="user-123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         event_str = str(event)
@@ -217,7 +217,7 @@ class TestHandicapUpdatedEventImmutability:
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
@@ -229,7 +229,7 @@ class TestHandicapUpdatedEventImmutability:
             user_id="123",
             old_handicap=15.0,
             new_handicap=18.5,
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
 
         assert event.occurred_on is not None

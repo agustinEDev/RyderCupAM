@@ -31,7 +31,7 @@ class PasswordResetRequestedEvent(DomainEvent):
         requested_at: datetime,
         reset_token_expires_at: datetime,
         ip_address: str | None = None,
-        user_agent: str | None = None
+        user_agent: str | None = None,
     ):
         super().__init__()
         self.user_id = user_id

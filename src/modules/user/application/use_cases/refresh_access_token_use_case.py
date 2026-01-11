@@ -4,14 +4,21 @@ Refresh Access Token Use Case
 Caso de uso para renovar el access token usando un refresh token válido.
 Implementa el patrón Session Timeout (OWASP A01/A02 - v1.8.0).
 Security Logging (v1.8.0): Registra uso de refresh tokens.
+CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
+Device Fingerprinting (v1.13.0): Registra/actualiza dispositivo en cada refresh.
 """
 
+from src.config.csrf_config import generate_csrf_token
+from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
     RefreshAccessTokenResponseDTO,
     UserResponseDTO,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.register_device_use_case import (
+    RegisterDeviceUseCase,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -45,22 +52,23 @@ class RefreshAccessTokenUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        token_service: ITokenService
+        token_service: ITokenService,
+        register_device_use_case: RegisterDeviceUseCase,
     ):
         """
         Inicializa el caso de uso.
 
         Args:
-            uow: Unit of Work para acceso a repositorios (users, refresh_tokens)
+            uow: Unit of Work para acceso a repositorios (users, refresh_tokens, user_devices)
             token_service: Servicio para validación y generación de tokens JWT
+            register_device_use_case: Caso de uso para registrar/actualizar dispositivos (v1.13.0)
         """
         self._uow = uow
         self._token_service = token_service
+        self._register_device_use_case = register_device_use_case
 
-    async def execute(
-        self,
-        request: RefreshAccessTokenRequestDTO,
-        refresh_token_jwt: str
+    async def execute(  # noqa: PLR0911
+        self, request: RefreshAccessTokenRequestDTO, refresh_token_jwt: str
     ) -> RefreshAccessTokenResponseDTO | None:
         """
         Ejecuta el caso de uso de renovación de access token.
@@ -138,12 +146,24 @@ class RefreshAccessTokenUseCase:
             # Usuario fue eliminado
             return None
 
-        # 5. Generar nuevo access token (15 minutos)
-        new_access_token = self._token_service.create_access_token(
-            data={"sub": str(user.id.value)}
-        )
+        # 5. Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo
+        # Solo si tenemos user_agent e IP (opcionales en DTO para tests)
+        if request.user_agent and request.ip_address:
+            device_request = RegisterDeviceRequestDTO(
+                user_id=str(user.id.value),
+                user_agent=request.user_agent,
+                ip_address=request.ip_address,
+            )
+            # Registrar dispositivo (crea nuevo o actualiza last_used_at)
+            await self._register_device_use_case.execute(device_request)
 
-        # 6. Security Logging: Uso exitoso de refresh token
+        # 6. Generar nuevo access token (15 minutos)
+        new_access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
+
+        # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
+        csrf_token = generate_csrf_token()
+
+        # 8. Security Logging: Uso exitoso de refresh token
         security_logger.log_refresh_token_used(
             user_id=str(user.id.value),
             ip_address=ip_address,
@@ -152,12 +172,13 @@ class RefreshAccessTokenUseCase:
             new_access_token_created=True,
         )
 
-        # 7. Preparar respuesta
+        # 9. Preparar respuesta
         user_dto = UserResponseDTO.model_validate(user)
 
         return RefreshAccessTokenResponseDTO(
             access_token=new_access_token,
-            token_type="bearer",
+            csrf_token=csrf_token,
+            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
-            message="Access token renovado exitosamente"
+            message="Access token renovado exitosamente",
         )

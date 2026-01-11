@@ -22,6 +22,7 @@ from src.shared.domain.events.domain_event import DomainEvent
 @dataclass(frozen=True)
 class SampleEvent(DomainEvent):
     """Evento de prueba para testear DomainEvent base."""
+
     user_id: str
     action: str
 
@@ -38,8 +39,8 @@ class TestDomainEvent:
             # Intentar crear DomainEvent() sin argumentos debe fallar porque no tiene campos
             event = DomainEvent()
             # Si llega aquí, verificamos que tiene metadatos básicos
-            assert hasattr(event, 'event_id')
-            assert hasattr(event, 'occurred_on')
+            assert hasattr(event, "event_id")
+            assert hasattr(event, "occurred_on")
         except TypeError:
             # Es aceptable que falle, dependiendo de la implementación de dataclass
             pass
@@ -47,10 +48,7 @@ class TestDomainEvent:
     def test_creates_event_with_automatic_metadata(self):
         """Evento se crea con metadata automática (ID, timestamp, versión)."""
         # Act - Solo campos específicos, metadatos se generan automáticamente
-        event = SampleEvent(
-            user_id="user-123",
-            action="registered"
-        )
+        event = SampleEvent(user_id="user-123", action="registered")
 
         # Assert - Datos específicos
         assert event.user_id == "user-123"
@@ -71,11 +69,7 @@ class TestDomainEvent:
     def test_event_is_immutable(self):
         """Los eventos son inmutables (no se pueden modificar después de crear)."""
         # Arrange
-        event = SampleEvent(
-
-            user_id="user-123",
-            action="registered"
-        )
+        event = SampleEvent(user_id="user-123", action="registered")
 
         # Act & Assert - FrozenInstanceError para dataclasses frozen
         with pytest.raises(Exception, match="cannot assign to field|can't set attribute"):
@@ -117,11 +111,7 @@ class TestDomainEvent:
     def test_to_dict_serialization(self):
         """El método to_dict() serializa correctamente el evento."""
         # Arrange
-        event = SampleEvent(
-
-            user_id="user-456",
-            action="profile_updated"
-        )
+        event = SampleEvent(user_id="user-456", action="profile_updated")
 
         # Act
         event_dict = event.to_dict()
@@ -130,29 +120,25 @@ class TestDomainEvent:
         assert isinstance(event_dict, dict)
 
         # Metadata
-        assert event_dict['event_id'] == event.event_id
-        assert event_dict['event_type'] == 'SampleEvent'
-        assert event_dict['aggregate_id'] == event.aggregate_id  # Generado automáticamente
-        assert event_dict['occurred_on'] == event.occurred_on.isoformat()
-        assert event_dict['event_version'] == 1
+        assert event_dict["event_id"] == event.event_id
+        assert event_dict["event_type"] == "SampleEvent"
+        assert event_dict["aggregate_id"] == event.aggregate_id  # Generado automáticamente
+        assert event_dict["occurred_on"] == event.occurred_on.isoformat()
+        assert event_dict["event_version"] == 1
 
         # Datos específicos
-        assert event_dict['data']['user_id'] == 'user-456'
-        assert event_dict['data']['action'] == 'profile_updated'
+        assert event_dict["data"]["user_id"] == "user-456"
+        assert event_dict["data"]["action"] == "profile_updated"
 
         # Los campos de metadata no deben estar duplicados en 'data'
-        assert 'event_id' not in event_dict['data']
-        assert 'aggregate_id' not in event_dict['data']
-        assert 'occurred_on' not in event_dict['data']
+        assert "event_id" not in event_dict["data"]
+        assert "aggregate_id" not in event_dict["data"]
+        assert "occurred_on" not in event_dict["data"]
 
     def test_string_representation(self):
         """Representación string es clara y contiene info clave."""
         # Arrange
-        event = SampleEvent(
-
-            user_id="user-123",
-            action="registered"
-        )
+        event = SampleEvent(user_id="user-123", action="registered")
 
         # Act
         str_repr = str(event)

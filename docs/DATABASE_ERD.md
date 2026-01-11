@@ -1,12 +1,12 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Versión:** v2.1.0 (Planificación)
-> **Última actualización:** 7 de Enero de 2026
-> **Base de datos:** PostgreSQL 15+
+> **Version:** v1.13.0 (Current) + v2.1.0 Planning
+> **Last Updated:** 9 January 2026
+> **Database:** PostgreSQL 15+
 
 ---
 
-## 📊 Diagrama Completo
+## 📊 Complete Diagram
 
 ```mermaid
 erDiagram
@@ -42,6 +42,8 @@ erDiagram
         VARCHAR(255) verification_token "nullable"
         VARCHAR(255) password_reset_token "nullable - v1.11.0"
         TIMESTAMP password_reset_expires_at "nullable - v1.11.0"
+        INT failed_login_attempts "default 0 - v1.13.0"
+        TIMESTAMP locked_until "nullable - v1.13.0"
         CHAR(2) country_code FK "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -56,6 +58,26 @@ erDiagram
         TIMESTAMP created_at
         TIMESTAMP revoked_at "nullable"
     }
+
+    password_history {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR(255) password_hash "bcrypt hash"
+        TIMESTAMP created_at
+    }
+
+    user_devices {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR(100) device_name
+        VARCHAR(500) user_agent
+        VARCHAR(45) ip_address
+        VARCHAR(64) fingerprint_hash UK
+        BOOLEAN is_active "default true - v1.13.0"
+        TIMESTAMP last_used_at
+        TIMESTAMP created_at
+    }
+
 
     %% ========================================
     %% ROLES & PERMISSIONS (v2.1.0 - NEW)
@@ -85,8 +107,8 @@ erDiagram
         VARCHAR(20) course_type "STANDARD_18 | PITCH_AND_PUTT | EXECUTIVE"
         INT number_of_holes "9 or 18"
         VARCHAR(20) approval_status "PENDING_APPROVAL | APPROVED | REJECTED"
-        UUID creator_id FK "Usuario que lo creó"
-        UUID approved_by FK "nullable - Admin que aprobó"
+        UUID creator_id FK "User who created it"
+        UUID approved_by FK "nullable - Admin who approved"
         TIMESTAMP approved_at "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -190,7 +212,7 @@ erDiagram
     invitations {
         UUID id PK
         UUID competition_id FK
-        UUID inviter_id FK "Creator que invita"
+        UUID inviter_id FK "Creator who invites"
         VARCHAR(255) invitee_email
         UUID invitee_user_id FK "nullable si no registrado"
         VARCHAR(20) status "PENDING | ACCEPTED | REJECTED | EXPIRED"
@@ -213,7 +235,7 @@ erDiagram
         UUID player_id FK
         INT gross_score "Golpes brutos"
         INT net_score "Golpes netos calculado"
-        INT strokes_received "Golpes recibidos por handicap"
+        INT strokes_received "Strokes received by handicap"
         VARCHAR(20) status "DRAFT | SUBMITTED | VALIDATED | DISPUTED"
         TIMESTAMP submitted_at "nullable"
         TIMESTAMP validated_at "nullable"
@@ -233,6 +255,8 @@ erDiagram
 
     %% User Module
     users ||--o{ refresh_tokens : "has"
+    users ||--o{ password_history : "has"
+    users ||--o{ user_devices : "has"
     users ||--o{ competitions : "creates"
     users ||--o{ enrollments : "enrolls_in"
     users ||--o{ user_roles : "has_roles"
@@ -285,12 +309,12 @@ erDiagram
 | `roles` | 3-10 | User | Sprint 1 |
 | `user_roles` | 100-10,000+ | User | Sprint 1 |
 | `golf_courses` | 100-5,000 | Golf Courses | Sprint 1 |
-| `tees` | 300-25,000 (3-5 por campo) | Golf Courses | Sprint 1 |
-| `holes` | 1,800-90,000 (18 por campo) | Golf Courses | Sprint 1 |
-| `rounds` | 30-3,000 (3-10 por torneo) | Competition | Sprint 3 |
-| `matches` | 100-30,000 (10-30 por round) | Competition | Sprint 3 |
+| `tees` | 300-25,000 (3-5 per course) | Golf Courses | Sprint 1 |
+| `holes` | 1,800-90,000 (18 per course) | Golf Courses | Sprint 1 |
+| `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 3 |
+| `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 3 |
 | `invitations` | 500-100,000 | Competition | Sprint 3 |
-| `hole_scores` | 5,000-5,000,000 (72 por match singles, 144 fourball) | Scoring | Sprint 4 |
+| `hole_scores` | 5,000-5,000,000 (72 per singles match, 144 fourball) | Scoring | Sprint 4 |
 
 **Total tablas nuevas:** 9
 
@@ -381,7 +405,7 @@ CREATE UNIQUE INDEX idx_hole_scores_match_hole_player ON hole_scores(match_id, h
 | `invitations` | +20 | 20 jugadores invitados |
 | `hole_scores` | +2,160 | 60 matches x 18 hoyos x 2 jugadores (singles) |
 
-**Total por competición:** ~2,269 registros
+**Total per competition:** ~2,269 records
 
 ### Escenario: 100 Competiciones Activas
 
@@ -403,7 +427,7 @@ CREATE UNIQUE INDEX idx_hole_scores_match_hole_player ON hole_scores(match_id, h
 
 ### Particionamiento (Futuro v2.2.0)
 ```sql
--- Particionar hole_scores por fecha (mensual)
+-- Partition hole_scores by date (monthly)
 CREATE TABLE hole_scores_2026_01 PARTITION OF hole_scores
     FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
 ```

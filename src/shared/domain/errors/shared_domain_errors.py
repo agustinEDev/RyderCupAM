@@ -28,6 +28,7 @@ class UnitOfWorkError(SharedDomainError):
     Se utiliza para encapsular errores relacionados con la gestión de transacciones
     y coordinación entre repositorios.
     """
+
     pass
 
 
@@ -38,6 +39,7 @@ class UnitOfWorkCommitError(UnitOfWorkError):
     Se utiliza cuando hay problemas al confirmar las operaciones pendientes,
     como violaciones de constraints, errores de conexión, etc.
     """
+
     pass
 
 
@@ -48,6 +50,7 @@ class UnitOfWorkRollbackError(UnitOfWorkError):
     Se utiliza cuando hay problemas al revertir las operaciones pendientes,
     situación crítica que puede requerir intervención manual.
     """
+
     pass
 
 
@@ -58,6 +61,7 @@ class UnitOfWorkFlushError(UnitOfWorkError):
     Se utiliza cuando hay problemas al sincronizar el estado sin hacer commit,
     como violaciones de constraints o errores de validación.
     """
+
     pass
 
 
@@ -68,6 +72,7 @@ class UnitOfWorkStateError(UnitOfWorkError):
     Se utiliza cuando se intenta realizar operaciones en un UoW que no está
     activo o que ya ha sido finalizado.
     """
+
     pass
 
 
@@ -78,6 +83,7 @@ class TransactionError(SharedDomainError):
     Se utiliza para encapsular errores generales de transacciones que pueden
     ocurrir en diferentes contextos, no solo en Unit of Work.
     """
+
     pass
 
 
@@ -88,6 +94,7 @@ class TransactionTimeoutError(TransactionError):
     Se utiliza cuando las operaciones de base de datos tardan más tiempo
     del configurado como límite máximo para transacciones.
     """
+
     pass
 
 
@@ -98,4 +105,5 @@ class TransactionIsolationError(TransactionError):
     Se utiliza cuando se detectan conflictos de concurrencia, deadlocks,
     o violaciones del nivel de aislamiento configurado.
     """
+
     pass

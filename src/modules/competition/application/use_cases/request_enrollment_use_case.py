@@ -13,23 +13,28 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionNotFoundError(Exception):
     """Excepción lanzada cuando la competición no existe."""
+
     pass
 
 
 class CompetitionNotActiveError(Exception):
     """Excepción lanzada cuando la competición no está en estado ACTIVE."""
+
     pass
 
 
 class AlreadyEnrolledError(Exception):
     """Excepción lanzada cuando el usuario ya tiene una inscripción en esta competición."""
+
     pass
 
 
@@ -59,10 +64,7 @@ class RequestEnrollmentUseCase:
         """
         self._uow = uow
 
-    async def execute(
-        self,
-        request: RequestEnrollmentRequestDTO
-    ) -> RequestEnrollmentResponseDTO:
+    async def execute(self, request: RequestEnrollmentRequestDTO) -> RequestEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de solicitud de inscripción.
 
@@ -108,7 +110,7 @@ class RequestEnrollmentUseCase:
             enrollment = Enrollment.request(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
-                user_id=user_id
+                user_id=user_id,
             )
 
             # 5. Persistir
@@ -123,5 +125,5 @@ class RequestEnrollmentUseCase:
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
             status=enrollment.status.value,
-            created_at=enrollment.created_at
+            created_at=enrollment.created_at,
         )

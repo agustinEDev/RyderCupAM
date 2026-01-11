@@ -1,109 +1,118 @@
-# ADR-021: GitHub Actions para CI/CD Pipeline
+# ADR-021: GitHub Actions for CI/CD Pipeline
 
-**Fecha**: 30 de noviembre de 2025
-**Estado**: Aceptado
-**Decisores**: Equipo de desarrollo
+**Date**: November 30, 2025
+**Status**: Accepted
+**Decision Makers**: Development Team
 
-## Contexto y Problema
+## Context and Problem
 
-El proyecto necesita un sistema de CI/CD que ejecute tests automáticamente, valide calidad de código, verifique migraciones de base de datos y soporte múltiples versiones de Python. Debe ser fácil de mantener, proporcionar feedback rápido y ser gratuito o de bajo costo.
+The project needs a CI/CD system that automatically runs tests, validates code quality, verifies database migrations, and supports multiple Python versions. Must be easy to maintain, provide fast feedback, and be free or low-cost.
 
-## Opciones Consideradas
+## Options Considered
 
-1. **GitHub Actions**: Integrado con GitHub, 2000 min/mes gratis (ilimitado para repos públicos)
-2. **GitLab CI/CD**: 400 min/mes gratis, requiere migrar repositorio
-3. **CircleCI**: 6000 min/mes gratis, requiere integración externa
-4. **Jenkins (self-hosted)**: Control total, requiere servidor dedicado
+1. **GitHub Actions**: Integrated with GitHub, 2000 min/month free (unlimited for public repos)
+2. **GitLab CI/CD**: 400 min/month free, requires repository migration
+3. **CircleCI**: 6000 min/month free, requires external integration
+4. **Jenkins (self-hosted)**: Full control, requires dedicated server
 
-## Decisión
+## Decision
 
-**Adoptamos GitHub Actions** con la siguiente estructura:
+**Adopt GitHub Actions** with pipeline covering: preparation, unit_tests (Python 3.11/3.12 matrix), integration_tests (PostgreSQL service), security_scan (Gitleaks), code_quality (Ruff), type_checking (Mypy), and database_migrations (Alembic validation). Uses dependency caching and parallelization for independent jobs.
 
-```yaml
-Pipeline Jobs:
-├── preparation (setup Python + cache)
-├── unit_tests (Python 3.11, 3.12 matrix)
-├── integration_tests (con PostgreSQL service)
-├── security_scan (Gitleaks)
-├── code_quality (Ruff)
-├── type_checking (Mypy)
-└── database_migrations (Alembic validation)
-```
+## Rationale
 
-### Configuración:
-- **Matrix strategy**: Python 3.11 y 3.12
-- **Caché de dependencias**: pip cache
-- **PostgreSQL service**: Para integration tests
-- **Paralelización**: Jobs independientes en paralelo
+### Advantages:
 
-## Justificación
+1. **Native Integration**
+   - Automatic workflow triggers (push, PR)
+   - Integrated secrets management
+   - Status checks visible in PRs
 
-### Ventajas:
-
-1. **Integración Nativa**
-   - Workflow triggers automáticos (push, PR)
-   - Secrets management integrado
-   - Status checks visibles en PRs
-
-2. **Costo y Performance**
-   - Gratuito para repositorio público
-   - Caché de dependencias reduce builds
-   - Ejecución rápida (~3 minutos)
+2. **Cost and Performance**
+   - Free for public repository
+   - Dependency cache reduces builds
+   - Fast execution (~3 minutes)
 
 3. **Ecosystem**
-   - Actions pre-construidas (setup-python, gitleaks)
-   - Configuración YAML declarativa
-   - Logs detallados
+   - Pre-built actions (setup-python, gitleaks)
+   - Declarative YAML configuration
+   - Detailed logs
 
 4. **Developer Experience**
-   - Feedback rápido en PRs
-   - Re-run de jobs individuales
-   - Zero-config para contribuidores
+   - Fast feedback in PRs
+   - Re-run individual jobs
+   - Zero-config for contributors
 
-## Consecuencias
+## Consequences
 
-### Positivas:
-- ✅ Tests ejecutándose automáticamente en ~3 minutos
-- ✅ Detección temprana de errores (types, linting, security)
-- ✅ Validación de migraciones antes de merge
-- ✅ Soporte multi-version Python
+### Positive:
+- ✅ Tests running automatically in ~3 minutes
+- ✅ Early error detection (types, linting, security)
+- ✅ Migration validation before merge
+- ✅ Multi-version Python support
 
-### Negativas:
-- ❌ Vendor lock-in con GitHub (mitigado: YAML portable)
-- ❌ Runners compartidos (performance variable)
-- ❌ Logs borrados después de 90 días
+### Negative:
+- ❌ Vendor lock-in with GitHub (mitigated: portable YAML)
+- ❌ Shared runners (variable performance)
+- ❌ Logs deleted after 90 days
 
-### Riesgos Mitigados:
-- **Límite de minutos**: Repo público = minutos ilimitados
-- **Performance**: Caché reduce tiempo de build
-- **Secrets exposure**: Gitleaks valida commits
+### Risks Mitigated:
+- **Minute limit**: Public repo = unlimited minutes
+- **Performance**: Cache reduces build time
+- **Secrets exposure**: Gitleaks validates commits
 
-## Validación
+## Validation
 
-La decisión se considera exitosa si:
-- [x] Pipeline ejecuta en < 5 minutos (✅ ~3 min)
-- [x] Tests en Python 3.11 y 3.12 (✅ Matrix strategy)
-- [x] Integration tests con PostgreSQL (✅ Service container)
-- [x] Security scanning activo (✅ Gitleaks)
+Decision considered successful if:
+- [x] Pipeline runs in < 5 minutes (✅ ~3 min)
+- [x] Tests on Python 3.11 and 3.12 (✅ Matrix strategy)
+- [x] Integration tests with PostgreSQL (✅ Service container)
+- [x] Security scanning active (✅ Gitleaks)
 - [x] Code quality checks (✅ Ruff + Mypy)
 
-## Referencias
+## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [Python CI/CD Best Practices](https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python)
 - [Gitleaks Action](https://github.com/gitleaks/gitleaks-action)
 
-## Notas de Implementación
+## Implementation Notes
 
-### Implementado (30 Nov 2025):
-- ✅ Pipeline completo en `.github/workflows/ci_cd_pipeline.yml`
-- ✅ 7 jobs paralelos con dependencias optimizadas
-- ✅ Mypy configurado pragmáticamente (SQLAlchemy imperative mapping)
-- ✅ Gitleaks con `.gitleaksignore` para false positives
-- ✅ Suite de tests completa ejecutándose en CI
+### Implemented (Nov 30, 2025):
+Complete pipeline in `.github/workflows/ci_cd_pipeline.yml` with 7 parallel jobs, Mypy configured pragmatically for SQLAlchemy, Gitleaks with fingerprint-based whitelist, and complete test suite.
 
-### Lecciones Aprendidas:
-- **Python compatibility**: PEP 695 syntax requiere 3.12+, usar `Generic[TypeVar]` para compatibilidad
-- **Mypy strictness**: Balance pragmático por módulo (domain, infrastructure)
-- **Gitleaks**: Whitelist específico con fingerprints, no glob patterns
-- **Alembic**: `override=False` en `load_dotenv()` para precedencia de env vars
+### Key Lessons:
+- Use `Generic[TypeVar]` for Python 3.11/3.12 compatibility (avoid PEP 695)
+- Gitleaks requires specific fingerprints, not glob patterns
+- Alembic: `override=False` in `load_dotenv()` for env vars precedence
+
+---
+
+## Evolution: Security Enhancements (Jan 8, 2026 - v1.13.0)
+
+### New Jobs Added:
+
+**JOB 4: Security Tests** ⭐
+- Runs 45+ security tests (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
+- OWASP Coverage: A01-A09
+- PostgreSQL service (same as integration tests)
+- Fail-fast policy (blocks build if fails)
+
+**JOB 7: Trivy Container Scan** ⭐
+- Scans Docker image for CVEs (OS + Python packages)
+- Severity: HIGH + CRITICAL
+- Output: SARIF → GitHub Security tab
+- Exit code: 0 (monitoring mode, non-blocking for now)
+
+### Complete Security Stack:
+- **SCA**: Safety, pip-audit, Snyk Test (dependencies)
+- **SAST**: Bandit, Snyk Code (source code)
+- **Secrets**: Gitleaks (commits)
+- **DAST**: Security Tests (runtime vulnerabilities) ⭐ NEW
+- **Container**: Trivy (Docker image CVEs) ⭐ NEW
+
+### Metrics Post-Enhancements:
+- Jobs: 7 → **10 jobs**
+- Tests: 734 → **779 tests** (+45 security tests)
+- Security tools: 4 → **6 tools**
+- Pipeline time: ~3 min (unchanged - parallelization)

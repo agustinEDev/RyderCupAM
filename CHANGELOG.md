@@ -57,6 +57,263 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.13.0] - 2026-01-09
+
+### Added - Account Lockout (Brute Force Protection) ✅ COMPLETADO (7 Ene 2026)
+
+**🔒 Protección Contra Ataques de Fuerza Bruta** (OWASP A07)
+
+#### Features Implementadas:
+- ✅ Account lockout automático tras 10 intentos fallidos de login
+- ✅ Bloqueo temporal de 30 minutos (auto-desbloqueo)
+- ✅ HTTP 423 Locked cuando cuenta está bloqueada
+- ✅ Reset automático de contador tras login exitoso
+- ✅ Endpoint manual de desbloqueo para admins (POST /auth/unlock-account)
+- ✅ Persistencia en BD (no solo memoria)
+
+#### Arquitectura (Clean Architecture):
+- **Domain Layer**:
+  - 4 métodos nuevos en User entity: `record_failed_login()`, `is_locked()`, `unlock()`, `reset_failed_attempts()`
+  - 2 Domain Events: `AccountLockedEvent`, `AccountUnlockedEvent`
+  - 1 Excepción: `AccountLockedException`
+- **Application Layer**:
+  - LoginUserUseCase modificado (dual check pattern)
+  - UnlockAccountUseCase nuevo
+  - 2 DTOs: `UnlockAccountRequestDTO`, `UnlockAccountResponseDTO`
+- **Infrastructure Layer**:
+  - Migration b6d8a1c65bd2: 2 campos (`failed_login_attempts`, `locked_until`) + índice
+  - Mapper actualizado para nuevos campos
+- **API Layer**:
+  - POST /api/v1/auth/unlock-account (pendiente rol Admin v2.1.0)
+  - Login endpoint modificado (retorna HTTP 423)
+
+#### Tests:
+- ✅ 5 tests de integración pasando (100%)
+- Tests: lockout tras 10 intentos, bloqueo con password correcta, reset contador, persistencia, mensaje con timestamp
+
+#### Decisiones Técnicas (ADR-027):
+- Integración en User entity (vs LoginAttempt separado)
+- Naive datetimes (consistencia con codebase)
+- Dual check pattern (pre + post password verification)
+- X-Test-Client-ID para tests (bypass rate limiting)
+
+#### Security:
+- **OWASP A07** mitigado: Credential stuffing, dictionary attacks, brute force
+- **Defense in Depth**: Complementa rate limiting existente (5/min)
+- **Audit Trail**: Domain events para security logging
+
+#### Commits:
+1. `a9fe089`: Domain + Application + Infrastructure layers
+2. `e499add`: API Layer + Tests
+3. `14ecfd0`: Bug fixes (lockout logic + timezone consistency)
+
+#### Documentación:
+- ✅ ADR-027: Account Lockout - Brute Force Protection
+- ✅ docs/API.md: Endpoint unlock-account documentado
+- ✅ postman_collection.json: Request "Unlock Account (Admin)" agregado
+- ✅ docs/SECURITY_IMPLEMENTATION.md: Actualizado
+
+**Ver detalles:** `docs/architecture/decisions/ADR-027*.md`, `docs/API.md`
+
+---
+
+### Added - Device Fingerprinting ✅ COMPLETADO (10 Ene 2026)
+
+**📱 Gestión de Dispositivos de Usuario + Auto-registro en Login/Refresh** (OWASP A01)
+
+#### Features Implementadas:
+- ✅ **Auto-registro de dispositivos** en LoginUserUseCase y RefreshAccessTokenUseCase
+- ✅ Detección automática de dispositivos en login/refresh token (integración completa)
+- ✅ Listado de dispositivos activos (GET /api/v1/users/me/devices)
+- ✅ Revocación manual de dispositivos (DELETE /api/v1/users/me/devices/{device_id})
+- ✅ Fingerprint único: SHA256(device_name + "|" + user_agent + "|" + ip_address)
+- ✅ Soft delete con audit trail (is_active=FALSE)
+- ✅ Partial unique index: previene duplicados activos, permite múltiples revocados
+
+#### Arquitectura (Clean Architecture):
+- **Domain Layer**:
+  - UserDevice entity (id, user_id, fingerprint, last_used_at, is_active)
+  - 2 Value Objects: UserDeviceId, DeviceFingerprint
+  - 2 Domain Events: NewDeviceDetectedEvent, DeviceRevokedEvent
+  - UserDeviceRepositoryInterface (5 métodos)
+- **Application Layer**:
+  - 3 Use Cases: RegisterDeviceUseCase, ListUserDevicesUseCase, RevokeDeviceUseCase
+  - 7 DTOs (RegisterDevice, ListDevices, RevokeDevice request/response)
+- **Infrastructure Layer**:
+  - Migration 50ccf425ff32: tabla user_devices + 2 índices
+  - SQLAlchemyUserDeviceRepository con TypeDecorators
+  - UserUnitOfWork actualizado (user_devices property)
+- **API Layer**:
+  - GET /api/v1/users/me/devices - Lista dispositivos activos
+  - DELETE /api/v1/users/me/devices/{device_id} - Revoca dispositivo
+
+#### Tests:
+- ✅ 86 tests unitarios (Domain: 66, Application: 20)
+- ✅ 13 tests de integración (API con PostgreSQL)
+- ✅ Total: 99/99 tests device fingerprinting pasando (100%)
+- ✅ Suite completa: 1021/1021 tests (100% pasando)
+- ✅ Integración completa: 10 archivos modificados (dependencies, use cases, DTOs, tests)
+
+#### Decisiones Técnicas (ADR-030):
+- IP incluida en fingerprint (redes diferentes = dispositivos diferentes)
+- Soft delete para audit trail (vs hard delete)
+- Partial unique index (user_id, fingerprint_hash WHERE is_active=TRUE)
+- **Auto-registro integrado** en LoginUserUseCase y RefreshAccessTokenUseCase (condicional si user_agent + ip_address presentes)
+- Validación de ownership en revocación
+- RegisterDeviceUseCase inyectado via DI en dependencies.py
+
+#### Security:
+- **OWASP A01** mitigado: Session transparency, device management
+- **User empowerment**: Auto-detección + control manual
+- **Audit Trail**: Domain events para security logging
+
+#### Documentación:
+- ✅ ADR-030: Device Fingerprinting (123 líneas)
+- ✅ docs/API.md: 2 endpoints documentados
+- ✅ postman_collection.json: Requests "List Devices" y "Revoke Device" agregados
+
+**Ver detalles:** `docs/architecture/decisions/ADR-030-device-fingerprinting.md`, `docs/API.md`
+
+---
+
+### Added - CSRF Protection ✅ COMPLETADO (8 Ene 2026)
+
+**🛡️ Protección Contra Cross-Site Request Forgery** (OWASP A01)
+
+#### Features Implementadas:
+- ✅ Triple capa de protección CSRF:
+  - **Capa 1**: Custom Header `X-CSRF-Token` (principal)
+  - **Capa 2**: Double-Submit Cookie `csrf_token` (NO httpOnly)
+  - **Capa 3**: SameSite="lax" (ya implementado)
+- ✅ Middleware CSRFMiddleware con timing-safe comparison
+- ✅ Token 256-bit (secrets.token_urlsafe(32)), duración 15 min
+- ✅ Generación automática en login + refresh token endpoints
+- ✅ Validación en POST/PUT/PATCH/DELETE (exime GET/HEAD/OPTIONS)
+- ✅ Public endpoints exempt: /register, /login, /forgot-password, /reset-password, /verify-email
+
+#### Tests:
+- ✅ 11 tests de seguridad (10 passing + 1 skipped)
+- ✅ Cobertura: token generation, validation, exemptions, timing-safe comparison
+- ✅ Tests convertidos a async para pytest-xdist compatibility (8 workers paralelos)
+
+#### Decisiones Técnicas (ADR-028):
+- Custom middleware vs fastapi-csrf-protect (mayor control)
+- Double-submit cookie pattern (stateless, no DB storage)
+- Public endpoints exempt (no pueden tener token antes de registrarse)
+- SameSite="lax" complementa (permite GET links de email)
+
+#### Security:
+- **OWASP A01** mitigado: CSRF attacks, unauthorized state changes
+- **Defense in Depth**: 3 capas de protección
+- **Timing-safe comparison**: Previene timing attacks
+
+**Ver detalles:** `docs/architecture/decisions/ADR-028-csrf-protection.md`
+
+---
+
+### Added - Password History ✅ COMPLETADO (8 Ene 2026)
+
+**🔐 Prevención de Reutilización de Contraseñas** (OWASP A07)
+
+#### Features Implementadas:
+- ✅ Previene reutilización de las últimas 5 contraseñas
+- ✅ Tabla `password_history` con bcrypt hashes (255 chars)
+- ✅ Cascade delete on user deletion (GDPR Article 17 compliance)
+- ✅ Validación automática en UpdateSecurity y ResetPassword use cases
+- ✅ Domain Event: PasswordHistoryRecordedEvent
+
+#### Arquitectura:
+- **Domain Layer**:
+  - PasswordHistory entity (id, user_id, password_hash, created_at)
+  - PasswordHistoryId Value Object
+  - PasswordHistoryRepositoryInterface (5 métodos)
+- **Infrastructure Layer**:
+  - Migration: tabla password_history + índices
+  - SQLAlchemyPasswordHistoryRepository
+  - InMemoryPasswordHistoryRepository para tests
+- **Application Layer**:
+  - Validación integrada en UpdateSecurityUseCase
+  - Validación integrada en ResetPasswordUseCase
+
+#### Tests:
+- ✅ 25 tests unitarios (PasswordHistoryId + PasswordHistory)
+- ✅ 947/947 tests pasando (99.16% suite completa)
+
+#### Decisiones Técnicas (ADR-029):
+- LIMIT 5 (vs todas las contraseñas históricas)
+- Bcrypt hashes almacenados (vs plaintext comparison imposible)
+- Cascade delete (GDPR compliance)
+- Auto-cleanup diferido a v1.14.0
+
+**Ver detalles:** `docs/architecture/decisions/ADR-029-password-history.md`
+
+---
+
+### Fixed - CI/CD Pipeline (9 Ene 2026)
+
+**🔧 Correcciones de Linting y Type Checking**
+
+#### Ruff Fixes (36 errors → 0):
+- Auto-fixed 33 errors: deprecated typing imports (`List→list`, `Dict→dict`)
+- Manual fixes:
+  - `alembic/env.py:33`: Moved noqa comment to opening line (E402)
+  - `dev_tests.py:41`: Added type annotation for `DOCSTRING_CACHE`
+  - `user_device_mapper.py:76`: Replaced `try/except/pass` → `contextlib.suppress()` (SIM105)
+
+#### Mypy Fixes (3 errors → 0):
+- `dev_tests.py`: Fixed DOCSTRING_CACHE type (`dict[str, str]` → `dict[str, dict[str, str]]`)
+- `main.py:137`: Added `# type: ignore[arg-type]` for slowapi handler (sync/async compatibility)
+
+#### Test Fixes:
+- `test_csrf_protection.py`: Complete rewrite (21 → 413 lines)
+  - Converted sync TestClient → AsyncClient for pytest-xdist compatibility
+  - Fixed endpoint paths (`/api/v1/users/profile` not `/me/profile`)
+  - 10/11 CSRF tests now passing (1 skipped)
+- `test_device_routes.py`: Complete rewrite (broken syntax fixed)
+  - 6/6 integration tests passing
+
+#### CI/CD Verification:
+- ✅ `ruff check .` → All checks passed!
+- ✅ `mypy .` → Success: no issues found in 234 source files
+- ✅ `bandit -r src/ -ll` → No issues identified (22,447 lines scanned)
+- ✅ `pytest tests/ -n auto` → 1021 passed, 2 skipped in 61.56s
+
+**Pipeline Status:** ✅ Ready for GitHub Actions (all checks will pass)
+
+---
+
+## [1.12.1] - 2026-01-05
+
+### Added - Snyk Code (SAST) Integration ✅ COMPLETADO (5 Ene 2026)
+
+**🔍 Análisis Estático de Código Fuente en CI/CD** (OWASP A03, A02, A01)
+
+- ✅ Snyk Code (SAST) integrado en pipeline CI/CD
+- ✅ Escaneo automático de código fuente en `src/`
+- ✅ Detección de vulnerabilidades en código propio:
+  - SQL Injection
+  - XSS (Cross-Site Scripting)
+  - Hardcoded secrets
+  - Path Traversal
+  - Weak Cryptography
+  - Command Injection
+- ✅ 2 tipos de análisis en Job 8:
+  - Snyk Test (SCA): Escaneo de dependencias
+  - Snyk Code (SAST): Escaneo de código fuente
+- ✅ Reportes separados: `snyk-dependencies-report.json` + `snyk-code-report.json`
+- ✅ Resumen automático con contador de issues por tipo
+- ✅ Artifacts con retención de 30 días
+- ✅ Resultados enviados a Snyk dashboard
+
+**Archivos Modificados:**
+- `.github/workflows/ci_cd_pipeline.yml` (Job 8 mejorado: +47 líneas, -6 líneas)
+
+**Impacto:** Doble capa de seguridad en CI/CD (SCA + SAST). Detección temprana de vulnerabilidades antes de mergear a main. Compliance OWASP mejorado para A03 (Injection), A02 (Cryptographic Failures), A01 (Access Control).
+
+**PR:** #39
+
+---
+
 ## [1.12.1] - 2026-01-05
 
 ### Added - Snyk Code (SAST) Integration ✅ COMPLETADO (5 Ene 2026)

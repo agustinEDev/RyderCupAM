@@ -4,7 +4,9 @@ Tests unitarios para RFEGHandicapService
 Verifica la funcionalidad de normalización de texto para eliminar acentos.
 """
 
-from src.modules.user.infrastructure.external.rfeg_handicap_service import RFEGHandicapService
+from src.modules.user.infrastructure.external.rfeg_handicap_service import (
+    RFEGHandicapService,
+)
 
 
 class TestRFEGHandicapServiceNormalizacion:

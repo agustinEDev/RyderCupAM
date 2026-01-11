@@ -3,6 +3,7 @@ RefreshToken ID Value Object.
 
 Value Object que encapsula el identificador único de un refresh token.
 """
+
 import uuid
 
 

@@ -42,9 +42,7 @@ class TestUpdateCompetitionUseCase:
         return UserId(uuid4())
 
     async def test_should_update_competition_name_successfully(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede actualizar el nombre de una competición.
@@ -60,7 +58,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -69,9 +67,7 @@ class TestUpdateCompetitionUseCase:
         update_request = UpdateCompetitionRequestDTO(name="Updated Name")
 
         response = await update_use_case.execute(
-            CompetitionId(created.id),
-            update_request,
-            creator_id
+            CompetitionId(created.id), update_request, creator_id
         )
 
         # Assert
@@ -82,11 +78,7 @@ class TestUpdateCompetitionUseCase:
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
         assert str(competition.name) == "Updated Name"
 
-    async def test_should_update_multiple_fields(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
-    ):
+    async def test_should_update_multiple_fields(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que se pueden actualizar múltiples campos a la vez.
 
@@ -101,7 +93,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -111,14 +103,10 @@ class TestUpdateCompetitionUseCase:
             name="Updated",
             start_date=date(2025, 7, 1),
             end_date=date(2025, 7, 3),
-            main_country="FR"
+            main_country="FR",
         )
 
-        await update_use_case.execute(
-            CompetitionId(created.id),
-            update_request,
-            creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
@@ -128,9 +116,7 @@ class TestUpdateCompetitionUseCase:
         assert competition.location.main_country.value == "FR"
 
     async def test_should_update_handicap_from_scratch_to_percentage(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se puede cambiar el hándicap de SCRATCH a PERCENTAGE.
@@ -146,22 +132,17 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
         update_use_case = UpdateCompetitionUseCase(uow)
         update_request = UpdateCompetitionRequestDTO(
-            handicap_type="PERCENTAGE",
-            handicap_percentage=90
+            handicap_type="PERCENTAGE", handicap_percentage=90
         )
 
-        await update_use_case.execute(
-            CompetitionId(created.id),
-            update_request,
-            creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
@@ -169,9 +150,7 @@ class TestUpdateCompetitionUseCase:
         assert competition.handicap_settings.percentage == 90
 
     async def test_should_raise_error_when_competition_not_found(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si la competición no existe.
@@ -192,9 +171,7 @@ class TestUpdateCompetitionUseCase:
         assert "No existe competición" in str(exc_info.value)
 
     async def test_should_raise_error_when_not_creator(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que solo el creador puede actualizar.
@@ -210,7 +187,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -220,18 +197,12 @@ class TestUpdateCompetitionUseCase:
         update_request = UpdateCompetitionRequestDTO(name="Hacked")
 
         with pytest.raises(NotCompetitionCreatorError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id),
-                update_request,
-                other_user
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, other_user)
 
         assert "Solo el creador" in str(exc_info.value)
 
     async def test_should_raise_error_when_not_in_draft_state(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que solo se puede actualizar en estado DRAFT.
@@ -247,7 +218,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -263,18 +234,12 @@ class TestUpdateCompetitionUseCase:
         update_request = UpdateCompetitionRequestDTO(name="Cannot Update")
 
         with pytest.raises(CompetitionNotEditableError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id),
-                update_request,
-                creator_id
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         assert "Solo se permite en estado DRAFT" in str(exc_info.value)
 
     async def test_should_raise_error_when_percentage_missing(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
         Verifica que se lanza excepción si se pone PERCENTAGE sin porcentaje.
@@ -290,7 +255,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -302,19 +267,11 @@ class TestUpdateCompetitionUseCase:
         )
 
         with pytest.raises(ValueError) as exc_info:
-            await update_use_case.execute(
-                CompetitionId(created.id),
-                update_request,
-                creator_id
-            )
+            await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         assert "handicap_percentage es requerido" in str(exc_info.value)
 
-    async def test_should_commit_transaction(
-        self,
-        uow: InMemoryUnitOfWork,
-        creator_id: UserId
-    ):
+    async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que la transacción se hace commit correctamente.
 
@@ -329,7 +286,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH"
+            handicap_type="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -337,11 +294,7 @@ class TestUpdateCompetitionUseCase:
         update_use_case = UpdateCompetitionUseCase(uow)
         update_request = UpdateCompetitionRequestDTO(name="Updated")
 
-        await update_use_case.execute(
-            CompetitionId(created.id),
-            update_request,
-            creator_id
-        )
+        await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         assert uow.committed is True

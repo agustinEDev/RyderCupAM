@@ -11,10 +11,10 @@ from typing import Generic, TypeVar
 from .domain_event import DomainEvent
 
 # Type variable para permitir handlers específicos para tipos de eventos
-EventType = TypeVar('EventType', bound=DomainEvent)
+EventType = TypeVar("EventType", bound=DomainEvent)
 
 
-class EventHandler(Generic[EventType], ABC):
+class EventHandler(Generic[EventType], ABC):  # noqa: UP046
     """
     Interfaz base para todos los handlers de eventos de dominio.
 

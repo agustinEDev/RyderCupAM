@@ -4,7 +4,6 @@ Enrollment Repository - SQLAlchemy Implementation.
 Implementación concreta del repositorio de inscripciones usando SQLAlchemy async.
 """
 
-
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -13,7 +12,9 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.enrollment_status import (
+    EnrollmentStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -64,10 +65,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return await self._session.get(Enrollment, enrollment_id)
 
     async def find_by_competition(
-        self,
-        competition_id: CompetitionId,
-        limit: int = 100,
-        offset: int = 0
+        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición.
@@ -95,7 +93,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         competition_id: CompetitionId,
         status: EnrollmentStatus,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[Enrollment]:
         """
         Busca inscripciones de una competición filtradas por estado.
@@ -117,7 +115,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .where(
                 and_(
                     Enrollment.competition_id == competition_id,
-                    Enrollment._status_value == status.value
+                    Enrollment._status_value == status.value,
                 )
             )
             .order_by(Enrollment.created_at.asc())
@@ -128,10 +126,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return list(result.scalars().all())
 
     async def find_by_user(
-        self,
-        user_id: UserId,
-        limit: int = 100,
-        offset: int = 0
+        self, user_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario.
@@ -155,9 +150,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return list(result.scalars().all())
 
     async def exists_for_user_in_competition(
-        self,
-        user_id: UserId,
-        competition_id: CompetitionId
+        self, user_id: UserId, competition_id: CompetitionId
     ) -> bool:
         """
         Verifica si existe una inscripción para un usuario en una competición.
@@ -177,7 +170,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .where(
                 and_(
                     Enrollment.user_id == user_id,
-                    Enrollment.competition_id == competition_id
+                    Enrollment.competition_id == competition_id,
                 )
             )
         )
@@ -200,7 +193,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .where(
                 and_(
                     Enrollment.competition_id == competition_id,
-                    Enrollment._status_value == EnrollmentStatus.APPROVED.value
+                    Enrollment._status_value == EnrollmentStatus.APPROVED.value,
                 )
             )
         )
@@ -223,7 +216,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .where(
                 and_(
                     Enrollment.competition_id == competition_id,
-                    Enrollment._status_value == EnrollmentStatus.REQUESTED.value
+                    Enrollment._status_value == EnrollmentStatus.REQUESTED.value,
                 )
             )
         )
@@ -231,9 +224,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return result.scalar_one()
 
     async def find_by_competition_and_team(
-        self,
-        competition_id: CompetitionId,
-        team_id: str
+        self, competition_id: CompetitionId, team_id: str
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones asignadas a un equipo específico.
@@ -250,7 +241,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .where(
                 and_(
                     Enrollment.competition_id == competition_id,
-                    Enrollment.team_id == team_id
+                    Enrollment.team_id == team_id,
                 )
             )
             .order_by(Enrollment.created_at.asc())

@@ -11,6 +11,7 @@ from datetime import date, datetime
 
 class InvalidDateRangeError(Exception):
     """Excepción lanzada cuando un rango de fechas no es válido."""
+
     pass
 
 
@@ -64,8 +65,8 @@ class DateRange:
             )
 
         # 4. Asignar valores normalizados (usar object.__setattr__ porque es frozen)
-        object.__setattr__(self, 'start_date', normalized_start)
-        object.__setattr__(self, 'end_date', normalized_end)
+        object.__setattr__(self, "start_date", normalized_start)
+        object.__setattr__(self, "end_date", normalized_end)
 
     def _normalize_date(self, value: date | datetime, field_name: str) -> date:
         """
@@ -86,8 +87,7 @@ class DateRange:
         if isinstance(value, date):
             return value
         raise InvalidDateRangeError(
-            f"{field_name} debe ser de tipo date o datetime, "
-            f"se recibió {type(value).__name__}"
+            f"{field_name} debe ser de tipo date o datetime, se recibió {type(value).__name__}"
         )
 
     def duration_days(self) -> int:
@@ -124,7 +124,7 @@ class DateRange:
         """
         return self.start_date <= check_date <= self.end_date
 
-    def overlaps_with(self, other: 'DateRange') -> bool:
+    def overlaps_with(self, other: "DateRange") -> bool:
         """
         Verifica si este rango se solapa con otro.
 
@@ -140,10 +140,7 @@ class DateRange:
             >>> range1.overlaps_with(range2)
             True
         """
-        return (
-            self.start_date <= other.end_date and
-            self.end_date >= other.start_date
-        )
+        return self.start_date <= other.end_date and self.end_date >= other.start_date
 
     def __str__(self) -> str:
         """Representación string legible."""
@@ -156,9 +153,9 @@ class DateRange:
         Dos DateRange son iguales si tienen las mismas fechas.
         """
         return (
-            isinstance(other, DateRange) and
-            self.start_date == other.start_date and
-            self.end_date == other.end_date
+            isinstance(other, DateRange)
+            and self.start_date == other.start_date
+            and self.end_date == other.end_date
         )
 
     def __hash__(self) -> int:

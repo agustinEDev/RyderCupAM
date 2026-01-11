@@ -15,6 +15,7 @@ from src.shared.domain.value_objects.country_code import CountryCode
 
 class InvalidLocationError(Exception):
     """Excepción lanzada cuando la ubicación no es válida."""
+
     pass
 
 
@@ -176,10 +177,10 @@ class Location:
         Dos Location son iguales si tienen los mismos países en el mismo orden.
         """
         return (
-            isinstance(other, Location) and
-            self.main_country == other.main_country and
-            self.adjacent_country_1 == other.adjacent_country_1 and
-            self.adjacent_country_2 == other.adjacent_country_2
+            isinstance(other, Location)
+            and self.main_country == other.main_country
+            and self.adjacent_country_1 == other.adjacent_country_1
+            and self.adjacent_country_2 == other.adjacent_country_2
         )
 
     def __hash__(self) -> int:

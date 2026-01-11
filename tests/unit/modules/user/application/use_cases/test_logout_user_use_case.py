@@ -8,8 +8,13 @@ from datetime import datetime
 
 import pytest
 
-from src.modules.user.application.dto.user_dto import LogoutRequestDTO, LogoutResponseDTO
-from src.modules.user.application.use_cases.logout_user_use_case import LogoutUserUseCase
+from src.modules.user.application.dto.user_dto import (
+    LogoutRequestDTO,
+    LogoutResponseDTO,
+)
+from src.modules.user.application.use_cases.logout_user_use_case import (
+    LogoutUserUseCase,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -33,7 +38,7 @@ async def existing_user(uow):
         first_name="Test",
         last_name="User",
         email_str="test@example.com",
-        plain_password="V@l1dP@ss123!"
+        plain_password="V@l1dP@ss123!",
     )
 
     async with uow:
@@ -82,7 +87,9 @@ class TestLogoutUserUseCase:
         """
         # Arrange
         request = LogoutRequestDTO()
-        non_existent_user_id = "12345678-1234-5678-1234-567812345678"  # UUID válido pero inexistente
+        non_existent_user_id = (
+            "12345678-1234-5678-1234-567812345678"  # UUID válido pero inexistente
+        )
         token = "sample-jwt-token"
 
         # Act
@@ -127,8 +134,8 @@ class TestLogoutUserUseCase:
 
         # Assert
         assert result is not None
-        assert hasattr(result, 'message')
-        assert hasattr(result, 'logged_out_at')
+        assert hasattr(result, "message")
+        assert hasattr(result, "logged_out_at")
         assert isinstance(result.message, str)
         assert isinstance(result.logged_out_at, datetime)
 

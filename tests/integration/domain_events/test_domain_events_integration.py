@@ -36,17 +36,18 @@ class TestDomainEventsIntegration:
         event_bus.register(handler)
 
         # Mock de métodos del handler para verificar ejecución
-        with patch.object(handler, '_send_welcome_email') as mock_email, \
-             patch.object(handler, '_log_registration') as mock_log, \
-             patch.object(handler, '_notify_external_systems') as mock_notify:
-
+        with (
+            patch.object(handler, "_send_welcome_email") as mock_email,
+            patch.object(handler, "_log_registration") as mock_log,
+            patch.object(handler, "_notify_external_systems") as mock_notify,
+        ):
             # Act
             # 1. Crear usuario (genera evento automáticamente)
             user = User.create(
                 first_name="Carlos",
                 last_name="Rodríguez",
                 email_str="carlos.rodriguez@test.com",
-                plain_password="SecurePass123!"
+                plain_password="SecurePass123!",
             )
 
             # 2. Verificar que el usuario tiene eventos
@@ -96,14 +97,15 @@ class TestDomainEventsIntegration:
             first_name="Ana",
             last_name="García",
             email_str="ana.garcia@test.com",
-            plain_password="T3stP@ssw0rd!"
+            plain_password="T3stP@ssw0rd!",
         )
 
         # Mock de métodos para todos los handlers
-        with patch.object(UserRegisteredEventHandler, '_send_welcome_email') as mock_email, \
-             patch.object(UserRegisteredEventHandler, '_log_registration') as mock_log, \
-             patch.object(UserRegisteredEventHandler, '_notify_external_systems') as mock_notify:
-
+        with (
+            patch.object(UserRegisteredEventHandler, "_send_welcome_email") as mock_email,
+            patch.object(UserRegisteredEventHandler, "_log_registration") as mock_log,
+            patch.object(UserRegisteredEventHandler, "_notify_external_systems") as mock_notify,
+        ):
             # Act
             await event_bus.publish_all(user.get_domain_events())
 
@@ -154,18 +156,16 @@ class TestDomainEventsIntegration:
             first_name="Luis",
             last_name="Martín",
             email_str="luis.martin@test.com",
-            plain_password="T3stP@ssw0rd!"
+            plain_password="T3stP@ssw0rd!",
         )
 
         # Mock del handler
-        with patch.object(handler, 'handle') as mock_handle:
-
+        with patch.object(handler, "handle") as mock_handle:
             # Act - Simular patrón Repository
             # 1. Obtener eventos antes de guardar
             events = user.get_domain_events()
 
             # 2. "Guardar" usuario en base de datos (simulado)
-
 
             # 3. Publicar eventos después del guardado exitoso
             await event_bus.publish_all(events)
@@ -206,13 +206,16 @@ class TestDomainEventsIntegration:
             first_name="Pedro",
             last_name="López",
             email_str="pedro.lopez@test.com",
-            plain_password="T3stP@ssw0rd!"
+            plain_password="T3stP@ssw0rd!",
         )
 
         # Configurar mocks: uno que falla y otro que funciona
-        with patch.object(working_handler, 'handle') as mock_working, \
-             patch.object(failing_handler, 'handle', side_effect=Exception("Handler failed")) as mock_failing:
-
+        with (
+            patch.object(working_handler, "handle") as mock_working,
+            patch.object(
+                failing_handler, "handle", side_effect=Exception("Handler failed")
+            ) as mock_failing,
+        ):
             # Act
             await event_bus.publish_all(user.get_domain_events())
 
@@ -242,7 +245,7 @@ class TestDomainEventsIntegration:
             first_name="María",
             last_name="González",
             email_str="maria.gonzalez@test.com",
-            plain_password="T3stP@ssw0rd!"
+            plain_password="T3stP@ssw0rd!",
         )
 
         original_events = user.get_domain_events()
@@ -255,7 +258,7 @@ class TestDomainEventsIntegration:
             "email": original_event.email,
             "first_name": original_event.first_name,
             "last_name": original_event.last_name,
-            "occurred_on": original_event.occurred_on
+            "occurred_on": original_event.occurred_on,
         }
 
         # Act
@@ -282,7 +285,7 @@ class TestDomainEventsIntegration:
             first_name="Sofía",
             last_name="Hernández",
             email_str="sofia.hernandez@test.com",
-            plain_password="T3stP@ssw0rd!"
+            plain_password="T3stP@ssw0rd!",
         )
 
         # Act

@@ -62,21 +62,23 @@ class UserProfileUpdatedEvent(DomainEvent):
         Extiende la serialización base con campos específicos del evento.
         """
         base_dict = super().to_dict()
-        base_dict.update({
-            'profile_changes': {
-                'first_name': {
-                    'old': self.old_first_name,
-                    'new': self.new_first_name,
-                    'changed': self.has_first_name_change
+        base_dict.update(
+            {
+                "profile_changes": {
+                    "first_name": {
+                        "old": self.old_first_name,
+                        "new": self.new_first_name,
+                        "changed": self.has_first_name_change,
+                    },
+                    "last_name": {
+                        "old": self.old_last_name,
+                        "new": self.new_last_name,
+                        "changed": self.has_last_name_change,
+                    },
                 },
-                'last_name': {
-                    'old': self.old_last_name,
-                    'new': self.new_last_name,
-                    'changed': self.has_last_name_change
-                }
-            },
-            'updated_at': self.updated_at.isoformat()
-        })
+                "updated_at": self.updated_at.isoformat(),
+            }
+        )
         return base_dict
 
     def __str__(self) -> str:

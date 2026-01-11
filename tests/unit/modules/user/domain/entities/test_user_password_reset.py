@@ -13,13 +13,16 @@ Estructura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.events.password_reset_completed_event import PasswordResetCompletedEvent
-from src.modules.user.domain.events.password_reset_requested_event import PasswordResetRequestedEvent
+from src.modules.user.domain.events.password_reset_completed_event import (
+    PasswordResetCompletedEvent,
+)
+from src.modules.user.domain.events.password_reset_requested_event import (
+    PasswordResetRequestedEvent,
+)
 
 
 class TestGeneratePasswordResetToken:
@@ -38,16 +41,13 @@ class TestGeneratePasswordResetToken:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         ip_address = "192.168.1.100"
         user_agent = "Mozilla/5.0 (Test Browser)"
 
         # Act
-        token = user.generate_password_reset_token(
-            ip_address=ip_address,
-            user_agent=user_agent
-        )
+        token = user.generate_password_reset_token(ip_address=ip_address, user_agent=user_agent)
 
         # Assert
         # 1. Verificar que se generó un token no vacío
@@ -57,7 +57,7 @@ class TestGeneratePasswordResetToken:
 
         # 2. Verificar que el token es URL-safe (no contiene caracteres especiales problemáticos)
         # secrets.token_urlsafe() genera tokens con caracteres [A-Za-z0-9_-]
-        assert all(c.isalnum() or c in ['-', '_'] for c in token)
+        assert all(c.isalnum() or c in ["-", "_"] for c in token)
 
         # 3. Verificar que el token se almacenó en el usuario
         assert user.password_reset_token == token
@@ -97,7 +97,7 @@ class TestGeneratePasswordResetToken:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
 
         # Generar primer token
@@ -137,7 +137,7 @@ class TestGeneratePasswordResetToken:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
 
         # Act
@@ -171,7 +171,7 @@ class TestCanResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -193,7 +193,7 @@ class TestCanResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         user.generate_password_reset_token()
 
@@ -215,7 +215,7 @@ class TestCanResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -240,12 +240,14 @@ class TestCanResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         # No se genera ningún token
 
         # Act & Assert
-        with pytest.raises(ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"):
+        with pytest.raises(
+            ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"
+        ):
             user.can_reset_password("any_token")
 
     def test_can_reset_password_at_exact_expiration_boundary(self, sample_user_data):
@@ -260,7 +262,7 @@ class TestCanResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="CurrentPassword123!"
+            plain_password="CurrentPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -289,7 +291,7 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         old_password_hash = user.password.hashed_value
         token = user.generate_password_reset_token(ip_address="10.0.0.1")
@@ -301,7 +303,7 @@ class TestResetPassword:
             token=token,
             new_password=new_password,
             ip_address="10.0.0.1",
-            user_agent="Mozilla/5.0"
+            user_agent="Mozilla/5.0",
         )
 
         # Assert
@@ -337,17 +339,14 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         old_password_hash = user.password.hashed_value
         user.generate_password_reset_token()
 
         # Act & Assert
         with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):
-            user.reset_password(
-                token="wrong_token_xyz",
-                new_password="NewPassword456!"
-            )
+            user.reset_password(token="wrong_token_xyz", new_password="NewPassword456!")
 
         # Verificar que la contraseña NO cambió
         assert user.password.hashed_value == old_password_hash
@@ -364,7 +363,7 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         old_password_hash = user.password.hashed_value
         token = user.generate_password_reset_token()
@@ -374,10 +373,7 @@ class TestResetPassword:
 
         # Act & Assert
         with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):
-            user.reset_password(
-                token=token,
-                new_password="NewPassword456!"
-            )
+            user.reset_password(token=token, new_password="NewPassword456!")
 
         # Verificar que la contraseña NO cambió
         assert user.password.hashed_value == old_password_hash
@@ -394,7 +390,7 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
 
@@ -403,7 +399,7 @@ class TestResetPassword:
         with pytest.raises(Exception):  # InvalidPasswordError o ValueError
             user.reset_password(
                 token=token,
-                new_password="weakpassword"  # No cumple: mayúsculas, números, símbolos
+                new_password="weakpassword",  # No cumple: mayúsculas, números, símbolos
             )
 
     def test_reset_password_invalidates_token_after_use(self, sample_user_data):
@@ -418,22 +414,18 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
 
         # Act: Primer reseteo (exitoso)
-        user.reset_password(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        user.reset_password(token=token, new_password="NewPassword456!")
 
         # Assert: Segundo intento con el mismo token falla
-        with pytest.raises(ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"):
-            user.reset_password(
-                token=token,
-                new_password="AnotherPassword789!"
-            )
+        with pytest.raises(
+            ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"
+        ):
+            user.reset_password(token=token, new_password="AnotherPassword789!")
 
     def test_reset_password_without_ip_and_user_agent(self, sample_user_data):
         """
@@ -447,16 +439,13 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         user.clear_domain_events()
 
         # Act
-        user.reset_password(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        user.reset_password(token=token, new_password="NewPassword456!")
 
         # Assert
         assert user.password_reset_token is None
@@ -480,18 +469,16 @@ class TestResetPassword:
             first_name=sample_user_data["name"],
             last_name=sample_user_data["surname"],
             email_str=sample_user_data["email"],
-            plain_password="OldPassword123!"
+            plain_password="OldPassword123!",
         )
         token = user.generate_password_reset_token()
         old_updated_at = user.updated_at
 
         # Act: Esperar un pequeño momento para asegurar que el timestamp cambie
         import time
+
         time.sleep(0.01)  # 10ms
-        user.reset_password(
-            token=token,
-            new_password="NewPassword456!"
-        )
+        user.reset_password(token=token, new_password="NewPassword456!")
 
         # Assert
         assert user.updated_at > old_updated_at

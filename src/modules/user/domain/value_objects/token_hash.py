@@ -3,6 +3,7 @@ TokenHash Value Object.
 
 Value Object que encapsula el hash de un refresh token para almacenamiento seguro.
 """
+
 import hashlib
 
 
@@ -30,7 +31,9 @@ class TokenHash:
             raise ValueError(f"Hash debe ser string. Recibido: {type(hashed_value).__name__}")
 
         if len(hashed_value) != sha256_hex_length:
-            raise ValueError(f"Hash inválido. Debe ser SHA256 ({sha256_hex_length} chars). Recibido: {len(hashed_value)} chars")
+            raise ValueError(
+                f"Hash inválido. Debe ser SHA256 ({sha256_hex_length} chars). Recibido: {len(hashed_value)} chars"
+            )
 
         # Verificar que sea hexadecimal válido
         try:
@@ -61,7 +64,7 @@ class TokenHash:
 
         # Hashear con SHA256 (rápido, suficiente para tokens JWT)
         # No necesitamos bcrypt porque los tokens JWT ya son aleatorios y largos
-        hash_obj = hashlib.sha256(token.encode('utf-8'))
+        hash_obj = hashlib.sha256(token.encode("utf-8"))
         hashed = hash_obj.hexdigest()
 
         return cls(hashed)

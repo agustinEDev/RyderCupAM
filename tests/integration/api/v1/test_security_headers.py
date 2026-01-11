@@ -49,9 +49,10 @@ class TestSecurityHeaders:
         assert "x-frame-options" in headers, (
             "Falta header X-Frame-Options - Vulnerable a clickjacking"
         )
-        assert headers["x-frame-options"].upper() in ["DENY", "SAMEORIGIN"], (
-            "X-Frame-Options debe ser DENY o SAMEORIGIN"
-        )
+        assert headers["x-frame-options"].upper() in [
+            "DENY",
+            "SAMEORIGIN",
+        ], "X-Frame-Options debe ser DENY o SAMEORIGIN"
 
         # 3. X-Content-Type-Options
         assert "x-content-type-options" in headers, (
@@ -89,10 +90,7 @@ class TestSecurityHeaders:
                     Cache-Control previene cacheo de tokens de autenticación
         """
         # Intentar login con credenciales inválidas (no importa para este test)
-        payload = {
-            "email": "test@example.com",
-            "password": "wrongpassword"
-        }
+        payload = {"email": "test@example.com", "password": "wrongpassword"}
         response = await client.post("/api/v1/auth/login", json=payload)
 
         # La petición puede fallar (401), pero debe tener security headers
@@ -128,7 +126,7 @@ class TestSecurityHeaders:
             "email": "newuser@example.com",
             "password": "TestPassword123!",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
         response = await client.post("/api/v1/auth/register", json=payload)
 
@@ -191,9 +189,7 @@ class TestSecurityHeaders:
         assert "referrer-policy" in headers
 
     @pytest.mark.asyncio
-    async def test_security_headers_consistency_across_endpoints(
-        self, client: AsyncClient
-    ):
+    async def test_security_headers_consistency_across_endpoints(self, client: AsyncClient):
         """
         GIVEN: Múltiples endpoints diferentes
         WHEN: Se realizan peticiones a cada uno
@@ -215,7 +211,7 @@ class TestSecurityHeaders:
             "x-frame-options",
             "x-content-type-options",
             "referrer-policy",
-            "cache-control"
+            "cache-control",
         }
 
         for endpoint in endpoints_to_test:
@@ -223,7 +219,7 @@ class TestSecurityHeaders:
 
             # No importa el status code (puede ser 200, 401, 405 Method Not Allowed, etc.)
             headers = response.headers
-            headers_lower = {k.lower() for k in headers.keys()}
+            headers_lower = {k.lower() for k in headers}
 
             # Verificar que todos los required_headers están presentes
             missing_headers = required_headers - headers_lower
@@ -246,6 +242,7 @@ class TestSecurityHeaders:
 
         # Extraer el valor de max-age
         import re
+
         match = re.search(r"max-age=(\d+)", hsts_header)
         assert match, "HSTS debe incluir max-age=<segundos>"
 

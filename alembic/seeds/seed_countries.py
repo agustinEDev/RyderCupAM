@@ -18,7 +18,8 @@ def seed_countries():
     Note: Includes some territories (Kosovo XK, Gaza GZ, Gibraltar GI, Western Sahara EH)
     that have land borders but may not be universally recognized as sovereign countries.
     """
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO countries (code, name_en, name_es) VALUES
         ('AF', 'Afghanistan', 'Afganistán'),
         ('AL', 'Albania', 'Albania'),
@@ -239,7 +240,8 @@ def seed_countries():
         -- ('FO', 'Faroe Islands', 'Islas Feroe'),
         -- ('GL', 'Greenland', 'Groenlandia')
         ON CONFLICT (code) DO NOTHING;
-    """)
+    """
+    )
 
 
 def seed_country_adjacencies():
@@ -255,7 +257,8 @@ def seed_country_adjacencies():
 
     Source: Wikipedia - List of countries and territories by land borders
     """
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO country_adjacencies (country_code_1, country_code_2) VALUES
         -- Afghanistan (AF)
         ('AF', 'CN'), ('CN', 'AF'),
@@ -762,4 +765,5 @@ def seed_country_adjacencies():
         ('IT', 'HR'), ('HR', 'IT'),
         ('VN', 'PH'), ('PH', 'VN')
         ON CONFLICT (country_code_1, country_code_2) DO NOTHING;
-    """)
+    """
+    )
