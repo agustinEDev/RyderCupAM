@@ -45,7 +45,123 @@
 
 ## 🎯 Roadmap Futuro
 
-### v1.13.0 - Security Hardening (EN PROGRESO - Ene 2026) ⏳
+### v2.1.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA - 7 semanas
+
+**Objetivo:** Sistema completo de gestión de torneos Ryder Cup: campos de golf, planificación, live scoring con validación dual y leaderboards en tiempo real.
+
+**Estado:** 🔵 En Planificación (Ene 2026)
+
+---
+
+#### 📦 Bloques Funcionales
+
+| # | Bloque | Semana | Tests | Descripción |
+|---|--------|--------|-------|-------------|
+| 1 | **Roles & Permisos** | 1-2 | ~40 | Sistema formal Admin/Creator/Player |
+| 2 | **Golf Courses** | 1-2 | ~60 | CRUD campos con tees y hoyos (18) |
+| 3 | **Course Approval** | 3 | ~30 | Creator crea campos → Admin aprueba |
+| 4 | **Schedule** | 4 | ~50 | Rounds + Matches + asignación jugadores |
+| 5 | **Invitations** | 4 | ~45 | Buscar/invitar usuarios + registro con token |
+| 6 | **Playing Handicap** | 5 | ~25 | Cálculo WHS automático por tee |
+| 7 | **Live Scoring** | 5 | ~40 | Anotación hoyo a hoyo con navegación libre |
+| 8 | **Dual Validation** | 6-7 | ~35 | Validación independiente jugador vs marcador |
+| 9 | **Leaderboards** | 6-7 | ~30 | Match + Global en tiempo real |
+
+**Total:** 9 bloques | 7 semanas | ~355 tests nuevos | 35 endpoints | 14 entidades
+
+---
+
+#### 🗄️ Nuevas Entidades Principales
+
+**Domain Layer:**
+- `Role`, `UserRole` - Sistema de roles formal
+- `GolfCourse`, `Tee`, `Hole` - Gestión de campos
+- `Round`, `Match` - Planificación de jornadas
+- `Invitation` - Sistema de invitaciones
+- `HoleScore` - Anotación de scores
+- `MatchResult`, `TeamStandings` - Leaderboards
+
+**Enums clave:**
+- `RoleName`: ADMIN, CREATOR, PLAYER
+- `GolfCourseType`: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
+- `TeeCategory`: CHAMPIONSHIP_MALE, AMATEUR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, BEGINNER, CUSTOM
+- `ApprovalStatus`: PENDING_APPROVAL, APPROVED, REJECTED
+- `MatchFormat`: FOURBALL, FOURSOMES, SINGLES, GREENSOME
+- `MatchStatus`: SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, WALKOVER_TEAM_A, WALKOVER_TEAM_B
+- `InvitationStatus`: PENDING, ACCEPTED, REJECTED, EXPIRED
+- `ScoreStatus`: DRAFT, SUBMITTED, VALIDATED, DISPUTED
+
+---
+
+#### ✅ Criterios de Aceptación Clave
+
+**Admin:**
+- CRUD campos (tees múltiples + 18 hoyos con plantillas)
+- Aprobar/rechazar campos pendientes + email notificación
+- Asignar roles a usuarios
+
+**Creator:**
+- Buscar campos por país + crear nuevos (PENDING_APPROVAL)
+- Crear rounds/matches + asignar jugadores + seleccionar tees
+- Invitar usuarios (registrados o por email con token)
+- Cancelar matches o walkover
+- Ver leaderboards
+
+**Player:**
+- Aceptar/rechazar invitaciones
+- Registrarse con token (auto-inscripción)
+- Anotar scores hoyo a hoyo (navegación libre ← →)
+- Ver ✅/❌ coincidencia en tiempo real
+- Entregar tarjeta solo si 18/18 ✅
+- Ver scorecard (bruto/neto) + leaderboard
+
+---
+
+#### 🎯 UX Highlights
+
+**Scoring Interface:**
+```
+[← Hoyo 4]  HOYO 5  [Hoyo 6 →]
+Par: 4 | 356m | SI: 3
+Tu score: [5] | Marcador: [4]
+✅ Coincide
+
+Progreso: ✅✅✅❌⚪⚪⚪⚪⚪ | ⚪⚪⚪⚪⚪⚪⚪⚪⚪
+          1 2 3 4 5 6 7 8 9   10...18
+
+[🏁 Entregar] ← Solo si todos ✅
+```
+
+**Validación Dual:**
+- Cada jugador valida SU tarjeta independientemente
+- Bloqueo de entrega si hay discrepancias en tus scores
+
+**Invitaciones:**
+- Búsqueda por email/nombre
+- Token 256-bit, expira 7 días
+- Email bilingües (ES/EN)
+
+---
+
+#### 📈 Roadmap v2.1.x (Futuro)
+
+**v2.1.1** - Plantillas schedule, WebSocket, Puntos custom, Notificaciones push
+**v2.1.2** - Stats avanzadas, Export PDF, Google Maps, Weather API
+**v2.1.3** - Cache Redis, Read replicas, CDN, Load testing
+
+---
+
+#### 🔗 ADRs a Crear
+
+- `ADR-022` - Competition Module Evolution (visión general)
+- `ADR-023` - Golf Course Approval Workflow
+- `ADR-024` - Playing Handicap WHS Calculation
+- `ADR-025` - Dual Validation Scoring System
+- `ADR-026` - Invitation System Design
+
+---
+
+### v1.13.0 - Security Hardening ✅ **COMPLETADO** (9 Ene 2026)
 
 **Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** ✅ **COMPLETADO**
 

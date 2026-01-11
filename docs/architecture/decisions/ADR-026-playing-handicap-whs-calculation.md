@@ -1,6 +1,6 @@
 # ADR-026: Playing Handicap WHS Calculation
 
-**Date**: January 7, 2026
+**Date**: January 9, 2026
 **Status**: Accepted
 **Decision Makers**: Development Team
 

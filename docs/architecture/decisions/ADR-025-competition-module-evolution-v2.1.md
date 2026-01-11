@@ -1,6 +1,6 @@
 # ADR-025: Competition Module Evolution - v2.1.0
 
-**Date**: January 7, 2026
+**Date**: January 9, 2026
 **Status**: Accepted
 **Decision Makers**: Development Team
 

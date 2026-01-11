@@ -346,38 +346,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-## [1.12.1] - 2026-01-05
-
-### Added - Snyk Code (SAST) Integration ✅ COMPLETADO (5 Ene 2026)
-
-**🔍 Análisis Estático de Código Fuente en CI/CD** (OWASP A03, A02, A01)
-
-- ✅ Snyk Code (SAST) integrado en pipeline CI/CD
-- ✅ Escaneo automático de código fuente en `src/`
-- ✅ Detección de vulnerabilidades en código propio:
-  - SQL Injection
-  - XSS (Cross-Site Scripting)
-  - Hardcoded secrets
-  - Path Traversal
-  - Weak Cryptography
-  - Command Injection
-- ✅ 2 tipos de análisis en Job 8:
-  - Snyk Test (SCA): Escaneo de dependencias
-  - Snyk Code (SAST): Escaneo de código fuente
-- ✅ Reportes separados: `snyk-dependencies-report.json` + `snyk-code-report.json`
-- ✅ Resumen automático con contador de issues por tipo
-- ✅ Artifacts con retención de 30 días
-- ✅ Resultados enviados a Snyk dashboard
-
-**Archivos Modificados:**
-- `.github/workflows/ci_cd_pipeline.yml` (Job 8 mejorado: +47 líneas, -6 líneas)
-
-**Impacto:** Doble capa de seguridad en CI/CD (SCA + SAST). Detección temprana de vulnerabilidades antes de mergear a main. Compliance OWASP mejorado para A03 (Injection), A02 (Cryptographic Failures), A01 (Access Control).
-
-**PR:** #39
-
----
-
 ## [1.12.0] - 2026-01-03
 
 ### Security - Snyk Vulnerability Fixes ✅ COMPLETADO (3 Ene 2026)

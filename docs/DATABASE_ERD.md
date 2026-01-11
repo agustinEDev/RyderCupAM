@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v1.13.0 (Current)
-> **Last Updated:** 8 January 2026
+> **Version:** v1.13.0 (Current) + v2.1.0 Planning
+> **Last Updated:** 9 January 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -65,6 +65,19 @@ erDiagram
         VARCHAR(255) password_hash "bcrypt hash"
         TIMESTAMP created_at
     }
+
+    user_devices {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR(100) device_name
+        VARCHAR(500) user_agent
+        VARCHAR(45) ip_address
+        VARCHAR(64) fingerprint_hash UK
+        BOOLEAN is_active "default true - v1.13.0"
+        TIMESTAMP last_used_at
+        TIMESTAMP created_at
+    }
+
 
     %% ========================================
     %% ROLES & PERMISSIONS (v2.1.0 - NEW)
@@ -243,6 +256,7 @@ erDiagram
     %% User Module
     users ||--o{ refresh_tokens : "has"
     users ||--o{ password_history : "has"
+    users ||--o{ user_devices : "has"
     users ||--o{ competitions : "creates"
     users ||--o{ enrollments : "enrolls_in"
     users ||--o{ user_roles : "has_roles"
