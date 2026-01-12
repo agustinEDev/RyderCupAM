@@ -19,6 +19,7 @@ from sqlalchemy.exc import NoInspectionAvailable
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 
 # Importar metadata, registry y UserIdDecorator compartidos del mapper principal de users
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
@@ -70,6 +71,25 @@ class TokenHashDecorator(TypeDecorator):
         return TokenHash(value)
 
 
+class UserDeviceIdDecorator(TypeDecorator):
+    """TypeDecorator para UserDeviceId."""
+
+    impl = String(36)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        """Convierte UserDeviceId → string para BD."""
+        if isinstance(value, UserDeviceId):
+            return str(value.value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        """Convierte string → UserDeviceId desde BD."""
+        if value is None:
+            return None
+        return UserDeviceId(value)
+
+
 # ============================================================================
 # Tabla refresh_tokens
 # ============================================================================
@@ -83,6 +103,13 @@ refresh_tokens_table = Table(
         UserIdDecorator,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    ),
+    Column(
+        "device_id",
+        UserDeviceIdDecorator,
+        ForeignKey("user_devices.id", ondelete="CASCADE"),
+        nullable=True,  # Nullable para backward compatibility
         index=True,
     ),
     Column("token_hash", TokenHashDecorator, nullable=False, unique=True, index=True),
@@ -117,6 +144,7 @@ def start_mappers():
             properties={
                 "_id": refresh_tokens_table.c.id,
                 "_user_id": refresh_tokens_table.c.user_id,
+                "_device_id": refresh_tokens_table.c.device_id,
                 "_token_hash": refresh_tokens_table.c.token_hash,
                 "_expires_at": refresh_tokens_table.c.expires_at,
                 "_created_at": refresh_tokens_table.c.created_at,

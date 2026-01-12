@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -27,6 +28,7 @@ class RefreshToken:
     Attributes:
         id: Identificador único del refresh token
         user_id: ID del usuario propietario
+        device_id: ID del dispositivo asociado (permite revocar por dispositivo)
         token_hash: Hash SHA256 del token JWT (no almacenamos texto plano)
         expires_at: Fecha/hora de expiración
         created_at: Fecha/hora de creación
@@ -40,6 +42,7 @@ class RefreshToken:
         user_id: UserId,
         token_hash: TokenHash,
         expires_at: datetime,
+        device_id: UserDeviceId | None = None,
         created_at: datetime | None = None,
         revoked: bool = False,
         revoked_at: datetime | None = None,
@@ -52,6 +55,7 @@ class RefreshToken:
             user_id: ID del usuario propietario
             token_hash: Hash del token JWT
             expires_at: Fecha/hora de expiración
+            device_id: ID del dispositivo asociado (opcional para backward compatibility)
             created_at: Fecha/hora de creación (auto-generado si None)
             revoked: Si el token está revocado
             revoked_at: Fecha/hora de revocación
@@ -60,6 +64,7 @@ class RefreshToken:
         self._user_id = user_id
         self._token_hash = token_hash
         self._expires_at = expires_at
+        self._device_id = device_id
         self._created_at = created_at or datetime.now()
         self._revoked = revoked
         self._revoked_at = revoked_at
@@ -99,11 +104,17 @@ class RefreshToken:
         """Retorna la fecha de revocación (si aplica)."""
         return self._revoked_at
 
+    @property
+    def device_id(self) -> UserDeviceId | None:
+        """Retorna el ID del dispositivo asociado."""
+        return self._device_id
+
     @classmethod
     def create(
         cls,
         user_id: UserId,
         token: str,
+        device_id: UserDeviceId | None = None,
         expires_in_days: int = 7,
     ) -> "RefreshToken":
         """
@@ -114,6 +125,7 @@ class RefreshToken:
         Args:
             user_id: ID del usuario propietario
             token: Token JWT en texto plano (se hasheará)
+            device_id: ID del dispositivo asociado (requerido para revocación correcta)
             expires_in_days: Días hasta expiración (default 7)
 
         Returns:
@@ -121,8 +133,9 @@ class RefreshToken:
 
         Example:
             >>> user_id = UserId.generate()
+            >>> device_id = UserDeviceId.generate()
             >>> token_jwt = "eyJhbGciOiJIUzI1NiIsInR5..."
-            >>> refresh_token = RefreshToken.create(user_id, token_jwt)
+            >>> refresh_token = RefreshToken.create(user_id, token_jwt, device_id)
         """
         token_id = RefreshTokenId.generate()
         token_hash = TokenHash.from_token(token)
@@ -133,6 +146,7 @@ class RefreshToken:
             user_id=user_id,
             token_hash=token_hash,
             expires_at=expires_at,
+            device_id=device_id,
             created_at=datetime.now(),
             revoked=False,
             revoked_at=None,

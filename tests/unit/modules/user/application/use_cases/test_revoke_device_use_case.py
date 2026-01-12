@@ -65,7 +65,8 @@ class TestRevokeDeviceUseCase:
 
         # Assert
         assert response is not None
-        assert response.message == "Dispositivo revocado exitosamente"
+        assert "Dispositivo revocado exitosamente" in response.message
+        assert "sesión(es) cerrada(s)" in response.message
         assert response.device_id == register_response.device_id
 
         # Verificar que el dispositivo está inactivo
@@ -341,7 +342,8 @@ class TestRevokeDeviceUseCase:
         response = await revoke_use_case.execute(request)
 
         # Assert
-        assert response.message == "Dispositivo revocado exitosamente"
+        assert "Dispositivo revocado exitosamente" in response.message
+        assert "sesión(es) cerrada(s)" in response.message
         assert response.device_id == device_b_response.device_id
 
         # Verificar que dispositivo B está inactivo

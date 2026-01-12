@@ -522,6 +522,74 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Device Fingerprinting Security Check (v1.13.0):
+    # Verificar que el dispositivo actual NO esté revocado
+    # Si el dispositivo fue revocado, el token es inválido aunque técnicamente sea válido
+    import logging
+    logger = logging.getLogger(__name__)
+
+    user_agent = request.headers.get("User-Agent", "unknown")
+
+    # Extraer IP con soporte para proxies (X-Forwarded-For, X-Real-IP)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        ip_address = forwarded_for.split(",")[0].strip()
+    elif request.headers.get("X-Real-IP"):
+        ip_address = request.headers.get("X-Real-IP").strip()
+    elif request.client and request.client.host:
+        ip_address = request.client.host
+    else:
+        ip_address = "unknown"
+
+    if user_agent != "unknown" and ip_address != "unknown":
+        from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+        from src.modules.user.domain.value_objects.user_id import UserId
+
+        try:
+            # Crear fingerprint del dispositivo actual
+            current_fingerprint = DeviceFingerprint.create(
+                user_agent=user_agent,
+                ip_address=ip_address
+            )
+
+            # Buscar dispositivo por fingerprint (usando nueva transacción)
+            # IMPORTANTE: NO usamos find_by_user_and_fingerprint porque filtra por is_active=True
+            # Necesitamos encontrar el dispositivo AUNQUE esté revocado para bloquearlo
+            user_id_vo = UserId(user_id_str)
+            async with uow:
+                # Query directo sin filtrar por is_active
+                from sqlalchemy import select
+                from src.modules.user.domain.entities.user_device import UserDevice
+
+                statement = (
+                    select(UserDevice)
+                    .where(UserDevice._user_id == user_id_vo)
+                    .where(UserDevice._fingerprint_hash == current_fingerprint.fingerprint_hash)
+                    # NO filtramos por is_active para encontrar dispositivos revocados
+                    # Ordenamos por is_active DESC para que si hay múltiples, tome el activo primero
+                    .order_by(UserDevice._is_active.desc())
+                    .limit(1)
+                )
+                result = await uow._session.execute(statement)
+                device = result.scalar_one_or_none()
+
+                # Si el dispositivo existe pero está revocado, denegar acceso
+                if device and not device.is_active:
+                    logger.warning(f"Access denied: Revoked device {device.id} attempted access for user {user_id_str}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+        except HTTPException:
+            # Re-lanzar HTTPException para que FastAPI la maneje
+            raise
+        except Exception as e:
+            # Si hay error al crear fingerprint o consultar BD, continuar (no bloquear por errores técnicos)
+            # Esto previene que un error en device fingerprinting bloquee a todos los usuarios
+            logger.error(f"Error during device validation for user {user_id_str}: {type(e).__name__}: {e}")
+            pass
+
     return user
 
 
