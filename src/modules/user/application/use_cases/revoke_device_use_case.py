@@ -23,6 +23,7 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -66,7 +67,7 @@ class RevokeDeviceUseCase:
         Ejecuta el caso de uso de revocación de dispositivo.
 
         Args:
-            request: DTO con user_id y device_id
+            request: DTO con user_id, device_id, y opcionalmente user_agent + ip_address
 
         Returns:
             RevokeDeviceResponseDTO con mensaje de confirmación
@@ -75,12 +76,14 @@ class RevokeDeviceUseCase:
             ValueError: Si device_id no es UUID válido o dispositivo no existe
             PermissionError: Si el dispositivo no pertenece al usuario
             RuntimeError: Si el dispositivo ya estaba revocado
+            CurrentDeviceRevocationException: Si intenta revocar el dispositivo actual
 
         Example Flow:
             # Revocación exitosa
-            Request: user_id=123, device_id=456
+            Request: user_id=123, device_id=456, user_agent="...", ip_address="..."
             → Buscar dispositivo 456
             → Validar: dispositivo.user_id == 123 ✅
+            → Validar: fingerprint actual != fingerprint dispositivo 456 ✅
             → Revocar: device.revoke()
             → Evento: DeviceRevokedEvent lanzado
             → Response: "Dispositivo revocado exitosamente"
@@ -90,6 +93,12 @@ class RevokeDeviceUseCase:
             → Buscar dispositivo 789
             → Validar: dispositivo.user_id == 999 ❌
             → Error: PermissionError("No autorizado para revocar este dispositivo")
+
+            # Error: Dispositivo actual (auto-revocación)
+            Request: user_id=123, device_id=456 (mismo fingerprint)
+            → Buscar dispositivo 456
+            → Validar: fingerprint actual == fingerprint dispositivo 456 ❌
+            → Error: CurrentDeviceRevocationException("No puedes revocar el dispositivo actual")
 
             # Error: Dispositivo ya revocado
             Request: user_id=123, device_id=456 (ya revocado)
@@ -109,15 +118,30 @@ class RevokeDeviceUseCase:
             if device.user_id != user_id:
                 raise PermissionError(f"No autorizado para revocar dispositivo {request.device_id}")
 
-            # 4. Revocar dispositivo (lanza DeviceRevokedEvent)
+            # 4. Revocar dispositivo especificado (lanza DeviceRevokedEvent)
+            # NOTA: El usuario PUEDE revocar cualquier dispositivo, incluyendo el actual
+            # Si revoca el dispositivo actual, perderá acceso inmediatamente
+            # El frontend debe mostrar una advertencia visual antes de confirmar
             device.revoke()
 
-            # 5. Guardar cambios en BD
+            # 5. Determinar si es el dispositivo actual (para info en respuesta)
+            is_current_device = False
+            if request.user_agent and request.ip_address:
+                current_fingerprint = DeviceFingerprint.create(
+                    user_agent=request.user_agent, ip_address=request.ip_address
+                )
+                is_current_device = device.matches_fingerprint(current_fingerprint)
+
+            # 6. Guardar cambios en BD
             await self._uow.user_devices.save(device)
             await self._uow.commit()
 
-            # 6. Retornar confirmación
+            # 7. Retornar confirmación
+            message = "Dispositivo revocado exitosamente"
+            if is_current_device:
+                message = "Dispositivo actual revocado exitosamente. Tu sesión se cerrará."
+
             return RevokeDeviceResponseDTO(
-                message="Dispositivo revocado exitosamente",
+                message=message,
                 device_id=request.device_id,
             )
