@@ -189,13 +189,9 @@ class LoginUserUseCase:
             data={"sub": str(user.id.value)}
         )
 
-        # Crear entidad RefreshToken (hashea el JWT antes de guardar)
-        refresh_token_entity = RefreshToken.create(
-            user_id=user.id, token=refresh_token_jwt, expires_in_days=7
-        )
-
-        # Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo
-        # Solo si tenemos user_agent e IP (opcionales en DTO para tests)
+        # Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo PRIMERO
+        # Necesitamos el device_id para asociarlo con el refresh token
+        device_id = None
         if request.user_agent and request.ip_address:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
@@ -203,7 +199,17 @@ class LoginUserUseCase:
                 ip_address=request.ip_address,
             )
             # Registrar dispositivo (crea nuevo o actualiza last_used_at)
-            await self._register_device_use_case.execute(device_request)
+            device_response = await self._register_device_use_case.execute(device_request)
+            # Obtener device_id para asociar con refresh token
+            from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
+            device_id = UserDeviceId.from_string(device_response.device_id)
+
+        # Crear entidad RefreshToken (hashea el JWT antes de guardar)
+        # IMPORTANTE: Asociar con device_id para permitir revocación correcta
+        refresh_token_entity = RefreshToken.create(
+            user_id=user.id, token=refresh_token_jwt, device_id=device_id, expires_in_days=7
+        )
 
         # Persistir usuario + refresh token usando Unit of Work
         async with self._uow:
