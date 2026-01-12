@@ -15,6 +15,7 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 )
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (
     refresh_tokens_table,
@@ -186,3 +187,32 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         result = await self._session.execute(stmt)
         await self._session.flush()
         return (result.rowcount or 0) > 0
+
+    async def revoke_all_for_device(self, device_id: UserDeviceId) -> int:
+        """
+        Revoca todos los refresh tokens de un dispositivo específico.
+
+        Este método es CRÍTICO para cerrar sesiones al revocar un dispositivo.
+        Marca todos los tokens asociados al device_id como revocados.
+
+        Args:
+            device_id: ID del dispositivo cuyos tokens se revocarán
+
+        Returns:
+            Número de tokens revocados
+        """
+        stmt = (
+            update(refresh_tokens_table)
+            .where(
+                refresh_tokens_table.c.device_id == str(device_id.value),
+                refresh_tokens_table.c.revoked == False,  # noqa: E712 - Solo revocar los no revocados
+            )
+            .values(
+                revoked=True,
+                revoked_at=datetime.now(),
+            )
+        )
+
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return result.rowcount or 0

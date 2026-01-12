@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -175,5 +176,34 @@ class RefreshTokenRepositoryInterface(ABC):
 
         Example:
             >>> deleted = await repository.delete(token_id)
+        """
+        pass
+
+    @abstractmethod
+    async def revoke_all_for_device(self, device_id: UserDeviceId) -> int:
+        """
+        Revoca todos los refresh tokens de un dispositivo específico.
+
+        Este método es CRÍTICO para la funcionalidad de revocación de dispositivos.
+        Cuando un usuario revoca un dispositivo, TODOS los refresh tokens asociados
+        a ese dispositivo deben invalidarse para cerrar las sesiones activas.
+
+        Útil para:
+        - Revocar dispositivo → cerrar sesiones del dispositivo
+        - Usuario revoca Safari iOS → Safari iOS se desloguea automáticamente
+        - Compromiso de dispositivo detectado
+
+        Args:
+            device_id: ID del dispositivo cuyos tokens se revocarán
+
+        Returns:
+            Número de tokens revocados
+
+        Example:
+            >>> # Usuario revoca su iPhone desde su Mac
+            >>> device_id = UserDeviceId("550e8400-...")
+            >>> revoked_count = await repository.revoke_all_for_device(device_id)
+            >>> # Todos los refresh tokens del iPhone quedan inválidos
+            >>> # iPhone se desloguea al intentar refrescar el access token
         """
         pass

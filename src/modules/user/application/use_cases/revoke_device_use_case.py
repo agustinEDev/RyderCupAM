@@ -124,7 +124,12 @@ class RevokeDeviceUseCase:
             # El frontend debe mostrar una advertencia visual antes de confirmar
             device.revoke()
 
-            # 5. Determinar si es el dispositivo actual (para info en respuesta)
+            # 5. CRÍTICO: Invalidar TODOS los refresh tokens del dispositivo revocado
+            # Esto cierra las sesiones activas del dispositivo
+            # Sin este paso, el dispositivo permanecería logueado aunque esté revocado
+            tokens_revoked = await self._uow.refresh_tokens.revoke_all_for_device(device_id)
+
+            # 6. Determinar si es el dispositivo actual (para info en respuesta)
             is_current_device = False
             if request.user_agent and request.ip_address:
                 current_fingerprint = DeviceFingerprint.create(
@@ -132,14 +137,14 @@ class RevokeDeviceUseCase:
                 )
                 is_current_device = device.matches_fingerprint(current_fingerprint)
 
-            # 6. Guardar cambios en BD
+            # 7. Guardar cambios en BD
             await self._uow.user_devices.save(device)
             await self._uow.commit()
 
-            # 7. Retornar confirmación
-            message = "Dispositivo revocado exitosamente"
+            # 8. Retornar confirmación
+            message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."
             if is_current_device:
-                message = "Dispositivo actual revocado exitosamente. Tu sesión se cerrará."
+                message = f"Dispositivo actual revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s). Tu sesión se cerrará."
 
             return RevokeDeviceResponseDTO(
                 message=message,
