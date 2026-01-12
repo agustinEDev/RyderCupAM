@@ -20,9 +20,6 @@ from src.modules.user.application.dto.device_dto import (
     RevokeDeviceRequestDTO,
     RevokeDeviceResponseDTO,
 )
-from src.modules.user.domain.exceptions.current_device_revocation_exception import (
-    CurrentDeviceRevocationException,
-)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
