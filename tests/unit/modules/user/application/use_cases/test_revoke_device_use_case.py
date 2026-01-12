@@ -243,3 +243,109 @@ class TestRevokeDeviceUseCase:
         # Assert
         assert list_response.total_count == 1
         assert list_response.devices[0].device_name == "Safari on iOS"
+
+    async def test_revoke_current_device_returns_special_message(self, uow):
+        """
+        Test: Revocar dispositivo actual retorna mensaje especial
+        Given: Dispositivo registrado con user_agent e IP específicos
+        When: Se revoca con el MISMO user_agent e IP (dispositivo actual)
+        Then: Revocación exitosa con mensaje indicando que es el dispositivo actual
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow)
+        user_id = UserId.generate()
+
+        # Contexto HTTP del dispositivo actual
+        current_user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        current_ip = "192.168.1.100"
+
+        # Registrar dispositivo
+        register_response = await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent=current_user_agent,
+                ip_address=current_ip,
+            )
+        )
+
+        # Revocar con el MISMO user_agent e IP (dispositivo actual)
+        request = RevokeDeviceRequestDTO(
+            user_id=str(user_id.value),
+            device_id=register_response.device_id,
+            user_agent=current_user_agent,  # Mismo user_agent
+            ip_address=current_ip,  # Misma IP
+        )
+
+        # Act
+        response = await revoke_use_case.execute(request)
+
+        # Assert
+        assert "dispositivo actual" in response.message.lower()
+        assert "sesión se cerrará" in response.message.lower()
+        assert response.device_id == register_response.device_id
+
+        # Verificar que el dispositivo está inactivo
+        async with uow:
+            device_id_obj = UserDeviceId.from_string(register_response.device_id)
+            device = await uow.user_devices.find_by_id(device_id_obj)
+            assert device.is_active is False
+
+    async def test_revoke_different_device_succeeds_with_context(self, uow):
+        """
+        Test: Revocar dispositivo DIFERENTE al actual es exitoso
+        Given: 2 dispositivos registrados (user_agent + IP diferentes)
+        When: Se revoca dispositivo B desde dispositivo A (con contexto HTTP de A)
+        Then: Dispositivo B queda revocado, dispositivo A permanece activo
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow)
+        user_id = UserId.generate()
+
+        # Dispositivo A (actual - desde donde se hace la revocación)
+        device_a_user_agent = "Mozilla/5.0 (Macintosh) Chrome/120.0"
+        device_a_ip = "192.168.1.100"
+
+        # Dispositivo B (a revocar)
+        device_b_user_agent = "Mozilla/5.0 (iPhone) Safari/604.1"
+        device_b_ip = "192.168.1.101"
+
+        # Registrar dispositivo A (actual)
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent=device_a_user_agent,
+                ip_address=device_a_ip,
+            )
+        )
+
+        # Registrar dispositivo B (a revocar)
+        device_b_response = await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent=device_b_user_agent,
+                ip_address=device_b_ip,
+            )
+        )
+
+        # Revocar dispositivo B DESDE dispositivo A (contexto HTTP de A)
+        request = RevokeDeviceRequestDTO(
+            user_id=str(user_id.value),
+            device_id=device_b_response.device_id,
+            user_agent=device_a_user_agent,  # Contexto de dispositivo A
+            ip_address=device_a_ip,  # Contexto de dispositivo A
+        )
+
+        # Act
+        response = await revoke_use_case.execute(request)
+
+        # Assert
+        assert response.message == "Dispositivo revocado exitosamente"
+        assert response.device_id == device_b_response.device_id
+
+        # Verificar que dispositivo B está inactivo
+        async with uow:
+            device_id_b = UserDeviceId.from_string(device_b_response.device_id)
+            device_b = await uow.user_devices.find_by_id(device_id_b)
+            assert device_b.is_active is False

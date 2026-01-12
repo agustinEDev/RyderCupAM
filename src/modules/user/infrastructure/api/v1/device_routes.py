@@ -18,7 +18,7 @@ Patrón: REST API + Dependency Injection + DTOs
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from src.config.dependencies import (
     get_current_user,
@@ -41,6 +41,58 @@ from src.modules.user.domain.entities.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Security Context Extraction
+# ============================================================================
+
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extrae la dirección IP del cliente del request.
+
+    Prioriza headers de proxy (X-Forwarded-For, X-Real-IP) para detectar
+    IP real detrás de proxies/load balancers.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        Dirección IP del cliente o "unknown" si no se puede determinar
+    """
+    # Prioridad 1: X-Forwarded-For (proxies, load balancers)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
+        # La primera es la IP real del cliente
+        return forwarded_for.split(",")[0].strip()
+
+    # Prioridad 2: X-Real-IP (Nginx, otros proxies)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+
+    # Prioridad 3: client.host (conexión directa)
+    if request.client and request.client.host:
+        return request.client.host
+
+    # Fallback: IP desconocida
+    return "unknown"
+
+
+def get_user_agent(request: Request) -> str:
+    """
+    Extrae el User-Agent del cliente del request.
+
+    Args:
+        request: Request de FastAPI
+
+    Returns:
+        User-Agent del navegador o "unknown" si no está presente
+    """
+    user_agent = request.headers.get("User-Agent")
+    return user_agent if user_agent else "unknown"
 
 
 # ============================================================================
@@ -165,6 +217,7 @@ async def list_user_devices(
     - Lanza evento DeviceRevokedEvent para audit trail
     - NO elimina físicamente el registro
     - Dispositivo revocado NO aparece en listados
+    - **Permite revocar cualquier dispositivo, incluyendo el actual**
 
     **Security:**
     - Requiere autenticación JWT
@@ -177,8 +230,9 @@ async def list_user_devices(
     - Limpiar dispositivos antiguos que ya no usa
 
     **IMPORTANTE:**
-    - NO cierra sesiones activas (solo marca dispositivo como revocado)
-    - Para cerrar sesiones, usar logout endpoint
+    - Si revocas el dispositivo actual, perderás acceso inmediatamente
+    - El frontend debe mostrar advertencia antes de confirmar
+    - Para cerrar sesión controlada, mejor usar logout endpoint
 
     **Example Response:**
     ```json
@@ -192,6 +246,7 @@ async def list_user_devices(
 )
 async def revoke_device(
     device_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     use_case: RevokeDeviceUseCase = Depends(get_revoke_device_use_case),
 ) -> RevokeDeviceResponseDTO:
@@ -241,14 +296,20 @@ async def revoke_device(
         }
     """
     try:
-        # Crear request DTO con user_id y device_id
-        request = RevokeDeviceRequestDTO(
+        # Extraer contexto HTTP del request (user-agent + IP)
+        user_agent = get_user_agent(request)
+        ip_address = get_client_ip(request)
+
+        # Crear request DTO con user_id, device_id y contexto HTTP
+        revoke_request = RevokeDeviceRequestDTO(
             user_id=str(current_user.id),
             device_id=device_id,
+            user_agent=user_agent,
+            ip_address=ip_address,
         )
 
         # Ejecutar use case
-        response = await use_case.execute(request)
+        response = await use_case.execute(revoke_request)
 
         logger.info(f"User {current_user.id} revoked device {device_id}")
 

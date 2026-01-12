@@ -250,6 +250,13 @@ class RevokeDeviceRequestDTO(BaseModel):
     Fields:
         user_id: ID del usuario propietario (validación de autorización)
         device_id: ID del dispositivo a revocar
+        user_agent: User-Agent del request actual (opcional, para validar dispositivo actual)
+        ip_address: IP del request actual (opcional, para validar dispositivo actual)
+
+    Note:
+        Los campos user_agent e ip_address son opcionales para mantener compatibilidad
+        con tests existentes, pero se DEBEN proporcionar en endpoints reales para
+        prevenir auto-revocación del dispositivo actual.
     """
 
     user_id: str = Field(
@@ -261,6 +268,22 @@ class RevokeDeviceRequestDTO(BaseModel):
         ...,
         description="ID del dispositivo a revocar",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
+    )
+    user_agent: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=2000,
+        description="User-Agent del request actual (para prevenir auto-revocación)",
+        json_schema_extra={
+            "example": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        },
+    )
+    ip_address: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=45,
+        description="IP del request actual (para prevenir auto-revocación)",
+        json_schema_extra={"example": "192.168.1.100"},
     )
 
     model_config = ConfigDict(str_strip_whitespace=True)
