@@ -11,6 +11,7 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
     RefreshTokenRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.security.token_hash import hash_token
 
@@ -146,3 +147,20 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
             del self._tokens[token_id_str]
             return True
         return False
+
+    async def revoke_all_for_device(self, device_id: UserDeviceId) -> int:
+        """
+        Revoca todos los refresh tokens asociados a un dispositivo.
+
+        Args:
+            device_id: ID del dispositivo cuyos tokens se revocarán
+
+        Returns:
+            Número de tokens revocados
+        """
+        count = 0
+        for token in self._tokens.values():
+            if token.device_id and token.device_id.value == device_id.value and not token.revoked:
+                token.revoke()
+                count += 1
+        return count

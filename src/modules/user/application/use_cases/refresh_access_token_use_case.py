@@ -146,9 +146,9 @@ class RefreshAccessTokenUseCase:
             # Usuario fue eliminado
             return None
 
-        # 5. Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo
-        # Solo si tenemos user_agent e IP (opcionales en DTO para tests)
-        if request.user_agent and request.ip_address:
+        # 5. Device Fingerprinting (v1.13.0): Actualizar last_used_at del dispositivo
+        # Si el refresh token tiene device_id, actualizamos last_used_at
+        if refresh_token_entity.device_id and request.user_agent and request.ip_address:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
