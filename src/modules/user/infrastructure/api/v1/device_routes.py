@@ -112,6 +112,7 @@ def get_user_agent(request: Request) -> str:
     - Solo dispositivos con is_active=True
     - Ordenados por last_used_at DESC (más recientes primero)
     - Retorna lista vacía si no hay dispositivos
+    - **Campo `is_current_device`** indica el dispositivo actual (v1.13.1)
 
     **Security:**
     - Requiere autenticación JWT (httpOnly cookie)
@@ -121,6 +122,7 @@ def get_user_agent(request: Request) -> str:
     - Permite al usuario revisar qué dispositivos tienen acceso a su cuenta
     - Detectar sesiones sospechosas en dispositivos desconocidos
     - Gestionar dispositivos antes de revocar alguno
+    - **Identificar visualmente el dispositivo actual** (v1.13.1)
 
     **Example Response:**
     ```json
@@ -132,7 +134,8 @@ def get_user_agent(request: Request) -> str:
           "ip_address": "192.168.1.100",
           "last_used_at": "2026-01-09T10:30:00Z",
           "created_at": "2026-01-08T14:20:00Z",
-          "is_active": true
+          "is_active": true,
+          "is_current_device": true
         },
         {
           "id": "8d0f7789-8536-51ef-b827-f18fd2g01bf8",
@@ -140,7 +143,8 @@ def get_user_agent(request: Request) -> str:
           "ip_address": "192.168.1.101",
           "last_used_at": "2026-01-08T16:45:00Z",
           "created_at": "2026-01-07T12:10:00Z",
-          "is_active": true
+          "is_active": true,
+          "is_current_device": false
         }
       ],
       "total_count": 2
@@ -150,6 +154,7 @@ def get_user_agent(request: Request) -> str:
     tags=["Devices"],
 )
 async def list_user_devices(
+    request: Request,
     current_user: User = Depends(get_current_user),
     use_case: ListUserDevicesUseCase = Depends(get_list_user_devices_use_case),
 ) -> ListUserDevicesResponseDTO:
@@ -157,6 +162,7 @@ async def list_user_devices(
     Lista todos los dispositivos activos del usuario autenticado.
 
     Args:
+        request: Request de FastAPI (para extraer User-Agent e IP)
         current_user: Usuario autenticado (extraído del JWT)
         use_case: Use case inyectado por DI
 
@@ -172,6 +178,7 @@ async def list_user_devices(
         GET /api/v1/users/me/devices
         Headers:
           Cookie: access_token=eyJhbGc...
+          User-Agent: Mozilla/5.0...
 
         # Response 200
         {
@@ -186,11 +193,19 @@ async def list_user_devices(
         }
     """
     try:
-        # Crear request DTO con user_id del JWT
-        request = ListUserDevicesRequestDTO(user_id=str(current_user.id))
+        # Extraer contexto HTTP del request (v1.13.1 - para is_current_device)
+        user_agent = get_user_agent(request)
+        ip_address = get_client_ip(request)
+
+        # Crear request DTO con user_id + contexto HTTP
+        request_dto = ListUserDevicesRequestDTO(
+            user_id=str(current_user.id),
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
 
         # Ejecutar use case
-        response = await use_case.execute(request)
+        response = await use_case.execute(request_dto)
 
         logger.info(f"User {current_user.id} listed {response.total_count} active devices")
 

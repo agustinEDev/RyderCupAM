@@ -43,7 +43,11 @@ class TestListUserDevicesUseCase:
         use_case = ListUserDevicesUseCase(uow)
         user_id = UserId.generate()
 
-        request = ListUserDevicesRequestDTO(user_id=str(user_id.value))
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=None,  # Sin contexto HTTP
+            ip_address=None,
+        )
 
         # Act
         response = await use_case.execute(request)
@@ -84,7 +88,11 @@ class TestListUserDevicesUseCase:
             )
         )
 
-        request = ListUserDevicesRequestDTO(user_id=str(user_id.value))
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=None,  # Sin contexto HTTP
+            ip_address=None,
+        )
 
         # Act
         response = await list_use_case.execute(request)
@@ -93,6 +101,8 @@ class TestListUserDevicesUseCase:
         assert response.total_count == 2
         assert len(response.devices) == 2
         assert all(device.is_active for device in response.devices)
+        # v1.13.1: Sin contexto HTTP, todos los dispositivos son is_current_device=False
+        assert all(device.is_current_device is False for device in response.devices)
 
     async def test_list_devices_excludes_revoked_devices(self, uow):
         """
@@ -138,7 +148,11 @@ class TestListUserDevicesUseCase:
             await uow.user_devices.save(device)
             await uow.commit()
 
-        request = ListUserDevicesRequestDTO(user_id=str(user_id.value))
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=None,  # Sin contexto HTTP
+            ip_address=None,
+        )
 
         # Act
         response = await list_use_case.execute(request)
@@ -148,6 +162,8 @@ class TestListUserDevicesUseCase:
         assert len(response.devices) == 1
         # Device name es auto-generado por DeviceFingerprint, no el pasado en el request
         assert response.devices[0].is_active is True
+        # v1.13.1: Sin contexto HTTP, is_current_device=False
+        assert response.devices[0].is_current_device is False
 
     async def test_list_devices_contains_all_required_fields(self, uow):
         """
@@ -170,7 +186,11 @@ class TestListUserDevicesUseCase:
             )
         )
 
-        request = ListUserDevicesRequestDTO(user_id=str(user_id.value))
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=None,  # Sin contexto HTTP
+            ip_address=None,
+        )
 
         # Act
         response = await list_use_case.execute(request)
@@ -183,6 +203,8 @@ class TestListUserDevicesUseCase:
         assert device.last_used_at is not None
         assert device.created_at is not None
         assert device.is_active is True
+        # v1.13.1: Campo nuevo requerido
+        assert device.is_current_device is False
 
     async def test_list_devices_for_different_users_isolated(self, uow):
         """
@@ -225,7 +247,11 @@ class TestListUserDevicesUseCase:
             )
         )
 
-        request = ListUserDevicesRequestDTO(user_id=str(user_id1.value))
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id1.value),
+            user_agent=None,  # Sin contexto HTTP
+            ip_address=None,
+        )
 
         # Act
         response = await list_use_case.execute(request)
@@ -233,3 +259,205 @@ class TestListUserDevicesUseCase:
         # Assert
         assert response.total_count == 1
         assert response.devices[0].device_name == "Chrome on macOS"
+        # v1.13.1: Sin contexto HTTP, is_current_device=False
+        assert response.devices[0].is_current_device is False
+
+    # ===================================================================================
+    # TESTS NUEVOS v1.13.1: is_current_device Detection
+    # ===================================================================================
+
+    async def test_is_current_device_true_when_fingerprint_matches(self, uow):
+        """
+        Test: is_current_device=True cuando el fingerprint coincide
+        Given: Usuario con 1 dispositivo registrado
+        When: Se lista con el MISMO user_agent + ip_address usado al registrarlo
+        Then: El dispositivo tiene is_current_device=True
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        list_use_case = ListUserDevicesUseCase(uow)
+        user_id = UserId.generate()
+
+        # Contexto HTTP específico
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+        ip_address = "192.168.1.100"
+
+        # Registrar dispositivo con estos valores
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent=user_agent,
+                ip_address=ip_address,
+            )
+        )
+
+        # Listar con el MISMO user_agent + ip_address
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=user_agent,  # ← MISMO
+            ip_address=ip_address,  # ← MISMO
+        )
+
+        # Act
+        response = await list_use_case.execute(request)
+
+        # Assert
+        assert response.total_count == 1
+        # ✅ El dispositivo debe estar marcado como actual
+        assert response.devices[0].is_current_device is True
+
+    async def test_is_current_device_false_when_fingerprint_differs(self, uow):
+        """
+        Test: is_current_device=False cuando el fingerprint NO coincide
+        Given: Usuario con 1 dispositivo registrado (Chrome on macOS)
+        When: Se lista con DIFERENTE user_agent + ip_address (Safari on iOS)
+        Then: El dispositivo tiene is_current_device=False
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        list_use_case = ListUserDevicesUseCase(uow)
+        user_id = UserId.generate()
+
+        # Registrar dispositivo 1 (Chrome on macOS)
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0",
+                ip_address="192.168.1.100",
+            )
+        )
+
+        # Listar desde dispositivo 2 (Safari on iOS) - DIFERENTE
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+            ip_address="192.168.1.101",  # ← IP diferente
+        )
+
+        # Act
+        response = await list_use_case.execute(request)
+
+        # Assert
+        assert response.total_count == 1
+        # ❌ El dispositivo NO debe estar marcado como actual (es otro dispositivo)
+        assert response.devices[0].is_current_device is False
+
+    async def test_is_current_device_all_false_without_context(self, uow):
+        """
+        Test: Todos is_current_device=False cuando NO hay contexto HTTP
+        Given: Usuario con 3 dispositivos registrados
+        When: Se lista SIN user_agent + ip_address (None)
+        Then: TODOS los dispositivos tienen is_current_device=False
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        list_use_case = ListUserDevicesUseCase(uow)
+        user_id = UserId.generate()
+
+        # Registrar 3 dispositivos diferentes
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0",
+                ip_address="192.168.1.100",
+            )
+        )
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+                ip_address="192.168.1.101",
+            )
+        )
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0",
+                ip_address="192.168.1.102",
+            )
+        )
+
+        # Listar SIN contexto HTTP
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=None,  # ← SIN contexto
+            ip_address=None,
+        )
+
+        # Act
+        response = await list_use_case.execute(request)
+
+        # Assert
+        assert response.total_count == 3
+        # ❌ TODOS deben ser False (no podemos determinar el actual sin contexto)
+        assert all(device.is_current_device is False for device in response.devices)
+
+    async def test_is_current_device_only_one_true_with_multiple_devices(self, uow):
+        """
+        Test: Solo UN dispositivo es is_current_device=True con múltiples dispositivos
+        Given: Usuario con 4 dispositivos registrados
+        When: Se lista con user_agent + ip_address del dispositivo 2
+        Then: Solo dispositivo 2 tiene is_current_device=True, los demás False
+        """
+        # Arrange
+        register_use_case = RegisterDeviceUseCase(uow)
+        list_use_case = ListUserDevicesUseCase(uow)
+        user_id = UserId.generate()
+
+        # Contexto HTTP del dispositivo 2 (Safari on iOS)
+        current_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1"
+        current_ip_address = "192.168.1.101"
+
+        # Registrar 4 dispositivos diferentes
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0",
+                ip_address="192.168.1.100",
+            )
+        )
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent=current_user_agent,  # ← ESTE es el actual
+                ip_address=current_ip_address,
+            )
+        )
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0",
+                ip_address="192.168.1.102",
+            )
+        )
+        await register_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user_id.value),
+                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/119.0.0.0",
+                ip_address="192.168.1.103",
+            )
+        )
+
+        # Listar desde el dispositivo 2
+        request = ListUserDevicesRequestDTO(
+            user_id=str(user_id.value),
+            user_agent=current_user_agent,
+            ip_address=current_ip_address,
+        )
+
+        # Act
+        response = await list_use_case.execute(request)
+
+        # Assert
+        assert response.total_count == 4
+
+        # Verificar que SOLO uno es True
+        current_devices = [d for d in response.devices if d.is_current_device is True]
+        assert len(current_devices) == 1
+
+        # Verificar que los otros 3 son False
+        other_devices = [d for d in response.devices if d.is_current_device is False]
+        assert len(other_devices) == 3
+
+        # El dispositivo actual debe ser "Safari on iOS"
+        assert current_devices[0].device_name == "Safari on iOS"

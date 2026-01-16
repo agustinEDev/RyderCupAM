@@ -24,6 +24,7 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -103,7 +104,16 @@ class ListUserDevicesUseCase:
             # 2. Buscar todos los dispositivos activos del usuario
             devices = await self._uow.user_devices.find_active_by_user(user_id)
 
-            # 3. Mapear entidades a DTOs
+            # 3. Crear fingerprint del dispositivo actual (si hay contexto HTTP)
+            # v1.13.1: Detectar dispositivo actual para marcar is_current_device
+            current_fingerprint = None
+            if request.user_agent and request.ip_address:
+                current_fingerprint = DeviceFingerprint.create(
+                    user_agent=request.user_agent,
+                    ip_address=request.ip_address,
+                )
+
+            # 4. Mapear entidades a DTOs (con is_current_device calculado)
             device_dtos = [
                 UserDeviceDTO(
                     id=str(device.id.value),
@@ -112,11 +122,16 @@ class ListUserDevicesUseCase:
                     last_used_at=device.last_used_at,
                     created_at=device.created_at,
                     is_active=device.is_active,
+                    is_current_device=(
+                        device.matches_fingerprint(current_fingerprint)
+                        if current_fingerprint
+                        else False
+                    ),
                 )
                 for device in devices
             ]
 
-            # 4. Retornar respuesta con lista + contador
+            # 5. Retornar respuesta con lista + contador
             return ListUserDevicesResponseDTO(
                 devices=device_dtos,
                 total_count=len(device_dtos),
