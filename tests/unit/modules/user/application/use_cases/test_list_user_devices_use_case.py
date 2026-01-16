@@ -279,7 +279,9 @@ class TestListUserDevicesUseCase:
         user_id = UserId.generate()
 
         # Contexto HTTP específico
-        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+        user_agent = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+        )
         ip_address = "192.168.1.100"
 
         # Registrar dispositivo con estos valores
