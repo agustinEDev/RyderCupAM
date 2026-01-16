@@ -45,6 +45,121 @@
 
 ## 🎯 Roadmap Futuro
 
+### v1.13.1 - Bugfix: Current Device Detection 🐛 EN PROGRESO - 1 día
+
+**Objetivo:** Añadir campo `is_current_device` al endpoint de listado de dispositivos para mejorar la UX.
+
+**Estado:** 🟡 En Desarrollo (16 Ene 2026)
+
+**Branch:** `feature/detect-current-device`
+
+---
+
+#### 📋 Tareas de Implementación
+
+| # | Tarea | Archivos | Tiempo | Estado |
+|---|-------|----------|--------|--------|
+| 1 | Añadir campo `is_current_device` a UserDeviceDTO | `device_dto.py` | 5 min | ⏳ Pendiente |
+| 2 | Actualizar ListUserDevicesRequestDTO con contexto HTTP | `device_dto.py` | 5 min | ⏳ Pendiente |
+| 3 | Modificar ListUserDevicesUseCase para calcular dispositivo actual | `list_user_devices_use_case.py` | 15 min | ⏳ Pendiente |
+| 4 | Actualizar endpoint GET /users/me/devices para pasar contexto HTTP | `device_routes.py` | 10 min | ⏳ Pendiente |
+| 5 | Actualizar tests unitarios de ListUserDevicesUseCase | `test_list_user_devices_use_case.py` | 20 min | ⏳ Pendiente |
+| 6 | Actualizar tests de integración del endpoint | `test_device_routes.py` | 15 min | ⏳ Pendiente |
+| 7 | Actualizar documentación API | `docs/API.md` | 5 min | ⏳ Pendiente |
+| 8 | Actualizar Postman collection | `postman_collection.json` | 5 min | ⏳ Pendiente |
+
+**Total:** 8 tareas | ~1.5 horas | 4 archivos modificados
+
+---
+
+#### 🔍 Problema Identificado
+
+El endpoint `GET /api/v1/users/me/devices` retorna una lista de dispositivos del usuario, pero **NO indica cuál es el dispositivo actual** que está usando en este momento.
+
+**Impacto en UX:**
+- El frontend no puede resaltar el dispositivo actual visualmente
+- No puede mostrar advertencia al revocar el dispositivo actual
+- Usuario no puede identificar fácilmente "desde dónde estoy navegando ahora"
+
+**Ejemplo de respuesta actual (SIN `is_current_device`):**
+```json
+{
+  "devices": [
+    {
+      "id": "7c9e6679-...",
+      "device_name": "Chrome on macOS",
+      "ip_address": "192.168.1.100",
+      "last_used_at": "2026-01-09T10:30:00Z",
+      "is_active": true
+      // ❌ Falta: is_current_device
+    }
+  ],
+  "total_count": 1
+}
+```
+
+**Ejemplo de respuesta esperada (CON `is_current_device`):**
+```json
+{
+  "devices": [
+    {
+      "id": "7c9e6679-...",
+      "device_name": "Chrome on macOS",
+      "ip_address": "192.168.1.100",
+      "last_used_at": "2026-01-09T10:30:00Z",
+      "is_active": true,
+      "is_current_device": true  // ✅ NUEVO
+    }
+  ],
+  "total_count": 1
+}
+```
+
+---
+
+#### 💡 Solución Técnica
+
+**Lógica de detección:**
+1. Extraer `user_agent` e `ip_address` del request HTTP en el endpoint
+2. Crear `DeviceFingerprint` con esos valores
+3. Comparar el hash del fingerprint actual con cada dispositivo de la lista
+4. Si `device.fingerprint_hash == current_fingerprint.fingerprint_hash` → `is_current_device = True`
+
+**Reutilización de código:**
+- Usar mismo patrón que `RevokeDeviceUseCase.execute()` líneas 133-138
+- Helpers `get_user_agent()` y `get_client_ip()` ya existen en `device_routes.py`
+- Método `device.matches_fingerprint()` ya existe en la entidad `UserDevice`
+
+---
+
+#### 📊 Tests Esperados
+
+**Tests Unitarios (list_user_devices_use_case):**
+- ✅ Marca `is_current_device=True` cuando el fingerprint coincide
+- ✅ Marca `is_current_device=False` cuando el fingerprint NO coincide
+- ✅ Maneja correctamente cuando NO se pasa contexto HTTP (todos `False`)
+- ✅ Funciona con múltiples dispositivos (solo uno `True`)
+
+**Tests de Integración (device_routes):**
+- ✅ Endpoint retorna `is_current_device=True` para el dispositivo actual
+- ✅ Endpoint retorna `is_current_device=False` para dispositivos diferentes
+
+**Total nuevos tests:** ~6 tests
+
+---
+
+#### 📝 Checklist de Completado
+
+- [ ] 4 archivos modificados
+- [ ] 6 tests nuevos (100% pasando)
+- [ ] Suite completa: 1027/1027 tests (100%)
+- [ ] Documentación actualizada (API.md + Postman)
+- [ ] CI/CD pasando (Ruff + Mypy + Tests)
+- [ ] Commit firmado con GPG
+- [ ] PR creado con descripción clara
+
+---
+
 ### v2.1.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA - 7 semanas
 
 **Objetivo:** Sistema completo de gestión de torneos Ryder Cup: campos de golf, planificación, live scoring con validación dual y leaderboards en tiempo real.
