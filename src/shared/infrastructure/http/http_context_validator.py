@@ -34,8 +34,7 @@ MIN_USER_AGENT_LENGTH = 10
 MAX_USER_AGENT_LENGTH = 500
 
 # Valores sentinel conocidos que deben ser rechazados
-# nosec B104 - Esta es una lista de IPs que RECHAZAMOS, no que usamos para binding
-IP_SENTINEL_VALUES = {"unknown", "0.0.0.0", "127.0.0.1", "::1", "localhost"}
+IP_SENTINEL_VALUES = {"unknown", "0.0.0.0", "127.0.0.1", "::1", "localhost"}  # nosec B104
 USER_AGENT_SENTINEL_VALUES = {"unknown", ""}
 
 
