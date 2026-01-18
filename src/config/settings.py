@@ -67,5 +67,17 @@ class Settings:
     SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
     SENTRY_PROFILES_SAMPLE_RATE: float = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
 
+    # Trusted Proxies Configuration (v1.13.1)
+    # Lista de IPs de proxies/load balancers confiables para prevenir IP spoofing
+    # Formato: Lista separada por comas
+    # - Local: Vacío (no usar headers de proxy)
+    # - Producción: IPs de Render.com load balancers o Nginx
+    # Si está vacío, get_trusted_client_ip() NO confiará en X-Forwarded-For/X-Real-IP
+    TRUSTED_PROXIES: list[str] = [
+        ip.strip()
+        for ip in os.getenv("TRUSTED_PROXIES", "").split(",")
+        if ip.strip()
+    ]
+
 
 settings = Settings()

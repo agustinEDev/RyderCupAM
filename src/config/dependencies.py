@@ -124,6 +124,9 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
 from src.modules.user.domain.entities.user_device import UserDevice
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
+    user_devices_table,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -566,7 +569,7 @@ async def get_current_user(  # noqa: PLR0912
                     .where(UserDevice.fingerprint_hash == current_fingerprint.fingerprint_hash)  # type: ignore[arg-type]
                     # NO filtramos por is_active para encontrar dispositivos revocados
                     # Ordenamos por is_active DESC para que si hay múltiples, tome el activo primero
-                    .order_by(UserDevice.is_active.desc())
+                    .order_by(user_devices_table.c.is_active.desc())
                     .limit(1)
                 )
                 result = await uow._session.execute(statement)

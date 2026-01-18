@@ -6,6 +6,7 @@ from src.config.dependencies import (
     get_update_profile_use_case,
     get_update_security_use_case,
 )
+from src.config.settings import settings
 from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
     FindUserResponseDTO,
@@ -27,51 +28,21 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidCredentialsError,
     UserNotFoundError,
 )
+from src.shared.infrastructure.http.http_context_validator import (
+    get_trusted_client_ip,
+    get_user_agent,
+)
 
 router = APIRouter()
 
 
 # ============================================================================
-# HELPER FUNCTIONS - Security Context Extraction
+# HELPER FUNCTIONS - Removed (v1.13.1)
 # ============================================================================
-
-
-def get_client_ip(request: Request) -> str:
-    """
-    Extrae la dirección IP del cliente del request.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        Dirección IP del cliente o "unknown"
-    """
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    if request.client and request.client.host:
-        return request.client.host
-
-    return "unknown"
-
-
-def get_user_agent(request: Request) -> str:
-    """
-    Extrae el User-Agent del cliente del request.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        User-Agent del navegador o "unknown"
-    """
-    user_agent = request.headers.get("User-Agent")
-    return user_agent if user_agent else "unknown"
+# NOTA: get_client_ip() y get_user_agent() movidas a helper centralizado
+# src/shared/infrastructure/http/http_context_validator.py
+# Ahora se usa get_trusted_client_ip() para prevenir IP spoofing
+# ============================================================================
 
 
 @router.get(
@@ -198,7 +169,8 @@ async def update_security(
     """
     try:
         # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
-        request.ip_address = get_client_ip(http_request)
+        # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+        request.ip_address = get_trusted_client_ip(http_request, settings.TRUSTED_PROXIES)
         request.user_agent = get_user_agent(http_request)
 
         # Ejecutar el caso de uso con el user_id del token JWT

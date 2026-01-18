@@ -25,6 +25,7 @@ from src.config.dependencies import (
     get_list_user_devices_use_case,
     get_revoke_device_use_case,
 )
+from src.config.settings import settings
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
     ListUserDevicesResponseDTO,
@@ -38,65 +39,20 @@ from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.shared.infrastructure.http.http_context_validator import (
+    get_trusted_client_ip,
+    get_user_agent,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 # ============================================================================
-# HELPER FUNCTIONS - Security Context Extraction
-# ============================================================================
-
-
-def get_client_ip(request: Request) -> str:
-    """
-    Extrae la dirección IP del cliente del request.
-
-    Prioriza headers de proxy (X-Forwarded-For, X-Real-IP) para detectar
-    IP real detrás de proxies/load balancers.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        Dirección IP del cliente o "unknown" si no se puede determinar
-    """
-    # Prioridad 1: X-Forwarded-For (proxies, load balancers)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-        # La primera es la IP real del cliente
-        return forwarded_for.split(",")[0].strip()
-
-    # Prioridad 2: X-Real-IP (Nginx, otros proxies)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    # Prioridad 3: client.host (conexión directa)
-    if request.client and request.client.host:
-        return request.client.host
-
-    # Fallback: IP desconocida
-    return "unknown"
-
-
-def get_user_agent(request: Request) -> str:
-    """
-    Extrae el User-Agent del cliente del request.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        User-Agent del navegador o "unknown" si no está presente
-    """
-    user_agent = request.headers.get("User-Agent")
-    return user_agent if user_agent else "unknown"
-
-
-# ============================================================================
 # ENDPOINTS - Device Management
+# ============================================================================
+# NOTA: get_client_ip() y get_user_agent() movidas a helper centralizado
+# src/shared/infrastructure/http/http_context_validator.py (v1.13.1)
 # ============================================================================
 
 
@@ -194,10 +150,14 @@ async def list_user_devices(
     """
     try:
         # Extraer contexto HTTP del request (v1.13.1 - para is_current_device)
+        # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+        # Si TRUSTED_PROXIES está vacío, NO confiará en X-Forwarded-For/X-Real-IP
         user_agent = get_user_agent(request)
-        ip_address = get_client_ip(request)
+        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
 
         # Crear request DTO con user_id + contexto HTTP
+        # NOTA: ip_address puede ser None si es inválida (validate_ip_address aplicado)
+        # El use case manejará None con graceful degradation
         request_dto = ListUserDevicesRequestDTO(
             user_id=str(current_user.id),
             user_agent=user_agent,
@@ -312,10 +272,12 @@ async def revoke_device(
     """
     try:
         # Extraer contexto HTTP del request (user-agent + IP)
+        # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
         user_agent = get_user_agent(request)
-        ip_address = get_client_ip(request)
+        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
 
         # Crear request DTO con user_id, device_id y contexto HTTP
+        # NOTA: ip_address puede ser None si es inválida
         revoke_request = RevokeDeviceRequestDTO(
             user_id=str(current_user.id),
             device_id=device_id,

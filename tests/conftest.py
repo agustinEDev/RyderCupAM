@@ -19,7 +19,17 @@ POSTGRESQL_ASYNC_PREFIX = "postgresql+asyncpg://"
 # --- Configuración Inicial del Entorno de Test ---
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+# IMPORTANTE: Configurar variables de entorno ANTES de importar la aplicación
+# para que settings.py las cargue correctamente
 os.environ["TESTING"] = "true"
+
+# Configuración de seguridad para Device Fingerprinting (v1.13.1)
+# En testing, configuramos una IP "mágica" como proxy confiable
+# que el AsyncClient simulará como su origen. Esto permite que
+# get_trusted_client_ip() confíe en headers X-Forwarded-For del testing.
+# IP ficticia: 127.0.0.1 (localhost)
+os.environ["TRUSTED_PROXIES"] = "127.0.0.1,testclient"
 
 # --- Importaciones de la Aplicación ---
 from main import app as fastapi_app
@@ -423,6 +433,13 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
     Returns:
         Tuple con (client, user_data) donde user_data incluye el token de acceso
     """
+    # Configurar headers HTTP válidos para Device Fingerprinting (v1.13.1)
+    # Sin estos headers, la validación de IP/User-Agent rechazará los valores sentinel
+    client.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TestClient/1.0",
+        "X-Forwarded-For": "203.0.113.100",  # IP pública válida (TEST-NET-3 RFC 5737)
+    })
+
     # Registrar un usuario
     user_data = {
         "email": "testuser@example.com",
