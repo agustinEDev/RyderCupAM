@@ -16,6 +16,8 @@ Llamado desde:
 Patrón: Use Case Pattern + Unit of Work + DTO Mapper
 """
 
+import logging
+
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
     ListUserDevicesResponseDTO,
@@ -24,7 +26,14 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.http.http_context_validator import (
+    validate_ip_address,
+    validate_user_agent,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class ListUserDevicesUseCase:
@@ -103,7 +112,44 @@ class ListUserDevicesUseCase:
             # 2. Buscar todos los dispositivos activos del usuario
             devices = await self._uow.user_devices.find_active_by_user(user_id)
 
-            # 3. Mapear entidades a DTOs
+            # 3. Crear fingerprint del dispositivo actual (si hay contexto HTTP válido)
+            # v1.13.1: Detectar dispositivo actual para marcar is_current_device
+            # Validaciones aplicadas:
+            # - Rechazar valores sentinel (unknown, "", whitespace, 0.0.0.0)
+            # - Validar formato de IP y User-Agent
+            # - Graceful degradation: si falla, current_fingerprint = None
+            current_fingerprint = None
+
+            # Validar user_agent e ip_address ANTES de crear fingerprint
+            validated_user_agent = validate_user_agent(request.user_agent)
+            validated_ip_address = validate_ip_address(request.ip_address)
+
+            if validated_user_agent and validated_ip_address:
+                try:
+                    current_fingerprint = DeviceFingerprint.create(
+                        user_agent=validated_user_agent,
+                        ip_address=validated_ip_address,
+                    )
+                    logger.debug(
+                        f"Current device fingerprint created: {current_fingerprint.device_name}"
+                    )
+                except (ValueError, Exception) as e:
+                    # Graceful degradation: NO fallar el endpoint si no se puede crear fingerprint
+                    # El usuario podrá ver sus dispositivos, solo no se marcará is_current_device
+                    logger.warning(
+                        f"Failed to create device fingerprint for current device: {e}. "
+                        f"UA='{request.user_agent}', IP='{request.ip_address}'"
+                    )
+                    current_fingerprint = None
+            else:
+                # Valores no válidos (sentinel o malformados)
+                logger.debug(
+                    f"Skipping fingerprint creation due to invalid values. "
+                    f"UA valid={validated_user_agent is not None}, "
+                    f"IP valid={validated_ip_address is not None}"
+                )
+
+            # 4. Mapear entidades a DTOs (con is_current_device calculado)
             device_dtos = [
                 UserDeviceDTO(
                     id=str(device.id.value),
@@ -112,11 +158,16 @@ class ListUserDevicesUseCase:
                     last_used_at=device.last_used_at,
                     created_at=device.created_at,
                     is_active=device.is_active,
+                    is_current_device=(
+                        device.matches_fingerprint(current_fingerprint)
+                        if current_fingerprint
+                        else False
+                    ),
                 )
                 for device in devices
             ]
 
-            # 4. Retornar respuesta con lista + contador
+            # 5. Retornar respuesta con lista + contador
             return ListUserDevicesResponseDTO(
                 devices=device_dtos,
                 total_count=len(device_dtos),
