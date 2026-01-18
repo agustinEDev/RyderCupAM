@@ -124,9 +124,6 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
 from src.modules.user.domain.entities.user_device import UserDevice
-from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
-    user_devices_table,
-)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -138,6 +135,9 @@ from src.modules.user.infrastructure.external.rfeg_handicap_service import (
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
+    user_devices_table,
 )
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
