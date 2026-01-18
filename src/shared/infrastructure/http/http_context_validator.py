@@ -24,7 +24,6 @@ Patrones: Defensive Programming + Fail-Safe Defaults
 
 import ipaddress
 import logging
-from typing import Optional
 
 from fastapi import Request
 
@@ -35,11 +34,11 @@ MIN_USER_AGENT_LENGTH = 10
 MAX_USER_AGENT_LENGTH = 500
 
 # Valores sentinel conocidos que deben ser rechazados
-IP_SENTINEL_VALUES = {"unknown", "0.0.0.0", "127.0.0.1", "::1", "localhost"}
+IP_SENTINEL_VALUES = {"unknown", "0.0.0.0", "127.0.0.1", "::1", "localhost"}  # nosec B104
 USER_AGENT_SENTINEL_VALUES = {"unknown", ""}
 
 
-def validate_ip_address(ip: Optional[str]) -> Optional[str]:
+def validate_ip_address(ip: str | None) -> str | None:
     """
     Valida que una dirección IP sea válida y no sea un valor sentinel.
 
@@ -97,11 +96,7 @@ def validate_ip_address(ip: Optional[str]) -> Optional[str]:
         ip_obj = ipaddress.ip_address(ip_clean)
 
         # 4. (Opcional) Rechazar IPs privadas/loopback
-        # Comentado porque en desarrollo local usamos 192.168.x.x
-        # Descomentar en producción si solo esperas IPs públicas
-        # if ip_obj.is_private or ip_obj.is_loopback:
-        #     logger.warning(f"IP validation rejected: private/loopback IP '{ip_clean}'")
-        #     return None
+        # Deshabilitado porque en desarrollo local usamos 192.168.x.x
 
         return str(ip_obj)  # Normalizado por ipaddress
 
@@ -110,7 +105,7 @@ def validate_ip_address(ip: Optional[str]) -> Optional[str]:
         return None
 
 
-def validate_user_agent(user_agent: Optional[str]) -> Optional[str]:
+def validate_user_agent(user_agent: str | None) -> str | None:
     """
     Valida que un User-Agent sea válido y no sea un valor sentinel.
 
@@ -178,9 +173,7 @@ def validate_user_agent(user_agent: Optional[str]) -> Optional[str]:
     return ua_clean
 
 
-def get_trusted_client_ip(
-    request: Request, trusted_proxies: Optional[list[str]] = None
-) -> Optional[str]:
+def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = None) -> str | None:
     """
     Extrae la IP del cliente de forma segura validando headers de proxy.
 
@@ -261,9 +254,7 @@ def get_trusted_client_ip(
         # NO confiar en headers X-Forwarded-For/X-Real-IP
         client_ip = proxy_ip
         if trusted_proxies:
-            logger.warning(
-                f"Untrusted proxy {proxy_ip} sent request, ignoring forwarded headers"
-            )
+            logger.warning(f"Untrusted proxy {proxy_ip} sent request, ignoring forwarded headers")
         else:
             logger.debug(f"No trusted proxies configured, using direct client IP: {client_ip}")
 
@@ -271,7 +262,7 @@ def get_trusted_client_ip(
     return validate_ip_address(client_ip)
 
 
-def get_user_agent(request: Request) -> Optional[str]:
+def get_user_agent(request: Request) -> str | None:
     """
     Extrae el User-Agent del request de forma segura.
 

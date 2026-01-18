@@ -5,6 +5,7 @@ Configuración centralizada de la aplicación usando variables de entorno.
 """
 
 import os
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -73,10 +74,8 @@ class Settings:
     # - Local: Vacío (no usar headers de proxy)
     # - Producción: IPs de Render.com load balancers o Nginx
     # Si está vacío, get_trusted_client_ip() NO confiará en X-Forwarded-For/X-Real-IP
-    TRUSTED_PROXIES: list[str] = [
-        ip.strip()
-        for ip in os.getenv("TRUSTED_PROXIES", "").split(",")
-        if ip.strip()
+    TRUSTED_PROXIES: ClassVar[list[str]] = [
+        ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()
     ]
 
 

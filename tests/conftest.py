@@ -435,10 +435,12 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
     """
     # Configurar headers HTTP válidos para Device Fingerprinting (v1.13.1)
     # Sin estos headers, la validación de IP/User-Agent rechazará los valores sentinel
-    client.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TestClient/1.0",
-        "X-Forwarded-For": "203.0.113.100",  # IP pública válida (TEST-NET-3 RFC 5737)
-    })
+    client.headers.update(
+        {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TestClient/1.0",
+            "X-Forwarded-For": "203.0.113.100",  # IP pública válida (TEST-NET-3 RFC 5737)
+        }
+    )
 
     # Registrar un usuario
     user_data = {
