@@ -16,17 +16,16 @@ Cobertura:
 Patrón: Given-When-Then + Pytest Fixtures
 """
 
-import pytest
 from unittest.mock import Mock
+
 from fastapi import Request
 
 from src.shared.infrastructure.http.http_context_validator import (
-    validate_ip_address,
-    validate_user_agent,
     get_trusted_client_ip,
     get_user_agent,
+    validate_ip_address,
+    validate_user_agent,
 )
-
 
 # ============================================================================
 # TEST SUITE: validate_ip_address()
