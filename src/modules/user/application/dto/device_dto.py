@@ -125,6 +125,7 @@ class UserDeviceDTO(BaseModel):
         last_used_at: Última vez que se usó el dispositivo
         created_at: Fecha de creación del dispositivo
         is_active: Estado del dispositivo (activo/revocado)
+        is_current_device: True si es el dispositivo desde el cual se hace el request (v1.13.1)
     """
 
     id: str = Field(
@@ -157,6 +158,11 @@ class UserDeviceDTO(BaseModel):
         description="Estado del dispositivo (True=activo, False=revocado)",
         json_schema_extra={"example": True},
     )
+    is_current_device: bool = Field(
+        ...,
+        description="True si es el dispositivo actual desde el que se realiza el request (v1.13.1)",
+        json_schema_extra={"example": True},
+    )
 
     model_config = ConfigDict(
         from_attributes=True,  # Permite crear desde entidades ORM
@@ -168,6 +174,7 @@ class UserDeviceDTO(BaseModel):
                 "last_used_at": "2026-01-09T10:30:00Z",
                 "created_at": "2026-01-08T14:20:00Z",
                 "is_active": True,
+                "is_current_device": True,
             }
         },
     )
@@ -179,12 +186,30 @@ class ListUserDevicesRequestDTO(BaseModel):
 
     Fields:
         user_id: ID del usuario (extraído del JWT)
+        user_agent: User-Agent del request HTTP (opcional, para calcular is_current_device) (v1.13.1)
+        ip_address: IP del request HTTP (opcional, para calcular is_current_device) (v1.13.1)
     """
 
     user_id: str = Field(
         ...,
         description="ID del usuario propietario de los dispositivos",
         json_schema_extra={"example": "550e8400-e29b-41d4-a716-446655440000"},
+    )
+    user_agent: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=2000,
+        description="User-Agent del request HTTP para calcular dispositivo actual (v1.13.1)",
+        json_schema_extra={
+            "example": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        },
+    )
+    ip_address: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=45,
+        description="IP del request HTTP para calcular dispositivo actual (v1.13.1)",
+        json_schema_extra={"example": "192.168.1.100"},
     )
 
     model_config = ConfigDict(str_strip_whitespace=True)

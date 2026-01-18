@@ -25,6 +25,7 @@ from src.config.dependencies import (
     get_list_user_devices_use_case,
     get_revoke_device_use_case,
 )
+from src.config.settings import settings
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
     ListUserDevicesResponseDTO,
@@ -38,65 +39,20 @@ from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.shared.infrastructure.http.http_context_validator import (
+    get_trusted_client_ip,
+    get_user_agent,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 # ============================================================================
-# HELPER FUNCTIONS - Security Context Extraction
-# ============================================================================
-
-
-def get_client_ip(request: Request) -> str:
-    """
-    Extrae la dirección IP del cliente del request.
-
-    Prioriza headers de proxy (X-Forwarded-For, X-Real-IP) para detectar
-    IP real detrás de proxies/load balancers.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        Dirección IP del cliente o "unknown" si no se puede determinar
-    """
-    # Prioridad 1: X-Forwarded-For (proxies, load balancers)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-        # La primera es la IP real del cliente
-        return forwarded_for.split(",")[0].strip()
-
-    # Prioridad 2: X-Real-IP (Nginx, otros proxies)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    # Prioridad 3: client.host (conexión directa)
-    if request.client and request.client.host:
-        return request.client.host
-
-    # Fallback: IP desconocida
-    return "unknown"
-
-
-def get_user_agent(request: Request) -> str:
-    """
-    Extrae el User-Agent del cliente del request.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        User-Agent del navegador o "unknown" si no está presente
-    """
-    user_agent = request.headers.get("User-Agent")
-    return user_agent if user_agent else "unknown"
-
-
-# ============================================================================
 # ENDPOINTS - Device Management
+# ============================================================================
+# NOTA: get_client_ip() y get_user_agent() movidas a helper centralizado
+# src/shared/infrastructure/http/http_context_validator.py (v1.13.1)
 # ============================================================================
 
 
@@ -112,6 +68,7 @@ def get_user_agent(request: Request) -> str:
     - Solo dispositivos con is_active=True
     - Ordenados por last_used_at DESC (más recientes primero)
     - Retorna lista vacía si no hay dispositivos
+    - **Campo `is_current_device`** indica el dispositivo actual (v1.13.1)
 
     **Security:**
     - Requiere autenticación JWT (httpOnly cookie)
@@ -121,6 +78,7 @@ def get_user_agent(request: Request) -> str:
     - Permite al usuario revisar qué dispositivos tienen acceso a su cuenta
     - Detectar sesiones sospechosas en dispositivos desconocidos
     - Gestionar dispositivos antes de revocar alguno
+    - **Identificar visualmente el dispositivo actual** (v1.13.1)
 
     **Example Response:**
     ```json
@@ -132,7 +90,8 @@ def get_user_agent(request: Request) -> str:
           "ip_address": "192.168.1.100",
           "last_used_at": "2026-01-09T10:30:00Z",
           "created_at": "2026-01-08T14:20:00Z",
-          "is_active": true
+          "is_active": true,
+          "is_current_device": true
         },
         {
           "id": "8d0f7789-8536-51ef-b827-f18fd2g01bf8",
@@ -140,7 +99,8 @@ def get_user_agent(request: Request) -> str:
           "ip_address": "192.168.1.101",
           "last_used_at": "2026-01-08T16:45:00Z",
           "created_at": "2026-01-07T12:10:00Z",
-          "is_active": true
+          "is_active": true,
+          "is_current_device": false
         }
       ],
       "total_count": 2
@@ -150,6 +110,7 @@ def get_user_agent(request: Request) -> str:
     tags=["Devices"],
 )
 async def list_user_devices(
+    request: Request,
     current_user: User = Depends(get_current_user),
     use_case: ListUserDevicesUseCase = Depends(get_list_user_devices_use_case),
 ) -> ListUserDevicesResponseDTO:
@@ -157,6 +118,7 @@ async def list_user_devices(
     Lista todos los dispositivos activos del usuario autenticado.
 
     Args:
+        request: Request de FastAPI (para extraer User-Agent e IP)
         current_user: Usuario autenticado (extraído del JWT)
         use_case: Use case inyectado por DI
 
@@ -172,6 +134,7 @@ async def list_user_devices(
         GET /api/v1/users/me/devices
         Headers:
           Cookie: access_token=eyJhbGc...
+          User-Agent: Mozilla/5.0...
 
         # Response 200
         {
@@ -186,11 +149,23 @@ async def list_user_devices(
         }
     """
     try:
-        # Crear request DTO con user_id del JWT
-        request = ListUserDevicesRequestDTO(user_id=str(current_user.id))
+        # Extraer contexto HTTP del request (v1.13.1 - para is_current_device)
+        # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+        # Si TRUSTED_PROXIES está vacío, NO confiará en X-Forwarded-For/X-Real-IP
+        user_agent = get_user_agent(request)
+        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+
+        # Crear request DTO con user_id + contexto HTTP
+        # NOTA: ip_address puede ser None si es inválida (validate_ip_address aplicado)
+        # El use case manejará None con graceful degradation
+        request_dto = ListUserDevicesRequestDTO(
+            user_id=str(current_user.id),
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
 
         # Ejecutar use case
-        response = await use_case.execute(request)
+        response = await use_case.execute(request_dto)
 
         logger.info(f"User {current_user.id} listed {response.total_count} active devices")
 
@@ -297,10 +272,12 @@ async def revoke_device(
     """
     try:
         # Extraer contexto HTTP del request (user-agent + IP)
+        # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
         user_agent = get_user_agent(request)
-        ip_address = get_client_ip(request)
+        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
 
         # Crear request DTO con user_id, device_id y contexto HTTP
+        # NOTA: ip_address puede ser None si es inválida
         revoke_request = RevokeDeviceRequestDTO(
             user_id=str(current_user.id),
             device_id=device_id,

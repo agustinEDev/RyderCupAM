@@ -27,6 +27,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
@@ -201,8 +202,6 @@ class LoginUserUseCase:
             # Registrar dispositivo (crea nuevo o actualiza last_used_at)
             device_response = await self._register_device_use_case.execute(device_request)
             # Obtener device_id para asociar con refresh token
-            from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
-
             device_id = UserDeviceId.from_string(device_response.device_id)
 
         # Crear entidad RefreshToken (hashea el JWT antes de guardar)
