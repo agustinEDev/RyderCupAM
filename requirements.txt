@@ -95,8 +95,8 @@ pip-audit==2.10.0
 urllib3==2.6.3
 
 # filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
-# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition)
-filelock==3.20.1
+# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition) y CVE-2026-22701
+filelock==3.20.3
 
 # authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:

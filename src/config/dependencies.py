@@ -1,7 +1,9 @@
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import async_session_maker
@@ -121,10 +123,16 @@ from src.modules.user.application.use_cases.validate_reset_token_use_case import
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
+from src.modules.user.domain.entities.user_device import UserDevice
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
+    user_devices_table,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.external.rfeg_handicap_service import (
     RFEGHandicapService,
 )
@@ -428,7 +436,7 @@ def get_update_security_use_case(
 security = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
+async def get_current_user(  # noqa: PLR0912
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     uow: UserUnitOfWorkInterface = Depends(get_uow),
@@ -525,7 +533,6 @@ async def get_current_user(
     # Device Fingerprinting Security Check (v1.13.0):
     # Verificar que el dispositivo actual NO esté revocado
     # Si el dispositivo fue revocado, el token es inválido aunque técnicamente sea válido
-    import logging
     logger = logging.getLogger(__name__)
 
     user_agent = request.headers.get("User-Agent", "unknown")
@@ -534,22 +541,20 @@ async def get_current_user(
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         ip_address = forwarded_for.split(",")[0].strip()
-    elif request.headers.get("X-Real-IP"):
-        ip_address = request.headers.get("X-Real-IP").strip()
-    elif request.client and request.client.host:
-        ip_address = request.client.host
     else:
-        ip_address = "unknown"
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            ip_address = real_ip.strip()
+        elif request.client and request.client.host:
+            ip_address = request.client.host
+        else:
+            ip_address = "unknown"
 
     if user_agent != "unknown" and ip_address != "unknown":
-        from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
-        from src.modules.user.domain.value_objects.user_id import UserId
-
         try:
             # Crear fingerprint del dispositivo actual
             current_fingerprint = DeviceFingerprint.create(
-                user_agent=user_agent,
-                ip_address=ip_address
+                user_agent=user_agent, ip_address=ip_address
             )
 
             # Buscar dispositivo por fingerprint (usando nueva transacción)
@@ -558,16 +563,13 @@ async def get_current_user(
             user_id_vo = UserId(user_id_str)
             async with uow:
                 # Query directo sin filtrar por is_active
-                from sqlalchemy import select
-                from src.modules.user.domain.entities.user_device import UserDevice
-
                 statement = (
                     select(UserDevice)
-                    .where(UserDevice._user_id == user_id_vo)
-                    .where(UserDevice._fingerprint_hash == current_fingerprint.fingerprint_hash)
+                    .where(UserDevice.user_id == user_id_vo)  # type: ignore[arg-type]
+                    .where(UserDevice.fingerprint_hash == current_fingerprint.fingerprint_hash)  # type: ignore[arg-type]
                     # NO filtramos por is_active para encontrar dispositivos revocados
                     # Ordenamos por is_active DESC para que si hay múltiples, tome el activo primero
-                    .order_by(UserDevice._is_active.desc())
+                    .order_by(user_devices_table.c.is_active.desc())
                     .limit(1)
                 )
                 result = await uow._session.execute(statement)
@@ -575,7 +577,9 @@ async def get_current_user(
 
                 # Si el dispositivo existe pero está revocado, denegar acceso
                 if device and not device.is_active:
-                    logger.warning(f"Access denied: Revoked device {device.id} attempted access for user {user_id_str}")
+                    logger.warning(
+                        f"Access denied: Revoked device {device.id} attempted access for user {user_id_str}"
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
@@ -587,7 +591,9 @@ async def get_current_user(
         except Exception as e:
             # Si hay error al crear fingerprint o consultar BD, continuar (no bloquear por errores técnicos)
             # Esto previene que un error en device fingerprinting bloquee a todos los usuarios
-            logger.error(f"Error during device validation for user {user_id_str}: {type(e).__name__}: {e}")
+            logger.error(
+                f"Error during device validation for user {user_id_str}: {type(e).__name__}: {e}"
+            )
             pass
 
     return user

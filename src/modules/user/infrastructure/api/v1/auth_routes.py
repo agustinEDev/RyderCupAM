@@ -19,6 +19,7 @@ from src.config.dependencies import (
     security,
 )
 from src.config.rate_limit import limiter
+from src.config.settings import settings
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
@@ -70,6 +71,10 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountLockedException
+from src.shared.infrastructure.http.http_context_validator import (
+    get_trusted_client_ip,
+    get_user_agent,
+)
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
@@ -90,55 +95,12 @@ router = APIRouter()
 
 
 # ============================================================================
-# HELPER FUNCTIONS - Security Context Extraction
+# HELPER FUNCTIONS - Removed (v1.13.1)
 # ============================================================================
-
-
-def get_client_ip(request: Request) -> str:
-    """
-    Extrae la dirección IP del cliente del request.
-
-    Prioriza headers de proxy (X-Forwarded-For, X-Real-IP) para detectar
-    IP real detrás de proxies/load balancers.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        Dirección IP del cliente o "unknown" si no se puede determinar
-    """
-    # Prioridad 1: X-Forwarded-For (proxies, load balancers)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-        # La primera es la IP real del cliente
-        return forwarded_for.split(",")[0].strip()
-
-    # Prioridad 2: X-Real-IP (Nginx, otros proxies)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    # Prioridad 3: client.host (conexión directa)
-    if request.client and request.client.host:
-        return request.client.host
-
-    # Fallback: IP desconocida
-    return "unknown"
-
-
-def get_user_agent(request: Request) -> str:
-    """
-    Extrae el User-Agent del cliente del request.
-
-    Args:
-        request: Request de FastAPI
-
-    Returns:
-        User-Agent del navegador o "unknown" si no está presente
-    """
-    user_agent = request.headers.get("User-Agent")
-    return user_agent if user_agent else "unknown"
+# NOTA: get_client_ip() y get_user_agent() movidas a helper centralizado
+# src/shared/infrastructure/http/http_context_validator.py
+# Ahora se usa get_trusted_client_ip() para prevenir IP spoofing
+# ============================================================================
 
 
 @router.post(
@@ -231,7 +193,8 @@ async def login_user(
         HTTPException 401: Si las credenciales son incorrectas
     """
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
-    login_data.ip_address = get_client_ip(request)
+    # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    login_data.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
     login_data.user_agent = get_user_agent(request)
 
     try:
@@ -361,7 +324,8 @@ async def logout_user(
         )
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
-    logout_request.ip_address = get_client_ip(request)
+    # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    logout_request.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
     logout_request.user_agent = get_user_agent(request)
 
     logout_response = await use_case.execute(logout_request, user_id, token)
@@ -447,8 +411,10 @@ async def refresh_access_token(
         )
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
+    # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
     refresh_request = RefreshAccessTokenRequestDTO(
-        ip_address=get_client_ip(request), user_agent=get_user_agent(request)
+        ip_address=get_trusted_client_ip(request, settings.TRUSTED_PROXIES),
+        user_agent=get_user_agent(request),
     )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 
@@ -701,7 +667,8 @@ async def forgot_password(
         - Timing attack prevention con delay artificial
     """
     # Extraer contexto de seguridad
-    ip_address = get_client_ip(request)
+    # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO
@@ -771,7 +738,8 @@ async def reset_password(
         - Email de confirmación enviado
     """
     # Extraer contexto de seguridad
-    ip_address = get_client_ip(request)
+    # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO
