@@ -3,7 +3,7 @@
 **Date**: January 27, 2026
 **Status**: Accepted
 **Decision Makers**: Development Team
-**Sprint**: v2.1.0 - Sprint 4 (Scoring System)
+**Sprint**: v2.0.0 - Sprint 4 (Scoring System)
 
 ## Context and Problem
 
@@ -148,9 +148,9 @@ def format_standing(a_won: int, b_won: int, holes_played: int) -> str:
 ## References
 
 - **R&A Rules of Golf**: Rule 3.2 (Match Play)
-- **ADR-025**: Competition Module Evolution v2.1.0
+- **ADR-025**: Competition Module Evolution v2.0.0
 - **ADR-026**: Playing Handicap WHS Calculation (strokes received algorithm)
-- **ROADMAP.md**: v2.1.0 Sprint 4 (Scoring System)
+- **ROADMAP.md**: v2.0.0 Sprint 4 (Scoring System)
 
 ---
 **Lines**: 98 | **Immutable after acceptance**

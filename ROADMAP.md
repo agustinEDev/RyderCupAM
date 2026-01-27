@@ -21,11 +21,13 @@
 
 ## 🎯 Roadmap Futuro
 
-### v2.1.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA
+### v2.0.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA
 
 **Fechas:** 27 Ene - 17 Mar 2026 (7 semanas) | **Esfuerzo:** 330h | **Tests:** 75+ | **Endpoints:** 30
 
 **Objetivo:** Sistema completo de gestión de torneos Ryder Cup con campos de golf, planificación, live scoring con validación dual y leaderboards en tiempo real.
+
+**Nota:** Major version bump por magnitud del cambio (30 endpoints, 14 entidades, 7 semanas desarrollo)
 
 ---
 
@@ -274,7 +276,7 @@ class LeaderboardResponse(BaseModel):
 
 **Existentes:**
 - **ADR-020:** Competition Module Domain Design (v1.x baseline)
-- **ADR-025:** Competition Module Evolution v2.1.0 (umbrella ADR - 9 Ene 2026)
+- **ADR-025:** Competition Module Evolution v2.0.0 (umbrella ADR - 9 Ene 2026)
 - **ADR-026:** Playing Handicap WHS Calculation (9 Ene 2026)
 
 **Nuevos (Sprint 1):**
@@ -284,7 +286,7 @@ class LeaderboardResponse(BaseModel):
 
 ---
 
-### v1.14.0 - Compliance & Features (2-3 semanas)
+### v2.1.0 - Compliance & Features (2-3 semanas)
 
 **Objetivo:** GDPR compliance + UX improvements
 
@@ -312,7 +314,7 @@ class LeaderboardResponse(BaseModel):
 
 ---
 
-### v1.15.0 - AI & RAG Module (2-3 semanas)
+### v2.2.0 - AI & RAG Module (2-3 semanas)
 
 **Objetivo:** Chatbot asistente de reglas de golf
 
@@ -345,7 +347,7 @@ src/modules/ai/
 
 ---
 
-### v2.0.0 - Major Release (BREAKING CHANGES) (4-6 meses)
+### v3.0.0 - Major Release (BREAKING CHANGES) (4-6 meses)
 
 **Objetivo:** Escalabilidad + Features avanzadas
 
@@ -383,12 +385,12 @@ src/modules/ai/
 ```
 2026 Q1  │ ✅ v1.13.0 - Security Hardening (COMPLETADO)
           │ ✅ v1.13.1 - Device Detection + HTTP Security (COMPLETADO)
-          │ ⭐ v2.1.0 - Competition Module Evolution (27 Ene - 17 Mar) ← EN CURSO
-2026 Q2  │ v1.14.0 - Compliance (GDPR, Audit Logging, Avatares)
-          │ v1.15.0 - AI & RAG Module (Golf Rules Assistant)
+          │ ⭐ v2.0.0 - Competition Module Evolution (27 Ene - 17 Mar) ← EN CURSO
+2026 Q2  │ v2.1.0 - Compliance (GDPR, Audit Logging, Avatares)
+          │ v2.2.0 - AI & RAG Module (Golf Rules Assistant)
 2026 Q3  │ v2.1.1 - WebSocket, Puntos custom
           │ v2.1.2 - Stats avanzadas, Export PDF
-2026 Q4+ │ v2.0.0 - Major Release (planificación + desarrollo)
+2026 Q4+ │ v3.0.0 - Major Release (planificación + desarrollo)
 ```
 
 ---
@@ -408,9 +410,9 @@ src/modules/ai/
 - **WHS:** https://www.usga.org/handicapping.html
 - **R&A Rules:** https://www.randa.org/en/rog/the-rules-of-golf
 
-**ADRs Clave v2.1.0:**
+**ADRs Clave v2.0.0:**
 - ADR-020: Competition Module Domain Design (baseline)
-- ADR-025: Competition Module Evolution v2.1.0 (umbrella)
+- ADR-025: Competition Module Evolution v2.0.0 (umbrella)
 - ADR-026: Playing Handicap WHS Calculation
 - ADR-031: Match Play Scoring Calculation
 - ADR-032: Golf Course Approval Workflow Details
@@ -486,5 +488,5 @@ src/modules/ai/
 
 ---
 
-**Próxima Revisión:** v2.1.0 Sprint 1 (31 Ene 2026)
+**Próxima Revisión:** v2.0.0 Sprint 1 (31 Ene 2026)
 **Responsable:** Equipo Backend

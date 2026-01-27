@@ -3,7 +3,7 @@
 **Date**: January 27, 2026
 **Status**: Accepted
 **Decision Makers**: Development Team
-**Sprint**: v2.1.0 - Sprint 3 (Invitations System)
+**Sprint**: v2.0.0 - Sprint 3 (Invitations System)
 
 ## Context and Problem
 
@@ -204,8 +204,8 @@ def expire_old_invitations():
 ## References
 
 - **ADR-024**: Password Reset Security (similar token generation pattern)
-- **ADR-025**: Competition Module Evolution v2.1.0 (mentions invitations briefly)
-- **ROADMAP.md**: v2.1.0 Sprint 3 (Invitations System)
+- **ADR-025**: Competition Module Evolution v2.0.0 (mentions invitations briefly)
+- **ROADMAP.md**: v2.0.0 Sprint 3 (Invitations System)
 - **Similar pattern**: GitHub organization invitations
 
 ---

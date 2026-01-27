@@ -3,7 +3,7 @@
 **Date**: January 27, 2026
 **Status**: Accepted
 **Decision Makers**: Development Team
-**Sprint**: v2.1.0 - Sprint 1 (Golf Courses)
+**Sprint**: v2.0.0 - Sprint 1 (Golf Courses)
 
 ## Context and Problem
 
@@ -163,8 +163,8 @@ CHECK (LENGTH(holes) = 18)
 
 ## References
 
-- **ADR-025**: Competition Module Evolution v2.1.0 (mentions approval briefly)
-- **ROADMAP.md**: v2.1.0 Sprint 1 (Golf Courses endpoints)
+- **ADR-025**: Competition Module Evolution v2.0.0 (mentions approval briefly)
+- **ROADMAP.md**: v2.0.0 Sprint 1 (Golf Courses endpoints)
 - **Similar workflow**: GitHub PR approval (request → review → approve/reject)
 
 ---

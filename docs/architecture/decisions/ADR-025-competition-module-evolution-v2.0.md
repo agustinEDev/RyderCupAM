@@ -1,4 +1,4 @@
-# ADR-025: Competition Module Evolution - v2.1.0
+# ADR-025: Competition Module Evolution - v2.0.0
 
 **Date**: January 9, 2026
 **Status**: Accepted
@@ -119,5 +119,5 @@ class Invitation:
 
 ## References
 
-- **ROADMAP.md**: v2.1.0 implementation details
+- **ROADMAP.md**: v2.0.0 implementation details
 - **ADR-026**: Playing Handicap WHS Calculation
