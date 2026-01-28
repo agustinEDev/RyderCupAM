@@ -83,6 +83,7 @@ class User:
         reset_token_expires_at: datetime | None = None,
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
+        is_admin: bool = False,
         domain_events: list[DomainEvent] | None = None,
     ):
         self.id = id
@@ -101,6 +102,7 @@ class User:
         self.reset_token_expires_at = reset_token_expires_at
         self.failed_login_attempts = failed_login_attempts
         self.locked_until = locked_until
+        self.is_admin = is_admin
         self._domain_events = domain_events or []
 
     def get_full_name(self) -> str:
@@ -119,6 +121,15 @@ class User:
             and self.last_name.strip() != ""
             and self.password is not None
         )
+
+    def is_system_admin(self) -> bool:
+        """
+        Verifica si el usuario tiene privilegios de administrador del sistema.
+
+        Returns:
+            bool: True si el usuario es administrador, False en caso contrario
+        """
+        return self.is_admin
 
     def verify_password(self, plain_password: str) -> bool:
         """Verifica si el password plano coincide con el hasheado."""
@@ -172,6 +183,7 @@ class User:
         email_str: str,
         plain_password: str,
         country_code_str: str | None = None,
+        is_admin: bool = False,
     ) -> "User":
         """
         Factory method para crear usuario con Value Objects.
@@ -182,6 +194,7 @@ class User:
             email_str: Email en formato string
             plain_password: Password en texto plano
             country_code_str: Código ISO del país (opcional, ej: "ES", "FR")
+            is_admin: Si el usuario tiene privilegios de administrador (default: False)
 
         Returns:
             User: Nueva instancia con ID generado y Value Objects
@@ -204,6 +217,7 @@ class User:
             created_at=datetime.now(),
             updated_at=datetime.now(),
             country_code=country_code,
+            is_admin=is_admin,
         )
 
         # Generar evento de registro

@@ -1,12 +1,19 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
+    get_competition_uow,
     get_current_user,
     get_find_user_use_case,
     get_update_profile_use_case,
     get_update_security_use_case,
 )
 from src.config.settings import settings
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
     FindUserResponseDTO,
@@ -15,6 +22,13 @@ from src.modules.user.application.dto.user_dto import (
     UpdateSecurityRequestDTO,
     UpdateSecurityResponseDTO,
     UserResponseDTO,
+    UserRolesResponseDTO,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.security.authorization import (
+    is_admin,
+    is_creator_of,
+    is_player_in,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.update_profile_use_case import (
@@ -197,4 +211,79 @@ async def update_security(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/me/roles/{competition_id}",
+    response_model=UserRolesResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Consultar roles del usuario en una competición",
+    description="Retorna los roles del usuario actual en una competición específica (admin, creator, player).",
+    tags=["Users"],
+)
+async def get_my_roles_in_competition(
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+):
+    """
+    Endpoint para consultar los roles del usuario actual en una competición.
+
+    **Roles retornados:**
+    - `is_admin`: Usuario es administrador del sistema (rol global)
+    - `is_creator`: Usuario creó esta competición (rol contextual)
+    - `is_player`: Usuario está enrollado con status APPROVED (rol contextual)
+
+    **Casos de uso (Frontend):**
+    - Mostrar/ocultar botón "Editar Competición" (solo creator o admin)
+    - Mostrar/ocultar botón "Gestionar Inscripciones" (solo creator o admin)
+    - Mostrar/ocultar botón "Anotar Scores" (solo players)
+    - Mostrar badge "Admin" o "Creator" en UI
+
+    **Seguridad:**
+    - Solo el usuario autenticado puede consultar sus propios roles
+    - La autorización real se valida en backend (este endpoint es solo para UX)
+
+    **Returns:**
+    - Objeto con flags de roles (is_admin, is_creator, is_player)
+    """
+    try:
+        competition_vo_id = CompetitionId(competition_id)
+        user_vo_id = UserId(str(current_user.id))
+
+        # Obtener la competición para validar que existe y verificar creator
+        async with uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+
+            if not competition:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Competition with id {competition_id} not found",
+                )
+
+            # Verificar roles usando authorization helpers
+            user_is_admin = is_admin(current_user)
+            user_is_creator = is_creator_of(current_user, competition)
+            user_is_player = await is_player_in(user_vo_id, competition_vo_id, uow)
+
+            return UserRolesResponseDTO(
+                is_admin=user_is_admin,
+                is_creator=user_is_creator,
+                is_player=user_is_player,
+                competition_id=str(competition_id),
+            )
+
+    except HTTPException:
+        # Re-raise HTTPExceptions (404, etc.)
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid competition ID format: {str(e)}",
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}",
         ) from e
