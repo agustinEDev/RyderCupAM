@@ -10,8 +10,8 @@ from datetime import date, timedelta
 import pytest
 
 from src.modules.competition.domain.services.competition_policy import (
-    MAX_COMPETITIONS_PER_CREATOR,
     MAX_COMPETITION_DURATION_DAYS,
+    MAX_COMPETITIONS_PER_CREATOR,
     MAX_ENROLLMENTS_PER_USER,
     CompetitionPolicy,
 )
@@ -21,7 +21,6 @@ from src.modules.competition.domain.value_objects.competition_status import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
-
 
 # ======================================================================================
 # TESTS: can_create_competition
@@ -379,5 +378,3 @@ def test_validate_date_range_allows_when_duration_at_limit():
 
     # Should not raise
     CompetitionPolicy.validate_date_range(start_date, end_date, "Test")
-
-

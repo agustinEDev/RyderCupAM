@@ -14,13 +14,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import (
-    CompetitionStatus,
-)
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.enrollment_status import (
-    EnrollmentStatus,
-)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
 

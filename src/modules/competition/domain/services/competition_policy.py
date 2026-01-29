@@ -22,7 +22,6 @@ MAX_ENROLLMENTS_PER_USER = 20
 
 # Límites de duración
 MAX_COMPETITION_DURATION_DAYS = 365
-MIN_DAYS_BEFORE_START = 1  # Al menos 1 día de anticipación
 
 
 class CompetitionPolicy:
@@ -42,12 +41,12 @@ class CompetitionPolicy:
     """
 
     @staticmethod
-    def can_create_competition(creator_id: UserId, existing_count: int) -> None:
+    def can_create_competition(_creator_id: UserId, existing_count: int) -> None:
         """
         Valida si un usuario puede crear una nueva competición.
 
         Args:
-            creator_id: ID del usuario que quiere crear la competición
+            _creator_id: ID del usuario que quiere crear la competición (context only)
             existing_count: Número de competiciones activas del usuario
 
         Raises:
@@ -120,8 +119,7 @@ class CompetitionPolicy:
         # 4. Validar restricción temporal (competición no debe haber empezado)
         if datetime.now().date() >= competition_start_date:
             raise BusinessRuleViolation(
-                f"Competition starts on {competition_start_date}. "
-                "Cannot enroll after start date."
+                f"Competition starts on {competition_start_date}. Cannot enroll after start date."
             )
 
     @staticmethod
@@ -151,9 +149,7 @@ class CompetitionPolicy:
             )
 
     @staticmethod
-    def validate_date_range(
-        start_date: date, end_date: date, competition_name: str
-    ) -> None:
+    def validate_date_range(start_date: date, end_date: date, competition_name: str) -> None:
         """
         Valida que el rango de fechas sea razonable.
 
@@ -188,7 +184,3 @@ class CompetitionPolicy:
                 f"Competition '{competition_name}': Duration ({duration_days} days) "
                 f"exceeds maximum allowed ({MAX_COMPETITION_DURATION_DAYS} days)."
             )
-
-
-# Import necesario para timedelta (al final para evitar import circular)
-from datetime import timedelta

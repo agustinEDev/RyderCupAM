@@ -9,9 +9,13 @@ OWASP Coverage:
 """
 
 
-class BusinessRuleViolation(Exception):
+class BusinessRuleViolation(Exception):  # noqa: N818
     """
     Excepción lanzada cuando se viola una regla de negocio.
+
+    Note:
+        El nombre NO termina en "Error" intencionalmente (convención DDD).
+        Las violaciones de reglas de negocio son eventos del dominio, no errores técnicos.
 
     Diferencia con otras excepciones:
     - ValueError: Validación de formato/tipo
