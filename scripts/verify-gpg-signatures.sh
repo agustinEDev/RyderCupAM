@@ -105,15 +105,26 @@ while IFS= read -r commit; do
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
+    # Check if this is a GitHub-generated merge (auto-merge)
+    IS_GITHUB_MERGE=false
     if [ "$PARENT_COUNT" -ge 2 ]; then
-        # Merge commit - GitHub PR merges cannot be signed by user, allow without signature
+        MERGE_COUNT=$((MERGE_COUNT + 1))
+        # Detect GitHub auto-merges by author/email or commit message
+        if echo "$COMMIT_AUTHOR" | grep -iq "GitHub" || \
+           echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
+           (echo "$COMMIT_MSG" | grep -q "Merge pull request" && echo "$COMMIT_EMAIL" | grep -iq "github"); then
+            IS_GITHUB_MERGE=true
+        fi
+    fi
+
+    if [ "$IS_GITHUB_MERGE" = true ]; then
+        # GitHub auto-merge - signature not required
         echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
-        echo "   Type: MERGE COMMIT (signature not required)"
-        MERGE_COUNT=$((MERGE_COUNT + 1))
+        echo "   Type: GITHUB AUTO-MERGE (signature not required)"
         VALID_COUNT=$((VALID_COUNT + 1))
     else
-        # Regular commit - verify signature
+        # Regular commit or manual merge - verify signature
         SIG_STATUS=$(git verify-commit "$commit" 2>&1 || true)
 
         if echo "$SIG_STATUS" | grep -q "Good signature"; then

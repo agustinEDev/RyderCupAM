@@ -21,13 +21,13 @@
 
 ## 🎯 Future Roadmap
 
-### v2.0.0 - Competition Module Evolution ⭐ TOP PRIORITY
+### v2.0.1 - Competition Module Evolution ⭐ TOP PRIORITY
 
 **Dates:** Jan 27 - Mar 17, 2026 (7 weeks) | **Effort:** 330h | **Tests:** 75+ | **Endpoints:** 30
 
 **Goal:** Complete Ryder Cup tournament management system with golf courses, scheduling, live scoring with dual validation, and real-time leaderboards.
 
-**Note:** Major version bump due to the scale of the changes (30 endpoints, 12 entities, 7 weeks development).
+**Note:** Minor version bump (v2.0.0 was RBAC Foundation). Major changes: 30 endpoints, 12 entities, 7 weeks development.
 
 ---
 
@@ -36,10 +36,10 @@
 | Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
 |--------|-------|-------|-----------|-------|------------|
 | **Sprint 1** | Jan 27 - Feb 6 | 60h | 7 (RBAC + Golf Courses) | 25+ | 🔄 Fri, Jan 31 |
-| **Sprint 2** | Feb 7 - Feb 17 | 70h | 10 (Rounds + Matches) | 18+ | 🔄 Fri, Feb 14 |
-| **Sprint 3** | Feb 18 - Feb 24 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 21 |
-| **Sprint 4** | Feb 25 - Mar 10 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 7 |
-| **Sprint 5** | Mar 11 - Mar 17 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 14 |
+| **Sprint 2** | Feb 7 - Feb 17 | 70h | 10 (Rounds + Matches) | 18+ | 🔄 Fri, Feb 13 |
+| **Sprint 3** | Feb 18 - Feb 24 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 20 |
+| **Sprint 4** | Feb 25 - Mar 10 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 6 |
+| **Sprint 5** | Mar 11 - Mar 17 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 13 |
 
 ---
 

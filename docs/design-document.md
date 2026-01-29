@@ -54,56 +54,66 @@ Domain (Entities, VOs, Events, Repos)
 
 ### Implemented Protections
 
-**A01: Broken Access Control (10/10)**
+#### A01: Broken Access Control (10/10)
+
 - JWT authentication with HS256 (SECRET_KEY from environment)
 - Device fingerprinting (User-Agent + IP)
 - Refresh token rotation (7d lifetime, SHA256 hashed in DB)
 - IP spoofing prevention (trusted proxy validation)
 - httpOnly cookies (primary) + Authorization header (legacy support)
 
-**A02: Cryptographic Failures (9.9/10)**
+#### A02: Cryptographic Failures (9.9/10)
+
 - HTTPS enforced (HSTS headers)
 - Bcrypt password hashing (12 rounds, ~200ms)
 - Secure session management
 
-**A03: Injection (10/10)**
+#### A03: Injection (10/10)
+
 - SQLAlchemy ORM (parameterized queries)
 - Input validation (Pydantic)
 - HTTP context validation (sentinel rejection)
 
-**A04: Insecure Design (9.5/10)**
+#### A04: Insecure Design (9.5/10)
+
 - Clean Architecture (layered security)
 - Domain validation (Value Objects)
 - Business logic guards (CompetitionPolicy)
 - Threat modeling (STRIDE analysis for 5 flows)
 
-**A05: Security Misconfiguration (9.5/10)**
+#### A05: Security Misconfiguration (9.5/10)
+
 - Secure HTTP headers (CSP, X-Frame-Options, etc.)
 - CORS configuration (whitelist origins)
 - Environment-based settings
 
-**A06: Vulnerable Components (9.8/10)**
+#### A06: Vulnerable Components (9.8/10)
+
 - Dependency scanning (pip-audit)
 - Regular updates (requirements.txt)
 
-**A07: Identification Failures (9.9/10)**
+#### A07: Identification Failures (9.9/10)
+
 - Password policy (12+ chars, complexity, history)
 - Account lockout (10 failed attempts, 30min)
 - Password reset flow (secure tokens)
 - Device tracking
 
-**A08: Software Integrity Failures (9.5/10)**
+#### A08: Software Integrity Failures (9.5/10)
+
 - SBOM generation (CycloneDX format, 160 components tracked)
 - Dependency lock with SHA256 hashes (prevents substitution attacks)
 - CI/CD supply chain validation (automated SBOM + integrity checks)
 - Git-based deployment + Docker image verification (Trivy)
 
-**A09: Security Logging Failures (9.0/10)**
+#### A09: Security Logging Failures (9.0/10)
+
 - Audit logging (login, logout, security events)
 - Sentry integration (error tracking)
 - Correlation IDs
 
-**A10: SSRF (9.5/10)**
+#### A10: SSRF (9.5/10)
+
 - URL validation
 - External service whitelisting
 
@@ -389,9 +399,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `destroy-cluster.sh` - Cluster teardown
 
 **Access**:
-- Backend: http://localhost:8000 (API docs)
-- Frontend: http://localhost:8080
-- PostgreSQL: localhost:5434 (external tools)
+- Backend: <http://localhost:8000> (API docs)
+- Frontend: <http://localhost:8080>
+- PostgreSQL: `localhost:5434` (external tools)
 
 **Features**:
 - Automatic port mapping (no manual port-forward needed)

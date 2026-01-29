@@ -15,20 +15,20 @@ Automated pipeline that runs on **every push** and **pull request**.
 
 ## Pipeline Jobs
 
-| Job                     | What It Does                            | Time  | When Fails                                        |
-| ----------------------- | --------------------------------------- | ----- | ------------------------------------------------- |
-| 🔧 **Preparation**      | Setup Python + cache dependencies       | ~30s  | Check `requirements.txt`                          |
-| 🧪 **Unit Tests**       | 879 tests (Python 3.11/3.12)            | ~45s  | Run locally: `pytest tests/unit/`                 |
-| 🗄️ **Integration Tests** | 72 tests + PostgreSQL                   | ~60s  | Check migrations: `alembic upgrade head`          |
-| 🔐 **Security Tests**   | 45+ tests (CSRF, XSS, SQLi)             | ~50s  | Fix security vulnerability                        |
-| 🔒 **Security Checks**  | Bandit, Safety, pip-audit, Gitleaks     | ~40s  | Update vulnerable dependency                      |
-| 📝 **Linting**          | Ruff code quality                       | ~20s  | Run: `ruff format src/ tests/`                    |
-| 🔬 **Type Checking**    | Mypy static analysis                    | ~25s  | Add type hints                                    |
-| 🐳 **Build & Scan**     | Docker build + Trivy scan               | ~90s  | Check `Dockerfile` or base image                  |
-| 🐍 **Snyk Scan**        | SCA + SAST security                     | ~40s  | Review Snyk report in Artifacts                   |
-| 📦 **SBOM Generation**  | Software Bill of Materials              | ~35s  | Only runs on `main`/`develop`/`release/*`         |
-| 🔏 **GPG Verification** | Verify all commits signed               | ~15s  | Sign commits: `git commit --amend -S`             |
-| 📊 **Summary**          | Final report                            | ~5s   | -                                                 |
+| Job | What It Does | Time | When Fails |
+| --- | --- | --- | --- |
+| 🔧 **Preparation** | Setup Python + cache dependencies | ~30s | Check `requirements.txt` |
+| 🧪 **Unit Tests** | 879 tests (Python 3.11/3.12) | ~45s | Run locally: `pytest tests/unit/` |
+| 🗄️ **Integration Tests** | 72 tests + PostgreSQL | ~60s | Check migrations: `alembic upgrade head` |
+| 🔐 **Security Tests** | 45+ tests (CSRF, XSS, SQLi) | ~50s | Fix security vulnerability |
+| 🔒 **Security Checks** | Bandit, Safety, pip-audit, Gitleaks | ~40s | Update vulnerable dependency |
+| 📝 **Linting** | Ruff code quality | ~20s | Run: `ruff format src/ tests/` |
+| 🔬 **Type Checking** | Mypy static analysis | ~25s | Add type hints |
+| 🐳 **Build & Scan** | Docker build + Trivy scan | ~90s | Check `Dockerfile` or base image |
+| 🐍 **Snyk Scan** | SCA + SAST security | ~40s | Review Snyk report in Artifacts |
+| 📦 **SBOM Generation** | Software Bill of Materials | ~35s | Only runs on `main`/`develop`/`release/*` |
+| 🔏 **GPG Verification** | Verify all commits signed | ~15s | Sign commits: `git commit --amend -S` |
+| 📊 **Summary** | Final report | ~5s | - |
 
 **Total Time**: ~3 minutes
 
