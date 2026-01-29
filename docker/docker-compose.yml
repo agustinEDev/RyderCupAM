@@ -3,7 +3,7 @@ services:
   db:
     image: postgres:15-alpine
     ports:
-      - "${DATABASE_PORT:-5433}:5432"
+      - "${DOCKER_DATABASE_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data/
       - ./scripts/validate-postgres-env.sh:/validate-postgres-env.sh:ro
@@ -28,7 +28,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "${PORT:-8000}:8000"
+      - "${DOCKER_APP_PORT:-8001}:8000"
     volumes:
       - ..:/app
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
