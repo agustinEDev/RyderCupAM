@@ -67,7 +67,7 @@ class RequestGolfCourseUseCase:
             # 2. Crear Tees
             tees = [
                 Tee(
-                    tee_category=TeeCategory(tee_dto.tee_category),
+                    category=TeeCategory(tee_dto.tee_category),
                     identifier=tee_dto.identifier,
                     course_rating=tee_dto.course_rating,
                     slope_rating=tee_dto.slope_rating,
@@ -78,7 +78,7 @@ class RequestGolfCourseUseCase:
             # 3. Crear Holes
             holes = [
                 Hole(
-                    hole_number=hole_dto.hole_number,
+                    number=hole_dto.hole_number,
                     par=hole_dto.par,
                     stroke_index=hole_dto.stroke_index,
                 )

@@ -218,17 +218,18 @@ mapper_registry.map_imperatively(
     Tee,
     golf_course_tees_table,
     properties={
-        # Map tee_category enum to TeeCategory
-        "tee_category": Column(
-            "tee_category",
-            SQLEnum(TeeCategory, name="tee_category_enum", create_type=False),
-        ),
+        # Map database column tee_category to entity attribute category
+        "category": golf_course_tees_table.c.tee_category,
     },
 )
 
 mapper_registry.map_imperatively(
     Hole,
     golf_course_holes_table,
+    properties={
+        # Map database column hole_number to entity attribute number
+        "number": golf_course_holes_table.c.hole_number,
+    },
 )
 
 mapper_registry.map_imperatively(
@@ -250,7 +251,7 @@ mapper_registry.map_imperatively(
             Hole,
             cascade="all, delete-orphan",
             lazy="joined",  # Eager loading
-            order_by=golf_course_holes_table.c.hole_number,
+            order_by=golf_course_holes_table.c.hole_number,  # DB column name
         ),
         # Domain events (transient, not persisted)
         "_domain_events": [],

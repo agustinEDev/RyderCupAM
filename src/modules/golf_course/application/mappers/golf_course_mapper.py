@@ -36,7 +36,7 @@ class GolfCourseMapper:
             creator_id=str(golf_course.creator_id),
             tees=[
                 TeeDTO(
-                    tee_category=tee.tee_category.value,
+                    tee_category=tee.category.value,
                     identifier=tee.identifier,
                     course_rating=tee.course_rating,
                     slope_rating=tee.slope_rating,
@@ -45,7 +45,7 @@ class GolfCourseMapper:
             ],
             holes=[
                 HoleDTO(
-                    hole_number=hole.hole_number,
+                    hole_number=hole.number,
                     par=hole.par,
                     stroke_index=hole.stroke_index,
                 )
