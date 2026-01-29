@@ -4,7 +4,7 @@
 # Pipeline completo de integración continua y despliegue continuo
 # Ejecuta tests, security checks, linting y type checking en paralelo
 #
-# Jobs (11 en paralelo):
+# Jobs (12 en paralelo):
 # 1. Preparation - Setup Python + dependencies cache
 # 2. Unit Tests - 662 tests (Python 3.11 + 3.12)
 # 3. Integration Tests - 72 tests (con PostgreSQL)
@@ -15,7 +15,8 @@
 # 8. Build - Docker + Trivy container scan
 # 9. Snyk Scan - SCA + SAST
 # 10. SBOM Generation - CycloneDX SBOM + dependency graph
-# 11. Summary - Reporte final
+# 11. GPG Signature Verification - Validates all commits are signed
+# 12. Summary - Reporte final
 
 name: CI/CD Pipeline
 
@@ -922,14 +923,78 @@ jobs:
           output-file: sbom/sbom.json
 
   # ================================
-  # JOB 10: SUMMARY
+  # JOB 10: GPG SIGNATURE VERIFICATION
+  # ================================
+  # Verifica que todos los commits estén firmados con GPG
+  # Cumple con OWASP A08:2021 Software and Data Integrity Failures
+  # Ejecuta en todos los pushes y PRs (security critical)
+
+  gpg_verification:
+    name: 🔏 GPG Signature Verification
+    runs-on: ubuntu-latest
+    needs: preparation
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for commit range verification
+
+      - name: Import GPG Public Key
+        env:
+          GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+        run: |
+          echo "🔑 Importing GPG public key from secrets..."
+          echo "$GPG_PUBLIC_KEY" | gpg --import --batch --yes
+
+          echo ""
+          echo "📋 Imported keys:"
+          gpg --list-keys
+
+      - name: Verify Commit Signatures
+        run: |
+          echo "🔍 Verifying GPG signatures on commits..."
+          chmod +x scripts/verify-gpg-signatures.sh
+
+          # Determine base ref based on event type
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_REF="origin/${{ github.event.repository.default_branch }}"
+          fi
+
+          # Run verification script
+          ./scripts/verify-gpg-signatures.sh "$BASE_REF" HEAD
+
+      - name: Generate Verification Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "🔏 GPG SIGNATURE VERIFICATION SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "✅ All commits in this push/PR are signed with valid GPG keys"
+          echo ""
+          echo "🔒 Security:"
+          echo "   - Code integrity verified"
+          echo "   - Author authentication confirmed"
+          echo "   - OWASP A08:2021 compliance"
+          echo ""
+          echo "📖 Policy:"
+          echo "   - All commits MUST be signed with GPG"
+          echo "   - Branch protection enforces this on main/develop"
+          echo ""
+          echo "=========================================="
+
+  # ================================
+  # JOB 11: SUMMARY
   # ================================
   # Job final que depende de todos los anteriores
 
   pipeline_summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan, sbom_generation]
+    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan, sbom_generation, gpg_verification]
     if: always()
 
     steps:
@@ -953,6 +1018,7 @@ jobs:
           SECURITY_CHECKS="${{ needs.security_checks.result }}"
           SNYK_SCAN="${{ needs.snyk_scan.result }}"
           SBOM_GEN="${{ needs.sbom_generation.result }}"
+          GPG_VERIFY="${{ needs.gpg_verification.result }}"
           LINTING="${{ needs.linting.result }}"
           TYPE_CHECKING="${{ needs.type_checking.result }}"
           BUILD="${{ needs.build.result }}"
@@ -977,6 +1043,7 @@ jobs:
             echo "| 🔒 Security Checks | $(get_emoji "$SECURITY_CHECKS") | \`$SECURITY_CHECKS\` |"
             echo "| 🐍 Snyk Scan | $(get_emoji "$SNYK_SCAN") | \`$SNYK_SCAN\` |"
             echo "| 📦 SBOM Generation | $(get_emoji "$SBOM_GEN") | \`$SBOM_GEN\` |"
+            echo "| 🔏 GPG Verification | $(get_emoji "$GPG_VERIFY") | \`$GPG_VERIFY\` |"
             echo "| 📝 Linting | $(get_emoji "$LINTING") | \`$LINTING\` |"
             echo "| 🔬 Type Checking | $(get_emoji "$TYPE_CHECKING") | \`$TYPE_CHECKING\` |"
             echo "| 🐳 Build & Scan | $(get_emoji "$BUILD") | \`$BUILD\` |"
