@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**v1.13.1** · 18 January 2026 · Phase 2 Complete
+**v2.0.0** · 29 January 2026 · RBAC Foundation + Sprint 1
 
 ---
 
@@ -12,7 +12,7 @@ Amateur golf tournament system in Ryder Cup format.
 
 **Infrastructure**: Docker, Kubernetes (Kind), GitHub Actions
 
-**Security**: OWASP Top 10 compliant (9.4/10 score)
+**Security**: OWASP Top 10 compliant (9.7/10 score)
 
 **Features**:
 - ✅ User management + JWT auth + device tracking
@@ -55,10 +55,11 @@ Domain (Entities, VOs, Events, Repos)
 ### Implemented Protections
 
 **A01: Broken Access Control (10/10)**
-- JWT authentication with RS256 (256-bit keys)
+- JWT authentication with HS256 (SECRET_KEY from environment)
 - Device fingerprinting (User-Agent + IP)
-- Refresh token rotation (7d lifetime)
+- Refresh token rotation (7d lifetime, SHA256 hashed in DB)
 - IP spoofing prevention (trusted proxy validation)
+- httpOnly cookies (primary) + Authorization header (legacy support)
 
 **A02: Cryptographic Failures (9.9/10)**
 - HTTPS enforced (HSTS headers)
@@ -295,7 +296,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ### Authentication
 
-**JWT**: HS256, exp 60min, secret in env
+**JWT**: HS256, access 15min, refresh 7d, SECRET_KEY in env
 **Password**: bcrypt, rounds=12 (prod), rounds=4 (test)
 
 ### Validation

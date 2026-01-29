@@ -28,7 +28,7 @@ Implement **three improvements** for supply chain security:
 - Tool: `cyclonedx-bom` (OWASP standard)
 - Script: `scripts/generate-sbom.sh`
 - Output: `sbom/sbom.json` + metadata (SHA256 checksum)
-- CI/CD: Automated job on main/develop branches
+- CI/CD: Automated job on main/develop/release/* branches
 - Format: CycloneDX 1.6 JSON (industry standard)
 
 ### 2. Dependency Lock with Hashes
@@ -39,8 +39,8 @@ Implement **three improvements** for supply chain security:
 - Usage: `pip install -r requirements.lock --require-hashes`
 
 ### 3. CI/CD Integration
-- New Job: `sbom_generation` (Job 10)
-- Execution: Only on main/develop/release branches
+- New Job: `sbom_generation` (Job 10 of 12)
+- Execution: Only on main/develop/release/* branches (skipped on feature branches)
 - Artifacts: 90-day retention, GitHub Dependency Graph upload
 - Validation: JSON structure + required fields
 

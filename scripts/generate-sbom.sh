@@ -48,12 +48,16 @@ echo -e "${GREEN}[3/4]${NC} Generating timestamped backup..."
 cp "$OUTPUT_DIR/sbom.$FORMAT" "$OUTPUT_DIR/sbom_${TIMESTAMP}.$FORMAT"
 
 echo -e "${GREEN}[4/4]${NC} Generating SBOM metadata..."
+
+# Extract specVersion from generated SBOM
+SPEC_VERSION=$(jq -r '.specVersion // "1.6"' "$OUTPUT_DIR/sbom.$FORMAT" 2>/dev/null || echo "1.6")
+
 cat > "$OUTPUT_DIR/sbom-metadata.txt" << EOF
 SBOM Metadata
 =============
 Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 Format: CycloneDX $FORMAT
-Standard: OWASP CycloneDX 1.6
+Standard: OWASP CycloneDX $SPEC_VERSION
 Source: requirements.txt
 Tool: cyclonedx-py
 Project: Ryder Cup Amateur Manager Backend

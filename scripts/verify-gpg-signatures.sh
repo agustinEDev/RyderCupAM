@@ -32,8 +32,21 @@ echo ""
 # Import GPG public key from environment variable if provided
 if [ -n "$GPG_PUBLIC_KEY" ]; then
     echo -e "${GREEN}[1/4]${NC} Importing GPG public key from environment..."
-    echo "$GPG_PUBLIC_KEY" | gpg --import --batch --yes 2>/dev/null || true
-    echo "✅ GPG key imported"
+
+    if echo "$GPG_PUBLIC_KEY" | gpg --import --batch --yes 2>&1; then
+        echo "✅ GPG key imported successfully"
+    else
+        GPG_EXIT=$?
+        echo -e "${RED}❌ ERROR: Failed to import GPG key${NC}"
+        echo "   Exit code: $GPG_EXIT"
+        echo ""
+        echo "   This usually means:"
+        echo "   - GPG_PUBLIC_KEY is not a valid GPG public key"
+        echo "   - GPG is not installed or not working"
+        echo "   - Key format is incorrect"
+        echo ""
+        exit 1
+    fi
 else
     echo -e "${YELLOW}⚠️  No GPG_PUBLIC_KEY environment variable found${NC}"
     echo "   Using system keyring only"
@@ -44,12 +57,26 @@ echo -e "${GREEN}[2/4]${NC} Fetching commit range..."
 echo "   Base: $BASE_REF"
 echo "   Head: $HEAD_REF"
 
-# Get list of commits in range
-COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>/dev/null || echo "")
+# Get list of commits in range (fail if git rev-list errors)
+COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>&1)
+REV_LIST_EXIT=$?
+
+if [ $REV_LIST_EXIT -ne 0 ]; then
+    echo -e "${RED}❌ ERROR: git rev-list failed${NC}"
+    echo "   Command: git rev-list $BASE_REF..$HEAD_REF"
+    echo "   Error: $COMMIT_LIST"
+    echo ""
+    echo "   This usually means:"
+    echo "   - Base ref ($BASE_REF) doesn't exist"
+    echo "   - Invalid commit range"
+    echo "   - Repository is corrupted"
+    echo ""
+    exit 1
+fi
 
 if [ -z "$COMMIT_LIST" ]; then
     echo -e "${YELLOW}⚠️  No new commits to verify${NC}"
-    echo "   This might be the initial commit or base ref doesn't exist"
+    echo "   This might be the initial commit"
     echo ""
     echo -e "${GREEN}✅ Verification passed (no commits to check)${NC}"
     exit 0
@@ -73,27 +100,16 @@ while IFS= read -r commit; do
     COMMIT_SHORT=$(git log -1 --format="%h" "$commit")
     COMMIT_MSG=$(git log -1 --format="%s" "$commit" | head -c 60)
     COMMIT_AUTHOR=$(git log -1 --format="%an" "$commit")
-    COMMIT_EMAIL=$(git log -1 --format="%ae" "$commit")
 
     # Check if this is a merge commit (has 2+ parents)
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    # Check if commit was created by GitHub (squash/rebase merge)
-    IS_GITHUB_COMMIT=false
-    if echo "$COMMIT_EMAIL" | grep -q "@users.noreply.github.com"; then
-        IS_GITHUB_COMMIT=true
-    fi
-
-    if [ "$PARENT_COUNT" -ge 2 ] || [ "$IS_GITHUB_COMMIT" = true ]; then
-        # Merge commit or GitHub-created commit - cannot be signed by user
+    if [ "$PARENT_COUNT" -ge 2 ]; then
+        # Merge commit - GitHub PR merges cannot be signed by user, allow without signature
         echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
-        if [ "$PARENT_COUNT" -ge 2 ]; then
-            echo "   Type: MERGE COMMIT (signature not required)"
-        else
-            echo "   Type: GITHUB PR COMMIT (signature not required)"
-        fi
+        echo "   Type: MERGE COMMIT (signature not required)"
         MERGE_COUNT=$((MERGE_COUNT + 1))
         VALID_COUNT=$((VALID_COUNT + 1))
     else
@@ -133,7 +149,7 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
-echo "   GitHub/merge commits: $MERGE_COUNT (signature not required)"
+echo "   Merge commits: $MERGE_COUNT (signature not required)"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
 echo "   Invalid signatures: ${#INVALID_SIGNATURES[@]}"
 echo ""
