@@ -8,6 +8,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
 [![Tests](https://img.shields.io/badge/tests-1066%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
@@ -75,6 +76,25 @@ open http://localhost:8000/docs
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - Health Check: http://localhost:8000/health
+
+### Local Development (Kubernetes)
+
+For a more production-like environment, you can use Kubernetes (via Kind). This setup provides a full cluster with separate services for the API, frontend, and database.
+
+```bash
+# Navigate to the Kubernetes directory
+cd k8s
+
+# Run the deployment script
+# (Make sure scripts are executable: chmod +x scripts/*.sh)
+./scripts/deploy-cluster.sh
+```
+
+Once the script finishes, the application will be accessible at:
+- **Frontend:** `http://localhost:8080`
+- **Backend API:** `http://localhost:8000/docs`
+
+For a complete guide on managing the Kubernetes environment, including troubleshooting and script details, see the **[Kubernetes README](k8s/README.md)**.
 
 ### Production Deployment (Render.com)
 
