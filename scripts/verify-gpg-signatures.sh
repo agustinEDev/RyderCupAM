@@ -66,34 +66,59 @@ echo ""
 UNSIGNED_COMMITS=()
 INVALID_SIGNATURES=()
 VALID_COUNT=0
+MERGE_COUNT=0
 
 while IFS= read -r commit; do
     # Get commit info
     COMMIT_SHORT=$(git log -1 --format="%h" "$commit")
     COMMIT_MSG=$(git log -1 --format="%s" "$commit" | head -c 60)
     COMMIT_AUTHOR=$(git log -1 --format="%an" "$commit")
+    COMMIT_EMAIL=$(git log -1 --format="%ae" "$commit")
 
-    # Verify signature
-    SIG_STATUS=$(git verify-commit "$commit" 2>&1 || true)
+    # Check if this is a merge commit (has 2+ parents)
+    PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
+    PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    if echo "$SIG_STATUS" | grep -q "Good signature"; then
-        echo -e "✅ ${GREEN}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+    # Check if commit was created by GitHub (squash/rebase merge)
+    IS_GITHUB_COMMIT=false
+    if echo "$COMMIT_EMAIL" | grep -q "@users.noreply.github.com"; then
+        IS_GITHUB_COMMIT=true
+    fi
+
+    if [ "$PARENT_COUNT" -ge 2 ] || [ "$IS_GITHUB_COMMIT" = true ]; then
+        # Merge commit or GitHub-created commit - cannot be signed by user
+        echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
+        if [ "$PARENT_COUNT" -ge 2 ]; then
+            echo "   Type: MERGE COMMIT (signature not required)"
+        else
+            echo "   Type: GITHUB PR COMMIT (signature not required)"
+        fi
+        MERGE_COUNT=$((MERGE_COUNT + 1))
         VALID_COUNT=$((VALID_COUNT + 1))
-    elif echo "$SIG_STATUS" | grep -q "gpg: Good signature"; then
-        echo -e "✅ ${GREEN}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-        echo "   Author: $COMMIT_AUTHOR"
-        VALID_COUNT=$((VALID_COUNT + 1))
-    elif echo "$SIG_STATUS" | grep -q "BAD signature"; then
-        echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-        echo "   Author: $COMMIT_AUTHOR"
-        echo "   Status: BAD SIGNATURE"
-        INVALID_SIGNATURES+=("$COMMIT_SHORT")
     else
-        echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-        echo "   Author: $COMMIT_AUTHOR"
-        echo "   Status: NOT SIGNED"
-        UNSIGNED_COMMITS+=("$COMMIT_SHORT")
+        # Regular commit - verify signature
+        SIG_STATUS=$(git verify-commit "$commit" 2>&1 || true)
+
+        if echo "$SIG_STATUS" | grep -q "Good signature"; then
+            echo -e "✅ ${GREEN}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            VALID_COUNT=$((VALID_COUNT + 1))
+        elif echo "$SIG_STATUS" | grep -q "gpg: Good signature"; then
+            echo -e "✅ ${GREEN}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            VALID_COUNT=$((VALID_COUNT + 1))
+        elif echo "$SIG_STATUS" | grep -q "BAD signature"; then
+            echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Status: BAD SIGNATURE"
+            INVALID_SIGNATURES+=("$COMMIT_SHORT")
+        else
+            echo -e "❌ ${RED}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Status: NOT SIGNED"
+            UNSIGNED_COMMITS+=("$COMMIT_SHORT")
+        fi
     fi
     echo ""
 done <<< "$COMMIT_LIST"
@@ -108,6 +133,7 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
+echo "   GitHub/merge commits: $MERGE_COUNT (signature not required)"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
 echo "   Invalid signatures: ${#INVALID_SIGNATURES[@]}"
 echo ""
