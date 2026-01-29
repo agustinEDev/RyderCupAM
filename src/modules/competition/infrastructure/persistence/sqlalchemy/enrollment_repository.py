@@ -222,6 +222,49 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one()
 
+    async def count_approved_by_competition(self, competition_id: CompetitionId) -> int:
+        """
+        Alias para count_approved.
+        Cuenta el total de inscripciones aprobadas en una competición.
+
+        Args:
+            competition_id: ID de la competición
+
+        Returns:
+            int: Número total de inscripciones aprobadas
+        """
+        return await self.count_approved(competition_id)
+
+    async def count_active_by_user(self, user_id: UserId) -> int:
+        """
+        Cuenta el total de inscripciones activas de un usuario.
+
+        Considera activas las inscripciones con estado APPROVED o REQUESTED.
+
+        Args:
+            user_id: ID del usuario
+
+        Returns:
+            int: Número total de inscripciones activas
+        """
+        statement = (
+            select(func.count())
+            .select_from(Enrollment)
+            .where(
+                and_(
+                    Enrollment.user_id == user_id,
+                    Enrollment._status_value.in_(
+                        [
+                            EnrollmentStatus.APPROVED.value,
+                            EnrollmentStatus.REQUESTED.value,
+                        ]
+                    ),
+                )
+            )
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one()
+
     async def count_pending(self, competition_id: CompetitionId) -> int:
         """
         Cuenta el total de inscripciones pendientes (REQUESTED) en una competición.
