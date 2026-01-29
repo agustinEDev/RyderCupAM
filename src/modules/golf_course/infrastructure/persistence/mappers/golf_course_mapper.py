@@ -242,6 +242,13 @@ mapper_registry.map_imperatively(
         "_id": Column("id", GolfCourseIdType),
         "_country_code": Column("country_code", CountryCodeType),
         "_creator_id": Column("creator_id", UserIdType),
+        # Scalar attributes mapping
+        "_name": golf_courses_table.c.name,
+        "_course_type": golf_courses_table.c.course_type,
+        "_approval_status": golf_courses_table.c.approval_status,
+        "_rejection_reason": golf_courses_table.c.rejection_reason,
+        "_created_at": golf_courses_table.c.created_at,
+        "_updated_at": golf_courses_table.c.updated_at,
         # One-to-many relationships with tees and holes
         "_tees": relationship(
             Tee,
