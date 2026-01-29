@@ -38,6 +38,4 @@ class Hole:
             raise ValueError(f"Par must be 3, 4, or 5, got {self.par}")
 
         if not (1 <= self.stroke_index <= 18):  # noqa: PLR2004
-            raise ValueError(
-                f"Stroke index must be between 1 and 18, got {self.stroke_index}"
-            )
+            raise ValueError(f"Stroke index must be between 1 and 18, got {self.stroke_index}")

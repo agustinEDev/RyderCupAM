@@ -38,9 +38,7 @@ class Tee:
     def __post_init__(self) -> None:
         """Valida los ratings WHS."""
         if not (55 <= self.slope_rating <= 155):  # noqa: PLR2004
-            raise ValueError(
-                f"Slope rating must be between 55 and 155, got {self.slope_rating}"
-            )
+            raise ValueError(f"Slope rating must be between 55 and 155, got {self.slope_rating}")
 
         if not (50.0 <= self.course_rating <= 90.0):  # noqa: PLR2004
             raise ValueError(

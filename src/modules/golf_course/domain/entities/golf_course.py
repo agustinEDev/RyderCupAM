@@ -153,9 +153,9 @@ class GolfCourse:
         # Registrar evento de creación
         golf_course._record_event(
             GolfCourseRequestedEvent(
-                golf_course_id=golf_course_id,
+                golf_course_id=str(golf_course_id),
                 golf_course_name=name,
-                creator_id=creator_id,
+                creator_id=str(creator_id),
             )
         )
 
@@ -217,9 +217,9 @@ class GolfCourse:
         # Registrar evento de aprobación
         self._record_event(
             GolfCourseApprovedEvent(
-                golf_course_id=self._id,
+                golf_course_id=str(self._id),
                 golf_course_name=self._name,
-                creator_id=self._creator_id,
+                creator_id=str(self._creator_id),
             )
         )
 
@@ -251,9 +251,9 @@ class GolfCourse:
         # Registrar evento de rechazo
         self._record_event(
             GolfCourseRejectedEvent(
-                golf_course_id=self._id,
+                golf_course_id=str(self._id),
                 golf_course_name=self._name,
-                creator_id=self._creator_id,
+                creator_id=str(self._creator_id),
                 rejection_reason=reason,
             )
         )

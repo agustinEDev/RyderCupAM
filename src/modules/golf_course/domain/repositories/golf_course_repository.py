@@ -42,9 +42,7 @@ class IGolfCourseRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_approval_status(
-        self, approval_status: ApprovalStatus
-    ) -> list[GolfCourse]:
+    async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
         """
         Busca campos de golf por estado de aprobación.
 

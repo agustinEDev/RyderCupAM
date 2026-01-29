@@ -2,14 +2,12 @@
 GolfCourseRequestedEvent - Creator solicita un nuevo campo de golf.
 """
 
-from datetime import datetime
+from dataclasses import dataclass
 
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 
-from ..value_objects.golf_course_id import GolfCourseId
 
-
+@dataclass(frozen=True)
 class GolfCourseRequestedEvent(DomainEvent):
     """
     Evento de dominio: Creator solicita un nuevo campo de golf.
@@ -18,25 +16,13 @@ class GolfCourseRequestedEvent(DomainEvent):
     que entra en estado PENDING_APPROVAL.
 
     Trigger: Email a Admin notificando nueva solicitud pendiente.
+
+    Atributos:
+        golf_course_id: ID del campo solicitado (str UUID)
+        golf_course_name: Nombre del campo
+        creator_id: ID del usuario que solicitó el campo (str UUID)
     """
 
-    def __init__(
-        self,
-        golf_course_id: GolfCourseId,
-        golf_course_name: str,
-        creator_id: UserId,
-        occurred_on: datetime | None = None,
-    ) -> None:
-        super().__init__(occurred_on)
-        self.golf_course_id = golf_course_id
-        self.golf_course_name = golf_course_name
-        self.creator_id = creator_id
-
-    def __repr__(self) -> str:
-        return (
-            f"GolfCourseRequestedEvent("
-            f"golf_course_id={self.golf_course_id}, "
-            f"name={self.golf_course_name}, "
-            f"creator_id={self.creator_id}, "
-            f"occurred_on={self.occurred_on})"
-        )
+    golf_course_id: str
+    golf_course_name: str
+    creator_id: str
