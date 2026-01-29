@@ -12,6 +12,7 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import (
@@ -80,7 +81,16 @@ class CreateCompetitionUseCase:
             ValueError: Si los Value Objects no son válidos
         """
         async with self._uow:
-            # 1. Validar que el nombre no exista para este creador
+            # 1. Business logic guard: Validar límite de competiciones por creador
+            existing_count = await self._uow.competitions.count_by_creator(creator_id)
+            CompetitionPolicy.can_create_competition(creator_id, existing_count)
+
+            # 2. Business logic guard: Validar rango de fechas razonable
+            CompetitionPolicy.validate_date_range(
+                request.start_date, request.end_date, request.name
+            )
+
+            # 3. Validar que el nombre no exista para este creador
             name_vo = CompetitionName(request.name)
             existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
             if existing:
@@ -88,25 +98,25 @@ class CreateCompetitionUseCase:
                     f"Ya existe una competición con el nombre '{request.name}'"
                 )
 
-            # 2. Construir Location usando Domain Service (valida países y adyacencias)
+            # 4. Construir Location usando Domain Service (valida países y adyacencias)
             location = await self._location_builder.build_from_codes(
                 main_country=request.main_country,
                 adjacent_country_1=request.adjacent_country_1,
                 adjacent_country_2=request.adjacent_country_2,
             )
 
-            # 3. Construir HandicapSettings
+            # 5. Construir HandicapSettings
             handicap_settings = self._build_handicap_settings(
                 request.handicap_type, request.handicap_percentage
             )
 
-            # 4. Construir DateRange
+            # 6. Construir DateRange
             date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
 
-            # 5. Construir TeamAssignment desde string
+            # 7. Construir TeamAssignment desde string
             team_assignment_vo = TeamAssignment(request.team_assignment)
 
-            # 6. Crear la entidad Competition usando factory method
+            # 8. Crear la entidad Competition usando factory method
             competition = Competition.create(
                 id=CompetitionId.generate(),
                 creator_id=creator_id,
@@ -120,13 +130,13 @@ class CreateCompetitionUseCase:
                 team_assignment=team_assignment_vo,
             )
 
-            # 6. Persistir la competición
+            # 9. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 7. Commit de la transacción
+            # 10. Commit de la transacción
             await self._uow.commit()
 
-        # 8. Retornar DTO de respuesta
+        # 11. Retornar DTO de respuesta
         return CreateCompetitionResponseDTO(
             id=competition.id.value,
             creator_id=competition.creator_id.value,
