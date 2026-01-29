@@ -3,13 +3,13 @@ services:
   db:
     image: postgres:15-alpine
     ports:
-      - "${DATABASE_PORT:-5432}:5432"
+      - "${DATABASE_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data/
       - ./scripts/validate-postgres-env.sh:/validate-postgres-env.sh:ro
     env_file:
       - path: ../.env
-        required: false
+        required: true
     environment:
       # Note: Defaults are ONLY for docker-compose syntax safety; validation scripts
       # will fail-fast if actual .env values are missing (see validate-postgres-env.sh)
@@ -34,7 +34,7 @@ services:
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:
       - path: ../.env
-        required: false
+        required: true
     entrypoint: ["/bin/sh", "/validate-app-env.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
