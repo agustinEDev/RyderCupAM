@@ -101,6 +101,14 @@ class GolfCourseRequest(BaseModel):
 
 #### Sprint 2: Competition Scheduling (1.5 weeks)
 
+**Code Quality Refactor (Priority):**
+- **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
+- **Files**: `business_rule_violation.py`, `competition_policy.py`, `request_enrollment_use_case.py`
+- **Action**: Create `DuplicateEnrollmentViolation`, `InvalidCompetitionStatusViolation`, etc.
+- **Benefit**: Type-safe exception handling, better DDD, maintainable
+- **Tests**: Update ~20 tests (CompetitionPolicy + use cases)
+- **Time**: 2-3 hours
+
 **Rounds Endpoints (4):**
 ```
 POST   /api/v1/competitions/{comp_id}/rounds
