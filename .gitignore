@@ -70,3 +70,4 @@ sonar-project.properties.coverage
 docs/frontend-examples/
 docs/FRONTEND_INTEGRATION_v1.13.0.mdlogs/*.log.*
 docker/.env
+\n# K8s database backups\nk8s/backups/*.sql
