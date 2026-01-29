@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 39 active
-**Version**: v1.13.0
-**Last Updated**: 9 January 2026
+**Total Endpoints**: 40 active
+**Version**: v2.0.0
+**Last Updated**: 29 January 2026
 
 ---
 
@@ -25,10 +25,11 @@ Authentication (11 endpoints)
 ├── GET  /api/v1/auth/validate-reset-token/:token # Validate reset token
 └── POST /api/v1/auth/unlock-account     # Manual account unlock (Admin, v1.13.0)
 
-User Management (3 endpoints)
+User Management (4 endpoints)
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
-└── PATCH /api/v1/users/security         # Update security (email/password)
+├── PATCH /api/v1/users/security         # Update security (email/password)
+└── GET   /api/v1/users/me/roles/{id}    # Check user roles in a competition (v2.0.0)
 
 Device Management (2 endpoints) ⭐ v1.13.0
 ├── GET    /api/v1/users/me/devices      # List active devices
@@ -170,6 +171,51 @@ Country Management (2 endpoints)
 - country_code can be null
 
 **📋 See complete module:** `docs/modules/user-management.md`
+
+---
+
+## Role-Based Access Control (RBAC) ⭐ v2.0.0
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/users/me/roles/{competition_id}` | GET | Yes | Check roles for the authenticated user in a specific competition |
+
+### Path Parameters
+
+**GET /users/me/roles/{competition_id}:**
+- `competition_id` (string, required, UUID format) - The ID of the competition to check roles against.
+
+### Responses
+
+**200 OK - Successful Response**
+Returns a `UserRolesResponseDTO` object detailing the user's roles.
+- `is_admin` (boolean) - True if the user is a global administrator.
+- `is_creator` (boolean) - True if the user is the creator of the specified competition.
+- `is_player` (boolean) - True if the user is an approved player in the specified competition.
+- `competition_id` (string, UUID) - The ID of the competition for which roles were checked.
+
+**Example:**
+```json
+{
+  "is_admin": false,
+  "is_creator": true,
+  "is_player": true,
+  "competition_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**401 Unauthorized**
+- The user is not authenticated (i.e., missing or invalid JWT).
+
+**404 Not Found**
+- The specified `competition_id` does not exist.
+
+**422 Unprocessable Entity**
+- The provided `competition_id` is not a valid UUID.
+
+### Business Logic
+- This endpoint provides a simple way for a frontend application to conditionally render UI elements based on the user's permissions in the context of a specific competition.
+- The roles are derived dynamically at request time and are not stored in a dedicated database table, following the simplified RBAC architecture of v2.0.0.
 
 ---
 

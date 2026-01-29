@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v1.13.0 (Current) + v2.1.0 Planning
-> **Last Updated:** 9 January 2026
+> **Version:** v2.0.0 (Current) + v2.1.0 Planning
+> **Last Updated:** January 29, 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -27,7 +27,7 @@ erDiagram
     }
 
     %% ========================================
-    %% USER MODULE (v1.0.0 - v1.12.1)
+    %% USER MODULE (v1.0.0 - v2.0.0)
     %% ========================================
 
     users {
@@ -44,6 +44,7 @@ erDiagram
         TIMESTAMP password_reset_expires_at "nullable - v1.11.0"
         INT failed_login_attempts "default 0 - v1.13.0"
         TIMESTAMP locked_until "nullable - v1.13.0"
+        BOOLEAN is_admin "default false - v2.0.0"
         CHAR(2) country_code FK "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -52,6 +53,7 @@ erDiagram
     refresh_tokens {
         UUID id PK
         UUID user_id FK
+        UUID device_id FK "nullable - v1.13.0"
         VARCHAR(64) token_hash UK "SHA256"
         TIMESTAMP expires_at
         BOOLEAN revoked
@@ -78,24 +80,6 @@ erDiagram
         TIMESTAMP created_at
     }
 
-
-    %% ========================================
-    %% ROLES & PERMISSIONS (v2.1.0 - NEW)
-    %% ========================================
-
-    roles {
-        UUID id PK
-        VARCHAR(50) name UK "ADMIN, CREATOR, PLAYER"
-        VARCHAR(255) description
-        TIMESTAMP created_at
-    }
-
-    user_roles {
-        UUID user_id PK,FK
-        UUID role_id PK,FK
-        TIMESTAMP assigned_at
-    }
-
     %% ========================================
     %% GOLF COURSES (v2.1.0 - NEW)
     %% ========================================
@@ -117,7 +101,7 @@ erDiagram
     tees {
         UUID id PK
         UUID golf_course_id FK
-        VARCHAR(50) identifier "60 | Blancas | Championship | etc"
+        VARCHAR(50) identifier "60 | White | Championship | etc"
         VARCHAR(30) category "CHAMPIONSHIP_MALE | AMATEUR_MALE | etc"
         FLOAT slope_rating "55-155"
         FLOAT course_rating
@@ -164,7 +148,7 @@ erDiagram
         UUID user_id FK
         VARCHAR(20) status "REQUESTED | INVITED | APPROVED | REJECTED | CANCELLED | WITHDRAWN"
         VARCHAR(10) team_id "nullable - team_1 or team_2"
-        DECIMAL(4_1) custom_handicap "nullable - override"
+        DECIMAL(4,1) custom_handicap "nullable - override"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -188,17 +172,17 @@ erDiagram
         UUID round_id FK
         VARCHAR(20) format "FOURBALL | FOURSOMES | SINGLES | GREENSOME"
         VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | WALKOVER_TEAM_A | WALKOVER_TEAM_B"
-        INT starting_hole "1-18 para shotgun start"
+        INT starting_hole "1-18 for shotgun start"
         UUID team_a_player_1_id FK
         UUID team_a_player_1_tee_id FK
-        INT team_a_player_1_playing_handicap "Pre-calculado WHS"
-        UUID team_a_player_2_id FK "nullable para SINGLES"
+        INT team_a_player_1_playing_handicap "Pre-calculated WHS"
+        UUID team_a_player_2_id FK "nullable for SINGLES"
         UUID team_a_player_2_tee_id FK "nullable"
         INT team_a_player_2_playing_handicap "nullable"
         UUID team_b_player_1_id FK
         UUID team_b_player_1_tee_id FK
         INT team_b_player_1_playing_handicap
-        UUID team_b_player_2_id FK "nullable para SINGLES"
+        UUID team_b_player_2_id FK "nullable for SINGLES"
         UUID team_b_player_2_tee_id FK "nullable"
         INT team_b_player_2_playing_handicap "nullable"
         TIMESTAMP created_at
@@ -214,11 +198,11 @@ erDiagram
         UUID competition_id FK
         UUID inviter_id FK "Creator who invites"
         VARCHAR(255) invitee_email
-        UUID invitee_user_id FK "nullable si no registrado"
+        UUID invitee_user_id FK "nullable if not registered"
         VARCHAR(20) status "PENDING | ACCEPTED | REJECTED | EXPIRED"
         VARCHAR(255) token UK "256-bit secure token"
         TEXT personal_message "nullable"
-        TIMESTAMP expires_at "7 días"
+        TIMESTAMP expires_at "7 days"
         TIMESTAMP responded_at "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -233,8 +217,8 @@ erDiagram
         UUID match_id FK
         INT hole_number "1-18"
         UUID player_id FK
-        INT gross_score "Golpes brutos"
-        INT net_score "Golpes netos calculado"
+        INT gross_score "Gross strokes"
+        INT net_score "Calculated net strokes"
         INT strokes_received "Strokes received by handicap"
         VARCHAR(20) status "DRAFT | SUBMITTED | VALIDATED | DISPUTED"
         TIMESTAMP submitted_at "nullable"
@@ -257,17 +241,14 @@ erDiagram
     users ||--o{ refresh_tokens : "has"
     users ||--o{ password_history : "has"
     users ||--o{ user_devices : "has"
+    user_devices ||--o{ refresh_tokens : "generates"
     users ||--o{ competitions : "creates"
     users ||--o{ enrollments : "enrolls_in"
-    users ||--o{ user_roles : "has_roles"
     users ||--o{ golf_courses : "creates (pending)"
     users ||--o{ golf_courses : "approves (admin)"
     users ||--o{ invitations : "invites"
     users ||--o{ invitations : "invited"
     users ||--o{ hole_scores : "records"
-
-    %% Roles
-    roles ||--o{ user_roles : "assigned_to"
 
     %% Golf Courses
     golf_courses ||--o{ tees : "has"
@@ -287,27 +268,27 @@ erDiagram
 
 ---
 
-## 📋 Tablas Actuales (v1.12.1)
+## 📋 Current Tables (v2.0.0)
 
-| Tabla | Registros Típicos | Módulo | Versión |
+| Table | Typical Records | Module | Version |
 |-------|-------------------|--------|---------|
 | `countries` | 166 | Shared | v1.0.0 |
 | `country_adjacencies` | 614 | Shared | v1.0.0 |
 | `users` | 100-10,000+ | User | v1.0.0 |
 | `refresh_tokens` | 100-50,000 | User | v1.8.0 |
+| `password_history` | 500-50,000 (5 per user) | User | v1.13.0 |
+| `user_devices` | 200-100,000 (2-10 per user) | User | v1.13.0 |
 | `competitions` | 10-1,000 | Competition | v1.3.0 |
 | `enrollments` | 200-50,000 | Competition | v1.3.0 |
 
-**Total tablas actuales:** 6
+**Total current tables:** 8
 
 ---
 
-## 🆕 Tablas Nuevas (v2.1.0)
+## 🆕 New Tables (v2.1.0)
 
-| Tabla | Registros Típicos | Módulo | Sprint |
+| Table | Typical Records | Module | Sprint |
 |-------|-------------------|--------|--------|
-| `roles` | 3-10 | User | Sprint 1 |
-| `user_roles` | 100-10,000+ | User | Sprint 1 |
 | `golf_courses` | 100-5,000 | Golf Courses | Sprint 1 |
 | `tees` | 300-25,000 (3-5 per course) | Golf Courses | Sprint 1 |
 | `holes` | 1,800-90,000 (18 per course) | Golf Courses | Sprint 1 |
@@ -316,24 +297,35 @@ erDiagram
 | `invitations` | 500-100,000 | Competition | Sprint 3 |
 | `hole_scores` | 5,000-5,000,000 (72 per singles match, 144 fourball) | Scoring | Sprint 4 |
 
-**Total tablas nuevas:** 9
+**Total new tables:** 7
 
-**Total tablas v2.1.0:** 15 tablas
+**Total tables in v2.1.0:** 15 tables
 
 ---
 
-## 🔑 Índices Principales
+## 🔑 Key Indexes
 
-### Índices Actuales
+### Current Indexes
 ```sql
 -- users
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_country ON users(country_code);
+CREATE INDEX idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE; -- v2.0.0
 
 -- refresh_tokens
 CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+CREATE INDEX idx_refresh_tokens_device_id ON refresh_tokens(device_id); -- v1.13.0
+
+-- password_history
+CREATE INDEX idx_password_history_user_id ON password_history(user_id);
+CREATE INDEX idx_password_history_created_at ON password_history(created_at);
+
+-- user_devices
+CREATE INDEX idx_user_devices_user_id ON user_devices(user_id);
+CREATE INDEX idx_user_devices_fingerprint_hash ON user_devices(fingerprint_hash);
+CREATE UNIQUE INDEX idx_user_devices_active_fingerprint ON user_devices(user_id, fingerprint_hash) WHERE is_active = TRUE; -- v1.13.0
 
 -- competitions
 CREATE INDEX idx_competitions_creator ON competitions(creator_id);
@@ -346,12 +338,8 @@ CREATE INDEX idx_enrollments_user ON enrollments(user_id);
 CREATE INDEX idx_enrollments_status ON enrollments(status);
 ```
 
-### Índices Nuevos (v2.1.0)
+### New Indexes (v2.1.0)
 ```sql
--- roles & user_roles
-CREATE INDEX idx_user_roles_user ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role ON user_roles(role_id);
-
 -- golf_courses
 CREATE INDEX idx_golf_courses_country ON golf_courses(country_code);
 CREATE INDEX idx_golf_courses_status ON golf_courses(approval_status);
@@ -391,25 +379,25 @@ CREATE UNIQUE INDEX idx_hole_scores_match_hole_player ON hole_scores(match_id, h
 
 ---
 
-## 📐 Estimación de Crecimiento
+## 📐 Growth Estimation
 
-### Escenario: 1 Competición Típica (20 jugadores, 3 días)
+### Scenario: 1 Typical Competition (20 players, 3 days)
 
-| Tabla | Registros | Cálculo |
+| Table | Records | Calculation |
 |-------|-----------|---------|
-| `golf_courses` | +1 | 1 campo |
+| `golf_courses` | +1 | 1 course |
 | `tees` | +4 | 4 tees (60, 56, 52, 47) |
-| `holes` | +18 | 18 hoyos |
-| `rounds` | +6 | 2 rounds/día x 3 días |
+| `holes` | +18 | 18 holes |
+| `rounds` | +6 | 2 rounds/day x 3 days |
 | `matches` | +60 | 10 matches/round x 6 rounds |
-| `invitations` | +20 | 20 jugadores invitados |
-| `hole_scores` | +2,160 | 60 matches x 18 hoyos x 2 jugadores (singles) |
+| `invitations` | +20 | 20 players invited |
+| `hole_scores` | +2,160 | 60 matches x 18 holes x 2 players (singles) |
 
 **Total per competition:** ~2,269 records
 
-### Escenario: 100 Competiciones Activas
+### Scenario: 100 Active Competitions
 
-| Tabla | Registros |
+| Table | Records |
 |-------|-----------|
 | `golf_courses` | 100 |
 | `tees` | 400 |
@@ -419,31 +407,31 @@ CREATE UNIQUE INDEX idx_hole_scores_match_hole_player ON hole_scores(match_id, h
 | `invitations` | 2,000 |
 | `hole_scores` | 216,000 |
 
-**Total estimado:** ~227,000 registros nuevos
+**Total estimated:** ~227,000 new records
 
 ---
 
-## 🚀 Estrategia de Optimización
+## 🚀 Optimization Strategy
 
-### Particionamiento (Futuro v2.2.0)
+### Partitioning (Future v2.2.0)
 ```sql
 -- Partition hole_scores by date (monthly)
 CREATE TABLE hole_scores_2026_01 PARTITION OF hole_scores
     FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
 ```
 
-### Archivado (Futuro v2.2.0)
-- Mover `hole_scores` de competiciones completadas a tabla de archivo
-- Retención: 2 años en BD activa, 5 años en archivo
+### Archiving (Future v2.2.0)
+- Move `hole_scores` from completed competitions to an archive table.
+- Retention: 2 years in active DB, 5 years in archive.
 
-### Read Replicas (Futuro v2.2.0)
-- Leaderboards consultan read replica
-- Escrituras (scoring) en BD principal
+### Read Replicas (Future v2.2.0)
+- Leaderboards will query a read replica.
+- Writes (scoring) will go to the primary DB.
 
 ---
 
-## 🔗 Referencias
+## 🔗 References
 
-- **ROADMAP.md**: Planificación v2.1.0
+- **ROADMAP.md**: v2.1.0 Planning
 - **ADR-025**: Competition Module Evolution
-- **Migraciones**: `alembic/versions/`
+- **Migrations**: `alembic/versions/`

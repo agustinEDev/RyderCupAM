@@ -6,118 +6,86 @@
 
 ## Context and Problem
 
-The current Competition Module allows creating tournaments and managing enrollments, but lacks:
-- Golf course management (tees, holes, slope/course rating)
-- Round planning with specific matches
-- Live scoring with hole-by-hole annotation
-- Dual validation (player vs marker)
-- Invitation system for players
+Competition Module lacks: golf courses, round planning, live scoring, dual validation, invitations.
 
-**Need:** Complete system for professional amateur Ryder Cup tournaments.
+**Need**: Complete system for professional amateur Ryder Cup tournaments.
 
 ## Decisions
 
-### 1. Formal Role System
+### 1. Simplified RBAC (Table-less)
 
-**Decision**: Implement roles with dedicated tables (not boolean flags).
+**Decision**: Three-tier contextual roles without database tables.
 
-```python
-RoleName = Enum("ADMIN", "CREATOR", "PLAYER")
-# Tables: roles, user_roles (many-to-many)
-```
+- **ADMIN**: `users.is_admin` boolean field (global)
+- **CREATOR**: Derived from `competition.creator_id == user.id` (contextual)
+- **PLAYER**: Derived from `enrollment.status == APPROVED` (contextual)
 
-**Reason**: Scalability for future roles and granular permissions.
+**Reason**: Reduces complexity while meeting requirements. No over-engineering.
 
 ### 2. Tees with Normalized Category
 
-**Decision**: Hybrid between free nomenclature and internal category.
+**Decision**: Hybrid free nomenclature + internal category.
 
-```python
-class Tee:
-    identifier: str          # "60", "Blancas", "Championship" (free)
-    category: TeeCategory    # CHAMPIONSHIP_MALE, AMATEUR_MALE, etc.
-    slope_rating: float
-    course_rating: float
-    gender: Gender
-```
+- `identifier`: "60", "Blancas", "Championship" (free text)
+- `category`: TeeCategory enum (CHAMPIONSHIP_MALE, AMATEUR_MALE, etc.)
+- `slope_rating`, `course_rating`, `gender`
 
-**Reason**: International flexibility + normalization for statistics.
+**Reason**: International flexibility + statistical normalization.
 
 ### 3. Pre-calculated Playing Handicap
 
 **Decision**: Calculate and store playing handicap when assigning tee to player.
 
-```python
-playing_handicap = (handicap_index × slope_rating / 113) + (course_rating - par)
-# Storage: 4 fields in Match entity (team_a_player_1_playing_handicap, etc.)
-```
+**Formula**: `PH = (HI × SR / 113) + (CR - par)`
 
-**Reason**: Efficiency in calculations + auditing (know what handicap was used in each match).
+**Storage**: 4 fields in Match entity (one per player).
+
+**Reason**: Efficiency + audit trail (know exact handicap used in match).
 
 ### 4. Independent Dual Validation
 
-**Decision**: Each player validates ONLY their own card.
+**Decision**: Each player validates ONLY their own scorecard.
 
-```python
-def can_submit_scorecard(player: Player) -> bool:
-    for hole in 1..18:
-        if player.score[hole] != marker.annotation_for_player[hole]:
-            return False  # ❌ Block
-    return True  # ✅ Can submit
-```
+**Logic**: Player can submit if `player.score[hole] == marker.annotation[hole]` for all 18 holes.
 
-**Reason**: Player A can submit independently of Player B's card. Reflects real golf process.
+**Reason**: Independence between players, reflects real golf process.
 
 ### 5. Course Approval Workflow
 
-**Decision**: Creator creates courses → PENDING_APPROVAL → Admin approves/rejects.
+**Decision**: Creator creates → PENDING_APPROVAL → Admin approves/rejects.
 
-```python
-ApprovalStatus = Enum("PENDING_APPROVAL", "APPROVED", "REJECTED")
-```
+**States**: `PENDING_APPROVAL`, `APPROVED`, `REJECTED` (final states).
 
-**Reason**: Doesn't block Creator + data quality control.
+**Reason**: Quality control without blocking Creator workflow.
 
 ### 6. Invitations with Secure Token
 
-**Decision**: Invitation system with token for direct registration.
+**Decision**: 256-bit token, 7-day expiration, auto-enrollment on acceptance.
 
-```python
-class Invitation:
-    invitee_email: Email
-    invitee_user_id: UserId | None  # null if not registered
-    token: str  # 256-bit, expires 7 days
-    status: InvitationStatus
-```
+**Flow**: Creator invites by email → Token sent → Player registers/accepts → Enrollment.APPROVED.
 
-**Reason**: Smooth UX (search by email + auto-enrollment on registration).
+**Reason**: Smooth UX, invitation = pre-approval.
 
 ## Main Aggregates
 
-**New:**
-- `GolfCourse` (name, country, type, tees[], holes[])
-- `Round` (date, golf_course, session_type)
-- `Match` (format, players, tees, playing_handicaps, status)
-- `Invitation` (competition, email, token, status)
-- `HoleScore` (match, hole_number, player, gross, net, status)
+**New**: `GolfCourse`, `Round`, `Match`, `Invitation`, `HoleScore`
 
-**Key Enums:**
-- `RoleName`, `TeeCategory`, `GolfCourseType`, `MatchFormat`, `MatchStatus`, `InvitationStatus`, `ScoreStatus`
+**Key Enums**: `TeeCategory`, `MatchFormat`, `MatchStatus`, `InvitationStatus`, `ScoreStatus`
 
 ## Consequences
 
 ### Positive ✅
-- Complete professional system for Ryder Cup tournaments
-- Auditable playing handicap
-- Dual validation reflects real golf process
-- Scalable: formal roles, normalized tees
-- Smooth UX with invitations
+- Complete professional tournament system
+- Auditable handicaps, dual validation
+- Scalable RBAC, normalized data
+- Smooth invitation UX
 
 ### Negative ⚠️
 - High complexity (+9 tables, +14 entities)
-- Duplicated playing handicap (Competition policy + Match calculation)
+- Playing handicap duplicated (policy + match)
 
 ## References
 
-- **ROADMAP.md**: v2.0.0 implementation details
+- **ROADMAP.md**: v2.0.0 details
 - **ADR-026**: Playing Handicap WHS Calculation
+- **ADR-031-033**: Match scoring, approval, invitations
