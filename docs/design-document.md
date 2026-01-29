@@ -50,7 +50,7 @@ Domain (Entities, VOs, Events, Repos)
 
 ## Security (OWASP Top 10)
 
-**Score**: 9.5/10 (v2.0.0, 29 Jan 2026)
+**Score**: 9.7/10 (v2.0.0, 29 Jan 2026)
 
 ### Implemented Protections
 
@@ -91,9 +91,11 @@ Domain (Entities, VOs, Events, Repos)
 - Password reset flow (secure tokens)
 - Device tracking
 
-**A08: Software Integrity Failures (8.0/10)**
-- Git-based deployment
-- Docker image verification
+**A08: Software Integrity Failures (9.5/10)**
+- SBOM generation (CycloneDX format, 160 components tracked)
+- Dependency lock with SHA256 hashes (prevents substitution attacks)
+- CI/CD supply chain validation (automated SBOM + integrity checks)
+- Git-based deployment + Docker image verification (Trivy)
 
 **A09: Security Logging Failures (9.0/10)**
 - Audit logging (login, logout, security events)
@@ -105,6 +107,15 @@ Domain (Entities, VOs, Events, Repos)
 - External service whitelisting
 
 ### Recent Security Improvements
+
+**v2.0.0 (29 Jan 2026)**:
+- ✅ A08: Software Integrity Failures (8.0 → 9.5)
+  - SBOM generation (CycloneDX, 160 components)
+  - Dependency lock with SHA256 hashes
+  - CI/CD supply chain validation
+- ✅ A04: Insecure Design (8.5 → 9.5)
+  - Business logic guards (CompetitionPolicy)
+  - STRIDE threat modeling (5 critical flows)
 
 **v1.13.1 (18 Jan 2026)**:
 - ✅ IP spoofing prevention (trusted proxy whitelist)
