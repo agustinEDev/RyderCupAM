@@ -34,7 +34,6 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
-
 # ===========================================
 # PURE AUTHORIZATION FUNCTIONS (No side effects)
 # ===========================================

@@ -5,6 +5,7 @@ Valida las funciones de autorización que determinan permisos de usuarios
 según el modelo de roles contextual del sistema.
 """
 
+from datetime import date, datetime
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -40,9 +41,6 @@ from src.shared.infrastructure.security.authorization import (
     require_creator_or_admin,
     require_player_in_competition,
 )
-
-from datetime import date, datetime
-
 
 # ======================================================================================
 # FIXTURES

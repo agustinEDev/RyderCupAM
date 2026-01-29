@@ -24,12 +24,6 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
     UserRolesResponseDTO,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.security.authorization import (
-    is_admin,
-    is_creator_of,
-    is_player_in,
-)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.update_profile_use_case import (
     UpdateProfileUseCase,
@@ -42,9 +36,15 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidCredentialsError,
     UserNotFoundError,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
+)
+from src.shared.infrastructure.security.authorization import (
+    is_admin,
+    is_creator_of,
+    is_player_in,
 )
 
 router = APIRouter()
@@ -280,10 +280,10 @@ async def get_my_roles_in_competition(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid competition ID format: {str(e)}",
+            detail=f"Invalid competition ID format: {e!s}",
         ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}",
+            detail=f"Internal server error: {e!s}",
         ) from e
