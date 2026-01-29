@@ -55,8 +55,8 @@ class GolfCourseRepository(IGolfCourseRepository):
             select(GolfCourse)
             .where(golf_courses_table.c.id == golf_course_id.value)
             .options(
-                joinedload(GolfCourse._tees),  # type: ignore
-                joinedload(GolfCourse._holes),  # type: ignore
+                joinedload(GolfCourse._tees),
+                joinedload(GolfCourse._holes),
             )
         )
         result = await self._session.execute(stmt)
@@ -76,8 +76,8 @@ class GolfCourseRepository(IGolfCourseRepository):
             select(GolfCourse)
             .where(golf_courses_table.c.approval_status == approval_status)
             .options(
-                joinedload(GolfCourse._tees),  # type: ignore
-                joinedload(GolfCourse._holes),  # type: ignore
+                joinedload(GolfCourse._tees),
+                joinedload(GolfCourse._holes),
             )
             .order_by(golf_courses_table.c.created_at.desc())
         )
@@ -116,8 +116,8 @@ class GolfCourseRepository(IGolfCourseRepository):
             select(GolfCourse)
             .where(golf_courses_table.c.creator_id == creator_id.value)
             .options(
-                joinedload(GolfCourse._tees),  # type: ignore
-                joinedload(GolfCourse._holes),  # type: ignore
+                joinedload(GolfCourse._tees),
+                joinedload(GolfCourse._holes),
             )
             .order_by(golf_courses_table.c.created_at.desc())
         )

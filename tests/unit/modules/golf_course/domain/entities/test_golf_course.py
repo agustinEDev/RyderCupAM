@@ -11,13 +11,14 @@ from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.events.golf_course_approved_event import GolfCourseApprovedEvent
 from src.modules.golf_course.domain.events.golf_course_rejected_event import GolfCourseRejectedEvent
-from src.modules.golf_course.domain.events.golf_course_requested_event import GolfCourseRequestedEvent
+from src.modules.golf_course.domain.events.golf_course_requested_event import (
+    GolfCourseRequestedEvent,
+)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-
 
 # ============================================================================
 # Fixtures
@@ -412,7 +413,9 @@ def test_approve_golf_course_already_approved(valid_tees, valid_holes):
     golf_course.approve()
 
     # When/Then
-    with pytest.raises(ValueError, match="Cannot approve course in status.*Only PENDING_APPROVAL can be approved"):
+    with pytest.raises(
+        ValueError, match="Cannot approve course in status.*Only PENDING_APPROVAL can be approved"
+    ):
         golf_course.approve()
 
 
@@ -434,7 +437,9 @@ def test_approve_golf_course_already_rejected(valid_tees, valid_holes):
     golf_course.reject(reason="Datos incorrectos en los ratings")
 
     # When/Then
-    with pytest.raises(ValueError, match="Cannot approve course in status.*Only PENDING_APPROVAL can be approved"):
+    with pytest.raises(
+        ValueError, match="Cannot approve course in status.*Only PENDING_APPROVAL can be approved"
+    ):
         golf_course.approve()
 
 
@@ -540,7 +545,9 @@ def test_reject_golf_course_already_approved(valid_tees, valid_holes):
     golf_course.approve()
 
     # When/Then
-    with pytest.raises(ValueError, match="Cannot reject course in status.*Only PENDING_APPROVAL can be rejected"):
+    with pytest.raises(
+        ValueError, match="Cannot reject course in status.*Only PENDING_APPROVAL can be rejected"
+    ):
         golf_course.reject(reason="Razón de rechazo válida pero estado no lo permite")
 
 
@@ -562,7 +569,9 @@ def test_reject_golf_course_already_rejected(valid_tees, valid_holes):
     golf_course.reject(reason="Primera razón de rechazo válida")
 
     # When/Then
-    with pytest.raises(ValueError, match="Cannot reject course in status.*Only PENDING_APPROVAL can be rejected"):
+    with pytest.raises(
+        ValueError, match="Cannot reject course in status.*Only PENDING_APPROVAL can be rejected"
+    ):
         golf_course.reject(reason="Segunda razón de rechazo válida pero estado no lo permite")
 
 

@@ -7,7 +7,9 @@ Tablas:
 - golf_course_holes (value object collection)
 """
 
+import uuid
 from datetime import datetime
+from typing import Any
 
 import sqlalchemy.types
 from sqlalchemy import (
@@ -153,57 +155,57 @@ golf_course_holes_table = Table(
 # ============================================================================
 
 
-class GolfCourseIdType(sqlalchemy.types.TypeDecorator):
+class GolfCourseIdType(sqlalchemy.types.TypeDecorator[GolfCourseId]):
     """TypeDecorator para GolfCourseId Value Object."""
 
     impl = UUID(as_uuid=True)
     cache_ok = True
 
-    def process_bind_param(self, value: GolfCourseId | None, dialect):
+    def process_bind_param(self, value: GolfCourseId | None, dialect: Any) -> uuid.UUID | None:
         """Convierte GolfCourseId → UUID para persistencia."""
         if value is None:
             return None
-        return value.value
+        return uuid.UUID(value.value)
 
-    def process_result_value(self, value: UUID | None, dialect) -> GolfCourseId | None:
+    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> GolfCourseId | None:
         """Convierte UUID → GolfCourseId al hidratar."""
         if value is None:
             return None
-        return GolfCourseId(value)
+        return GolfCourseId(str(value))
 
 
-class CountryCodeType(sqlalchemy.types.TypeDecorator):
+class CountryCodeType(sqlalchemy.types.TypeDecorator[CountryCode]):
     """TypeDecorator para CountryCode Value Object."""
 
     impl = String(2)
     cache_ok = True
 
-    def process_bind_param(self, value: CountryCode | None, dialect) -> str | None:
+    def process_bind_param(self, value: CountryCode | None, dialect: Any) -> str | None:
         """Convierte CountryCode → str para persistencia."""
         if value is None:
             return None
         return value.value
 
-    def process_result_value(self, value: str | None, dialect) -> CountryCode | None:
+    def process_result_value(self, value: str | None, dialect: Any) -> CountryCode | None:
         """Convierte str → CountryCode al hidratar."""
         if value is None:
             return None
         return CountryCode(value)
 
 
-class UserIdType(sqlalchemy.types.TypeDecorator):
+class UserIdType(sqlalchemy.types.TypeDecorator[UserId]):
     """TypeDecorator para UserId Value Object."""
 
     impl = UUID(as_uuid=True)
     cache_ok = True
 
-    def process_bind_param(self, value: UserId | None, dialect):
+    def process_bind_param(self, value: UserId | None, dialect: Any) -> uuid.UUID | None:
         """Convierte UserId → UUID para persistencia."""
         if value is None:
             return None
         return value.value
 
-    def process_result_value(self, value: UUID | None, dialect) -> UserId | None:
+    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> UserId | None:
         """Convierte UUID → UserId al hidratar."""
         if value is None:
             return None

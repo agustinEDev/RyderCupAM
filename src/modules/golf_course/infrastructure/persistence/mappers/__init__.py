@@ -8,8 +8,8 @@ from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapp
 )
 
 __all__ = [
-    "golf_courses_table",
-    "golf_course_tees_table",
     "golf_course_holes_table",
+    "golf_course_tees_table",
+    "golf_courses_table",
     "mapper_registry",
 ]
