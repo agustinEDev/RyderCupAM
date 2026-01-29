@@ -50,7 +50,7 @@ Domain (Entities, VOs, Events, Repos)
 
 ## Security (OWASP Top 10)
 
-**Score**: 9.4/10 (v1.13.1, 18 Jan 2026)
+**Score**: 9.5/10 (v2.0.0, 29 Jan 2026)
 
 ### Implemented Protections
 
@@ -70,9 +70,11 @@ Domain (Entities, VOs, Events, Repos)
 - Input validation (Pydantic)
 - HTTP context validation (sentinel rejection)
 
-**A04: Insecure Design (8.5/10)**
+**A04: Insecure Design (9.5/10)**
 - Clean Architecture (layered security)
 - Domain validation (Value Objects)
+- Business logic guards (CompetitionPolicy)
+- Threat modeling (STRIDE analysis for 5 flows)
 
 **A05: Security Misconfiguration (9.5/10)**
 - Secure HTTP headers (CSP, X-Frame-Options, etc.)
