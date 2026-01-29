@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.13.1-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1066%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1091%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,10 +29,11 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **39 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,066 tests** passing (99.9% success rate, ~60s execution)
+- ✅ **40 REST API endpoints** fully documented (Swagger UI)
+- ✅ **1,091 tests** passing (100% success rate, ~65s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
+- ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
 - ✅ **10 CI/CD jobs** - GitHub Actions pipeline (~3min)
 - ✅ **Device Fingerprinting** - Advanced session management with auto-registration
 - ✅ **Email Verification** - Bilingual templates (ES/EN) via Mailgun
@@ -160,12 +161,15 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 ## ✨ Features
 
 ### User Management
+- ✅ **RBAC Foundation (v2.0.0)**: Simplified three-tier role system (ADMIN, CREATOR, PLAYER).
 - ✅ Registration with email verification (bilingual ES/EN)
 - ✅ JWT authentication (httpOnly cookies + dual support)
 - ✅ Profile management (personal info + security)
 - ✅ Handicap system (manual + RFEG integration)
 - ✅ Password reset with secure tokens (256-bit, 24h expiration)
 - ✅ Device fingerprinting with auto-registration
+
+> **Note on Admin Users**: The `ADMIN` role is assigned directly in the database (`users.is_admin = TRUE`) for security. There is no public endpoint for this operation.
 
 ### Competition Module
 - ✅ CRUD operations for tournaments
@@ -190,17 +194,19 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **Input Sanitization** - HTML sanitization, XSS prevention
 - ✅ **Sentry Integration** - Error tracking + APM + profiling
 
-### Coming Soon (v2.0.0 - Competition Module Evolution)
-- 🔄 **Golf Course Management** - Creator requests, Admin approval workflow
-- 🔄 **RBAC System** - Formal role management (ADMIN, CREATOR, PLAYER)
-- 🔄 **Round Planning** - Manual match scheduling with drag-drop
-- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation
-- 🔄 **Invitation System** - Email invitations with secure tokens
-- 🔄 **Playing Handicap** - WHS automatic calculation per tee
-- 🔄 **Match Play Scoring** - Net scores, hole winners, standings
-- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache
+### What's New in v2.0.0
+- ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER) is now complete.
 
-**Timeline**: Jan 27 - Mar 17, 2026 (7 weeks) | **30 new endpoints** | **75+ tests**
+### Coming Soon (Competition Module Evolution)
+- 🔄 **Golf Course Management** - Creator requests, Admin approval workflow.
+- 🔄 **Round Planning** - Manual match scheduling with drag-drop.
+- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation.
+- 🔄 **Invitation System** - Email invitations with secure tokens.
+- 🔄 **Playing Handicap** - WHS automatic calculation per tee.
+- 🔄 **Match Play Scoring** - Net scores, hole winners, standings.
+- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache.
+
+**Timeline**: Jan 27 - Mar 17, 2026 (7 weeks) | **~29 more endpoints** | **~50+ more tests**
 
 ---
 
@@ -258,18 +264,18 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v1.13.1)
+### Test Statistics (v2.0.0)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,066** | ✅ 99.9% passing | 90%+ |
-| User Module | 563 | ✅ 100% | 92% |
+| **Total** | **1,091** | ✅ 100% passing | 90%+ |
+| User Module | 588 | ✅ 100% | 92% |
 | Competition Module | 174 | ✅ 100% | 91% |
 | Security Suite | 34 | ✅ 100% | 95% |
 | Shared | 138 | ✅ 100% | 88% |
 | Integration | 72 | ✅ 100% | - |
 
-**Execution Time**: ~60 seconds (with pytest-xdist parallelization)
+**Execution Time**: ~65 seconds (with pytest-xdist parallelization)
 
 **Test Types**:
 - Unit tests (domain + application logic)
@@ -342,74 +348,81 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (39 total)
+### Available Endpoints (40 total)
 
 <details>
-<summary><b>Authentication (6 endpoints)</b></summary>
+<summary><b>Authentication (11 endpoints)</b></summary>
 
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - Login with JWT
-- `POST /api/v1/auth/logout` - Logout (revoke refresh tokens)
-- `POST /api/v1/auth/verify-email` - Verify email with token
-- `POST /api/v1/auth/refresh-token` - Refresh access token
-- `POST /api/v1/auth/unlock-account` - Manual account unlock (admin)
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/current-user`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/verify-email`
+- `POST /api/v1/auth/resend-verification`
+- `POST /api/v1/auth/refresh-token`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
+- `GET /api/v1/auth/validate-reset-token/:token`
+- `POST /api/v1/auth/unlock-account`
 </details>
 
 <details>
-<summary><b>Users (8 endpoints)</b></summary>
+<summary><b>User Management (4 endpoints)</b></summary>
 
-- `GET /api/v1/users/me` - Get current user profile
-- `PUT /api/v1/users/me` - Update profile
-- `PUT /api/v1/users/me/security` - Update password/email
-- `GET /api/v1/users/search` - Search users
-- `GET /api/v1/users/me/roles` - Get user roles
-- `GET /api/v1/users/me/devices` - List active devices
-- `DELETE /api/v1/users/me/devices/{device_id}` - Revoke device
-- `POST /api/v1/users/request-password-reset` - Request password reset
-- `POST /api/v1/users/reset-password` - Reset password with token
+- `GET /api/v1/users/search`
+- `PATCH /api/v1/users/profile`
+- `PATCH /api/v1/users/security`
+- `GET /api/v1/users/me/roles/{competition_id}` (v2.0.0)
 </details>
 
 <details>
-<summary><b>Handicaps (3 endpoints)</b></summary>
+<summary><b>Device Management (2 endpoints)</b></summary>
 
-- `POST /api/v1/handicaps/rfeg-update` - Update from RFEG
-- `PUT /api/v1/handicaps/manual` - Manual handicap update
-- `POST /api/v1/handicaps/batch-rfeg-update` - Batch update
+- `GET /api/v1/users/me/devices`
+- `DELETE /api/v1/users/me/devices/{id}`
 </details>
 
 <details>
-<summary><b>Competitions (10 endpoints)</b></summary>
+<summary><b>Handicap Management (3 endpoints)</b></summary>
 
-- `POST /api/v1/competitions` - Create competition
-- `GET /api/v1/competitions` - List competitions
-- `GET /api/v1/competitions/{id}` - Get competition details
-- `PUT /api/v1/competitions/{id}` - Update competition
-- `DELETE /api/v1/competitions/{id}` - Delete competition
-- `POST /api/v1/competitions/{id}/activate` - Activate (DRAFT → ACTIVE)
-- `POST /api/v1/competitions/{id}/close-enrollments` - Close enrollments
-- `POST /api/v1/competitions/{id}/start` - Start competition
-- `POST /api/v1/competitions/{id}/complete` - Complete competition
-- `POST /api/v1/competitions/{id}/cancel` - Cancel competition
+- `POST /api/v1/handicaps/update`
+- `POST /api/v1/handicaps/update-multiple`
+- `POST /api/v1/handicaps/update-manual`
 </details>
 
 <details>
-<summary><b>Enrollments (8 endpoints)</b></summary>
+<summary><b>Competition Management (10 endpoints)</b></summary>
 
-- `POST /api/v1/competitions/{id}/enrollments` - Request enrollment
-- `POST /api/v1/competitions/{id}/enrollments/direct` - Direct enrollment (creator)
-- `GET /api/v1/competitions/{id}/enrollments` - List enrollments
-- `PUT /api/v1/enrollments/{id}/approve` - Approve enrollment
-- `PUT /api/v1/enrollments/{id}/reject` - Reject enrollment
-- `PUT /api/v1/enrollments/{id}/cancel` - Cancel enrollment
-- `PUT /api/v1/enrollments/{id}/withdraw` - Withdraw enrollment
-- `PUT /api/v1/enrollments/{id}/set-handicap` - Set custom handicap
+- `POST /api/v1/competitions`
+- `GET /api/v1/competitions`
+- `GET /api/v1/competitions/{id}`
+- `PUT /api/v1/competitions/{id}`
+- `DELETE /api/v1/competitions/{id}`
+- `POST /api/v1/competitions/{id}/activate`
+- `POST /api/v1/competitions/{id}/close-enrollments`
+- `POST /api/v1/competitions/{id}/start`
+- `POST /api/v1/competitions/{id}/complete`
+- `POST /api/v1/competitions/{id}/cancel`
+</details>
+
+<details>
+<summary><b>Enrollment Management (8 endpoints)</b></summary>
+
+- `POST /api/v1/competitions/{id}/enrollments`
+- `POST /api/v1/competitions/{id}/enrollments/direct`
+- `GET /api/v1/competitions/{id}/enrollments`
+- `POST /api/v1/enrollments/{id}/approve`
+- `POST /api/v1/enrollments/{id}/reject`
+- `POST /api/v1/enrollments/{id}/cancel`
+- `POST /api/v1/enrollments/{id}/withdraw`
+- `PUT /api/v1/enrollments/{id}/handicap`
 </details>
 
 <details>
 <summary><b>Countries (2 endpoints)</b></summary>
 
-- `GET /api/v1/countries` - List all countries (166 total)
-- `GET /api/v1/countries/{code}/adjacent` - Get adjacent countries
+- `GET /api/v1/countries`
+- `GET /api/v1/countries/{code}/adjacent`
 </details>
 
 **Interactive Documentation**: http://localhost:8000/docs
@@ -496,23 +509,20 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v1.13.1 (Production)
+### Current Version: v2.0.0 (Production)
 
 **Latest Features**:
-- Current device detection in device list
-- IP spoofing prevention with trusted proxy validation
-- HTTP context validation centralized (306 lines helper)
-- +36 security tests
-- OWASP score: 9.2 → 9.4
+- **RBAC Foundation**: Simplified, three-tier role system (ADMIN, CREATOR, PLAYER).
+- New endpoint `GET /users/me/roles/{competition_id}` to check roles.
+- +25 tests for RBAC, bringing total to 1,091.
 
-### Coming Next: v2.0.0 - Competition Module Evolution ⭐
+### Coming Next: v2.0.1 - Competition Module Evolution ⭐
 
-**Timeline**: Jan 27 - Mar 17, 2026 (7 weeks)
-**Effort**: 330h | **Endpoints**: +30 | **Tests**: +75
+**Timeline**: Jan 30 - Mar 17, 2026 (7 weeks)
+**Effort**: ~270h | **Endpoints**: +29 | **Tests**: +50
 
 **Features**:
 - Golf course management with approval workflow
-- RBAC system (ADMIN, CREATOR, PLAYER)
 - Round planning and match scheduling
 - Live scoring with dual validation (player + marker)
 - Invitation system with secure tokens
@@ -521,7 +531,7 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 - Real-time leaderboards with Redis cache
 
 **Sprint Breakdown**:
-1. **Sprint 1** (Jan 27 - Feb 6): RBAC + Golf Courses - 10 endpoints
+1. **Sprint 1** (Jan 27 - Feb 6): Golf Courses - 6 endpoints
 2. **Sprint 2** (Feb 7 - Feb 17): Rounds + Matches - 10 endpoints
 3. **Sprint 3** (Feb 18 - Feb 24): Invitations - 5 endpoints
 4. **Sprint 4** (Feb 25 - Mar 10): Scoring System - 4 endpoints

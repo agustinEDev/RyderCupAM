@@ -1,59 +1,31 @@
 # Changelog
 
-Todos los cambios notables en este proyecto serán documentados en este archivo.
+All notable changes to this project will be documented in this file.
 
-El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
-y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned - v2.1.0 - Competition Module Evolution (En Planificación - 7 semanas)
+## [2.0.0] - 2026-01-29
 
-**🏌️ Sistema Completo de Gestión de Torneos Ryder Cup**
+### Added
+- **RBAC Foundation**: Implemented a simplified, three-tier role system (ADMIN, CREATOR, PLAYER) without a formal roles table.
+  - Added `is_admin` boolean field to the `User` entity with a partial index for performance.
+  - Created a new endpoint `GET /api/v1/users/me/roles/{competition_id}` to check user roles within a competition.
+  - Implemented authorization helpers: `is_admin_user()`, `is_creator_of()`, and `is_player_in()`.
+- Added 25 new tests (17 unit, 8 integration) for the RBAC functionality, achieving 100% coverage for the new code.
 
-#### Added (Planificado)
-- Sistema de roles formal (Admin, Creator, Player) con tablas dedicadas
-- Gestión completa de campos de golf con tees y 18 hoyos
-- Sistema de aprobación de campos (Creator → PENDING_APPROVAL → Admin aprueba)
-- Planificación de jornadas (Rounds) y partidos (Matches)
-- Sistema de invitaciones con token seguro y auto-registro
-- Cálculo automático de Playing Handicap (WHS)
-- Live scoring hoyo a hoyo con navegación libre
-- Validación dual independiente (jugador vs marcador)
-- Leaderboards en tiempo real (match + global)
+### Changed
+- Separated Docker and Kubernetes port variables to prevent conflicts during local development. `DOCKER_APP_PORT` and `DOCKER_DATABASE_PORT` are now used for the application in `docker-compose.yml`.
+- Updated `docker-compose.yml` to use the new port variables.
 
-#### Nuevas Entidades (9 bloques)
-1. **Roles & Permissions**: `Role`, `UserRole`
-2. **Golf Courses**: `GolfCourse`, `Tee` (múltiples por campo), `Hole` (18 por campo)
-3. **Schedule**: `Round`, `Match` (Fourball, Foursomes, Singles, Greensome)
-4. **Invitations**: `Invitation` (búsqueda + email + token)
-5. **Scoring**: `HoleScore` (gross, net, strokes_received)
+### Fixed
+- Resolved port allocation errors when running the application with Docker Compose and a local Kubernetes cluster simultaneously.
 
-#### Nuevos Endpoints (~35 REST API)
-- Golf Courses: CRUD Admin + búsqueda por país (Creator)
-- Course Approval: Aprobar/rechazar + notificaciones email
-- Rounds: CRUD jornadas por competición
-- Matches: CRUD partidos + asignación jugadores/tees
-- Invitations: Buscar usuarios + invitar (registrados y email) + responder
-- Scoring: Anotar scores hoyo a hoyo + validación dual + entregar tarjeta
-- Leaderboards: Match individual + Global por equipos
+### Database
+- A new database migration `7522c9fc51ef` is required to add the `is_admin` column to the `users` table.
 
-#### Changed (Planificado)
-- Competition Module: Evolución de gestión básica a sistema completo profesional
-- Playing Handicap: Pre-calculado y almacenado (WHS fórmula oficial)
-- Validación de scores: Sistema dual independiente por jugador
-
-#### Tests Esperados
-- +355 tests nuevos (905 → 1,260 tests, +39% growth)
-- Cobertura completa: Domain, Application, Infrastructure, API
-
-#### Documentación
-- ADR-025: Competition Module Evolution v2.1.0
-- ADR-026: Playing Handicap WHS Calculation
-- DATABASE_ERD.md: Diagrama completo (15 tablas)
-- ROADMAP.md: Planificación detallada 7 semanas
-
-**Ver detalles completos:** `ROADMAP.md`, `docs/DATABASE_ERD.md`, `docs/architecture/decisions/ADR-025*.md`
 
 ---
 
