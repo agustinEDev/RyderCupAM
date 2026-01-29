@@ -149,6 +149,28 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_by_user_and_competition(
+        self, user_id: UserId, competition_id: CompetitionId
+    ) -> Enrollment | None:
+        """
+        Busca un enrollment específico de un usuario en una competición.
+
+        Args:
+            user_id: ID del usuario
+            competition_id: ID de la competición
+
+        Returns:
+            Enrollment | None: El enrollment si existe, None si no existe
+        """
+        statement = select(Enrollment).where(
+            and_(
+                Enrollment.user_id == user_id,
+                Enrollment.competition_id == competition_id,
+            )
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def exists_for_user_in_competition(
         self, user_id: UserId, competition_id: CompetitionId
     ) -> bool:
