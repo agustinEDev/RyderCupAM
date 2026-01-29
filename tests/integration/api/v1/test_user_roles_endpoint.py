@@ -49,7 +49,7 @@ async def test_get_my_roles_returns_is_admin_true_for_admin_user(client: AsyncCl
         try:
             await session.execute(
                 text("UPDATE users SET is_admin = TRUE WHERE id = :user_id"),
-                {"user_id": admin_user["id"]}
+                {"user_id": admin_user["id"]},
             )
             await session.commit()
         finally:

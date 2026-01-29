@@ -83,9 +83,7 @@ def is_creator_of(user: UserResponseDTO, competition: Competition) -> bool:
     return competition.is_creator(UserId(str(user.id)))
 
 
-async def is_player_in(
-    user_id: UserId, competition_id: CompetitionId, uow
-) -> bool:
+async def is_player_in(user_id: UserId, competition_id: CompetitionId, uow) -> bool:
     """
     Verifica si el usuario está enrollado en una competición (rol contextual).
 

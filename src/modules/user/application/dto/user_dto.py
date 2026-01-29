@@ -151,7 +151,8 @@ class UserResponseDTO(BaseModel):
         default=False, description="Indica si el email del usuario ha sido verificado."
     )
     is_admin: bool = Field(
-        default=False, description="Indica si el usuario tiene privilegios de administrador del sistema (RBAC)."
+        default=False,
+        description="Indica si el usuario tiene privilegios de administrador del sistema (RBAC).",
     )
 
     # Configuración de Pydantic actualizada para V2
@@ -677,18 +678,15 @@ class UserRolesResponseDTO(BaseModel):
     """
 
     is_admin: bool = Field(
-        ...,
-        description="True si el usuario es administrador del sistema (rol global)."
+        ..., description="True si el usuario es administrador del sistema (rol global)."
     )
     is_creator: bool = Field(
-        ...,
-        description="True si el usuario creó esta competición (rol contextual)."
+        ..., description="True si el usuario creó esta competición (rol contextual)."
     )
     is_player: bool = Field(
         ...,
-        description="True si el usuario está enrollado en esta competición con status APPROVED (rol contextual)."
+        description="True si el usuario está enrollado en esta competición con status APPROVED (rol contextual).",
     )
     competition_id: str = Field(
-        ...,
-        description="UUID de la competición para la cual se consultaron los roles."
+        ..., description="UUID de la competición para la cual se consultaron los roles."
     )
