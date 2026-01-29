@@ -1,3 +1,13 @@
+# ============================================================================
+# Docker Compose Configuration for Ryder Cup Backend
+# ============================================================================
+# IMPORTANT: When running from project root, use:
+#   docker-compose -f docker/docker-compose.yml --env-file .env up -d
+#
+# Variables de puerto (evita conflictos con K8s):
+#   - DOCKER_DATABASE_PORT=5433 (Docker) vs DATABASE_PORT=5434 (K8s)
+#   - DOCKER_APP_PORT=8001 (Docker) vs PORT=8000 (K8s)
+# ============================================================================
 
 services:
   db:
@@ -8,7 +18,7 @@ services:
       - postgres_data:/var/lib/postgresql/data/
       - ./scripts/validate-postgres-env.sh:/validate-postgres-env.sh:ro
     env_file:
-      - path: ../.env
+      - path: .env
         required: true
     environment:
       # Note: Defaults are ONLY for docker-compose syntax safety; validation scripts
@@ -33,7 +43,7 @@ services:
       - ..:/app
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:
-      - path: ../.env
+      - path: .env
         required: true
     entrypoint: ["/bin/sh", "/validate-app-env.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -68,4 +68,5 @@ sonar-project.properties.coverage
 # Frontend Documentation (belongs in RyderCupWeb repo)
 # ==================================
 docs/frontend-examples/
-docs/FRONTEND_INTEGRATION_v1.13.0.md
+docs/FRONTEND_INTEGRATION_v1.13.0.mdlogs/*.log.*
+docker/.env
