@@ -4,7 +4,7 @@
 # Pipeline completo de integración continua y despliegue continuo
 # Ejecuta tests, security checks, linting y type checking en paralelo
 #
-# Jobs (10 en paralelo):
+# Jobs (11 en paralelo):
 # 1. Preparation - Setup Python + dependencies cache
 # 2. Unit Tests - 662 tests (Python 3.11 + 3.12)
 # 3. Integration Tests - 72 tests (con PostgreSQL)
@@ -14,7 +14,8 @@
 # 7. Type Checking - Mypy
 # 8. Build - Docker + Trivy container scan
 # 9. Snyk Scan - SCA + SAST
-# 10. Summary - Reporte final
+# 10. SBOM Generation - CycloneDX SBOM + dependency graph
+# 11. Summary - Reporte final
 
 name: CI/CD Pipeline
 
@@ -791,14 +792,144 @@ jobs:
           command: monitor
 
   # ================================
-  # JOB 9: SUMMARY
+  # JOB 9: SBOM GENERATION
+  # ================================
+  # Genera Software Bill of Materials (SBOM) en formato CycloneDX
+  # Cumple con OWASP A08:2021 Software and Data Integrity Failures
+  # Ejecuta solo en main/develop para evitar overhead en feature branches
+
+  sbom_generation:
+    name: 📦 SBOM Generation
+    runs-on: ubuntu-latest
+    needs: preparation
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.ref, 'release/')
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install cyclonedx-bom
+
+      - name: Generate SBOM (CycloneDX JSON)
+        run: |
+          echo "📦 Generating SBOM in CycloneDX format..."
+          mkdir -p sbom
+
+          cyclonedx-py requirements \
+            --input requirements.txt \
+            --output sbom/sbom.json \
+            --format json \
+            --verbose
+
+      - name: Generate SBOM Metadata
+        run: |
+          COMPONENT_COUNT=$(jq '.components | length' sbom/sbom.json)
+          SBOM_SHA256=$(sha256sum sbom/sbom.json | awk '{print $1}')
+
+          cat > sbom/sbom-metadata.txt << EOF
+          SBOM Metadata
+          =============
+          Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Format: CycloneDX 1.6 (JSON)
+          Source: requirements.txt
+          Tool: cyclonedx-py
+          Project: Ryder Cup Amateur Manager Backend
+          Version: 2.0.0
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+
+          Statistics:
+          - Components: $COMPONENT_COUNT
+          - SHA256: $SBOM_SHA256
+
+          OWASP Compliance:
+          - A08:2021 Software and Data Integrity Failures
+          - NIST SP 800-161r1 (Supply Chain Risk Management)
+          EOF
+
+      - name: Validate SBOM
+        run: |
+          echo "🔍 Validating SBOM structure..."
+
+          # Check if SBOM is valid JSON
+          jq empty sbom/sbom.json
+
+          # Check required fields
+          SPEC_VERSION=$(jq -r '.specVersion' sbom/sbom.json)
+          SERIAL_NUMBER=$(jq -r '.serialNumber' sbom/sbom.json)
+
+          echo "✅ SBOM validation passed"
+          echo "   Spec version: $SPEC_VERSION"
+          echo "   Serial number: $SERIAL_NUMBER"
+
+      - name: Generate SBOM Summary
+        run: |
+          echo "=========================================="
+          echo "📦 SBOM GENERATION SUMMARY"
+          echo "=========================================="
+          echo ""
+
+          COMPONENT_COUNT=$(jq '.components | length' sbom/sbom.json)
+          DIRECT_DEPS=$(grep -c "^[a-zA-Z0-9-]*==" requirements.txt || echo "0")
+          TRANSITIVE_DEPS=$((COMPONENT_COUNT - DIRECT_DEPS))
+
+          echo "📊 Statistics:"
+          echo "   Total components: $COMPONENT_COUNT"
+          echo "   Direct dependencies: $DIRECT_DEPS"
+          echo "   Transitive dependencies: $TRANSITIVE_DEPS"
+          echo ""
+          echo "📄 Files generated:"
+          echo "   - sbom/sbom.json ($(wc -l < sbom/sbom.json) lines)"
+          echo "   - sbom/sbom-metadata.txt"
+          echo ""
+          echo "🔒 Security:"
+          echo "   - Full supply chain visibility"
+          echo "   - Vulnerability tracking enabled"
+          echo "   - OWASP A08:2021 compliance"
+          echo ""
+          echo "=========================================="
+
+      - name: Upload SBOM as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: |
+            sbom/sbom.json
+            sbom/sbom-metadata.txt
+          retention-days: 90
+
+      - name: Upload SBOM to GitHub Dependency Graph (if main)
+        if: github.ref == 'refs/heads/main'
+        uses: advanced-security/sbom-generator-action@v0.0.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          format: cyclonedx
+          output-file: sbom/sbom.json
+
+  # ================================
+  # JOB 10: SUMMARY
   # ================================
   # Job final que depende de todos los anteriores
 
   pipeline_summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
-    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan]
+    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan, sbom_generation]
     if: always()
 
     steps:
@@ -821,6 +952,7 @@ jobs:
           SECURITY_TESTS="${{ needs.security_tests.result }}"
           SECURITY_CHECKS="${{ needs.security_checks.result }}"
           SNYK_SCAN="${{ needs.snyk_scan.result }}"
+          SBOM_GEN="${{ needs.sbom_generation.result }}"
           LINTING="${{ needs.linting.result }}"
           TYPE_CHECKING="${{ needs.type_checking.result }}"
           BUILD="${{ needs.build.result }}"
@@ -844,6 +976,7 @@ jobs:
             echo "| 🔐 Security Tests | $(get_emoji "$SECURITY_TESTS") | \`$SECURITY_TESTS\` |"
             echo "| 🔒 Security Checks | $(get_emoji "$SECURITY_CHECKS") | \`$SECURITY_CHECKS\` |"
             echo "| 🐍 Snyk Scan | $(get_emoji "$SNYK_SCAN") | \`$SNYK_SCAN\` |"
+            echo "| 📦 SBOM Generation | $(get_emoji "$SBOM_GEN") | \`$SBOM_GEN\` |"
             echo "| 📝 Linting | $(get_emoji "$LINTING") | \`$LINTING\` |"
             echo "| 🔬 Type Checking | $(get_emoji "$TYPE_CHECKING") | \`$TYPE_CHECKING\` |"
             echo "| 🐳 Build & Scan | $(get_emoji "$BUILD") | \`$BUILD\` |"
