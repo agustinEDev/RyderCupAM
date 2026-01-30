@@ -112,6 +112,12 @@ class GolfCourseResponseDTO(BaseModel):
     total_par: int = Field(..., description="Par total del campo")
     created_at: datetime = Field(..., description="Fecha de creación")
     updated_at: datetime = Field(..., description="Fecha de última actualización")
+    original_golf_course_id: str | None = Field(
+        None, description="ID del campo original (si este es un clone/update proposal)"
+    )
+    is_pending_update: bool = Field(
+        False, description="TRUE si este campo tiene un clone pendiente de aprobación"
+    )
 
     class Config:
         from_attributes = True
@@ -165,3 +171,70 @@ class ListPendingGolfCoursesResponseDTO(BaseModel):
 
     golf_courses: list[GolfCourseResponseDTO] = Field(..., description="Lista de campos pendientes")
     count: int = Field(..., description="Número total de campos")
+
+
+# ============================================================================
+# Update/Edit DTOs (v2.0.2)
+# ============================================================================
+
+
+class UpdateGolfCourseRequestDTO(BaseModel):
+    """Request para actualizar un campo de golf existente."""
+
+    name: str = Field(..., min_length=3, max_length=200, description="Nombre del campo")
+    country_code: str = Field(
+        ..., min_length=2, max_length=2, description="Código ISO del país (ES, FR, etc.)"
+    )
+    course_type: CourseType = Field(..., description="Tipo de campo (STANDARD_18, etc.)")
+    tees: list[TeeDTO] = Field(..., min_length=2, max_length=6, description="2-6 tees")
+    holes: list[HoleDTO] = Field(
+        ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
+    )
+
+
+class UpdateGolfCourseResponseDTO(BaseModel):
+    """Response después de actualizar un campo de golf."""
+
+    golf_course: GolfCourseResponseDTO = Field(..., description="Campo actualizado")
+    message: str = Field(..., description="Mensaje explicando qué pasó (updated vs clone created)")
+    pending_update: GolfCourseResponseDTO | None = Field(
+        None, description="Clone creado (solo si creator editó campo APPROVED)"
+    )
+
+
+class ApproveUpdateGolfCourseRequestDTO(BaseModel):
+    """Request para aprobar un update (clone) de un campo de golf."""
+
+    clone_id: str = Field(..., description="ID del clone a aprobar (UUID)")
+
+
+class ApproveUpdateGolfCourseResponseDTO(BaseModel):
+    """Response después de aprobar un update."""
+
+    updated_golf_course: GolfCourseResponseDTO = Field(
+        ..., description="Campo original con cambios aplicados"
+    )
+    message: str = Field(
+        default="Golf course update approved successfully",
+        description="Mensaje de confirmación",
+    )
+    applied_changes_from: str = Field(..., description="ID del clone que fue aplicado (ya eliminado)")
+
+
+class RejectUpdateGolfCourseRequestDTO(BaseModel):
+    """Request para rechazar un update (clone) de un campo de golf."""
+
+    clone_id: str = Field(..., description="ID del clone a rechazar (UUID)")
+
+
+class RejectUpdateGolfCourseResponseDTO(BaseModel):
+    """Response después de rechazar un update."""
+
+    original_golf_course: GolfCourseResponseDTO = Field(
+        ..., description="Campo original sin cambios"
+    )
+    message: str = Field(
+        default="Golf course update rejected",
+        description="Mensaje de confirmación",
+    )
+    rejected_clone_id: str = Field(..., description="ID del clone rechazado (eliminado)")
