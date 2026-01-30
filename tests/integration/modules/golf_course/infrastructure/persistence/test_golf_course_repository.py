@@ -25,7 +25,9 @@ from src.shared.domain.value_objects.country_code import CountryCode
 # Marcar todos los tests de este fichero como 'integration' y 'skip' (necesitan user fixtures)
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skip(reason="Needs user fixtures for creator_id FK. Will be enabled in next iteration."),
+    pytest.mark.skip(
+        reason="Needs user fixtures for creator_id FK. Will be enabled in next iteration."
+    ),
 ]
 
 
