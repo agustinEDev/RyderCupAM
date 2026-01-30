@@ -25,7 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import column_property, relationship
 from sqlalchemy.types import CHAR
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -235,16 +235,16 @@ mapper_registry.map_imperatively(
     golf_courses_table,
     properties={
         # Value Objects mapping (TypeDecorators en tabla)
-        "_id": golf_courses_table.c.id,
-        "_country_code": golf_courses_table.c.country_code,
-        "_creator_id": golf_courses_table.c.creator_id,
+        "_id": column_property(golf_courses_table.c.id),
+        "_country_code": column_property(golf_courses_table.c.country_code),
+        "_creator_id": column_property(golf_courses_table.c.creator_id),
         # Scalar attributes mapping
-        "_name": golf_courses_table.c.name,
-        "_course_type": golf_courses_table.c.course_type,
-        "_approval_status": golf_courses_table.c.approval_status,
-        "_rejection_reason": golf_courses_table.c.rejection_reason,
-        "_created_at": golf_courses_table.c.created_at,
-        "_updated_at": golf_courses_table.c.updated_at,
+        "_name": column_property(golf_courses_table.c.name),
+        "_course_type": column_property(golf_courses_table.c.course_type),
+        "_approval_status": column_property(golf_courses_table.c.approval_status),
+        "_rejection_reason": column_property(golf_courses_table.c.rejection_reason),
+        "_created_at": column_property(golf_courses_table.c.created_at),
+        "_updated_at": column_property(golf_courses_table.c.updated_at),
         # One-to-many relationships with tees and holes
         "_tees": relationship(
             Tee,

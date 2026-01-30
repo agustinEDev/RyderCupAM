@@ -966,8 +966,8 @@ jobs:
           # Run verification script
           ./scripts/verify-gpg-signatures.sh "$BASE_REF" HEAD
 
-      - name: Generate Verification Summary
-        if: always()
+      - name: Generate Verification Summary (Success)
+        if: success()
         run: |
           echo "=========================================="
           echo "🔏 GPG SIGNATURE VERIFICATION SUMMARY"
@@ -983,6 +983,28 @@ jobs:
           echo "📖 Policy:"
           echo "   - All commits MUST be signed with GPG"
           echo "   - Branch protection enforces this on main/develop"
+          echo ""
+          echo "=========================================="
+
+      - name: Generate Verification Summary (Failure)
+        if: failure()
+        run: |
+          echo "=========================================="
+          echo "🔏 GPG SIGNATURE VERIFICATION SUMMARY"
+          echo "=========================================="
+          echo ""
+          echo "❌ GPG verification FAILED"
+          echo ""
+          echo "⚠️  Found unsigned or invalid commits"
+          echo ""
+          echo "📋 Action Required:"
+          echo "   1. Check the 'Verify Commit Signatures' step output above"
+          echo "   2. Sign unsigned commits: git rebase --exec 'git commit --amend --no-edit -n -S' origin/main"
+          echo "   3. Or amend last commit: git commit --amend --no-edit -S"
+          echo "   4. Force push: git push --force"
+          echo ""
+          echo "📖 Documentation:"
+          echo "   See CLAUDE.md section '🔐 Git Commit Signing' for setup instructions"
           echo ""
           echo "=========================================="
 

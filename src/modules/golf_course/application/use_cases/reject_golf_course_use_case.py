@@ -54,7 +54,7 @@ class RejectGolfCourseUseCase:
         """
         async with self._uow:
             # 1. Obtener campo
-            golf_course_id = GolfCourseId.from_string(request.golf_course_id)
+            golf_course_id = GolfCourseId(request.golf_course_id)
             golf_course = await self._uow.golf_courses.find_by_id(golf_course_id)
 
             if not golf_course:

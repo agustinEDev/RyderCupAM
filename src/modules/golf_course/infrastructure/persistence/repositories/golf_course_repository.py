@@ -60,6 +60,7 @@ class GolfCourseRepository(IGolfCourseRepository):
             )
         )
         result = await self._session.execute(stmt)
+        result = result.unique()
         return result.scalar_one_or_none()
 
     async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
@@ -82,6 +83,7 @@ class GolfCourseRepository(IGolfCourseRepository):
             .order_by(golf_courses_table.c.created_at.desc())
         )
         result = await self._session.execute(stmt)
+        result = result.unique()
         return list(result.scalars().all())
 
     async def find_approved(self) -> list[GolfCourse]:
@@ -122,6 +124,7 @@ class GolfCourseRepository(IGolfCourseRepository):
             .order_by(golf_courses_table.c.created_at.desc())
         )
         result = await self._session.execute(stmt)
+        result = result.unique()
         return list(result.scalars().all())
 
     async def delete(self, golf_course_id: GolfCourseId) -> None:

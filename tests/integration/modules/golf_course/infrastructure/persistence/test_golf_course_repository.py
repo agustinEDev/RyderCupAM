@@ -8,6 +8,7 @@ TODO: These tests require user fixtures to create valid creator_id foreign keys.
 """
 
 import pytest
+from sqlalchemy import select
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
@@ -536,8 +537,20 @@ async def test_delete_golf_course(db_session, valid_tees, valid_holes):
     await repository.delete(golf_course.id)
     await db_session.commit()
 
-    # Assert
+    # Assert - GolfCourse eliminado
     assert await repository.find_by_id(golf_course.id) is None
+
+    # Assert - Cascade delete: Tees eliminados
+    tees_query = select(Tee).where(Tee.golf_course_id == golf_course.id.value)
+    result_tees = await db_session.execute(tees_query)
+    remaining_tees = result_tees.scalars().all()
+    assert len(remaining_tees) == 0, "Tees should be cascade deleted"
+
+    # Assert - Cascade delete: Holes eliminados
+    holes_query = select(Hole).where(Hole.golf_course_id == golf_course.id.value)
+    result_holes = await db_session.execute(holes_query)
+    remaining_holes = result_holes.scalars().all()
+    assert len(remaining_holes) == 0, "Holes should be cascade deleted"
 
 
 async def test_delete_non_existent_golf_course(db_session):

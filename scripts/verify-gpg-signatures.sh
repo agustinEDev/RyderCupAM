@@ -94,12 +94,14 @@ UNSIGNED_COMMITS=()
 INVALID_SIGNATURES=()
 VALID_COUNT=0
 MERGE_COUNT=0
+GITHUB_AUTO_MERGE_COUNT=0
 
 while IFS= read -r commit; do
     # Get commit info
     COMMIT_SHORT=$(git log -1 --format="%h" "$commit")
     COMMIT_MSG=$(git log -1 --format="%s" "$commit" | head -c 60)
     COMMIT_AUTHOR=$(git log -1 --format="%an" "$commit")
+    COMMIT_EMAIL=$(git log -1 --format="%ae" "$commit")
 
     # Check if this is a merge commit (has 2+ parents)
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
@@ -123,6 +125,7 @@ while IFS= read -r commit; do
         echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
         echo "   Type: GITHUB AUTO-MERGE (signature not required)"
+        GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         VALID_COUNT=$((VALID_COUNT + 1))
     else
         # Regular commit or manual merge - verify signature
@@ -161,7 +164,8 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
-echo "   Merge commits: $MERGE_COUNT (signature not required)"
+echo "   Merge commits: $MERGE_COUNT"
+echo "   GitHub auto-merges (signature not required): $GITHUB_AUTO_MERGE_COUNT"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
 echo "   Invalid signatures: ${#INVALID_SIGNATURES[@]}"
 echo ""

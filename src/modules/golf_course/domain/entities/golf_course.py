@@ -88,8 +88,8 @@ class GolfCourse:
         self._country_code = country_code
         self._course_type = course_type
         self._creator_id = creator_id
-        self._tees = tees
-        self._holes = holes
+        self._tees = list(tees)  # Defensive copy
+        self._holes = list(holes)  # Defensive copy
         self._approval_status = approval_status
         self._rejection_reason = rejection_reason
         self._created_at = created_at
