@@ -53,7 +53,7 @@ class GolfCourseRepository(IGolfCourseRepository):
         """
         stmt = (
             select(GolfCourse)
-            .where(golf_courses_table.c.id == golf_course_id.value)
+            .where(golf_courses_table.c.id == golf_course_id)
             .options(
                 joinedload(GolfCourse._tees),
                 joinedload(GolfCourse._holes),
@@ -116,7 +116,7 @@ class GolfCourseRepository(IGolfCourseRepository):
         """
         stmt = (
             select(GolfCourse)
-            .where(golf_courses_table.c.creator_id == creator_id.value)
+            .where(golf_courses_table.c.creator_id == creator_id)
             .options(
                 joinedload(GolfCourse._tees),
                 joinedload(GolfCourse._holes),

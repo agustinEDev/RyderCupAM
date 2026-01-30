@@ -944,11 +944,18 @@ jobs:
         env:
           GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
         run: |
-          echo "🔑 Importing GPG public key from secrets..."
-          echo "$GPG_PUBLIC_KEY" | gpg --import --batch --yes
+          echo "🔑 Checking GPG public key availability..."
+
+          if [ -n "$GPG_PUBLIC_KEY" ]; then
+            echo "✅ GPG_PUBLIC_KEY found, importing..."
+            echo "$GPG_PUBLIC_KEY" | gpg --import --batch --yes
+          else
+            echo "⚠️  GPG_PUBLIC_KEY not available (forked PR or missing secret)"
+            echo "   Verification will use system keyring only"
+          fi
 
           echo ""
-          echo "📋 Imported keys:"
+          echo "📋 Available GPG keys:"
           gpg --list-keys
 
       - name: Verify Commit Signatures
