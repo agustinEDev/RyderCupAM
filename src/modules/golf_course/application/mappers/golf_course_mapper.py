@@ -56,4 +56,10 @@ class GolfCourseMapper:
             total_par=golf_course.total_par,
             created_at=golf_course.created_at,
             updated_at=golf_course.updated_at,
+            original_golf_course_id=(
+                str(golf_course.original_golf_course_id)
+                if golf_course.original_golf_course_id
+                else None
+            ),
+            is_pending_update=golf_course.is_pending_update,
         )

@@ -53,7 +53,13 @@ class TestRejectUpdateGolfCourseUseCase:
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
-            )
+            ),
+            Tee(
+                category=TeeCategory.AMATEUR_MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+            ),
         ]
         holes_original = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
 
@@ -76,9 +82,21 @@ class TestRejectUpdateGolfCourseUseCase:
                 identifier="Blue",
                 course_rating=74.0,
                 slope_rating=135,
-            )
+            ),
+            Tee(
+                category=TeeCategory.AMATEUR_MALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+            ),
         ]
-        holes_clone = [Hole(number=i, par=5, stroke_index=i) for i in range(1, 19)]
+        # Holes con pars válidos (total = 70: 4xpar3 + 10xpar4 + 4xpar5)
+        holes_clone = [
+            Hole(number=i, par=3, stroke_index=i) if i in [3, 7, 12, 17] else
+            Hole(number=i, par=5, stroke_index=i) if i in [5, 9, 14, 18] else
+            Hole(number=i, par=4, stroke_index=i)
+            for i in range(1, 19)
+        ]
 
         clone = GolfCourse.create(
             name="Updated Golf Club",
