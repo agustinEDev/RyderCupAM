@@ -66,6 +66,8 @@ class GolfCourse:
         rejection_reason: str | None,
         created_at: datetime,
         updated_at: datetime,
+        original_golf_course_id: GolfCourseId | None = None,
+        is_pending_update: bool = False,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -83,6 +85,8 @@ class GolfCourse:
             rejection_reason: Razón de rechazo (solo si REJECTED)
             created_at: Fecha de creación
             updated_at: Fecha de última actualización
+            original_golf_course_id: Si no es None, este es un clone/update proposal del original
+            is_pending_update: TRUE si este campo tiene un clone pendiente de aprobación
             domain_events: Eventos de dominio (opcional)
         """
         self._id = id
@@ -96,6 +100,8 @@ class GolfCourse:
         self._rejection_reason = rejection_reason
         self._created_at = created_at
         self._updated_at = updated_at
+        self._original_golf_course_id = original_golf_course_id
+        self._is_pending_update = is_pending_update
         self._domain_events: list[DomainEvent] = domain_events or []
 
         # Validar invariantes
@@ -187,6 +193,8 @@ class GolfCourse:
         rejection_reason: str | None,
         created_at: datetime,
         updated_at: datetime,
+        original_golf_course_id: GolfCourseId | None = None,
+        is_pending_update: bool = False,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -205,6 +213,8 @@ class GolfCourse:
             rejection_reason=rejection_reason,
             created_at=created_at,
             updated_at=updated_at,
+            original_golf_course_id=original_golf_course_id,
+            is_pending_update=is_pending_update,
         )
 
     def approve(self) -> None:
@@ -269,6 +279,96 @@ class GolfCourse:
                 rejection_reason=reason,
             )
         )
+
+    def update(
+        self,
+        name: str,
+        country_code: CountryCode,
+        course_type: CourseType,
+        tees: list[Tee],
+        holes: list[Hole],
+    ) -> None:
+        """
+        Actualiza los campos del golf course.
+
+        Este método actualiza todos los campos modificables in-place.
+        IMPORTANTE: La lógica de negocio (si crear clone o actualizar directo)
+        debe estar en el use case, no aquí.
+
+        Args:
+            name: Nuevo nombre del campo
+            country_code: Nuevo código de país
+            course_type: Nuevo tipo de campo
+            tees: Nueva lista de tees
+            holes: Nueva lista de hoyos
+
+        Raises:
+            ValueError: Si los datos no son válidos
+        """
+        # Validar nombre
+        if not (3 <= len(name) <= 200):  # noqa: PLR2004
+            raise ValueError("Course name must be between 3 and 200 characters")
+
+        # Actualizar campos
+        self._name = name
+        self._country_code = country_code
+        self._course_type = course_type
+        self._tees = list(tees)  # Defensive copy
+        self._holes = list(holes)  # Defensive copy
+        self._updated_at = datetime.utcnow()
+
+        # Validar invariantes
+        self._validate_holes()
+        self._validate_tees()
+
+    def mark_as_pending_update(self) -> None:
+        """
+        Marca este campo como 'tiene cambios pendientes de aprobación'.
+
+        Usado cuando un creator edita un campo APPROVED y se crea un clone.
+        """
+        self._is_pending_update = True
+        self._updated_at = datetime.utcnow()
+
+    def clear_pending_update(self) -> None:
+        """
+        Quita la marca de 'cambios pendientes'.
+
+        Usado cuando el admin aprueba o rechaza el clone.
+        """
+        self._is_pending_update = False
+        self._updated_at = datetime.utcnow()
+
+    def apply_changes_from_clone(self, clone: "GolfCourse") -> None:
+        """
+        Aplica todos los cambios de un clone a este campo original.
+
+        Usado cuando el admin aprueba un update y necesitamos copiar
+        todos los campos del clone al original.
+
+        Args:
+            clone: El clone con los cambios propuestos
+
+        Raises:
+            ValueError: Si el clone no es realmente un clone de este campo
+        """
+        if clone.original_golf_course_id != self._id:
+            raise ValueError(f"Clone {clone.id} is not a clone of this golf course {self._id}")
+
+        # Copiar todos los campos modificables del clone
+        self._name = clone._name
+        self._country_code = clone._country_code
+        self._course_type = clone._course_type
+        self._tees = list(clone._tees)  # Defensive copy
+        self._holes = list(clone._holes)  # Defensive copy
+        self._updated_at = datetime.utcnow()
+
+        # Quitar marca de pending update
+        self._is_pending_update = False
+
+        # Validar invariantes
+        self._validate_holes()
+        self._validate_tees()
 
     def _validate_holes(self) -> None:
         """
@@ -377,3 +477,13 @@ class GolfCourse:
     def total_par(self) -> int:
         """Retorna el par total del campo."""
         return sum(h.par for h in self._holes)
+
+    @property
+    def original_golf_course_id(self) -> GolfCourseId | None:
+        """Retorna el ID del campo original si este es un clone/update proposal."""
+        return self._original_golf_course_id
+
+    @property
+    def is_pending_update(self) -> bool:
+        """Retorna TRUE si este campo tiene un clone pendiente de aprobación."""
+        return self._is_pending_update

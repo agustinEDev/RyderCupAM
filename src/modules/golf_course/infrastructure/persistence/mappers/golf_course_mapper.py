@@ -13,6 +13,7 @@ from typing import Any
 
 import sqlalchemy.types
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -135,6 +136,20 @@ golf_courses_table = Table(
     Column(
         "updated_at", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     ),
+    Column(
+        "original_golf_course_id",
+        GolfCourseIdType,
+        ForeignKey("golf_courses.id", ondelete="CASCADE"),
+        nullable=True,
+        comment="If not NULL, this is a clone/update proposal of the original golf course",
+    ),
+    Column(
+        "is_pending_update",
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="TRUE if this golf course has a pending update clone",
+    ),
     CheckConstraint("LENGTH(name) >= 3", name="ck_golf_courses_name_min_length"),
     CheckConstraint(
         "(approval_status != 'REJECTED') OR (rejection_reason IS NOT NULL)",
@@ -238,6 +253,7 @@ mapper_registry.map_imperatively(
         "_id": column_property(golf_courses_table.c.id),
         "_country_code": column_property(golf_courses_table.c.country_code),
         "_creator_id": column_property(golf_courses_table.c.creator_id),
+        "_original_golf_course_id": column_property(golf_courses_table.c.original_golf_course_id),
         # Scalar attributes mapping
         "_name": column_property(golf_courses_table.c.name),
         "_course_type": column_property(golf_courses_table.c.course_type),
@@ -245,6 +261,7 @@ mapper_registry.map_imperatively(
         "_rejection_reason": column_property(golf_courses_table.c.rejection_reason),
         "_created_at": column_property(golf_courses_table.c.created_at),
         "_updated_at": column_property(golf_courses_table.c.updated_at),
+        "_is_pending_update": column_property(golf_courses_table.c.is_pending_update),
         # One-to-many relationships with tees and holes
         "_tees": relationship(
             Tee,
