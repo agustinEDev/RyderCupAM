@@ -33,6 +33,24 @@ class GolfCourseId:
         """Genera un nuevo GolfCourseId aleatorio."""
         return cls(str(uuid.uuid4()))
 
+    @classmethod
+    def from_string(cls, value: str) -> "GolfCourseId":
+        """
+        Crea un GolfCourseId a partir de un string UUID.
+
+        Alias de constructor para consistencia con otros Value Objects.
+
+        Args:
+            value: UUID en formato string
+
+        Returns:
+            Nueva instancia de GolfCourseId
+
+        Raises:
+            ValueError: Si el UUID no es válido
+        """
+        return cls(value)
+
     @property
     def value(self) -> str:
         """Retorna el UUID como string."""
