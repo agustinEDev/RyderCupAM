@@ -23,11 +23,15 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 
-# Marcar todos los tests de este fichero como 'integration' y 'skip' (necesitan user fixtures)
+# Marcar todos los tests de este fichero como 'integration' y 'skip'
+# RAZÓN: Estos tests requieren fixtures de usuarios creados via API (no SQL raw).
+#        El problema es complejo: client crea una BD temporal, db_session otra diferente.
+#        Requiere refactorización de fixtures para compartir la misma sesión de BD.
+#        Se habilitarán en Sprint 2 cuando se implemente la solución correcta.
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skip(
-        reason="Needs user fixtures for creator_id FK. Will be enabled in next iteration."
+        reason="Complex fixture issue: client and db_session use different DBs. Fix in Sprint 2."
     ),
 ]
 
