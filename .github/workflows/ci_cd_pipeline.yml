@@ -803,6 +803,8 @@ jobs:
     name: 📦 SBOM Generation
     runs-on: ubuntu-latest
     needs: preparation
+    permissions:
+      contents: write  # Required for dependency-graph-submit-action
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.ref, 'release/')
 
     steps:
@@ -1067,6 +1069,22 @@ jobs:
           FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "failure" | wc -l)
           SKIPPED_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "skipped" | wc -l)
 
+          # Sanitize commit message for markdown table
+          COMMIT_MSG_RAW="${{ github.event.head_commit.message }}"
+
+          # Fallback to PR title if commit message is empty
+          if [ -z "$COMMIT_MSG_RAW" ]; then
+            COMMIT_MSG_RAW="${{ github.event.pull_request.title }}"
+          fi
+
+          # Fallback to "N/A" if still empty
+          if [ -z "$COMMIT_MSG_RAW" ]; then
+            SANITIZED_COMMIT_MSG="N/A"
+          else
+            # Replace newlines with space, escape pipe characters
+            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | tr '\n' ' ' | sed 's/|/\\|/g')
+          fi
+
           # Generate Markdown Summary
           {
             echo "# 🏆 CI/CD Pipeline Execution Report"
@@ -1077,7 +1095,7 @@ jobs:
             echo "|----------|-------|"
             echo "| **Branch** | \`${{ github.ref_name }}\` |"
             echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |"
-            echo "| **Commit Message** | ${{ github.event.head_commit.message }} |"
+            echo "| **Commit Message** | $SANITIZED_COMMIT_MSG |"
             echo "| **Triggered by** | @${{ github.actor }} |"
             echo "| **Event** | \`${{ github.event_name }}\` |"
             echo "| **Run Number** | #${{ github.run_number }} |"
