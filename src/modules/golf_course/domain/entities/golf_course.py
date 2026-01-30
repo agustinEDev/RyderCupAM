@@ -7,6 +7,8 @@ Ver ADR-032 para detalles del workflow de aprobación.
 
 from datetime import datetime
 
+from sqlalchemy.orm import reconstructor
+
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -99,6 +101,16 @@ class GolfCourse:
         # Validar invariantes
         self._validate_holes()
         self._validate_tees()
+
+    @reconstructor
+    def _init_on_load(self) -> None:
+        """
+        SQLAlchemy reconstructor - called after entity is loaded from database.
+
+        Ensures _domain_events is initialized when SQLAlchemy hydrates the entity.
+        """
+        if not hasattr(self, "_domain_events"):
+            self._domain_events: list[DomainEvent] = []
 
     @classmethod
     def create(

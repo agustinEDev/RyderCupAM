@@ -149,7 +149,7 @@ golf_course_tees_table = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column(
         "golf_course_id",
-        UUID(as_uuid=True),
+        GolfCourseIdType,
         ForeignKey("golf_courses.id", ondelete="CASCADE"),
         nullable=False,
     ),
@@ -193,7 +193,7 @@ golf_course_holes_table = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column(
         "golf_course_id",
-        UUID(as_uuid=True),
+        GolfCourseIdType,
         ForeignKey("golf_courses.id", ondelete="CASCADE"),
         nullable=False,
     ),

@@ -56,25 +56,9 @@ class RequestGolfCourseRequestDTO(BaseModel):
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
 
-    @field_validator("holes")
-    @classmethod
-    def validate_hole_numbers(cls, holes: list[HoleDTO]) -> list[HoleDTO]:
-        """Valida que los hoyos estén numerados 1-18."""
-        hole_numbers = [h.hole_number for h in holes]
-        if sorted(hole_numbers) != list(range(1, 19)):
-            raise ValueError("Holes must be numbered 1-18")
-        return holes
-
-    @field_validator("holes")
-    @classmethod
-    def validate_stroke_indices(cls, holes: list[HoleDTO]) -> list[HoleDTO]:
-        """Valida que los stroke indices sean únicos 1-18."""
-        stroke_indices = [h.stroke_index for h in holes]
-        if len(stroke_indices) != len(set(stroke_indices)):
-            raise ValueError("Stroke indices must be unique")
-        if sorted(stroke_indices) != list(range(1, 19)):
-            raise ValueError("Stroke indices must be 1-18")
-        return holes
+    # NOTA: Las validaciones de reglas de negocio (stroke_index únicos, hole_numbers, etc.)
+    # están en el dominio (GolfCourse._validate_holes), no aquí.
+    # El DTO solo valida la estructura básica del request.
 
 
 class ApproveGolfCourseRequestDTO(BaseModel):

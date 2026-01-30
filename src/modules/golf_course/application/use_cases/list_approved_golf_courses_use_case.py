@@ -7,7 +7,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ListApprovedGolfCoursesResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
-from src.shared.infrastructure.persistence.unit_of_work import AbstractUoW
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import GolfCourseUnitOfWorkInterface
 
 
 class ListApprovedGolfCoursesUseCase:
@@ -21,7 +21,7 @@ class ListApprovedGolfCoursesUseCase:
         ListApprovedGolfCoursesResponseDTO con la lista de campos aprobados
     """
 
-    def __init__(self, uow: AbstractUoW) -> None:
+    def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
     async def execute(

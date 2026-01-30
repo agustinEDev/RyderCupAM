@@ -13,7 +13,7 @@ from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-from src.shared.infrastructure.persistence.unit_of_work import AbstractUoW
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import GolfCourseUnitOfWorkInterface
 
 
 class RequestGolfCourseUseCase:
@@ -41,7 +41,7 @@ class RequestGolfCourseUseCase:
         ValueError: Si los datos son inválidos (reglas de dominio)
     """
 
-    def __init__(self, uow: AbstractUoW) -> None:
+    def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
     async def execute(
@@ -64,7 +64,12 @@ class RequestGolfCourseUseCase:
             country_code = CountryCode(request.country_code)
             course_type = request.course_type
 
-            # 2. Crear Tees
+            # 2. Validar que el país existe en la BD
+            country = await self._uow.countries.find_by_code(country_code)
+            if country is None:
+                raise ValueError(f"Country with code '{request.country_code}' not found")
+
+            # 3. Crear Tees
             tees = [
                 Tee(
                     category=TeeCategory(tee_dto.tee_category),
@@ -75,7 +80,7 @@ class RequestGolfCourseUseCase:
                 for tee_dto in request.tees
             ]
 
-            # 3. Crear Holes
+            # 4. Crear Holes
             holes = [
                 Hole(
                     number=hole_dto.hole_number,
@@ -85,7 +90,7 @@ class RequestGolfCourseUseCase:
                 for hole_dto in request.holes
             ]
 
-            # 4. Crear GolfCourse (estado PENDING_APPROVAL)
+            # 5. Crear GolfCourse (estado PENDING_APPROVAL)
             golf_course = GolfCourse.create(
                 name=request.name,
                 country_code=country_code,
@@ -95,13 +100,13 @@ class RequestGolfCourseUseCase:
                 holes=holes,
             )
 
-            # 5. Persistir
+            # 6. Persistir
             await self._uow.golf_courses.save(golf_course)
 
-            # 6. Commit (dispara eventos)
+            # 7. Commit (dispara eventos)
             await self._uow.commit()
 
-            # 7. Mapear a Response DTO
+            # 8. Mapear a Response DTO
             response_dto = GolfCourseMapper.to_response_dto(golf_course)
 
             return RequestGolfCourseResponseDTO(golf_course=response_dto)
