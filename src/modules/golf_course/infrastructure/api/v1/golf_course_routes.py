@@ -10,6 +10,12 @@ Endpoints implementados (Sprint 1):
 - GET    /api/v1/admin/golf-courses/pending     # Admin lista pendientes
 - PUT    /api/v1/admin/golf-courses/{id}/approve # Admin aprueba
 - PUT    /api/v1/admin/golf-courses/{id}/reject  # Admin rechaza
+
+Endpoints v2.0.2 - Update Workflow (Opción A+):
+- POST   /api/v1/admin/golf-courses             # Admin crea campo directo a APPROVED
+- PUT    /api/v1/golf-courses/{id}              # Editar campo (con workflow de clones)
+- PUT    /api/v1/admin/golf-courses/{clone_id}/approve-update # Admin aprueba update clone
+- PUT    /api/v1/admin/golf-courses/{clone_id}/reject-update  # Admin rechaza update clone
 """
 
 import logging
@@ -21,14 +27,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from src.config.dependencies import get_current_user, get_golf_course_uow
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ApproveGolfCourseRequestDTO,
+    ApproveUpdateGolfCourseRequestDTO,
     GetGolfCourseByIdRequestDTO,
     ListApprovedGolfCoursesRequestDTO,
     ListPendingGolfCoursesRequestDTO,
     RejectGolfCourseRequestDTO,
+    RejectUpdateGolfCourseRequestDTO,
     RequestGolfCourseRequestDTO,
+    UpdateGolfCourseRequestDTO,
 )
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.approve_update_golf_course_use_case import (
+    ApproveUpdateGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.create_direct_golf_course_use_case import (
+    CreateDirectGolfCourseUseCase,
 )
 from src.modules.golf_course.application.use_cases.get_golf_course_by_id_use_case import (
     GetGolfCourseByIdUseCase,
@@ -42,8 +57,14 @@ from src.modules.golf_course.application.use_cases.list_pending_golf_courses_use
 from src.modules.golf_course.application.use_cases.reject_golf_course_use_case import (
     RejectGolfCourseUseCase,
 )
+from src.modules.golf_course.application.use_cases.reject_update_golf_course_use_case import (
+    RejectUpdateGolfCourseUseCase,
+)
 from src.modules.golf_course.application.use_cases.request_golf_course_use_case import (
     RequestGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
+    UpdateGolfCourseUseCase,
 )
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -104,6 +125,34 @@ def get_reject_golf_course_use_case(
 ) -> RejectGolfCourseUseCase:
     """Dependency injection para RejectGolfCourseUseCase."""
     return RejectGolfCourseUseCase(uow)
+
+
+def get_create_direct_golf_course_use_case(
+    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
+) -> CreateDirectGolfCourseUseCase:
+    """Dependency injection para CreateDirectGolfCourseUseCase."""
+    return CreateDirectGolfCourseUseCase(uow)
+
+
+def get_update_golf_course_use_case(
+    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
+) -> UpdateGolfCourseUseCase:
+    """Dependency injection para UpdateGolfCourseUseCase."""
+    return UpdateGolfCourseUseCase(uow)
+
+
+def get_approve_update_golf_course_use_case(
+    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
+) -> ApproveUpdateGolfCourseUseCase:
+    """Dependency injection para ApproveUpdateGolfCourseUseCase."""
+    return ApproveUpdateGolfCourseUseCase(uow)
+
+
+def get_reject_update_golf_course_use_case(
+    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
+) -> RejectUpdateGolfCourseUseCase:
+    """Dependency injection para RejectUpdateGolfCourseUseCase."""
+    return RejectUpdateGolfCourseUseCase(uow)
 
 
 # ============================================================================
@@ -278,9 +327,144 @@ async def list_golf_courses(
         ) from None
 
 
+@router.put("/{golf_course_id}")
+async def update_golf_course(
+    golf_course_id: UUID,
+    request_data: UpdateGolfCourseRequestDTO,
+    current_user: Annotated[User, Depends(get_current_user)],
+    use_case: Annotated[UpdateGolfCourseUseCase, Depends(get_update_golf_course_use_case)],
+):
+    """
+    Endpoint: Actualizar campo de golf existente.
+
+    **Autenticación**: Requerida
+    **Authorization**:
+    - Admin: Puede editar cualquier campo (in-place, cambios inmediatos)
+    - Creator: Solo sus propios campos
+
+    **Workflow (Opción A+)**:
+    - Admin edita APPROVED/PENDING → Actualiza in-place, cambios inmediatos
+    - Creator edita APPROVED → Crea clone PENDING_APPROVAL, original permanece visible
+    - Creator edita PENDING → Actualiza in-place
+    - Campos REJECTED: NO editables (crear nueva solicitud)
+
+    **Path Parameters**:
+    - golf_course_id: UUID del campo a editar
+
+    **Request Body**:
+    - name: Nombre del campo (3-200 caracteres)
+    - country_code: Código ISO del país (ej: "ES", "US")
+    - course_type: Tipo de campo ("STANDARD_18", "PITCH_AND_PUTT", "EXECUTIVE")
+    - tees: Lista de 2-6 tees con ratings WHS
+    - holes: Lista de 18 hoyos con par y stroke index únicos
+
+    **Responses**:
+    - 200: Campo actualizado (puede incluir pending_update si se creó clone)
+    - 400: Datos inválidos o campo REJECTED
+    - 401: No autenticado
+    - 403: Sin permisos (no eres admin ni creator)
+    - 404: Campo no encontrado
+    - 422: Validation error
+    """
+    try:
+        from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+
+        golf_course_id_vo = GolfCourseId(str(golf_course_id))
+        user_id = UserId(str(current_user.id))
+        is_admin = current_user.is_admin
+
+        response = await use_case.execute(
+            golf_course_id=golf_course_id_vo,
+            request=request_data,
+            user_id=user_id,
+            is_admin=is_admin,
+        )
+
+        return response
+
+    except ValueError as e:
+        error_str = str(e).lower()
+        if "not found" in error_str:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+        if "permission" in error_str or "not have permission" in error_str:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from None
+        if "rejected" in error_str or "cannot edit" in error_str:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+
+        logger.warning(f"Validation error in update_golf_course: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except Exception as e:
+        logger.error(f"Unexpected error in update_golf_course: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from None
+
+
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
+
+
+@router.post("/admin", status_code=status.HTTP_201_CREATED, tags=["admin"])
+async def create_direct_golf_course(
+    request_data: RequestGolfCourseRequestDTO,
+    current_user: Annotated[User, Depends(get_current_user)],
+    use_case: Annotated[
+        CreateDirectGolfCourseUseCase, Depends(get_create_direct_golf_course_use_case)
+    ],
+):
+    """
+    Endpoint: Admin crea campo de golf directo a APPROVED.
+
+    **Autenticación**: Requerida
+    **Authorization**: Solo Admin
+
+    A diferencia del endpoint /request, este crea el campo directamente
+    en estado APPROVED sin necesidad de aprobación posterior.
+
+    **Request Body**:
+    - name: Nombre del campo (3-200 caracteres)
+    - country_code: Código ISO del país (ej: "ES", "US")
+    - course_type: Tipo de campo ("STANDARD_18", "PITCH_AND_PUTT", "EXECUTIVE")
+    - tees: Lista de 2-6 tees con ratings WHS
+    - holes: Lista de 18 hoyos con par y stroke index únicos
+
+    **Responses**:
+    - 201: Campo creado exitosamente (APPROVED)
+    - 400: Datos inválidos
+    - 401: No autenticado
+    - 403: No eres Admin
+    - 422: Validation error
+    """
+    # Authorization: Solo Admin
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create golf courses directly to APPROVED status",
+        )
+
+    try:
+        creator_id = UserId(str(current_user.id))
+        response = await use_case.execute(request_data, creator_id)
+
+        return {
+            "message": "Golf course created successfully (APPROVED)",
+            "golf_course": response.golf_course,
+        }
+
+    except BusinessRuleViolation as e:
+        logger.warning(f"Business rule violation: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except ValueError as e:
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except Exception as e:
+        logger.error(f"Unexpected error in create_direct_golf_course: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from None
 
 
 @router.get("/admin/pending", tags=["admin"])
@@ -441,6 +625,139 @@ async def reject_golf_course(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Unexpected error in reject_golf_course: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from None
+
+
+@router.put("/admin/{clone_id}/approve-update", tags=["admin"])
+async def approve_update_golf_course(
+    clone_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    use_case: Annotated[
+        ApproveUpdateGolfCourseUseCase, Depends(get_approve_update_golf_course_use_case)
+    ],
+):
+    """
+    Endpoint: Admin aprueba un update proposal (clone) de campo de golf.
+
+    **Autenticación**: Requerida
+    **Authorization**: Solo Admin
+
+    **Workflow**:
+    1. Busca el clone por ID
+    2. Verifica que sea un clone válido (tiene original_golf_course_id)
+    3. Busca el campo original
+    4. Aplica todos los cambios del clone al original
+    5. Elimina el clone
+    6. Marca original como is_pending_update=FALSE
+    7. Retorna el original actualizado
+
+    **Path Parameters**:
+    - clone_id: UUID del clone a aprobar (NO el original)
+
+    **Responses**:
+    - 200: Update aprobado, cambios aplicados al original
+    - 400: Clone inválido o no es un clone
+    - 401: No autenticado
+    - 403: No eres Admin
+    - 404: Clone o campo original no encontrado
+    """
+    # Authorization: Solo Admin
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can approve golf course updates",
+        )
+
+    try:
+        request_dto = ApproveUpdateGolfCourseRequestDTO(clone_id=str(clone_id))
+        response = await use_case.execute(request_dto)
+
+        return {
+            "message": "Golf course update approved successfully",
+            "updated_golf_course": response.updated_golf_course,
+            "applied_changes_from": response.applied_changes_from,
+        }
+
+    except ValueError as e:
+        error_str = str(e).lower()
+        if "not found" in error_str:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+        if "not a clone" in error_str or "does not have" in error_str:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except Exception as e:
+        logger.error(f"Unexpected error in approve_update_golf_course: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from None
+
+
+@router.put("/admin/{clone_id}/reject-update", tags=["admin"])
+async def reject_update_golf_course(
+    clone_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    use_case: Annotated[
+        RejectUpdateGolfCourseUseCase, Depends(get_reject_update_golf_course_use_case)
+    ],
+):
+    """
+    Endpoint: Admin rechaza un update proposal (clone) de campo de golf.
+
+    **Autenticación**: Requerida
+    **Authorization**: Solo Admin
+
+    **Workflow**:
+    1. Busca el clone por ID
+    2. Verifica que sea un clone válido (tiene original_golf_course_id)
+    3. Busca el campo original
+    4. Elimina el clone (rechazado)
+    5. Marca original como is_pending_update=FALSE (clear mark)
+    6. Retorna el original sin cambios
+
+    **Path Parameters**:
+    - clone_id: UUID del clone a rechazar (NO el original)
+
+    **Responses**:
+    - 200: Update rechazado, clone eliminado, original sin cambios
+    - 400: Clone inválido o no es un clone
+    - 401: No autenticado
+    - 403: No eres Admin
+    - 404: Clone o campo original no encontrado
+    """
+    # Authorization: Solo Admin
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can reject golf course updates",
+        )
+
+    try:
+        request_dto = RejectUpdateGolfCourseRequestDTO(clone_id=str(clone_id))
+        response = await use_case.execute(request_dto)
+
+        return {
+            "message": "Golf course update rejected successfully",
+            "original_golf_course": response.original_golf_course,
+            "rejected_clone_id": response.rejected_clone_id,
+        }
+
+    except ValueError as e:
+        error_str = str(e).lower()
+        if "not found" in error_str:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+        if "not a clone" in error_str or "does not have" in error_str:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
+    except Exception as e:
+        logger.error(f"Unexpected error in reject_update_golf_course: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
