@@ -146,6 +146,7 @@ class TestRegisterUserUseCase:
             password="V@l1dP@ss123!",
             first_name="Test",
             last_name="User",
+            country_code="ES",  # Usuario español para que RFEG se ejecute
             manual_handicap=20.0,  # Este será ignorado
         )
 
@@ -184,3 +185,91 @@ class TestRegisterUserUseCase:
 
         # Assert
         assert user_response.handicap is None
+
+    async def test_should_search_rfeg_handicap_for_spanish_users(
+        self, uow: InMemoryUnitOfWork, country_repository
+    ):
+        """
+        Verifica que la búsqueda de RFEG se ejecuta SOLO para usuarios españoles.
+        """
+        # Arrange
+        mock_handicap_service = AsyncMock()
+        mock_handicap_service.search_handicap.return_value = 15.4  # Handicap encontrado
+
+        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        request_dto = RegisterUserRequestDTO(
+            email="spanish.player@example.com",
+            password="V@l1dP@ss123!",
+            first_name="Carlos",
+            last_name="García López",
+            country_code="ES",  # Usuario español
+        )
+
+        # Act
+        user_response = await use_case.execute(request_dto)
+
+        # Assert
+        # 1. Verificar que se llamó al servicio RFEG
+        mock_handicap_service.search_handicap.assert_called_once_with("Carlos García López")
+
+        # 2. Verificar que el handicap se asignó
+        async with uow:
+            user_id_vo = UserId(user_response.id)
+            saved_user = await uow.users.find_by_id(user_id_vo)
+            assert saved_user.handicap.value == 15.4
+
+    async def test_should_not_search_rfeg_handicap_for_non_spanish_users(
+        self, uow: InMemoryUnitOfWork, country_repository
+    ):
+        """
+        Verifica que la búsqueda de RFEG NO se ejecuta para usuarios no españoles.
+        """
+        # Arrange
+        mock_handicap_service = AsyncMock()
+        mock_handicap_service.search_handicap.return_value = 10.0  # No debería usarse
+
+        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        request_dto = RegisterUserRequestDTO(
+            email="french.player@example.com",
+            password="V@l1dP@ss123!",
+            first_name="Pierre",
+            last_name="Dupont",
+            country_code="FR",  # Usuario francés
+        )
+
+        # Act
+        user_response = await use_case.execute(request_dto)
+
+        # Assert
+        # 1. Verificar que NO se llamó al servicio RFEG
+        mock_handicap_service.search_handicap.assert_not_called()
+
+        # 2. Verificar que el usuario se registró sin handicap
+        async with uow:
+            user_id_vo = UserId(user_response.id)
+            saved_user = await uow.users.find_by_id(user_id_vo)
+            assert saved_user.handicap is None
+
+    async def test_should_not_search_rfeg_handicap_when_no_country_code(
+        self, uow: InMemoryUnitOfWork, country_repository
+    ):
+        """
+        Verifica que la búsqueda de RFEG NO se ejecuta si el usuario no especificó país.
+        """
+        # Arrange
+        mock_handicap_service = AsyncMock()
+
+        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        request_dto = RegisterUserRequestDTO(
+            email="no.country@example.com",
+            password="V@l1dP@ss123!",
+            first_name="John",
+            last_name="Doe",
+            country_code=None,  # Sin país especificado
+        )
+
+        # Act
+        user_response = await use_case.execute(request_dto)
+
+        # Assert
+        mock_handicap_service.search_handicap.assert_not_called()
