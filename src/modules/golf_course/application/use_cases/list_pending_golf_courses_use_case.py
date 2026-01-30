@@ -7,7 +7,9 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ListPendingGolfCoursesResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
-from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import GolfCourseUnitOfWorkInterface
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 
 
 class ListPendingGolfCoursesUseCase:

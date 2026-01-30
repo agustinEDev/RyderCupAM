@@ -10,10 +10,12 @@ from src.modules.golf_course.application.mappers.golf_course_mapper import GolfC
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import GolfCourseUnitOfWorkInterface
 
 
 class RequestGolfCourseUseCase:

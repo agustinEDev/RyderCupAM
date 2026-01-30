@@ -4,7 +4,7 @@ Golf Course DTOs - Request/Response for use cases.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 

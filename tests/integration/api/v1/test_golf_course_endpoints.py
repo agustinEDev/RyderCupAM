@@ -14,7 +14,6 @@ from tests.conftest import (
     approve_golf_course,
     create_authenticated_user,
     create_golf_course,
-    reject_golf_course,
 )
 
 
@@ -193,8 +192,8 @@ class TestGetGolfCourseById:
         )
         # Hacer admin al usuario (directamente en BD para test)
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
@@ -298,8 +297,8 @@ class TestListGolfCourses:
             client, "admin2@test.com", "AdminPass123!", "Admin", "Two"
         )
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
@@ -361,8 +360,8 @@ class TestListPendingGolfCourses:
             client, "admin3@test.com", "AdminPass123!", "Admin", "Three"
         )
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
@@ -421,8 +420,8 @@ class TestApproveGolfCourse:
             client, "admin4@test.com", "AdminPass123!", "Admin", "Four"
         )
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
@@ -484,8 +483,8 @@ class TestRejectGolfCourse:
             client, "admin5@test.com", "AdminPass123!", "Admin", "Five"
         )
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
@@ -526,8 +525,8 @@ class TestRejectGolfCourse:
             client, "admin6@test.com", "AdminPass123!", "Admin", "Six"
         )
         async def make_admin():
-            from src.config.dependencies import get_db_session
             from main import app as fastapi_app
+            from src.config.dependencies import get_db_session
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:

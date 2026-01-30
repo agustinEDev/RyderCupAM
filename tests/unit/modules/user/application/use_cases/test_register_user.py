@@ -269,7 +269,7 @@ class TestRegisterUserUseCase:
         )
 
         # Act
-        user_response = await use_case.execute(request_dto)
+        _ = await use_case.execute(request_dto)
 
         # Assert
         mock_handicap_service.search_handicap.assert_not_called()

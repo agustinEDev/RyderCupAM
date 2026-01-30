@@ -45,10 +45,13 @@ from src.modules.golf_course.application.use_cases.reject_golf_course_use_case i
 from src.modules.golf_course.application.use_cases.request_golf_course_use_case import (
     RequestGolfCourseUseCase,
 )
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
-from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import GolfCourseUnitOfWorkInterface
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +140,6 @@ async def request_golf_course(
     """
     try:
         # Crear UserId del usuario autenticado
-        from src.modules.user.domain.value_objects.user_id import UserId
         creator_id = UserId(str(current_user.id))
 
         response = await use_case.execute(request_data, creator_id)
@@ -145,16 +147,16 @@ async def request_golf_course(
 
     except BusinessRuleViolation as e:
         logger.warning(f"Business rule violation: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Unexpected error in request_golf_course: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
 
 
 @router.get("/{golf_course_id}")
@@ -203,19 +205,19 @@ async def get_golf_course_by_id(
         return golf_course
 
     except HTTPException:
-        # Re-raise HTTPException as-is (403, 404, etc.)
+        # Re-raise HTTPException as-is (403, 404, etc.) from None
         raise
     except ValueError as e:
         if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
         logger.warning(f"Validation error: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Unexpected error in get_golf_course_by_id: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
 
 
 @router.get("")
@@ -273,7 +275,7 @@ async def list_golf_courses(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
 
 
 # ============================================================================
@@ -316,7 +318,7 @@ async def list_pending_golf_courses(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
 
 
 @router.put("/admin/{golf_course_id}/approve", tags=["admin"])
@@ -363,18 +365,18 @@ async def approve_golf_course(
     except ValueError as e:
         error_str = str(e).lower()
         if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
         if "cannot approve" in error_str or "only pending" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
         logger.warning(f"Validation error: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Unexpected error in approve_golf_course: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
 
 
 @router.put("/admin/{golf_course_id}/reject", tags=["admin"])
@@ -429,17 +431,17 @@ async def reject_golf_course(
     except ValueError as e:
         error_str = str(e).lower()
         if "not found" in error_str:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
         if "cannot reject" in error_str or "only pending" in error_str:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
         if "reason" in error_str and ("10" in error_str or "500" in error_str):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
         logger.warning(f"Validation error: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Unexpected error in reject_golf_course: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from None
