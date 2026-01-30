@@ -916,11 +916,10 @@ jobs:
 
       - name: Upload SBOM to GitHub Dependency Graph (if main)
         if: github.ref == 'refs/heads/main'
-        uses: advanced-security/sbom-generator-action@v0.0.1
+        uses: github/dependency-graph-submit-action@v1
         with:
+          sbom: sbom/sbom.json
           token: ${{ secrets.GITHUB_TOKEN }}
-          format: cyclonedx
-          output-file: sbom/sbom.json
 
   # ================================
   # JOB 10: GPG SIGNATURE VERIFICATION
