@@ -226,7 +226,9 @@ async def test_find_by_approval_status_pending(db_session, valid_tees, valid_hol
     names = {course.name for course in pending_courses}
     assert "Campo Pendiente 1" in names
     assert "Campo Pendiente 2" in names
-    assert all(course.approval_status == ApprovalStatus.PENDING_APPROVAL for course in pending_courses)
+    assert all(
+        course.approval_status == ApprovalStatus.PENDING_APPROVAL for course in pending_courses
+    )
 
 
 async def test_find_by_approval_status_approved(db_session, valid_tees, valid_holes):
@@ -558,12 +560,42 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
     """
     # Arrange
     all_tees = [
-        Tee(category=TeeCategory.CHAMPIONSHIP_MALE, identifier="Negro", course_rating=75.0, slope_rating=145),
-        Tee(category=TeeCategory.AMATEUR_MALE, identifier="Blanco", course_rating=73.0, slope_rating=135),
-        Tee(category=TeeCategory.FORWARD_MALE, identifier="Amarillo", course_rating=71.0, slope_rating=128),
-        Tee(category=TeeCategory.CHAMPIONSHIP_FEMALE, identifier="Azul", course_rating=76.0, slope_rating=142),
-        Tee(category=TeeCategory.AMATEUR_FEMALE, identifier="Rojo", course_rating=73.5, slope_rating=136),
-        Tee(category=TeeCategory.FORWARD_FEMALE, identifier="Verde", course_rating=71.5, slope_rating=130),
+        Tee(
+            category=TeeCategory.CHAMPIONSHIP_MALE,
+            identifier="Negro",
+            course_rating=75.0,
+            slope_rating=145,
+        ),
+        Tee(
+            category=TeeCategory.AMATEUR_MALE,
+            identifier="Blanco",
+            course_rating=73.0,
+            slope_rating=135,
+        ),
+        Tee(
+            category=TeeCategory.FORWARD_MALE,
+            identifier="Amarillo",
+            course_rating=71.0,
+            slope_rating=128,
+        ),
+        Tee(
+            category=TeeCategory.CHAMPIONSHIP_FEMALE,
+            identifier="Azul",
+            course_rating=76.0,
+            slope_rating=142,
+        ),
+        Tee(
+            category=TeeCategory.AMATEUR_FEMALE,
+            identifier="Rojo",
+            course_rating=73.5,
+            slope_rating=136,
+        ),
+        Tee(
+            category=TeeCategory.FORWARD_FEMALE,
+            identifier="Verde",
+            course_rating=71.5,
+            slope_rating=130,
+        ),
     ]
     golf_course = GolfCourse.create(
         name="Campo con 6 Tees",
@@ -595,7 +627,9 @@ async def test_repository_preserves_hole_order(db_session, valid_tees):
     THEN: El orden se preserva correctamente (1-18)
     """
     # Arrange
-    holes_unordered = [Hole(number=i, par=4, stroke_index=i) for i in range(18, 0, -1)]  # Orden inverso
+    holes_unordered = [
+        Hole(number=i, par=4, stroke_index=i) for i in range(18, 0, -1)
+    ]  # Orden inverso
     golf_course = GolfCourse.create(
         name="Campo Test Orden",
         country_code=CountryCode("ES"),
