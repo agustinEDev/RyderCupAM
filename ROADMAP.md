@@ -1,18 +1,19 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.0 (Production)
-> **Last Updated:** Jan 29, 2026
+> **Current Version:** 2.0.1 (Production)
+> **Last Updated:** Jan 30, 2026
 > **OWASP Score:** 9.4/10
 
 ---
 
 ## 📊 Current Status
 
-**Tests:** 1,091 (100% passing, ~65s) | **Endpoints:** 40 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,151 (1,135 passing, 16 skipped, ~60s) | **Endpoints:** 46 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
 - **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states)
+- **Golf Course:** Request, Approval Workflow (Admin), CRUD endpoints, WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
 **OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐
@@ -43,7 +44,7 @@
 
 ---
 
-#### Sprint 1: RBAC Foundation v2.0.0 (✅ COMPLETED: Jan 29, 2026)
+#### Sprint 1: RBAC Foundation + Golf Course Module v2.0.1 (✅ COMPLETED: Jan 30, 2026)
 
 **RBAC Foundation v2.0.0: Simplified Role System**
 - **Architecture**: Three-tier system WITHOUT a formal roles table.

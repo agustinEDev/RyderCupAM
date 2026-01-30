@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 40 active
-**Version**: v2.0.0
-**Last Updated**: 29 January 2026
+**Total Endpoints**: 46 active
+**Version**: v2.0.1
+**Last Updated**: 30 January 2026
 
 ---
 
@@ -65,6 +65,14 @@ Enrollment Management (8 endpoints)
 Country Management (2 endpoints)
 ├── GET  /api/v1/countries               # List all countries
 └── GET  /api/v1/countries/{code}/adjacent # List adjacent countries
+
+Golf Course Management (6 endpoints) ⭐ v2.0.1
+├── POST /api/v1/golf-courses/request    # Request new golf course (Creator)
+├── GET  /api/v1/golf-courses/{id}       # Get golf course details
+├── GET  /api/v1/golf-courses            # List golf courses (filter by approval_status)
+├── GET  /api/v1/admin/golf-courses/pending # List pending approvals (Admin)
+├── PUT  /api/v1/admin/golf-courses/{id}/approve # Approve course (Admin)
+└── PUT  /api/v1/admin/golf-courses/{id}/reject  # Reject course (Admin)
 ```
 
 ---
@@ -487,6 +495,100 @@ REJECTED    CANCELLED
 
 ---
 
+## ⛳ Golf Course Management ⭐ v2.0.1
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/golf-courses/request` | POST | Yes | Request new golf course (Creator) |
+| `/golf-courses/{id}` | GET | No | Get golf course details (tees + holes) |
+| `/golf-courses` | GET | No | List golf courses with filters |
+| `/admin/golf-courses/pending` | GET | Yes | List pending approvals (Admin only) |
+| `/admin/golf-courses/{id}/approve` | PUT | Yes | Approve golf course (Admin only) |
+| `/admin/golf-courses/{id}/reject` | PUT | Yes | Reject golf course with reason (Admin only) |
+
+### Main Fields
+
+**Request Golf Course:**
+- `name` (string, required, 3-200 chars)
+- `country_code` (string, required, ISO 3166-1 alpha-2)
+- `course_type` (enum, required: "STANDARD_18" | "PITCH_AND_PUTT" | "EXECUTIVE")
+- `tees` (array, required, 2-6 tees)
+  - `tee_category` (string, required: "CHAMPIONSHIP_MALE", "AMATEUR_MALE", etc.)
+  - `identifier` (string, required: "Amarillo", "Oro", "1", etc.)
+  - `course_rating` (float, required, 50.0-90.0)
+  - `slope_rating` (int, required, 55-155)
+- `holes` (array, required, exactly 18 holes)
+  - `hole_number` (int, required, 1-18)
+  - `par` (int, required, 3-5)
+  - `stroke_index` (int, required, 1-18, unique)
+
+**Approve Golf Course:**
+- `golf_course_id` (string, required, UUID)
+
+**Reject Golf Course:**
+- `golf_course_id` (string, required, UUID)
+- `reason` (string, required, 10-500 chars)
+
+### Query Parameters
+
+**GET /golf-courses:**
+- `approval_status` (string, optional) - Filter by status (PENDING_APPROVAL, APPROVED, REJECTED)
+- `country_code` (string, optional) - Filter by country
+- `creator_id` (string, optional) - Filter by creator
+
+### Golf Course Response
+
+**Structure:**
+- `id` (string) - Golf course UUID
+- `name` (string) - Course name
+- `country_code` (string) - ISO country code
+- `course_type` (string) - Type of course
+- `creator_id` (string) - Creator UUID
+- `tees` (array) - List of tees with WHS ratings
+- `holes` (array) - List of 18 holes with par and stroke index
+- `approval_status` (string) - Current approval status
+- `rejection_reason` (string, nullable) - Reason for rejection if applicable
+- `total_par` (int) - Computed total par (sum of all holes)
+- `created_at` (datetime) - Creation timestamp
+- `updated_at` (datetime) - Last update timestamp
+
+### Approval Workflow
+
+```
+PENDING_APPROVAL → APPROVED
+                 ↓
+              REJECTED
+```
+
+**States:**
+- `PENDING_APPROVAL` - Awaiting admin approval after creation
+- `APPROVED` - Approved by admin, available for competitions
+- `REJECTED` - Rejected by admin with reason
+
+### Business Rules
+
+- **Creator permissions**: Any authenticated user can request a golf course
+- **Admin permissions**: Only admins can approve/reject/view pending courses
+- **Validation**:
+  - Exactly 18 holes with unique stroke indices (1-18)
+  - Total par between 66 and 76
+  - 2-6 tees per course with valid WHS ratings
+  - Course rating: 50.0-90.0 (WHS standard)
+  - Slope rating: 55-155 (WHS standard)
+- **Tee categories normalized**: Uses WHS standard categories
+- **Country validation**: Country code must exist in countries table
+- **Immutability**: Once created, golf courses cannot be edited (re-request if needed)
+
+### Domain Events
+
+- `GolfCourseRequestedEvent` - Emitted when creator requests a new course
+- `GolfCourseApprovedEvent` - Emitted when admin approves a course
+- `GolfCourseRejectedEvent` - Emitted when admin rejects a course
+
+**📋 See complete module:** `CLAUDE.md` (Golf Course Module section)
+
+---
+
 ## 📖 Swagger UI (Interactive Documentation)
 
 ### Access
@@ -591,5 +693,5 @@ REJECTED    CANCELLED
 
 ---
 
-**Last Updated:** 8 January 2026
-**Version:** v1.13.0
+**Last Updated:** 30 January 2026
+**Version:** v2.0.1
