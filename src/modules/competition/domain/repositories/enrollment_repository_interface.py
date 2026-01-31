@@ -165,6 +165,27 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_user_and_competition(
+        self, user_id: UserId, competition_id: CompetitionId
+    ) -> Enrollment | None:
+        """
+        Busca una inscripción específica de un usuario en una competición.
+
+        Útil para: Obtener enrollment existente para validaciones de business logic.
+
+        Args:
+            user_id: El ID del usuario
+            competition_id: El ID de la competición
+
+        Returns:
+            Optional[Enrollment]: La inscripción encontrada o None si no existe
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def count_approved(self, competition_id: CompetitionId) -> int:
         """
         Cuenta el total de inscripciones aprobadas en una competición.
@@ -176,6 +197,38 @@ class EnrollmentRepositoryInterface(ABC):
 
         Returns:
             int: Número total de inscripciones aprobadas
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
+    async def count_approved_by_competition(self, competition_id: CompetitionId) -> int:
+        """
+        Alias para count_approved.
+        Cuenta el total de inscripciones aprobadas en una competición.
+
+        Args:
+            competition_id: El ID de la competición
+
+        Returns:
+            int: Número total de inscripciones aprobadas
+        """
+        pass
+
+    @abstractmethod
+    async def count_active_by_user(self, user_id: UserId) -> int:
+        """
+        Cuenta el total de inscripciones activas (APPROVED/REQUESTED) de un usuario.
+
+        Útil para: Validar límite de inscripciones por usuario (business logic guard).
+
+        Args:
+            user_id: El ID del usuario
+
+        Returns:
+            int: Número total de inscripciones activas
 
         Raises:
             RepositoryError: Si ocurre un error de consulta

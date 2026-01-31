@@ -81,9 +81,13 @@ class RegisterUserUseCase:
                 country_code_str=request.country_code,
             )
 
-            # 2.5 Intentar buscar hándicap inicial (no bloquea el registro)
+            # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
             handicap_value = None
-            if self._handicap_service:
+            if (
+                self._handicap_service
+                and new_user.country_code
+                and new_user.country_code.value == "ES"
+            ):
                 try:
                     handicap_value = await self._handicap_service.search_handicap(
                         new_user.get_full_name()

@@ -327,9 +327,18 @@ def display_summary(summary: dict, tests: list, warning_count: int, total_time: 
     success_rate = (passed / total * 100) if total > 0 else 0
     summary_color = COLORS["GREEN"] if failed == 0 and error == 0 else COLORS["RED"]
 
+    # Determinar mensaje de resultado basado en fallos reales, no en skipped
+    has_failures = failed > 0 or error > 0
+    if not has_failures and skipped == 0:
+        result_msg = "¡TODOS LOS TESTS PASARON!"
+    elif not has_failures and skipped > 0:
+        result_msg = f"¡TODOS LOS TESTS PASARON! ({skipped} omitidos)"
+    else:
+        result_msg = "¡HAN FALLADO TESTS!"
+
     print_header(f"{ICONS['SUMMARY']} RESUMEN DE LA EJECUCIÓN")
     print(
-        f"{summary_color}{COLORS['BOLD']}Resultado Final: {'¡TODOS LOS TESTS PASARON!' if success_rate == 100 else '¡HAN FALLADO TESTS!'}{COLORS['ENDC']}"
+        f"{summary_color}{COLORS['BOLD']}Resultado Final: {result_msg}{COLORS['ENDC']}"
     )
     print(f"  - {ICONS['PASSED']} Pasaron: {passed}")
     print(f"  - {ICONS['FAILED']} Fallaron: {failed}")
