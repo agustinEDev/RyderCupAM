@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v2.0.0 (Current) + v2.1.0 Planning
-> **Last Updated:** January 29, 2026
+> **Version:** v2.0.2-dev (Current) + v2.1.0 Planning
+> **Last Updated:** January 31, 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -153,6 +153,14 @@ erDiagram
         TIMESTAMP updated_at
     }
 
+    competition_golf_courses {
+        CHAR(36) id PK "v2.0.2 - Association table"
+        CHAR(36) competition_id FK "CHAR(36) to match competitions.id"
+        UUID golf_course_id FK "UUID to match golf_courses.id"
+        INT display_order "1-based ordering"
+        TIMESTAMP created_at
+    }
+
     %% ========================================
     %% ROUNDS & MATCHES (v2.1.0 - NEW)
     %% ========================================
@@ -258,8 +266,10 @@ erDiagram
 
     %% Competition Module
     competitions ||--o{ enrollments : "has"
+    competitions ||--o{ competition_golf_courses : "has"
     competitions ||--o{ rounds : "has"
     competitions ||--o{ invitations : "has"
+    golf_courses ||--o{ competition_golf_courses : "used_in"
 
     %% Rounds & Matches
     rounds ||--o{ matches : "has"
@@ -268,7 +278,7 @@ erDiagram
 
 ---
 
-## 📋 Current Tables (v2.0.0)
+## 📋 Current Tables (v2.0.2)
 
 | Table | Typical Records | Module | Version |
 |-------|-------------------|--------|---------|
@@ -280,26 +290,27 @@ erDiagram
 | `user_devices` | 200-100,000 (2-10 per user) | User | v1.13.0 |
 | `competitions` | 10-1,000 | Competition | v1.3.0 |
 | `enrollments` | 200-50,000 | Competition | v1.3.0 |
+| `competition_golf_courses` | 30-10,000 (1-10 per competition) | Competition | v2.0.2 |
+| `golf_courses` | 100-5,000 | Golf Courses | v2.0.1 |
+| `tees` | 300-25,000 (3-5 per course) | Golf Courses | v2.0.1 |
+| `holes` | 1,800-90,000 (18 per course) | Golf Courses | v2.0.1 |
 
-**Total current tables:** 8
+**Total current tables:** 12
 
 ---
 
-## 🆕 New Tables (v2.1.0)
+## 🆕 Planned Tables (v2.1.0 - Future)
 
 | Table | Typical Records | Module | Sprint |
 |-------|-------------------|--------|--------|
-| `golf_courses` | 100-5,000 | Golf Courses | Sprint 1 |
-| `tees` | 300-25,000 (3-5 per course) | Golf Courses | Sprint 1 |
-| `holes` | 1,800-90,000 (18 per course) | Golf Courses | Sprint 1 |
-| `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 3 |
-| `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 3 |
+| `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 2-3 |
+| `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 2-3 |
 | `invitations` | 500-100,000 | Competition | Sprint 3 |
 | `hole_scores` | 5,000-5,000,000 (72 per singles match, 144 fourball) | Scoring | Sprint 4 |
 
-**Total new tables:** 7
+**Total planned tables:** 4
 
-**Total tables in v2.1.0:** 15 tables
+**Total tables after v2.1.0 completion:** 16 tables
 
 ---
 
@@ -336,9 +347,13 @@ CREATE INDEX idx_competitions_dates ON competitions(start_date, end_date);
 CREATE INDEX idx_enrollments_competition ON enrollments(competition_id);
 CREATE INDEX idx_enrollments_user ON enrollments(user_id);
 CREATE INDEX idx_enrollments_status ON enrollments(status);
+
+-- competition_golf_courses (v2.0.2)
+CREATE INDEX ix_competition_golf_courses_competition_id ON competition_golf_courses(competition_id);
+CREATE INDEX ix_competition_golf_courses_golf_course_id ON competition_golf_courses(golf_course_id);
 ```
 
-### New Indexes (v2.1.0)
+### New Indexes (v2.0.1 - v2.1.0)
 ```sql
 -- golf_courses
 CREATE INDEX idx_golf_courses_country ON golf_courses(country_code);

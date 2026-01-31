@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 46 active
-**Version**: v2.0.1
-**Last Updated**: 30 January 2026
+**Total Endpoints**: 54 active
+**Version**: v2.0.2-dev
+**Last Updated**: 31 January 2026
 
 ---
 
@@ -52,6 +52,12 @@ Competition Management (10 endpoints)
 ├── POST /api/v1/competitions/{id}/complete         # IN_PROGRESS → COMPLETED
 └── POST /api/v1/competitions/{id}/cancel           # Any state → CANCELLED
 
+Competition-GolfCourse Management (4 endpoints) ⭐ v2.0.2
+├── POST   /api/v1/competitions/{id}/golf-courses    # Add golf course to competition
+├── DELETE /api/v1/competitions/{id}/golf-courses/{gc_id} # Remove golf course
+├── PUT    /api/v1/competitions/{id}/golf-courses/reorder # Reorder all courses
+└── GET    /api/v1/competitions/{id}/golf-courses    # List competition's golf courses
+
 Enrollment Management (8 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
 ├── POST /api/v1/competitions/{id}/enrollments/direct # Direct enroll (creator only)
@@ -66,13 +72,17 @@ Country Management (2 endpoints)
 ├── GET  /api/v1/countries               # List all countries
 └── GET  /api/v1/countries/{code}/adjacent # List adjacent countries
 
-Golf Course Management (6 endpoints) ⭐ v2.0.1
+Golf Course Management (10 endpoints) ⭐ v2.0.1
 ├── POST /api/v1/golf-courses/request    # Request new golf course (Creator)
+├── POST /api/v1/admin/golf-courses      # Create course directly (Admin, approved)
 ├── GET  /api/v1/golf-courses/{id}       # Get golf course details
 ├── GET  /api/v1/golf-courses            # List golf courses (filter by approval_status)
 ├── GET  /api/v1/admin/golf-courses/pending # List pending approvals (Admin)
 ├── PUT  /api/v1/admin/golf-courses/{id}/approve # Approve course (Admin)
-└── PUT  /api/v1/admin/golf-courses/{id}/reject  # Reject course (Admin)
+├── PUT  /api/v1/admin/golf-courses/{id}/reject  # Reject course (Admin)
+├── PUT  /api/v1/golf-courses/{id}       # Submit update (Creator, clone-based workflow)
+├── PUT  /api/v1/admin/golf-courses/updates/{id}/approve # Approve update (Admin)
+└── PUT  /api/v1/admin/golf-courses/updates/{id}/reject  # Reject update (Admin)
 ```
 
 ---

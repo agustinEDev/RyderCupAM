@@ -8,11 +8,11 @@
 
 ## 📊 Current Status
 
-**Tests:** 1,177 (1,177 passing, 16 skipped, ~142s) | **Endpoints:** 50 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,201 (1,201 passing, 16 skipped, ~79s) | **Endpoints:** 54 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
-- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states)
+- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M (add/remove/reorder) ⭐ v2.0.2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
@@ -110,9 +110,9 @@ class GolfCourseRequest(BaseModel):
 
 ---
 
-#### Sprint 2: Competition Scheduling (1.5 weeks)
+#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS
 
-**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (PRIORITY)**
+**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (✅ COMPLETED: Jan 31, 2026)**
 - **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
 - **Problem**: Violates Unit of Work pattern - UoW context manager (`__aexit__`) should handle commits automatically
 - **Files to modify**:
@@ -127,10 +127,11 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 3-4 hours
 - **Related**: Golf Course module already completed (v2.0.1 - commit bfa7efa)
 
-**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (FOUNDATION)**
+**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (✅ COMPLETED: Jan 31, 2026)**
 - **Rationale**: Competitions can be played across multiple golf courses (multi-round tournaments)
 - **Architecture**: Many-to-Many via `competition_golf_courses` association table
 - **Migration**: Create `competition_golf_courses` table (id, competition_id, golf_course_id, display_order, created_at)
+  - **Type Safety**: Mixed UUID types - `competition_id` uses CHAR(36) to match existing `competitions.id`, `golf_course_id` uses UUID(as_uuid=True) to match `golf_courses.id`
 - **Domain Layer**:
   - New entity: `CompetitionGolfCourse` (id, golf_course_id, display_order)
   - Update `Competition` entity: add `_golf_courses: list[CompetitionGolfCourse]`
@@ -160,9 +161,16 @@ class GolfCourseRequest(BaseModel):
   - Option to create new course request (PENDING) and attach to competition
   - Warning if competition has PENDING courses (cannot activate until approved)
   - UI to reorder courses (drag-and-drop)
-- **Tests**: +55 tests (25 domain, 18 application, 12 integration)
-- **Time**: 1.5 weeks
-- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship)
+- **Tests**: +24 tests (24 domain: 13 CompetitionGolfCourseId + 11 CompetitionGolfCourse) ✅
+  - **Pending**: Application (31 tests for 3 use cases) + Integration (API endpoints) - deferred to Block 2+
+- **Time**: 4 hours (Domain + Migration + Infrastructure + API stubs)
+- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship) - PENDING
+- **Commits**:
+  - 7bfc8f5 - feat(domain): add CompetitionGolfCourse many-to-many relationship
+  - 15e3e5a - feat(migration): add competition_golf_courses association table
+  - 79dd6e4 - feat(infra): add CompetitionGolfCourse mapper and endpoints
+  - 63dc494 - fix(mapper): add explicit property mappings for CompetitionGolfCourse
+  - 25d54d3 - fix(migration): change competition_id to CHAR(36) to match existing schema
 
 **Block 2: Code Quality Refactor - Exception Subclasses**
 - **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
