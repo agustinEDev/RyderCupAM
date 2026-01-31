@@ -642,7 +642,7 @@ jobs:
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: success() || steps.trivy_scan.outcome == 'success'
+        if: steps.trivy_scan.outcome == 'success' && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -970,9 +970,20 @@ jobs:
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             BASE_REF="${{ github.event.pull_request.base.sha }}"
           else
-            BASE_REF="origin/${{ github.event.repository.default_branch }}"
+            # Ensure default branch ref is available for non-PR events
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+            echo "📥 Fetching $DEFAULT_BRANCH to ensure ref is available..."
+            git fetch origin "$DEFAULT_BRANCH" || {
+              echo "⚠️  Failed to fetch $DEFAULT_BRANCH, falling back to github.event.before"
+              BASE_REF="${{ github.event.before }}"
+            }
+            # Only set BASE_REF if fetch succeeded
+            if [ -z "$BASE_REF" ]; then
+              BASE_REF="origin/$DEFAULT_BRANCH"
+            fi
           fi
 
+          echo "📋 Using BASE_REF: $BASE_REF"
           # Run verification script
           ./scripts/verify-gpg-signatures.sh "$BASE_REF" HEAD
 

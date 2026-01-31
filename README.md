@@ -169,7 +169,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ Password reset with secure tokens (256-bit, 24h expiration)
 - ✅ Device fingerprinting with auto-registration
 
-> **Note on Admin Users**: The `ADMIN` role is assigned directly in the database (`users.is_admin = TRUE`) for security. There is no public endpoint for this operation.
+> **Admin User Setup**: Set `ADMIN_EMAIL=admin@example.com` in `.env` before running migrations. The initial admin is auto-promoted during migration. For post-migration promotion: `UPDATE users SET is_admin = TRUE WHERE email = 'user@example.com';`
 
 ### Competition Module
 - ✅ CRUD operations for tournaments

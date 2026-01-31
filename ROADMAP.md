@@ -38,7 +38,7 @@
 |--------|-------|-------|-----------|-------|------------|
 | **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
 | **Sprint 2** | Feb 3 - Feb 24 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | 🔄 Fri, Feb 13, Feb 20 |
-| **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 28 |
+| **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 27 |
 | **Sprint 4** | Mar 4 - Mar 17 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 13 |
 | **Sprint 5** | Mar 18 - Mar 24 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 20 |
 
@@ -345,7 +345,7 @@ class LeaderboardResponse(BaseModel):
 | Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | Fri, Jan 31 |
 | Sprint 2 (Block 0-1) | Competition-GolfCourse M2M | Multi-select courses + Reorder UI | Fri, Feb 13 |
 | Sprint 2 (Block 2-3) | Rounds + Matches Scheduling | Drag-drop + Match Wizard | Fri, Feb 20 |
-| Sprint 3 | Invitations | Invitation Cards | Fri, Feb 28 |
+| Sprint 3 | Invitations | Invitation Cards | Fri, Feb 27 |
 | Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
 | Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
 
