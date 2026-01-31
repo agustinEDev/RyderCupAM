@@ -8,12 +8,12 @@
 
 ## 📊 Current Status
 
-**Tests:** 1,151 (1,135 passing, 16 skipped, ~60s) | **Endpoints:** 46 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,177 (1,177 passing, 16 skipped, ~142s) | **Endpoints:** 50 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
 - **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states)
-- **Golf Course:** Request, Approval Workflow (Admin), CRUD endpoints, WHS-compliant tees/holes validation ⭐ v2.0.1
+- **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
 **OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐
@@ -36,7 +36,7 @@
 
 | Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
 |--------|-------|-------|-----------|-------|------------|
-| **Sprint 1** | Jan 27 - Feb 6 | 60h | 7 (RBAC + Golf Courses) | 25+ | 🔄 Fri, Jan 31 |
+| **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
 | **Sprint 2** | Feb 7 - Feb 17 | 70h | 10 (Rounds + Matches) | 18+ | 🔄 Fri, Feb 13 |
 | **Sprint 3** | Feb 18 - Feb 24 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 20 |
 | **Sprint 4** | Feb 25 - Mar 10 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 6 |
@@ -44,7 +44,7 @@
 
 ---
 
-#### Sprint 1: RBAC Foundation + Golf Course Module v2.0.1 (✅ COMPLETED: Jan 30, 2026)
+#### Sprint 1: RBAC Foundation + Golf Course Module v2.0.1 (✅ COMPLETED: Jan 31, 2026)
 
 **RBAC Foundation v2.0.0: Simplified Role System**
 - **Architecture**: Three-tier system WITHOUT a formal roles table.
@@ -63,15 +63,25 @@
   - `src/modules/competition/infrastructure/authorization/` (helper functions)
   - `tests/integration/api/v1/test_user_roles_endpoint.py` (integration tests)
 
-**Golf Courses Endpoints (6):**
+**Golf Courses Endpoints (10):**
 ```
-POST /api/v1/golf-courses/request          # Creator requests
+POST /api/v1/golf-courses/request          # Creator requests new course
+POST /api/v1/admin/golf-courses            # Admin creates course directly (approved)
 GET  /api/v1/golf-courses/{id}             # Details (tees + holes)
 GET  /api/v1/golf-courses?approval_status=APPROVED
 GET  /api/v1/admin/golf-courses/pending
 PUT  /api/v1/admin/golf-courses/{id}/approve
 PUT  /api/v1/admin/golf-courses/{id}/reject
+PUT  /api/v1/golf-courses/{id}             # Creator submits update (clone-based workflow)
+PUT  /api/v1/admin/golf-courses/updates/{id}/approve  # Admin approves update
+PUT  /api/v1/admin/golf-courses/updates/{id}/reject   # Admin rejects update
 ```
+
+**Update Workflow (Clone-Based - Option A+):**
+- Creator submits update → creates pending clone (original unchanged)
+- Admin approves → clone replaces original, original soft-deleted
+- Admin rejects → clone deleted, original unchanged
+- No data loss during approval process
 **Key DTOs:**
 ```python
 class GolfCourseRequest(BaseModel):

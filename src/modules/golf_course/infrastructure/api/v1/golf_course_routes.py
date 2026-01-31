@@ -77,7 +77,7 @@ from src.shared.domain.exceptions.business_rule_violation import BusinessRuleVio
 logger = logging.getLogger(__name__)
 
 # Router
-router = APIRouter(prefix="/golf-courses", tags=["golf-courses"])
+router = APIRouter(prefix="/golf-courses")
 
 
 # ============================================================================
