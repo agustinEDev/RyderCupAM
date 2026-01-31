@@ -164,7 +164,7 @@ class AddGolfCourseToCompetitionUseCase:
 
             # 6. Añadir el campo a la competición (validación de país + duplicados en dominio)
             try:
-                competition.add_golf_course(golf_course_id, golf_course.country)
+                competition.add_golf_course(golf_course_id, golf_course.country_code)
             except ValueError as e:
                 # Puede ser por país incompatible o campo duplicado
                 error_msg = str(e)
