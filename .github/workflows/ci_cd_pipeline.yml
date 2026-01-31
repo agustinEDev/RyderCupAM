@@ -890,7 +890,7 @@ jobs:
           echo ""
 
           COMPONENT_COUNT=$(jq '.components | length' sbom/sbom.json)
-          DIRECT_DEPS=$(grep -c "^[a-zA-Z0-9._-]\+\s*==" requirements.txt || echo "0")
+          DIRECT_DEPS=$(grep -E -c "^[[:alnum:]._-]+[[:space:]]*==" requirements.txt || echo "0")
           TRANSITIVE_DEPS=$((COMPONENT_COUNT - DIRECT_DEPS))
 
           echo "📊 Statistics:"

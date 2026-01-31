@@ -36,10 +36,17 @@ class TestCreateDirectGolfCourseUseCase:
         """Mock del Unit of Work."""
         uow = AsyncMock()
         uow.__aenter__ = AsyncMock(return_value=uow)
-        uow.__aexit__ = AsyncMock(return_value=None)
+        uow.commit = AsyncMock()
+
+        # Simulate UoW context manager: commit on successful exit
+        async def aexit_side_effect(exc_type, exc, tb):
+            if exc_type is None:
+                await uow.commit()
+            return None
+
+        uow.__aexit__ = AsyncMock(side_effect=aexit_side_effect)
         uow.golf_courses = AsyncMock()
         uow.countries = AsyncMock()
-        uow.commit = AsyncMock()
         return uow
 
     @pytest.fixture
@@ -94,7 +101,7 @@ class TestCreateDirectGolfCourseUseCase:
         assert response.golf_course.approval_status == ApprovalStatus.APPROVED.value
         assert response.golf_course.country_code == "ES"
         mock_uow.golf_courses.save.assert_called_once()
-        mock_uow.commit.assert_called_once()
+        mock_uow.commit.assert_called_once()  # UoW context manager calls commit on success
 
     async def test_should_raise_error_when_country_not_found(self, mock_uow, valid_request_dto):
         """

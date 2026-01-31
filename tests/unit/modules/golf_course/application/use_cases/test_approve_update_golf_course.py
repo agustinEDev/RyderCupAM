@@ -38,9 +38,16 @@ class TestApproveUpdateGolfCourseUseCase:
         """Mock del Unit of Work."""
         uow = AsyncMock()
         uow.__aenter__ = AsyncMock(return_value=uow)
-        uow.__aexit__ = AsyncMock(return_value=None)
-        uow.golf_courses = AsyncMock()
         uow.commit = AsyncMock()
+
+        # Simulate UoW context manager: commit on successful exit
+        async def aexit_side_effect(exc_type, exc, tb):
+            if exc_type is None:
+                await uow.commit()
+            return None
+
+        uow.__aexit__ = AsyncMock(side_effect=aexit_side_effect)
+        uow.golf_courses = AsyncMock()
         return uow
 
     @pytest.fixture
@@ -162,7 +169,7 @@ class TestApproveUpdateGolfCourseUseCase:
         # Verificar llamadas
         mock_uow.golf_courses.save.assert_called_once()  # Original actualizado
         mock_uow.golf_courses.delete.assert_called_once_with(clone.id)  # Clone eliminado (por ID)
-        mock_uow.commit.assert_called_once()
+        mock_uow.commit.assert_called_once()  # UoW context manager calls commit on success
 
     async def test_should_raise_error_when_clone_not_found(self, mock_uow):
         """

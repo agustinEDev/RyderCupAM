@@ -4,18 +4,18 @@ Golf Course Routes - API REST Layer (Infrastructure).
 Endpoints FastAPI para el módulo Golf Course siguiendo Clean Architecture.
 
 Endpoints implementados (Sprint 1):
-- POST   /api/v1/golf-courses/request           # Creator solicita nuevo campo
-- GET    /api/v1/golf-courses/{id}              # Detalles de un campo
-- GET    /api/v1/golf-courses                   # Listar campos (con filtros)
-- GET    /api/v1/admin/golf-courses/pending     # Admin lista pendientes
-- PUT    /api/v1/admin/golf-courses/{id}/approve # Admin aprueba
-- PUT    /api/v1/admin/golf-courses/{id}/reject  # Admin rechaza
+- POST   /api/v1/golf-courses/request                         # Creator solicita nuevo campo
+- GET    /api/v1/golf-courses/{id}                            # Detalles de un campo
+- GET    /api/v1/golf-courses                                 # Listar campos (con filtros)
+- GET    /api/v1/golf-courses/admin/pending                   # Admin lista pendientes
+- PUT    /api/v1/golf-courses/admin/{golf_course_id}/approve  # Admin aprueba
+- PUT    /api/v1/golf-courses/admin/{golf_course_id}/reject   # Admin rechaza
 
 Endpoints v2.0.2 - Update Workflow (Opción A+):
-- POST   /api/v1/admin/golf-courses             # Admin crea campo directo a APPROVED
-- PUT    /api/v1/golf-courses/{id}              # Editar campo (con workflow de clones)
-- PUT    /api/v1/admin/golf-courses/{clone_id}/approve-update # Admin aprueba update clone
-- PUT    /api/v1/admin/golf-courses/{clone_id}/reject-update  # Admin rechaza update clone
+- POST   /api/v1/golf-courses/admin                           # Admin crea campo directo a APPROVED
+- PUT    /api/v1/golf-courses/{id}                            # Editar campo (con workflow de clones)
+- PUT    /api/v1/golf-courses/admin/{clone_id}/approve-update # Admin aprueba update clone
+- PUT    /api/v1/golf-courses/admin/{clone_id}/reject-update  # Admin rechaza update clone
 """
 
 import logging
