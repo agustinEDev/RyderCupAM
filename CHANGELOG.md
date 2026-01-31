@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **GolfCourse Entity**: Added `@reconstructor` to ensure `_domain_events` is initialized when loaded from DB
 - **RequestGolfCourseUseCase**: Added country validation to prevent FK errors
 - **SQLAlchemy Orphan Management**: Fixed critical bug in update workflow - explicit DELETE before UPDATE prevents orphaned rows
+- **Clean Architecture - UoW Pattern**: Removed 9 explicit `await self._uow.commit()` calls from Golf Course use cases (commits now handled automatically by UoW context manager `__aexit__`)
+- **Test Mocks**: Updated 4 test fixtures to simulate UoW `__aexit__` behavior (auto-commit on success, rollback on exception)
+- **CI/CD Pipeline**: Fixed DIRECT_DEPS grep to use POSIX classes (`grep -E -c "^[[:alnum:]._-]+[[:space:]]*=="`) for compatibility
+- **API Documentation**: Corrected endpoint paths in golf_course_routes.py docstring (reflect actual router prefix `/golf-courses`)
+- **Code Quality**: Applied Ruff auto-fixes - removed 72 redundant `return None` statements (11 migrations, 4 test files)
 - **7 CodeRabbit Issues Resolved**:
   1. **CRITICAL**: Migration schema - removed incorrect `par` column from `golf_course_tees` table
   2. **CRITICAL**: Mapper registration - added `start_golf_course_mappers()` in main.py and tests/conftest.py
