@@ -24,11 +24,11 @@
 
 ### v2.0.1 - Competition Module Evolution ⭐ TOP PRIORITY
 
-**Dates:** Jan 27 - Mar 17, 2026 (7 weeks) | **Effort:** 330h | **Tests:** 75+ | **Endpoints:** 30
+**Dates:** Jan 27 - Mar 24, 2026 (8 weeks) | **Effort:** 394h | **Tests:** 130+ | **Endpoints:** 34
 
 **Goal:** Complete Ryder Cup tournament management system with golf courses, scheduling, live scoring with dual validation, and real-time leaderboards.
 
-**Note:** Minor version bump (v2.0.0 was RBAC Foundation). Major changes: 30 endpoints, 12 entities, 7 weeks development.
+**Note:** Minor version bump (v2.0.0 was RBAC Foundation). Major changes: 34 endpoints, 13 entities, 8 weeks development.
 
 ---
 
@@ -37,10 +37,10 @@
 | Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
 |--------|-------|-------|-----------|-------|------------|
 | **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
-| **Sprint 2** | Feb 7 - Feb 17 | 70h | 10 (Rounds + Matches) | 18+ | 🔄 Fri, Feb 13 |
-| **Sprint 3** | Feb 18 - Feb 24 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 20 |
-| **Sprint 4** | Feb 25 - Mar 10 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 6 |
-| **Sprint 5** | Mar 11 - Mar 17 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 13 |
+| **Sprint 2** | Feb 3 - Feb 24 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | 🔄 Fri, Feb 13, Feb 20 |
+| **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 28 |
+| **Sprint 4** | Mar 4 - Mar 17 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 13 |
+| **Sprint 5** | Mar 18 - Mar 24 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 20 |
 
 ---
 
@@ -112,7 +112,59 @@ class GolfCourseRequest(BaseModel):
 
 #### Sprint 2: Competition Scheduling (1.5 weeks)
 
-**Code Quality Refactor (Priority):**
+**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (PRIORITY)**
+- **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
+- **Problem**: Violates Unit of Work pattern - UoW context manager (`__aexit__`) should handle commits automatically
+- **Files to modify**:
+  - Competition: 14 use cases (activate, cancel, close, complete, create, delete, start, update, handle_enrollment, direct_enroll, request_enrollment, set_custom_handicap, cancel_enrollment, withdraw_enrollment)
+  - User: 2 use cases (register_device, revoke_device)
+- **Actions**:
+  1. Remove all explicit `await self._uow.commit()` calls (9 already removed from Golf Course module)
+  2. Update ~16-20 unit tests to remove `mock_uow.commit.assert_called_once()` assertions
+  3. Update mock fixtures to simulate UoW `__aexit__` behavior (commit on success, rollback on exception)
+- **Benefit**: 100% consistent Clean Architecture, automatic transaction management, less code duplication
+- **Tests**: Update existing tests, verify 1,177/1,177 still passing
+- **Time**: 3-4 hours
+- **Related**: Golf Course module already completed (v2.0.1 - commit bfa7efa)
+
+**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (FOUNDATION)**
+- **Rationale**: Competitions can be played across multiple golf courses (multi-round tournaments)
+- **Architecture**: Many-to-Many via `competition_golf_courses` association table
+- **Migration**: Create `competition_golf_courses` table (id, competition_id, golf_course_id, display_order, created_at)
+- **Domain Layer**:
+  - New entity: `CompetitionGolfCourse` (id, golf_course_id, display_order)
+  - Update `Competition` entity: add `_golf_courses: list[CompetitionGolfCourse]`
+  - Business methods: `add_golf_course()`, `remove_golf_course()`, `reorder_golf_courses()`
+  - Business rules:
+    - DRAFT competitions can have 0+ courses
+    - ACTIVE requires ≥1 course (all APPROVED)
+    - Cannot modify courses after ACTIVATED
+    - Golf course country must match competition location (main or adjacent)
+    - Cannot delete golf course used in ACTIVE/IN_PROGRESS competitions
+- **Application Layer**:
+  - New use cases: AddGolfCourseToCompetition, RemoveGolfCourseFromCompetition, ReorderGolfCourses
+  - Update: CreateCompetition (accept `golf_course_ids`), ActivateCompetition (validate all APPROVED)
+  - New DTOs: CompetitionGolfCourseDTO, Add/Remove/Reorder request DTOs
+- **Infrastructure**:
+  - SQLAlchemy mapper: relationship with `cascade="all, delete-orphan"`, `order_by=display_order`
+  - Repository: `find_by_id_with_golf_courses()` (eager loading), `find_active_competitions_using_course()`
+- **API Endpoints** (4 new):
+  ```
+  POST   /api/v1/competitions/{comp_id}/golf-courses
+  DELETE /api/v1/competitions/{comp_id}/golf-courses/{gc_id}
+  PUT    /api/v1/competitions/{comp_id}/golf-courses/reorder
+  GET    /api/v1/competitions/{comp_id}/golf-courses
+  ```
+- **Frontend Integration**:
+  - Competition creation: multi-select golf courses (existing APPROVED)
+  - Option to create new course request (PENDING) and attach to competition
+  - Warning if competition has PENDING courses (cannot activate until approved)
+  - UI to reorder courses (drag-and-drop)
+- **Tests**: +55 tests (25 domain, 18 application, 12 integration)
+- **Time**: 1.5 weeks
+- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship)
+
+**Block 2: Code Quality Refactor - Exception Subclasses**
 - **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
 - **Files**: `business_rule_violation.py`, `competition_policy.py`, `request_enrollment_use_case.py`
 - **Action**: Create `DuplicateEnrollmentViolation`, `InvalidCompetitionStatusViolation`, etc.
@@ -241,10 +293,11 @@ class LeaderboardResponse(BaseModel):
 
 ---
 
-#### 🗄️ New Entities (12 total)
+#### 🗄️ New Entities (13 total)
 
 **Domain Layer:**
 - `GolfCourse`, `Tee`, `Hole` - Golf Course Management (3 tables)
+- `CompetitionGolfCourse` - Competition-GolfCourse Many-to-Many association (1 table)
 - `Round`, `Match` - Scheduling (2 tables)
 - `Invitation` - Invitation System (1 table)
 - `HoleScore` - Score Annotation (1 table)
@@ -256,21 +309,22 @@ class LeaderboardResponse(BaseModel):
 #### ✅ Acceptance Criteria
 
 **Functionality:**
-- 30 endpoints implemented + Swagger docs
-- Functional RBAC (ADMIN, CREATOR, PLAYER) using a simplified, table-less design.
+- 34 endpoints implemented + Swagger docs
+- Functional RBAC (ADMIN, CREATOR, PLAYER) using a simplified, table-less design
+- Competition-GolfCourse many-to-many relationship with reordering
 - Auto-calculated playing handicaps (WHS)
 - Dual validation (player + marker)
 - Public real-time leaderboard
 
 **Testing:**
 - ≥85% coverage
-- 75+ tests (unit + integration)
+- 130+ tests (unit + integration)
 - 0 failing in CI/CD
 
 **Performance:**
 - API p95 < 200ms
-- Eager loading + Redis cache
-- Critical DB indexes
+- Eager loading (joinedload/selectinload) + Redis cache
+- Critical DB indexes (competition_golf_courses, rounds, matches)
 
 **Security:**
 - Authorization checks on all endpoints
@@ -279,8 +333,8 @@ class LeaderboardResponse(BaseModel):
 
 **Documentation:**
 - Complete Swagger (descriptions, examples)
-- 3 new ADRs (031, 032, 033)
-- 10 Alembic migrations
+- 4 new ADRs (031, 032, 033, 034)
+- 11 Alembic migrations
 
 ---
 
@@ -289,10 +343,11 @@ class LeaderboardResponse(BaseModel):
 | Sprint | Backend Delivers | Frontend Consumes | Sync Point |
 |--------|----------------|------------------|------------|
 | Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | Fri, Jan 31 |
-| Sprint 2 | Scheduling | Drag-drop + Match Wizard | Fri, Feb 14 |
-| Sprint 3 | Invitations | Invitation Cards | Fri, Feb 21 |
-| Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 7 |
-| Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 14 |
+| Sprint 2 (Block 0-1) | Competition-GolfCourse M2M | Multi-select courses + Reorder UI | Fri, Feb 13 |
+| Sprint 2 (Block 2-3) | Rounds + Matches Scheduling | Drag-drop + Match Wizard | Fri, Feb 20 |
+| Sprint 3 | Invitations | Invitation Cards | Fri, Feb 28 |
+| Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
+| Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
 
 **Protocol:** Backend deploys to dev → updates Swagger → notifies Frontend (Friday) → integration (Monday).
 
@@ -309,6 +364,9 @@ class LeaderboardResponse(BaseModel):
 - **ADR-031:** Match Play Scoring Calculation (Jan 27, 2026)
 - **ADR-032:** Golf Course Approval Workflow Details (Jan 27, 2026)
 - **ADR-033:** Invitation Token Security and Auto-Enrollment (Jan 27, 2026)
+
+**New (Sprint 2):**
+- **ADR-034:** Competition-GolfCourse Many-to-Many Relationship (Feb 3, 2026)
 
 ---
 
