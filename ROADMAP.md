@@ -172,6 +172,25 @@ class GolfCourseRequest(BaseModel):
 - **Tests**: Update ~20 tests (CompetitionPolicy + use cases)
 - **Time**: 2-3 hours
 
+**Block 3: Fix SBOM Submission to GitHub Dependency Graph**
+- **Issue**: Action `github/dependency-graph-submit-action@v1` doesn't exist (CI/CD failing)
+- **Current State**: Step commented out in `.github/workflows/ci_cd_pipeline.yml` (release v2.0.1)
+- **Options**:
+  1. Use GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
+  2. Use `advanced-security/maven-dependency-submission-action` (ecosystem-specific, N/A for Python)
+  3. Use `jessehouwing/actions-dependency-submission` (community action)
+- **Recommended**: Option 1 (REST API) - Most reliable, no third-party dependencies
+- **Implementation**:
+  - Create bash script `scripts/submit-sbom-to-github.sh`
+  - Call GitHub API with SBOM JSON payload (CycloneDX format)
+  - Only execute on `main` branch (same condition as before)
+  - Add error handling + logging
+- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance
+- **Files**: `.github/workflows/ci_cd_pipeline.yml`, `scripts/submit-sbom-to-github.sh`
+- **Tests**: Manual testing (GitHub API requires merge to main)
+- **Time**: 2-3 hours
+- **ADR**: ADR-035 (SBOM Submission via GitHub REST API)
+
 **Rounds Endpoints (4):**
 ```
 POST   /api/v1/competitions/{comp_id}/rounds
