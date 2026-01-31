@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.1-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1091%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1177%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,8 +29,8 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **40 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,091 tests** passing (100% success rate, ~65s execution)
+- ✅ **50 REST API endpoints** fully documented (Swagger UI)
+- ✅ **1,177 tests** passing (100% success rate, ~142s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
@@ -264,18 +264,19 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v2.0.0)
+### Test Statistics (v2.0.1)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,091** | ✅ 100% passing | 90%+ |
+| **Total** | **1,177** | ✅ 100% passing | 90%+ |
 | User Module | 588 | ✅ 100% | 92% |
 | Competition Module | 174 | ✅ 100% | 91% |
+| Golf Course Module | 51 | ✅ 100% | 93% |
 | Security Suite | 34 | ✅ 100% | 95% |
 | Shared | 138 | ✅ 100% | 88% |
-| Integration | 72 | ✅ 100% | - |
+| Integration | 100 | ✅ 100% | - |
 
-**Execution Time**: ~65 seconds (with pytest-xdist parallelization)
+**Execution Time**: ~142 seconds (with pytest-xdist parallelization)
 
 **Test Types**:
 - Unit tests (domain + application logic)
@@ -348,7 +349,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (40 total)
+### Available Endpoints (50 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>
@@ -416,6 +417,21 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 - `POST /api/v1/enrollments/{id}/cancel`
 - `POST /api/v1/enrollments/{id}/withdraw`
 - `PUT /api/v1/enrollments/{id}/handicap`
+</details>
+
+<details>
+<summary><b>Golf Course Management (10 endpoints)</b></summary>
+
+- `POST /api/v1/golf-courses/request` - Creator requests new course
+- `POST /api/v1/golf-courses/admin` - Admin creates course directly (approved)
+- `GET /api/v1/golf-courses/{id}` - Get course details (tees + holes)
+- `GET /api/v1/golf-courses?approval_status=APPROVED` - List filtered courses
+- `GET /api/v1/golf-courses/admin/pending` - Admin view pending approvals
+- `PUT /api/v1/golf-courses/admin/{id}/approve` - Admin approves course
+- `PUT /api/v1/golf-courses/admin/{id}/reject` - Admin rejects course
+- `PUT /api/v1/golf-courses/{id}` - Creator submits update (clone-based)
+- `PUT /api/v1/golf-courses/admin/updates/{id}/approve` - Admin approves update
+- `PUT /api/v1/golf-courses/admin/updates/{id}/reject` - Admin rejects update
 </details>
 
 <details>
@@ -509,20 +525,22 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.0 (Production)
+### Current Version: v2.0.1 (Production)
 
-**Latest Features**:
-- **RBAC Foundation**: Simplified, three-tier role system (ADMIN, CREATOR, PLAYER).
-- New endpoint `GET /users/me/roles/{competition_id}` to check roles.
-- +25 tests for RBAC, bringing total to 1,091.
+**Latest Features** (Sprint 1 - Jan 31, 2026):
+- **Golf Course Module**: Complete CRUD with Admin approval workflow + Update system
+- **10 new endpoints**: Request, Admin create, Approve/Reject, Update workflow (clone-based)
+- **RBAC Foundation** (v2.0.0): Three-tier role system (ADMIN, CREATOR, PLAYER)
+- **+51 tests** (28 integration, 23 unit) - Total: 1,177 passing
+- **WHS-compliant validation**: 2-6 tees, 18 holes, Course/Slope ratings
 
-### Coming Next: v2.0.1 - Competition Module Evolution ⭐
+### Coming Next: Sprint 2-5 - Competition Module Evolution ⭐
 
-**Timeline**: Jan 30 - Mar 17, 2026 (7 weeks)
-**Effort**: ~270h | **Endpoints**: +29 | **Tests**: +50
+**Timeline**: Feb 3 - Mar 24, 2026 (7 weeks)
+**Effort**: ~334h | **Endpoints**: +23 | **Tests**: +79
 
-**Features**:
-- Golf course management with approval workflow
+**Planned Features**:
+- Competition-GolfCourse Many-to-Many relationship
 - Round planning and match scheduling
 - Live scoring with dual validation (player + marker)
 - Invitation system with secure tokens
@@ -531,11 +549,11 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 - Real-time leaderboards with Redis cache
 
 **Sprint Breakdown**:
-1. **Sprint 1** (Jan 27 - Feb 6): Golf Courses - 6 endpoints
-2. **Sprint 2** (Feb 7 - Feb 17): Rounds + Matches - 10 endpoints
-3. **Sprint 3** (Feb 18 - Feb 24): Invitations - 5 endpoints
-4. **Sprint 4** (Feb 25 - Mar 10): Scoring System - 4 endpoints
-5. **Sprint 5** (Mar 11 - Mar 17): Leaderboards - 2 endpoints
+1. ✅ **Sprint 1** (Jan 27 - Jan 31): Golf Courses - 10 endpoints (COMPLETED)
+2. **Sprint 2** (Feb 3 - Feb 24): Competition-GolfCourse + Rounds + Matches - 14 endpoints
+3. **Sprint 3** (Feb 25 - Mar 3): Invitations - 5 endpoints
+4. **Sprint 4** (Mar 4 - Mar 17): Scoring System - 4 endpoints
+5. **Sprint 5** (Mar 18 - Mar 24): Leaderboards - 2 endpoints
 
 See [ROADMAP.md](ROADMAP.md) for complete version planning.
 

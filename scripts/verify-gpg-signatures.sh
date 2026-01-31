@@ -112,10 +112,16 @@ while IFS= read -r commit; do
     if [ "$PARENT_COUNT" -ge 2 ]; then
         MERGE_COUNT=$((MERGE_COUNT + 1))
         # Detect GitHub auto-merges by author/email or commit message patterns
+        # Patterns:
+        # 1. Author/email contains GitHub
+        # 2. "Merge pull request #123"
+        # 3. "Merge abc123 into def456" (GitHub auto-merge format)
+        # 4. "(#123)" - PR number in conventional commit (GitHub PR merge)
         if echo "$COMMIT_AUTHOR" | grep -iq "GitHub" || \
            echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
            echo "$COMMIT_MSG" | grep -q "Merge pull request" || \
-           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}"; then
+           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}" || \
+           echo "$COMMIT_MSG" | grep -Eq "\(#[0-9]+\)"; then
             IS_GITHUB_MERGE=true
         fi
     fi
