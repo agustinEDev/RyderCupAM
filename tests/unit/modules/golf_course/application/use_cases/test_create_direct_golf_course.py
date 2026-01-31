@@ -42,7 +42,6 @@ class TestCreateDirectGolfCourseUseCase:
         async def aexit_side_effect(exc_type, exc, tb):
             if exc_type is None:
                 await uow.commit()
-            return None
 
         uow.__aexit__ = AsyncMock(side_effect=aexit_side_effect)
         uow.golf_courses = AsyncMock()
