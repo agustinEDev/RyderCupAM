@@ -835,11 +835,7 @@ jobs:
           echo "📦 Generating SBOM in CycloneDX format..."
           mkdir -p sbom
 
-          cyclonedx-py requirements \
-            --input requirements.txt \
-            --output sbom/sbom.json \
-            --format json \
-            --verbose
+          cyclonedx-py requirements requirements.txt -o sbom/sbom.json
 
       - name: Generate SBOM Metadata
         run: |
