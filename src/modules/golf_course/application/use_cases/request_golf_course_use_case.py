@@ -105,10 +105,7 @@ class RequestGolfCourseUseCase:
             # 6. Persistir
             await self._uow.golf_courses.save(golf_course)
 
-            # 7. Commit (dispara eventos)
-            await self._uow.commit()
-
-            # 8. Mapear a Response DTO
+            # 7. Mapear a Response DTO (commit automático al salir del context manager)
             response_dto = GolfCourseMapper.to_response_dto(golf_course)
 
             return RequestGolfCourseResponseDTO(golf_course=response_dto)

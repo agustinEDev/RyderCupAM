@@ -143,8 +143,8 @@ class UpdateGolfCourseUseCase:
                     holes=holes,
                 )
                 await self._uow.golf_courses.save(original_course)
-                await self._uow.commit()
 
+                # Commit automático al salir del context manager
                 response_dto = GolfCourseMapper.to_response_dto(original_course)
                 message = (
                     "Golf course updated successfully (admin privileges)"
@@ -168,8 +168,8 @@ class UpdateGolfCourseUseCase:
                     holes=holes,
                 )
                 await self._uow.golf_courses.save(original_course)
-                await self._uow.commit()
 
+                # Commit automático al salir del context manager
                 response_dto = GolfCourseMapper.to_response_dto(original_course)
 
                 return UpdateGolfCourseResponseDTO(
@@ -214,8 +214,8 @@ class UpdateGolfCourseUseCase:
             # Guardar ambos
             await self._uow.golf_courses.save(clone_reconstructed)
             await self._uow.golf_courses.save(original_course)
-            await self._uow.commit()
 
+            # Commit automático al salir del context manager
             original_dto = GolfCourseMapper.to_response_dto(original_course)
             clone_dto = GolfCourseMapper.to_response_dto(clone_reconstructed)
 

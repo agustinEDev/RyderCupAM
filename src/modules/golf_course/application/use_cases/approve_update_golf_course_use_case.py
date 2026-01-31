@@ -73,14 +73,10 @@ class ApproveUpdateGolfCourseUseCase:
                 )
 
             # 3. Buscar campo original
-            original_course = await self._uow.golf_courses.find_by_id(
-                clone.original_golf_course_id
-            )
+            original_course = await self._uow.golf_courses.find_by_id(clone.original_golf_course_id)
 
             if original_course is None:
-                raise ValueError(
-                    f"Original golf course {clone.original_golf_course_id} not found"
-                )
+                raise ValueError(f"Original golf course {clone.original_golf_course_id} not found")
 
             # 4. Aplicar cambios del clone al original
             original_course.apply_changes_from_clone(clone)
@@ -91,10 +87,7 @@ class ApproveUpdateGolfCourseUseCase:
             # 6. Eliminar clone
             await self._uow.golf_courses.delete(clone.id)
 
-            # 7. Commit
-            await self._uow.commit()
-
-            # 8. Mapear a Response DTO
+            # 7. Mapear a Response DTO (commit automático al salir del context manager)
             updated_dto = GolfCourseMapper.to_response_dto(original_course)
 
             return ApproveUpdateGolfCourseResponseDTO(

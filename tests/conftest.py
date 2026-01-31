@@ -845,10 +845,7 @@ async def create_golf_course(
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
@@ -860,7 +857,9 @@ async def create_golf_course(
     return response.json()
 
 
-async def approve_golf_course(client: AsyncClient, admin_cookies: dict, golf_course_id: str) -> dict:
+async def approve_golf_course(
+    client: AsyncClient, admin_cookies: dict, golf_course_id: str
+) -> dict:
     """Helper para aprobar un campo de golf (Admin only)."""
     client.cookies.clear()
     client.cookies.update(admin_cookies)
@@ -878,8 +877,7 @@ async def reject_golf_course(
     client.cookies.update(admin_cookies)
 
     response = await client.put(
-        f"/api/v1/golf-courses/admin/{golf_course_id}/reject",
-        params={"reason": reason}
+        f"/api/v1/golf-courses/admin/{golf_course_id}/reject", params={"reason": reason}
     )
     assert response.status_code == 200, f"Failed to reject golf course: {response.text}"
     return response.json()

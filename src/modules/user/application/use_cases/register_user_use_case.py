@@ -86,7 +86,7 @@ class RegisterUserUseCase:
             if (
                 self._handicap_service
                 and new_user.country_code
-                and new_user.country_code.value == 'ES'
+                and new_user.country_code.value == "ES"
             ):
                 try:
                     handicap_value = await self._handicap_service.search_handicap(

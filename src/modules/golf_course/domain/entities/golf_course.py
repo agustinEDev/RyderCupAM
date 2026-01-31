@@ -319,6 +319,7 @@ class GolfCourse:
         # para evitar conflictos de IDs y golf_course_id con SQLAlchemy
         del self._tees[:]  # Elimina todos los elementos in-place
         from src.modules.golf_course.domain.entities.tee import Tee as TeeEntity
+
         for tee in tees:
             new_tee = TeeEntity(
                 category=tee.category,
@@ -330,6 +331,7 @@ class GolfCourse:
 
         del self._holes[:]  # Elimina todos los elementos in-place
         from src.modules.golf_course.domain.entities.hole import Hole as HoleEntity
+
         for hole in holes:
             new_hole = HoleEntity(
                 number=hole.number,
@@ -390,6 +392,7 @@ class GolfCourse:
         for tee in clone._tees:
             # Crear nuevo Tee con los mismos datos
             from src.modules.golf_course.domain.entities.tee import Tee
+
             new_tee = Tee(
                 category=tee.category,
                 identifier=tee.identifier,
@@ -402,6 +405,7 @@ class GolfCourse:
         for hole in clone._holes:
             # Crear nuevo Hole con los mismos datos
             from src.modules.golf_course.domain.entities.hole import Hole
+
             new_hole = Hole(
                 number=hole.number,
                 par=hole.par,

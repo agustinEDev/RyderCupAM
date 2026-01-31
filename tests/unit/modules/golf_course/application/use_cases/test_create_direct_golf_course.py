@@ -81,9 +81,7 @@ class TestCreateDirectGolfCourseUseCase:
         """
         # Arrange
         mock_uow.countries.find_by_code.return_value = Country(
-            code=CountryCode("ES"),
-            name_en="Spain",
-            name_es="España"
+            code=CountryCode("ES"), name_en="Spain", name_es="España"
         )
         creator_id = UserId(str(uuid4()))
         use_case = CreateDirectGolfCourseUseCase(mock_uow)
@@ -98,9 +96,7 @@ class TestCreateDirectGolfCourseUseCase:
         mock_uow.golf_courses.save.assert_called_once()
         mock_uow.commit.assert_called_once()
 
-    async def test_should_raise_error_when_country_not_found(
-        self, mock_uow, valid_request_dto
-    ):
+    async def test_should_raise_error_when_country_not_found(self, mock_uow, valid_request_dto):
         """
         Verifica que falla si el país no existe.
 

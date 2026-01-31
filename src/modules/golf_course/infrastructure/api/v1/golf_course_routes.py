@@ -212,9 +212,7 @@ async def request_golf_course(
 async def get_golf_course_by_id(
     golf_course_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    use_case: Annotated[
-        GetGolfCourseByIdUseCase, Depends(get_get_golf_course_by_id_use_case)
-    ],
+    use_case: Annotated[GetGolfCourseByIdUseCase, Depends(get_get_golf_course_by_id_use_case)],
 ):
     """
     Endpoint: Obtener detalles de un campo de golf por ID.
@@ -576,9 +574,7 @@ async def approve_golf_course(
 async def reject_golf_course(
     golf_course_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
-    use_case: Annotated[
-        RejectGolfCourseUseCase, Depends(get_reject_golf_course_use_case)
-    ],
+    use_case: Annotated[RejectGolfCourseUseCase, Depends(get_reject_golf_course_use_case)],
     reason: str = Query(..., min_length=10, max_length=500, description="Rejection reason"),
 ):
     """
@@ -611,9 +607,7 @@ async def reject_golf_course(
         )
 
     try:
-        request_dto = RejectGolfCourseRequestDTO(
-            golf_course_id=str(golf_course_id), reason=reason
-        )
+        request_dto = RejectGolfCourseRequestDTO(golf_course_id=str(golf_course_id), reason=reason)
         response = await use_case.execute(request_dto)
 
         return {

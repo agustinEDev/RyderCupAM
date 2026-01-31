@@ -271,7 +271,9 @@ def start_golf_course_mappers():
                 "_id": column_property(golf_courses_table.c.id),
                 "_country_code": column_property(golf_courses_table.c.country_code),
                 "_creator_id": column_property(golf_courses_table.c.creator_id),
-                "_original_golf_course_id": column_property(golf_courses_table.c.original_golf_course_id),
+                "_original_golf_course_id": column_property(
+                    golf_courses_table.c.original_golf_course_id
+                ),
                 # Scalar attributes mapping
                 "_name": column_property(golf_courses_table.c.name),
                 "_course_type": column_property(golf_courses_table.c.course_type),

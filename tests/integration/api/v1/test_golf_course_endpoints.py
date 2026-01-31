@@ -48,10 +48,7 @@ class TestRequestGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         # Act
@@ -86,10 +83,7 @@ class TestRequestGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.post("/api/v1/golf-courses/request", json=golf_course_data)
@@ -122,10 +116,7 @@ class TestRequestGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.post(
@@ -135,7 +126,9 @@ class TestRequestGolfCourse:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_request_golf_course_duplicate_stroke_index_returns_400(self, client: AsyncClient):
+    async def test_request_golf_course_duplicate_stroke_index_returns_400(
+        self, client: AsyncClient
+    ):
         """Solicitar campo con stroke index duplicados retorna 400."""
         user = await create_authenticated_user(
             client, "creator3@test.com", "P@ssw0rd123!", "Creator", "Three"
@@ -190,21 +183,24 @@ class TestGetGolfCourseById:
         admin = await create_authenticated_user(
             client, "admin@test.com", "AdminPass123!", "Admin", "User"
         )
+
         # Hacer admin al usuario (directamente en BD para test)
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin@test.com"}
+                        {"email": "admin@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
@@ -216,8 +212,7 @@ class TestGetGolfCourseById:
 
         # Act
         response = await client.get(
-            f"/api/v1/golf-courses/{golf_course['id']}",
-            cookies=regular_user["cookies"]
+            f"/api/v1/golf-courses/{golf_course['id']}", cookies=regular_user["cookies"]
         )
 
         # Assert
@@ -237,8 +232,7 @@ class TestGetGolfCourseById:
 
         # Act
         response = await client.get(
-            f"/api/v1/golf-courses/{golf_course['id']}",
-            cookies=creator["cookies"]
+            f"/api/v1/golf-courses/{golf_course['id']}", cookies=creator["cookies"]
         )
 
         # Assert
@@ -262,8 +256,7 @@ class TestGetGolfCourseById:
 
         # Act
         response = await client.get(
-            f"/api/v1/golf-courses/{golf_course['id']}",
-            cookies=other_user["cookies"]
+            f"/api/v1/golf-courses/{golf_course['id']}", cookies=other_user["cookies"]
         )
 
         # Assert
@@ -278,10 +271,7 @@ class TestGetGolfCourseById:
 
         fake_id = "00000000-0000-0000-0000-000000000000"
 
-        response = await client.get(
-            f"/api/v1/golf-courses/{fake_id}",
-            cookies=user["cookies"]
-        )
+        response = await client.get(f"/api/v1/golf-courses/{fake_id}", cookies=user["cookies"])
 
         assert response.status_code == 404
 
@@ -296,20 +286,23 @@ class TestListGolfCourses:
         admin = await create_authenticated_user(
             client, "admin2@test.com", "AdminPass123!", "Admin", "Two"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin2@test.com"}
+                        {"email": "admin2@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         # Creator solicita 2 campos
@@ -326,10 +319,7 @@ class TestListGolfCourses:
         regular_user = await create_authenticated_user(
             client, "regular2@test.com", "RegularPass123!", "Regular", "Two"
         )
-        response = await client.get(
-            "/api/v1/golf-courses",
-            cookies=regular_user["cookies"]
-        )
+        response = await client.get("/api/v1/golf-courses", cookies=regular_user["cookies"])
 
         # Assert: Solo debe ver el aprobado
         assert response.status_code == 200
@@ -359,20 +349,23 @@ class TestListPendingGolfCourses:
         admin = await create_authenticated_user(
             client, "admin3@test.com", "AdminPass123!", "Admin", "Three"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin3@test.com"}
+                        {"email": "admin3@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         # Creator solicita campo
@@ -382,10 +375,7 @@ class TestListPendingGolfCourses:
         golf_course = await create_golf_course(client, creator["cookies"])
 
         # Act: Admin lista pendientes
-        response = await client.get(
-            "/api/v1/golf-courses/admin/pending",
-            cookies=admin["cookies"]
-        )
+        response = await client.get("/api/v1/golf-courses/admin/pending", cookies=admin["cookies"])
 
         # Assert
         assert response.status_code == 200
@@ -401,10 +391,7 @@ class TestListPendingGolfCourses:
             client, "regular3@test.com", "RegularPass123!", "Regular", "Three"
         )
 
-        response = await client.get(
-            "/api/v1/golf-courses/admin/pending",
-            cookies=user["cookies"]
-        )
+        response = await client.get("/api/v1/golf-courses/admin/pending", cookies=user["cookies"])
 
         assert response.status_code == 403
 
@@ -419,20 +406,23 @@ class TestApproveGolfCourse:
         admin = await create_authenticated_user(
             client, "admin4@test.com", "AdminPass123!", "Admin", "Four"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin4@test.com"}
+                        {"email": "admin4@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         # Creator solicita campo
@@ -443,8 +433,7 @@ class TestApproveGolfCourse:
 
         # Act: Admin aprueba
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{golf_course['id']}/approve",
-            cookies=admin["cookies"]
+            f"/api/v1/golf-courses/admin/{golf_course['id']}/approve", cookies=admin["cookies"]
         )
 
         # Assert
@@ -465,8 +454,7 @@ class TestApproveGolfCourse:
         )
 
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{golf_course['id']}/approve",
-            cookies=other_user["cookies"]
+            f"/api/v1/golf-courses/admin/{golf_course['id']}/approve", cookies=other_user["cookies"]
         )
 
         assert response.status_code == 403
@@ -482,20 +470,23 @@ class TestRejectGolfCourse:
         admin = await create_authenticated_user(
             client, "admin5@test.com", "AdminPass123!", "Admin", "Five"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin5@test.com"}
+                        {"email": "admin5@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         # Creator solicita campo
@@ -509,7 +500,7 @@ class TestRejectGolfCourse:
         response = await client.put(
             f"/api/v1/golf-courses/admin/{golf_course['id']}/reject",
             params={"reason": reason},
-            cookies=admin["cookies"]
+            cookies=admin["cookies"],
         )
 
         # Assert
@@ -524,20 +515,23 @@ class TestRejectGolfCourse:
         admin = await create_authenticated_user(
             client, "admin6@test.com", "AdminPass123!", "Admin", "Six"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin6@test.com"}
+                        {"email": "admin6@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         # Creator solicita campo
@@ -548,8 +542,7 @@ class TestRejectGolfCourse:
 
         # Act: Admin intenta rechazar sin razón
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{golf_course['id']}/reject",
-            cookies=admin["cookies"]
+            f"/api/v1/golf-courses/admin/{golf_course['id']}/reject", cookies=admin["cookies"]
         )
 
         # Assert: Debe fallar por falta de parámetro requerido
@@ -570,7 +563,7 @@ class TestRejectGolfCourse:
         response = await client.put(
             f"/api/v1/golf-courses/admin/{golf_course['id']}/reject",
             params={"reason": "Test rejection reason text here"},
-            cookies=other_user["cookies"]
+            cookies=other_user["cookies"],
         )
 
         assert response.status_code == 403
@@ -586,20 +579,23 @@ class TestCreateDirectGolfCourse:
         admin = await create_authenticated_user(
             client, "admin7@test.com", "AdminPass123!", "Admin", "Seven"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin7@test.com"}
+                        {"email": "admin7@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         golf_course_data = {
@@ -622,17 +618,12 @@ class TestCreateDirectGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         # Act
         response = await client.post(
-            "/api/v1/golf-courses/admin",
-            json=golf_course_data,
-            cookies=admin["cookies"]
+            "/api/v1/golf-courses/admin", json=golf_course_data, cookies=admin["cookies"]
         )
 
         # Assert
@@ -670,16 +661,11 @@ class TestCreateDirectGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.post(
-            "/api/v1/golf-courses/admin",
-            json=golf_course_data,
-            cookies=user["cookies"]
+            "/api/v1/golf-courses/admin", json=golf_course_data, cookies=user["cookies"]
         )
 
         assert response.status_code == 403
@@ -695,20 +681,23 @@ class TestUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin8@test.com", "AdminPass123!", "Admin", "Eight"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin8@test.com"}
+                        {"email": "admin8@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -745,9 +734,7 @@ class TestUpdateGolfCourse:
         }
 
         response = await client.put(
-            f"/api/v1/golf-courses/{golf_course['id']}",
-            json=update_data,
-            cookies=admin["cookies"]
+            f"/api/v1/golf-courses/{golf_course['id']}", json=update_data, cookies=admin["cookies"]
         )
 
         # Assert
@@ -766,20 +753,23 @@ class TestUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin9@test.com", "AdminPass123!", "Admin", "Nine"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin9@test.com"}
+                        {"email": "admin9@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -809,16 +799,13 @@ class TestUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
 
         # Assert
@@ -865,16 +852,13 @@ class TestUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
 
         # Assert
@@ -917,16 +901,13 @@ class TestUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=other_user["cookies"]
+            cookies=other_user["cookies"],
         )
 
         assert response.status_code == 403
@@ -942,20 +923,23 @@ class TestApproveUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin10@test.com", "AdminPass123!", "Admin", "Ten"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin10@test.com"}
+                        {"email": "admin10@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -985,23 +969,19 @@ class TestApproveUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         update_response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
         clone_id = update_response.json()["pending_update"]["id"]
 
         # Act: Admin aprueba el clone
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{clone_id}/approve-update",
-            cookies=admin["cookies"]
+            f"/api/v1/golf-courses/admin/{clone_id}/approve-update", cookies=admin["cookies"]
         )
 
         # Assert
@@ -1020,20 +1000,23 @@ class TestApproveUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin11@test.com", "AdminPass123!", "Admin", "Eleven"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin11@test.com"}
+                        {"email": "admin11@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -1063,16 +1046,13 @@ class TestApproveUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         update_response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
         clone_id = update_response.json()["pending_update"]["id"]
 
@@ -1082,8 +1062,7 @@ class TestApproveUpdateGolfCourse:
         )
 
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{clone_id}/approve-update",
-            cookies=other_user["cookies"]
+            f"/api/v1/golf-courses/admin/{clone_id}/approve-update", cookies=other_user["cookies"]
         )
 
         # Assert
@@ -1100,20 +1079,23 @@ class TestRejectUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin12@test.com", "AdminPass123!", "Admin", "Twelve"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin12@test.com"}
+                        {"email": "admin12@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -1143,24 +1125,20 @@ class TestRejectUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         update_response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
         assert update_response.status_code == 200, f"Update failed: {update_response.json()}"
         clone_id = update_response.json()["pending_update"]["id"]
 
         # Act: Admin rechaza el clone
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{clone_id}/reject-update",
-            cookies=admin["cookies"]
+            f"/api/v1/golf-courses/admin/{clone_id}/reject-update", cookies=admin["cookies"]
         )
 
         # Assert
@@ -1179,20 +1157,23 @@ class TestRejectUpdateGolfCourse:
         admin = await create_authenticated_user(
             client, "admin13@test.com", "AdminPass123!", "Admin", "Thirteen"
         )
+
         async def make_admin():
             from main import app as fastapi_app
             from src.config.dependencies import get_db_session
+
             db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
             async for session in db_session_override():
                 try:
                     await session.execute(
                         text("UPDATE users SET is_admin = true WHERE email = :email"),
-                        {"email": "admin13@test.com"}
+                        {"email": "admin13@test.com"},
                     )
                     await session.commit()
                     break
                 finally:
                     await session.close()
+
         await make_admin()
 
         creator = await create_authenticated_user(
@@ -1222,16 +1203,13 @@ class TestRejectUpdateGolfCourse:
                     "par": 72,
                 },
             ],
-            "holes": [
-                {"hole_number": i, "par": 4, "stroke_index": i}
-                for i in range(1, 19)
-            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         }
 
         update_response = await client.put(
             f"/api/v1/golf-courses/{golf_course['id']}",
             json=update_data,
-            cookies=creator["cookies"]
+            cookies=creator["cookies"],
         )
         clone_id = update_response.json()["pending_update"]["id"]
 
@@ -1241,8 +1219,7 @@ class TestRejectUpdateGolfCourse:
         )
 
         response = await client.put(
-            f"/api/v1/golf-courses/admin/{clone_id}/reject-update",
-            cookies=other_user["cookies"]
+            f"/api/v1/golf-courses/admin/{clone_id}/reject-update", cookies=other_user["cookies"]
         )
 
         # Assert

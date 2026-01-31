@@ -123,9 +123,7 @@ class TestUpdateGolfCourseUseCase:
         golf_course_id = approved_golf_course.id
         mock_uow.golf_courses.find_by_id.return_value = approved_golf_course
         mock_uow.countries.find_by_code.return_value = Country(
-            code=CountryCode("ES"),
-            name_en="Spain",
-            name_es="España"
+            code=CountryCode("ES"), name_en="Spain", name_es="España"
         )
 
         user_id = approved_golf_course.creator_id
@@ -162,9 +160,7 @@ class TestUpdateGolfCourseUseCase:
         golf_course_id = approved_golf_course.id
         mock_uow.golf_courses.find_by_id.return_value = approved_golf_course
         mock_uow.countries.find_by_code.return_value = Country(
-            code=CountryCode("ES"),
-            name_en="Spain",
-            name_es="España"
+            code=CountryCode("ES"), name_en="Spain", name_es="España"
         )
 
         user_id = approved_golf_course.creator_id
@@ -236,9 +232,7 @@ class TestUpdateGolfCourseUseCase:
         golf_course_id = pending_course.id
         mock_uow.golf_courses.find_by_id.return_value = pending_course
         mock_uow.countries.find_by_code.return_value = Country(
-            code=CountryCode("ES"),
-            name_en="Spain",
-            name_es="España"
+            code=CountryCode("ES"), name_en="Spain", name_es="España"
         )
 
         user_id = creator_id
@@ -260,9 +254,7 @@ class TestUpdateGolfCourseUseCase:
         mock_uow.golf_courses.save.assert_called_once()
         mock_uow.commit.assert_called_once()
 
-    async def test_should_raise_error_when_course_not_found(
-        self, mock_uow, valid_update_dto
-    ):
+    async def test_should_raise_error_when_course_not_found(self, mock_uow, valid_update_dto):
         """
         Verifica que falla si el campo no existe.
 
@@ -312,9 +304,7 @@ class TestUpdateGolfCourseUseCase:
                 is_admin=is_admin,
             )
 
-    async def test_should_raise_error_when_course_is_rejected(
-        self, mock_uow, valid_update_dto
-    ):
+    async def test_should_raise_error_when_course_is_rejected(self, mock_uow, valid_update_dto):
         """
         Verifica que no se pueden editar campos REJECTED.
 

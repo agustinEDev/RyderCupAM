@@ -218,7 +218,9 @@ class ApproveUpdateGolfCourseResponseDTO(BaseModel):
         default="Golf course update approved successfully",
         description="Mensaje de confirmación",
     )
-    applied_changes_from: str = Field(..., description="ID del clone que fue aplicado (ya eliminado)")
+    applied_changes_from: str = Field(
+        ..., description="ID del clone que fue aplicado (ya eliminado)"
+    )
 
 
 class RejectUpdateGolfCourseRequestDTO(BaseModel):

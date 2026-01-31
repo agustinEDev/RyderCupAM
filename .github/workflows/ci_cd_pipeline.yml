@@ -1134,7 +1134,7 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
           # Determine overall status
-          if [ "$UNIT_TESTS" == "failure" ] || [ "$INTEGRATION_TESTS" == "failure" ] || [ "$SECURITY_TESTS" == "failure" ]; then
+          if [ "$UNIT_TESTS" == "failure" ] || [ "$INTEGRATION_TESTS" == "failure" ] || [ "$SECURITY_TESTS" == "failure" ] || [ "$GPG_VERIFY" == "failure" ]; then
             {
               echo "---"
               echo ""
@@ -1149,6 +1149,7 @@ jobs:
               [ "$UNIT_TESTS" == "failure" ] && echo "- ❌ **Unit Tests** — Core business logic validation failed"
               [ "$INTEGRATION_TESTS" == "failure" ] && echo "- ❌ **Integration Tests** — Database/API integration issues detected"
               [ "$SECURITY_TESTS" == "failure" ] && echo "- ❌ **Security Tests** — Security vulnerabilities found (CSRF, XSS, SQLi, Auth)"
+              [ "$GPG_VERIFY" == "failure" ] && echo "- ❌ **GPG Verification** — Unsigned or invalid commit signatures detected"
               echo ""
               echo "### 📋 Action Required"
               echo ""

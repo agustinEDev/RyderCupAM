@@ -92,9 +92,11 @@ class TestApproveUpdateGolfCourseUseCase:
         ]
         # Holes con pars válidos (total = 70: 4xpar3 + 10xpar4 + 4xpar5)
         holes_clone = [
-            Hole(number=i, par=3, stroke_index=i) if i in [3, 7, 12, 17] else
-            Hole(number=i, par=5, stroke_index=i) if i in [5, 9, 14, 18] else
-            Hole(number=i, par=4, stroke_index=i)
+            Hole(number=i, par=3, stroke_index=i)
+            if i in [3, 7, 12, 17]
+            else Hole(number=i, par=5, stroke_index=i)
+            if i in [5, 9, 14, 18]
+            else Hole(number=i, par=4, stroke_index=i)
             for i in range(1, 19)
         ]
 
@@ -140,8 +142,8 @@ class TestApproveUpdateGolfCourseUseCase:
         original, clone = original_and_clone
 
         mock_uow.golf_courses.find_by_id.side_effect = [
-            clone,      # Primera llamada: buscar clone
-            original,   # Segunda llamada: buscar original
+            clone,  # Primera llamada: buscar clone
+            original,  # Segunda llamada: buscar original
         ]
 
         request_dto = ApproveUpdateGolfCourseRequestDTO(clone_id=str(clone.id))
@@ -235,9 +237,7 @@ class TestApproveUpdateGolfCourseUseCase:
         mock_uow.golf_courses.save.assert_not_called()
         mock_uow.golf_courses.delete.assert_not_called()
 
-    async def test_should_raise_error_when_original_not_found(
-        self, mock_uow, original_and_clone
-    ):
+    async def test_should_raise_error_when_original_not_found(self, mock_uow, original_and_clone):
         """
         Verifica que falla si el campo original no existe.
 
@@ -250,7 +250,7 @@ class TestApproveUpdateGolfCourseUseCase:
 
         mock_uow.golf_courses.find_by_id.side_effect = [
             clone,  # Primera llamada: clone encontrado
-            None,   # Segunda llamada: original NO encontrado
+            None,  # Segunda llamada: original NO encontrado
         ]
 
         request_dto = ApproveUpdateGolfCourseRequestDTO(clone_id=str(clone.id))
