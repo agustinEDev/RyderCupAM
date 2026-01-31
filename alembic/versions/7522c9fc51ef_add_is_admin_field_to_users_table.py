@@ -5,6 +5,7 @@ Revises: c97658d9d49e
 Create Date: 2026-01-28 23:33:34.084381
 
 """
+import os
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -55,6 +56,28 @@ def upgrade() -> None:
         ["is_admin"],
         postgresql_where=sa.text("is_admin = TRUE"),
     )
+
+    # Backfill: Establecer is_admin = TRUE para el administrador inicial
+    # Lee ADMIN_EMAIL de variables de entorno
+    # Safety: No-op si ADMIN_EMAIL no está configurado o no existe usuario con ese email
+    admin_email = os.getenv("ADMIN_EMAIL")
+    if admin_email:
+        # Ejecutar UPDATE condicional (solo si existe el usuario)
+        op.execute(
+            sa.text(
+                """
+                UPDATE users
+                SET is_admin = TRUE
+                WHERE email = :admin_email
+                """
+            ).bindparams(admin_email=admin_email)
+        )
+        print(f"✅ Backfill: is_admin = TRUE for email '{admin_email}' (if exists)")
+    else:
+        print(
+            "⚠️  ADMIN_EMAIL not configured - no admin user backfilled. "
+            "Set ADMIN_EMAIL in .env to designate an admin."
+        )
 
 
 def downgrade() -> None:

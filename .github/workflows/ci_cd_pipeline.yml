@@ -1066,6 +1066,7 @@ jobs:
           BUILD="${{ needs.build.result }}"
 
           # Calculate metrics
+          # Note: TOTAL_JOBS counts functional jobs (excludes preparation + summary)
           TOTAL_JOBS=10
           SUCCESS_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "success" | wc -l)
           FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "failure" | wc -l)
@@ -1276,7 +1277,7 @@ jobs:
               echo ""
               echo "---"
               echo ""
-              echo "*Pipeline completed in ~3 minutes with 10 parallel jobs* ⚡"
+              echo "*Pipeline completed in ~3 minutes (10 functional jobs, 12 total)* ⚡"
             } >> $GITHUB_STEP_SUMMARY
             exit 0
           fi

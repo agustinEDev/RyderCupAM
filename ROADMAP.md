@@ -471,7 +471,7 @@ src/modules/ai/
 2026 Q1  │ ✅ v1.13.0 - Security Hardening (COMPLETED)
           │ ✅ v1.13.1 - Device Detection + HTTP Security (COMPLETED)
           │ ✅ v2.0.0 - RBAC Foundation (Jan 29, 2026) (COMPLETED)
-          │ ⭐ v2.0.1 - Competition Module Evolution (Jan 27 - Mar 17) ← IN PROGRESS
+          │ ⭐ v2.0.1 - Competition Module Evolution (Jan 27 - Mar 24) ← IN PROGRESS
 2026 Q2  │ v2.1.0 - Compliance (GDPR, Audit Logging, Avatars)
           │ v2.2.0 - AI & RAG Module (Golf Rules Assistant)
 2026 Q3  │ v2.1.1 - WebSocket, Custom points
