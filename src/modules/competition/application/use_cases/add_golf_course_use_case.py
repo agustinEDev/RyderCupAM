@@ -170,10 +170,9 @@ class AddGolfCourseToCompetitionUseCase:
                 error_msg = str(e)
                 if "país" in error_msg.lower() or "country" in error_msg.lower():
                     raise IncompatibleCountryError(error_msg) from e
-                elif "duplicado" in error_msg.lower() or "already" in error_msg.lower():
+                if "duplicado" in error_msg.lower() or "already" in error_msg.lower():
                     raise GolfCourseAlreadyAssignedError(error_msg) from e
-                else:
-                    raise  # Re-lanzar si es otro tipo de ValueError
+                raise  # Re-lanzar si es otro tipo de ValueError
 
             # 7. Guardar la competición actualizada
             await self._uow.competitions.save(competition)

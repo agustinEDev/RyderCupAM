@@ -50,6 +50,16 @@ from src.modules.competition.application.use_cases.activate_competition_use_case
     CompetitionNotFoundError as ActivateNotFoundError,
     NotCompetitionCreatorError as ActivateNotCreatorError,
 )
+from src.modules.competition.application.use_cases.add_golf_course_use_case import (
+    AddGolfCourseToCompetitionUseCase,
+    CompetitionNotDraftError as AddGCNotDraftError,
+    CompetitionNotFoundError as AddGCNotFoundError,
+    GolfCourseAlreadyAssignedError,
+    GolfCourseNotApprovedError,
+    GolfCourseNotFoundError,
+    IncompatibleCountryError,
+    NotCompetitionCreatorError as AddGCNotCreatorError,
+)
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
     CompetitionNotFoundError as CancelNotFoundError,
@@ -82,21 +92,6 @@ from src.modules.competition.application.use_cases.get_competition_use_case impo
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
 )
-from src.modules.competition.application.use_cases.start_competition_use_case import (
-    CompetitionNotFoundError as StartNotFoundError,
-    NotCompetitionCreatorError as StartNotCreatorError,
-    StartCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.add_golf_course_use_case import (
-    AddGolfCourseToCompetitionUseCase,
-    CompetitionNotDraftError as AddGCNotDraftError,
-    CompetitionNotFoundError as AddGCNotFoundError,
-    GolfCourseAlreadyAssignedError,
-    GolfCourseNotApprovedError,
-    GolfCourseNotFoundError,
-    IncompatibleCountryError,
-    NotCompetitionCreatorError as AddGCNotCreatorError,
-)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     CompetitionNotDraftError as RemoveGCNotDraftError,
     CompetitionNotFoundError as RemoveGCNotFoundError,
@@ -110,6 +105,11 @@ from src.modules.competition.application.use_cases.reorder_golf_courses_use_case
     InvalidReorderError,
     NotCompetitionCreatorError as ReorderNotCreatorError,
     ReorderGolfCoursesUseCase,
+)
+from src.modules.competition.application.use_cases.start_competition_use_case import (
+    CompetitionNotFoundError as StartNotFoundError,
+    NotCompetitionCreatorError as StartNotCreatorError,
+    StartCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     CompetitionNotEditableError,
@@ -1308,7 +1308,7 @@ async def cancel_competition(
 )
 @limiter.limit("10/minute")
 async def add_golf_course_to_competition(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     golf_course_id_body: dict,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -1381,7 +1381,7 @@ async def add_golf_course_to_competition(
 )
 @limiter.limit("10/minute")
 async def remove_golf_course_from_competition(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     golf_course_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -1443,7 +1443,7 @@ async def remove_golf_course_from_competition(
 )
 @limiter.limit("10/minute")
 async def reorder_golf_courses(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     golf_course_ids_body: dict,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -1517,7 +1517,7 @@ async def reorder_golf_courses(
 )
 @limiter.limit("20/minute")
 async def list_competition_golf_courses(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
 ):
@@ -1571,7 +1571,7 @@ async def list_competition_golf_courses(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listando campos de golf: {str(e)}")
+        logger.error(f"Error listando campos de golf: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al listar campos de golf",
