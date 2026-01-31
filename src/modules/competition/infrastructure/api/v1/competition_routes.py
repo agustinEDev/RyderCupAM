@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
+    get_add_golf_course_to_competition_use_case,
     get_cancel_competition_use_case,
     get_close_enrollments_use_case,
     get_competition_uow,
@@ -20,6 +21,8 @@ from src.config.dependencies import (
     get_delete_competition_use_case,
     get_get_competition_use_case,
     get_list_competitions_use_case,
+    get_remove_golf_course_from_competition_use_case,
+    get_reorder_golf_courses_use_case,
     get_start_competition_use_case,
     get_uow,  # User Unit of Work para obtener datos del creador
     get_update_competition_use_case,
@@ -1313,7 +1316,7 @@ async def add_golf_course_to_competition(
     golf_course_id_body: dict,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: AddGolfCourseToCompetitionUseCase = Depends(
-        lambda: None  # TODO: Añadir dependency injection
+        get_add_golf_course_to_competition_use_case
     ),
 ):
     """
@@ -1386,7 +1389,7 @@ async def remove_golf_course_from_competition(
     golf_course_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RemoveGolfCourseFromCompetitionUseCase = Depends(
-        lambda: None  # TODO: Añadir dependency injection
+        get_remove_golf_course_from_competition_use_case
     ),
 ):
     """
@@ -1447,9 +1450,7 @@ async def reorder_golf_courses(
     competition_id: UUID,
     golf_course_ids_body: dict,
     current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: ReorderGolfCoursesUseCase = Depends(
-        lambda: None  # TODO: Añadir dependency injection
-    ),
+    use_case: ReorderGolfCoursesUseCase = Depends(get_reorder_golf_courses_use_case),
 ):
     """
     Reordena los campos de golf asociados a una competición en estado DRAFT.

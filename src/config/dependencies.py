@@ -10,6 +10,9 @@ from src.config.database import async_session_maker
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.add_golf_course_use_case import (
+    AddGolfCourseToCompetitionUseCase,
+)
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
 )
@@ -45,6 +48,12 @@ from src.modules.competition.application.use_cases.list_enrollments_use_case imp
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
+    RemoveGolfCourseFromCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
+    ReorderGolfCoursesUseCase,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
@@ -862,6 +871,50 @@ def get_cancel_competition_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return CancelCompetitionUseCase(uow)
+
+
+def get_add_golf_course_to_competition_use_case(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> AddGolfCourseToCompetitionUseCase:
+    """
+    Proveedor del caso de uso AddGolfCourseToCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` y `get_golf_course_uow`.
+    2. Crea una instancia de `AddGolfCourseToCompetitionUseCase` con ambas dependencias.
+    3. El golf_course_repository se obtiene desde golf_course_uow.golf_courses.
+    """
+    return AddGolfCourseToCompetitionUseCase(
+        uow=competition_uow,
+        golf_course_repository=golf_course_uow.golf_courses,
+    )
+
+
+def get_remove_golf_course_from_competition_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RemoveGolfCourseFromCompetitionUseCase:
+    """
+    Proveedor del caso de uso RemoveGolfCourseFromCompetitionUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `RemoveGolfCourseFromCompetitionUseCase` con esa dependencia.
+    """
+    return RemoveGolfCourseFromCompetitionUseCase(uow)
+
+
+def get_reorder_golf_courses_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ReorderGolfCoursesUseCase:
+    """
+    Proveedor del caso de uso ReorderGolfCoursesUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ReorderGolfCoursesUseCase` con esa dependencia.
+    """
+    return ReorderGolfCoursesUseCase(uow)
 
 
 # ======================================================================================
