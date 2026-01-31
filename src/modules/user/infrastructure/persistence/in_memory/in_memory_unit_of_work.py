@@ -64,7 +64,29 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
+        """
+        Finaliza el contexto async - maneja commit/rollback automáticamente.
+
+        Comportamiento:
+        - Si NO hubo excepción → commit() automático
+        - Si hubo excepción → rollback() automático
+
+        Args:
+            exc_type: Tipo de excepción (None si no hubo error)
+            exc_val: Valor de la excepción
+            exc_tb: Traceback de la excepción
+        """
+        if exc_type:
+            # Si hubo excepción, hacer rollback
+            await self.rollback()
+        else:
+            # Si todo fue exitoso, hacer commit automáticamente
+            try:
+                await self.commit()
+            except Exception:
+                # Si commit falla, hacer rollback
+                await self.rollback()
+                raise
 
     async def commit(self) -> None:
         self.committed = True

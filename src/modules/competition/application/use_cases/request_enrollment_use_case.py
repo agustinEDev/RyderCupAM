@@ -134,8 +134,6 @@ class RequestEnrollmentUseCase:
             # 5. Persistir
             await self._uow.enrollments.add(enrollment)
 
-            # 6. Commit
-            await self._uow.commit()
 
         # 7. Retornar DTO
         return RequestEnrollmentResponseDTO(

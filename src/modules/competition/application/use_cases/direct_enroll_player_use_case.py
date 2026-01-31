@@ -135,8 +135,6 @@ class DirectEnrollPlayerUseCase:
             # 6. Persistir
             await self._uow.enrollments.add(enrollment)
 
-            # 7. Commit
-            await self._uow.commit()
 
         # 8. Retornar DTO
         return DirectEnrollPlayerResponseDTO(

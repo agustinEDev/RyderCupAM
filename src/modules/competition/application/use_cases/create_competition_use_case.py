@@ -133,8 +133,6 @@ class CreateCompetitionUseCase:
             # 9. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 10. Commit de la transacción
-            await self._uow.commit()
 
         # 11. Retornar DTO de respuesta
         return CreateCompetitionResponseDTO(

@@ -108,8 +108,6 @@ class DeleteCompetitionUseCase:
             # 5. Eliminar la competición
             await self._uow.competitions.delete(competition_id)
 
-            # 6. Commit de la transacción
-            await self._uow.commit()
 
         # 7. Retornar DTO de respuesta
         return DeleteCompetitionResponseDTO(

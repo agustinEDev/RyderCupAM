@@ -112,8 +112,6 @@ class SetCustomHandicapUseCase:
             # 6. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-            # 7. Commit
-            await self._uow.commit()
 
         # 8. Retornar DTO
         return SetCustomHandicapResponseDTO(

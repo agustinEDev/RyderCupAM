@@ -99,8 +99,6 @@ class CloseEnrollmentsUseCase:
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
-            # 6. Commit de la transacción
-            await self._uow.commit()
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(
