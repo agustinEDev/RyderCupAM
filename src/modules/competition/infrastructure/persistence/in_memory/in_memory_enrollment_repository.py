@@ -90,6 +90,28 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
             if enr.competition_id == competition_id and enr.status == EnrollmentStatus.APPROVED
         )
 
+    async def count_approved_by_competition(self, competition_id: CompetitionId) -> int:
+        """Alias para count_approved."""
+        return await self.count_approved(competition_id)
+
+    async def count_active_by_user(self, user_id: UserId) -> int:
+        """Cuenta el número de inscripciones activas (APPROVED/REQUESTED) de un usuario."""
+        return sum(
+            1
+            for enr in self._enrollments.values()
+            if enr.user_id == user_id
+            and enr.status in [EnrollmentStatus.APPROVED, EnrollmentStatus.REQUESTED]
+        )
+
+    async def find_by_user_and_competition(
+        self, user_id: UserId, competition_id: CompetitionId
+    ) -> Enrollment | None:
+        """Busca una inscripción específica de un usuario en una competición."""
+        for enr in self._enrollments.values():
+            if enr.user_id == user_id and enr.competition_id == competition_id:
+                return enr
+        return None
+
     async def count_pending(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones pendientes (REQUESTED)."""
         return sum(

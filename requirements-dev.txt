@@ -48,3 +48,18 @@ safety>=3.2.0
 # Radon - Calcula métricas de complejidad ciclomática y mantenibilidad
 # Ayuda a identificar código complejo que necesita refactorización
 radon>=6.0.1
+
+# ================================
+# SOFTWARE SUPPLY CHAIN SECURITY
+# ================================
+
+# cyclonedx-bom - Genera Software Bill of Materials (SBOM) en formato CycloneDX
+# Cumple con OWASP A08:2021 Software and Data Integrity Failures
+# Permite auditoría completa de la cadena de suministro de software
+cyclonedx-bom>=4.0.0
+
+# pip-tools - Herramientas para gestión de dependencias con pip
+# pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad
+# pip-sync: Sincroniza el entorno con el lock file
+# Previene ataques de dependency substitution
+pip-tools>=7.4.0

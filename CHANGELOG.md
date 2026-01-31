@@ -1,59 +1,121 @@
 # Changelog
 
-Todos los cambios notables en este proyecto serán documentados en este archivo.
+All notable changes to this project will be documented in this file.
 
-El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
-y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned - v2.1.0 - Competition Module Evolution (En Planificación - 7 semanas)
+## [2.0.1] - 2026-01-31 (Sprint 1: Golf Courses CRUD + Admin Update Workflow)
 
-**🏌️ Sistema Completo de Gestión de Torneos Ryder Cup**
+### Added
+- **Golf Course Module** (Complete CRUD with Admin Approval Workflow + Update System):
+  - Domain Layer: `GolfCourse` aggregate with `Tee` and `Hole` entities
+  - Value Objects: `GolfCourseId`, `CourseType`, `ApprovalStatus`, `TeeCategory`
+  - Domain Events: `GolfCourseRequestedEvent`, `GolfCourseApprovedEvent`, `GolfCourseRejectedEvent`
+  - Unit of Work: `GolfCourseUnitOfWorkInterface` with dual repository coordination (golf_courses + countries)
+  - Infrastructure: `SQLAlchemyGolfCourseUnitOfWork`, `GolfCourseRepository`, SQLAlchemy mappers
+  - **10 REST API Endpoints** (6 original + 4 update workflow):
+    - `POST /api/v1/golf-courses/request` - Creator requests new course
+    - `POST /api/v1/admin/golf-courses` - Admin creates course directly (approved)
+    - `GET /api/v1/golf-courses/{id}` - Get course details (tees + holes)
+    - `GET /api/v1/golf-courses?approval_status=APPROVED` - List filtered courses
+    - `GET /api/v1/admin/golf-courses/pending` - Admin view pending approvals
+    - `PUT /api/v1/admin/golf-courses/{id}/approve` - Admin approves course
+    - `PUT /api/v1/admin/golf-courses/{id}/reject` - Admin rejects course
+    - `PUT /api/v1/golf-courses/{id}` - Creator submits update (clone + approval workflow)
+    - `PUT /api/v1/admin/golf-courses/updates/{id}/approve` - Admin approves update
+    - `PUT /api/v1/admin/golf-courses/updates/{id}/reject` - Admin rejects update
+  - **Update Workflow (Option A+ - Clone-Based)**:
+    - Creator submits update → creates pending clone (original unchanged)
+    - Admin approves → clone replaces original, original soft-deleted
+    - Admin rejects → clone deleted, original unchanged
+    - No data loss during approval process
+  - Authorization: Request/List (authenticated), Admin endpoints (admin only)
+  - Validations: 2-6 tees, 18 holes unique, par 66-76, stroke indices 1-18 unique
+  - ~28 integration tests (API endpoints, 100% passing)
+  - Repository tests: 100% passing (fixture issue resolved)
 
-#### Added (Planificado)
-- Sistema de roles formal (Admin, Creator, Player) con tablas dedicadas
-- Gestión completa de campos de golf con tees y 18 hoyos
-- Sistema de aprobación de campos (Creator → PENDING_APPROVAL → Admin aprueba)
-- Planificación de jornadas (Rounds) y partidos (Matches)
-- Sistema de invitaciones con token seguro y auto-registro
-- Cálculo automático de Playing Handicap (WHS)
-- Live scoring hoyo a hoyo con navegación libre
-- Validación dual independiente (jugador vs marcador)
-- Leaderboards en tiempo real (match + global)
+- **User Module - RFEG Optimization**:
+  - Conditional RFEG handicap search: executes ONLY for Spanish users (country_code='ES')
+  - Performance improvement: ~80% reduction in external API calls
+  - 3 new unit tests for RFEG conditional logic (100% passing)
 
-#### Nuevas Entidades (9 bloques)
-1. **Roles & Permissions**: `Role`, `UserRole`
-2. **Golf Courses**: `GolfCourse`, `Tee` (múltiples por campo), `Hole` (18 por campo)
-3. **Schedule**: `Round`, `Match` (Fourball, Foursomes, Singles, Greensome)
-4. **Invitations**: `Invitation` (búsqueda + email + token)
-5. **Scoring**: `HoleScore` (gross, net, strokes_received)
+- **Test Fixtures**:
+  - `sample_golf_course_data()` - 18 holes, 2 tees, Real Club de Golf El Prat
+  - `create_golf_course()` - Helper to request course via API
+  - `approve_golf_course()` - Helper for admin approval
+  - `reject_golf_course()` - Helper for admin rejection
 
-#### Nuevos Endpoints (~35 REST API)
-- Golf Courses: CRUD Admin + búsqueda por país (Creator)
-- Course Approval: Aprobar/rechazar + notificaciones email
-- Rounds: CRUD jornadas por competición
-- Matches: CRUD partidos + asignación jugadores/tees
-- Invitations: Buscar usuarios + invitar (registrados y email) + responder
-- Scoring: Anotar scores hoyo a hoyo + validación dual + entregar tarjeta
-- Leaderboards: Match individual + Global por equipos
+### Changed
+- **Golf Course Use Cases**: Refactored from `AbstractUoW` to `GolfCourseUnitOfWorkInterface`
+- **Dependencies**: Added `get_golf_course_uow()` dependency provider in `src/config/dependencies.py`
+- **Main Application**: Registered golf_course_routes under `/api/v1` with "Golf Courses" tag
 
-#### Changed (Planificado)
-- Competition Module: Evolución de gestión básica a sistema completo profesional
-- Playing Handicap: Pre-calculado y almacenado (WHS fórmula oficial)
-- Validación de scores: Sistema dual independiente por jugador
+### Fixed
+- **GolfCourse Entity**: Added `@reconstructor` to ensure `_domain_events` is initialized when loaded from DB
+- **RequestGolfCourseUseCase**: Added country validation to prevent FK errors
+- **SQLAlchemy Orphan Management**: Fixed critical bug in update workflow - explicit DELETE before UPDATE prevents orphaned rows
+- **Clean Architecture - UoW Pattern**: Removed 9 explicit `await self._uow.commit()` calls from Golf Course use cases (commits now handled automatically by UoW context manager `__aexit__`)
+- **Test Mocks**: Updated 4 test fixtures to simulate UoW `__aexit__` behavior (auto-commit on success, rollback on exception)
+- **CI/CD Pipeline**: Fixed DIRECT_DEPS grep to use POSIX classes (`grep -E -c "^[[:alnum:]._-]+[[:space:]]*=="`) for compatibility
+- **API Documentation**: Corrected endpoint paths in golf_course_routes.py docstring (reflect actual router prefix `/golf-courses`)
+- **Code Quality**: Applied Ruff auto-fixes - removed 72 redundant `return None` statements (11 migrations, 4 test files)
+- **7 CodeRabbit Issues Resolved**:
+  1. **CRITICAL**: Migration schema - removed incorrect `par` column from `golf_course_tees` table
+  2. **CRITICAL**: Mapper registration - added `start_golf_course_mappers()` in main.py and tests/conftest.py
+  3. **IMPORTANT**: Deprecated datetime - replaced `datetime.utcnow()` with `datetime.now(UTC).replace(tzinfo=None)` (7 occurrences)
+  4. **IMPORTANT**: UnitOfWork rollback - added try/except in `__aexit__` to rollback on commit failure
+  5. **MEDIUM**: HTTP status codes - return 400 for invalid `approval_status` values (not 403)
+  6. **MINOR**: CI/CD grep pattern - fixed SBOM dependency counting (supports underscores/dots)
+  7. **MINOR**: Ruff linting - added PLC0415 exceptions for local imports in domain entities
 
-#### Tests Esperados
-- +355 tests nuevos (905 → 1,260 tests, +39% growth)
-- Cobertura completa: Domain, Application, Infrastructure, API
+### Database
+- **New Migration**: `af107e8f82c6_create_golf_course_tables`
+  - `golf_courses` table (UUID PK, approval workflow, FK to users & countries)
+  - `golf_course_tees` table (2-6 tees per course, WHS ratings)
+  - `golf_course_holes` table (18 holes, par 3-5, unique stroke indices)
+  - Indexes: `ix_golf_courses_approval_status`, `ix_golf_courses_creator_id`
+  - Constraints: Check constraints for ranges, unique constraints per course
+  - Cascade delete: Deleting a golf_course deletes all its tees and holes
 
-#### Documentación
-- ADR-025: Competition Module Evolution v2.1.0
-- ADR-026: Playing Handicap WHS Calculation
-- DATABASE_ERD.md: Diagrama completo (15 tablas)
-- ROADMAP.md: Planificación detallada 7 semanas
+### Tests
+- **Total Tests**: 1,177 (1,177 passing, 16 skipped)
+- **New Tests**: +10 integration tests (Golf Course update workflow) + +16 unit tests (use cases)
+- **Modified Tests**: +3 user tests (RFEG conditional logic)
+- **Execution Time**: ~142s (with `-n auto`)
+- **Success Rate**: 100% (1,177/1,177 passing)
 
-**Ver detalles completos:** `ROADMAP.md`, `docs/DATABASE_ERD.md`, `docs/architecture/decisions/ADR-025*.md`
+### Documentation
+- Updated CLAUDE.md with Golf Course Module section
+- Updated test statistics and skipped tests explanation
+- All commits signed with GPG
+
+**Part of**: Sprint 1 v2.0.1 (RBAC Foundation + Golf Courses CRUD)
+**Ref**: ROADMAP.md lines 45-98
+
+---
+
+## [2.0.0] - 2026-01-29
+
+### Added
+- **RBAC Foundation**: Implemented a simplified, three-tier role system (ADMIN, CREATOR, PLAYER) without a formal roles table.
+  - Added `is_admin` boolean field to the `User` entity with a partial index for performance.
+  - Created a new endpoint `GET /api/v1/users/me/roles/{competition_id}` to check user roles within a competition.
+  - Implemented authorization helpers: `is_admin_user()`, `is_creator_of()`, and `is_player_in()`.
+- Added 25 new tests (17 unit, 8 integration) for the RBAC functionality, achieving 100% coverage for the new code.
+
+### Changed
+- Separated Docker and Kubernetes port variables to prevent conflicts during local development. `DOCKER_APP_PORT` and `DOCKER_DATABASE_PORT` are now used for the application in `docker-compose.yml`.
+- Updated `docker-compose.yml` to use the new port variables.
+
+### Fixed
+- Resolved port allocation errors when running the application with Docker Compose and a local Kubernetes cluster simultaneously.
+
+### Database
+- A new database migration `7522c9fc51ef` is required to add the `is_admin` column to the `users` table.
+
 
 ---
 

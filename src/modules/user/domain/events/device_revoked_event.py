@@ -47,12 +47,13 @@ class DeviceRevokedEvent(DomainEvent):
         occurred_on (datetime): Timestamp del evento (UTC naive)
 
     Examples:
+        >>> from datetime import datetime
         >>> event = DeviceRevokedEvent(
         ...     user_id=UserId.generate(),
         ...     device_id=UserDeviceId.generate(),
         ...     device_name="Chrome on macOS",
         ...     revoked_by_user=True,
-        ...     occurred_on=datetime.utcnow()
+        ...     occurred_on=datetime.now()
         ... )
         >>> event.revoked_by_user
         True

@@ -107,6 +107,8 @@ users_table = Table(
     # Account Lockout fields (v1.13.0)
     Column("failed_login_attempts", Integer, nullable=False, default=0),
     Column("locked_until", DateTime, nullable=True),
+    # RBAC field (v2.0.0)
+    Column("is_admin", Boolean, nullable=False, default=False),
 )
 
 

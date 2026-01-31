@@ -121,8 +121,11 @@ zipp==3.19.1
 marshmallow==3.26.2
 
 # ecdsa - Elliptic Curve Digital Signature Algorithm (dependencia transitiva de python-jose)
-# Fijada explícitamente para resolver CVE-2024-23342 (Signature malleability vulnerability)
-# NOTA: No hay versión fija disponible aún, monitorear actualizaciones
+# CVE-2024-23342: Minerva timing attack on P-256 curve (CVSS 7.4 HIGH)
+# STATUS: No fix available - project considers side-channel attacks out of scope
+# IMPACT: LOW - We use HS256 (HMAC), NOT ES256/ES384/ES512 (ECDSA)
+# ACTION: No action required unless we switch to EC algorithms (ES256/ES384/ES512)
+# REFERENCES: https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp
 ecdsa==0.19.1
 
 

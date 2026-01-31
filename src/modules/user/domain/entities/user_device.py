@@ -166,7 +166,7 @@ class UserDevice:
             raise ValueError("fingerprint debe ser una instancia de DeviceFingerprint")
 
         # Crear entidad
-        now = datetime.utcnow()
+        now = datetime.now()
         device = UserDevice(
             id=UserDeviceId.generate(),
             user_id=user_id,
@@ -321,7 +321,7 @@ class UserDevice:
             >>> device.last_used_at > original_time
             True
         """
-        self._last_used_at = datetime.utcnow()
+        self._last_used_at = datetime.now()
 
     def matches_fingerprint(self, fingerprint: DeviceFingerprint) -> bool:
         """

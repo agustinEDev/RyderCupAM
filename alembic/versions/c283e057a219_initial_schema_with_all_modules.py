@@ -6,12 +6,13 @@ Create Date: 2025-11-23 12:13:17.821158
 
 """
 
-from typing import Sequence, Union
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # Importar seeds de países
 # Añadir el directorio seeds al path para poder importar
@@ -19,12 +20,11 @@ seeds_dir = Path(__file__).parent.parent / "seeds"
 sys.path.insert(0, str(seeds_dir))
 from seed_countries import seed_countries, seed_country_adjacencies
 
-
 # revision identifiers, used by Alembic.
 revision: str = "c283e057a219"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

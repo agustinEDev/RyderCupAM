@@ -40,6 +40,9 @@ from src.config.dependencies import get_db_session
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     start_mappers as start_competition_mappers,
 )
+from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
+    start_golf_course_mappers,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
     start_mappers,
@@ -128,6 +131,7 @@ def pytest_configure(config):
         start_mappers()  # User module
         start_country_mappers()  # Shared domain (Country)
         start_competition_mappers()  # Competition module
+        start_golf_course_mappers()  # Golf Course module
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
 
@@ -142,6 +146,7 @@ def pytest_configure(config):
             start_mappers()
             start_country_mappers()
             start_competition_mappers()
+            start_golf_course_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
             pass
@@ -749,4 +754,130 @@ async def activate_competition(client: AsyncClient, cookies: dict, competition_i
 
     response = await client.post(f"/api/v1/competitions/{competition_id}/activate")
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"
+    return response.json()
+
+
+# ======================================================================================
+# GOLF COURSE MODULE FIXTURES
+# ======================================================================================
+
+
+@pytest.fixture(scope="session")
+def sample_golf_course_data() -> dict:
+    """Fixture con datos de ejemplo para un campo de golf."""
+    return {
+        "name": "Real Club de Golf El Prat",
+        "country_code": "ES",
+        "course_type": "STANDARD_18",
+        "tees": [
+            {
+                "identifier": "Amarillo",
+                "tee_category": "CHAMPIONSHIP_MALE",
+                "course_rating": 72.5,
+                "slope_rating": 135,
+                "par": 72,
+            },
+            {
+                "identifier": "Blanco",
+                "tee_category": "AMATEUR_MALE",
+                "course_rating": 70.8,
+                "slope_rating": 130,
+                "par": 72,
+            },
+        ],
+        "holes": [
+            {"hole_number": 1, "par": 4, "stroke_index": 5},
+            {"hole_number": 2, "par": 3, "stroke_index": 17},
+            {"hole_number": 3, "par": 5, "stroke_index": 1},
+            {"hole_number": 4, "par": 4, "stroke_index": 9},
+            {"hole_number": 5, "par": 4, "stroke_index": 7},
+            {"hole_number": 6, "par": 4, "stroke_index": 3},
+            {"hole_number": 7, "par": 3, "stroke_index": 15},
+            {"hole_number": 8, "par": 5, "stroke_index": 11},
+            {"hole_number": 9, "par": 4, "stroke_index": 13},
+            {"hole_number": 10, "par": 4, "stroke_index": 6},
+            {"hole_number": 11, "par": 3, "stroke_index": 18},
+            {"hole_number": 12, "par": 5, "stroke_index": 2},
+            {"hole_number": 13, "par": 4, "stroke_index": 10},
+            {"hole_number": 14, "par": 4, "stroke_index": 8},
+            {"hole_number": 15, "par": 4, "stroke_index": 4},
+            {"hole_number": 16, "par": 3, "stroke_index": 16},
+            {"hole_number": 17, "par": 5, "stroke_index": 12},
+            {"hole_number": 18, "par": 4, "stroke_index": 14},
+        ],
+    }
+
+
+async def create_golf_course(
+    client: AsyncClient, cookies: dict, golf_course_data: dict | None = None
+) -> dict:
+    """
+    Helper para crear (solicitar) un campo de golf.
+
+    Args:
+        client: Cliente HTTP de testing
+        cookies: Cookies HTTPOnly de autenticación
+        golf_course_data: Datos del campo (opcional)
+
+    Returns:
+        Dict con los datos del campo creado (estado PENDING_APPROVAL)
+    """
+    import uuid
+
+    if golf_course_data is None:
+        golf_course_data = {
+            "name": f"Test Golf Course {uuid.uuid4().hex[:8]}",
+            "country_code": "ES",
+            "course_type": "STANDARD_18",
+            "tees": [
+                {
+                    "identifier": "Amarillo",
+                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "course_rating": 72.5,
+                    "slope_rating": 135,
+                    "par": 72,
+                },
+                {
+                    "identifier": "Blanco",
+                    "tee_category": "AMATEUR_MALE",
+                    "course_rating": 70.2,
+                    "slope_rating": 128,
+                    "par": 72,
+                },
+            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
+        }
+
+    # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
+    client.cookies.clear()
+    client.cookies.update(cookies)
+
+    response = await client.post("/api/v1/golf-courses/request", json=golf_course_data)
+    assert response.status_code == 201, f"Failed to create golf course: {response.text}"
+    return response.json()
+
+
+async def approve_golf_course(
+    client: AsyncClient, admin_cookies: dict, golf_course_id: str
+) -> dict:
+    """Helper para aprobar un campo de golf (Admin only)."""
+    client.cookies.clear()
+    client.cookies.update(admin_cookies)
+
+    response = await client.put(f"/api/v1/golf-courses/admin/{golf_course_id}/approve")
+    assert response.status_code == 200, f"Failed to approve golf course: {response.text}"
+    return response.json()
+
+
+async def reject_golf_course(
+    client: AsyncClient, admin_cookies: dict, golf_course_id: str, reason: str
+) -> dict:
+    """Helper para rechazar un campo de golf (Admin only)."""
+    client.cookies.clear()
+    client.cookies.update(admin_cookies)
+
+    response = await client.put(
+        f"/api/v1/golf-courses/admin/{golf_course_id}/reject", params={"reason": reason}
+    )
+    assert response.status_code == 200, f"Failed to reject golf course: {response.text}"
     return response.json()
