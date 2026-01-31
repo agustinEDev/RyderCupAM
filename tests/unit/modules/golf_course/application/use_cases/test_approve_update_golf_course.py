@@ -159,7 +159,7 @@ class TestApproveUpdateGolfCourseUseCase:
 
         # Verificar llamadas
         mock_uow.golf_courses.save.assert_called_once()  # Original actualizado
-        mock_uow.golf_courses.delete.assert_called_once_with(clone)  # Clone eliminado
+        mock_uow.golf_courses.delete.assert_called_once_with(clone.id)  # Clone eliminado (por ID)
         mock_uow.commit.assert_called_once()
 
     async def test_should_raise_error_when_clone_not_found(self, mock_uow):

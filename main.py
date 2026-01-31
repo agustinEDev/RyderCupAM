@@ -37,6 +37,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
     start_mappers as start_competition_mappers,
 )
 from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # noqa: E402
+from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (  # noqa: E402
+    start_golf_course_mappers,
+)
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
     device_routes,
@@ -77,7 +80,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_mappers()  # User module mappers
     start_country_mappers()  # Shared domain (Country) mappers
     start_competition_mappers()  # Competition module mappers
-    # Golf Course mappers are included in start_mappers() via golf_course_mapper.py
+    start_golf_course_mappers()  # Golf Course module mappers
     yield
     print("INFO:     Apagando aplicación...")
 

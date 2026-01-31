@@ -8,9 +8,9 @@ from uuid import uuid4
 import pytest
 
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
-    UpdateGolfCourseRequestDTO,
-    TeeDTO,
     HoleDTO,
+    TeeDTO,
+    UpdateGolfCourseRequestDTO,
 )
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,

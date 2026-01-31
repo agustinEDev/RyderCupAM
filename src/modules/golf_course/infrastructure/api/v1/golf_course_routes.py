@@ -293,17 +293,26 @@ async def list_golf_courses(
 
     **Responses**:
     - 200: Lista de campos
+    - 400: Valor inválido de approval_status
     - 401: No autenticado
     - 403: Sin permisos para ver estados no-aprobados
     """
     try:
+        # Validar approval_status si se proporciona
+        valid_statuses = ["APPROVED", "PENDING_APPROVAL", "REJECTED"]
+        if approval_status is not None and approval_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid approval_status. Must be one of: {', '.join(valid_statuses)}",
+            )
+
         # Por defecto, listar solo aprobados (público)
         if approval_status is None or approval_status == "APPROVED":
             request_dto = ListApprovedGolfCoursesRequestDTO()
             response = await approved_use_case.execute(request_dto)
             return {"golf_courses": response.golf_courses}
 
-        # Otros estados requieren permisos de Admin
+        # Otros estados válidos requieren permisos de Admin
         if not current_user.is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

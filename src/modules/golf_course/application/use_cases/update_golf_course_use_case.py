@@ -158,7 +158,7 @@ class UpdateGolfCourseUseCase:
                     pending_update=None,
                 )
 
-            elif original_course.approval_status == ApprovalStatus.PENDING_APPROVAL:
+            if original_course.approval_status == ApprovalStatus.PENDING_APPROVAL:
                 # CASO 3: Creator edita su propio campo PENDING → in-place
                 original_course.update(
                     name=request.name,
@@ -178,50 +178,49 @@ class UpdateGolfCourseUseCase:
                     pending_update=None,
                 )
 
-            else:
-                # CASO 2: Creator edita su campo APPROVED → crear CLONE
-                # El original permanece APPROVED y visible
+            # CASO 2: Creator edita su campo APPROVED → crear CLONE
+            # El original permanece APPROVED y visible
 
-                # Crear clone como si fuera nuevo campo
-                clone = GolfCourse.create(
-                    name=request.name,
-                    country_code=country_code,
-                    course_type=request.course_type,
-                    creator_id=original_course.creator_id,  # Mismo creator
-                    tees=tees,
-                    holes=holes,
-                )
+            # Crear clone como si fuera nuevo campo
+            clone = GolfCourse.create(
+                name=request.name,
+                country_code=country_code,
+                course_type=request.course_type,
+                creator_id=original_course.creator_id,  # Mismo creator
+                tees=tees,
+                holes=holes,
+            )
 
-                # Marcar clone como update proposal (reconstruir con campos especiales)
-                clone_reconstructed = GolfCourse.reconstruct(
-                    id=clone.id,
-                    name=clone.name,
-                    country_code=clone.country_code,
-                    course_type=clone.course_type,
-                    creator_id=clone.creator_id,
-                    tees=clone.tees,
-                    holes=clone.holes,
-                    approval_status=ApprovalStatus.PENDING_APPROVAL,
-                    rejection_reason=None,
-                    created_at=clone.created_at,
-                    updated_at=clone.updated_at,
-                    original_golf_course_id=golf_course_id,  # Link al original
-                    is_pending_update=False,
-                )
+            # Marcar clone como update proposal (reconstruir con campos especiales)
+            clone_reconstructed = GolfCourse.reconstruct(
+                id=clone.id,
+                name=clone.name,
+                country_code=clone.country_code,
+                course_type=clone.course_type,
+                creator_id=clone.creator_id,
+                tees=clone.tees,
+                holes=clone.holes,
+                approval_status=ApprovalStatus.PENDING_APPROVAL,
+                rejection_reason=None,
+                created_at=clone.created_at,
+                updated_at=clone.updated_at,
+                original_golf_course_id=golf_course_id,  # Link al original
+                is_pending_update=False,
+            )
 
-                # Marcar original como "tiene cambios pendientes"
-                original_course.mark_as_pending_update()
+            # Marcar original como "tiene cambios pendientes"
+            original_course.mark_as_pending_update()
 
-                # Guardar ambos
-                await self._uow.golf_courses.save(clone_reconstructed)
-                await self._uow.golf_courses.save(original_course)
-                await self._uow.commit()
+            # Guardar ambos
+            await self._uow.golf_courses.save(clone_reconstructed)
+            await self._uow.golf_courses.save(original_course)
+            await self._uow.commit()
 
-                original_dto = GolfCourseMapper.to_response_dto(original_course)
-                clone_dto = GolfCourseMapper.to_response_dto(clone_reconstructed)
+            original_dto = GolfCourseMapper.to_response_dto(original_course)
+            clone_dto = GolfCourseMapper.to_response_dto(clone_reconstructed)
 
-                return UpdateGolfCourseResponseDTO(
-                    golf_course=original_dto,
-                    message="Changes submitted for admin approval. Original golf course remains active.",
-                    pending_update=clone_dto,
-                )
+            return UpdateGolfCourseResponseDTO(
+                golf_course=original_dto,
+                message="Changes submitted for admin approval. Original golf course remains active.",
+                pending_update=clone_dto,
+            )

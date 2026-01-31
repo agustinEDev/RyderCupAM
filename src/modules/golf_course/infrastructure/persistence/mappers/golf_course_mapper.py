@@ -227,53 +227,71 @@ golf_course_holes_table = Table(
 # Imperative Mapping
 # ============================================================================
 
-mapper_registry.map_imperatively(
-    Tee,
-    golf_course_tees_table,
-    properties={
-        # Map database column tee_category to entity attribute category
-        "category": golf_course_tees_table.c.tee_category,
-    },
-)
 
-mapper_registry.map_imperatively(
-    Hole,
-    golf_course_holes_table,
-    properties={
-        # Map database column hole_number to entity attribute number
-        "number": golf_course_holes_table.c.hole_number,
-    },
-)
+def start_golf_course_mappers():
+    """
+    Inicia el mapeo entre entidades de Golf Course y tablas de BD.
 
-mapper_registry.map_imperatively(
-    GolfCourse,
-    golf_courses_table,
-    properties={
-        # Value Objects mapping (TypeDecorators en tabla)
-        "_id": column_property(golf_courses_table.c.id),
-        "_country_code": column_property(golf_courses_table.c.country_code),
-        "_creator_id": column_property(golf_courses_table.c.creator_id),
-        "_original_golf_course_id": column_property(golf_courses_table.c.original_golf_course_id),
-        # Scalar attributes mapping
-        "_name": column_property(golf_courses_table.c.name),
-        "_course_type": column_property(golf_courses_table.c.course_type),
-        "_approval_status": column_property(golf_courses_table.c.approval_status),
-        "_rejection_reason": column_property(golf_courses_table.c.rejection_reason),
-        "_created_at": column_property(golf_courses_table.c.created_at),
-        "_updated_at": column_property(golf_courses_table.c.updated_at),
-        "_is_pending_update": column_property(golf_courses_table.c.is_pending_update),
-        # One-to-many relationships with tees and holes
-        "_tees": relationship(
+    Es idempotente - puede llamarse múltiples veces sin problemas.
+
+    Mapea:
+    - GolfCourse entity → golf_courses table
+    - Tee value object → golf_course_tees table
+    - Hole value object → golf_course_holes table
+    """
+    # Mapear Tee (value object collection)
+    if Tee not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
             Tee,
-            cascade="all, delete-orphan",
-            lazy="joined",  # Eager loading
-            order_by=golf_course_tees_table.c.id,
-        ),
-        "_holes": relationship(
+            golf_course_tees_table,
+            properties={
+                # Map database column tee_category to entity attribute category
+                "category": golf_course_tees_table.c.tee_category,
+            },
+        )
+
+    # Mapear Hole (value object collection)
+    if Hole not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
             Hole,
-            cascade="all, delete-orphan",
-            lazy="joined",  # Eager loading
-            order_by=golf_course_holes_table.c.hole_number,  # DB column name
-        ),
-    },
-)
+            golf_course_holes_table,
+            properties={
+                # Map database column hole_number to entity attribute number
+                "number": golf_course_holes_table.c.hole_number,
+            },
+        )
+
+    # Mapear GolfCourse (aggregate root)
+    if GolfCourse not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            GolfCourse,
+            golf_courses_table,
+            properties={
+                # Value Objects mapping (TypeDecorators en tabla)
+                "_id": column_property(golf_courses_table.c.id),
+                "_country_code": column_property(golf_courses_table.c.country_code),
+                "_creator_id": column_property(golf_courses_table.c.creator_id),
+                "_original_golf_course_id": column_property(golf_courses_table.c.original_golf_course_id),
+                # Scalar attributes mapping
+                "_name": column_property(golf_courses_table.c.name),
+                "_course_type": column_property(golf_courses_table.c.course_type),
+                "_approval_status": column_property(golf_courses_table.c.approval_status),
+                "_rejection_reason": column_property(golf_courses_table.c.rejection_reason),
+                "_created_at": column_property(golf_courses_table.c.created_at),
+                "_updated_at": column_property(golf_courses_table.c.updated_at),
+                "_is_pending_update": column_property(golf_courses_table.c.is_pending_update),
+                # One-to-many relationships with tees and holes
+                "_tees": relationship(
+                    Tee,
+                    cascade="all, delete-orphan",
+                    lazy="joined",  # Eager loading
+                    order_by=golf_course_tees_table.c.id,
+                ),
+                "_holes": relationship(
+                    Hole,
+                    cascade="all, delete-orphan",
+                    lazy="joined",  # Eager loading
+                    order_by=golf_course_holes_table.c.hole_number,  # DB column name
+                ),
+            },
+        )

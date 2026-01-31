@@ -89,7 +89,7 @@ class ApproveUpdateGolfCourseUseCase:
             await self._uow.golf_courses.save(original_course)
 
             # 6. Eliminar clone
-            await self._uow.golf_courses.delete(clone)
+            await self._uow.golf_courses.delete(clone.id)
 
             # 7. Commit
             await self._uow.commit()

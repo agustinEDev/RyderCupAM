@@ -48,7 +48,6 @@ def upgrade() -> None:
         sa.Column('identifier', sa.String(length=50), nullable=False, comment='Identificador libre del campo (Amarillo, Oro, 1, etc.)'),
         sa.Column('course_rating', sa.Float(), nullable=False, comment='Course Rating WHS (50.0-90.0)'),
         sa.Column('slope_rating', sa.Integer(), nullable=False, comment='Slope Rating WHS (55-155)'),
-        sa.Column('par', sa.Integer(), nullable=False, comment='Par total del campo'),
         sa.CheckConstraint('course_rating >= 50.0 AND course_rating <= 90.0', name='ck_tees_course_rating_range'),
         sa.CheckConstraint('slope_rating >= 55 AND slope_rating <= 155', name='ck_tees_slope_rating_range'),
         sa.ForeignKeyConstraint(['golf_course_id'], ['golf_courses.id'], ondelete='CASCADE'),

@@ -5,7 +5,7 @@ Workflow: PENDING_APPROVAL → APPROVED/REJECTED (inmutable después)
 Ver ADR-032 para detalles del workflow de aprobación.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import reconstructor
 
@@ -151,7 +151,7 @@ class GolfCourse:
         if not (3 <= len(name) <= 200):  # noqa: PLR2004
             raise ValueError("Course name must be between 3 and 200 characters")
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         golf_course_id = GolfCourseId.generate()
 
         golf_course = cls(
@@ -234,7 +234,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.APPROVED
         self._rejection_reason = None
-        self._updated_at = datetime.utcnow()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Registrar evento de aprobación
         self._record_event(
@@ -268,7 +268,7 @@ class GolfCourse:
 
         self._approval_status = ApprovalStatus.REJECTED
         self._rejection_reason = reason
-        self._updated_at = datetime.utcnow()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Registrar evento de rechazo
         self._record_event(
@@ -313,9 +313,32 @@ class GolfCourse:
         self._name = name
         self._country_code = country_code
         self._course_type = course_type
-        self._tees = list(tees)  # Defensive copy
-        self._holes = list(holes)  # Defensive copy
-        self._updated_at = datetime.utcnow()
+
+        # Actualizar colecciones rastreadas por SQLAlchemy
+        # IMPORTANTE: Creamos NUEVOS objetos en lugar de usar los pasados como parámetro
+        # para evitar conflictos de IDs y golf_course_id con SQLAlchemy
+        del self._tees[:]  # Elimina todos los elementos in-place
+        from src.modules.golf_course.domain.entities.tee import Tee as TeeEntity
+        for tee in tees:
+            new_tee = TeeEntity(
+                category=tee.category,
+                identifier=tee.identifier,
+                course_rating=tee.course_rating,
+                slope_rating=tee.slope_rating,
+            )
+            self._tees.append(new_tee)
+
+        del self._holes[:]  # Elimina todos los elementos in-place
+        from src.modules.golf_course.domain.entities.hole import Hole as HoleEntity
+        for hole in holes:
+            new_hole = HoleEntity(
+                number=hole.number,
+                par=hole.par,
+                stroke_index=hole.stroke_index,
+            )
+            self._holes.append(new_hole)
+
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Validar invariantes
         self._validate_holes()
@@ -328,7 +351,7 @@ class GolfCourse:
         Usado cuando un creator edita un campo APPROVED y se crea un clone.
         """
         self._is_pending_update = True
-        self._updated_at = datetime.utcnow()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def clear_pending_update(self) -> None:
         """
@@ -337,7 +360,7 @@ class GolfCourse:
         Usado cuando el admin aprueba o rechaza el clone.
         """
         self._is_pending_update = False
-        self._updated_at = datetime.utcnow()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def apply_changes_from_clone(self, clone: "GolfCourse") -> None:
         """
@@ -359,9 +382,34 @@ class GolfCourse:
         self._name = clone._name
         self._country_code = clone._country_code
         self._course_type = clone._course_type
-        self._tees = list(clone._tees)  # Defensive copy
-        self._holes = list(clone._holes)  # Defensive copy
-        self._updated_at = datetime.utcnow()
+
+        # Actualizar colecciones rastreadas por SQLAlchemy
+        # IMPORTANTE: Creamos NUEVOS objetos en lugar de copiar referencias
+        # porque los objetos del clone ya tienen golf_course_id asignado
+        del self._tees[:]  # Elimina todos los elementos in-place
+        for tee in clone._tees:
+            # Crear nuevo Tee con los mismos datos
+            from src.modules.golf_course.domain.entities.tee import Tee
+            new_tee = Tee(
+                category=tee.category,
+                identifier=tee.identifier,
+                course_rating=tee.course_rating,
+                slope_rating=tee.slope_rating,
+            )
+            self._tees.append(new_tee)
+
+        del self._holes[:]  # Elimina todos los elementos in-place
+        for hole in clone._holes:
+            # Crear nuevo Hole con los mismos datos
+            from src.modules.golf_course.domain.entities.hole import Hole
+            new_hole = Hole(
+                number=hole.number,
+                par=hole.par,
+                stroke_index=hole.stroke_index,
+            )
+            self._holes.append(new_hole)
+
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Quitar marca de pending update
         self._is_pending_update = False

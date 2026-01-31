@@ -113,12 +113,17 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             await self.rollback()
         else:
             # Si todo fue exitoso, hacer commit automáticamente
-            await self.commit()
+            try:
+                await self.commit()
 
-            # Domain Events: Los eventos están registrados en las entidades
-            # Nota: Para MVP, los eventos están listos pero la publicación
-            # real a un event bus se implementará cuando se necesiten handlers
-            # (ej: enviar emails, actualizar vistas materializadas, etc.)
+                # Domain Events: Los eventos están registrados en las entidades
+                # Nota: Para MVP, los eventos están listos pero la publicación
+                # real a un event bus se implementará cuando se necesiten handlers
+                # (ej: enviar emails, actualizar vistas materializadas, etc.)
+            except Exception:
+                # Si commit falla, hacer rollback para limpiar estado de transacción
+                await self.rollback()
+                raise  # Re-raise para que el caller vea el error
 
     async def commit(self) -> None:
         """

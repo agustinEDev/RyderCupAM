@@ -92,6 +92,10 @@ unfixable = []
 # K8s scripts pueden tener imports después de sys.path setup
 "k8s/scripts/*.py" = ["E402", "PLR2004"]
 
+# Domain entities pueden tener imports locales para evitar circular imports
+"src/modules/golf_course/domain/entities/*.py" = ["PLC0415"]
+"src/modules/golf_course/infrastructure/api/v1/golf_course_routes.py" = ["PLC0415"]
+
 [lint.isort]
 # Configuración de ordenamiento de imports (compatible con Black)
 combine-as-imports = true
