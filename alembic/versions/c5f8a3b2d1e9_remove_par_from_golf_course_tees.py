@@ -26,14 +26,13 @@ def upgrade() -> None:
     Par belongs only to golf_course_holes, not to tees.
 
     CodeRabbit Issue #1 fix.
-    """
-    # Check if column exists before dropping (idempotent)
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-    columns = [col['name'] for col in inspector.get_columns('golf_course_tees')]
 
-    if 'par' in columns:
-        op.drop_column('golf_course_tees', 'par')
+    Uses PostgreSQL's DROP COLUMN IF EXISTS for idempotency.
+    Compatible with both online and offline (--sql) modes.
+    """
+    # Use raw SQL to support both online and offline modes
+    # PostgreSQL's IF EXISTS makes this idempotent
+    op.execute('ALTER TABLE golf_course_tees DROP COLUMN IF EXISTS par')
 
 
 def downgrade() -> None:

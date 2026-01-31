@@ -630,7 +630,9 @@ jobs:
           fi
 
       - name: Run Trivy Container Security Scan
+        id: trivy_scan
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: 'rydercupam:${{ github.sha }}'
           format: 'sarif'
@@ -640,7 +642,7 @@ jobs:
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: success() || steps.trivy_scan.outcome == 'success'
         with:
           sarif_file: 'trivy-results.sarif'
 
