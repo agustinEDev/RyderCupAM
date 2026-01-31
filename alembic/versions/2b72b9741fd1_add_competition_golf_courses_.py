@@ -19,12 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Importar UUID de postgresql para compatibilidad
+    from sqlalchemy.dialects.postgresql import UUID
+
     # Crear tabla de asociación competition_golf_courses
     op.create_table(
         'competition_golf_courses',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('competition_id', sa.UUID(), nullable=False),
-        sa.Column('golf_course_id', sa.UUID(), nullable=False),
+        sa.Column('id', UUID(as_uuid=True), nullable=False),
+        sa.Column('competition_id', UUID(as_uuid=True), nullable=False),
+        sa.Column('golf_course_id', UUID(as_uuid=True), nullable=False),
         sa.Column('display_order', sa.Integer(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
 

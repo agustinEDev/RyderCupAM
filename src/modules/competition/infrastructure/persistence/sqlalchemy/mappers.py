@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Table,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -195,25 +196,27 @@ class CompetitionGolfCourseIdDecorator(TypeDecorator):
 
 class GolfCourseIdDecorator(TypeDecorator):
     """
-    TypeDecorator para convertir GolfCourseId (UUID VO) a/desde VARCHAR(36).
+    TypeDecorator para convertir GolfCourseId (UUID VO) a/desde UUID nativo.
+
+    IMPORTANTE: Debe coincidir con el tipo usado en golf_courses.id (UUID as_uuid=True)
     """
 
-    impl = CHAR(36)
+    impl = UUID(as_uuid=True)
     cache_ok = True
 
-    def process_bind_param(self, value: GolfCourseId | str | None, dialect) -> str | None:
-        """Convierte GolfCourseId o str a string para BD."""
-        if isinstance(value, GolfCourseId):
-            return str(value.value)
-        if isinstance(value, str):
-            return value
-        return None
-
-    def process_result_value(self, value: str | None, dialect) -> GolfCourseId | None:
-        """Convierte string de BD a GolfCourseId."""
+    def process_bind_param(self, value: GolfCourseId | None, dialect) -> uuid.UUID | None:
+        """Convierte GolfCourseId a UUID para BD."""
         if value is None:
             return None
-        return GolfCourseId(uuid.UUID(value))
+        if isinstance(value, GolfCourseId):
+            return value.value
+        return uuid.UUID(str(value))
+
+    def process_result_value(self, value: uuid.UUID | None, dialect) -> GolfCourseId | None:
+        """Convierte UUID de BD a GolfCourseId."""
+        if value is None:
+            return None
+        return GolfCourseId(value)
 
 
 # =============================================================================
