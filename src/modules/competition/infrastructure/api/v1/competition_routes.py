@@ -27,6 +27,8 @@ from src.config.dependencies import (
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
+    AddGolfCourseRequestDTO,
+    AddGolfCourseResponseDTO,
     CancelCompetitionRequestDTO,
     CloseEnrollmentsRequestDTO,
     CompetitionResponseDTO,
@@ -36,6 +38,10 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
     CreatorDTO,
     DeleteCompetitionRequestDTO,
+    RemoveGolfCourseRequestDTO,
+    RemoveGolfCourseResponseDTO,
+    ReorderGolfCoursesRequestDTO,
+    ReorderGolfCoursesResponseDTO,
     StartCompetitionRequestDTO,
     UpdateCompetitionRequestDTO,
 )
@@ -80,6 +86,30 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
     CompetitionNotFoundError as StartNotFoundError,
     NotCompetitionCreatorError as StartNotCreatorError,
     StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.add_golf_course_use_case import (
+    AddGolfCourseToCompetitionUseCase,
+    CompetitionNotDraftError as AddGCNotDraftError,
+    CompetitionNotFoundError as AddGCNotFoundError,
+    GolfCourseAlreadyAssignedError,
+    GolfCourseNotApprovedError,
+    GolfCourseNotFoundError,
+    IncompatibleCountryError,
+    NotCompetitionCreatorError as AddGCNotCreatorError,
+)
+from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
+    CompetitionNotDraftError as RemoveGCNotDraftError,
+    CompetitionNotFoundError as RemoveGCNotFoundError,
+    GolfCourseNotAssignedError,
+    NotCompetitionCreatorError as RemoveGCNotCreatorError,
+    RemoveGolfCourseFromCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
+    CompetitionNotDraftError as ReorderNotDraftError,
+    CompetitionNotFoundError as ReorderNotFoundError,
+    InvalidReorderError,
+    NotCompetitionCreatorError as ReorderNotCreatorError,
+    ReorderGolfCoursesUseCase,
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     CompetitionNotEditableError,
@@ -1261,4 +1291,288 @@ async def cancel_competition(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
+        ) from e
+
+
+# ======================================================================================
+# GOLF COURSE MANAGEMENT ENDPOINTS
+# ======================================================================================
+
+
+@router.post(
+    "/competitions/{competition_id}/golf-courses",
+    response_model=AddGolfCourseResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Añadir campo de golf a competición",
+    tags=["Competitions - Golf Courses"],
+)
+@limiter.limit("10/minute")
+async def add_golf_course_to_competition(
+    request: Request,
+    competition_id: UUID,
+    golf_course_id_body: dict,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: AddGolfCourseToCompetitionUseCase = Depends(
+        lambda: None  # TODO: Añadir dependency injection
+    ),
+):
+    """
+    Añade un campo de golf aprobado a una competición en estado DRAFT.
+
+    **Restricciones:**
+    - Solo el creador puede añadir campos
+    - La competición debe estar en estado DRAFT
+    - El campo debe estar APPROVED
+    - El país del campo debe ser compatible con la ubicación de la competición
+
+    **Returns:**
+    - 201: Campo añadido exitosamente
+    - 400: Competición no está en DRAFT, país incompatible, o campo ya asociado
+    - 403: Usuario no es el creador
+    - 404: Competición o campo de golf no encontrado
+    """
+    try:
+        current_user_id = UserId(current_user.id)
+
+        # Construir DTO de request
+        request_dto = AddGolfCourseRequestDTO(
+            competition_id=competition_id,
+            golf_course_id=golf_course_id_body.get("golf_course_id"),
+        )
+
+        # Ejecutar caso de uso
+        response = await use_case.execute(request_dto, current_user_id)
+
+        return response
+
+    except AddGCNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except GolfCourseNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except AddGCNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except (
+        AddGCNotDraftError,
+        GolfCourseNotApprovedError,
+        GolfCourseAlreadyAssignedError,
+        IncompatibleCountryError,
+    ) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.delete(
+    "/competitions/{competition_id}/golf-courses/{golf_course_id}",
+    response_model=RemoveGolfCourseResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar campo de golf de competición",
+    tags=["Competitions - Golf Courses"],
+)
+@limiter.limit("10/minute")
+async def remove_golf_course_from_competition(
+    request: Request,
+    competition_id: UUID,
+    golf_course_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: RemoveGolfCourseFromCompetitionUseCase = Depends(
+        lambda: None  # TODO: Añadir dependency injection
+    ),
+):
+    """
+    Elimina un campo de golf de una competición en estado DRAFT.
+
+    **Restricciones:**
+    - Solo el creador puede eliminar campos
+    - La competición debe estar en estado DRAFT
+    - El campo debe estar actualmente asociado a la competición
+
+    **Returns:**
+    - 200: Campo eliminado exitosamente
+    - 400: Competición no está en DRAFT o campo no está asociado
+    - 403: Usuario no es el creador
+    - 404: Competición no encontrada
+    """
+    try:
+        current_user_id = UserId(current_user.id)
+
+        # Construir DTO de request
+        request_dto = RemoveGolfCourseRequestDTO(
+            competition_id=competition_id,
+            golf_course_id=golf_course_id,
+        )
+
+        # Ejecutar caso de uso
+        response = await use_case.execute(request_dto, current_user_id)
+
+        return response
+
+    except RemoveGCNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except RemoveGCNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except (RemoveGCNotDraftError, GolfCourseNotAssignedError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.put(
+    "/competitions/{competition_id}/golf-courses/reorder",
+    response_model=ReorderGolfCoursesResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Reordenar campos de golf en competición",
+    tags=["Competitions - Golf Courses"],
+)
+@limiter.limit("10/minute")
+async def reorder_golf_courses(
+    request: Request,
+    competition_id: UUID,
+    golf_course_ids_body: dict,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ReorderGolfCoursesUseCase = Depends(
+        lambda: None  # TODO: Añadir dependency injection
+    ),
+):
+    """
+    Reordena los campos de golf asociados a una competición en estado DRAFT.
+
+    **Restricciones:**
+    - Solo el creador puede reordenar campos
+    - La competición debe estar en estado DRAFT
+    - La lista debe incluir TODOS los campos actualmente asociados
+    - No puede haber duplicados en la lista
+
+    **Request Body Example:**
+    ```json
+    {
+        "golf_course_ids": [
+            "uuid-golf-course-3",  # display_order = 1
+            "uuid-golf-course-1",  # display_order = 2
+            "uuid-golf-course-2"   # display_order = 3
+        ]
+    }
+    ```
+
+    **Returns:**
+    - 200: Campos reordenados exitosamente
+    - 400: Competición no está en DRAFT, duplicados, IDs faltantes o extra
+    - 403: Usuario no es el creador
+    - 404: Competición no encontrada
+    """
+    try:
+        current_user_id = UserId(current_user.id)
+
+        # Construir DTO de request
+        request_dto = ReorderGolfCoursesRequestDTO(
+            competition_id=competition_id,
+            golf_course_ids=golf_course_ids_body.get("golf_course_ids", []),
+        )
+
+        # Ejecutar caso de uso
+        response = await use_case.execute(request_dto, current_user_id)
+
+        return response
+
+    except ReorderNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except ReorderNotCreatorError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except (ReorderNotDraftError, InvalidReorderError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/competitions/{competition_id}/golf-courses",
+    response_model=list[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Listar campos de golf de una competición",
+    tags=["Competitions - Golf Courses"],
+)
+@limiter.limit("20/minute")
+async def list_competition_golf_courses(
+    request: Request,
+    competition_id: UUID,
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+):
+    """
+    Obtiene la lista ordenada de campos de golf asociados a una competición.
+
+    **Returns:**
+    - 200: Lista de campos con orden de visualización
+    - 404: Competición no encontrada
+
+    **Response Example:**
+    ```json
+    [
+        {
+            "golf_course_id": "uuid-1",
+            "display_order": 1,
+            "created_at": "2026-01-31T21:00:00"
+        },
+        {
+            "golf_course_id": "uuid-2",
+            "display_order": 2,
+            "created_at": "2026-01-31T21:05:00"
+        }
+    ]
+    ```
+    """
+    try:
+        competition_vo_id = CompetitionId(competition_id)
+
+        async with uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+
+            if not competition:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No existe competición con ID {competition_id}",
+                )
+
+            # Construir respuesta con datos básicos de cada campo
+            golf_courses_list = [
+                {
+                    "golf_course_id": str(gc.golf_course_id.value),
+                    "display_order": gc.display_order,
+                    "created_at": gc.created_at.isoformat(),
+                }
+                for gc in competition.golf_courses
+            ]
+
+            return golf_courses_list
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listando campos de golf: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al listar campos de golf",
         ) from e

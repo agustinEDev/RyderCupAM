@@ -23,9 +23,15 @@ from sqlalchemy.types import CHAR, TypeDecorator
 
 # Domain Entities
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition_golf_course import (
+    CompetitionGolfCourse,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 
 # Value Objects - Competition
+from src.modules.competition.domain.value_objects.competition_golf_course_id import (
+    CompetitionGolfCourseId,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
@@ -44,6 +50,9 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
 )
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
+
+# Golf Course Value Object (FK)
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 # User Value Object (FK)
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -155,6 +164,56 @@ class CountryCodeDecorator(TypeDecorator):
         if value is None:
             return None
         return CountryCode(value)
+
+
+class CompetitionGolfCourseIdDecorator(TypeDecorator):
+    """
+    TypeDecorator para convertir CompetitionGolfCourseId (UUID VO) a/desde VARCHAR(36).
+    """
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(
+        self, value: CompetitionGolfCourseId | str | None, dialect
+    ) -> str | None:
+        """Convierte CompetitionGolfCourseId o str a string para BD."""
+        if isinstance(value, CompetitionGolfCourseId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(
+        self, value: str | None, dialect
+    ) -> CompetitionGolfCourseId | None:
+        """Convierte string de BD a CompetitionGolfCourseId."""
+        if value is None:
+            return None
+        return CompetitionGolfCourseId(uuid.UUID(value))
+
+
+class GolfCourseIdDecorator(TypeDecorator):
+    """
+    TypeDecorator para convertir GolfCourseId (UUID VO) a/desde VARCHAR(36).
+    """
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: GolfCourseId | str | None, dialect) -> str | None:
+        """Convierte GolfCourseId o str a string para BD."""
+        if isinstance(value, GolfCourseId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> GolfCourseId | None:
+        """Convierte string de BD a GolfCourseId."""
+        if value is None:
+            return None
+        return GolfCourseId(uuid.UUID(value))
 
 
 # =============================================================================
@@ -446,6 +505,31 @@ enrollments_table = Table(
 
 
 # =============================================================================
+# TABLA COMPETITION_GOLF_COURSES (Association Table)
+# =============================================================================
+
+competition_golf_courses_table = Table(
+    "competition_golf_courses",
+    metadata,
+    Column("id", CompetitionGolfCourseIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "golf_course_id",
+        GolfCourseIdDecorator,
+        ForeignKey("golf_courses.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("display_order", Integer, nullable=False),
+    Column("created_at", DateTime, nullable=False),
+)
+
+
+# =============================================================================
 # START MAPPERS - Función de inicialización
 # =============================================================================
 
@@ -541,10 +625,26 @@ def start_competition_mappers():
             },
         )
 
+    # Mapear CompetitionGolfCourse (Association Entity)
+    if CompetitionGolfCourse not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            CompetitionGolfCourse,
+            competition_golf_courses_table,
+            properties={
+                # Mapeo directo de columnas simples
+                # SQLAlchemy mapea automáticamente los atributos que coinciden con los nombres
+                # de las columnas (id, competition_id, golf_course_id, display_order, created_at)
+                # ya están mapeados implícitamente gracias a los TypeDecorators.
+                #
+                # NOTA: Competition.golf_courses se manejará mediante una relación
+                # en el mapper de Competition cuando implementemos lazy loading.
+            },
+        )
+
 
 def start_mappers():
     """
-    Inicia los mappers de Competition y Enrollment.
+    Inicia los mappers de Competition, Enrollment y CompetitionGolfCourse.
 
     Esta función debe ser llamada al inicio de la aplicación (en main.py)
     para registrar los mappers de SQLAlchemy antes de realizar cualquier

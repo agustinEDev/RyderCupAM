@@ -9,7 +9,10 @@ from datetime import datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.value_objects.country_code import CountryCode
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
+from ..entities.competition_golf_course import CompetitionGolfCourse
 from ..events.competition_activated_event import CompetitionActivatedEvent
 from ..events.competition_cancelled_event import CompetitionCancelledEvent
 from ..events.competition_completed_event import CompetitionCompletedEvent
@@ -127,6 +130,7 @@ class Competition:
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
+        self._golf_courses: list[CompetitionGolfCourse] = []
 
     @classmethod
     def create(
@@ -261,12 +265,22 @@ class Competition:
 
         Abre las inscripciones para jugadores.
 
+        Business Rules:
+        - Requiere al menos 1 campo de golf asignado
+
         Raises:
-            CompetitionStateError: Si la transición no es válida
+            CompetitionStateError: Si la transición no es válida o falta campo de golf
         """
         if not self.status.can_transition_to(CompetitionStatus.ACTIVE):
             raise CompetitionStateError(
                 f"No se puede activar una competición en estado {self.status.value}"
+            )
+
+        # Validación: requiere al menos 1 campo de golf
+        if len(self._golf_courses) == 0:
+            raise CompetitionStateError(
+                "No se puede activar una competición sin campos de golf asignados. "
+                "Añade al menos un campo de golf antes de activar."
             )
 
         self.status = CompetitionStatus.ACTIVE
@@ -476,6 +490,216 @@ class Competition:
         """Limpia los eventos de dominio después de procesarlos."""
         self._ensure_domain_events()
         self._domain_events.clear()
+
+    # ===========================================
+    # GOLF COURSE MANAGEMENT
+    # ===========================================
+
+    def add_golf_course(
+        self, golf_course_id: GolfCourseId, country_code: CountryCode
+    ) -> None:
+        """
+        Añade un campo de golf a la competición.
+
+        Business Rules:
+        - Solo en estado DRAFT
+        - El país del campo debe ser compatible con la location de la competición
+        - No se permiten duplicados
+
+        Args:
+            golf_course_id: ID del campo de golf a añadir
+            country_code: Código del país del campo (para validación)
+
+        Raises:
+            CompetitionStateError: Si no está en DRAFT
+            ValueError: Si el país no es compatible o el campo ya existe
+        """
+        # Validación: solo en DRAFT
+        if self.status != CompetitionStatus.DRAFT:
+            raise CompetitionStateError(
+                f"Solo puedes añadir campos de golf en estado DRAFT. "
+                f"Estado actual: {self.status.value}"
+            )
+
+        # Validación: país compatible
+        if not self._is_country_compatible(country_code):
+            raise ValueError(
+                f"El campo de golf está en {country_code.value}, "
+                f"que no es compatible con la location de la competición: {self.location}"
+            )
+
+        # Validación: no duplicados
+        if self._has_golf_course(golf_course_id):
+            raise ValueError(
+                f"El campo de golf {golf_course_id} ya está añadido a la competición"
+            )
+
+        # Calcular próximo display_order automáticamente
+        next_order = len(self._golf_courses) + 1
+
+        # Crear asociación
+        association = CompetitionGolfCourse.create(
+            competition_id=self.id,
+            golf_course_id=golf_course_id,
+            display_order=next_order,
+        )
+
+        # Añadir a la colección
+        self._golf_courses.append(association)
+        self.updated_at = datetime.now()
+
+    def remove_golf_course(self, golf_course_id: GolfCourseId) -> None:
+        """
+        Quita un campo de golf de la competición.
+
+        Reordena automáticamente los campos restantes (1, 2, 3...).
+
+        Business Rules:
+        - Solo en estado DRAFT
+
+        Args:
+            golf_course_id: ID del campo de golf a quitar
+
+        Raises:
+            CompetitionStateError: Si no está en DRAFT
+            ValueError: Si el campo no existe
+        """
+        # Validación: solo en DRAFT
+        if self.status != CompetitionStatus.DRAFT:
+            raise CompetitionStateError(
+                f"Solo puedes quitar campos de golf en estado DRAFT. "
+                f"Estado actual: {self.status.value}"
+            )
+
+        # Buscar el campo
+        field_to_remove = None
+        for cgc in self._golf_courses:
+            if cgc.golf_course_id == golf_course_id:
+                field_to_remove = cgc
+                break
+
+        # Validación: el campo debe existir
+        if field_to_remove is None:
+            raise ValueError(
+                f"El campo de golf {golf_course_id} no está en la competición"
+            )
+
+        # Remover
+        self._golf_courses.remove(field_to_remove)
+
+        # Reordenar automáticamente (1, 2, 3...)
+        for i, cgc in enumerate(self._golf_courses, start=1):
+            cgc.change_order(i)
+
+        self.updated_at = datetime.now()
+
+    def reorder_golf_courses(
+        self, new_order: list[tuple[GolfCourseId, int]]
+    ) -> None:
+        """
+        Cambia el orden de los campos de golf.
+
+        Business Rules:
+        - Solo en DRAFT
+        - Todos los campos deben tener orden único
+        - El orden debe ser secuencial (1, 2, 3... sin huecos)
+
+        Args:
+            new_order: Lista de tuplas (golf_course_id, new_display_order)
+
+        Raises:
+            CompetitionStateError: Si no está en DRAFT
+            ValueError: Si hay órdenes duplicados o no secuenciales
+        """
+        # Validación: solo en DRAFT
+        if self.status != CompetitionStatus.DRAFT:
+            raise CompetitionStateError(
+                f"Solo puedes reordenar campos de golf en estado DRAFT. "
+                f"Estado actual: {self.status.value}"
+            )
+
+        # Validación: mismo número de campos
+        if len(new_order) != len(self._golf_courses):
+            raise ValueError(
+                f"Debes especificar el orden para todos los campos. "
+                f"Esperados: {len(self._golf_courses)}, Recibidos: {len(new_order)}"
+            )
+
+        # Validación: orden secuencial (1, 2, 3...)
+        orders = [order for _, order in new_order]
+        expected_orders = list(range(1, len(new_order) + 1))
+        if sorted(orders) != expected_orders:
+            raise ValueError(
+                f"El orden debe ser secuencial (1, 2, 3...). "
+                f"Recibido: {sorted(orders)}"
+            )
+
+        # Aplicar nuevo orden
+        for golf_course_id, new_display_order in new_order:
+            # Buscar el campo
+            for cgc in self._golf_courses:
+                if cgc.golf_course_id == golf_course_id:
+                    cgc.change_order(new_display_order)
+                    break
+            else:
+                raise ValueError(f"Campo {golf_course_id} no encontrado")
+
+        self.updated_at = datetime.now()
+
+    def _is_country_compatible(self, country_code: CountryCode) -> bool:
+        """
+        Verifica si un país es compatible con la location de la competición.
+
+        Un país es compatible si:
+        - Es el país principal de la location, O
+        - Es uno de los países adyacentes (si existen)
+
+        Args:
+            country_code: Código del país a verificar
+
+        Returns:
+            True si es compatible, False en caso contrario
+        """
+        # País principal siempre es compatible
+        if country_code == self.location.main_country:
+            return True
+
+        # Países adyacentes son compatibles
+        if (
+            self.location.adjacent_country_1
+            and country_code == self.location.adjacent_country_1
+        ):
+            return True
+
+        if (
+            self.location.adjacent_country_2
+            and country_code == self.location.adjacent_country_2
+        ):
+            return True
+
+        return False
+
+    def _has_golf_course(self, golf_course_id: GolfCourseId) -> bool:
+        """
+        Verifica si un campo de golf ya está en la competición.
+
+        Args:
+            golf_course_id: ID del campo a buscar
+
+        Returns:
+            True si ya existe, False en caso contrario
+        """
+        return any(cgc.golf_course_id == golf_course_id for cgc in self._golf_courses)
+
+    @property
+    def golf_courses(self) -> list[CompetitionGolfCourse]:
+        """
+        Retorna la lista de campos de golf (ordenados por display_order).
+
+        Returns:
+            Lista de CompetitionGolfCourse ordenada por display_order
+        """
+        return sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
 
     # ===========================================
     # MÉTODOS ESPECIALES

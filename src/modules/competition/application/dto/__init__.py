@@ -4,6 +4,9 @@ from .competition_dto import (
     # Lifecycle Transitions
     ActivateCompetitionRequestDTO,
     ActivateCompetitionResponseDTO,
+    # Golf Course Management
+    AddGolfCourseRequestDTO,
+    AddGolfCourseResponseDTO,
     CancelCompetitionRequestDTO,
     CancelCompetitionResponseDTO,
     CloseEnrollmentsRequestDTO,
@@ -17,6 +20,10 @@ from .competition_dto import (
     # Delete & Cancel
     DeleteCompetitionRequestDTO,
     DeleteCompetitionResponseDTO,
+    RemoveGolfCourseRequestDTO,
+    RemoveGolfCourseResponseDTO,
+    ReorderGolfCoursesRequestDTO,
+    ReorderGolfCoursesResponseDTO,
     StartCompetitionRequestDTO,
     StartCompetitionResponseDTO,
     UpdateCompetitionRequestDTO,
@@ -47,6 +54,8 @@ from .enrollment_dto import (
 __all__ = [
     "ActivateCompetitionRequestDTO",
     "ActivateCompetitionResponseDTO",
+    "AddGolfCourseRequestDTO",
+    "AddGolfCourseResponseDTO",
     "CancelCompetitionRequestDTO",
     "CancelCompetitionResponseDTO",
     "CancelEnrollmentRequestDTO",
@@ -66,6 +75,10 @@ __all__ = [
     "EnrollmentResponseDTO",
     "HandleEnrollmentRequestDTO",
     "HandleEnrollmentResponseDTO",
+    "RemoveGolfCourseRequestDTO",
+    "RemoveGolfCourseResponseDTO",
+    "ReorderGolfCoursesRequestDTO",
+    "ReorderGolfCoursesResponseDTO",
     # Enrollment DTOs
     "RequestEnrollmentRequestDTO",
     "RequestEnrollmentResponseDTO",
