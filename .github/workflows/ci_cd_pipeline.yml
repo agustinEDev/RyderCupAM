@@ -805,8 +805,8 @@ jobs:
     name: 📦 SBOM Generation
     runs-on: ubuntu-latest
     needs: preparation
-    permissions:
-      contents: write  # Required for dependency-graph-submit-action
+    # permissions:
+    #   contents: write  # Required for dependency-graph-submit-action (currently disabled)
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.ref, 'release/')
 
     steps:
@@ -918,12 +918,14 @@ jobs:
             sbom/sbom-metadata.txt
           retention-days: 90
 
-      - name: Upload SBOM to GitHub Dependency Graph (if main)
-        if: github.ref == 'refs/heads/main'
-        uses: github/dependency-graph-submit-action@v1
-        with:
-          sbom: sbom/sbom.json
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # NOTE: Commented out - action doesn't exist (non-existent GitHub action)
+      # TODO: Implement SBOM submission using GitHub REST API or alternative method
+      # - name: Upload SBOM to GitHub Dependency Graph (if main)
+      #   if: github.ref == 'refs/heads/main'
+      #   uses: github/dependency-graph-submit-action@v1
+      #   with:
+      #     sbom: sbom/sbom.json
+      #     token: ${{ secrets.GITHUB_TOKEN }}
 
   # ================================
   # JOB 10: GPG SIGNATURE VERIFICATION
