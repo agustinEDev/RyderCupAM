@@ -631,13 +631,12 @@ def start_competition_mappers():
             CompetitionGolfCourse,
             competition_golf_courses_table,
             properties={
-                # Mapeo directo de columnas simples
-                # SQLAlchemy mapea automáticamente los atributos que coinciden con los nombres
-                # de las columnas (id, competition_id, golf_course_id, display_order, created_at)
-                # ya están mapeados implícitamente gracias a los TypeDecorators.
-                #
-                # NOTA: Competition.golf_courses se manejará mediante una relación
-                # en el mapper de Competition cuando implementemos lazy loading.
+                # Mapeo explícito para que SQLAlchemy reconozca los atributos privados
+                "_id": competition_golf_courses_table.c.id,
+                "_competition_id": competition_golf_courses_table.c.competition_id,
+                "_golf_course_id": competition_golf_courses_table.c.golf_course_id,
+                "_display_order": competition_golf_courses_table.c.display_order,
+                "_created_at": competition_golf_courses_table.c.created_at,
             },
         )
 

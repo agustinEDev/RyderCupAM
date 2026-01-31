@@ -15,8 +15,8 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.golf_course.domain.repositories.golf_course_repository_interface import (
-    GolfCourseRepositoryInterface,
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -89,7 +89,7 @@ class AddGolfCourseToCompetitionUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        golf_course_repository: GolfCourseRepositoryInterface,
+        golf_course_repository: IGolfCourseRepository,
     ):
         """
         Constructor.
