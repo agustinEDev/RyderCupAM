@@ -35,7 +35,7 @@ Flow:
 - **Domain**: 4 User entity methods + 2 events (AccountLocked/Unlocked)
 - **Application**: Modified Login + UnlockAccountUseCase + 2 DTOs
 - **Infrastructure**: Migration (2 fields + index)
-- **API**: POST /unlock-account (pending Admin role v2.1.0)
+- **API**: POST /unlock-account (Admin role implemented in v2.0.0 via `is_admin` flag)
 
 ## Rationale
 

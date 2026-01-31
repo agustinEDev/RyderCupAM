@@ -64,6 +64,12 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
+from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
+    SQLAlchemyGolfCourseUnitOfWork,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.token_service_interface import ITokenService
@@ -698,6 +704,24 @@ def get_competition_uow(
     - countries: Repositorio de países (shared domain)
     """
     return SQLAlchemyCompetitionUnitOfWork(session)
+
+
+def get_golf_course_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> GolfCourseUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo Golf Course.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemyGolfCourseUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `GolfCourseUnitOfWorkInterface`.
+
+    La UoW de Golf Course coordina 2 repositorios:
+    - golf_courses: Repositorio de campos de golf
+    - countries: Repositorio de países (shared domain)
+    """
+    return SQLAlchemyGolfCourseUnitOfWork(session)
 
 
 def get_create_competition_use_case(

@@ -1,430 +1,437 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Versión Actual:** 1.13.1 (COMPLETADO)
-> **Última actualización:** 18 Ene 2026
-> **Estado:** ✅ Producción (v1.13.1 - Current Device Detection + HTTP Security Enhancements)
-> **OWASP Score:** 9.4/10 (Account Lockout + CSRF + Password History + Device Fingerprinting + IP Spoofing Prevention)
+> **Current Version:** 2.0.1 (Production)
+> **Last Updated:** Jan 30, 2026
+> **OWASP Score:** 9.4/10
 
 ---
 
-## 📊 Estado Actual
+## 📊 Current Status
 
-### Métricas
-- **Tests:** 1,066 (99.9% passing, ~60s) - +36 HTTP Security, +99 Device Fingerprinting, +11 CSRF, +5 Account Lockout
-- **Endpoints:** 39 REST API - +2 device endpoints (/me/devices GET/DELETE)
-- **Módulos:** User, Competition, Enrollment, Countries
-- **CI/CD:** GitHub Actions (10 jobs paralelos, ~3min) - Security Tests + Trivy
-- **Deployment:** Render.com + Docker + PostgreSQL
+**Tests:** 1,177 (1,177 passing, 16 skipped, ~142s) | **Endpoints:** 50 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
-### Completado (v1.0.0 - v1.13.1)
+**Completed Modules:**
+- **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
+- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states)
+- **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
+- **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
-| Componente | Features |
-|-----------|----------|
-| **User Module** | Login, Register, Email Verification, Password Reset, Handicap (RFEG), Profile |
-| **Competition Module** | CRUD, State Machine (6 estados), Enrollments, Countries (166 + 614 fronteras) |
-| **Security (v1.8.0 - v1.13.1)** | Rate Limiting, httpOnly Cookies, Session Timeout (15min/7d), CORS, XSS Protection, Security Logging, Sentry, Dependency Audit (Safety + pip-audit + Snyk Code SAST), Account Lockout (v1.13.0), CSRF Protection (v1.13.0), Password History (v1.13.0), Device Fingerprinting (v1.13.0), **IP Spoofing Prevention (v1.13.1)**, **HTTP Validation (v1.13.1)** |
-| **Testing** | 1,066 tests (unit + integration + security), CI/CD automático |
-
-### OWASP Top 10 Coverage
-
-| Categoría | Score | Protecciones |
-|-----------|-------|--------------|
-| A01: Access Control | **10/10** | JWT, Refresh Tokens, Session Timeout, Authorization, CSRF Protection, Device Fingerprinting, **IP Spoofing Prevention (v1.13.1)** ⭐ |
-| A02: Crypto Failures | 10/10 | bcrypt (12 rounds), httpOnly Cookies, HSTS, Tokens seguros |
-| A03: Injection | 10/10 | SQLAlchemy ORM, HTML Sanitization, Pydantic Validation, **Sentinel Validation (v1.13.1)** ⭐ |
-| A04: Insecure Design | 9/10 | Rate Limiting (5/min login), Field Limits, Password Policy |
-| A05: Misconfiguration | 9.5/10 | Security Headers, CORS Whitelist, Secrets Management |
-| A06: Vulnerable Components | 9.0/10 | Triple Audit (Safety + pip-audit + Snyk), Auto-updates, 6 CVEs resueltos |
-| A07: Auth Failures | 9.5/10 | Password Policy (ASVS V2.1), Session Timeout, Rate Limiting, Account Lockout, Password History |
-| A08: Data Integrity | 7/10 | API Versioning |
-| A09: Logging | 10/10 | Security Audit Trail, Correlation IDs, Sentry (APM + Profiling) |
-| A10: SSRF | 8/10 | Input Validation |
-| **Promedio** | **9.4/10** | Suma: 94.0 puntos / 10 categorías = 9.40 ⭐ |
+**OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐
 
 ---
 
-## 🎯 Roadmap Futuro
+## 🎯 Future Roadmap
 
-### v1.13.1 - Bugfix + Security Enhancements ✅ COMPLETADO - 18 Ene 2026
+### v2.0.1 - Competition Module Evolution ⭐ TOP PRIORITY
 
-**Objetivo:** Añadir campo `is_current_device` + mejoras críticas de seguridad HTTP.
+**Dates:** Jan 27 - Mar 24, 2026 (8 weeks) | **Effort:** 394h | **Tests:** 130+ | **Endpoints:** 34
 
-**Estado:** ✅ Completado (18 Ene 2026)
+**Goal:** Complete Ryder Cup tournament management system with golf courses, scheduling, live scoring with dual validation, and real-time leaderboards.
 
-**Branch:** `feature/detect-current-device`
-
----
-
-#### 📋 Tareas de Implementación
-
-| # | Tarea | Archivos | Tiempo | Estado |
-|---|-------|----------|--------|--------|
-| 1 | Añadir campo `is_current_device` a UserDeviceDTO | `device_dto.py` | 5 min | ✅ Completado |
-| 2 | Actualizar ListUserDevicesRequestDTO con contexto HTTP | `device_dto.py` | 5 min | ✅ Completado |
-| 3 | Modificar ListUserDevicesUseCase para calcular dispositivo actual | `list_user_devices_use_case.py` | 15 min | ✅ Completado |
-| 4 | Actualizar endpoint GET /users/me/devices para pasar contexto HTTP | `device_routes.py` | 10 min | ✅ Completado |
-| 5 | **NUEVO:** Helper centralizado de validación HTTP (IP spoofing prevention) | `http_context_validator.py` | 2h | ✅ Completado |
-| 6 | **NUEVO:** Refactorizar routes (eliminar código duplicado) | `*_routes.py` | 1h | ✅ Completado |
-| 7 | Actualizar tests unitarios de ListUserDevicesUseCase | `test_list_user_devices_use_case.py` | 20 min | ✅ Completado |
-| 8 | **NUEVO:** Tests de seguridad HTTP (36 tests) | `test_http_context_validator.py` | 1.5h | ✅ Completado |
-| 9 | Actualizar tests de integración del endpoint | `test_device_routes.py` | 15 min | ✅ Completado |
-| 10 | Actualizar documentación API | `docs/API.md` | 5 min | ✅ Completado |
-| 11 | Actualizar Postman collection | `postman_collection.json` | 5 min | ✅ Completado |
-
-**Total:** 11 tareas | ~6 horas | 9 archivos modificados + 2 nuevos creados
+**Note:** Minor version bump (v2.0.0 was RBAC Foundation). Major changes: 34 endpoints, 13 entities, 8 weeks development.
 
 ---
 
-#### 🔍 Problemas Identificados
+#### 📅 Sprint Breakdown
 
-**1. UX - Dispositivo Actual no Marcado:**
-- El endpoint `GET /api/v1/users/me/devices` no indicaba cuál es el dispositivo actual
-- Frontend no podía resaltar visualmente el dispositivo en uso
-- Sin advertencia al revocar el dispositivo actual
-
-**2. CRÍTICO - Valores Sentinel sin Validación (OWASP A03):**
-- `DeviceFingerprint.create()` fallaba con `ValueError` si recibía `user_agent="unknown"` o `ip_address=""`
-- Causaba HTTP 500 en endpoint `/users/me/devices` si AsyncClient no enviaba headers
-- **Impacto:** Endpoint inestable en testing/production con clientes sin headers
-
-**3. CRÍTICO - IP Spoofing Vulnerability (OWASP A01):**
-- Funciones `get_client_ip()` confiaban ciegamente en headers `X-Forwarded-For` sin validar proxy
-- **Ataque:** Cliente malicioso podía falsificar su IP enviando header manipulado
-- **Impacto:** Bypass de rate limiting, device fingerprinting incorrecto, sesiones compartidas
-- Código duplicado en 3 archivos (90 líneas)
+| Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
+|--------|-------|-------|-----------|-------|------------|
+| **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
+| **Sprint 2** | Feb 3 - Feb 24 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | 🔄 Fri, Feb 13, Feb 20 |
+| **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 27 |
+| **Sprint 4** | Mar 4 - Mar 17 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 13 |
+| **Sprint 5** | Mar 18 - Mar 24 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 20 |
 
 ---
 
-#### 💡 Solución Implementada
+#### Sprint 1: RBAC Foundation + Golf Course Module v2.0.1 (✅ COMPLETED: Jan 31, 2026)
 
-**1. Campo `is_current_device` (Bugfix UX):**
-- ✅ Extracción de `user_agent` + `ip_address` del request en endpoint
-- ✅ Creación de `DeviceFingerprint` y comparación de hashes
-- ✅ Marcado de dispositivo actual con `is_current_device=True`
+**RBAC Foundation v2.0.0: Simplified Role System**
+- **Architecture**: Three-tier system WITHOUT a formal roles table.
+  - **ADMIN Role** (Global): `users.is_admin` boolean field.
+  - **CREATOR Role** (Contextual): Derived from `competition.creator_id == user.id`.
+  - **PLAYER Role** (Contextual): Derived from an enrollment with `status = APPROVED`.
+- **New Endpoint**:
+  - `GET /api/v1/users/me/roles/{competition_id}` - Checks the user's roles for a specific competition.
+    - Returns: `{is_admin, is_creator, is_player}` for the current user.
+- **Authorization Helpers** (Infrastructure Layer): `is_admin_user()`, `is_creator_of()`, `is_player_in()`.
+- **Test Coverage**: 17 unit tests (authorization helpers), 8 integration tests (API endpoint). **Total: 25 new tests (100% passing)**.
+- **Key Files Modified/Created**:
+  - `alembic/versions/7522c9fc51ef_add_is_admin_field_to_users_table.py` (migration)
+  - `src/modules/user/domain/entities/user.py` (`is_admin` added)
+  - `src/modules/user/infrastructure/api/v1/user_routes.py` (new endpoint)
+  - `src/modules/competition/infrastructure/authorization/` (helper functions)
+  - `tests/integration/api/v1/test_user_roles_endpoint.py` (integration tests)
 
-**2. Validación de Valores Sentinel (Security Fix):**
-- ✅ `validate_ip_address()`: Rechaza "unknown", "", whitespace, "0.0.0.0", "127.0.0.1", formato inválido
-- ✅ `validate_user_agent()`: Rechaza "unknown", "", whitespace, < 10 chars, > 500 chars
-- ✅ Graceful degradation: Retorna `None` en lugar de lanzar excepciones
-- ✅ Logs de debug/warning apropiados
+**Golf Courses Endpoints (10):**
+```
+POST /api/v1/golf-courses/request          # Creator requests new course
+POST /api/v1/admin/golf-courses            # Admin creates course directly (approved)
+GET  /api/v1/golf-courses/{id}             # Details (tees + holes)
+GET  /api/v1/golf-courses?approval_status=APPROVED
+GET  /api/v1/admin/golf-courses/pending
+PUT  /api/v1/admin/golf-courses/{id}/approve
+PUT  /api/v1/admin/golf-courses/{id}/reject
+PUT  /api/v1/golf-courses/{id}             # Creator submits update (clone-based workflow)
+PUT  /api/v1/admin/golf-courses/updates/{id}/approve  # Admin approves update
+PUT  /api/v1/admin/golf-courses/updates/{id}/reject   # Admin rejects update
+```
 
-**3. Prevención de IP Spoofing (Security Critical):**
-- ✅ Helper centralizado `http_context_validator.py` (306 líneas)
-- ✅ `get_trusted_client_ip()`: Valida proxy contra whitelist `TRUSTED_PROXIES`
-- ✅ Solo confía en `X-Forwarded-For` si proxy es confiable
-- ✅ Fallback a `request.client.host` si proxy no confiable
-- ✅ Aplicación de `validate_ip_address()` al resultado
-- ✅ Eliminación de código duplicado en 3 archivos (-90 líneas)
+**Update Workflow (Clone-Based - Option A+):**
+- Creator submits update → creates pending clone (original unchanged)
+- Admin approves → clone replaces original, original soft-deleted
+- Admin rejects → clone deleted, original unchanged
+- No data loss during approval process
+**Key DTOs:**
+```python
+class GolfCourseRequest(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+    country_code: str = Field(regex=r"^[A-Z]{2}$")
+    course_type: Literal["STANDARD_18", "PITCH_AND_PUTT", "EXECUTIVE"]
+    tees: list[TeeDTO] = Field(min_length=2, max_length=6)
+    holes: list[HoleDTO] = Field(min_length=18, max_length=18)
 
-**Configuración de Producción:**
-```bash
-# .env (Render.com)
-TRUSTED_PROXIES=10.0.0.1,10.0.0.2  # IPs de load balancers
+    @field_validator('holes')
+    def validate_stroke_index_unique(cls, holes):
+        stroke_indices = [h.stroke_index for h in holes]
+        if len(stroke_indices) != len(set(stroke_indices)):
+            raise ValueError("Stroke indices must be unique (1-18)")
+        return holes
 
-# .env (Local)
-TRUSTED_PROXIES=  # Vacío = NO confiar en headers
+    @field_validator('holes')
+    def validate_total_par(cls, holes):
+        total_par = sum(h.par for h in holes)
+        if not (66 <= total_par <= 76):
+            raise ValueError("Total par must be between 66 and 76")
+        return holes
+```
+
+**Validations:** Exactly 18 holes, unique stroke indices 1-18, total par 66-76, 2-6 tees.
+
+---
+
+#### Sprint 2: Competition Scheduling (1.5 weeks)
+
+**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (PRIORITY)**
+- **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
+- **Problem**: Violates Unit of Work pattern - UoW context manager (`__aexit__`) should handle commits automatically
+- **Files to modify**:
+  - Competition: 14 use cases (activate, cancel, close, complete, create, delete, start, update, handle_enrollment, direct_enroll, request_enrollment, set_custom_handicap, cancel_enrollment, withdraw_enrollment)
+  - User: 2 use cases (register_device, revoke_device)
+- **Actions**:
+  1. Remove all explicit `await self._uow.commit()` calls (9 already removed from Golf Course module)
+  2. Update ~16-20 unit tests to remove `mock_uow.commit.assert_called_once()` assertions
+  3. Update mock fixtures to simulate UoW `__aexit__` behavior (commit on success, rollback on exception)
+- **Benefit**: 100% consistent Clean Architecture, automatic transaction management, less code duplication
+- **Tests**: Update existing tests, verify 1,177/1,177 still passing
+- **Time**: 3-4 hours
+- **Related**: Golf Course module already completed (v2.0.1 - commit bfa7efa)
+
+**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (FOUNDATION)**
+- **Rationale**: Competitions can be played across multiple golf courses (multi-round tournaments)
+- **Architecture**: Many-to-Many via `competition_golf_courses` association table
+- **Migration**: Create `competition_golf_courses` table (id, competition_id, golf_course_id, display_order, created_at)
+- **Domain Layer**:
+  - New entity: `CompetitionGolfCourse` (id, golf_course_id, display_order)
+  - Update `Competition` entity: add `_golf_courses: list[CompetitionGolfCourse]`
+  - Business methods: `add_golf_course()`, `remove_golf_course()`, `reorder_golf_courses()`
+  - Business rules:
+    - DRAFT competitions can have 0+ courses
+    - ACTIVE requires ≥1 course (all APPROVED)
+    - Cannot modify courses after ACTIVATED
+    - Golf course country must match competition location (main or adjacent)
+    - Cannot delete golf course used in ACTIVE/IN_PROGRESS competitions
+- **Application Layer**:
+  - New use cases: AddGolfCourseToCompetition, RemoveGolfCourseFromCompetition, ReorderGolfCourses
+  - Update: CreateCompetition (accept `golf_course_ids`), ActivateCompetition (validate all APPROVED)
+  - New DTOs: CompetitionGolfCourseDTO, Add/Remove/Reorder request DTOs
+- **Infrastructure**:
+  - SQLAlchemy mapper: relationship with `cascade="all, delete-orphan"`, `order_by=display_order`
+  - Repository: `find_by_id_with_golf_courses()` (eager loading), `find_active_competitions_using_course()`
+- **API Endpoints** (4 new):
+  ```
+  POST   /api/v1/competitions/{comp_id}/golf-courses
+  DELETE /api/v1/competitions/{comp_id}/golf-courses/{gc_id}
+  PUT    /api/v1/competitions/{comp_id}/golf-courses/reorder
+  GET    /api/v1/competitions/{comp_id}/golf-courses
+  ```
+- **Frontend Integration**:
+  - Competition creation: multi-select golf courses (existing APPROVED)
+  - Option to create new course request (PENDING) and attach to competition
+  - Warning if competition has PENDING courses (cannot activate until approved)
+  - UI to reorder courses (drag-and-drop)
+- **Tests**: +55 tests (25 domain, 18 application, 12 integration)
+- **Time**: 1.5 weeks
+- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship)
+
+**Block 2: Code Quality Refactor - Exception Subclasses**
+- **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
+- **Files**: `business_rule_violation.py`, `competition_policy.py`, `request_enrollment_use_case.py`
+- **Action**: Create `DuplicateEnrollmentViolation`, `InvalidCompetitionStatusViolation`, etc.
+- **Benefit**: Type-safe exception handling, better DDD, maintainable
+- **Tests**: Update ~20 tests (CompetitionPolicy + use cases)
+- **Time**: 2-3 hours
+
+**Block 3: Fix SBOM Submission to GitHub Dependency Graph**
+- **Issue**: Action `github/dependency-graph-submit-action@v1` doesn't exist (CI/CD failing)
+- **Current State**: Step commented out in `.github/workflows/ci_cd_pipeline.yml` (release v2.0.1)
+- **Options**:
+  1. Use GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
+  2. Use `advanced-security/maven-dependency-submission-action` (ecosystem-specific, N/A for Python)
+  3. Use `jessehouwing/actions-dependency-submission` (community action)
+- **Recommended**: Option 1 (REST API) - Most reliable, no third-party dependencies
+- **Implementation**:
+  - Create bash script `scripts/submit-sbom-to-github.sh`
+  - Call GitHub API with SBOM JSON payload (CycloneDX format)
+  - Only execute on `main` branch (same condition as before)
+  - Add error handling + logging
+- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance
+- **Files**: `.github/workflows/ci_cd_pipeline.yml`, `scripts/submit-sbom-to-github.sh`
+- **Tests**: Manual testing (GitHub API requires merge to main)
+- **Time**: 2-3 hours
+- **ADR**: ADR-035 (SBOM Submission via GitHub REST API)
+
+**Rounds Endpoints (4):**
+```
+POST   /api/v1/competitions/{comp_id}/rounds
+PUT    /api/v1/rounds/{round_id}
+DELETE /api/v1/rounds/{round_id}
+GET    /api/v1/competitions/{comp_id}/schedule  # Rounds + matches nested
+```
+
+**Matches Endpoints (6):**
+```
+POST   /api/v1/rounds/{round_id}/matches
+GET    /api/v1/matches/{match_id}
+PUT    /api/v1/matches/{match_id}/players
+PUT    /api/v1/matches/{match_id}/status
+POST   /api/v1/matches/{match_id}/walkover
+DELETE /api/v1/matches/{match_id}
+```
+
+**Playing Handicap Calculation (Domain Service):**
+```python
+class PlayingHandicapCalculator:
+    """WHS Official: PH = (HI × SR / 113) + (CR - Par)"""
+    @staticmethod
+    def calculate(handicap_index: float, tee: Tee, course_par: int) -> int:
+        slope_factor = tee.slope_rating / 113
+        ph = (handicap_index * slope_factor) + (tee.course_rating - course_par)
+        return round(ph)
+```
+
+**Validations:** SINGLES (1 player/team), FOURBALL/FOURSOMES (2 players/team), tee must exist in golf course, players must be enrolled with APPROVED status.
+
+---
+
+#### Sprint 3: Invitations System (1 week)
+
+**Endpoints (5):**
+```
+POST /api/v1/competitions/{comp_id}/invitations        # By user ID
+POST /api/v1/competitions/{comp_id}/invitations/by-email
+GET  /api/v1/invitations/me                            # Pending
+POST /api/v1/invitations/{invitation_id}/respond       # Accept/Decline
+GET  /api/v1/competitions/{comp_id}/invitations        # Creator view
+```
+
+**Security:**
+- Token: 256-bit (`secrets.token_urlsafe(32)`), SHA256 hash in DB
+- Expiration: 7 days, Celery background task (every 6h)
+- Auto-enrollment: ACCEPTED → Enrollment status APPROVED (bypasses approval)
+
+**Email Templates:** Bilingual ES/EN, Mailgun
+
+---
+
+#### Sprint 4: Scoring System (2 weeks)
+
+**Endpoints (4):**
+```
+POST /api/v1/matches/{match_id}/scores/holes/{hole_number}
+GET  /api/v1/matches/{match_id}/scoring-view           # 3-tab view
+POST /api/v1/matches/{match_id}/scorecard/submit
+GET  /api/v1/matches/{match_id}/scorecard
+```
+
+**Dual Validation:**
+```python
+class ScoringValidator:
+    @staticmethod
+    def validate_dual_entry(player_score: int | None, marker_score: int | None) -> str:
+        """Returns: 'match' | 'mismatch' | 'pending'"""
+        if player_score is None or marker_score is None:
+            return "pending"
+        return "match" if player_score == marker_score else "mismatch"
+```
+
+**Match Play Calculator:**
+```python
+class MatchPlayCalculator:
+    @staticmethod
+    def calculate_standing(holes_data: list[HoleScoreDetail]) -> MatchStanding:
+        """Net score = gross - strokes_received. Lower net wins hole."""
+        # Returns: "Team A leads 2UP" | "All Square" | "Team B wins 3&2"
+```
+
+**Unified View:**
+```python
+class MatchScoringView(BaseModel):
+    current_hole: int              # Next uncompleted hole
+    hole_info: HoleScoreDetail     # Tab 1: Input
+    scorecard: list[HoleScoreDetail]  # Tab 2: Scorecard
+    match_standing: MatchStanding  # Tab 3: Leaderboard
+    can_submit: bool               # True if 18/18 holes are validated
 ```
 
 ---
 
-#### 📊 Resultados
+#### Sprint 5: Leaderboards & Optimization (1 week)
 
-**Tests:**
-- ✅ +36 tests de seguridad HTTP (100% passing)
-- ✅ Suite completa: 1,066/1,066 tests (99.9% passing)
-- ✅ Tiempo: ~60 segundos con paralelización
+**Endpoints (2):**
+```
+GET /api/v1/competitions/{comp_id}/leaderboard       # Public, complete
+GET /api/v1/competitions/{comp_id}/leaderboard/live  # Only IN_PROGRESS matches
+```
 
-**Seguridad OWASP:**
-- ✅ **A01 (Access Control):** 9.7/10 → **10/10** (+0.3) - IP Spoofing Prevention
-- ✅ **A03 (Injection):** 10/10 (mantenido) - Sentinel Validation
-- ✅ **Score Global:** 9.2/10 → **9.4/10** (+0.2)
+**Optimizations:**
+- DB Indexes: (competition_id, status), (match_id, hole_number)
+- Redis cache (TTL 30s) for live matches
+- Eager loading (selectinload) to prevent N+1 queries
+- Target: < 200ms p95
 
-**Código:**
-- ✅ 2 archivos nuevos: `http_context_validator.py` (306 líneas) + tests (674 líneas)
-- ✅ 9 archivos modificados
-- ✅ -90 líneas de código duplicado
-- ✅ Centralización total de validación HTTP
-
----
-
-#### 📝 Checklist de Completado
-
-- [x] Helper centralizado de validación HTTP creado
-- [x] Validación de valores sentinel implementada
-- [x] Prevención de IP spoofing con whitelist de proxies
-- [x] Código duplicado eliminado (3 archivos)
-- [x] 36 tests de seguridad (100% passing)
-- [x] Tests de integración actualizados
-- [x] OWASP score mejorado (9.2 → 9.4)
-- [x] Documentación actualizada (ROADMAP + CHANGELOG)
+**Response:**
+```python
+class LeaderboardResponse(BaseModel):
+    team_a_standing: TeamStanding  # points, matches won/lost/halved
+    team_b_standing: TeamStanding
+    matches: list[MatchSummary]
+    has_live_matches: bool
+    last_updated: datetime
+```
 
 ---
 
-### v2.1.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA - 7 semanas
-
-**Objetivo:** Sistema completo de gestión de torneos Ryder Cup: campos de golf, planificación, live scoring con validación dual y leaderboards en tiempo real.
-
-**Estado:** 🔵 En Planificación (Ene 2026)
-
----
-
-#### 📦 Bloques Funcionales
-
-| # | Bloque | Semana | Tests | Descripción |
-|---|--------|--------|-------|-------------|
-| 1 | **Roles & Permisos** | 1-2 | ~40 | Sistema formal Admin/Creator/Player |
-| 2 | **Golf Courses** | 1-2 | ~60 | CRUD campos con tees y hoyos (18) |
-| 3 | **Course Approval** | 3 | ~30 | Creator crea campos → Admin aprueba |
-| 4 | **Schedule** | 4 | ~50 | Rounds + Matches + asignación jugadores |
-| 5 | **Invitations** | 4 | ~45 | Buscar/invitar usuarios + registro con token |
-| 6 | **Playing Handicap** | 5 | ~25 | Cálculo WHS automático por tee |
-| 7 | **Live Scoring** | 5 | ~40 | Anotación hoyo a hoyo con navegación libre |
-| 8 | **Dual Validation** | 6-7 | ~35 | Validación independiente jugador vs marcador |
-| 9 | **Leaderboards** | 6-7 | ~30 | Match + Global en tiempo real |
-
-**Total:** 9 bloques | 7 semanas | ~355 tests nuevos | 35 endpoints | 14 entidades
-
----
-
-#### 🗄️ Nuevas Entidades Principales
+#### 🗄️ New Entities (13 total)
 
 **Domain Layer:**
-- `Role`, `UserRole` - Sistema de roles formal
-- `GolfCourse`, `Tee`, `Hole` - Gestión de campos
-- `Round`, `Match` - Planificación de jornadas
-- `Invitation` - Sistema de invitaciones
-- `HoleScore` - Anotación de scores
-- `MatchResult`, `TeamStandings` - Leaderboards
+- `GolfCourse`, `Tee`, `Hole` - Golf Course Management (3 tables)
+- `CompetitionGolfCourse` - Competition-GolfCourse Many-to-Many association (1 table)
+- `Round`, `Match` - Scheduling (2 tables)
+- `Invitation` - Invitation System (1 table)
+- `HoleScore` - Score Annotation (1 table)
 
-**Enums clave:**
-- `RoleName`: ADMIN, CREATOR, PLAYER
-- `GolfCourseType`: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
-- `TeeCategory`: CHAMPIONSHIP_MALE, AMATEUR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, BEGINNER, CUSTOM
-- `ApprovalStatus`: PENDING_APPROVAL, APPROVED, REJECTED
-- `MatchFormat`: FOURBALL, FOURSOMES, SINGLES, GREENSOME
-- `MatchStatus`: SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, WALKOVER_TEAM_A, WALKOVER_TEAM_B
-- `InvitationStatus`: PENDING, ACCEPTED, REJECTED, EXPIRED
-- `ScoreStatus`: DRAFT, SUBMITTED, VALIDATED, DISPUTED
+**Enums:** GolfCourseType, TeeCategory, ApprovalStatus, MatchFormat, MatchStatus, InvitationStatus, ScoreStatus
 
 ---
 
-#### ✅ Criterios de Aceptación Clave
+#### ✅ Acceptance Criteria
 
-**Admin:**
-- CRUD campos (tees múltiples + 18 hoyos con plantillas)
-- Aprobar/rechazar campos pendientes + email notificación
-- Asignar roles a usuarios
+**Functionality:**
+- 34 endpoints implemented + Swagger docs
+- Functional RBAC (ADMIN, CREATOR, PLAYER) using a simplified, table-less design
+- Competition-GolfCourse many-to-many relationship with reordering
+- Auto-calculated playing handicaps (WHS)
+- Dual validation (player + marker)
+- Public real-time leaderboard
 
-**Creator:**
-- Buscar campos por país + crear nuevos (PENDING_APPROVAL)
-- Crear rounds/matches + asignar jugadores + seleccionar tees
-- Invitar usuarios (registrados o por email con token)
-- Cancelar matches o walkover
-- Ver leaderboards
+**Testing:**
+- ≥85% coverage
+- 130+ tests (unit + integration)
+- 0 failing in CI/CD
 
-**Player:**
-- Aceptar/rechazar invitaciones
-- Registrarse con token (auto-inscripción)
-- Anotar scores hoyo a hoyo (navegación libre ← →)
-- Ver ✅/❌ coincidencia en tiempo real
-- Entregar tarjeta solo si 18/18 ✅
-- Ver scorecard (bruto/neto) + leaderboard
+**Performance:**
+- API p95 < 200ms
+- Eager loading (joinedload/selectinload) + Redis cache
+- Critical DB indexes (competition_golf_courses, rounds, matches)
 
----
+**Security:**
+- Authorization checks on all endpoints
+- Pydantic validation
+- Configured CORS
 
-#### 🎯 UX Highlights
-
-**Scoring Interface:**
-```
-[← Hoyo 4]  HOYO 5  [Hoyo 6 →]
-Par: 4 | 356m | SI: 3
-Tu score: [5] | Marcador: [4]
-✅ Coincide
-
-Progreso: ✅✅✅❌⚪⚪⚪⚪⚪ | ⚪⚪⚪⚪⚪⚪⚪⚪⚪
-          1 2 3 4 5 6 7 8 9   10...18
-
-[🏁 Entregar] ← Solo si todos ✅
-```
-
-**Validación Dual:**
-- Cada jugador valida SU tarjeta independientemente
-- Bloqueo de entrega si hay discrepancias en tus scores
-
-**Invitaciones:**
-- Búsqueda por email/nombre
-- Token 256-bit, expira 7 días
-- Email bilingües (ES/EN)
+**Documentation:**
+- Complete Swagger (descriptions, examples)
+- 4 new ADRs (031, 032, 033, 034)
+- 11 Alembic migrations
 
 ---
 
-#### 📈 Roadmap v2.1.x (Futuro)
+#### 🔄 Handoffs with Frontend
 
-**v2.1.1** - Plantillas schedule, WebSocket, Puntos custom, Notificaciones push
-**v2.1.2** - Stats avanzadas, Export PDF, Google Maps, Weather API
-**v2.1.3** - Cache Redis, Read replicas, CDN, Load testing
+| Sprint | Backend Delivers | Frontend Consumes | Sync Point |
+|--------|----------------|------------------|------------|
+| Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | Fri, Jan 31 |
+| Sprint 2 (Block 0-1) | Competition-GolfCourse M2M | Multi-select courses + Reorder UI | Fri, Feb 13 |
+| Sprint 2 (Block 2-3) | Rounds + Matches Scheduling | Drag-drop + Match Wizard | Fri, Feb 20 |
+| Sprint 3 | Invitations | Invitation Cards | Fri, Feb 27 |
+| Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
+| Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
 
----
-
-#### 🔗 ADRs a Crear
-
-- `ADR-022` - Competition Module Evolution (visión general)
-- `ADR-023` - Golf Course Approval Workflow
-- `ADR-024` - Playing Handicap WHS Calculation
-- `ADR-025` - Dual Validation Scoring System
-- `ADR-026` - Invitation System Design
+**Protocol:** Backend deploys to dev → updates Swagger → notifies Frontend (Friday) → integration (Monday).
 
 ---
 
-### v1.13.0 - Security Hardening ✅ **COMPLETADO** (9 Ene 2026)
+#### 🔗 Related ADRs
 
-**Objetivo:** Cerrar gaps de seguridad críticos | **Estado:** ✅ **COMPLETADO**
+**Existing:**
+- **ADR-020:** Competition Module Domain Design (v1.x baseline)
+- **ADR-025:** Competition Module Evolution v2.0.0 (umbrella ADR - Jan 9, 2026)
+- **ADR-026:** Playing Handicap WHS Calculation (Jan 9, 2026)
 
-| Tarea | Estimación | OWASP | Prioridad | Estado |
-|-------|-----------|-------|-----------|--------|
-| ~~**Account Lockout**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (7 Ene) |
-| ~~**CSRF Protection**~~ | ~~4-6h~~ | A01 | 🔴 CRÍTICA | ✅ **COMPLETADO** (8 Ene) |
-| ~~**Password History**~~ | ~~3-4h~~ | A07 | 🟠 Alta | ✅ **COMPLETADO** (8 Ene) |
-| ~~**Device Fingerprinting**~~ | ~~4-6h~~ | A01 | 🟠 Alta | ✅ **COMPLETADO** (9 Ene) |
-| ~~**2FA/MFA (TOTP)**~~ | ~~12-16h~~ | A07 | 🔴 CRÍTICA | ❌ **REMOVIDO** (no necesario ahora) |
+**New (Sprint 1):**
+- **ADR-031:** Match Play Scoring Calculation (Jan 27, 2026)
+- **ADR-032:** Golf Course Approval Workflow Details (Jan 27, 2026)
+- **ADR-033:** Invitation Token Security and Auto-Enrollment (Jan 27, 2026)
 
-**Total:** ~14-20 horas (4/4 completados) | **OWASP Actual:** ✅ **9.2/10** (v1.13.0 FINALIZADO)
-
-#### Cambios clave v1.13.0:
-- **Account Lockout**: Bloqueo tras 10 intentos fallidos, auto-desbloqueo 30 min, endpoint manual, integración total (ver ADR-027)
-- **CSRF Protection**: Triple capa (header, cookie, SameSite), middleware dedicado, tests exhaustivos (ver ADR-028)
-- **Password History**: Previene reutilización últimas 5 contraseñas, bcrypt hashes en BD, GDPR compliant (ver ADR-029)
-- **Device Fingerprinting**: SHA256 fingerprint, listado/revocación dispositivos, audit trail completo (ver ADR-030)
-- **Security Tests**: 40+ tests nuevos (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
-- **CI/CD Pipeline**: Añadidos jobs de Security Tests y Trivy Container Scan (ver ADR-021)
-
-**Cambios de Scope:**
-- ❌ 2FA/MFA removido: No crítico para app actual (OWASP ya 10.0/10, no hay datos financieros sensibles)
-- ✅ Focus en 4 features de alto impacto
-
-#### 1. ~~Account Lockout Policy~~ ✅ **COMPLETADO (7 Ene 2026)**
-- ✅ Bloqueo tras 10 intentos fallidos (HTTP 423 Locked)
-- ✅ Desbloqueo automático (30 min)
-- ✅ Endpoint manual unlock (POST /auth/unlock-account, Admin)
-- ✅ Persistencia en BD (failed_login_attempts, locked_until)
-- ✅ 5 tests integración pasando (100%)
-- ✅ ADR-027 documentado
-- ⚠️ Email notificación pendiente (opcional, no bloqueante)
-
-**Implementación:** 3 commits (`a9fe089`, `e499add`, `14ecfd0`)
-**Ver:** `docs/architecture/decisions/ADR-027-account-lockout-brute-force-protection.md`
-
-#### 2. ~~CSRF Protection~~ ✅ **COMPLETADO (8 Ene 2026)**
-- ✅ Triple capa: X-CSRF-Token header + double-submit cookie + SameSite="lax"
-- ✅ Middleware CSRFMiddleware con timing-safe comparison
-- ✅ Token 256-bit (secrets.token_urlsafe), 15 min duración
-- ✅ Generación en login + refresh token
-- ✅ Validación en POST/PUT/PATCH/DELETE (exime GET/HEAD/OPTIONS)
-- ✅ Public endpoints exempt (/register, /login, /forgot-password, etc)
-- ✅ 11 tests de seguridad pasando (10 passing + 1 skipped)
-- ✅ ADR-028 documentado
-
-#### 3. Password History ✅ COMPLETADO (8 Ene)
-- ✅ Tabla `password_history` con migración Alembic
-- ✅ Prevención de reutilización últimas 5 contraseñas
-- ✅ Bcrypt hashes almacenados (255 chars)
-- ✅ Cascade delete (GDPR compliance)
-- ✅ Domain events (PasswordHistoryRecordedEvent)
-- ✅ 25 unit tests (PasswordHistoryId + PasswordHistory)
-- ✅ Validación en UpdateSecurity + ResetPassword
-- ✅ ADR-029 documentado
-- ⏳ Cleanup automático (diferido a v1.14.0)
-
-#### 4. ~~Device Fingerprinting~~ ✅ **COMPLETADO (10 Ene 2026)**
-- ✅ UserDevice entity (id, user_id, device_name, user_agent, ip, fingerprint_hash, is_active, last_used_at)
-- ✅ DeviceFingerprint VO: SHA256 hash of User-Agent + IP
-- ✅ **Auto-registro integrado** en LoginUserUseCase y RefreshAccessTokenUseCase (condicional)
-- ✅ RegisterDeviceUseCase inyectado via DI (dependencies.py)
-- ✅ 2 endpoints REST (GET /api/v1/users/me/devices list, DELETE revoke)
-- ✅ 3 use cases (List, Register, Revoke)
-- ✅ 99 tests (86 unit + 13 integration) - 100% passing
-- ✅ Integración completa: 10 archivos modificados (LoginUserUseCase, RefreshAccessTokenUseCase, DTOs, tests)
-- ✅ Partial unique index: (user_id, fingerprint_hash) WHERE is_active=TRUE
-- ✅ Soft delete with audit trail
-- ✅ Domain events: NewDeviceDetectedEvent, DeviceRevokedEvent
-- ✅ Migration: 50ccf425ff32_add_user_devices_table.py
-- ✅ ADR-030 documentado
-- ⏳ Email notificación (diferido a v1.14.0)
+**New (Sprint 2):**
+- **ADR-034:** Competition-GolfCourse Many-to-Many Relationship (Feb 3, 2026)
 
 ---
 
-### v1.14.0 - Compliance & Features - 2-3 semanas
+### v2.1.0 - Compliance & Features (2-3 weeks)
 
-**Objetivo:** GDPR compliance + UX improvements
+**Goal:** GDPR compliance + UX improvements
+**Note:** The RBAC implementation in v2.0.0 is a simplified, table-less design. Future work should build on this foundation.
 
-| Tarea | Estimación | Categoría | Prioridad |
-|-------|-----------|-----------|-----------|
-| **GDPR Compliance** | 8-10h | Legal | 🟠 Alta |
-| **Audit Logging** | 6-8h | Compliance | 🟡 Media |
-| **Sistema Avatares** | 4-6h | UX | 🟡 Media |
-| **Error Handling** | 3-4h | DX | 🟢 Baja |
+**Features:**
+1. **GDPR Compliance** (8-10h):
+   - GET `/api/v1/users/me/export` (complete JSON)
+   - DELETE `/api/v1/users/me` (soft delete)
+   - Data anonymization, consent logging, retention policies (90 days)
 
-**Total:** ~21-28 horas
+2. **Audit Logging** (6-8h):
+   - `AuditLog` model in DB (user_id, action, resource, changes, timestamp, ip)
+   - 90-day retention, CSV/JSON export
 
-#### 1. GDPR Compliance Tools
-- Endpoint `GET /api/v1/users/me/export` (JSON completo)
-- Endpoint `DELETE /api/v1/users/me` (soft delete)
-- Anonimización de datos (GDPR Art. 17)
-- Consent logging
-- Data retention policies (90 días logs)
+3. **Avatar System** (4-6h):
+   - `avatar_url` field, Cloudinary/S3 storage
+   - PUT `/api/v1/users/me/avatar`, DELETE `/api/v1/users/me/avatar`
+   - Validation: max 2MB, jpg/png/webp
 
-#### 2. Audit Logging Completo
-- Modelo `AuditLog` en BD (user_id, action, resource, changes, timestamp, ip)
-- Log de TODAS las acciones CRUD
-- Retención 90 días
-- Exportación CSV/JSON para compliance
-- Dashboard básico (Sentry breadcrumbs)
+4. **Unified Error Handling** (3-4h):
+   - Centralized exception handlers
+   - Standard format: `{"error": {"code": "...", "message": "...", "details": {}}}`
+   - ErrorCode enum (40+ codes), i18n (ES/EN)
 
-#### 3. Sistema de Avatares
-- Campo `avatar_url` en User
-- Migración Alembic
-- Endpoints: `PUT /api/v1/users/me/avatar`, `DELETE /api/v1/users/me/avatar`
-- Storage: Cloudinary (5GB free) o AWS S3
-- Validación: max 2MB, formatos (jpg/png/webp)
-- Tests: 10+ tests
-
-#### 4. Gestión de Errores Unificada
-- Exception handlers centralizados
-- Formato estándar:
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Competition name is required",
-    "details": {"field": "name", "constraint": "required"}
-  }
-}
-```
-- ErrorCode enum (40+ códigos)
-- Traducción i18n (ES/EN)
+**Total:** ~21-28 hours
 
 ---
 
-### v1.15.0 - AI & RAG Module - 2-3 semanas
+### v2.2.0 - AI & RAG Module (2-3 weeks)
 
-**Objetivo:** Chatbot asistente de reglas de golf
+**Goal:** Golf rules assistant chatbot
 
-**Stack:** LangChain + Pinecone + OpenAI GPT-4o-mini
-**Costo:** $1-2/mes
-**Knowledge Base:** R&A Official Rules of Golf
+**Stack:** LangChain + Pinecone + OpenAI GPT-4o-mini | **Cost:** $1-2/month
 
-#### Features
-- RAG chatbot con búsqueda semántica
-- Solo disponible si `competition.status == IN_PROGRESS`
-- Rate limiting dual-layer:
-  - Global: 10 queries/día por usuario
-  - Por competición: 3/día (participante), 6/día (creador)
-  - Por minuto: 10 queries/min
-- Caché Redis (TTL 7 días, 80% hit rate esperado)
-- Pre-FAQs (20-30 hardcodeadas)
-- Temperatura 0.3 (respuestas consistentes)
+**Features:**
+- RAG chatbot with semantic search
+- Only available if `competition.status == IN_PROGRESS`
+- Dual-layer rate limiting: 10/day global, 3/day player, 6/day creator
+- Redis cache (TTL 7 days, 80% hit rate expected)
+- Pre-FAQs (20-30 hardcoded), temperature 0.3
 
-#### Arquitectura
+**Architecture:**
 ```
 src/modules/ai/
 ├── domain/           # Entities, VOs, Interfaces
@@ -432,122 +439,159 @@ src/modules/ai/
 └── infrastructure/   # Pinecone, Redis, OpenAI, API
 ```
 
-#### Ports
-- `VectorRepositoryInterface` - Pinecone semantic search
-- `CacheServiceInterface` - Redis caching
-- `DailyQuotaServiceInterface` - Rate limiting dual-layer
-- `LLMServiceInterface` - OpenAI GPT-4o-mini
+**Ports:** VectorRepository, CacheService, DailyQuotaService, LLMService
 
-#### Endpoints
-- `POST /api/v1/competitions/{id}/ai/ask` - Query chatbot
-- `GET /api/v1/competitions/{id}/ai/quota` - Remaining queries
+**Endpoints:**
+- POST `/api/v1/competitions/{id}/ai/ask`
+- GET `/api/v1/competitions/{id}/ai/quota`
 
-#### Tests
-- 60+ tests (unit + integration)
-- Mocks para OpenAI (evitar costos)
-- Tests de rate limiting
+**Tests:** 60+ tests (mocking OpenAI)
+
+**Knowledge Base:** R&A Official Rules of Golf
 
 ---
 
-### v2.0.0 - Major Release (BREAKING CHANGES) - 4-6 meses
+### v3.0.0 - Major Release (BREAKING CHANGES) (4-6 months)
 
-**Objetivo:** Escalabilidad + Features avanzadas
+**Goal:** Scalability + Advanced Features
 
-#### Breaking Changes
-- ❌ Eliminar tokens del response body (solo httpOnly cookies)
-- ❌ Eliminar compatibilidad con headers Authorization (deprecation period: 6 meses)
-- ❌ API v1 deprecada → API v2
+**Breaking Changes:**
+- ❌ Remove tokens from response body (httpOnly cookies only)
+- ❌ Remove support for Authorization headers (6-month deprecation)
+- ❌ Deprecate API v1 → API v2
 
-#### Security
+**Security:**
 - OAuth 2.0 / Social Login (Google, Apple, GitHub)
 - WebAuthn (Hardware Security Keys)
-- Advanced Threat Detection (ML-based anomaly detection)
+- Advanced Threat Detection (ML-based anomaly)
 - SOC 2 Compliance preparation
 
-#### Features
-- Analytics y estadísticas avanzadas
-- Integración USGA, Golf Australia
+**Features:**
+- Advanced analytics and statistics
+- USGA, Golf Australia integration
 - Push notifications (Firebase)
-- Sistema de pagos (Stripe)
-- Rankings globales
-- Galería de fotos (AWS S3 + CloudFront)
+- Payment system (Stripe)
+- Global rankings
+- Photo gallery (AWS S3 + CloudFront)
 
-#### Infrastructure
+**Infrastructure:**
 - Kubernetes deployment
 - Blue-green deployments
 - Auto-scaling (HPA)
-- CDN para assets estáticos
+- CDN for static assets
 - Database replication + read replicas
 - Multi-region deployment
 
 ---
 
-### v2.1.0 - Competition Module Evolution ⭐ PRIORIDAD MÁXIMA - 7 semanas
-
-**Objetivo:** Sistema completo de gestión de torneos Ryder Cup: campos de golf, planificación, live scoring con validación dual y leaderboards en tiempo real.
-
-**Estado:** 🔵 En Planificación (Ene 2026) | **Prioridad:** ⭐ MÁXIMA
-
-**📋 Ver documentación completa:** `docs/DATABASE_ERD.md`, `docs/architecture/decisions/ADR-025*.md`
-
-#### Bloques Funcionales (9 bloques, 7 semanas)
-
-| # | Bloque | Semana | Tests | Descripción |
-|---|--------|--------|-------|-------------|
-| 1 | Roles & Permisos | 1-2 | ~40 | Sistema formal Admin/Creator/Player |
-| 2 | Golf Courses | 1-2 | ~60 | CRUD campos con tees y hoyos (18) |
-| 3 | Course Approval | 3 | ~30 | Creator crea → Admin aprueba |
-| 4 | Schedule | 4 | ~50 | Rounds + Matches + asignación |
-| 5 | Invitations | 4 | ~45 | Buscar/invitar + auto-registro token |
-| 6 | Playing Handicap | 5 | ~25 | Cálculo WHS automático |
-| 7 | Live Scoring | 5 | ~40 | Hoyo a hoyo + navegación libre |
-| 8 | Dual Validation | 6-7 | ~35 | Validación independiente |
-| 9 | Leaderboards | 6-7 | ~30 | Match + Global real-time |
-
-**Total:** ~355 tests | 35 endpoints | 14 entidades
-
-#### ADRs Pendientes
-- ADR-022 a ADR-026 (Competition Evolution, Approval, WHS, Scoring, Invitations)
-
----
-
-## 📅 Timeline Recomendado
+## 📅 Recommended Timeline
 
 ```
-2026 Q1  │ v1.13.0 - Security Hardening (Account Lockout + CSRF + Device Fingerprinting + Password History)
-          │  🔹 Security Tests + Trivy (CI/CD)
-2026 Q2  │ v1.14.0 - Compliance (GDPR, Audit Logging, Avatares)
-2026 Q2  │ v1.15.0 - AI & RAG Module (Golf Rules Assistant)
-2026 Q3  │ v2.1.0 - Competition Module Evolution (7 semanas) ⭐ PRIORIDAD MÁXIMA
-2026 Q4+ │ v2.0.0 - Major Release (planificación + desarrollo)
+2026 Q1  │ ✅ v1.13.0 - Security Hardening (COMPLETED)
+          │ ✅ v1.13.1 - Device Detection + HTTP Security (COMPLETED)
+          │ ✅ v2.0.0 - RBAC Foundation (Jan 29, 2026) (COMPLETED)
+          │ ⭐ v2.0.1 - Competition Module Evolution (Jan 27 - Mar 24) ← IN PROGRESS
+2026 Q2  │ v2.1.0 - Compliance (GDPR, Audit Logging, Avatars)
+          │ v2.2.0 - AI & RAG Module (Golf Rules Assistant)
+2026 Q3  │ v2.1.1 - WebSocket, Custom points
+          │ v2.1.2 - Advanced Stats, Export PDF
+2026 Q4+ │ v3.0.0 - Major Release (planning + development)
 ```
 
 ---
 
-## 🔗 Referencias
+## 🔗 References
 
-- **ADRs:** `docs/architecture/decisions/ADR-*.md`
-- **CHANGELOG:** `CHANGELOG.md`
-- **CLAUDE:** `CLAUDE.md` (contexto completo del proyecto)
+**Documentation:**
+- **ADRs:** `docs/architecture/decisions/ADR-*.md` (33 total ADRs)
+- **CHANGELOG:** `CHANGELOG.md` (detailed change history)
+- **CLAUDE:** `CLAUDE.md` (complete project context)
 - **Frontend ROADMAP:** `../RyderCupWeb/ROADMAP.md`
+- **DATABASE_ERD:** `docs/DATABASE_ERD.md`
+
+**Standards:**
 - **OWASP Top 10:** https://owasp.org/www-project-top-ten/
 - **ASVS:** https://owasp.org/www-project-application-security-verification-standard/
+- **WHS:** https://www.usga.org/handicapping.html
+- **R&A Rules:** https://www.randa.org/en/rog/the-rules-of-golf
 
-**ADR relevantes:**
-- ADR-027: Account Lockout (Brute Force Protection)
-- ADR-028: CSRF Protection (Cross-Site Request Forgery)
-- ADR-021: GitHub Actions CI/CD Pipeline (evolución security jobs)
-
-**Cobertura de tests de seguridad:**
-- 45+ tests de seguridad (CSRF, XSS, SQLi, Auth Bypass, Rate Limiting)
-- 100% passing (CI/CD bloquea si falla alguno)
-
-**Cobertura de middleware y cookies:**
-- Middleware CSRF activo en todos los endpoints protegidos
-- Cookie csrf_token (no httpOnly) + header X-CSRF-Token (double-submit)
-- Renovación automática en login y refresh
+**Key ADRs for v2.0.0:**
+- ADR-020: Competition Module Domain Design (baseline)
+- ADR-025: Competition Module Evolution v2.0.0 (umbrella)
+- ADR-026: Playing Handicap WHS Calculation
+- ADR-031: Match Play Scoring Calculation
+- ADR-032: Golf Course Approval Workflow Details
+- ADR-033: Invitation Token Security
 
 ---
 
-**Próxima revisión:** ✅ v1.13.0 COMPLETADO (9 Ene 2026) - Iniciar v1.14.0 (Compliance & Features)
-**Responsable:** Equipo Backend
+## 📜 Completed Version History
+
+### v1.13.1 - Current Device Detection + HTTP Security (Jan 18, 2026) ✅
+
+**Changes:**
+- `is_current_device` field in GET /users/me/devices (UX improvement)
+- Centralized helper `http_context_validator.py` (306 lines)
+- IP spoofing prevention with `TRUSTED_PROXIES` whitelist
+- Sentinel validation (rejects "unknown", "", localhost)
+- +36 HTTP security tests (100% passing)
+- **OWASP:** 9.2 → 9.4 (+0.2) - A01(10/10), A03(10/10)
+
+---
+
+### v1.13.0 - Security Hardening (Jan 9, 2026) ✅
+
+**Features:**
+1. **Account Lockout:** Lock after 10 failed attempts, auto-unlock in 30 min, manual unlock endpoint
+2. **CSRF Protection:** Triple layer (header, cookie, SameSite), 256-bit token, middleware
+3. **Password History:** Prevents reuse of last 5 passwords, bcrypt hashes, GDPR compliant
+4. **Device Fingerprinting:** SHA256 fingerprint, list/revoke devices, soft delete, auto-register on login/refresh
+
+**Tests:** 905 → 1,021 (+116 tests)
+**OWASP:** 8.5 → 9.2 (+0.7)
+**ADRs:** ADR-027, ADR-028, ADR-029, ADR-030
+
+---
+
+### v1.12.1 - Snyk Code SAST (Jan 5, 2026) ✅
+
+- Snyk Code (SAST) in CI/CD pipeline
+- Detection: SQL Injection, XSS, Hardcoded secrets, Path Traversal, Weak Crypto
+- Separate reports: dependencies + code
+- Artifacts retention: 30 days
+
+---
+
+### v1.12.0 - Snyk Vulnerability Fixes (Jan 3, 2026) ✅
+
+- 6 CVEs resolved: authlib, setuptools, zipp, marshmallow
+- Snyk integration in CI/CD (severity: HIGH)
+- Tests: 905/905 (100%)
+
+---
+
+### Previous Versions (v1.0.0 - v1.11.0)
+
+| Version | Date | Main Features |
+|---------|------|---------------|
+| **v1.11.0** | Dec 26, 2025 | Password Reset System (256-bit token, bilingual emails, +51 tests) |
+| **v1.10.0** | Nov 30, 2025 | CI/CD Pipeline GitHub Actions (7 parallel jobs, Mypy, Gitleaks) |
+| **v1.9.2** | Nov 25, 2025 | Cognitive complexity refactoring (competition_routes.py) |
+| **v1.9.0** | Nov 25, 2025 | Increased Enrollment test coverage (7 use cases) |
+| **v1.8.1** | Nov 25, 2025 | BREAKING: Competitions now include `countries` field (array) |
+| **v1.8.0** | Nov 24, 2025 | Security Enhancements (httpOnly Cookies, Refresh Tokens, Rate Limiting, CORS, Security Headers, Logging, Correlation IDs, Validation, Sentry) |
+| **v1.7.0** | Nov 23, 2025 | User Nationality, Nested Creator, My Competitions Filter, Search Parameters |
+| **v1.6.4** | Nov 22, 2025 | Dual format support: `number_of_players` → `max_players` |
+| **v1.6.0** | Nov 18, 2025 | Competition Module REST API (20 endpoints: 10 Competition + 8 Enrollment + 2 Countries) |
+| **v1.5.0** | Nov 18, 2025 | Competition Module Infrastructure (Alembic migrations: 4 tables + 166 countries + 614 borders) |
+| **v1.3.0** | Nov 18, 2025 | Competition Module Domain + Application (173 tests, 11 domain events) |
+| **v1.2.0** | Nov 14, 2025 | Email Verification (24 tests, Mailgun integration) |
+| **v1.1.0** | Nov 12, 2025 | Email Verification System (unique tokens, bilingual templates) |
+| **v1.0.0** | Nov 1, 2025 | Clean Architecture + DDD, User Module, JWT Auth, Handicap RFEG, 420 tests |
+
+**See full details:** `CHANGELOG.md`
+
+---
+
+**Next Review:** v2.0.1 Sprint 1 (Feb 7, 2026)
+**Owner:** Backend Team

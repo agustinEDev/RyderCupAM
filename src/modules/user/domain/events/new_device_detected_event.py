@@ -47,12 +47,13 @@ class NewDeviceDetectedEvent(DomainEvent):
 
     Examples:
         >>> from src.modules.user.domain.value_objects.user_id import UserId
+        >>> from datetime import datetime
         >>> event = NewDeviceDetectedEvent(
         ...     user_id=UserId.generate(),
         ...     device_name="Chrome on macOS",
         ...     ip_address="192.168.1.100",
         ...     user_agent="Mozilla/5.0 (Macintosh)...",
-        ...     occurred_on=datetime.utcnow()
+        ...     occurred_on=datetime.now()
         ... )
         >>> event.device_name
         'Chrome on macOS'
