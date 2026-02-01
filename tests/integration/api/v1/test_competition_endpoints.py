@@ -12,8 +12,10 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    approve_golf_course,
     create_authenticated_user,
     create_competition,
+    create_golf_course,
 )
 
 
@@ -660,3 +662,311 @@ class TestEdgeCases:
         )
 
         assert response.status_code == 400
+
+
+class TestCompetitionGolfCourses:
+    """Tests para gestión de campos de golf en competiciones."""
+
+    @pytest.mark.asyncio
+    async def test_add_golf_course_to_competition_success(self, client: AsyncClient, admin_user):
+        """Añadir campo de golf aprobado a competición DRAFT es exitoso."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "golf_creator@test.com", "P@ssw0rd123!", "Golf", "Creator"
+        )
+
+        # Crear competición en DRAFT
+        comp = await create_competition(client, creator["cookies"])
+
+        # Crear y aprobar campo de golf
+        golf_course = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], golf_course["id"])
+
+        # Act
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 201
+        data = response.json()
+        assert data["competition_id"] == comp["id"]
+        assert data["golf_course_id"] == golf_course["id"]
+        assert data["display_order"] == 1
+        assert "added_at" in data
+
+    @pytest.mark.asyncio
+    async def test_add_golf_course_not_creator_returns_403(self, client: AsyncClient, admin_user):
+        """Añadir campo por usuario que no es creador retorna 403."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "comp_owner@test.com", "P@ssw0rd123!", "Owner", "User"
+        )
+        other_user = await create_authenticated_user(
+            client, "other_user@test.com", "P@ssw0rd123!", "Other", "User"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        golf_course = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], golf_course["id"])
+
+        # Act
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=other_user["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_add_golf_course_not_draft_returns_400(self, client: AsyncClient, admin_user):
+        """Añadir campo a competición ACTIVE retorna 400."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "active_comp@test.com", "P@ssw0rd123!", "Active", "Comp"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        golf_course = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], golf_course["id"])
+
+        # Act
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 400
+        assert "DRAFT" in response.text
+
+    @pytest.mark.asyncio
+    async def test_remove_golf_course_from_competition_success(self, client: AsyncClient, admin_user):
+        """Eliminar campo de golf de competición DRAFT es exitoso."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "remove_gc@test.com", "P@ssw0rd123!", "Remove", "GC"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        golf_course = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], golf_course["id"])
+
+        # Añadir campo primero
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Act
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}/golf-courses/{golf_course['id']}",
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["competition_id"] == comp["id"]
+        assert data["golf_course_id"] == golf_course["id"]
+        assert "removed_at" in data
+
+    @pytest.mark.asyncio
+    async def test_remove_golf_course_not_assigned_returns_400(self, client: AsyncClient, admin_user):
+        """Eliminar campo no asociado retorna 400."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "remove_unassigned@test.com", "P@ssw0rd123!", "Remove", "Unassigned"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        golf_course = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], golf_course["id"])
+
+        # Act (intentar eliminar sin haber añadido)
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}/golf-courses/{golf_course['id']}",
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 400
+        assert "no está asociado" in response.text.lower() or "not assigned" in response.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_reorder_golf_courses_success(self, client: AsyncClient, admin_user):
+        """Reordenar campos de golf en competición DRAFT es exitoso."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "reorder_gc@test.com", "P@ssw0rd123!", "Reorder", "GC"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+
+        # Crear y añadir 3 campos de golf
+        gc1 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc1["id"])
+
+        gc2 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc2["id"])
+
+        gc3 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc3["id"])
+
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc1["id"]},
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc2["id"]},
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc3["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Act - Reordenar en orden inverso
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/golf-courses/reorder",
+            json={"golf_course_ids": [gc3["id"], gc2["id"], gc1["id"]]},
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["competition_id"] == comp["id"]
+        assert data["success"] is True
+
+        # Verificar nuevo orden
+        list_response = await client.get(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            cookies=creator["cookies"],
+        )
+        golf_courses_list = list_response.json()
+        assert golf_courses_list[0]["golf_course_id"] == gc3["id"]
+        assert golf_courses_list[0]["display_order"] == 1
+        assert golf_courses_list[1]["golf_course_id"] == gc2["id"]
+        assert golf_courses_list[1]["display_order"] == 2
+        assert golf_courses_list[2]["golf_course_id"] == gc1["id"]
+        assert golf_courses_list[2]["display_order"] == 3
+
+    @pytest.mark.asyncio
+    async def test_reorder_golf_courses_missing_ids_returns_400(self, client: AsyncClient, admin_user):
+        """Reordenar con lista incompleta de IDs retorna 400."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "reorder_missing@test.com", "P@ssw0rd123!", "Reorder", "Missing"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+
+        gc1 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc1["id"])
+
+        gc2 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc2["id"])
+
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc1["id"]},
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc2["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Act - Enviar solo 1 de los 2 IDs
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/golf-courses/reorder",
+            json={"golf_course_ids": [gc1["id"]]},
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 400
+        assert "completa" in response.text.lower() or "missing" in response.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_list_golf_courses_success(self, client: AsyncClient, admin_user):
+        """Listar campos de golf de una competición es exitoso."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "list_gc@test.com", "P@ssw0rd123!", "List", "GC"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+
+        gc1 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc1["id"])
+
+        gc2 = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin_user["cookies"], gc2["id"])
+
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc1["id"]},
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc2["id"]},
+            cookies=creator["cookies"],
+        )
+
+        # Act
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 200
+        golf_courses = response.json()
+        assert len(golf_courses) == 2
+        assert golf_courses[0]["golf_course_id"] == gc1["id"]
+        assert golf_courses[0]["display_order"] == 1
+        assert golf_courses[1]["golf_course_id"] == gc2["id"]
+        assert golf_courses[1]["display_order"] == 2
+
+        # Verificar que incluye datos completos del campo
+        assert "golf_course" in golf_courses[0]
+        assert "name" in golf_courses[0]["golf_course"]
+        assert "tees" in golf_courses[0]["golf_course"]
+        assert "holes" in golf_courses[0]["golf_course"]
+
+    @pytest.mark.asyncio
+    async def test_list_golf_courses_empty_returns_empty_list(self, client: AsyncClient):
+        """Listar campos de competición sin campos retorna lista vacía."""
+        # Arrange
+        creator = await create_authenticated_user(
+            client, "list_empty@test.com", "P@ssw0rd123!", "List", "Empty"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+
+        # Act
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            cookies=creator["cookies"],
+        )
+
+        # Assert
+        assert response.status_code == 200
+        golf_courses = response.json()
+        assert len(golf_courses) == 0
+        assert golf_courses == []
