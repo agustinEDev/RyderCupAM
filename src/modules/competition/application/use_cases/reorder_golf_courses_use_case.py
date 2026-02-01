@@ -115,22 +115,54 @@ class ReorderGolfCoursesUseCase:
                     f"Estado actual: {competition.status.value}"
                 )
 
-            # 4. Convertir UUIDs a GolfCourseId
-            golf_course_ids = [GolfCourseId(uuid) for uuid in request.golf_course_ids]
+            # 4. Convertir UUIDs a tuplas (GolfCourseId, display_order)
+            # El orden en la lista determina el display_order (índice + 1)
+            new_order = [
+                (GolfCourseId(uuid), idx + 1)
+                for idx, uuid in enumerate(request.golf_course_ids)
+            ]
 
-            # 5. Reordenar campos (validación en dominio)
-            try:
-                competition.reorder_golf_courses(golf_course_ids)
-            except ValueError as e:
-                # Puede ser por duplicados, missing IDs, o extra IDs
-                raise InvalidReorderError(str(e)) from e
+            # 5. Validar que todos los campos existen y no hay duplicados
+            if len(new_order) != len(competition._golf_courses):
+                raise InvalidReorderError(
+                    f"Debes especificar el orden para todos los campos. "
+                    f"Esperados: {len(competition._golf_courses)}, Recibidos: {len(new_order)}"
+                )
 
-            # 6. Guardar la competición actualizada
-            await self._uow.competitions.save(competition)
+            # Validar que todos los IDs existen en la competición
+            competition_gc_ids = {cgc.golf_course_id for cgc in competition._golf_courses}
+            new_order_ids = {gc_id for gc_id, _ in new_order}
+            if competition_gc_ids != new_order_ids:
+                raise InvalidReorderError(
+                    "La lista de IDs no coincide con los campos actuales de la competición"
+                )
 
-        # 7. Construir respuesta
+            # 6. Reordenar en dos fases para evitar violaciones de UNIQUE constraint
+            # Fase 1: Asignar valores temporales altos (10000+) que no colisionan con 1-N
+            for idx, (golf_course_id, _) in enumerate(new_order):
+                for cgc in competition._golf_courses:
+                    if cgc.golf_course_id == golf_course_id:
+                        cgc._display_order = 10000 + idx + 1  # 10001, 10002, 10003, etc.
+                        break
+
+            # Flush para persistir valores temporales antes de asignar los finales
+            await self._uow.flush()
+
+            # Fase 2: Asignar valores finales (1, 2, 3...)
+            for golf_course_id, new_display_order in new_order:
+                for cgc in competition._golf_courses:
+                    if cgc.golf_course_id == golf_course_id:
+                        cgc._display_order = new_display_order
+                        break
+
+            competition.updated_at = datetime.now()
+
+            # 7. Guardar la competición actualizada
+            await self._uow.competitions.update(competition)
+
+        # 8. Construir respuesta
         return ReorderGolfCoursesResponseDTO(
             competition_id=request.competition_id,
-            golf_course_count=len(golf_course_ids),
+            golf_course_count=len(new_order),
             reordered_at=datetime.now(),
         )

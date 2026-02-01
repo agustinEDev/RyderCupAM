@@ -63,6 +63,30 @@ class CompetitionGolfCourseId:
             return False
         return self._value == other._value
 
+    def __lt__(self, other: "CompetitionGolfCourseId") -> bool:
+        """Less than comparison for sorting (required by SQLAlchemy)."""
+        if not isinstance(other, CompetitionGolfCourseId):
+            return NotImplemented
+        return self._value < other._value
+
+    def __le__(self, other: "CompetitionGolfCourseId") -> bool:
+        """Less than or equal comparison for sorting."""
+        if not isinstance(other, CompetitionGolfCourseId):
+            return NotImplemented
+        return self._value <= other._value
+
+    def __gt__(self, other: "CompetitionGolfCourseId") -> bool:
+        """Greater than comparison for sorting."""
+        if not isinstance(other, CompetitionGolfCourseId):
+            return NotImplemented
+        return self._value > other._value
+
+    def __ge__(self, other: "CompetitionGolfCourseId") -> bool:
+        """Greater than or equal comparison for sorting."""
+        if not isinstance(other, CompetitionGolfCourseId):
+            return NotImplemented
+        return self._value >= other._value
+
     def __hash__(self) -> int:
         """Permite usar en sets y como dict key."""
         return hash(self._value)

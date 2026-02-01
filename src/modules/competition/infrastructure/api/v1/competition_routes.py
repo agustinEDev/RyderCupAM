@@ -1557,12 +1557,39 @@ async def list_competition_golf_courses(
                     detail=f"No existe competición con ID {competition_id}",
                 )
 
-            # Construir respuesta con datos básicos de cada campo
+            # Construir respuesta con datos completos del campo de golf (incluyendo tees y holes)
             golf_courses_list = [
                 {
                     "golf_course_id": str(gc.golf_course_id.value),
                     "display_order": gc.display_order,
                     "created_at": gc.created_at.isoformat(),
+                    "golf_course": {
+                        "id": str(gc.golf_course.id.value),
+                        "name": gc.golf_course.name,
+                        "country_code": gc.golf_course.country_code.value,
+                        "course_type": gc.golf_course.course_type.value,
+                        "total_par": gc.golf_course.total_par,
+                        "approval_status": gc.golf_course.approval_status.value,
+                        "tees": [
+                            {
+                                "id": str(tee.id.value),
+                                "identifier": tee.identifier,
+                                "category": tee.category.value,
+                                "course_rating": float(tee.course_rating),
+                                "slope_rating": int(tee.slope_rating),
+                            }
+                            for tee in gc.golf_course.tees
+                        ],
+                        "holes": [
+                            {
+                                "id": str(hole.id.value),
+                                "hole_number": hole.hole_number,
+                                "par": hole.par,
+                                "stroke_index": hole.stroke_index,
+                            }
+                            for hole in gc.golf_course.holes
+                        ],
+                    },
                 }
                 for gc in competition.golf_courses
             ]

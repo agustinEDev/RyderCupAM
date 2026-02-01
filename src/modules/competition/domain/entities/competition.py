@@ -635,7 +635,7 @@ class Competition:
                 f"Recibido: {sorted(orders)}"
             )
 
-        # Aplicar nuevo orden
+        # Aplicar nuevo orden directamente
         for golf_course_id, new_display_order in new_order:
             # Buscar el campo
             for cgc in self._golf_courses:

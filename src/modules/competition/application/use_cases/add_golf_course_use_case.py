@@ -18,6 +18,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -156,7 +157,7 @@ class AddGolfCourseToCompetitionUseCase:
                 )
 
             # 5. Verificar que el campo esté aprobado
-            if not golf_course.is_approved():
+            if golf_course.approval_status != ApprovalStatus.APPROVED:
                 raise GolfCourseNotApprovedError(
                     f"El campo de golf '{golf_course.name}' no está aprobado. "
                     f"Estado actual: {golf_course.approval_status.value}"
@@ -175,7 +176,7 @@ class AddGolfCourseToCompetitionUseCase:
                 raise  # Re-lanzar si es otro tipo de ValueError
 
             # 7. Guardar la competición actualizada
-            await self._uow.competitions.save(competition)
+            await self._uow.competitions.update(competition)
 
         # 8. Construir respuesta
         # Buscar el display_order asignado (último en la lista)

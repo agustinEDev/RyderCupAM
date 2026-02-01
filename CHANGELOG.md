@@ -42,6 +42,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Removed `mock_uow.commit.assert_called_once()` assertions from ~16-20 unit tests
   - Result: 100% consistent Clean Architecture across all modules
 
+### Fixed
+- **Competition ↔ GolfCourse M2M Endpoints** - Critical bug fixes (12 issues resolved):
+  1. **Dependency Injection**: Added missing DI functions (`get_add_golf_course_to_competition_use_case`, `get_remove_golf_course_from_competition_use_case`, `get_reorder_golf_courses_use_case`) - fixes 404 errors
+  2. **GolfCourseId Value Object**:
+     - Constructor: Accept both `str` and `uuid.UUID`, removed invalid `version=4` parameter
+     - Added comparison operators (`__lt__`, `__le__`, `__gt__`, `__ge__`) for SQLAlchemy sorting
+     - Property `.value` returns `uuid.UUID` object instead of string
+  3. **CompetitionGolfCourseId Value Object**: Added comparison operators (`__lt__`, `__le__`, `__gt__`, `__ge__`) for SQLAlchemy sorting
+  4. **GolfCourseIdType TypeDecorator**: Fixed `process_bind_param()` to return `value.value` directly (already UUID object)
+  5. **AddGolfCourseUseCase**:
+     - Line 160: Fixed approval check from `is_approved()` to `approval_status != ApprovalStatus.APPROVED`
+     - Line 168: Fixed property access from `golf_course.country` to `golf_course.country_code`
+     - Line 179: Fixed repository method from `.save()` to `.update()`
+  6. **RemoveGolfCourseUseCase**: Line 124 - Fixed `.save()` to `.update()`
+  7. **ReorderGolfCoursesUseCase**:
+     - Line 120-123: Fixed data type conversion - now creates `list[tuple[GolfCourseId, int]]` instead of `list[GolfCourseId]`
+     - Line 133: Fixed `.save()` to `.update()`
+     - **Two-phase reorder strategy**: Implemented flush-based approach to avoid UNIQUE + CHECK constraint violations
+       - Phase 1: Assign temporary high values (10001+) to all fields
+       - Flush to persist temporary values
+       - Phase 2: Assign final values (1, 2, 3...)
+       - Respects CHECK constraint `display_order >= 1` and UNIQUE constraint `(competition_id, display_order)`
+  8. **CompetitionRepository**: Added eager loading with `selectinload()` for nested `golf_course` relationship
+  9. **Competition Mapper**: Added `relationship()` for `_golf_courses` with proper cascade and ordering
+  10. **CompetitionGolfCourse Mapper**: Added `relationship()` for `golf_course` entity
+  11. **GET /golf-courses endpoint**: Enriched response to include complete golf course data (tees with ratings, holes with par/stroke index)
+  12. **Competition Entity**: Simplified `reorder_golf_courses()` - moved two-phase logic to use case layer for flush access
+
 ### Technical Debt
 - **Pending**: Application layer tests for 3 new use cases (~31 tests)
 - **Pending**: Integration tests for 4 new API endpoints

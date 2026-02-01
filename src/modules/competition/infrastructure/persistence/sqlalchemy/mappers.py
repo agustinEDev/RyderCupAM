@@ -19,7 +19,7 @@ from sqlalchemy import (
     Table,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import composite
+from sqlalchemy.orm import composite, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
 # Domain Entities
@@ -52,7 +52,8 @@ from src.modules.competition.domain.value_objects.handicap_settings import (
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 
-# Golf Course Value Object (FK)
+# Golf Course Entity and Value Object (FK)
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 # User Value Object (FK)
@@ -610,6 +611,13 @@ def start_competition_mappers():
                 ),
                 # 7. max_players - Mapeo directo (mismo nombre)
                 "max_players": competitions_table.c.max_players,
+                # 8. Relationship con CompetitionGolfCourse (One-to-Many)
+                "_golf_courses": relationship(
+                    CompetitionGolfCourse,
+                    cascade="all, delete-orphan",
+                    order_by=competition_golf_courses_table.c.display_order,
+                    foreign_keys=[competition_golf_courses_table.c.competition_id],
+                ),
             },
         )
 
@@ -640,6 +648,12 @@ def start_competition_mappers():
                 "_golf_course_id": competition_golf_courses_table.c.golf_course_id,
                 "_display_order": competition_golf_courses_table.c.display_order,
                 "_created_at": competition_golf_courses_table.c.created_at,
+                # Relationship to load the full GolfCourse entity
+                "golf_course": relationship(
+                    GolfCourse,
+                    foreign_keys=[competition_golf_courses_table.c.golf_course_id],
+                    lazy="select",  # Will be overridden by explicit joinedload() in queries
+                ),
             },
         )
 

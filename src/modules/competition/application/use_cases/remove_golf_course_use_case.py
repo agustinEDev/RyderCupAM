@@ -121,7 +121,7 @@ class RemoveGolfCourseFromCompetitionUseCase:
                 raise GolfCourseNotAssignedError(str(e)) from e
 
             # 5. Guardar la competición actualizada
-            await self._uow.competitions.save(competition)
+            await self._uow.competitions.update(competition)
 
         # 6. Construir respuesta
         return RemoveGolfCourseResponseDTO(
