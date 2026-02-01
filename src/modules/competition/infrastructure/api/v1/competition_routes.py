@@ -1303,7 +1303,7 @@ async def cancel_competition(
 
 
 @router.post(
-    "/competitions/{competition_id}/golf-courses",
+    "/{competition_id}/golf-courses",
     response_model=AddGolfCourseResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Añadir campo de golf a competición",
@@ -1376,7 +1376,7 @@ async def add_golf_course_to_competition(
 
 
 @router.delete(
-    "/competitions/{competition_id}/golf-courses/{golf_course_id}",
+    "/{competition_id}/golf-courses/{golf_course_id}",
     response_model=RemoveGolfCourseResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Eliminar campo de golf de competición",
@@ -1438,7 +1438,7 @@ async def remove_golf_course_from_competition(
 
 
 @router.put(
-    "/competitions/{competition_id}/golf-courses/reorder",
+    "/{competition_id}/golf-courses/reorder",
     response_model=ReorderGolfCoursesResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Reordenar campos de golf en competición",
@@ -1510,7 +1510,7 @@ async def reorder_golf_courses(
 
 
 @router.get(
-    "/competitions/{competition_id}/golf-courses",
+    "/{competition_id}/golf-courses",
     response_model=list[dict],
     status_code=status.HTTP_200_OK,
     summary="Listar campos de golf de una competición",
