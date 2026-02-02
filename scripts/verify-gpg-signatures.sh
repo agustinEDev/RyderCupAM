@@ -113,28 +113,31 @@ while IFS= read -r commit; do
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    # Skip ALL merge commits (signature not required for merges)
+    # Check if this is a GitHub-generated merge (auto-merge)
+    IS_GITHUB_MERGE=false
     if [ "$PARENT_COUNT" -ge 2 ]; then
         MERGE_COUNT=$((MERGE_COUNT + 1))
-
-        # Detect if it's a GitHub auto-merge for reporting purposes
-        IS_GITHUB_MERGE=false
+        # Detect GitHub auto-merges by author/email or commit message patterns
+        # Patterns:
+        # 1. Author/email contains GitHub
+        # 2. "Merge pull request #123"
+        # 3. "Merge abc123 into def456" (GitHub auto-merge format)
+        # 4. "(#123)" - PR number in conventional commit (GitHub PR merge)
         if echo "$COMMIT_AUTHOR" | grep -iq "GitHub" || \
            echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
            echo "$COMMIT_MSG" | grep -q "Merge pull request" || \
-           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}"; then
+           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}" || \
+           echo "$COMMIT_MSG" | grep -Eq "\(#[0-9]+\)"; then
             IS_GITHUB_MERGE=true
-            GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         fi
+    fi
 
-        # All merge commits are excluded from signature verification
+    if [ "$IS_GITHUB_MERGE" = true ]; then
+        # GitHub auto-merge - signature not required
         echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
-        if [ "$IS_GITHUB_MERGE" = true ]; then
-            echo "   Type: GITHUB AUTO-MERGE (signature not required)"
-        else
-            echo "   Type: MERGE COMMIT (signature not required)"
-        fi
+        echo "   Type: GITHUB AUTO-MERGE (signature not required)"
+        GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         VALID_COUNT=$((VALID_COUNT + 1))
     else
         # Regular commit or manual merge - verify signature
@@ -173,9 +176,8 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
-echo "   Merge commits (signature not required): $MERGE_COUNT"
-echo "      ↳ GitHub auto-merges: $GITHUB_AUTO_MERGE_COUNT"
-echo "      ↳ Manual merges: $((MERGE_COUNT - GITHUB_AUTO_MERGE_COUNT))"
+echo "   Merge commits: $MERGE_COUNT"
+echo "   GitHub auto-merges (signature not required): $GITHUB_AUTO_MERGE_COUNT"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
 echo "   Invalid signatures: ${#INVALID_SIGNATURES[@]}"
 echo ""
