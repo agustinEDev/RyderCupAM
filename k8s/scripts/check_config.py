@@ -65,7 +65,7 @@ def detect_environment() -> str:
             return "local"
         if hostname == "localhost" and parsed.port == 8080:
             return "kubernetes"
-        if hostname == "rydercupfriends.com" or hostname == "rydercupam.onrender.com":
+        if hostname in ("rydercupfriends.com", "rydercupam.onrender.com"):
             return "production"
 
         return "unknown"

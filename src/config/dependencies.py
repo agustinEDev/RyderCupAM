@@ -46,14 +46,14 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
 )
-from src.modules.competition.application.use_cases.request_enrollment_use_case import (
-    RequestEnrollmentUseCase,
-)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
     ReorderGolfCoursesUseCase,
+)
+from src.modules.competition.application.use_cases.request_enrollment_use_case import (
+    RequestEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,

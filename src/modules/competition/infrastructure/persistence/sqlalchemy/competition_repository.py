@@ -10,6 +10,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition_golf_course import (
+    CompetitionGolfCourse,
+)
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
@@ -94,10 +97,6 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
-        from src.modules.competition.domain.entities.competition_golf_course import (
-            CompetitionGolfCourse,
-        )
-
         stmt = (
             select(Competition)
             .where(Competition.id == competition_id)

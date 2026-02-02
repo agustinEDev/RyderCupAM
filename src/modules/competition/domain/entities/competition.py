@@ -277,12 +277,8 @@ class Competition:
             )
 
         # TODO: Re-enable after updating tests to add golf courses before activate
-        # Validación: requiere al menos 1 campo de golf
-        # if len(self._golf_courses) == 0:
-        #     raise CompetitionStateError(
-        #         "No se puede activar una competición sin campos de golf asignados. "
-        #         "Añade al menos un campo de golf antes de activar."
-        #     )
+        # TODO(v2.0.2): Restaurar validación de golf courses una vez actualizados los 24 tests existentes
+        # Debe requerir al menos 1 campo de golf antes de activar
 
         self.status = CompetitionStatus.ACTIVE
         self.updated_at = datetime.now()
