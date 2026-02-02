@@ -969,24 +969,29 @@ jobs:
 
           # Determine base ref based on event type
           if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs: verify ONLY commits in PR branch that are NOT in base branch
             BASE_REF="${{ github.event.pull_request.base.sha }}"
+            HEAD_REF="${{ github.event.pull_request.head.sha }}"
+            echo "📋 Pull Request mode: verifying only NEW commits in PR"
+            echo "   Base (target branch): $BASE_REF"
+            echo "   Head (PR branch): $HEAD_REF"
           else
-            # Ensure default branch ref is available for non-PR events
-            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-            echo "📥 Fetching $DEFAULT_BRANCH to ensure ref is available..."
-            git fetch origin "$DEFAULT_BRANCH" || {
-              echo "⚠️  Failed to fetch $DEFAULT_BRANCH, falling back to github.event.before"
-              BASE_REF="${{ github.event.before }}"
-            }
-            # Only set BASE_REF if fetch succeeded
-            if [ -z "$BASE_REF" ]; then
-              BASE_REF="origin/$DEFAULT_BRANCH"
+            # For direct pushes: verify ONLY commits in this specific push
+            BASE_REF="${{ github.event.before }}"
+            HEAD_REF="${{ github.sha }}"
+            echo "📋 Push mode: verifying only commits in this push"
+            echo "   Before push: $BASE_REF"
+            echo "   After push: $HEAD_REF"
+
+            # Handle initial push (no previous commit)
+            if [ "$BASE_REF" == "0000000000000000000000000000000000000000" ]; then
+              echo "⚠️  Initial push detected, using origin/${{ github.event.repository.default_branch }} as base"
+              BASE_REF="origin/${{ github.event.repository.default_branch }}"
             fi
           fi
 
-          echo "📋 Using BASE_REF: $BASE_REF"
           # Run verification script
-          ./scripts/verify-gpg-signatures.sh "$BASE_REF" HEAD
+          ./scripts/verify-gpg-signatures.sh "$BASE_REF" "$HEAD_REF"
 
       - name: Generate Verification Summary (Success)
         if: success()
