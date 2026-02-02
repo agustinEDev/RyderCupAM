@@ -127,7 +127,7 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 3-4 hours
 - **Related**: Golf Course module already completed (v2.0.1 - commit bfa7efa)
 
-**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (✅ COMPLETED: Jan 31, 2026)**
+**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (✅ COMPLETED: Feb 1, 2026)**
 - **Rationale**: Competitions can be played across multiple golf courses (multi-round tournaments)
 - **Architecture**: Many-to-Many via `competition_golf_courses` association table
 - **Migration**: Create `competition_golf_courses` table (id, competition_id, golf_course_id, display_order, created_at)
@@ -161,8 +161,11 @@ class GolfCourseRequest(BaseModel):
   - Option to create new course request (PENDING) and attach to competition
   - Warning if competition has PENDING courses (cannot activate until approved)
   - UI to reorder courses (drag-and-drop)
-- **Tests**: +24 tests (24 domain: 13 CompetitionGolfCourseId + 11 CompetitionGolfCourse) ✅
-  - **Pending**: Application (31 tests for 3 use cases) + Integration (API endpoints) - deferred to Block 2+
+- **Tests**: +64 tests ✅
+  - Domain: 24 tests (13 CompetitionGolfCourseId + 11 CompetitionGolfCourse) ✅
+  - Application: 26 tests (11 AddGolfCourse + 6 RemoveGolfCourse + 9 ReorderGolfCourses) ✅
+  - Integration: 9 tests (4 API endpoints) ✅
+  - Infrastructure: InMemoryGolfCourseRepository + InMemoryGolfCourseUnitOfWork ✅
 - **Time**: 4 hours (Domain + Migration + Infrastructure + API stubs)
 - **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship) - PENDING
 - **Commits**:

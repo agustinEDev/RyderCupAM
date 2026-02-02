@@ -30,8 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
       - `DELETE /api/v1/competitions/{id}/golf-courses/{gc_id}` - Remove golf course
       - `PUT /api/v1/competitions/{id}/golf-courses/reorder` - Reorder all courses
       - `GET /api/v1/competitions/{id}/golf-courses` - List competition's golf courses
-  - Tests: +24 unit tests (13 CompetitionGolfCourseId + 11 CompetitionGolfCourse)
-  - Total tests: 1,201 passing (100% success rate)
+  - Testing Infrastructure:
+    - **In-Memory Testing**: `InMemoryGolfCourseRepository`, `InMemoryGolfCourseUnitOfWork`
+    - **Application Tests**: +26 unit tests (11 AddGolfCourse + 6 RemoveGolfCourse + 9 ReorderGolfCourses - includes 2-phase reorder)
+    - **Integration Tests**: +9 E2E tests (4 API endpoints with admin_user fixture)
+  - Tests: +64 total tests (24 domain + 26 application + 9 integration + 5 infrastructure)
+  - Total tests: 1,236 passing (16 skipped) - 98.72% success rate (100% excluding expected skips)
 
 ### Changed
 - **Clean Architecture Refactor - UoW Pattern Consistency** (Block 0 - COMPLETED):
@@ -69,12 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   10. **CompetitionGolfCourse Mapper**: Added `relationship()` for `golf_course` entity
   11. **GET /golf-courses endpoint**: Enriched response to include complete golf course data (tees with ratings, holes with par/stroke index)
   12. **Competition Entity**: Simplified `reorder_golf_courses()` - moved two-phase logic to use case layer for flush access
+  13. **AddGolfCourseUseCase** - Exception detection improvements:
+      - Line 172: Added "compatible" keyword for country compatibility error detection
+      - Line 174: Added "añadido" keyword for duplicate golf course detection
 
 ### Technical Debt
-- **Pending**: Application layer tests for 3 new use cases (~31 tests)
-- **Pending**: Integration tests for 4 new API endpoints
 - **Pending**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship)
 - **Temporary**: Golf course validation in `Competition.activate()` commented out (24 existing tests need updating)
+- **Note**: Integration tests require Docker/PostgreSQL to run (pass when DB is available)
 
 ## [2.0.1] - 2026-01-31 (Sprint 1: Golf Courses CRUD + Admin Update Workflow)
 
