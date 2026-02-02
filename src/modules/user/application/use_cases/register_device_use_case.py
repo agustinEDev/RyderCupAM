@@ -124,7 +124,6 @@ class RegisterDeviceUseCase:
             if existing_device:
                 existing_device.update_last_used()
                 await self._uow.user_devices.save(existing_device)
-                await self._uow.commit()
 
                 return RegisterDeviceResponseDTO(
                     device_id=str(existing_device.id.value),
@@ -138,7 +137,6 @@ class RegisterDeviceUseCase:
                 fingerprint=fingerprint,
             )
             await self._uow.user_devices.save(new_device)
-            await self._uow.commit()
 
             return RegisterDeviceResponseDTO(
                 device_id=str(new_device.id.value),

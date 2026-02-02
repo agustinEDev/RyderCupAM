@@ -337,9 +337,7 @@ def display_summary(summary: dict, tests: list, warning_count: int, total_time: 
         result_msg = "¡HAN FALLADO TESTS!"
 
     print_header(f"{ICONS['SUMMARY']} RESUMEN DE LA EJECUCIÓN")
-    print(
-        f"{summary_color}{COLORS['BOLD']}Resultado Final: {result_msg}{COLORS['ENDC']}"
-    )
+    print(f"{summary_color}{COLORS['BOLD']}Resultado Final: {result_msg}{COLORS['ENDC']}")
     print(f"  - {ICONS['PASSED']} Pasaron: {passed}")
     print(f"  - {ICONS['FAILED']} Fallaron: {failed}")
     print(f"  - {ICONS['ERROR']} Errores: {error}")

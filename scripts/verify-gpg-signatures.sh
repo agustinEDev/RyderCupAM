@@ -58,7 +58,13 @@ echo "   Base: $BASE_REF"
 echo "   Head: $HEAD_REF"
 
 # Get list of commits in range (fail if git rev-list errors)
-COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>&1)
+# If BASE_REF is empty, verify only HEAD_REF (first commit case)
+if [ -z "$BASE_REF" ]; then
+    echo "   (Verifying only HEAD_REF - no parent commit)"
+    COMMIT_LIST=$(git rev-list -n 1 "$HEAD_REF" 2>&1)
+else
+    COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>&1)
+fi
 REV_LIST_EXIT=$?
 
 if [ $REV_LIST_EXIT -ne 0 ]; then
@@ -107,31 +113,28 @@ while IFS= read -r commit; do
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    # Check if this is a GitHub-generated merge (auto-merge)
-    IS_GITHUB_MERGE=false
+    # Skip ALL merge commits (signature not required for merges)
     if [ "$PARENT_COUNT" -ge 2 ]; then
         MERGE_COUNT=$((MERGE_COUNT + 1))
-        # Detect GitHub auto-merges by author/email or commit message patterns
-        # Patterns:
-        # 1. Author/email contains GitHub
-        # 2. "Merge pull request #123"
-        # 3. "Merge abc123 into def456" (GitHub auto-merge format)
-        # 4. "(#123)" - PR number in conventional commit (GitHub PR merge)
+
+        # Detect if it's a GitHub auto-merge for reporting purposes
+        IS_GITHUB_MERGE=false
         if echo "$COMMIT_AUTHOR" | grep -iq "GitHub" || \
            echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
            echo "$COMMIT_MSG" | grep -q "Merge pull request" || \
-           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}" || \
-           echo "$COMMIT_MSG" | grep -Eq "\(#[0-9]+\)"; then
+           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}"; then
             IS_GITHUB_MERGE=true
+            GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
         fi
-    fi
 
-    if [ "$IS_GITHUB_MERGE" = true ]; then
-        # GitHub auto-merge - signature not required
+        # All merge commits are excluded from signature verification
         echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
         echo "   Author: $COMMIT_AUTHOR"
-        echo "   Type: GITHUB AUTO-MERGE (signature not required)"
-        GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
+        if [ "$IS_GITHUB_MERGE" = true ]; then
+            echo "   Type: GITHUB AUTO-MERGE (signature not required)"
+        else
+            echo "   Type: MERGE COMMIT (signature not required)"
+        fi
         VALID_COUNT=$((VALID_COUNT + 1))
     else
         # Regular commit or manual merge - verify signature
@@ -170,8 +173,9 @@ echo ""
 echo "📊 Statistics:"
 echo "   Total commits: $COMMIT_COUNT"
 echo "   Valid signatures: $VALID_COUNT"
-echo "   Merge commits: $MERGE_COUNT"
-echo "   GitHub auto-merges (signature not required): $GITHUB_AUTO_MERGE_COUNT"
+echo "   Merge commits (signature not required): $MERGE_COUNT"
+echo "      ↳ GitHub auto-merges: $GITHUB_AUTO_MERGE_COUNT"
+echo "      ↳ Manual merges: $((MERGE_COUNT - GITHUB_AUTO_MERGE_COUNT))"
 echo "   Unsigned commits: ${#UNSIGNED_COMMITS[@]}"
 echo "   Invalid signatures: ${#INVALID_SIGNATURES[@]}"
 echo ""

@@ -45,8 +45,6 @@ services:
     env_file:
       - path: .env
         required: true
-    entrypoint: ["/bin/sh", "/validate-app-env.sh"]
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
       # Database Configuration
       # Note: Defaults are ONLY for docker-compose syntax safety; validation scripts

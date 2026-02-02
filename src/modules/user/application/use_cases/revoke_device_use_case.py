@@ -139,7 +139,6 @@ class RevokeDeviceUseCase:
 
             # 7. Guardar cambios en BD
             await self._uow.user_devices.save(device)
-            await self._uow.commit()
 
             # 8. Retornar confirmación
             message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."

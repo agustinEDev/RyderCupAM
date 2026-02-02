@@ -95,9 +95,6 @@ class CompleteCompetitionUseCase:
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
-            # 5. Commit de la transacción
-            await self._uow.commit()
-
         # 6. Retornar DTO de respuesta
         return CompleteCompetitionResponseDTO(
             id=competition.id.value,

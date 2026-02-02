@@ -11,8 +11,17 @@ OWASP Coverage:
 from datetime import date, datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
 
+from ..exceptions.competition_violations import (
+    CompetitionFullViolation,
+    DuplicateEnrollmentViolation,
+    EnrollmentPastStartDateViolation,
+    InvalidCompetitionStatusViolation,
+    InvalidDateRangeViolation,
+    MaxCompetitionsExceededViolation,
+    MaxDurationExceededViolation,
+    MaxEnrollmentsExceededViolation,
+)
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_status import CompetitionStatus
 
@@ -50,15 +59,15 @@ class CompetitionPolicy:
             existing_count: Número de competiciones activas del usuario
 
         Raises:
-            BusinessRuleViolation: Si excede el límite permitido
+            MaxCompetitionsExceededViolation: Si excede el límite permitido
 
         Example:
             >>> CompetitionPolicy.can_create_competition(user_id, 49)  # OK
             >>> CompetitionPolicy.can_create_competition(user_id, 50)
-            BusinessRuleViolation: User cannot create more than 50 competitions
+            MaxCompetitionsExceededViolation: User cannot create more than 50 competitions
         """
         if existing_count >= MAX_COMPETITIONS_PER_CREATOR:
-            raise BusinessRuleViolation(
+            raise MaxCompetitionsExceededViolation(
                 f"User cannot create more than {MAX_COMPETITIONS_PER_CREATOR} "
                 f"competitions. Current count: {existing_count}."
             )
@@ -84,7 +93,10 @@ class CompetitionPolicy:
             user_total_enrollments: Total de enrollments activos del usuario
 
         Raises:
-            BusinessRuleViolation: Si viola alguna regla de negocio
+            DuplicateEnrollmentViolation: Si el usuario ya está inscrito
+            MaxEnrollmentsExceededViolation: Si excede el límite de inscripciones
+            InvalidCompetitionStatusViolation: Si el estado no permite enrollments
+            EnrollmentPastStartDateViolation: Si intenta inscribirse después del inicio
 
         Example:
             >>> CompetitionPolicy.can_enroll(
@@ -94,14 +106,14 @@ class CompetitionPolicy:
         """
         # 1. Prevenir duplicados
         if existing_enrollment_id is not None:
-            raise BusinessRuleViolation(
+            raise DuplicateEnrollmentViolation(
                 f"User {user_id} is already enrolled in competition {competition_id}. "
                 f"Existing enrollment: {existing_enrollment_id}."
             )
 
         # 2. Validar límite de enrollments por usuario
         if user_total_enrollments >= MAX_ENROLLMENTS_PER_USER:
-            raise BusinessRuleViolation(
+            raise MaxEnrollmentsExceededViolation(
                 f"User cannot enroll in more than {MAX_ENROLLMENTS_PER_USER} "
                 f"competitions. Current enrollments: {user_total_enrollments}."
             )
@@ -111,14 +123,14 @@ class CompetitionPolicy:
             CompetitionStatus.ACTIVE,
             CompetitionStatus.CLOSED,
         ]:
-            raise BusinessRuleViolation(
+            raise InvalidCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
                 "Enrollments only allowed in ACTIVE or CLOSED status."
             )
 
         # 4. Validar restricción temporal (competición no debe haber empezado)
         if datetime.now().date() >= competition_start_date:
-            raise BusinessRuleViolation(
+            raise EnrollmentPastStartDateViolation(
                 f"Competition starts on {competition_start_date}. Cannot enroll after start date."
             )
 
@@ -135,15 +147,15 @@ class CompetitionPolicy:
             competition_id: ID de la competición
 
         Raises:
-            BusinessRuleViolation: Si la competición está llena
+            CompetitionFullViolation: Si la competición está llena
 
         Example:
             >>> CompetitionPolicy.validate_capacity(23, 24, comp_id)  # OK
             >>> CompetitionPolicy.validate_capacity(24, 24, comp_id)
-            BusinessRuleViolation: Competition is full
+            CompetitionFullViolation: Competition is full
         """
         if current_enrollments >= max_players:
-            raise BusinessRuleViolation(
+            raise CompetitionFullViolation(
                 f"Competition {competition_id} has reached maximum capacity "
                 f"({max_players} players). Current enrollments: {current_enrollments}."
             )
@@ -159,7 +171,8 @@ class CompetitionPolicy:
             competition_name: Nombre de la competición (para mensaje de error)
 
         Raises:
-            BusinessRuleViolation: Si el rango es inválido o implausible
+            InvalidDateRangeViolation: Si start_date >= end_date
+            MaxDurationExceededViolation: Si la duración excede el máximo permitido
 
         Note:
             No valida que la fecha sea futura (eso es responsabilidad de la capa de aplicación).
@@ -172,7 +185,7 @@ class CompetitionPolicy:
         """
         # 1. Validar orden lógico
         if start_date >= end_date:
-            raise BusinessRuleViolation(
+            raise InvalidDateRangeViolation(
                 f"Competition '{competition_name}': Start date ({start_date}) "
                 f"must be before end date ({end_date})."
             )
@@ -180,7 +193,7 @@ class CompetitionPolicy:
         # 2. Validar duración razonable
         duration_days = (end_date - start_date).days
         if duration_days > MAX_COMPETITION_DURATION_DAYS:
-            raise BusinessRuleViolation(
+            raise MaxDurationExceededViolation(
                 f"Competition '{competition_name}': Duration ({duration_days} days) "
                 f"exceeds maximum allowed ({MAX_COMPETITION_DURATION_DAYS} days)."
             )

@@ -55,13 +55,13 @@ class GolfCourseIdType(sqlalchemy.types.TypeDecorator[GolfCourseId]):
         """Convierte GolfCourseId → UUID para persistencia."""
         if value is None:
             return None
-        return uuid.UUID(value.value)
+        return value.value  # value.value ya es uuid.UUID object
 
     def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> GolfCourseId | None:
         """Convierte UUID → GolfCourseId al hidratar."""
         if value is None:
             return None
-        return GolfCourseId(str(value))
+        return GolfCourseId(value)  # GolfCourseId acepta uuid.UUID object
 
 
 class CountryCodeType(sqlalchemy.types.TypeDecorator[CountryCode]):
@@ -287,7 +287,7 @@ def start_golf_course_mappers():
                     Tee,
                     cascade="all, delete-orphan",
                     lazy="joined",  # Eager loading
-                    order_by=golf_course_tees_table.c.id,
+                    # No order_by needed - tees don't have a meaningful order
                 ),
                 "_holes": relationship(
                     Hole,

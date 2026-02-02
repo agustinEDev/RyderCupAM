@@ -8,7 +8,11 @@ from datetime import date
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition_golf_course import (
+    CompetitionGolfCourse,
+)
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
@@ -85,13 +89,26 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         Busca una competición por su ID único.
 
+        Eager loads the golf_courses relationship and nested golf_course entities.
+
         Args:
             competition_id: ID de la competición
 
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
-        return await self._session.get(Competition, competition_id)
+        stmt = (
+            select(Competition)
+            .where(Competition.id == competition_id)
+            .options(
+                selectinload(Competition._golf_courses).selectinload(
+                    CompetitionGolfCourse.golf_course
+                )
+                # Note: GolfCourse.tees and GolfCourse.holes are already eager loaded via lazy="joined"
+            )
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0

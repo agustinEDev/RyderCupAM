@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.1-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.2--dev-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1177%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1201%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,11 +29,12 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **50 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,177 tests** passing (100% success rate, ~142s execution)
+- ✅ **54 REST API endpoints** fully documented (Swagger UI)
+- ✅ **1,201 tests** passing (100% success rate, ~79s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
+- ✅ **Competition ↔ GolfCourse M2M** - Multi-course tournaments with ordering (v2.0.2)
 - ✅ **10 CI/CD jobs** - GitHub Actions pipeline (~3min)
 - ✅ **Device Fingerprinting** - Advanced session management with auto-registration
 - ✅ **Email Verification** - Bilingual templates (ES/EN) via Mailgun
@@ -177,7 +178,8 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ Enrollment system (invitations + approvals)
 - ✅ Custom handicap override per competition
 - ✅ 166 countries with multilanguage support
-- ✅ 20 endpoints fully tested
+- ✅ **Competition ↔ GolfCourse M2M** (v2.0.2) - Multi-course tournaments with ordering
+- ✅ 24 endpoints (14 competition + 8 enrollment + 2 countries + 4 golf courses)
 
 ### Security Features (v1.13.1)
 - ✅ **httpOnly Cookies** - XSS prevention for tokens
@@ -194,19 +196,28 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **Input Sanitization** - HTML sanitization, XSS prevention
 - ✅ **Sentry Integration** - Error tracking + APM + profiling
 
-### What's New in v2.0.0
-- ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER) is now complete.
+### What's New
+
+**v2.0.2-dev (In Development)**
+- ✅ **Competition ↔ GolfCourse M2M**: Multi-course tournaments with add/remove/reorder operations
+- ✅ **Mixed UUID Types Support**: CHAR(36) and UUID(as_uuid=True) compatibility in associations
+
+**v2.0.1 (Jan 30, 2026)**
+- ✅ **Golf Course Module**: Creator requests, Admin approval workflow, Clone-based updates
+- ✅ **WHS Validation**: 2-6 tees, 18 holes, stroke indices, par totals
+
+**v2.0.0 (Jan 27, 2026)**
+- ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER)
 
 ### Coming Soon (Competition Module Evolution)
-- 🔄 **Golf Course Management** - Creator requests, Admin approval workflow.
-- 🔄 **Round Planning** - Manual match scheduling with drag-drop.
-- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation.
-- 🔄 **Invitation System** - Email invitations with secure tokens.
-- 🔄 **Playing Handicap** - WHS automatic calculation per tee.
-- 🔄 **Match Play Scoring** - Net scores, hole winners, standings.
-- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache.
+- 🔄 **Round Planning** - Manual match scheduling with drag-drop
+- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation
+- 🔄 **Invitation System** - Email invitations with secure tokens
+- 🔄 **Playing Handicap** - WHS automatic calculation per tee
+- 🔄 **Match Play Scoring** - Net scores, hole winners, standings
+- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache
 
-**Timeline**: Jan 27 - Mar 17, 2026 (7 weeks) | **~29 more endpoints** | **~50+ more tests**
+**Timeline**: Feb 3 - Mar 24, 2026 (7 weeks) | **~30 more endpoints** | **~106+ more tests**
 
 ---
 
