@@ -74,15 +74,15 @@ Country Management (2 endpoints)
 
 Golf Course Management (10 endpoints) ⭐ v2.0.1
 ├── POST /api/v1/golf-courses/request    # Request new golf course (Creator)
-├── POST /api/v1/admin/golf-courses      # Create course directly (Admin, approved)
+├── POST /api/v1/golf-courses/admin      # Create course directly (Admin, approved)
 ├── GET  /api/v1/golf-courses/{id}       # Get golf course details
 ├── GET  /api/v1/golf-courses            # List golf courses (filter by approval_status)
-├── GET  /api/v1/admin/golf-courses/pending # List pending approvals (Admin)
-├── PUT  /api/v1/admin/golf-courses/{id}/approve # Approve course (Admin)
-├── PUT  /api/v1/admin/golf-courses/{id}/reject  # Reject course (Admin)
+├── GET  /api/v1/golf-courses/admin/pending # List pending approvals (Admin)
+├── PUT  /api/v1/golf-courses/admin/{id}/approve # Approve course (Admin)
+├── PUT  /api/v1/golf-courses/admin/{id}/reject  # Reject course (Admin)
 ├── PUT  /api/v1/golf-courses/{id}       # Submit update (Creator, clone-based workflow)
-├── PUT  /api/v1/admin/golf-courses/updates/{id}/approve # Approve update (Admin)
-└── PUT  /api/v1/admin/golf-courses/updates/{id}/reject  # Reject update (Admin)
+├── PUT  /api/v1/golf-courses/admin/updates/{id}/approve # Approve update (Admin)
+└── PUT  /api/v1/golf-courses/admin/updates/{id}/reject  # Reject update (Admin)
 ```
 
 ---
@@ -703,5 +703,5 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
-**Last Updated:** 30 January 2026
-**Version:** v2.0.1
+**Last Updated:** 31 January 2026
+**Version:** v2.0.2-dev

@@ -13,9 +13,14 @@ After an exhaustive code review of the RyderCupAm backend, **15 distinct violati
 
 ### Severity Breakdown
 
-- **🔴 CRITICAL**: 3 violations (breaks architecture, must fix)
-- **⚠️ WARNING**: 8 violations (code smells, should fix)
-- **ℹ️ INFO**: 4 violations (minor improvements)
+### 🔴 CRITICAL
+3 violations (breaks architecture, must fix)
+
+### ⚠️ WARNING
+8 violations (code smells, should fix)
+
+### ℹ️ INFO
+4 violations (minor improvements)
 
 ### Key Strengths
 
@@ -420,7 +425,7 @@ class TeamAssignment(str, Enum):
 
 Split into smaller modules by feature:
 
-```
+```markdown
 infrastructure/api/v1/
 ├── competition/
 │   ├── __init__.py

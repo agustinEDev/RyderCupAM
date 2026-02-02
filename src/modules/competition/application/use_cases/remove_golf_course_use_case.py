@@ -5,7 +5,7 @@ Permite desasociar un campo de golf de una competición en estado DRAFT.
 Solo el creador puede realizar esta acción.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.competition_dto import (
     RemoveGolfCourseRequestDTO,
@@ -127,5 +127,5 @@ class RemoveGolfCourseFromCompetitionUseCase:
         return RemoveGolfCourseResponseDTO(
             competition_id=request.competition_id,
             golf_course_id=request.golf_course_id,
-            removed_at=datetime.now(),
+            removed_at=datetime.now(UTC),
         )

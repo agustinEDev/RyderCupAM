@@ -911,6 +911,14 @@ async def create_admin_user(
     from src.config.dependencies import get_db_session
 
     db_session_override = app.dependency_overrides.get(get_db_session)
+
+    # Validar que el override existe (requiere client fixture con database_override)
+    if db_session_override is None:
+        raise RuntimeError(
+            "Database session override not found. "
+            "Ensure the 'client' fixture with database_override is set up before calling create_admin_user."
+        )
+
     async for session in db_session_override():
         try:
             await session.execute(
@@ -918,7 +926,12 @@ async def create_admin_user(
                 {"user_id": admin_data["user"]["id"]},
             )
             await session.commit()
+        except Exception:
+            # Rollback on any error before re-raising
+            await session.rollback()
+            raise
         finally:
+            # Always close the session
             await session.close()
 
     # 3. Re-autenticar para obtener nuevo token JWT con is_admin=True

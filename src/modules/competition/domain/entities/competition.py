@@ -564,9 +564,12 @@ class Competition:
                 f"Estado actual: {self.status.value}"
             )
 
-        # Buscar el campo
+        # Ordenar por display_order para mantener el orden correcto después de remover
+        sorted_golf_courses = sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
+
+        # Buscar el campo en la lista ordenada
         field_to_remove = None
-        for cgc in self._golf_courses:
+        for cgc in sorted_golf_courses:
             if cgc.golf_course_id == golf_course_id:
                 field_to_remove = cgc
                 break
@@ -575,10 +578,13 @@ class Competition:
         if field_to_remove is None:
             raise ValueError(f"El campo de golf {golf_course_id} no está en la competición")
 
-        # Remover
-        self._golf_courses.remove(field_to_remove)
+        # Remover de la lista ordenada
+        sorted_golf_courses.remove(field_to_remove)
 
-        # Reordenar automáticamente (1, 2, 3...)
+        # Actualizar self._golf_courses con la lista ordenada (sin el campo removido)
+        self._golf_courses = sorted_golf_courses
+
+        # Reordenar automáticamente (1, 2, 3...) sobre la lista ordenada
         for i, cgc in enumerate(self._golf_courses, start=1):
             cgc.change_order(i)
 

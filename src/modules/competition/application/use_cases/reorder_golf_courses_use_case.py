@@ -147,11 +147,11 @@ class ReorderGolfCoursesUseCase:
             # Flush para persistir valores temporales antes de asignar los finales
             await self._uow.flush()
 
-            # Fase 2: Asignar valores finales (1, 2, 3...)
+            # Fase 2: Asignar valores finales (1, 2, 3...) usando change_order() para respetar business rules
             for golf_course_id, new_display_order in new_order:
                 for cgc in competition._golf_courses:
                     if cgc.golf_course_id == golf_course_id:
-                        cgc._display_order = new_display_order
+                        cgc.change_order(new_display_order)
                         break
 
             competition.updated_at = datetime.now()

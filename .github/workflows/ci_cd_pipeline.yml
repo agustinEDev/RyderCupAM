@@ -924,7 +924,8 @@ jobs:
             sbom/sbom.json \
             ${{ github.repository_owner }} \
             ${{ github.event.repository.name }} \
-            ${{ github.sha }}
+            ${{ github.sha }} \
+            ${{ github.ref }}
 
   # ================================
   # JOB 10: GPG SIGNATURE VERIFICATION

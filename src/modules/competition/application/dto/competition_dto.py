@@ -714,3 +714,86 @@ class ReorderGolfCoursesResponseDTO(BaseModel):
     reordered_at: datetime = Field(..., description="Fecha y hora de reordenación.")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
+# DTOs para API endpoints (request bodies y responses específicos)
+# ======================================================================================
+
+
+class AddGolfCourseBodyDTO(BaseModel):
+    """
+    DTO para el body del endpoint de añadir campo de golf a competición.
+
+    Este DTO valida que el request body contenga un golf_course_id válido.
+    El competition_id viene del path parameter.
+    """
+
+    golf_course_id: UUID = Field(..., description="ID del campo de golf a añadir.")
+
+
+class ReorderGolfCourseIdsRequest(BaseModel):
+    """
+    DTO para el body del endpoint de reordenar campos de golf.
+
+    Valida que el request body contenga una lista de UUIDs.
+    El competition_id viene del path parameter.
+    """
+
+    golf_course_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        description="Lista ordenada de IDs de campos de golf (orden final deseado).",
+    )
+
+
+# ======================================================================================
+# DTOs para listado detallado de campos de golf de una competición
+# ======================================================================================
+
+
+class TeeResponseDTO(BaseModel):
+    """DTO de respuesta para un tee de un campo de golf."""
+
+    id: UUID = Field(..., description="ID único del tee")
+    identifier: str = Field(..., description="Nombre del tee (ej: 'Championship', 'Blue', 'White')")
+    color: str | None = Field(None, description="Color del tee (opcional)")
+    course_rating: float = Field(..., description="Course Rating (WHS)")
+    slope_rating: int = Field(..., description="Slope Rating (WHS)")
+    par: int = Field(..., description="Par total del campo desde este tee")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HoleResponseDTO(BaseModel):
+    """DTO de respuesta para un hoyo de un campo de golf."""
+
+    hole_number: int = Field(..., description="Número del hoyo (1-18)")
+    par: int = Field(..., description="Par del hoyo (3, 4, o 5)")
+    stroke_index: int = Field(..., description="Índice de dificultad (1-18)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GolfCourseDetailDTO(BaseModel):
+    """DTO de respuesta con detalles completos de un campo de golf."""
+
+    id: UUID = Field(..., description="ID del campo de golf")
+    name: str = Field(..., description="Nombre del campo")
+    city: str = Field(..., description="Ciudad")
+    country_code: str = Field(..., description="Código ISO del país")
+    tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
+    holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompetitionGolfCourseResponseDTO(BaseModel):
+    """DTO de respuesta para un campo de golf asociado a una competición."""
+
+    golf_course_id: UUID = Field(..., description="ID del campo de golf")
+    display_order: int = Field(..., description="Orden de visualización")
+    created_at: datetime = Field(..., description="Fecha de asociación")
+    golf_course: GolfCourseDetailDTO = Field(..., description="Detalles completos del campo")
+
+    model_config = ConfigDict(from_attributes=True)

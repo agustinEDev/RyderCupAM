@@ -11,10 +11,10 @@
 #   - Repository information (owner, name, ref)
 #
 # Usage:
-#   ./submit-sbom-to-github.sh <sbom-file> <repo-owner> <repo-name> <ref-sha>
+#   ./submit-sbom-to-github.sh <sbom-file> <repo-owner> <repo-name> <ref-sha> <github-ref>
 #
 # Example:
-#   ./submit-sbom-to-github.sh sbom/sbom.json agustinEDev RyderCupAM abc123def
+#   ./submit-sbom-to-github.sh sbom/sbom.json agustinEDev RyderCupAM abc123def refs/heads/main
 #
 # GitHub API Reference:
 #   https://docs.github.com/en/rest/dependency-graph/dependency-submission
@@ -55,12 +55,12 @@ log_error() {
 # Input Validation
 # ============================================================================
 
-if [ $# -ne 4 ]; then
+if [ $# -ne 5 ]; then
     log_error "Invalid number of arguments"
-    echo "Usage: $0 <sbom-file> <repo-owner> <repo-name> <ref-sha>"
+    echo "Usage: $0 <sbom-file> <repo-owner> <repo-name> <ref-sha> <github-ref>"
     echo ""
     echo "Example:"
-    echo "  $0 sbom/sbom.json agustinEDev RyderCupAM \$GITHUB_SHA"
+    echo "  $0 sbom/sbom.json agustinEDev RyderCupAM \$GITHUB_SHA \$GITHUB_REF"
     exit 1
 fi
 
@@ -68,6 +68,7 @@ SBOM_FILE="$1"
 REPO_OWNER="$2"
 REPO_NAME="$3"
 REF_SHA="$4"
+GITHUB_REF="$5"
 
 # Validate SBOM file exists
 if [ ! -f "$SBOM_FILE" ]; then
@@ -119,7 +120,7 @@ PAYLOAD=$(cat <<EOF
 {
   "version": 0,
   "sha": "$REF_SHA",
-  "ref": "refs/heads/main",
+  "ref": "$GITHUB_REF",
   "job": {
     "correlator": "sbom_generation_$REF_SHA",
     "id": "$GITHUB_RUN_ID"

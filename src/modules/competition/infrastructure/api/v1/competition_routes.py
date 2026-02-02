@@ -30,10 +30,12 @@ from src.config.dependencies import (
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
+    AddGolfCourseBodyDTO,
     AddGolfCourseRequestDTO,
     AddGolfCourseResponseDTO,
     CancelCompetitionRequestDTO,
     CloseEnrollmentsRequestDTO,
+    CompetitionGolfCourseResponseDTO,
     CompetitionResponseDTO,
     CompleteCompetitionRequestDTO,
     CountryResponseDTO,
@@ -41,11 +43,15 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
     CreatorDTO,
     DeleteCompetitionRequestDTO,
+    GolfCourseDetailDTO,
+    HoleResponseDTO,
     RemoveGolfCourseRequestDTO,
     RemoveGolfCourseResponseDTO,
+    ReorderGolfCourseIdsRequest,
     ReorderGolfCoursesRequestDTO,
     ReorderGolfCoursesResponseDTO,
     StartCompetitionRequestDTO,
+    TeeResponseDTO,
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
@@ -1313,7 +1319,7 @@ async def cancel_competition(
 async def add_golf_course_to_competition(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    golf_course_id_body: dict,
+    golf_course_body: AddGolfCourseBodyDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: AddGolfCourseToCompetitionUseCase = Depends(
         get_add_golf_course_to_competition_use_case
@@ -1340,7 +1346,7 @@ async def add_golf_course_to_competition(
         # Construir DTO de request
         request_dto = AddGolfCourseRequestDTO(
             competition_id=competition_id,
-            golf_course_id=golf_course_id_body.get("golf_course_id"),
+            golf_course_id=golf_course_body.golf_course_id,
         )
 
         # Ejecutar caso de uso
@@ -1448,7 +1454,7 @@ async def remove_golf_course_from_competition(
 async def reorder_golf_courses(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    golf_course_ids_body: dict,
+    reorder_body: ReorderGolfCourseIdsRequest,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ReorderGolfCoursesUseCase = Depends(get_reorder_golf_courses_use_case),
 ):
@@ -1484,7 +1490,7 @@ async def reorder_golf_courses(
         # Construir DTO de request
         request_dto = ReorderGolfCoursesRequestDTO(
             competition_id=competition_id,
-            golf_course_ids=golf_course_ids_body.get("golf_course_ids", []),
+            golf_course_ids=reorder_body.golf_course_ids,
         )
 
         # Ejecutar caso de uso
@@ -1511,7 +1517,7 @@ async def reorder_golf_courses(
 
 @router.get(
     "/{competition_id}/golf-courses",
-    response_model=list[dict],
+    response_model=list[CompetitionGolfCourseResponseDTO],
     status_code=status.HTTP_200_OK,
     summary="Listar campos de golf de una competición",
     tags=["Competitions - Golf Courses"],
@@ -1559,38 +1565,36 @@ async def list_competition_golf_courses(
 
             # Construir respuesta con datos completos del campo de golf (incluyendo tees y holes)
             golf_courses_list = [
-                {
-                    "golf_course_id": str(gc.golf_course_id.value),
-                    "display_order": gc.display_order,
-                    "created_at": gc.created_at.isoformat(),
-                    "golf_course": {
-                        "id": str(gc.golf_course.id.value),
-                        "name": gc.golf_course.name,
-                        "country_code": gc.golf_course.country_code.value,
-                        "course_type": gc.golf_course.course_type.value,
-                        "total_par": gc.golf_course.total_par,
-                        "approval_status": gc.golf_course.approval_status.value,
-                        "tees": [
-                            {
-                                "id": str(tee.id.value),
-                                "identifier": tee.identifier,
-                                "category": tee.category.value,
-                                "course_rating": float(tee.course_rating),
-                                "slope_rating": int(tee.slope_rating),
-                            }
+                CompetitionGolfCourseResponseDTO(
+                    golf_course_id=gc.golf_course_id.value,
+                    display_order=gc.display_order,
+                    created_at=gc.created_at,
+                    golf_course=GolfCourseDetailDTO(
+                        id=gc.golf_course.id.value,
+                        name=gc.golf_course.name,
+                        city=gc.golf_course.city,
+                        country_code=gc.golf_course.country_code.value,
+                        tees=[
+                            TeeResponseDTO(
+                                id=tee.id.value,
+                                identifier=tee.identifier,
+                                color=tee.color,
+                                course_rating=float(tee.course_rating),
+                                slope_rating=int(tee.slope_rating),
+                                par=tee.par,
+                            )
                             for tee in gc.golf_course.tees
                         ],
-                        "holes": [
-                            {
-                                "id": str(hole.id.value),
-                                "hole_number": hole.hole_number,
-                                "par": hole.par,
-                                "stroke_index": hole.stroke_index,
-                            }
+                        holes=[
+                            HoleResponseDTO(
+                                hole_number=hole.hole_number,
+                                par=hole.par,
+                                stroke_index=hole.stroke_index,
+                            )
                             for hole in gc.golf_course.holes
                         ],
-                    },
-                }
+                    ),
+                )
                 for gc in competition.golf_courses
             ]
 
@@ -1598,9 +1602,3 @@ async def list_competition_golf_courses(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error listando campos de golf: {e!s}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al listar campos de golf",
-        ) from e
