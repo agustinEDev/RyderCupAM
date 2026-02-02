@@ -757,10 +757,8 @@ class TeeResponseDTO(BaseModel):
 
     id: UUID = Field(..., description="ID único del tee")
     identifier: str = Field(..., description="Nombre del tee (ej: 'Championship', 'Blue', 'White')")
-    color: str | None = Field(None, description="Color del tee (opcional)")
     course_rating: float = Field(..., description="Course Rating (WHS)")
     slope_rating: int = Field(..., description="Slope Rating (WHS)")
-    par: int = Field(..., description="Par total del campo desde este tee")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -780,7 +778,6 @@ class GolfCourseDetailDTO(BaseModel):
 
     id: UUID = Field(..., description="ID del campo de golf")
     name: str = Field(..., description="Nombre del campo")
-    city: str = Field(..., description="Ciudad")
     country_code: str = Field(..., description="Código ISO del país")
     tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
     holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")

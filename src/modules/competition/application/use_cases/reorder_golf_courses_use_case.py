@@ -5,7 +5,7 @@ Permite cambiar el orden de visualización de los campos de golf asociados a una
 Solo el creador puede realizar esta acción.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.competition_dto import (
     ReorderGolfCoursesRequestDTO,
@@ -154,7 +154,7 @@ class ReorderGolfCoursesUseCase:
                         cgc.change_order(new_display_order)
                         break
 
-            competition.updated_at = datetime.now()
+            competition.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
             # 7. Guardar la competición actualizada
             await self._uow.competitions.update(competition)
@@ -163,5 +163,5 @@ class ReorderGolfCoursesUseCase:
         return ReorderGolfCoursesResponseDTO(
             competition_id=request.competition_id,
             golf_course_count=len(new_order),
-            reordered_at=datetime.now(),
+            reordered_at=datetime.now(UTC),
         )

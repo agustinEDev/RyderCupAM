@@ -981,8 +981,14 @@ jobs:
           # Handle initial push or forced push (no previous commit)
           if [ "$BASE_REF" == "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
             echo "⚠️  Initial/forced push detected"
-            echo "   Verifying only HEAD commit: $HEAD_REF"
-            BASE_REF="$HEAD_REF~1"  # Verify only the last commit
+            # Check if HEAD_REF has a parent commit
+            if git rev-parse --verify "${HEAD_REF}^" &>/dev/null; then
+              echo "   Verifying only HEAD commit: $HEAD_REF"
+              BASE_REF="$HEAD_REF~1"  # Verify only the last commit
+            else
+              echo "   HEAD_REF is the first commit (no parent)"
+              BASE_REF=""  # Empty BASE_REF means verify only HEAD_REF
+            fi
           fi
 
           # Run verification script

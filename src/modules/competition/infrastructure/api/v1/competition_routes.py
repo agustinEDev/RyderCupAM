@@ -1572,16 +1572,13 @@ async def list_competition_golf_courses(
                     golf_course=GolfCourseDetailDTO(
                         id=gc.golf_course.id.value,
                         name=gc.golf_course.name,
-                        city=gc.golf_course.city,
                         country_code=gc.golf_course.country_code.value,
                         tees=[
                             TeeResponseDTO(
                                 id=tee.id.value,
                                 identifier=tee.identifier,
-                                color=tee.color,
                                 course_rating=float(tee.course_rating),
                                 slope_rating=int(tee.slope_rating),
-                                par=tee.par,
                             )
                             for tee in gc.golf_course.tees
                         ],

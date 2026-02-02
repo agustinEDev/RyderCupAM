@@ -88,7 +88,7 @@ for cgc in competition._golf_courses:
 
 **Recommended Fix:**
 
-**Option A: Two-phase method in domain (preferred)**
+#### Option A: Two-phase method in domain (preferred)
 ```python
 # In Competition entity (domain/entities/competition.py)
 def reorder_golf_courses_phase1(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
@@ -133,7 +133,7 @@ async def execute(self, request, user_id):
         await self._uow.competitions.update(competition)
 ```
 
-**Option B: Create a Domain Service**
+#### Option B: Create a Domain Service
 ```python
 # Domain service for complex reordering
 class GolfCourseReorderingService:
@@ -184,7 +184,7 @@ from sqlalchemy.orm import reconstructor
 
 **Recommended Fix:**
 
-**Option A: Move reconstructor logic to infrastructure (PREFERRED)**
+#### Option A: Move reconstructor logic to infrastructure (PREFERRED)
 
 ```python
 # Domain entity (NO SQLAlchemy imports!)
@@ -207,7 +207,7 @@ def receive_load(target, context):
         target._domain_events = []
 ```
 
-**Option B: Accept pragmatic compromise (document it)**
+#### Option B: Accept pragmatic compromise (document it)
 
 Create ADR documenting this decision:
 
