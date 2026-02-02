@@ -1097,6 +1097,11 @@ jobs:
             SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | tr '\n' ' ' | sed 's/|/\\|/g')
           fi
 
+          # Calculate percentages using awk
+          SUCCESS_PERCENT=$(awk -v sc="$SUCCESS_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (sc/tj)*100}')
+          FAILURE_PERCENT=$(awk -v fc="$FAILURE_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (fc/tj)*100}')
+          SKIPPED_PERCENT=$(awk -v sk="$SKIPPED_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (sk/tj)*100}')
+
           # Generate Markdown Summary
           {
             echo "# 🏆 CI/CD Pipeline Execution Report"
@@ -1136,9 +1141,9 @@ jobs:
             echo ""
             echo "| Metric | Count | Percentage |"
             echo "|--------|-------|------------|"
-            echo "| ✅ **Successful Jobs** | $SUCCESS_COUNT | $(awk "BEGIN {printf \"%.1f\", ($SUCCESS_COUNT/$TOTAL_JOBS)*100}")% |"
-            echo "| ❌ **Failed Jobs** | $FAILURE_COUNT | $(awk "BEGIN {printf \"%.1f\", ($FAILURE_COUNT/$TOTAL_JOBS)*100}")% |"
-            echo "| ⏭️ **Skipped Jobs** | $SKIPPED_COUNT | $(awk "BEGIN {printf \"%.1f\", ($SKIPPED_COUNT/$TOTAL_JOBS)*100}")% |"
+            echo "| ✅ **Successful Jobs** | $SUCCESS_COUNT | ${SUCCESS_PERCENT}% |"
+            echo "| ❌ **Failed Jobs** | $FAILURE_COUNT | ${FAILURE_PERCENT}% |"
+            echo "| ⏭️ **Skipped Jobs** | $SKIPPED_COUNT | ${SKIPPED_PERCENT}% |"
             echo "| 🎯 **Total Jobs** | $TOTAL_JOBS | 100% |"
             echo ""
           } >> $GITHUB_STEP_SUMMARY
