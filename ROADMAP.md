@@ -176,32 +176,37 @@ class GolfCourseRequest(BaseModel):
   - 25d54d3 - fix(migration): change competition_id to CHAR(36) to match existing schema
   - a51fe85 - feat(sprint2): complete Block 1 - M2M integration tests (9 tests + create_admin_user helper)
 
-**Block 2: Code Quality Refactor - Exception Subclasses**
+**Block 2: Code Quality Refactor - Exception Subclasses (✅ COMPLETED: Feb 2, 2026)**
 - **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
-- **Files**: `business_rule_violation.py`, `competition_policy.py`, `request_enrollment_use_case.py`
-- **Action**: Create `DuplicateEnrollmentViolation`, `InvalidCompetitionStatusViolation`, etc.
-- **Benefit**: Type-safe exception handling, better DDD, maintainable
-- **Tests**: Update ~20 tests (CompetitionPolicy + use cases)
-- **Time**: 2-3 hours
+- **Files Modified**:
+  - `src/modules/competition/domain/exceptions/competition_violations.py` (NEW - 8 subclasses)
+  - `src/modules/competition/domain/exceptions/__init__.py` (NEW)
+  - `src/modules/competition/domain/services/competition_policy.py` (refactored)
+  - `src/modules/competition/application/use_cases/request_enrollment_use_case.py` (refactored)
+  - `tests/unit/modules/competition/domain/services/test_competition_policy.py` (20 tests updated)
+- **Results**:
+  - ✅ 8 type-safe exception subclasses created
+  - ✅ Eliminated fragile string matching (`if "already enrolled" in str(e)`)
+  - ✅ 970/970 unit tests passing (100%)
+  - ✅ Better DDD compliance + maintainability
+- **Time**: 2.5 hours
 
-**Block 3: Fix SBOM Submission to GitHub Dependency Graph**
+**Block 3: Fix SBOM Submission to GitHub Dependency Graph (✅ COMPLETED: Feb 2, 2026)**
 - **Issue**: Action `github/dependency-graph-submit-action@v1` doesn't exist (CI/CD failing)
-- **Current State**: Step commented out in `.github/workflows/ci_cd_pipeline.yml` (release v2.0.1)
-- **Options**:
-  1. Use GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
-  2. Use `advanced-security/maven-dependency-submission-action` (ecosystem-specific, N/A for Python)
-  3. Use `jessehouwing/actions-dependency-submission` (community action)
-- **Recommended**: Option 1 (REST API) - Most reliable, no third-party dependencies
-- **Implementation**:
-  - Create bash script `scripts/submit-sbom-to-github.sh`
-  - Call GitHub API with SBOM JSON payload (CycloneDX format)
-  - Only execute on `main` branch (same condition as before)
-  - Add error handling + logging
-- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance
-- **Files**: `.github/workflows/ci_cd_pipeline.yml`, `scripts/submit-sbom-to-github.sh`
-- **Tests**: Manual testing (GitHub API requires merge to main)
-- **Time**: 2-3 hours
-- **ADR**: ADR-035 (SBOM Submission via GitHub REST API)
+- **Solution**: GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
+- **Files Modified/Created**:
+  - `scripts/submit-sbom-to-github.sh` (NEW - 202 lines, REST API integration)
+  - `.github/workflows/ci_cd_pipeline.yml` (uncommented + modified SBOM submission)
+  - `docs/architecture/decisions/ADR-036-sbom-submission-rest-api.md` (NEW)
+- **Results**:
+  - ✅ Zero external dependencies (no third-party actions)
+  - ✅ Full control over SBOM submission logic
+  - ✅ Proper error handling + logging
+  - ✅ `permissions: contents: write` enabled for Dependency Graph integration
+  - ⏸️ Manual verification pending (requires merge to main)
+- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance maintained
+- **Time**: 2 hours
+- **ADR**: ADR-036 (SBOM Submission via GitHub REST API)
 
 **Rounds Endpoints (4):**
 ```

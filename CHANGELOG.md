@@ -36,8 +36,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - **Integration Tests**: +9 E2E tests (4 API endpoints with admin_user fixture)
   - Tests: +64 total tests (24 domain + 26 application + 9 integration + 5 infrastructure)
   - Total tests: 1,236 passing (16 skipped) - 98.72% success rate (100% excluding expected skips)
+- **Type-Safe Exception Subclasses** (Block 2 - COMPLETED):
+  - Created 8 domain-specific exception subclasses:
+    - `MaxCompetitionsExceededViolation`, `DuplicateEnrollmentViolation`, `MaxEnrollmentsExceededViolation`
+    - `InvalidCompetitionStatusViolation`, `EnrollmentPastStartDateViolation`, `CompetitionFullViolation`
+    - `InvalidDateRangeViolation`, `MaxDurationExceededViolation`
+  - Files: `src/modules/competition/domain/exceptions/competition_violations.py` (NEW)
+  - Benefit: Type-safe exception handling, eliminates fragile string matching
+- **SBOM Submission via GitHub REST API** (Block 3 - COMPLETED):
+  - Created bash script `scripts/submit-sbom-to-github.sh` (+202 lines)
+  - Replaced non-existent `github/dependency-graph-submit-action@v1` with direct REST API integration
+  - Endpoint: `POST /repos/{owner}/{repo}/dependency-graph/snapshots`
+  - Enabled `permissions: contents: write` for Dependency Graph API
+  - ADR-036: Documents architectural decision and implementation details
+  - Benefit: Supply chain visibility, Dependabot integration, zero external dependencies
 
 ### Changed
+- **Exception Handling Refactor** (Block 2 - COMPLETED):
+  - Refactored `CompetitionPolicy` to use type-safe exception subclasses instead of generic `BusinessRuleViolation`
+  - Refactored `RequestEnrollmentUseCase` to use direct exception catching instead of fragile string matching
+  - Updated 20 tests in `test_competition_policy.py` to expect specific exception types
+  - Result: Improved maintainability, better DDD compliance, type-safe exception handling
 - **Clean Architecture Refactor - UoW Pattern Consistency** (Block 0 - COMPLETED):
   - Removed explicit `await self._uow.commit()` calls from:
     - Competition module: 14 use cases (activate, cancel, close, complete, create, delete, start, update, handle_enrollment, direct_enroll, request_enrollment, set_custom_handicap, cancel_enrollment, withdraw_enrollment)
