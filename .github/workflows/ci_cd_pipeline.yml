@@ -1097,10 +1097,10 @@ jobs:
             SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | tr '\n' ' ' | sed 's/|/\\|/g')
           fi
 
-          # Calculate percentages using bc (more reliable in GitHub Actions)
-          SUCCESS_PERCENT=$(echo "scale=1; ($SUCCESS_COUNT * 100) / $TOTAL_JOBS" | bc)
-          FAILURE_PERCENT=$(echo "scale=1; ($FAILURE_COUNT * 100) / $TOTAL_JOBS" | bc)
-          SKIPPED_PERCENT=$(echo "scale=1; ($SKIPPED_COUNT * 100) / $TOTAL_JOBS" | bc)
+          # Calculate percentages using python (guaranteed available in GitHub Actions)
+          SUCCESS_PERCENT=$(python3 -c "print(f'{($SUCCESS_COUNT * 100) / $TOTAL_JOBS:.1f}')")
+          FAILURE_PERCENT=$(python3 -c "print(f'{($FAILURE_COUNT * 100) / $TOTAL_JOBS:.1f}')")
+          SKIPPED_PERCENT=$(python3 -c "print(f'{($SKIPPED_COUNT * 100) / $TOTAL_JOBS:.1f}')")
 
           # Generate Markdown Summary
           {
