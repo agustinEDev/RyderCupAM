@@ -174,6 +174,7 @@ class GolfCourseRequest(BaseModel):
   - 79dd6e4 - feat(infra): add CompetitionGolfCourse mapper and endpoints
   - 63dc494 - fix(mapper): add explicit property mappings for CompetitionGolfCourse
   - 25d54d3 - fix(migration): change competition_id to CHAR(36) to match existing schema
+  - a51fe85 - feat(sprint2): complete Block 1 - M2M integration tests (9 tests + create_admin_user helper)
 
 **Block 2: Code Quality Refactor - Exception Subclasses**
 - **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
