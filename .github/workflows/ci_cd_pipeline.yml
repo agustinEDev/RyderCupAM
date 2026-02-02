@@ -1097,10 +1097,10 @@ jobs:
             SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | tr '\n' ' ' | sed 's/|/\\|/g')
           fi
 
-          # Calculate percentages using awk
-          SUCCESS_PERCENT=$(awk -v sc="$SUCCESS_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (sc/tj)*100}')
-          FAILURE_PERCENT=$(awk -v fc="$FAILURE_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (fc/tj)*100}')
-          SKIPPED_PERCENT=$(awk -v sk="$SKIPPED_COUNT" -v tj="$TOTAL_JOBS" 'BEGIN {printf "%.1f", (sk/tj)*100}')
+          # Calculate percentages using bc (more reliable in GitHub Actions)
+          SUCCESS_PERCENT=$(echo "scale=1; ($SUCCESS_COUNT * 100) / $TOTAL_JOBS" | bc)
+          FAILURE_PERCENT=$(echo "scale=1; ($FAILURE_COUNT * 100) / $TOTAL_JOBS" | bc)
+          SKIPPED_PERCENT=$(echo "scale=1; ($SKIPPED_COUNT * 100) / $TOTAL_JOBS" | bc)
 
           # Generate Markdown Summary
           {
