@@ -95,7 +95,6 @@ class StartCompetitionUseCase:
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
-
         # 6. Retornar DTO de respuesta
         return StartCompetitionResponseDTO(
             id=competition.id.value,

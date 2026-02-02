@@ -119,7 +119,6 @@ class HandleEnrollmentUseCase:
             # 5. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-
         # 7. Retornar DTO
         return HandleEnrollmentResponseDTO(
             id=enrollment.id.value,

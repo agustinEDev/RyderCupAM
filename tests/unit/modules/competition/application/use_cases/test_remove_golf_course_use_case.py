@@ -114,9 +114,7 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
                 slope_rating=120,
             ),
         ]
-        holes = [
-            Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)
-        ]
+        holes = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
 
         golf_course = GolfCourse.create(
             name="Real Club Valderrama",
@@ -166,9 +164,7 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         assert response.removed_at is not None
 
         # Verificar que el campo ya no está en la competición
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert len(updated_competition.golf_courses) == 0
 
     async def test_should_fail_when_competition_not_found(
@@ -359,9 +355,7 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         await use_case.execute(request_dto, creator_id)
 
         # Assert: Verificar que quedan 2 campos con orden correcto
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert len(updated_competition.golf_courses) == 2
         assert updated_competition.golf_courses[0].golf_course_id == gc1.id
         assert updated_competition.golf_courses[0].display_order == 1

@@ -49,9 +49,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         """
         return self._golf_courses.get(str(golf_course_id.value))
 
-    async def find_by_approval_status(
-        self, approval_status: ApprovalStatus
-    ) -> list[GolfCourse]:
+    async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
         """
         Busca campos por estado de aprobación.
 
@@ -61,11 +59,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         Returns:
             Lista de campos con ese estado
         """
-        return [
-            gc
-            for gc in self._golf_courses.values()
-            if gc.approval_status == approval_status
-        ]
+        return [gc for gc in self._golf_courses.values() if gc.approval_status == approval_status]
 
     async def find_approved(self) -> list[GolfCourse]:
         """
@@ -95,11 +89,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         Returns:
             Lista de campos creados por ese usuario
         """
-        return [
-            gc
-            for gc in self._golf_courses.values()
-            if gc.requested_by == creator_id
-        ]
+        return [gc for gc in self._golf_courses.values() if gc.requested_by == creator_id]
 
     async def delete(self, golf_course_id: GolfCourseId) -> None:
         """

@@ -110,9 +110,7 @@ class TestAddGolfCourseToCompetitionUseCase:
                 slope_rating=120,
             ),
         ]
-        holes = [
-            Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)
-        ]
+        holes = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
 
         golf_course = GolfCourse.create(
             name="Real Club de Golf El Prat",
@@ -167,9 +165,7 @@ class TestAddGolfCourseToCompetitionUseCase:
 
         # Verify in repository
         async with competition_uow:
-            stored_competition = await competition_uow.competitions.find_by_id(
-                competition.id
-            )
+            stored_competition = await competition_uow.competitions.find_by_id(competition.id)
             assert len(stored_competition._golf_courses) == 1
             assert stored_competition._golf_courses[0].golf_course_id == golf_course.id
 
@@ -467,9 +463,7 @@ class TestAddGolfCourseToCompetitionUseCase:
                     slope_rating=120,
                 ),
             ]
-            holes = [
-                Hole(number=j, par=4, stroke_index=j) for j in range(1, 19)
-            ]
+            holes = [Hole(number=j, par=4, stroke_index=j) for j in range(1, 19)]
 
             course = GolfCourse.create(
                 name=f"Course {i}",
@@ -504,9 +498,7 @@ class TestAddGolfCourseToCompetitionUseCase:
 
         # Assert - Verify all stored correctly
         async with competition_uow:
-            stored_competition = await competition_uow.competitions.find_by_id(
-                competition.id
-            )
+            stored_competition = await competition_uow.competitions.find_by_id(competition.id)
             assert len(stored_competition._golf_courses) == 3
             assert stored_competition._golf_courses[0].display_order == 1
             assert stored_competition._golf_courses[1].display_order == 2

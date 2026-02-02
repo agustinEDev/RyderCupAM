@@ -134,7 +134,6 @@ class RequestEnrollmentUseCase:
             # 5. Persistir
             await self._uow.enrollments.add(enrollment)
 
-
         # 7. Retornar DTO
         return RequestEnrollmentResponseDTO(
             id=enrollment.id.value,

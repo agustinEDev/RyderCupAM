@@ -133,7 +133,6 @@ class CreateCompetitionUseCase:
             # 9. Persistir la competición
             await self._uow.competitions.add(competition)
 
-
         # 11. Retornar DTO de respuesta
         return CreateCompetitionResponseDTO(
             id=competition.id.value,

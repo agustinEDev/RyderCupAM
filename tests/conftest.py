@@ -883,7 +883,9 @@ async def reject_golf_course(
     return response.json()
 
 
-async def create_admin_user(client: AsyncClient, email: str, password: str, first_name: str, last_name: str) -> dict:
+async def create_admin_user(
+    client: AsyncClient, email: str, password: str, first_name: str, last_name: str
+) -> dict:
     """
     Helper para crear un usuario administrador para tests de integración.
 
@@ -900,9 +902,7 @@ async def create_admin_user(client: AsyncClient, email: str, password: str, firs
     from sqlalchemy import text
 
     # 1. Crear usuario normalmente
-    admin_data = await create_authenticated_user(
-        client, email, password, first_name, last_name
-    )
+    admin_data = await create_authenticated_user(client, email, password, first_name, last_name)
 
     # 2. Marcar usuario como admin directamente en BD (usando la sesión del test client)
     # IMPORTANTE: Usamos app.dependency_overrides para obtener la misma sesión DB
@@ -915,7 +915,7 @@ async def create_admin_user(client: AsyncClient, email: str, password: str, firs
         try:
             await session.execute(
                 text("UPDATE users SET is_admin = TRUE WHERE id = :user_id"),
-                {"user_id": admin_data["user"]["id"]}
+                {"user_id": admin_data["user"]["id"]},
             )
             await session.commit()
         finally:

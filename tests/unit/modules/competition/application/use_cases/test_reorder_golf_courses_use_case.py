@@ -175,9 +175,7 @@ class TestReorderGolfCoursesUseCase:
         assert response.reordered_at is not None
 
         # Verificar orden actualizado en BD
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert updated_competition.golf_courses[0].golf_course_id == three_golf_courses[2].id
         assert updated_competition.golf_courses[0].display_order == 1
         assert updated_competition.golf_courses[1].golf_course_id == three_golf_courses[0].id
@@ -218,9 +216,7 @@ class TestReorderGolfCoursesUseCase:
         # Assert
         assert response.golf_course_count == 2
 
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert updated_competition.golf_courses[0].golf_course_id == three_golf_courses[1].id
         assert updated_competition.golf_courses[1].golf_course_id == three_golf_courses[0].id
 
@@ -479,9 +475,7 @@ class TestReorderGolfCoursesUseCase:
         await use_case.execute(request_dto, creator_id)
 
         # Assert
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert updated_competition.golf_courses[0].golf_course_id == three_golf_courses[2].id
         assert updated_competition.golf_courses[1].golf_course_id == three_golf_courses[1].id
         assert updated_competition.golf_courses[2].golf_course_id == three_golf_courses[0].id
@@ -519,8 +513,6 @@ class TestReorderGolfCoursesUseCase:
         # Assert
         assert response.golf_course_count == 2
 
-        updated_competition = await competition_uow.competitions.find_by_id(
-            competition.id
-        )
+        updated_competition = await competition_uow.competitions.find_by_id(competition.id)
         assert updated_competition.golf_courses[0].golf_course_id == three_golf_courses[0].id
         assert updated_competition.golf_courses[1].golf_course_id == three_golf_courses[1].id

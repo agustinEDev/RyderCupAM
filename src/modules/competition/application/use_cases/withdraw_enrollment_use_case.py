@@ -88,7 +88,6 @@ class WithdrawEnrollmentUseCase:
             # 4. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-
         # 6. Retornar DTO
         return WithdrawEnrollmentResponseDTO(
             id=enrollment.id.value,

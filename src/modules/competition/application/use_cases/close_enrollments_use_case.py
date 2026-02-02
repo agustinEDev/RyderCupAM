@@ -99,7 +99,6 @@ class CloseEnrollmentsUseCase:
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
-
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(
             id=competition.id.value,

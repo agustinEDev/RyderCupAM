@@ -186,9 +186,7 @@ class CompetitionGolfCourseIdDecorator(TypeDecorator):
             return value
         return None
 
-    def process_result_value(
-        self, value: str | None, dialect
-    ) -> CompetitionGolfCourseId | None:
+    def process_result_value(self, value: str | None, dialect) -> CompetitionGolfCourseId | None:
         """Convierte string de BD a CompetitionGolfCourseId."""
         if value is None:
             return None

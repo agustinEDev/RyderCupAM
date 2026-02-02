@@ -492,9 +492,7 @@ class Competition:
     # GOLF COURSE MANAGEMENT
     # ===========================================
 
-    def add_golf_course(
-        self, golf_course_id: GolfCourseId, country_code: CountryCode
-    ) -> None:
+    def add_golf_course(self, golf_course_id: GolfCourseId, country_code: CountryCode) -> None:
         """
         Añade un campo de golf a la competición.
 
@@ -527,9 +525,7 @@ class Competition:
 
         # Validación: no duplicados
         if self._has_golf_course(golf_course_id):
-            raise ValueError(
-                f"El campo de golf {golf_course_id} ya está añadido a la competición"
-            )
+            raise ValueError(f"El campo de golf {golf_course_id} ya está añadido a la competición")
 
         # Calcular próximo display_order automáticamente
         next_order = len(self._golf_courses) + 1
@@ -577,9 +573,7 @@ class Competition:
 
         # Validación: el campo debe existir
         if field_to_remove is None:
-            raise ValueError(
-                f"El campo de golf {golf_course_id} no está en la competición"
-            )
+            raise ValueError(f"El campo de golf {golf_course_id} no está en la competición")
 
         # Remover
         self._golf_courses.remove(field_to_remove)
@@ -590,9 +584,7 @@ class Competition:
 
         self.updated_at = datetime.now()
 
-    def reorder_golf_courses(
-        self, new_order: list[tuple[GolfCourseId, int]]
-    ) -> None:
+    def reorder_golf_courses(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
         """
         Cambia el orden de los campos de golf.
 
@@ -627,8 +619,7 @@ class Competition:
         expected_orders = list(range(1, len(new_order) + 1))
         if sorted(orders) != expected_orders:
             raise ValueError(
-                f"El orden debe ser secuencial (1, 2, 3...). "
-                f"Recibido: {sorted(orders)}"
+                f"El orden debe ser secuencial (1, 2, 3...). Recibido: {sorted(orders)}"
             )
 
         # Aplicar nuevo orden directamente
@@ -662,15 +653,11 @@ class Competition:
             return True
 
         # Países adyacentes son compatibles
-        if (
-            self.location.adjacent_country_1
-            and country_code == self.location.adjacent_country_1
-        ):
+        if self.location.adjacent_country_1 and country_code == self.location.adjacent_country_1:
             return True
 
         return bool(
-            self.location.adjacent_country_2
-            and country_code == self.location.adjacent_country_2
+            self.location.adjacent_country_2 and country_code == self.location.adjacent_country_2
         )
 
     def _has_golf_course(self, golf_course_id: GolfCourseId) -> bool:

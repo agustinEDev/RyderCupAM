@@ -169,9 +169,17 @@ class AddGolfCourseToCompetitionUseCase:
             except ValueError as e:
                 # Puede ser por país incompatible o campo duplicado
                 error_msg = str(e)
-                if "país" in error_msg.lower() or "country" in error_msg.lower() or "compatible" in error_msg.lower():
+                if (
+                    "país" in error_msg.lower()
+                    or "country" in error_msg.lower()
+                    or "compatible" in error_msg.lower()
+                ):
                     raise IncompatibleCountryError(error_msg) from e
-                if "duplicado" in error_msg.lower() or "already" in error_msg.lower() or "añadido" in error_msg.lower():
+                if (
+                    "duplicado" in error_msg.lower()
+                    or "already" in error_msg.lower()
+                    or "añadido" in error_msg.lower()
+                ):
                     raise GolfCourseAlreadyAssignedError(error_msg) from e
                 raise  # Re-lanzar si es otro tipo de ValueError
 
@@ -181,11 +189,7 @@ class AddGolfCourseToCompetitionUseCase:
         # 8. Construir respuesta
         # Buscar el display_order asignado (último en la lista)
         assigned_association = next(
-            (
-                gc
-                for gc in competition.golf_courses
-                if gc.golf_course_id == golf_course_id
-            ),
+            (gc for gc in competition.golf_courses if gc.golf_course_id == golf_course_id),
             None,
         )
 

@@ -118,8 +118,7 @@ class ReorderGolfCoursesUseCase:
             # 4. Convertir UUIDs a tuplas (GolfCourseId, display_order)
             # El orden en la lista determina el display_order (índice + 1)
             new_order = [
-                (GolfCourseId(uuid), idx + 1)
-                for idx, uuid in enumerate(request.golf_course_ids)
+                (GolfCourseId(uuid), idx + 1) for idx, uuid in enumerate(request.golf_course_ids)
             ]
 
             # 5. Validar que todos los campos existen y no hay duplicados
