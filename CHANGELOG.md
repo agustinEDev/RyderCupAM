@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [2.0.2] - TBD (Sprint 2: Competition Scheduling)
+## [2.0.2] - 2026-02-02 (Sprint 2: Competition Scheduling)
 
 ### Added
 - **Competition ↔ GolfCourse Many-to-Many Relationship** (Block 1 - COMPLETED):
