@@ -372,17 +372,24 @@ async def execute(self, golf_course_id, request, user_id, is_admin):
 
 **Violation:**
 - Value Objects (Enums) inherit from `str, Enum` but don't explicitly define equality semantics
-- While Python's Enum provides default equality, it's by **identity** not **value**
+- Python's Enum provides **value-based equality by default** (members are singletons but equality compares values)
+- However, explicit `__eq__` and `__hash__` definitions improve DDD clarity and handle edge cases
 
 **Why it's problematic:**
-- Value Objects should be compared by **value**, not identity
-- Missing explicit `__hash__` can cause issues in sets/dicts
-- Not following DDD value object contract explicitly
+- Missing explicit equality definition doesn't clearly communicate DDD Value Object intent
+- String comparison edge cases (e.g., comparing `TeamAssignment.MANUAL` with `"MANUAL"`) may behave unexpectedly
+- Not following DDD value object contract explicitly in code
 
-**Recommended Fix:**
+**Recommended Fix (Optional - Code Hygiene):**
 
 ```python
 class TeamAssignment(str, Enum):
+    """
+    Value Object for team assignment strategy.
+
+    NOTE: Python's Enum already provides value-based equality.
+    These implementations are optional code hygiene for DDD clarity.
+    """
     MANUAL = "MANUAL"
     AUTOMATIC = "AUTOMATIC"
 
@@ -399,7 +406,15 @@ class TeamAssignment(str, Enum):
         return hash(self.value)
 ```
 
-**Priority:** Low (Python's Enum already provides reasonable equality)
+**Affected Value Objects:**
+- `TeamAssignment` (src/modules/competition/domain/value_objects/team_assignment.py)
+- `EnrollmentStatus` (src/modules/competition/domain/value_objects/enrollment_status.py)
+- `CompetitionStatus` (src/modules/competition/domain/value_objects/competition_status.py)
+- `CourseType` (src/modules/golf_course/domain/value_objects/course_type.py)
+- `ApprovalStatus` (src/modules/golf_course/domain/value_objects/approval_status.py)
+- `TeeCategory` (src/modules/golf_course/domain/value_objects/tee_category.py)
+
+**Priority:** Low (Python's Enum equality semantics are already correct for our use case)
 
 ---
 

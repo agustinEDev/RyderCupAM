@@ -1102,8 +1102,8 @@ jobs:
           if [ -z "$COMMIT_MSG_RAW" ]; then
             SANITIZED_COMMIT_MSG="N/A"
           else
-            # Replace newlines with space, escape pipe characters
-            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | tr '\n' ' ' | sed 's/|/\\|/g')
+            # Extract only first line (title) for commit message to avoid multi-line bash issues
+            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | head -n 1 | sed 's/|/\\|/g')
           fi
 
           # Calculate percentages using python (guaranteed available in GitHub Actions)
