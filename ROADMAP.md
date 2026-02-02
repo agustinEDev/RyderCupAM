@@ -8,11 +8,11 @@
 
 ## 📊 Current Status
 
-**Tests:** 1,177 (1,177 passing, 16 skipped, ~142s) | **Endpoints:** 50 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,201 (1,201 passing, 16 skipped, ~79s) | **Endpoints:** 54 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
-- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states)
+- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M (add/remove/reorder) ⭐ v2.0.2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
@@ -110,9 +110,9 @@ class GolfCourseRequest(BaseModel):
 
 ---
 
-#### Sprint 2: Competition Scheduling (1.5 weeks)
+#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS
 
-**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (PRIORITY)**
+**Block 0: Clean Architecture Refactor - UoW Pattern Consistency (✅ COMPLETED: Jan 31, 2026)**
 - **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
 - **Problem**: Violates Unit of Work pattern - UoW context manager (`__aexit__`) should handle commits automatically
 - **Files to modify**:
@@ -127,10 +127,11 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 3-4 hours
 - **Related**: Golf Course module already completed (v2.0.1 - commit bfa7efa)
 
-**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (FOUNDATION)**
+**Block 1: Competition ↔ GolfCourse Many-to-Many Relationship (✅ COMPLETED: Feb 1, 2026)**
 - **Rationale**: Competitions can be played across multiple golf courses (multi-round tournaments)
 - **Architecture**: Many-to-Many via `competition_golf_courses` association table
 - **Migration**: Create `competition_golf_courses` table (id, competition_id, golf_course_id, display_order, created_at)
+  - **Type Safety**: Mixed UUID types - `competition_id` uses CHAR(36) to match existing `competitions.id`, `golf_course_id` uses UUID(as_uuid=True) to match `golf_courses.id`
 - **Domain Layer**:
   - New entity: `CompetitionGolfCourse` (id, golf_course_id, display_order)
   - Update `Competition` entity: add `_golf_courses: list[CompetitionGolfCourse]`
@@ -160,36 +161,52 @@ class GolfCourseRequest(BaseModel):
   - Option to create new course request (PENDING) and attach to competition
   - Warning if competition has PENDING courses (cannot activate until approved)
   - UI to reorder courses (drag-and-drop)
-- **Tests**: +55 tests (25 domain, 18 application, 12 integration)
-- **Time**: 1.5 weeks
-- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship)
+- **Tests**: +64 tests ✅
+  - Domain: 24 tests (13 CompetitionGolfCourseId + 11 CompetitionGolfCourse) ✅
+  - Application: 26 tests (11 AddGolfCourse + 6 RemoveGolfCourse + 9 ReorderGolfCourses) ✅
+  - Integration: 9 tests (4 API endpoints) ✅
+  - Infrastructure: InMemoryGolfCourseRepository + InMemoryGolfCourseUnitOfWork ✅
+- **Time**: 4 hours (Domain + Migration + Infrastructure + API stubs)
+- **ADR**: ADR-034 (Competition-GolfCourse Many-to-Many Relationship) - PENDING
+- **Commits**:
+  - 7bfc8f5 - feat(domain): add CompetitionGolfCourse many-to-many relationship
+  - 15e3e5a - feat(migration): add competition_golf_courses association table
+  - 79dd6e4 - feat(infra): add CompetitionGolfCourse mapper and endpoints
+  - 63dc494 - fix(mapper): add explicit property mappings for CompetitionGolfCourse
+  - 25d54d3 - fix(migration): change competition_id to CHAR(36) to match existing schema
+  - a51fe85 - feat(sprint2): complete Block 1 - M2M integration tests (9 tests + create_admin_user helper)
 
-**Block 2: Code Quality Refactor - Exception Subclasses**
+**Block 2: Code Quality Refactor - Exception Subclasses (✅ COMPLETED: Feb 2, 2026)**
 - **Issue**: CodeRabbit #2 - Replace fragile string matching with exception subclasses
-- **Files**: `business_rule_violation.py`, `competition_policy.py`, `request_enrollment_use_case.py`
-- **Action**: Create `DuplicateEnrollmentViolation`, `InvalidCompetitionStatusViolation`, etc.
-- **Benefit**: Type-safe exception handling, better DDD, maintainable
-- **Tests**: Update ~20 tests (CompetitionPolicy + use cases)
-- **Time**: 2-3 hours
+- **Files Modified**:
+  - `src/modules/competition/domain/exceptions/competition_violations.py` (NEW - 8 subclasses)
+  - `src/modules/competition/domain/exceptions/__init__.py` (NEW)
+  - `src/modules/competition/domain/services/competition_policy.py` (refactored)
+  - `src/modules/competition/application/use_cases/request_enrollment_use_case.py` (refactored)
+  - `tests/unit/modules/competition/domain/services/test_competition_policy.py` (20 tests updated)
+- **Results**:
+  - ✅ 8 type-safe exception subclasses created
+  - ✅ Eliminated fragile string matching (`if "already enrolled" in str(e)`)
+  - ✅ 970/970 unit tests passing (100%)
+  - ✅ Better DDD compliance + maintainability
+- **Time**: 2.5 hours
 
-**Block 3: Fix SBOM Submission to GitHub Dependency Graph**
+**Block 3: Fix SBOM Submission to GitHub Dependency Graph (✅ COMPLETED: Feb 2, 2026)**
 - **Issue**: Action `github/dependency-graph-submit-action@v1` doesn't exist (CI/CD failing)
-- **Current State**: Step commented out in `.github/workflows/ci_cd_pipeline.yml` (release v2.0.1)
-- **Options**:
-  1. Use GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
-  2. Use `advanced-security/maven-dependency-submission-action` (ecosystem-specific, N/A for Python)
-  3. Use `jessehouwing/actions-dependency-submission` (community action)
-- **Recommended**: Option 1 (REST API) - Most reliable, no third-party dependencies
-- **Implementation**:
-  - Create bash script `scripts/submit-sbom-to-github.sh`
-  - Call GitHub API with SBOM JSON payload (CycloneDX format)
-  - Only execute on `main` branch (same condition as before)
-  - Add error handling + logging
-- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance
-- **Files**: `.github/workflows/ci_cd_pipeline.yml`, `scripts/submit-sbom-to-github.sh`
-- **Tests**: Manual testing (GitHub API requires merge to main)
-- **Time**: 2-3 hours
-- **ADR**: ADR-035 (SBOM Submission via GitHub REST API)
+- **Solution**: GitHub REST API `/repos/{owner}/{repo}/dependency-graph/snapshots` (official)
+- **Files Modified/Created**:
+  - `scripts/submit-sbom-to-github.sh` (NEW - 202 lines, REST API integration)
+  - `.github/workflows/ci_cd_pipeline.yml` (uncommented + modified SBOM submission)
+  - `docs/architecture/decisions/ADR-036-sbom-submission-rest-api.md` (NEW)
+- **Results**:
+  - ✅ Zero external dependencies (no third-party actions)
+  - ✅ Full control over SBOM submission logic
+  - ✅ Proper error handling + logging
+  - ✅ `permissions: contents: write` enabled for Dependency Graph integration
+  - ⏸️ Manual verification pending (requires merge to main)
+- **Benefit**: Supply chain visibility, Dependabot integration, OWASP A08 compliance maintained
+- **Time**: 2 hours
+- **ADR**: ADR-036 (SBOM Submission via GitHub REST API)
 
 **Rounds Endpoints (4):**
 ```

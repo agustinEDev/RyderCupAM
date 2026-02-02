@@ -615,3 +615,182 @@ class CancelCompetitionResponseDTO(BaseModel):
     cancelled_at: datetime = Field(..., description="Fecha y hora de cancelación.")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# Golf Course Management DTOs
+# =============================================================================
+
+
+class AddGolfCourseRequestDTO(BaseModel):
+    """
+    DTO de entrada para añadir un campo de golf a una competición.
+
+    Business Rules:
+    - La competición debe estar en estado DRAFT
+    - El campo de golf debe estar APPROVED
+    - El campo no puede estar ya asociado a la competición
+    - El país del campo debe ser compatible con la ubicación de la competición
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_id: UUID = Field(..., description="ID del campo de golf a añadir.")
+
+
+class AddGolfCourseResponseDTO(BaseModel):
+    """
+    DTO de salida para añadir un campo de golf a una competición.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_id: UUID = Field(..., description="ID del campo de golf añadido.")
+    display_order: int = Field(..., description="Orden de visualización asignado.")
+    added_at: datetime = Field(..., description="Fecha y hora de adición.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RemoveGolfCourseRequestDTO(BaseModel):
+    """
+    DTO de entrada para eliminar un campo de golf de una competición.
+
+    Business Rules:
+    - La competición debe estar en estado DRAFT
+    - El campo debe estar asociado a la competición
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_id: UUID = Field(..., description="ID del campo de golf a eliminar.")
+
+
+class RemoveGolfCourseResponseDTO(BaseModel):
+    """
+    DTO de salida para eliminar un campo de golf de una competición.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_id: UUID = Field(..., description="ID del campo de golf eliminado.")
+    removed_at: datetime = Field(..., description="Fecha y hora de eliminación.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReorderGolfCoursesRequestDTO(BaseModel):
+    """
+    DTO de entrada para reordenar los campos de golf de una competición.
+
+    Business Rules:
+    - La competición debe estar en estado DRAFT
+    - Todos los golf_course_ids deben existir en la competición
+    - No puede haber duplicados
+    - Debe incluir TODOS los campos asociados
+
+    Example:
+        {
+            "competition_id": "123e4567-e89b-12d3-a456-426614174000",
+            "golf_course_ids": [
+                "uuid-golf-course-3",  # display_order = 1
+                "uuid-golf-course-1",  # display_order = 2
+                "uuid-golf-course-2"   # display_order = 3
+            ]
+        }
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        description="Lista ordenada de IDs de campos de golf (orden final deseado).",
+    )
+
+
+class ReorderGolfCoursesResponseDTO(BaseModel):
+    """
+    DTO de salida para reordenar campos de golf.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    golf_course_count: int = Field(..., description="Número de campos reordenados.")
+    reordered_at: datetime = Field(..., description="Fecha y hora de reordenación.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
+# DTOs para API endpoints (request bodies y responses específicos)
+# ======================================================================================
+
+
+class AddGolfCourseBodyDTO(BaseModel):
+    """
+    DTO para el body del endpoint de añadir campo de golf a competición.
+
+    Este DTO valida que el request body contenga un golf_course_id válido.
+    El competition_id viene del path parameter.
+    """
+
+    golf_course_id: UUID = Field(..., description="ID del campo de golf a añadir.")
+
+
+class ReorderGolfCourseIdsRequest(BaseModel):
+    """
+    DTO para el body del endpoint de reordenar campos de golf.
+
+    Valida que el request body contenga una lista de UUIDs.
+    El competition_id viene del path parameter.
+    """
+
+    golf_course_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        description="Lista ordenada de IDs de campos de golf (orden final deseado).",
+    )
+
+
+# ======================================================================================
+# DTOs para listado detallado de campos de golf de una competición
+# ======================================================================================
+
+
+class TeeResponseDTO(BaseModel):
+    """DTO de respuesta para un tee de un campo de golf."""
+
+    id: UUID = Field(..., description="ID único del tee")
+    identifier: str = Field(..., description="Nombre del tee (ej: 'Championship', 'Blue', 'White')")
+    course_rating: float = Field(..., description="Course Rating (WHS)")
+    slope_rating: int = Field(..., description="Slope Rating (WHS)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HoleResponseDTO(BaseModel):
+    """DTO de respuesta para un hoyo de un campo de golf."""
+
+    hole_number: int = Field(..., description="Número del hoyo (1-18)")
+    par: int = Field(..., description="Par del hoyo (3, 4, o 5)")
+    stroke_index: int = Field(..., description="Índice de dificultad (1-18)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GolfCourseDetailDTO(BaseModel):
+    """DTO de respuesta con detalles completos de un campo de golf."""
+
+    id: UUID = Field(..., description="ID del campo de golf")
+    name: str = Field(..., description="Nombre del campo")
+    country_code: str = Field(..., description="Código ISO del país")
+    tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
+    holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompetitionGolfCourseResponseDTO(BaseModel):
+    """DTO de respuesta para un campo de golf asociado a una competición."""
+
+    golf_course_id: UUID = Field(..., description="ID del campo de golf")
+    display_order: int = Field(..., description="Orden de visualización")
+    created_at: datetime = Field(..., description="Fecha de asociación")
+    golf_course: GolfCourseDetailDTO = Field(..., description="Detalles completos del campo")
+
+    model_config = ConfigDict(from_attributes=True)

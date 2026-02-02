@@ -881,3 +881,68 @@ async def reject_golf_course(
     )
     assert response.status_code == 200, f"Failed to reject golf course: {response.text}"
     return response.json()
+
+
+async def create_admin_user(
+    client: AsyncClient, email: str, password: str, first_name: str, last_name: str
+) -> dict:
+    """
+    Helper para crear un usuario administrador para tests de integración.
+
+    Args:
+        client: Cliente HTTP de testing
+        email: Email del admin
+        password: Contraseña del admin
+        first_name: Nombre
+        last_name: Apellido
+
+    Returns:
+        Dict con 'cookies', 'token', 'user' del administrador
+    """
+    from sqlalchemy import text
+
+    # 1. Crear usuario normalmente
+    admin_data = await create_authenticated_user(client, email, password, first_name, last_name)
+
+    # 2. Marcar usuario como admin directamente en BD (usando la sesión del test client)
+    # IMPORTANTE: Usamos app.dependency_overrides para obtener la misma sesión DB
+    # que usa el test client (worker-isolated database en pytest-xdist)
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    db_session_override = app.dependency_overrides.get(get_db_session)
+
+    # Validar que el override existe (requiere client fixture con database_override)
+    if db_session_override is None:
+        raise RuntimeError(
+            "Database session override not found. "
+            "Ensure the 'client' fixture with database_override is set up before calling create_admin_user."
+        )
+
+    async for session in db_session_override():
+        try:
+            await session.execute(
+                text("UPDATE users SET is_admin = TRUE WHERE id = :user_id"),
+                {"user_id": admin_data["user"]["id"]},
+            )
+            await session.commit()
+        except Exception:
+            # Rollback on any error before re-raising
+            await session.rollback()
+            raise
+        finally:
+            # Always close the session
+            await session.close()
+
+    # 3. Re-autenticar para obtener nuevo token JWT con is_admin=True
+    login_response = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
+    assert login_response.status_code == 200
+
+    # Actualizar con el nuevo token y cookies que incluyen is_admin=True
+    admin_data["token"] = login_response.json()["access_token"]
+    admin_data["user"] = login_response.json()["user"]
+    admin_data["cookies"] = dict(login_response.cookies)
+
+    return admin_data

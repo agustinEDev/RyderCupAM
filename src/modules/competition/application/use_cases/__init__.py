@@ -3,6 +3,9 @@
 from .activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
+from .add_golf_course_use_case import (
+    AddGolfCourseToCompetitionUseCase,
+)
 from .cancel_competition_use_case import (
     CancelCompetitionUseCase,
 )
@@ -24,6 +27,12 @@ from .get_competition_use_case import (
     CompetitionNotFoundError,
     GetCompetitionUseCase,
 )
+from .remove_golf_course_use_case import (
+    RemoveGolfCourseFromCompetitionUseCase,
+)
+from .reorder_golf_courses_use_case import (
+    ReorderGolfCoursesUseCase,
+)
 from .start_competition_use_case import (
     StartCompetitionUseCase,
 )
@@ -36,6 +45,7 @@ from .update_competition_use_case import (
 __all__ = [
     # State Transitions
     "ActivateCompetitionUseCase",
+    "AddGolfCourseToCompetitionUseCase",
     "CancelCompetitionUseCase",
     "CloseEnrollmentsUseCase",
     # Exceptions
@@ -49,6 +59,8 @@ __all__ = [
     "DeleteCompetitionUseCase",
     "GetCompetitionUseCase",
     "NotCompetitionCreatorError",
+    "RemoveGolfCourseFromCompetitionUseCase",
+    "ReorderGolfCoursesUseCase",
     "StartCompetitionUseCase",
     "UpdateCompetitionUseCase",
 ]

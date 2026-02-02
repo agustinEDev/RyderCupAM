@@ -58,7 +58,13 @@ echo "   Base: $BASE_REF"
 echo "   Head: $HEAD_REF"
 
 # Get list of commits in range (fail if git rev-list errors)
-COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>&1)
+# If BASE_REF is empty, verify only HEAD_REF (first commit case)
+if [ -z "$BASE_REF" ]; then
+    echo "   (Verifying only HEAD_REF - no parent commit)"
+    COMMIT_LIST=$(git rev-list -n 1 "$HEAD_REF" 2>&1)
+else
+    COMMIT_LIST=$(git rev-list "$BASE_REF..$HEAD_REF" 2>&1)
+fi
 REV_LIST_EXIT=$?
 
 if [ $REV_LIST_EXIT -ne 0 ]; then

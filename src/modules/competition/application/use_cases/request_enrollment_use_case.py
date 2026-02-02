@@ -9,6 +9,10 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentResponseDTO,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.exceptions.competition_violations import (
+    DuplicateEnrollmentViolation,
+    InvalidCompetitionStatusViolation,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -16,7 +20,6 @@ from src.modules.competition.domain.services.competition_policy import Competiti
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.exceptions.business_rule_violation import BusinessRuleViolation
 
 
 class CompetitionNotFoundError(Exception):
@@ -114,15 +117,12 @@ class RequestEnrollmentUseCase:
                     competition_start_date=competition.dates.start_date,
                     user_total_enrollments=user_total_enrollments,
                 )
-            except BusinessRuleViolation as e:
-                error_msg = str(e).lower()
-                # Convertir BusinessRuleViolation a excepciones específicas para compatibilidad
-                if "already enrolled" in error_msg:
-                    raise AlreadyEnrolledError(str(e)) from e
-                if "competition status" in error_msg or "only allowed in" in error_msg:
-                    raise CompetitionNotActiveError(str(e)) from e
-                # Otras BusinessRuleViolation se propagan tal cual
-                raise
+            except DuplicateEnrollmentViolation as e:
+                # Type-safe exception handling - no more fragile string matching!
+                raise AlreadyEnrolledError(str(e)) from e
+            except InvalidCompetitionStatusViolation as e:
+                raise CompetitionNotActiveError(str(e)) from e
+            # MaxEnrollmentsExceededViolation, EnrollmentPastStartDateViolation propagate as-is
 
             # 4. Crear enrollment con factory method
             enrollment = Enrollment.request(
@@ -133,9 +133,6 @@ class RequestEnrollmentUseCase:
 
             # 5. Persistir
             await self._uow.enrollments.add(enrollment)
-
-            # 6. Commit
-            await self._uow.commit()
 
         # 7. Retornar DTO
         return RequestEnrollmentResponseDTO(

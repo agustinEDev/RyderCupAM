@@ -155,7 +155,6 @@ class UpdateCompetitionUseCase:
 
             # 6. Persistir cambios
             await self._uow.competitions.update(competition)
-            await self._uow.commit()
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(
