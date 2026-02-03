@@ -121,10 +121,13 @@ class TestRegisterDeviceUseCase:
 
     async def test_register_device_different_ip_creates_new(self, uow):
         """
-        Test: Mismo dispositivo con IP diferente crea nuevo registro
-        Given: Mismo user_agent pero IP diferente
+        Test: Mismo dispositivo con IP de diferente red /24 crea nuevo registro
+        Given: Mismo user_agent pero IPs de diferentes redes /24
         When: Se registra dispositivo
-        Then: Se crea nuevo (fingerprint considera IP)
+        Then: Se crean dos dispositivos diferentes
+
+        Note: v2.0.4 - IPs se normalizan a /24 para tolerar rotación de ISP
+              192.168.1.x y 193.168.1.x son redes diferentes
         """
         # Arrange
         use_case = RegisterDeviceUseCase(uow)
@@ -134,14 +137,14 @@ class TestRegisterDeviceUseCase:
             user_id=str(user_id.value),
             device_name="Firefox on Windows",
             user_agent="Mozilla/5.0 (Windows NT 10.0)",
-            ip_address="192.168.1.100",
+            ip_address="192.168.1.100",  # Red /24: 192.168.1.0
         )
 
         request2 = RegisterDeviceRequestDTO(
             user_id=str(user_id.value),
             device_name="Firefox on Windows",
             user_agent="Mozilla/5.0 (Windows NT 10.0)",
-            ip_address="192.168.1.200",  # IP diferente
+            ip_address="193.168.1.100",  # Red /24: 193.168.1.0 (diferente)
         )
 
         # Act
