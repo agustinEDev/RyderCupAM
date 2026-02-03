@@ -8,26 +8,50 @@ echo "🚀 Iniciando Ryder Cup Manager API..."
 # =============================================================================
 echo "🔍 Validando variables de entorno requeridas..."
 
-REQUIRED_VARS="POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB SECRET_KEY"
-ALL_VALID=true
+# Detectar entorno de ejecución
+if [ -n "$DATABASE_URL" ]; then
+    # Render.com / Producción: usa DATABASE_URL
+    echo "ℹ️  Entorno: Producción (Render.com)"
+    echo "   Usando DATABASE_URL para PostgreSQL"
 
-for VAR in $REQUIRED_VARS; do
-    eval VALUE=\$$VAR
-    if [ -z "$VALUE" ]; then
-        echo "❌ ERROR: Variable requerida '$VAR' no está configurada"
-        ALL_VALID=false
-    elif echo "$VALUE" | grep -q "^MISSING_"; then
-        echo "❌ ERROR: Variable '$VAR' tiene valor placeholder: $VALUE"
-        ALL_VALID=false
+    # Validar SECRET_KEY
+    if [ -z "$SECRET_KEY" ]; then
+        echo "❌ ERROR: SECRET_KEY no configurada"
+        exit 1
     fi
-done
 
-if [ "$ALL_VALID" = false ]; then
-    echo "❌ Validación fallida. Por favor configura el archivo .env correctamente."
-    exit 1
+    # Validar formato de DATABASE_URL
+    if ! echo "$DATABASE_URL" | grep -qE "^postgres(ql)?://"; then
+        echo "❌ ERROR: DATABASE_URL malformada"
+        exit 1
+    fi
+
+    echo "✅ Variables validadas (Render)"
+else
+    # Docker Compose / Local: usa variables individuales
+    echo "ℹ️  Entorno: Desarrollo local (Docker)"
+
+    REQUIRED_VARS="POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB SECRET_KEY"
+    ALL_VALID=true
+
+    for VAR in $REQUIRED_VARS; do
+        eval VALUE=\$$VAR
+        if [ -z "$VALUE" ]; then
+            echo "❌ ERROR: Variable '$VAR' no configurada"
+            ALL_VALID=false
+        elif echo "$VALUE" | grep -q "^MISSING_"; then
+            echo "❌ ERROR: Variable '$VAR' tiene placeholder: $VALUE"
+            ALL_VALID=false
+        fi
+    done
+
+    if [ "$ALL_VALID" = false ]; then
+        echo "❌ Validación fallida. Configura .env correctamente."
+        exit 1
+    fi
+
+    echo "✅ Variables validadas (Docker)"
 fi
-
-echo "✅ Variables de entorno validadas"
 
 # =============================================================================
 # ESPERAR A POSTGRESQL
