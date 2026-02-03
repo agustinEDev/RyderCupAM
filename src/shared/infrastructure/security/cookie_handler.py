@@ -38,6 +38,36 @@ def is_production() -> bool:
     return os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 
+def get_cookie_domain() -> str | None:
+    """
+    Retorna el dominio para las cookies.
+
+    En producción con subdominios (api.rydercupfriends.com):
+    - COOKIE_DOMAIN=.rydercupfriends.com (permite www + api)
+
+    En desarrollo local:
+    - COOKIE_DOMAIN vacío o None (default a localhost)
+
+    Returns:
+        Domain string con punto inicial o None
+
+    Example:
+        >>> os.environ['COOKIE_DOMAIN'] = '.rydercupfriends.com'
+        >>> get_cookie_domain()
+        '.rydercupfriends.com'
+
+        >>> os.environ['COOKIE_DOMAIN'] = ''
+        >>> get_cookie_domain()
+        None
+
+    Note:
+        El punto inicial es CRÍTICO para permitir subdominios.
+        Sin el punto, las cookies solo funcionarían en el dominio exacto.
+    """
+    domain = os.getenv("COOKIE_DOMAIN")
+    return domain if domain and domain.strip() else None
+
+
 def set_auth_cookie(response: Response, token: str) -> None:
     """
     Establece una cookie httpOnly con el JWT de autenticación.
@@ -83,6 +113,7 @@ def set_auth_cookie(response: Response, token: str) -> None:
         samesite="lax",  # ✅ Protección CSRF moderada
         max_age=COOKIE_MAX_AGE,  # ✅ Expira en 1 hora
         path="/",  # ✅ Disponible en toda la app
+        domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
     )
 
 
@@ -113,6 +144,7 @@ def delete_auth_cookie(response: Response) -> None:
         httponly=True,  # Mismo httponly que al crear
         secure=is_production(),  # Mismo secure que al crear
         samesite="lax",  # Mismo samesite que al crear
+        domain=get_cookie_domain(),  # Mismo domain que al crear
     )
 
 
@@ -179,6 +211,7 @@ def set_refresh_token_cookie(response: Response, refresh_token: str) -> None:
         samesite="lax",  # ✅ Protección CSRF
         max_age=REFRESH_COOKIE_MAX_AGE,  # ✅ Expira en 7 días
         path="/",  # ✅ Disponible en toda la app
+        domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
     )
 
 
@@ -208,6 +241,7 @@ def delete_refresh_token_cookie(response: Response) -> None:
         httponly=True,  # Mismo httponly que al crear
         secure=is_production(),  # Mismo secure que al crear
         samesite="lax",  # Mismo samesite que al crear
+        domain=get_cookie_domain(),  # Mismo domain que al crear
     )
 
 
@@ -274,6 +308,7 @@ def set_csrf_cookie(response: Response, csrf_token: str) -> None:
         samesite="lax",  # ✅ Protección CSRF adicional
         max_age=CSRF_COOKIE_MAX_AGE,  # ✅ Expira en 15 minutos
         path="/",  # ✅ Disponible en toda la app
+        domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
     )
 
 
@@ -303,6 +338,7 @@ def delete_csrf_cookie(response: Response) -> None:
         httponly=False,  # Mismo httponly que al crear
         secure=is_production(),  # Mismo secure que al crear
         samesite="lax",  # Mismo samesite que al crear
+        domain=get_cookie_domain(),  # Mismo domain que al crear
     )
 
 
