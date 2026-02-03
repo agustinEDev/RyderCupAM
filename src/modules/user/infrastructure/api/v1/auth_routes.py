@@ -877,32 +877,3 @@ async def unlock_account(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
-
-
-# =============================================================================
-# DEBUG ENDPOINT - Cloudflare Headers Inspection (TEMPORAL)
-# =============================================================================
-
-
-@router.get(
-    "/debug/headers",
-    response_model=dict,
-    summary="[DEBUG] Inspect HTTP headers",
-    description="Temporary endpoint to verify Cloudflare headers (CF-Connecting-IP)",
-)
-async def debug_headers(request: Request):
-    """
-    Endpoint temporal para inspeccionar headers HTTP.
-
-    Usado para verificar que Cloudflare está enviando CF-Connecting-IP.
-
-    IMPORTANTE: ELIMINAR ESTE ENDPOINT DESPUÉS DE VERIFICAR.
-    """
-    return {
-        "cf_connecting_ip": request.headers.get("CF-Connecting-IP"),
-        "x_forwarded_for": request.headers.get("X-Forwarded-For"),
-        "x_real_ip": request.headers.get("X-Real-IP"),
-        "request_client_host": request.client.host if request.client else None,
-        "user_agent": request.headers.get("User-Agent"),
-        "all_headers": dict(request.headers),
-    }
