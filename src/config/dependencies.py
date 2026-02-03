@@ -552,18 +552,33 @@ async def get_current_user(  # noqa: PLR0912
 
     user_agent = request.headers.get("User-Agent", "unknown")
 
-    # Extraer IP con soporte para proxies (X-Forwarded-For, X-Real-IP)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        ip_address = forwarded_for.split(",")[0].strip()
+    # Extraer IP real del cliente con soporte para Cloudflare + proxies
+    # Prioridad:
+    # 1. CF-Connecting-IP (Cloudflare Proxy - IP real del usuario)
+    # 2. True-Client-IP (Cloudflare Enterprise - IP real del usuario)
+    # 3. X-Forwarded-For (proxies estándar - primer valor)
+    # 4. X-Real-IP (proxies alternativos)
+    # 5. request.client.host (fallback - puede ser IP interna de Render)
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        ip_address = cf_ip.strip()
     else:
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            ip_address = real_ip.strip()
-        elif request.client and request.client.host:
-            ip_address = request.client.host
+        true_client_ip = request.headers.get("True-Client-IP")
+        if true_client_ip:
+            ip_address = true_client_ip.strip()
         else:
-            ip_address = "unknown"
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # X-Forwarded-For puede tener múltiples IPs, tomar la primera (cliente original)
+                ip_address = forwarded_for.split(",")[0].strip()
+            else:
+                real_ip = request.headers.get("X-Real-IP")
+                if real_ip:
+                    ip_address = real_ip.strip()
+                elif request.client and request.client.host:
+                    ip_address = request.client.host
+                else:
+                    ip_address = "unknown"
 
     if user_agent != "unknown" and ip_address != "unknown":
         try:

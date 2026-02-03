@@ -189,11 +189,12 @@ def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = 
         str: IP del cliente validada
         None: Si no se puede determinar una IP válida
 
-    Lógica de extracción:
-        1. Validar que request viene de proxy confiable (si trusted_proxies está configurado)
-        2. Si proxy es confiable: usar X-Forwarded-For o X-Real-IP
-        3. Si proxy NO es confiable o no hay headers: usar request.client.host
-        4. Aplicar validate_ip_address() al resultado
+    Lógica de extracción (con Cloudflare support):
+        1. **Prioridad MÁXIMA:** CF-Connecting-IP (Cloudflare Proxy - siempre confiable)
+        2. **Prioridad 2:** True-Client-IP (Cloudflare Enterprise - siempre confiable)
+        3. **Prioridad 3:** Si proxy confiable: X-Forwarded-For o X-Real-IP
+        4. **Fallback:** request.client.host
+        5. Aplicar validate_ip_address() al resultado
 
     Examples:
         # Caso 1: Request directo (sin proxy)
@@ -231,28 +232,39 @@ def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = 
     # 3. Extraer IP del cliente según confianza del proxy
     client_ip = None
 
-    if is_trusted_proxy:
-        # Prioridad 1: X-Forwarded-For (proxies, load balancers)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-            # La primera es la IP real del cliente
-            client_ip = forwarded_for.split(",")[0].strip()
-            logger.debug(f"Using X-Forwarded-For from trusted proxy: {client_ip}")
-        else:
-            # Prioridad 2: X-Real-IP (Nginx, otros proxies)
-            real_ip = request.headers.get("X-Real-IP")
-            if real_ip:
-                client_ip = real_ip.strip()
-                logger.debug(f"Using X-Real-IP from trusted proxy: {client_ip}")
-            else:
-                # Fallback: IP del proxy (conexión directa al proxy)
-                client_ip = proxy_ip
-                logger.debug(f"No proxy headers, using proxy IP: {client_ip}")
+    # PRIORIDAD MÁXIMA: Headers de Cloudflare (siempre confiables, no pueden ser spoofed)
+    # Estos headers son añadidos por Cloudflare Proxy y son seguros de usar
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        client_ip = cf_ip.strip()
+        logger.debug(f"Using CF-Connecting-IP from Cloudflare: {client_ip}")
     else:
-        # Proxy NO confiable o sin configuración de proxies
-        # NO confiar en headers X-Forwarded-For/X-Real-IP
-        client_ip = proxy_ip
+        true_client_ip = request.headers.get("True-Client-IP")
+        if true_client_ip:
+            client_ip = true_client_ip.strip()
+            logger.debug(f"Using True-Client-IP from Cloudflare: {client_ip}")
+        elif is_trusted_proxy:
+            # Prioridad 2: X-Forwarded-For (proxies estándar, load balancers)
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
+                # La primera es la IP real del cliente
+                client_ip = forwarded_for.split(",")[0].strip()
+                logger.debug(f"Using X-Forwarded-For from trusted proxy: {client_ip}")
+            else:
+                # Prioridad 3: X-Real-IP (Nginx, otros proxies)
+                real_ip = request.headers.get("X-Real-IP")
+                if real_ip:
+                    client_ip = real_ip.strip()
+                    logger.debug(f"Using X-Real-IP from trusted proxy: {client_ip}")
+                else:
+                    # Fallback: IP del proxy (conexión directa al proxy)
+                    client_ip = proxy_ip
+                    logger.debug(f"No proxy headers, using proxy IP: {client_ip}")
+        else:
+            # Proxy NO confiable o sin configuración de proxies
+            # NO confiar en headers X-Forwarded-For/X-Real-IP
+            client_ip = proxy_ip
         if trusted_proxies:
             logger.warning(f"Untrusted proxy {proxy_ip} sent request, ignoring forwarded headers")
         else:
