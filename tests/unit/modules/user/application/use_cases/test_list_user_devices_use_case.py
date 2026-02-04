@@ -266,12 +266,16 @@ class TestListUserDevicesUseCase:
     # TESTS NUEVOS v1.13.1: is_current_device Detection
     # ===================================================================================
 
-    async def test_is_current_device_true_when_fingerprint_matches(self, uow):
+    async def test_is_current_device_true_when_cookie_matches(self, uow):
         """
-        Test: is_current_device=True cuando el fingerprint coincide
+        Test: is_current_device=True cuando device_id_from_cookie coincide (v2.0.4)
         Given: Usuario con 1 dispositivo registrado
-        When: Se lista con el MISMO user_agent + ip_address usado al registrarlo
+        When: Se lista con device_id_from_cookie del dispositivo registrado
         Then: El dispositivo tiene is_current_device=True
+
+        Cookie-based identification (v2.0.4):
+        - La cookie device_id identifica el dispositivo actual
+        - No depende de IP o User-Agent (que pueden cambiar)
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
@@ -284,20 +288,20 @@ class TestListUserDevicesUseCase:
         )
         ip_address = "192.168.1.100"
 
-        # Registrar dispositivo con estos valores
-        await register_use_case.execute(
+        # Registrar dispositivo y obtener device_id
+        register_response = await register_use_case.execute(
             RegisterDeviceRequestDTO(
                 user_id=str(user_id.value),
                 user_agent=user_agent,
                 ip_address=ip_address,
             )
         )
+        device_id = register_response.device_id
 
-        # Listar con el MISMO user_agent + ip_address
+        # Listar con device_id_from_cookie (simula cookie del navegador)
         request = ListUserDevicesRequestDTO(
             user_id=str(user_id.value),
-            user_agent=user_agent,  # ← MISMO
-            ip_address=ip_address,  # ← MISMO
+            device_id_from_cookie=device_id,  # ← Cookie con el device_id
         )
 
         # Act
@@ -305,7 +309,7 @@ class TestListUserDevicesUseCase:
 
         # Assert
         assert response.total_count == 1
-        # ✅ El dispositivo debe estar marcado como actual
+        # ✅ El dispositivo debe estar marcado como actual (via cookie)
         assert response.devices[0].is_current_device is True
 
     async def test_is_current_device_false_when_fingerprint_differs(self, uow):
@@ -396,19 +400,19 @@ class TestListUserDevicesUseCase:
 
     async def test_is_current_device_only_one_true_with_multiple_devices(self, uow):
         """
-        Test: Solo UN dispositivo es is_current_device=True con múltiples dispositivos
+        Test: Solo UN dispositivo es is_current_device=True con múltiples dispositivos (v2.0.4)
         Given: Usuario con 4 dispositivos registrados
-        When: Se lista con user_agent + ip_address del dispositivo 2
+        When: Se lista con device_id_from_cookie del dispositivo 2
         Then: Solo dispositivo 2 tiene is_current_device=True, los demás False
+
+        Cookie-based identification (v2.0.4):
+        - La cookie device_id identifica únicamente el dispositivo actual
+        - No importa el User-Agent o IP (pueden cambiar con VPN, actualizaciones, etc.)
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
         list_use_case = ListUserDevicesUseCase(uow)
         user_id = UserId.generate()
-
-        # Contexto HTTP del dispositivo 2 (Safari on iOS)
-        current_user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1"
-        current_ip_address = "192.168.1.101"
 
         # Registrar 4 dispositivos diferentes
         await register_use_case.execute(
@@ -418,13 +422,16 @@ class TestListUserDevicesUseCase:
                 ip_address="192.168.1.100",
             )
         )
-        await register_use_case.execute(
+        # ← ESTE será el dispositivo actual (guardamos su device_id)
+        device2_response = await register_use_case.execute(
             RegisterDeviceRequestDTO(
                 user_id=str(user_id.value),
-                user_agent=current_user_agent,  # ← ESTE es el actual
-                ip_address=current_ip_address,
+                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+                ip_address="192.168.1.101",
             )
         )
+        current_device_id = device2_response.device_id
+
         await register_use_case.execute(
             RegisterDeviceRequestDTO(
                 user_id=str(user_id.value),
@@ -440,11 +447,10 @@ class TestListUserDevicesUseCase:
             )
         )
 
-        # Listar desde el dispositivo 2
+        # Listar con device_id_from_cookie del dispositivo 2
         request = ListUserDevicesRequestDTO(
             user_id=str(user_id.value),
-            user_agent=current_user_agent,
-            ip_address=current_ip_address,
+            device_id_from_cookie=current_device_id,  # ← Cookie con device_id del Safari on iOS
         )
 
         # Act
