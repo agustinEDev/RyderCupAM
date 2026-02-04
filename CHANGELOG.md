@@ -7,20 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_No unreleased changes_
+
+## [2.0.4] - 2026-02-04 (Cookie-Based Device Identification)
+
+### Added
+
+**🍪 Cookie-Based Device Identification** (OWASP A01 - Session Management)
+- **Primary Change**: Device identification now uses persistent httpOnly cookie instead of IP-based fingerprinting
+- **Problem Solved**: Dynamic IPv6 rotation (common with Cloudflare/ISPs) no longer creates duplicate device records
+- **Cookie Settings**: `device_id` cookie with 1-year expiration, httpOnly, secure, samesite=lax
+- **New Repository Method**: `find_by_id_and_user()` for cookie-based device lookup with ownership validation
+- **New Entity Method**: `update_ip_address()` for audit trail updates when IP changes
+- **DTO Updates**:
+  - `RegisterDeviceRequestDTO`: Added `device_id_from_cookie` field
+  - `RegisterDeviceResponseDTO`: Added `set_device_cookie` boolean
+  - `LoginResponseDTO`: Added `device_id`, `should_set_device_cookie`
+  - `RefreshTokenResponseDTO`: Added `device_id`, `should_set_device_cookie`
+  - `ListUserDevicesRequestDTO`: Added `device_id_from_cookie`
+- **Cookie Handler**: New functions `set_device_id_cookie()`, `get_device_id_cookie_name()`, `delete_device_id_cookie()`
+- **ADR-030 Updated**: Documents evolution from fingerprint-based (v1.13.0) to cookie-based (v2.0.4)
+
+### Changed
+
+**🔄 RegisterDeviceUseCase Rewritten**
+- Cookie-first identification: If `device_id_from_cookie` present, lookup by ID instead of fingerprint
+- Fingerprint now used only for generating `device_name` (browser/OS detection)
+- IP address stored for audit trail only, not for identification
+- Returns `set_device_cookie=True` when new device created (caller must set cookie)
+
+**🔄 ListUserDevicesUseCase Simplified**
+- `is_current_device` determined by cookie match instead of fingerprint comparison
+- More reliable current device detection (no false negatives from IP changes)
+
+**🔄 Auth Routes Updated**
+- Login endpoint reads `device_id` cookie, passes to use case, sets cookie on new device
+- Refresh token endpoint follows same pattern
+- Device routes pass `device_id_from_cookie` for accurate `is_current_device`
+
 ### Fixed - Security Hotfixes (Feb 2-4, 2026)
 
-**🔒 Device Fingerprinting IP Normalization**
+**🔒 Device Fingerprinting IP Normalization** (v2.0.3)
 - Normalize IPs to /24 (IPv4) or /64 (IPv6) for consistent device fingerprinting
 - Prevents false logout when user's IP rotates within same ISP network (e.g., Cloudflare rotation)
 - Formula: `SHA256(user_agent + "|" + normalized_network_ip)`
 - Example: `192.168.1.100` and `192.168.1.205` both normalize to `192.168.1.0`
 
-**🌐 Cloudflare Headers Support**
+**🌐 Cloudflare Headers Support** (v2.0.3)
 - Use `CF-Connecting-IP` header when behind Cloudflare proxy (priority 1)
 - Fallback chain: `CF-Connecting-IP` → `True-Client-IP` → `X-Forwarded-For` → `X-Real-IP` → `request.client.host`
 - Accurate client IP detection in production (Render.com behind Cloudflare)
 
-**🍪 Cross-Subdomain Cookie Support**
+**🍪 Cross-Subdomain Cookie Support** (v2.0.3)
 - New env var: `COOKIE_DOMAIN` (optional, default: None)
 - Allows cookies shared across `*.rydercupfriends.com` subdomains
 - Set `COOKIE_DOMAIN=.rydercupfriends.com` in production for SSO across subdomains
@@ -36,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 **🐳 Docker/Render Compatibility**
 - Updated `entrypoint.sh` regex to accept `postgresql+asyncpg://` URLs
 - Supports: `postgres://`, `postgresql://`, `postgresql+asyncpg://`, `postgresql+psycopg2://`
+
+### Security
+
+**OWASP Score**: Maintained at 9.5/10
+- **A01 (Broken Access Control)**: Improved - More reliable device tracking, no false duplicates from IP rotation
+- **A02 (Cryptographic Failures)**: Unchanged - UUID v4 for device_id, httpOnly cookie protection
+- **A07 (Authentication Failures)**: Improved - Eliminates false logouts from dynamic IP changes
 
 ## [2.0.2] - 2026-02-02 (Sprint 2: Competition Scheduling)
 
