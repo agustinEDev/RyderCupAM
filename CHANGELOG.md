@@ -23,7 +23,7 @@ _No unreleased changes_
   - `RegisterDeviceRequestDTO`: Added `device_id_from_cookie` field
   - `RegisterDeviceResponseDTO`: Added `set_device_cookie` boolean
   - `LoginResponseDTO`: Added `device_id`, `should_set_device_cookie`
-  - `RefreshTokenResponseDTO`: Added `device_id`, `should_set_device_cookie`
+  - `RefreshAccessTokenResponseDTO`: Added `device_id`, `should_set_device_cookie`
   - `ListUserDevicesRequestDTO`: Added `device_id_from_cookie`
 - **Cookie Handler**: New functions `set_device_id_cookie()`, `get_device_id_cookie_name()`, `delete_device_id_cookie()`
 - **ADR-030 Updated**: Documents evolution from fingerprint-based (v1.13.0) to cookie-based (v2.0.4)

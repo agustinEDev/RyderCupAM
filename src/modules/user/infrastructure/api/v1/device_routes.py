@@ -17,6 +17,7 @@ Patrón: REST API + Dependency Injection + DTOs
 """
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -47,6 +48,36 @@ from src.shared.infrastructure.security.cookie_handler import get_device_id_cook
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+
+def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
+    """
+    Valida que el valor de la cookie device_id sea un UUID válido.
+
+    Security (v2.0.4): La cookie es controlada por el cliente y debe validarse
+    antes de pasar a DTOs para evitar ValidationError/500 errors.
+
+    Args:
+        cookie_value: Valor de la cookie device_id (puede ser None, vacío o malformado)
+
+    Returns:
+        str: UUID válido como string si la validación es exitosa
+        None: Si el valor es None, vacío o no es un UUID válido
+    """
+    if not cookie_value:
+        return None
+    try:
+        # uuid.UUID valida el formato y lanza ValueError si es inválido
+        validated = uuid.UUID(cookie_value)
+        return str(validated)
+    except (ValueError, AttributeError):
+        logger.debug(f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}...")
+        return None
 
 
 # ============================================================================
@@ -158,10 +189,12 @@ async def list_user_devices(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
 
-        # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
-        # Cookie-based identification para is_current_device
+        # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
+        # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
         device_id_cookie_name = get_device_id_cookie_name()
-        device_id_from_cookie = request.cookies.get(device_id_cookie_name)
+        device_id_from_cookie = _validate_device_id_cookie(
+            request.cookies.get(device_id_cookie_name)
+        )
 
         # Crear request DTO con user_id + device_id_from_cookie
         # NOTA: user_agent e ip_address ya no se usan para is_current_device (v2.0.4)

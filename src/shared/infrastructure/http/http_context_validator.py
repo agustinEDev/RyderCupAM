@@ -239,13 +239,19 @@ def get_trusted_client_ip(
     if trust_cloudflare_headers:
         cf_ip = request.headers.get("CF-Connecting-IP")
         if cf_ip:
-            logger.debug(f"Using CF-Connecting-IP from Cloudflare: {cf_ip.strip()}")
-            return validate_ip_address(cf_ip.strip())
+            validated_cf_ip = validate_ip_address(cf_ip.strip())
+            if validated_cf_ip:
+                logger.debug(f"Using CF-Connecting-IP from Cloudflare: {validated_cf_ip}")
+                return validated_cf_ip
+            logger.warning(f"Invalid CF-Connecting-IP header ignored: {cf_ip.strip()}")
 
         true_client_ip = request.headers.get("True-Client-IP")
         if true_client_ip:
-            logger.debug(f"Using True-Client-IP from Cloudflare: {true_client_ip.strip()}")
-            return validate_ip_address(true_client_ip.strip())
+            validated_true_ip = validate_ip_address(true_client_ip.strip())
+            if validated_true_ip:
+                logger.debug(f"Using True-Client-IP from Cloudflare: {validated_true_ip}")
+                return validated_true_ip
+            logger.warning(f"Invalid True-Client-IP header ignored: {true_client_ip.strip()}")
 
     # 3. Headers de proxy (solo si proxy es confiable)
     is_trusted_proxy = trusted_proxies and proxy_ip and proxy_ip in trusted_proxies
