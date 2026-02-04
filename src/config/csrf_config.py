@@ -47,6 +47,7 @@ EXEMPT_PATHS: Final[set[str]] = {
     "/api/v1/auth/register",  # Public endpoint - no existing session
     "/api/v1/auth/login",  # Public endpoint - generates CSRF token
     "/api/v1/auth/refresh-token",  # Protected by httpOnly refresh_token cookie
+    "/api/v1/auth/logout",  # Session termination - low risk, high usability
     "/api/v1/auth/forgot-password",  # Public endpoint
     "/api/v1/auth/reset-password",  # Public endpoint (token in URL)
     "/api/v1/auth/verify-email",  # Public endpoint (token in URL)
