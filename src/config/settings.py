@@ -78,5 +78,13 @@ class Settings:
         ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()
     ]
 
+    # Cloudflare Headers Trust (v2.0.4)
+    # - True: Confiar en CF-Connecting-IP y True-Client-IP headers
+    # - False: Ignorar headers de Cloudflare (más seguro si no estás detrás de Cloudflare)
+    # SECURITY: Solo activar si la app está desplegada detrás de Cloudflare proxy
+    TRUST_CLOUDFLARE_HEADERS: ClassVar[bool] = os.getenv(
+        "TRUST_CLOUDFLARE_HEADERS", "false"
+    ).lower() in ("true", "1", "yes")
+
 
 settings = Settings()

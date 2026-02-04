@@ -4,8 +4,8 @@
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
 **Total Endpoints**: 54 active
-**Version**: v2.0.2-dev
-**Last Updated**: 31 January 2026
+**Version**: v2.0.3-dev
+**Last Updated**: 4 February 2026
 
 ---
 

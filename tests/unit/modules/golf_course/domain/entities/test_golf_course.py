@@ -329,10 +329,10 @@ def test_create_golf_course_invalid_tees_count_too_many(valid_holes):
     all_categories = [
         TeeCategory.CHAMPIONSHIP_MALE,
         TeeCategory.AMATEUR_MALE,
-        TeeCategory.FORWARD_MALE,
+        TeeCategory.SENIOR_MALE,
         TeeCategory.CHAMPIONSHIP_FEMALE,
         TeeCategory.AMATEUR_FEMALE,
-        TeeCategory.FORWARD_FEMALE,
+        TeeCategory.SENIOR_FEMALE,
         TeeCategory.CHAMPIONSHIP_MALE,  # Repetida para hacer 7
     ]
     seven_tees = [

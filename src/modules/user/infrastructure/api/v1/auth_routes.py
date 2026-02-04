@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -78,11 +79,14 @@ from src.shared.infrastructure.http.http_context_validator import (
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
+    delete_device_id_cookie,
     delete_refresh_token_cookie,
     get_cookie_name,
+    get_device_id_cookie_name,
     get_refresh_cookie_name,
     set_auth_cookie,
     set_csrf_cookie,
+    set_device_id_cookie,
     set_refresh_token_cookie,
 )
 from src.shared.infrastructure.security.jwt_handler import (
@@ -92,6 +96,36 @@ from src.shared.infrastructure.security.jwt_handler import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+
+def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
+    """
+    Valida que el valor de la cookie device_id sea un UUID válido.
+
+    Security (v2.0.4): La cookie es controlada por el cliente y debe validarse
+    antes de pasar a DTOs para evitar ValidationError/500 errors.
+
+    Args:
+        cookie_value: Valor de la cookie device_id (puede ser None, vacío o malformado)
+
+    Returns:
+        str: UUID válido como string si la validación es exitosa
+        None: Si el valor es None, vacío o no es un UUID válido
+    """
+    if not cookie_value:
+        return None
+    try:
+        # uuid.UUID valida el formato y lanza ValueError si es inválido
+        validated = uuid.UUID(cookie_value)
+        return str(validated)
+    except (ValueError, AttributeError):
+        logger.debug(f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}...")
+        return None
 
 
 # ============================================================================
@@ -194,8 +228,17 @@ async def login_user(
     """
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    login_data.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    login_data.ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     login_data.user_agent = get_user_agent(request)
+
+    # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
+    # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
+    device_id_cookie_name = get_device_id_cookie_name()
+    login_data.device_id_from_cookie = _validate_device_id_cookie(
+        request.cookies.get(device_id_cookie_name)
+    )
 
     try:
         login_response = await use_case.execute(login_data)
@@ -223,6 +266,11 @@ async def login_user(
     # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
     # CSRF Token: 15 minutos (sincronizado con access token)
     set_csrf_cookie(response, login_response.csrf_token)
+
+    # ✅ NUEVO (v2.0.4): Establecer cookie device_id si es dispositivo nuevo
+    # Cookie httpOnly con duración de 1 año para identificación persistente
+    if login_response.should_set_device_cookie and login_response.device_id:
+        set_device_id_cookie(response, login_response.device_id)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -325,7 +373,9 @@ async def logout_user(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    logout_request.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    logout_request.ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     logout_request.user_agent = get_user_agent(request)
 
     logout_response = await use_case.execute(logout_request, user_id, token)
@@ -345,6 +395,11 @@ async def logout_user(
 
     # ✅ NUEVO (v1.13.0): Eliminar cookie CSRF
     delete_csrf_cookie(response)
+
+    # ✅ NUEVO (v2.0.4): Eliminar cookie device_id
+    # NOTA: El dispositivo NO se revoca automáticamente, solo se elimina la cookie
+    # El usuario puede revocar dispositivos manualmente desde /users/me/devices
+    delete_device_id_cookie(response)
 
     return logout_response
 
@@ -412,9 +467,17 @@ async def refresh_access_token(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
+    # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
+    device_id_cookie_name = get_device_id_cookie_name()
     refresh_request = RefreshAccessTokenRequestDTO(
-        ip_address=get_trusted_client_ip(request, settings.TRUSTED_PROXIES),
+        ip_address=get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        ),
         user_agent=get_user_agent(request),
+        device_id_from_cookie=_validate_device_id_cookie(
+            request.cookies.get(device_id_cookie_name)
+        ),
     )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 
@@ -430,6 +493,10 @@ async def refresh_access_token(
 
     # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
     set_csrf_cookie(response, refresh_response.csrf_token)
+
+    # ✅ NUEVO (v2.0.4): Establecer device_id cookie si es necesario
+    if refresh_response.should_set_device_cookie and refresh_response.device_id:
+        set_device_id_cookie(response, refresh_response.device_id)
 
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
@@ -668,7 +735,9 @@ async def forgot_password(
     """
     # Extraer contexto de seguridad
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO
@@ -739,7 +808,9 @@ async def reset_password(
     """
     # Extraer contexto de seguridad
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO
