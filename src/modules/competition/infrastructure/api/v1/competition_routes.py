@@ -1564,36 +1564,46 @@ async def list_competition_golf_courses(
                 )
 
             # Construir respuesta con datos completos del campo de golf (incluyendo tees y holes)
-            golf_courses_list = [
-                CompetitionGolfCourseResponseDTO(
-                    golf_course_id=gc.golf_course_id.value,
-                    display_order=gc.display_order,
-                    created_at=gc.created_at,
-                    golf_course=GolfCourseDetailDTO(
-                        id=gc.golf_course.id.value,
-                        name=gc.golf_course.name,
-                        country_code=gc.golf_course.country_code.value,
-                        tees=[
-                            TeeResponseDTO(
-                                id=tee.id.value,
-                                identifier=tee.identifier,
-                                course_rating=float(tee.course_rating),
-                                slope_rating=int(tee.slope_rating),
-                            )
-                            for tee in gc.golf_course.tees
-                        ],
-                        holes=[
-                            HoleResponseDTO(
-                                hole_number=hole.hole_number,
-                                par=hole.par,
-                                stroke_index=hole.stroke_index,
-                            )
-                            for hole in gc.golf_course.holes
-                        ],
-                    ),
+            golf_courses_list = []
+            for gc in competition.golf_courses:
+                # Debug: verificar que golf_course está cargado
+                if gc.golf_course is None:
+                    logger.error(
+                        f"golf_course is None for CompetitionGolfCourse {gc.id}, "
+                        f"golf_course_id={gc.golf_course_id.value}"
+                    )
+                    continue  # Skip this entry instead of failing
+
+                golf_course = gc.golf_course
+                golf_courses_list.append(
+                    CompetitionGolfCourseResponseDTO(
+                        golf_course_id=gc.golf_course_id.value,
+                        display_order=gc.display_order,
+                        created_at=gc.created_at,
+                        golf_course=GolfCourseDetailDTO(
+                            id=golf_course.id.value,
+                            name=golf_course.name,
+                            country_code=golf_course.country_code.value,
+                            tees=[
+                                TeeResponseDTO(
+                                    id=tee.id.value,
+                                    identifier=tee.identifier,
+                                    course_rating=float(tee.course_rating),
+                                    slope_rating=int(tee.slope_rating),
+                                )
+                                for tee in (golf_course.tees or [])
+                            ],
+                            holes=[
+                                HoleResponseDTO(
+                                    hole_number=hole.hole_number,
+                                    par=hole.par,
+                                    stroke_index=hole.stroke_index,
+                                )
+                                for hole in (golf_course.holes or [])
+                            ],
+                        ),
+                    )
                 )
-                for gc in competition.golf_courses
-            ]
 
             return golf_courses_list
 
