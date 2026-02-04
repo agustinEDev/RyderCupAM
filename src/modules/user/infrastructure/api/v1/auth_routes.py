@@ -78,11 +78,14 @@ from src.shared.infrastructure.http.http_context_validator import (
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
+    delete_device_id_cookie,
     delete_refresh_token_cookie,
     get_cookie_name,
+    get_device_id_cookie_name,
     get_refresh_cookie_name,
     set_auth_cookie,
     set_csrf_cookie,
+    set_device_id_cookie,
     set_refresh_token_cookie,
 )
 from src.shared.infrastructure.security.jwt_handler import (
@@ -197,6 +200,10 @@ async def login_user(
     login_data.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
     login_data.user_agent = get_user_agent(request)
 
+    # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
+    device_id_cookie_name = get_device_id_cookie_name()
+    login_data.device_id_from_cookie = request.cookies.get(device_id_cookie_name)
+
     try:
         login_response = await use_case.execute(login_data)
     except AccountLockedException as e:
@@ -223,6 +230,11 @@ async def login_user(
     # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
     # CSRF Token: 15 minutos (sincronizado con access token)
     set_csrf_cookie(response, login_response.csrf_token)
+
+    # ✅ NUEVO (v2.0.4): Establecer cookie device_id si es dispositivo nuevo
+    # Cookie httpOnly con duración de 1 año para identificación persistente
+    if login_response.should_set_device_cookie and login_response.device_id:
+        set_device_id_cookie(response, login_response.device_id)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -346,6 +358,11 @@ async def logout_user(
     # ✅ NUEVO (v1.13.0): Eliminar cookie CSRF
     delete_csrf_cookie(response)
 
+    # ✅ NUEVO (v2.0.4): Eliminar cookie device_id
+    # NOTA: El dispositivo NO se revoca automáticamente, solo se elimina la cookie
+    # El usuario puede revocar dispositivos manualmente desde /users/me/devices
+    delete_device_id_cookie(response)
+
     return logout_response
 
 
@@ -412,9 +429,12 @@ async def refresh_access_token(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
+    # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
+    device_id_cookie_name = get_device_id_cookie_name()
     refresh_request = RefreshAccessTokenRequestDTO(
         ip_address=get_trusted_client_ip(request, settings.TRUSTED_PROXIES),
         user_agent=get_user_agent(request),
+        device_id_from_cookie=request.cookies.get(device_id_cookie_name),
     )
     refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
 

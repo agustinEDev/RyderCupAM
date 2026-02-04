@@ -43,6 +43,7 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.security.cookie_handler import get_device_id_cookie_name
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -149,19 +150,25 @@ async def list_user_devices(
         }
     """
     try:
-        # Extraer contexto HTTP del request (v1.13.1 - para is_current_device)
+        # Extraer contexto HTTP del request
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
         # Si TRUSTED_PROXIES está vacío, NO confiará en X-Forwarded-For/X-Real-IP
         user_agent = get_user_agent(request)
         ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
 
-        # Crear request DTO con user_id + contexto HTTP
-        # NOTA: ip_address puede ser None si es inválida (validate_ip_address aplicado)
-        # El use case manejará None con graceful degradation
+        # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
+        # Cookie-based identification para is_current_device
+        device_id_cookie_name = get_device_id_cookie_name()
+        device_id_from_cookie = request.cookies.get(device_id_cookie_name)
+
+        # Crear request DTO con user_id + device_id_from_cookie
+        # NOTA: user_agent e ip_address ya no se usan para is_current_device (v2.0.4)
+        # Se mantienen por backwards compatibility y logging
         request_dto = ListUserDevicesRequestDTO(
             user_id=str(current_user.id),
             user_agent=user_agent,
             ip_address=ip_address,
+            device_id_from_cookie=device_id_from_cookie,
         )
 
         # Ejecutar use case

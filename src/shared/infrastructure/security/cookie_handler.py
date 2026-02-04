@@ -356,3 +356,103 @@ def get_csrf_cookie_name() -> str:
         'csrf_token'
     """
     return CSRF_COOKIE_NAME
+
+
+# =============================================================================
+# Device ID Cookie Handlers (Device Identification - v2.0.4)
+# =============================================================================
+
+DEVICE_ID_COOKIE_NAME = "device_id"  # Device identifier (1 year)
+DEVICE_ID_COOKIE_MAX_AGE = 31536000  # 1 year in seconds
+
+
+def set_device_id_cookie(response: Response, device_id: str) -> None:
+    """
+    Establece una cookie httpOnly con el device_id (UUID).
+
+    El device_id es un identificador único y persistente del dispositivo
+    que reemplaza la identificación por IP (que causaba duplicados con IPs dinámicas).
+    La cookie persiste 1 año para identificar el mismo dispositivo entre sesiones.
+
+    Parámetros de Seguridad:
+    - httponly=True: Previene acceso desde JavaScript (protección XSS)
+    - secure=True/False: Solo HTTPS en producción, HTTP permitido en desarrollo
+    - samesite="lax": Protección contra CSRF, permite navegación normal
+    - max_age=31536000: Expira en 1 año (identificador persistente)
+    - path="/": Cookie disponible en toda la aplicación
+
+    Args:
+        response: Objeto Response de FastAPI donde se añadirá la cookie
+        device_id: UUID del dispositivo (UserDevice.id)
+
+    Example:
+        >>> from fastapi import Response
+        >>> response = Response()
+        >>> set_device_id_cookie(response, "550e8400-e29b-41d4-a716-446655440000")
+        >>> # Cookie device_id añadida (persiste 1 año)
+
+    Security Notes:
+        - httponly=True: JavaScript NO puede leer el device_id (previene XSS)
+        - El device_id no contiene información sensible (solo UUID)
+        - Validación de ownership en cada request (device.user_id == jwt.user_id)
+
+    OWASP Compliance:
+        - A01: Broken Access Control → httpOnly previene robo de identificadores
+        - A07: Authentication Failures → Device binding para session management
+    """
+    response.set_cookie(
+        key=DEVICE_ID_COOKIE_NAME,
+        value=device_id,
+        httponly=True,  # ✅ Protección XSS
+        secure=is_production(),  # ✅ HTTPS en producción
+        samesite="lax",  # ✅ Protección CSRF
+        max_age=DEVICE_ID_COOKIE_MAX_AGE,  # ✅ Expira en 1 año
+        path="/",  # ✅ Disponible en toda la app
+        domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
+    )
+
+
+def delete_device_id_cookie(response: Response) -> None:
+    """
+    Elimina la cookie de device_id (revocación de dispositivo).
+
+    Esta función invalida la cookie estableciendo su valor vacío y
+    expiración en 0 (eliminación inmediata).
+
+    Args:
+        response: Objeto Response de FastAPI donde se eliminará la cookie
+
+    Example:
+        >>> from fastapi import Response
+        >>> response = Response()
+        >>> delete_device_id_cookie(response)
+        >>> # Cookie device_id eliminada del navegador
+
+    Note:
+        Esta función se usa cuando un dispositivo es revocado.
+        El usuario deberá hacer login nuevamente, generando un nuevo device_id.
+    """
+    response.delete_cookie(
+        key=DEVICE_ID_COOKIE_NAME,
+        path="/",  # Mismo path que al crear la cookie
+        httponly=True,  # Mismo httponly que al crear
+        secure=is_production(),  # Mismo secure que al crear
+        samesite="lax",  # Mismo samesite que al crear
+        domain=get_cookie_domain(),  # Mismo domain que al crear
+    )
+
+
+def get_device_id_cookie_name() -> str:
+    """
+    Retorna el nombre de la cookie de device_id.
+
+    Útil para extraer el device_id desde las cookies en endpoints.
+
+    Returns:
+        Nombre de la cookie de device_id (constante DEVICE_ID_COOKIE_NAME)
+
+    Example:
+        >>> get_device_id_cookie_name()
+        'device_id'
+    """
+    return DEVICE_ID_COOKIE_NAME

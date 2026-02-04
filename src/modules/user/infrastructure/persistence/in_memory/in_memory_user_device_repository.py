@@ -52,6 +52,28 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         device_key = str(device_id.value)
         return self._devices.get(device_key)
 
+    async def find_by_id_and_user(
+        self, device_id: UserDeviceId, user_id: UserId
+    ) -> UserDevice | None:
+        """
+        Busca dispositivo activo por ID validando ownership.
+
+        Args:
+            device_id: ID del dispositivo (desde cookie)
+            user_id: ID del usuario (desde JWT)
+
+        Returns:
+            Optional[UserDevice]: Dispositivo si existe, pertenece al usuario,
+                                 y está activo. None en caso contrario.
+
+        Note:
+            Cookie-based device identification con ownership validation.
+        """
+        device = await self.find_by_id(device_id)
+        if device and device.user_id == user_id and device.is_active:
+            return device
+        return None
+
     async def find_by_user_and_fingerprint(
         self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:
