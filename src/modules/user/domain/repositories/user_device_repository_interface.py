@@ -110,6 +110,49 @@ class UserDeviceRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_and_user(
+        self, device_id: UserDeviceId, user_id: UserId
+    ) -> UserDevice | None:
+        """
+        Busca un dispositivo por su ID validando ownership.
+
+        Este método es crítico para la identificación cookie-based de dispositivos.
+        Busca un dispositivo activo que:
+        1. Tenga el ID especificado
+        2. Pertenezca al usuario especificado (ownership validation)
+        3. Esté activo (is_active=True)
+
+        La validación de ownership previene ataques de escalación horizontal
+        donde un usuario intenta usar el device_id de otro usuario.
+
+        Args:
+            device_id: ID del dispositivo (desde cookie)
+            user_id: ID del usuario (desde JWT)
+
+        Returns:
+            Optional[UserDevice]: Dispositivo si existe, pertenece al usuario,
+                                 y está activo. None en caso contrario.
+
+        Security:
+            - OWASP A01: Previene Broken Access Control validando ownership
+            - El device_id viene de cookie httpOnly (no manipulable por JS)
+            - El user_id viene del JWT verificado
+
+        Examples:
+            >>> # En get_current_user dependency
+            >>> device_id = UserDeviceId.from_string(cookie_device_id)
+            >>> user_id = UserId(jwt_user_id)
+            >>> device = await repo.find_by_id_and_user(device_id, user_id)
+            >>> if device:
+            ...     # ✅ Dispositivo válido y activo
+            ...     pass
+            ... else:
+            ...     # ❌ Dispositivo no encontrado, no pertenece al usuario, o revocado
+            ...     raise HTTPException(401, "Dispositivo no válido")
+        """
+        pass
+
+    @abstractmethod
     async def find_by_user_and_fingerprint(
         self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:

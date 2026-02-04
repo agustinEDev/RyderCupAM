@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.2--dev-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.3--dev-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1201%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1202%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -30,7 +30,7 @@
 ### 🎯 Key Highlights
 
 - ✅ **54 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,201 tests** passing (100% success rate, ~79s execution)
+- ✅ **1,202 tests** passing (100% success rate, ~79s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)

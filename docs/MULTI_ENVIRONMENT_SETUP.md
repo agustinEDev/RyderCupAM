@@ -25,6 +25,8 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/rydercup
 SECRET_KEY=your-local-secret-key
 ```
 
+> **Note:** `DATABASE_URL` supports multiple formats: `postgres://`, `postgresql://`, and `postgresql+asyncpg://` (validated by `entrypoint.sh`).
+
 ### Commands
 
 ```bash

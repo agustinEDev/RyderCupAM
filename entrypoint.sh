@@ -20,8 +20,8 @@ if [ -n "$DATABASE_URL" ]; then
         exit 1
     fi
 
-    # Validar formato de DATABASE_URL
-    if ! echo "$DATABASE_URL" | grep -qE "^postgres(ql)?://"; then
+    # Validar formato de DATABASE_URL (acepta postgres://, postgresql://, postgresql+asyncpg://, postgresql+pg8000://)
+    if ! echo "$DATABASE_URL" | grep -qE "^postgres(ql)?(\+[a-zA-Z0-9_-]+)?://"; then
         echo "❌ ERROR: DATABASE_URL malformada"
         exit 1
     fi

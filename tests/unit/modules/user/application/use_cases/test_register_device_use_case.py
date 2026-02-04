@@ -57,33 +57,46 @@ class TestRegisterDeviceUseCase:
 
     async def test_register_existing_device_updates_last_used(self, uow):
         """
-        Test: Registrar dispositivo existente actualiza last_used_at
+        Test: Registrar dispositivo existente via cookie actualiza last_used_at
         Given: Dispositivo ya registrado
-        When: Se registra nuevamente con mismo fingerprint
-        Then: Se actualiza last_used_at y retorna is_new_device=False
+        When: Se registra con device_id_from_cookie válido
+        Then: Se actualiza last_used_at y retorna is_new_device=False (v2.0.4)
+
+        Cookie-based identification (v2.0.4):
+        - Primera vez: Sin cookie → crea dispositivo, set_device_cookie=True
+        - Segunda vez: Con cookie → actualiza dispositivo, set_device_cookie=False
         """
         # Arrange
         use_case = RegisterDeviceUseCase(uow)
         user_id = UserId.generate()
 
-        request = RegisterDeviceRequestDTO(
+        request1 = RegisterDeviceRequestDTO(
             user_id=str(user_id.value),
-            device_name="Safari 17.0 on iOS",
             user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
             ip_address="192.168.1.101",
         )
 
-        # Act - Primera vez (crear)
-        response1 = await use_case.execute(request)
+        # Act - Primera vez (crear - sin cookie)
+        response1 = await use_case.execute(request1)
 
-        # Act - Segunda vez (actualizar)
-        response2 = await use_case.execute(request)
+        # Preparar request con device_id_from_cookie (simulando cookie del navegador)
+        request2 = RegisterDeviceRequestDTO(
+            user_id=str(user_id.value),
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
+            ip_address="192.168.1.102",  # IP puede cambiar, no afecta identificación
+            device_id_from_cookie=response1.device_id,  # Cookie válida
+        )
+
+        # Act - Segunda vez (actualizar - con cookie)
+        response2 = await use_case.execute(request2)
 
         # Assert
         assert response1.is_new_device is True
+        assert response1.set_device_cookie is True  # Debe setear cookie
         assert response2.is_new_device is False
+        assert response2.set_device_cookie is False  # Cookie ya existe
         assert response1.device_id == response2.device_id
-        assert "Dispositivo conocido actualizado" in response2.message
+        assert "Dispositivo actualizado" in response2.message
 
     async def test_register_device_with_different_fingerprint_creates_new(self, uow):
         """
@@ -121,10 +134,13 @@ class TestRegisterDeviceUseCase:
 
     async def test_register_device_different_ip_creates_new(self, uow):
         """
-        Test: Mismo dispositivo con IP diferente crea nuevo registro
-        Given: Mismo user_agent pero IP diferente
+        Test: Mismo dispositivo con IP de diferente red /24 crea nuevo registro
+        Given: Mismo user_agent pero IPs de diferentes redes /24
         When: Se registra dispositivo
-        Then: Se crea nuevo (fingerprint considera IP)
+        Then: Se crean dos dispositivos diferentes
+
+        Note: v2.0.4 - IPs se normalizan a /24 para tolerar rotación de ISP
+              192.168.1.x y 193.168.1.x son redes diferentes
         """
         # Arrange
         use_case = RegisterDeviceUseCase(uow)
@@ -134,14 +150,14 @@ class TestRegisterDeviceUseCase:
             user_id=str(user_id.value),
             device_name="Firefox on Windows",
             user_agent="Mozilla/5.0 (Windows NT 10.0)",
-            ip_address="192.168.1.100",
+            ip_address="192.168.1.100",  # Red /24: 192.168.1.0
         )
 
         request2 = RegisterDeviceRequestDTO(
             user_id=str(user_id.value),
             device_name="Firefox on Windows",
             user_agent="Mozilla/5.0 (Windows NT 10.0)",
-            ip_address="192.168.1.200",  # IP diferente
+            ip_address="193.168.1.100",  # Red /24: 193.168.1.0 (diferente)
         )
 
         # Act

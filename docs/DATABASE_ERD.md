@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v2.0.2-dev (Current) + v2.1.0 Planning
-> **Last Updated:** January 31, 2026
+> **Version:** v2.0.3-dev (Current) + v2.1.0 Planning
+> **Last Updated:** February 4, 2026
 > **Database:** PostgreSQL 15+
 
 ---

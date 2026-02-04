@@ -97,6 +97,41 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         """
         return await self._session.get(UserDevice, device_id)
 
+    async def find_by_id_and_user(
+        self, device_id: UserDeviceId, user_id: UserId
+    ) -> UserDevice | None:
+        """
+        Busca un dispositivo ACTIVO por ID validando ownership.
+
+        Este query es crítico para cookie-based device identification.
+        Valida que el dispositivo existe, pertenece al usuario, y está activo.
+
+        Args:
+            device_id: UserDeviceId del dispositivo (desde cookie)
+            user_id: UserId del propietario (desde JWT)
+
+        Returns:
+            Optional[UserDevice]: Dispositivo si existe, pertenece al usuario,
+                                 y está activo. None en caso contrario.
+
+        Security:
+            - OWASP A01: Previene horizontal privilege escalation
+            - El device_id viene de cookie httpOnly
+            - El user_id viene de JWT verificado
+
+        Note:
+            - NO retorna dispositivos revocados (is_active=False)
+            - La validación de ownership es crucial para seguridad
+        """
+        statement = (
+            select(UserDevice)
+            .where(UserDevice._id == device_id)
+            .where(UserDevice._user_id == user_id)
+            .where(UserDevice._is_active == True)  # noqa: E712
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def find_by_user_and_fingerprint(
         self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:

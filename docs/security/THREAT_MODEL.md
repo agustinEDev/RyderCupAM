@@ -1,8 +1,8 @@
 # Threat Models - Ryder Cup Amateur Manager
 
-**Version:** 1.0
-**Date:** January 29, 2026
-**Last Review:** January 29, 2026
+**Version:** 1.1
+**Created On:** January 29, 2026
+**Last Review:** February 4, 2026
 **OWASP Coverage:** A04: Insecure Design (Threat Modeling)
 
 ---
@@ -45,7 +45,7 @@ User → API (email + password) → Verify credentials → Generate JWT → Set 
 | **Elevation of Privilege**: Normal user becomes admin | 🔴 HIGH | RBAC checks, `is_admin` field in DB, no public admin creation endpoint | ✅ Mitigated |
 
 ### Residual Risks
-- 🟡 **Session Hijacking**: If attacker gains physical access to device with active session → **Mitigation**: Session timeout (15 min), device fingerprinting, manual device revocation
+- 🟡 **Session Hijacking**: If attacker gains physical access to device with active session → **Mitigation**: Session timeout (15 min), cookie-based device identification (v2.0.4), manual device revocation, `is_current_device` for user awareness
 
 ---
 

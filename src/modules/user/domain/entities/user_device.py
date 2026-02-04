@@ -323,6 +323,31 @@ class UserDevice:
         """
         self._last_used_at = datetime.now()
 
+    def update_ip_address(self, ip_address: str) -> None:
+        """
+        Actualiza la dirección IP del dispositivo (audit trail).
+
+        Se llama cuando el dispositivo es identificado via cookie y la IP
+        ha cambiado desde la última vez. Permite mantener un registro de
+        la última IP conocida para auditoría de seguridad.
+
+        Args:
+            ip_address: Nueva dirección IP del dispositivo
+
+        Examples:
+            >>> device = UserDevice.create(user_id, fingerprint)
+            >>> device.ip_address
+            '192.168.1.100'
+            >>> device.update_ip_address('192.168.1.200')
+            >>> device.ip_address
+            '192.168.1.200'
+
+        Note:
+            - No dispara eventos de dominio (es solo audit)
+            - La IP se almacena tal cual se recibe (no se normaliza)
+        """
+        self._ip_address = ip_address
+
     def matches_fingerprint(self, fingerprint: DeviceFingerprint) -> bool:
         """
         Verifica si el fingerprint dado coincide con el de este dispositivo.

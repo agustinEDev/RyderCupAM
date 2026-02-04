@@ -173,7 +173,11 @@ def validate_user_agent(user_agent: str | None) -> str | None:
     return ua_clean
 
 
-def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = None) -> str | None:
+def get_trusted_client_ip(
+    request: Request,
+    trusted_proxies: list[str] | None = None,
+    trust_cloudflare_headers: bool = False,
+) -> str | None:
     """
     Extrae la IP del cliente de forma segura validando headers de proxy.
 
@@ -184,14 +188,17 @@ def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = 
         request: Request de FastAPI
         trusted_proxies: Lista de IPs de proxies confiables (opcional)
                         Si None, solo usa request.client.host (no confía en headers)
+        trust_cloudflare_headers: Si True, confía en CF-Connecting-IP y True-Client-IP
+                                 headers. Solo activar si la app está detrás de Cloudflare.
+                                 Default: False (seguro por defecto)
 
     Returns:
         str: IP del cliente validada
         None: Si no se puede determinar una IP válida
 
     Lógica de extracción (con Cloudflare support):
-        1. **Prioridad MÁXIMA:** CF-Connecting-IP (Cloudflare Proxy - siempre confiable)
-        2. **Prioridad 2:** True-Client-IP (Cloudflare Enterprise - siempre confiable)
+        1. **Prioridad MÁXIMA:** CF-Connecting-IP (solo si trust_cloudflare_headers=True)
+        2. **Prioridad 2:** True-Client-IP (solo si trust_cloudflare_headers=True)
         3. **Prioridad 3:** Si proxy confiable: X-Forwarded-For o X-Real-IP
         4. **Fallback:** request.client.host
         5. Aplicar validate_ip_address() al resultado
@@ -213,65 +220,64 @@ def get_trusted_client_ip(request: Request, trusted_proxies: list[str] | None = 
         >>> get_trusted_client_ip(request, trusted_proxies=["10.0.0.1"])
         '192.168.1.100'  # Ignora header, usa request.client.host
 
+        # Caso 4: App detrás de Cloudflare
+        >>> get_trusted_client_ip(request, trust_cloudflare_headers=True)
+        '203.0.113.45'  # Usa CF-Connecting-IP
+
     Security Notes:
         - Previene IP spoofing: NO confía en headers sin validar proxy
+        - Cloudflare headers solo se usan si trust_cloudflare_headers=True
         - Usa primera IP de X-Forwarded-For (la del cliente real)
         - Fallback seguro a request.client.host si hay duda
         - Aplica validate_ip_address() al final (rechaza sentinel)
     """
     # 1. Determinar IP del proxy (quien envió el request directamente)
-    proxy_ip = None
-    if request.client and request.client.host:
-        proxy_ip = request.client.host
+    proxy_ip = request.client.host if request.client else None
 
-    # 2. Validar si el proxy es confiable
-    is_trusted_proxy = False
-    if trusted_proxies and proxy_ip:
-        is_trusted_proxy = proxy_ip in trusted_proxies
+    # 2. PRIORIDAD MÁXIMA: Headers de Cloudflare (solo si trust_cloudflare_headers=True)
+    # SECURITY: Solo confiar en estos headers si la app está configurada para Cloudflare
+    if trust_cloudflare_headers:
+        cf_ip = request.headers.get("CF-Connecting-IP")
+        if cf_ip:
+            validated_cf_ip = validate_ip_address(cf_ip.strip())
+            if validated_cf_ip:
+                logger.debug(f"Using CF-Connecting-IP from Cloudflare: {validated_cf_ip}")
+                return validated_cf_ip
+            logger.warning(f"Invalid CF-Connecting-IP header ignored: {cf_ip.strip()}")
 
-    # 3. Extraer IP del cliente según confianza del proxy
-    client_ip = None
-
-    # PRIORIDAD MÁXIMA: Headers de Cloudflare (siempre confiables, no pueden ser spoofed)
-    # Estos headers son añadidos por Cloudflare Proxy y son seguros de usar
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        client_ip = cf_ip.strip()
-        logger.debug(f"Using CF-Connecting-IP from Cloudflare: {client_ip}")
-    else:
         true_client_ip = request.headers.get("True-Client-IP")
         if true_client_ip:
-            client_ip = true_client_ip.strip()
-            logger.debug(f"Using True-Client-IP from Cloudflare: {client_ip}")
-        elif is_trusted_proxy:
-            # Prioridad 2: X-Forwarded-For (proxies estándar, load balancers)
-            forwarded_for = request.headers.get("X-Forwarded-For")
-            if forwarded_for:
-                # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-                # La primera es la IP real del cliente
-                client_ip = forwarded_for.split(",")[0].strip()
-                logger.debug(f"Using X-Forwarded-For from trusted proxy: {client_ip}")
-            else:
-                # Prioridad 3: X-Real-IP (Nginx, otros proxies)
-                real_ip = request.headers.get("X-Real-IP")
-                if real_ip:
-                    client_ip = real_ip.strip()
-                    logger.debug(f"Using X-Real-IP from trusted proxy: {client_ip}")
-                else:
-                    # Fallback: IP del proxy (conexión directa al proxy)
-                    client_ip = proxy_ip
-                    logger.debug(f"No proxy headers, using proxy IP: {client_ip}")
-        else:
-            # Proxy NO confiable o sin configuración de proxies
-            # NO confiar en headers X-Forwarded-For/X-Real-IP
-            client_ip = proxy_ip
-        if trusted_proxies:
-            logger.warning(f"Untrusted proxy {proxy_ip} sent request, ignoring forwarded headers")
-        else:
-            logger.debug(f"No trusted proxies configured, using direct client IP: {client_ip}")
+            validated_true_ip = validate_ip_address(true_client_ip.strip())
+            if validated_true_ip:
+                logger.debug(f"Using True-Client-IP from Cloudflare: {validated_true_ip}")
+                return validated_true_ip
+            logger.warning(f"Invalid True-Client-IP header ignored: {true_client_ip.strip()}")
 
-    # 4. Validar IP extraída (rechaza sentinel, valida formato)
-    return validate_ip_address(client_ip)
+    # 3. Headers de proxy (solo si proxy es confiable)
+    is_trusted_proxy = trusted_proxies and proxy_ip and proxy_ip in trusted_proxies
+
+    if is_trusted_proxy:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0].strip()
+            logger.debug(f"Using X-Forwarded-For from trusted proxy: {client_ip}")
+            return validate_ip_address(client_ip)
+
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            logger.debug(f"Using X-Real-IP from trusted proxy: {real_ip.strip()}")
+            return validate_ip_address(real_ip.strip())
+
+        logger.debug(f"No proxy headers, using proxy IP: {proxy_ip}")
+        return validate_ip_address(proxy_ip)
+
+    # 4. Proxy NO confiable - usar IP directa
+    if trusted_proxies and proxy_ip:
+        logger.warning(f"Untrusted proxy {proxy_ip} sent request, ignoring forwarded headers")
+    else:
+        logger.debug(f"Using direct client IP: {proxy_ip}")
+
+    return validate_ip_address(proxy_ip)
 
 
 def get_user_agent(request: Request) -> str | None:

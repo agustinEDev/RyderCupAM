@@ -83,24 +83,29 @@ class TestDeviceFingerprintCreation:
         # Act & Assert
         assert fingerprint1.fingerprint_hash != fingerprint2.fingerprint_hash
 
-    def test_hash_formula_uses_user_agent_and_ip(self):
+    def test_hash_formula_uses_user_agent_and_normalized_ip(self):
         """
-        Test: Hash se genera usando user_agent + "|" + ip_address
+        Test: Hash se genera usando user_agent + "|" + normalized_ip
         Given: DeviceFingerprint con valores conocidos
         When: Se genera el hash
-        Then: El hash coincide con SHA256(user_agent|ip)
+        Then: El hash coincide con SHA256(user_agent|normalized_ip)
+
+        Note: IP se normaliza a /24 (IPv4) o /64 (IPv6) para tolerar rotación
+              127.0.0.1 → 127.0.0.0 (red /24)
         """
         # Arrange
         user_agent = "TestAgent"
         ip_address = "127.0.0.1"
+        normalized_ip = "127.0.0.0"  # /24 network
 
-        expected_hash = hashlib.sha256(f"{user_agent}|{ip_address}".encode()).hexdigest()
+        expected_hash = hashlib.sha256(f"{user_agent}|{normalized_ip}".encode()).hexdigest()
 
         # Act
         fingerprint = DeviceFingerprint.create(user_agent, ip_address)
 
         # Assert
         assert fingerprint.fingerprint_hash == expected_hash
+        assert fingerprint.ip_address == ip_address  # IP original se guarda para auditoría
 
     def test_device_name_auto_generated_chrome(self):
         """
@@ -343,6 +348,157 @@ class TestDeviceFingerprintComparison:
         assert "DeviceFingerprint" in repr_str
         assert "device_name=" in repr_str
         assert "hash=" in repr_str
+
+
+class TestDeviceFingerprintIPRotation:
+    """
+    Tests para tolerancia a rotación de IP (v2.0.4 fix).
+
+    Verifican que IPs del mismo ISP (/24 o /64) generen el mismo fingerprint,
+    evitando logouts automáticos cada 5 minutos por rotación de Cloudflare.
+    """
+
+    def test_ipv4_rotation_within_same_24(self):
+        """
+        Test: IPs del mismo /24 deben generar mismo fingerprint
+        Given: Dos IPs IPv4 del mismo rango /24 (mismos primeros 3 octetos)
+        When: Se crean DeviceFingerprints con el mismo User-Agent
+        Then: Ambos fingerprints tienen el mismo hash
+
+        Rationale: Cloudflare rota IPs dentro del mismo ISP (92.176.11.158 → 92.176.11.205)
+                   Ambas deben identificarse como mismo dispositivo para evitar logout
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0"
+        ip1 = "192.168.1.100"
+        ip2 = "192.168.1.205"
+
+        # Act
+        fp1 = DeviceFingerprint.create(user_agent, ip1)
+        fp2 = DeviceFingerprint.create(user_agent, ip2)
+
+        # Assert
+        assert fp1.fingerprint_hash == fp2.fingerprint_hash  # ✅ Mismo /24
+        assert fp1.matches(fp2)
+        # IPs originales se guardan para auditoría
+        assert fp1.ip_address == ip1
+        assert fp2.ip_address == ip2
+
+    def test_ipv4_rotation_different_24(self):
+        """
+        Test: IPs de diferente /24 deben generar diferente fingerprint
+        Given: Dos IPs IPv4 de rangos /24 distintos (diferentes primeros 3 octetos)
+        When: Se crean DeviceFingerprints con el mismo User-Agent
+        Then: Los fingerprints tienen hashes diferentes
+
+        Rationale: IP de otro ISP/país (92.x.x.x → 193.x.x.x) indica session hijacking
+                   Debe generar fingerprint distinto para bloquear acceso
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        ip1 = "192.168.1.100"
+        ip2 = "193.168.1.100"  # Diferente primer octeto
+
+        # Act
+        fp1 = DeviceFingerprint.create(user_agent, ip1)
+        fp2 = DeviceFingerprint.create(user_agent, ip2)
+
+        # Assert
+        assert fp1.fingerprint_hash != fp2.fingerprint_hash  # ❌ Diferente /24
+        assert not fp1.matches(fp2)
+
+    def test_ipv6_rotation_within_same_64(self):
+        """
+        Test: IPs del mismo /64 deben generar mismo fingerprint
+        Given: Dos IPs IPv6 del mismo rango /64 (mismos primeros 4 grupos)
+        When: Se crean DeviceFingerprints con el mismo User-Agent
+        Then: Ambos fingerprints tienen el mismo hash
+
+        Rationale: IPv6 también rota dentro del mismo ISP (/64 es el estándar)
+                   Debe tolerar rotación para evitar logout
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15"
+        ip1 = "2a09:bac3:7654:3210::1"
+        ip2 = "2a09:bac3:7654:3210::5"
+
+        # Act
+        fp1 = DeviceFingerprint.create(user_agent, ip1)
+        fp2 = DeviceFingerprint.create(user_agent, ip2)
+
+        # Assert
+        assert fp1.fingerprint_hash == fp2.fingerprint_hash  # ✅ Mismo /64
+        assert fp1.matches(fp2)
+        # IPs originales se guardan
+        assert fp1.ip_address == ip1
+        assert fp2.ip_address == ip2
+
+    def test_ipv6_rotation_different_64(self):
+        """
+        Test: IPs de diferente /64 deben generar diferente fingerprint
+        Given: Dos IPs IPv6 de rangos /64 distintos (diferentes primeros 4 grupos)
+        When: Se crean DeviceFingerprints con el mismo User-Agent
+        Then: Los fingerprints tienen hashes diferentes
+
+        Rationale: IPv6 de otro ISP/país indica session hijacking
+                   Debe generar fingerprint distinto
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+        ip1 = "2a09:bac3:7654:3210::1"
+        ip2 = "2a09:bac3:9999:aaaa::1"  # Diferente red /64
+
+        # Act
+        fp1 = DeviceFingerprint.create(user_agent, ip1)
+        fp2 = DeviceFingerprint.create(user_agent, ip2)
+
+        # Assert
+        assert fp1.fingerprint_hash != fp2.fingerprint_hash  # ❌ Diferente /64
+        assert not fp1.matches(fp2)
+
+    def test_real_world_cloudflare_rotation(self):
+        """
+        Test: Caso real de rotación de IP de Cloudflare
+        Given: IPs reales reportadas en producción (92.176.11.158 y 92.176.11.205)
+        When: Se crean fingerprints con el mismo User-Agent
+        Then: Generan el mismo hash (no logout)
+
+        Rationale: Este es el bug real reportado en producción
+                   Frontend polling cada 5 min detectaba is_current_device=false
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.2 Safari/605.1.15"
+        ip_inicial = "92.176.11.158"
+        ip_rotada = "92.176.11.205"
+
+        # Act
+        fp_inicial = DeviceFingerprint.create(user_agent, ip_inicial)
+        fp_rotada = DeviceFingerprint.create(user_agent, ip_rotada)
+
+        # Assert
+        assert fp_inicial.fingerprint_hash == fp_rotada.fingerprint_hash
+        assert fp_inicial.matches(fp_rotada)
+        # Device names deben ser iguales
+        assert fp_inicial.device_name == fp_rotada.device_name == "Safari on macOS"
+
+    def test_invalid_ip_format_raises_error(self):
+        """
+        Test: IP inválida lanza error al normalizar
+        Given: IP con formato inválido
+        When: Se intenta crear DeviceFingerprint
+        Then: Lanza ValueError
+
+        Rationale: Validación defensiva contra datos malformados
+        """
+        # Arrange
+        user_agent = "Mozilla/5.0"
+        invalid_ip = "999.999.999.999"
+
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            DeviceFingerprint.create(user_agent, invalid_ip)
+
+        assert "Invalid IP address" in str(exc_info.value)
 
 
 class TestDeviceFingerprintImmutability:
