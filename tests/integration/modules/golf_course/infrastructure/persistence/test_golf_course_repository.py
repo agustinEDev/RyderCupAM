@@ -598,7 +598,7 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.FORWARD_MALE,
+            category=TeeCategory.SENIOR_MALE,
             identifier="Amarillo",
             course_rating=71.0,
             slope_rating=128,
@@ -616,7 +616,7 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
             slope_rating=136,
         ),
         Tee(
-            category=TeeCategory.FORWARD_FEMALE,
+            category=TeeCategory.SENIOR_FEMALE,
             identifier="Verde",
             course_rating=71.5,
             slope_rating=130,
