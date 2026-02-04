@@ -344,7 +344,7 @@ class UserDevice:
 
         Note:
             - No dispara eventos de dominio (es solo audit)
-            - La IP se normaliza automáticamente (IPv6-mapped → IPv4)
+            - La IP se almacena tal cual se recibe (no se normaliza)
         """
         self._ip_address = ip_address
 

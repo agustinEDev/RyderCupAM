@@ -140,14 +140,40 @@ class RegisterDeviceUseCase:
                     logger.warning(f"Invalid device_id in cookie: {e}")
 
             # =========================================================
-            # PRIORITY 2: Create new device
+            # PRIORITY 2: Fingerprint-based lookup (fallback)
             # =========================================================
-            # Create fingerprint for device_name generation
+            # Create fingerprint for device lookup and device_name generation
             fingerprint = DeviceFingerprint.create(
                 user_agent=request.user_agent,
                 ip_address=request.ip_address,
             )
 
+            # Check if device already exists by fingerprint (prevents unique index violation)
+            existing_device = await self._uow.user_devices.find_by_user_and_fingerprint(
+                user_id=user_id,
+                fingerprint_hash=fingerprint.fingerprint_hash,
+            )
+
+            if existing_device:
+                # Device found via fingerprint - update timestamps and IP
+                existing_device.update_last_used()
+                existing_device.update_ip_address(request.ip_address)
+                await self._uow.user_devices.save(existing_device)
+
+                logger.debug(
+                    f"Device identified via fingerprint (cookie missing): {existing_device.device_name}"
+                )
+
+                return RegisterDeviceResponseDTO(
+                    device_id=str(existing_device.id.value),
+                    is_new_device=False,
+                    message=f"Dispositivo actualizado: {existing_device.device_name}",
+                    set_device_cookie=True,  # Cookie was missing, caller must set it
+                )
+
+            # =========================================================
+            # PRIORITY 3: Create new device
+            # =========================================================
             new_device = UserDevice.create(
                 user_id=user_id,
                 fingerprint=fingerprint,

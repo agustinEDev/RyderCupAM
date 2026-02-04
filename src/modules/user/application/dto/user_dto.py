@@ -507,6 +507,15 @@ class RefreshAccessTokenResponseDTO(BaseModel):
         default="Access token renovado exitosamente",
         description="Mensaje de confirmación de renovación.",
     )
+    # Device Fingerprinting (v2.0.4): Cookie-based device identification
+    device_id: str | None = Field(
+        default=None,
+        description="ID del dispositivo registrado (para cookie httpOnly).",
+    )
+    should_set_device_cookie: bool = Field(
+        default=False,
+        description="True si el caller debe establecer la cookie device_id.",
+    )
 
 
 # ======================================================================================
