@@ -154,7 +154,9 @@ async def list_user_devices(
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
         # Si TRUSTED_PROXIES está vacío, NO confiará en X-Forwarded-For/X-Real-IP
         user_agent = get_user_agent(request)
-        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+        ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        )
 
         # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
         # Cookie-based identification para is_current_device
@@ -281,7 +283,9 @@ async def revoke_device(
         # Extraer contexto HTTP del request (user-agent + IP)
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
         user_agent = get_user_agent(request)
-        ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+        ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        )
 
         # Crear request DTO con user_id, device_id y contexto HTTP
         # NOTA: ip_address puede ser None si es inválida

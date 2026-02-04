@@ -197,7 +197,9 @@ async def login_user(
     """
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    login_data.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    login_data.ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     login_data.user_agent = get_user_agent(request)
 
     # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
@@ -337,7 +339,9 @@ async def logout_user(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    logout_request.ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    logout_request.ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     logout_request.user_agent = get_user_agent(request)
 
     logout_response = await use_case.execute(logout_request, user_id, token)
@@ -432,7 +436,9 @@ async def refresh_access_token(
     # Device Fingerprinting (v2.0.4): Leer device_id desde cookie httpOnly
     device_id_cookie_name = get_device_id_cookie_name()
     refresh_request = RefreshAccessTokenRequestDTO(
-        ip_address=get_trusted_client_ip(request, settings.TRUSTED_PROXIES),
+        ip_address=get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        ),
         user_agent=get_user_agent(request),
         device_id_from_cookie=request.cookies.get(device_id_cookie_name),
     )
@@ -450,6 +456,10 @@ async def refresh_access_token(
 
     # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
     set_csrf_cookie(response, refresh_response.csrf_token)
+
+    # ✅ NUEVO (v2.0.4): Establecer device_id cookie si es necesario
+    if refresh_response.should_set_device_cookie and refresh_response.device_id:
+        set_device_id_cookie(response, refresh_response.device_id)
 
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
@@ -688,7 +698,9 @@ async def forgot_password(
     """
     # Extraer contexto de seguridad
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO
@@ -759,7 +771,9 @@ async def reset_password(
     """
     # Extraer contexto de seguridad
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    ip_address = get_trusted_client_ip(request, settings.TRUSTED_PROXIES)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
     user_agent = get_user_agent(request)
 
     # Añadir contexto al request DTO

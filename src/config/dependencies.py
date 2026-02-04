@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import async_session_maker
+from src.config.settings import settings
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -554,7 +555,9 @@ async def get_current_user(
     user_agent = request.headers.get("User-Agent", "unknown")
 
     # Extraer IP real del cliente (usa shared helper con soporte Cloudflare + proxies)
-    ip_address = get_trusted_client_ip(request)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
 
     if user_agent != "unknown" and ip_address:
         try:
