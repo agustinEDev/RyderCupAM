@@ -1586,7 +1586,7 @@ async def list_competition_golf_courses(
                             country_code=golf_course.country_code.value,
                             tees=[
                                 TeeResponseDTO(
-                                    id=tee.id.value,
+                                    category=tee.category.value,
                                     identifier=tee.identifier,
                                     course_rating=float(tee.course_rating),
                                     slope_rating=int(tee.slope_rating),
@@ -1595,7 +1595,7 @@ async def list_competition_golf_courses(
                             ],
                             holes=[
                                 HoleResponseDTO(
-                                    hole_number=hole.hole_number,
+                                    hole_number=hole.number,
                                     par=hole.par,
                                     stroke_index=hole.stroke_index,
                                 )

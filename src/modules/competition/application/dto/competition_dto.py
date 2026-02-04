@@ -755,7 +755,7 @@ class ReorderGolfCourseIdsRequest(BaseModel):
 class TeeResponseDTO(BaseModel):
     """DTO de respuesta para un tee de un campo de golf."""
 
-    id: UUID = Field(..., description="ID único del tee")
+    category: str = Field(..., description="Categoría del tee (CHAMPIONSHIP_MALE, AMATEUR_MALE, etc.)")
     identifier: str = Field(..., description="Nombre del tee (ej: 'Championship', 'Blue', 'White')")
     course_rating: float = Field(..., description="Course Rating (WHS)")
     slope_rating: int = Field(..., description="Slope Rating (WHS)")
