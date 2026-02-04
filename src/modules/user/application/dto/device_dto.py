@@ -28,6 +28,7 @@ class RegisterDeviceRequestDTO(BaseModel):
         user_id: ID del usuario propietario (extraído del JWT)
         user_agent: User-Agent completo del navegador
         ip_address: IP del cliente (IPv4 o IPv6)
+        device_id_from_cookie: ID del dispositivo desde cookie httpOnly (v2.0.4)
 
     Note:
         device_name NO es necesario - DeviceFingerprint.create() lo genera automáticamente
@@ -55,6 +56,13 @@ class RegisterDeviceRequestDTO(BaseModel):
         description="Dirección IP del cliente (IPv4 o IPv6)",
         json_schema_extra={"example": "192.168.1.100"},
     )
+    device_id_from_cookie: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+        description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+        json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
+    )
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -63,6 +71,7 @@ class RegisterDeviceRequestDTO(BaseModel):
                 "user_id": "550e8400-e29b-41d4-a716-446655440000",
                 "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
                 "ip_address": "192.168.1.100",
+                "device_id_from_cookie": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
             }
         },
     )
@@ -78,6 +87,7 @@ class RegisterDeviceResponseDTO(BaseModel):
         device_id: ID único del dispositivo
         is_new_device: True si es dispositivo nuevo, False si ya existía
         message: Mensaje descriptivo
+        set_device_cookie: True si el caller debe setear la cookie device_id (v2.0.4)
     """
 
     device_id: str = Field(
@@ -95,6 +105,11 @@ class RegisterDeviceResponseDTO(BaseModel):
         description="Mensaje descriptivo de la operación",
         json_schema_extra={"example": "Nuevo dispositivo detectado: Chrome on macOS"},
     )
+    set_device_cookie: bool = Field(
+        default=False,
+        description="True si el caller debe setear la cookie device_id (v2.0.4)",
+        json_schema_extra={"example": True},
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -102,6 +117,7 @@ class RegisterDeviceResponseDTO(BaseModel):
                 "device_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "is_new_device": True,
                 "message": "Nuevo dispositivo detectado: Chrome on macOS",
+                "set_device_cookie": True,
             }
         }
     )
@@ -186,8 +202,9 @@ class ListUserDevicesRequestDTO(BaseModel):
 
     Fields:
         user_id: ID del usuario (extraído del JWT)
-        user_agent: User-Agent del request HTTP (opcional, para calcular is_current_device) (v1.13.1)
-        ip_address: IP del request HTTP (opcional, para calcular is_current_device) (v1.13.1)
+        user_agent: User-Agent del request HTTP (opcional, legacy) (v1.13.1)
+        ip_address: IP del request HTTP (opcional, legacy) (v1.13.1)
+        device_id_from_cookie: ID del dispositivo desde cookie (v2.0.4, primary identifier)
     """
 
     user_id: str = Field(
@@ -199,7 +216,7 @@ class ListUserDevicesRequestDTO(BaseModel):
         default=None,
         min_length=10,
         max_length=2000,
-        description="User-Agent del request HTTP para calcular dispositivo actual (v1.13.1)",
+        description="User-Agent del request HTTP (legacy, v1.13.1)",
         json_schema_extra={
             "example": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         },
@@ -208,8 +225,15 @@ class ListUserDevicesRequestDTO(BaseModel):
         default=None,
         min_length=7,
         max_length=45,
-        description="IP del request HTTP para calcular dispositivo actual (v1.13.1)",
+        description="IP del request HTTP (legacy, v1.13.1)",
         json_schema_extra={"example": "192.168.1.100"},
+    )
+    device_id_from_cookie: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+        description="ID del dispositivo desde cookie httpOnly (v2.0.4, primary identifier)",
+        json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )
 
     model_config = ConfigDict(str_strip_whitespace=True)

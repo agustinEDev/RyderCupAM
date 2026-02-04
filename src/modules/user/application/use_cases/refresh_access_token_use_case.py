@@ -146,15 +146,16 @@ class RefreshAccessTokenUseCase:
             # Usuario fue eliminado
             return None
 
-        # 5. Device Fingerprinting (v1.13.0): Actualizar last_used_at del dispositivo
-        # Si el refresh token tiene device_id, actualizamos last_used_at
-        if refresh_token_entity.device_id and request.user_agent and request.ip_address:
+        # 5. Device Fingerprinting (v2.0.4): Actualizar last_used_at y ip_address del dispositivo
+        # Cookie-based identification: device_id_from_cookie tiene prioridad
+        if request.user_agent and request.ip_address:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
                 ip_address=request.ip_address,
+                device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
             )
-            # Registrar dispositivo (crea nuevo o actualiza last_used_at)
+            # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
             await self._register_device_use_case.execute(device_request)
 
         # 6. Generar nuevo access token (15 minutos)

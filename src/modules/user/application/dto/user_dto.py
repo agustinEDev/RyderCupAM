@@ -185,6 +185,9 @@ class LoginRequestDTO(BaseModel):
     Security Logging (v1.8.0):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
+
+    Device Fingerprinting (v2.0.4):
+    - device_id_from_cookie: ID del dispositivo desde cookie httpOnly (primary identifier)
     """
 
     email: EmailStr = Field(
@@ -202,6 +205,13 @@ class LoginRequestDTO(BaseModel):
         description=IP_ADDRESS_DESCRIPTION,
     )
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+    # Device Fingerprinting (v2.0.4): Cookie-based identification
+    device_id_from_cookie: str | None = Field(
+        None,
+        min_length=36,
+        max_length=36,
+        description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
 
 
 class LoginResponseDTO(BaseModel):
@@ -215,6 +225,10 @@ class LoginResponseDTO(BaseModel):
 
     CSRF Protection (v1.13.0):
     - csrf_token: Token de 256 bits para validación double-submit (15 minutos)
+
+    Device Fingerprinting (v2.0.4):
+    - device_id: ID del dispositivo (para setear cookie si es nuevo)
+    - should_set_device_cookie: True si el caller debe setear la cookie device_id
     """
 
     access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
@@ -226,6 +240,15 @@ class LoginResponseDTO(BaseModel):
     user: UserResponseDTO = Field(..., description="Información del usuario autenticado.")
     email_verification_required: bool = Field(
         default=False, description="Indica si el usuario necesita verificar su email."
+    )
+    # Device Fingerprinting (v2.0.4): Cookie-based identification
+    device_id: str | None = Field(
+        None,
+        description="ID del dispositivo registrado (v2.0.4). Usar para setear cookie si should_set_device_cookie=True.",
+    )
+    should_set_device_cookie: bool = Field(
+        default=False,
+        description="True si el caller debe setear la cookie device_id (v2.0.4). False si la cookie ya existe.",
     )
 
 
@@ -445,12 +468,22 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     Security Logging (v1.8.0):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
+
+    Device Fingerprinting (v2.0.4):
+    - device_id_from_cookie: ID del dispositivo desde cookie httpOnly (primary identifier)
     """
 
     # El refresh token se leerá desde la cookie httpOnly, no del body
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+    # Device Fingerprinting (v2.0.4): Cookie-based identification
+    device_id_from_cookie: str | None = Field(
+        None,
+        min_length=36,
+        max_length=36,
+        description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
 
 
 class RefreshAccessTokenResponseDTO(BaseModel):

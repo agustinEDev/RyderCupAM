@@ -190,19 +190,25 @@ class LoginUserUseCase:
             data={"sub": str(user.id.value)}
         )
 
-        # Device Fingerprinting (v1.13.0): Registrar/actualizar dispositivo PRIMERO
+        # Device Fingerprinting (v2.0.4): Registrar/actualizar dispositivo PRIMERO
+        # Cookie-based identification: device_id_from_cookie tiene prioridad
         # Necesitamos el device_id para asociarlo con el refresh token
         device_id = None
+        should_set_device_cookie = False
+        device_id_str = None
         if request.user_agent and request.ip_address:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
                 ip_address=request.ip_address,
+                device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
             )
-            # Registrar dispositivo (crea nuevo o actualiza last_used_at)
+            # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
             device_response = await self._register_device_use_case.execute(device_request)
             # Obtener device_id para asociar con refresh token
             device_id = UserDeviceId.from_string(device_response.device_id)
+            device_id_str = device_response.device_id
+            should_set_device_cookie = device_response.set_device_cookie
 
         # Crear entidad RefreshToken (hashea el JWT antes de guardar)
         # IMPORTANTE: Asociar con device_id para permitir revocación correcta
@@ -240,4 +246,7 @@ class LoginUserUseCase:
             token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
             email_verification_required=not user.is_email_verified(),
+            # Device Fingerprinting (v2.0.4): Cookie-based identification
+            device_id=device_id_str,
+            should_set_device_cookie=should_set_device_cookie,
         )
