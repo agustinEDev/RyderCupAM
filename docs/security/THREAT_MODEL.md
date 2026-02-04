@@ -1,7 +1,7 @@
 # Threat Models - Ryder Cup Amateur Manager
 
 **Version:** 1.1
-**Date:** January 29, 2026
+**Created On:** January 29, 2026
 **Last Review:** February 4, 2026
 **OWASP Coverage:** A04: Insecure Design (Threat Modeling)
 

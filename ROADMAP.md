@@ -1,7 +1,7 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.1 (Production)
-> **Last Updated:** Jan 30, 2026
+> **Current Version:** 2.0.4 (Production)
+> **Last Updated:** Feb 4, 2026
 > **OWASP Score:** 9.4/10
 
 ---
@@ -339,7 +339,7 @@ class LeaderboardResponse(BaseModel):
 - `HoleScore` - Score Annotation (1 table)
 
 **Enums:**
-- GolfCourseType: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
+- CourseType: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
 - TeeCategory (7 values): CHAMPIONSHIP_MALE, AMATEUR_MALE, SENIOR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, SENIOR_FEMALE, JUNIOR
 - ApprovalStatus: PENDING_APPROVAL, APPROVED, REJECTED
 - MatchFormat, MatchStatus, InvitationStatus, ScoreStatus (v2.1.0)

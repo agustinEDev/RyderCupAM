@@ -63,8 +63,6 @@ _No unreleased changes_
 - Allows cookies shared across `*.rydercupfriends.com` subdomains
 - Set `COOKIE_DOMAIN=.rydercupfriends.com` in production for SSO across subdomains
 
-### Changed
-
 **⛳ TeeCategory Enum Updated**
 - Renamed `FORWARD_MALE` → `SENIOR_MALE` (matches DB migration)
 - Renamed `FORWARD_FEMALE` → `SENIOR_FEMALE` (matches DB migration)
