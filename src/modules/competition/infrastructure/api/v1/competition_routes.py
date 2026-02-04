@@ -1599,3 +1599,9 @@ async def list_competition_golf_courses(
 
     except HTTPException:
         raise
+    except Exception as e:
+        logger.error(f"Error loading golf courses for competition {competition_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno al cargar campos de golf: {type(e).__name__}",
+        ) from e
