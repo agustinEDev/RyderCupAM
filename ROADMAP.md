@@ -110,7 +110,7 @@ class GolfCourseRequest(BaseModel):
 
 ---
 
-#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS
+#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS (Blocks 0-3 ✅ COMPLETED)
 
 **Block 0: Clean Architecture Refactor - UoW Pattern Consistency (✅ COMPLETED: Jan 31, 2026)**
 - **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
@@ -338,7 +338,11 @@ class LeaderboardResponse(BaseModel):
 - `Invitation` - Invitation System (1 table)
 - `HoleScore` - Score Annotation (1 table)
 
-**Enums:** GolfCourseType, TeeCategory, ApprovalStatus, MatchFormat, MatchStatus, InvitationStatus, ScoreStatus
+**Enums:**
+- GolfCourseType: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
+- TeeCategory (7 values): CHAMPIONSHIP_MALE, AMATEUR_MALE, SENIOR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, SENIOR_FEMALE, JUNIOR
+- ApprovalStatus: PENDING_APPROVAL, APPROVED, REJECTED
+- MatchFormat, MatchStatus, InvitationStatus, ScoreStatus (v2.1.0)
 
 ---
 
