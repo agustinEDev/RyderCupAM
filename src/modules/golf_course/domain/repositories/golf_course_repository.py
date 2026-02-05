@@ -55,9 +55,12 @@ class IGolfCourseRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_approved(self) -> list[GolfCourse]:
+    async def find_approved(self, country_code: str | None = None) -> list[GolfCourse]:
         """
-        Busca todos los campos aprobados.
+        Busca todos los campos aprobados, opcionalmente filtrados por país.
+
+        Args:
+            country_code: Código ISO del país para filtrar (opcional)
 
         Returns:
             Lista de campos con status APPROVED

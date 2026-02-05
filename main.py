@@ -79,8 +79,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     start_mappers()  # User module mappers
     start_country_mappers()  # Shared domain (Country) mappers
-    start_competition_mappers()  # Competition module mappers
-    start_golf_course_mappers()  # Golf Course module mappers
+    start_golf_course_mappers()  # Golf Course module mappers (before Competition - dependency)
+    start_competition_mappers()  # Competition module mappers (depends on GolfCourse)
     yield
     print("INFO:     Apagando aplicación...")
 

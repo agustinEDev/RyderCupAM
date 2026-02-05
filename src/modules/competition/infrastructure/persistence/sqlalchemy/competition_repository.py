@@ -23,6 +23,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -101,10 +102,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             select(Competition)
             .where(Competition.id == competition_id)
             .options(
-                selectinload(Competition._golf_courses).selectinload(
-                    CompetitionGolfCourse.golf_course
+                selectinload(Competition._golf_courses)
+                .selectinload(CompetitionGolfCourse.golf_course)
+                .options(
+                    selectinload(GolfCourse._tees),
+                    selectinload(GolfCourse._holes),
                 )
-                # Note: GolfCourse.tees and GolfCourse.holes are already eager loaded via lazy="joined"
             )
         )
         result = await self._session.execute(stmt)
