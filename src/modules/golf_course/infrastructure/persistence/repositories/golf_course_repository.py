@@ -16,6 +16,7 @@ from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapp
     golf_courses_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 
 
 class GolfCourseRepository(IGolfCourseRepository):
@@ -133,7 +134,9 @@ class GolfCourseRepository(IGolfCourseRepository):
         )
 
         if country_code:
-            stmt = stmt.where(golf_courses_table.c.country_code == country_code)
+            # Convert string to CountryCode VO for TypeDecorator compatibility
+            country_code_vo = CountryCode(country_code)
+            stmt = stmt.where(golf_courses_table.c.country_code == country_code_vo)
 
         result = await self._session.execute(stmt)
         result = result.unique()
