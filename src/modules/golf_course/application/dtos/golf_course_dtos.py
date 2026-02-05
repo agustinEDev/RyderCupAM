@@ -83,7 +83,7 @@ class GetGolfCourseByIdRequestDTO(BaseModel):
 class ListApprovedGolfCoursesRequestDTO(BaseModel):
     """Request para listar campos aprobados (todos los usuarios)."""
 
-    pass  # No requiere parámetros
+    country_code: str | None = Field(None, description="Filtrar por código ISO de país")
 
 
 class ListPendingGolfCoursesRequestDTO(BaseModel):
