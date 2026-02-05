@@ -2,7 +2,7 @@
 MatchFormat Value Object - Formato de partido.
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class MatchFormat(StrEnum):

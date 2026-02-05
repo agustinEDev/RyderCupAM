@@ -7,7 +7,7 @@ Workflow:
 - REJECTED: Admin rechaza (solo visible para Admin + owner)
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class ApprovalStatus(StrEnum):

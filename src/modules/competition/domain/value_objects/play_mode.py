@@ -2,7 +2,7 @@
 PlayMode Value Object - Modo de juego de una competición.
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class PlayMode(StrEnum):

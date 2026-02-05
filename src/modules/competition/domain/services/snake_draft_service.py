@@ -15,7 +15,7 @@ Resultado: Equipos equilibrados en términos de skill.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import TypeVar
 
 from src.modules.user.domain.value_objects.user_id import UserId

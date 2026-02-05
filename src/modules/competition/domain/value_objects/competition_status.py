@@ -4,7 +4,7 @@ CompetitionStatus Value Object - Estado del ciclo de vida de una competición.
 Define los estados posibles de una competición desde su creación hasta su finalización.
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class CompetitionStatus(StrEnum):

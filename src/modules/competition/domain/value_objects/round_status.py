@@ -2,7 +2,7 @@
 RoundStatus Value Object - Estado de una ronda.
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class RoundStatus(StrEnum):

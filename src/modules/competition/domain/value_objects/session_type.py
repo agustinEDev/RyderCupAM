@@ -2,7 +2,7 @@
 SessionType Value Object - Tipo de sesión en una jornada.
 """
 
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class SessionType(StrEnum):
