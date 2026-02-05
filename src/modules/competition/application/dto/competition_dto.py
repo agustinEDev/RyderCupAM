@@ -89,14 +89,8 @@ class CreateCompetitionRequestDTO(BaseModel):
         None, description="Lista de países adyacentes (formato frontend)."
     )
 
-    # Handicap Settings
-    handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
-    handicap_percentage: int | None = Field(
-        None,
-        ge=90,
-        le=100,
-        description="Porcentaje de hándicap (90, 95 o 100). Requerido si type='PERCENTAGE'.",
-    )
+    # Play Mode
+    play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Competition Config - con alias para compatibilidad con frontend
     max_players: int = Field(
@@ -126,10 +120,10 @@ class CreateCompetitionRequestDTO(BaseModel):
             return v.upper().strip()
         return v
 
-    @field_validator("handicap_type", mode="before")
+    @field_validator("play_mode", mode="before")
     @classmethod
-    def uppercase_handicap_type(cls, v):
-        """Convierte handicap_type a mayúsculas."""
+    def uppercase_play_mode(cls, v):
+        """Convierte play_mode a mayúsculas."""
         if v:
             return v.upper().strip()
         return v
@@ -163,23 +157,15 @@ class CreateCompetitionRequestDTO(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_handicap_config(self) -> "CreateCompetitionRequestDTO":
+    def validate_config(self) -> "CreateCompetitionRequestDTO":
         """Validaciones post-inicialización."""
         # Validar fechas
         if self.start_date >= self.end_date:
             raise ValueError("start_date debe ser anterior a end_date")
 
-        # Validar handicap_type
-        if self.handicap_type not in ["SCRATCH", "PERCENTAGE"]:
-            raise ValueError("handicap_type debe ser 'SCRATCH' o 'PERCENTAGE'")
-
-        # Si es PERCENTAGE, handicap_percentage es obligatorio
-        if self.handicap_type == "PERCENTAGE" and self.handicap_percentage is None:
-            raise ValueError("handicap_percentage es requerido cuando handicap_type='PERCENTAGE'")
-
-        # Si es SCRATCH, handicap_percentage debe ser None
-        if self.handicap_type == "SCRATCH" and self.handicap_percentage is not None:
-            raise ValueError("handicap_percentage debe ser None cuando handicap_type='SCRATCH'")
+        # Validar play_mode
+        if self.play_mode not in ["SCRATCH", "HANDICAP"]:
+            raise ValueError("play_mode debe ser 'SCRATCH' o 'HANDICAP'")
 
         # Validar team_assignment
         if self.team_assignment not in ["MANUAL", "AUTOMATIC"]:
@@ -214,9 +200,8 @@ class CreateCompetitionResponseDTO(BaseModel):
         description="Lista de países participantes con códigos y nombres.",
     )
 
-    # Handicap
-    handicap_type: str = Field(..., description="Tipo de hándicap.")
-    handicap_percentage: int | None = Field(None, description="Porcentaje de hándicap.")
+    # Play Mode
+    play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Nombres de equipos
     team_1_name: str = Field(..., description=TEAM_1_NAME_DESC)
@@ -269,11 +254,8 @@ class UpdateCompetitionRequestDTO(BaseModel):
         None, min_length=2, max_length=2, description="Nuevo país adyacente 2."
     )
 
-    # Handicap Settings
-    handicap_type: str | None = Field(None, description="Nuevo tipo de hándicap.")
-    handicap_percentage: int | None = Field(
-        None, ge=90, le=100, description="Nuevo porcentaje de hándicap."
-    )
+    # Play Mode
+    play_mode: str | None = Field(None, description="Nuevo modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Competition Config
     max_players: int | None = Field(None, ge=2, le=100, description="Nuevo máximo de jugadores.")
@@ -293,10 +275,10 @@ class UpdateCompetitionRequestDTO(BaseModel):
             return v.upper().strip()
         return v
 
-    @field_validator("handicap_type", mode="before")
+    @field_validator("play_mode", mode="before")
     @classmethod
-    def uppercase_handicap_type(cls, v):
-        """Convierte handicap_type a mayúsculas."""
+    def uppercase_play_mode(cls, v):
+        """Convierte play_mode a mayúsculas."""
         if v:
             return v.upper().strip()
         return v
@@ -363,11 +345,8 @@ class CompetitionResponseDTO(BaseModel):
         description="Lista de países participantes con códigos y nombres.",
     )
 
-    # Handicap Settings
-    handicap_type: str = Field(..., description="Tipo de hándicap: 'SCRATCH' o 'PERCENTAGE'.")
-    handicap_percentage: int | None = Field(
-        None, description="Porcentaje de hándicap (90-100) si es PERCENTAGE."
-    )
+    # Play Mode
+    play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Nombres de equipos
     team_1_name: str = Field(default="Team 1", description=TEAM_1_NAME_DESC)

@@ -26,8 +26,8 @@ from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
-from ..value_objects.handicap_settings import HandicapSettings
 from ..value_objects.location import Location
+from ..value_objects.play_mode import PlayMode
 from ..value_objects.team_assignment import TeamAssignment
 
 # Constantes de validación
@@ -46,7 +46,7 @@ class Competition:
     Entidad Competition - Representa un torneo de golf.
 
     Agregado raíz que gestiona:
-    - Configuración del torneo (nombre, fechas, ubicación, hándicap)
+    - Configuración del torneo (nombre, fechas, ubicación, modo de juego)
     - Equipos (nombres de los dos equipos)
     - Ciclo de vida (estados: DRAFT, ACTIVE, CLOSED, IN_PROGRESS, COMPLETED, CANCELLED)
     - Inscripciones (mediante agregado Enrollment)
@@ -69,7 +69,7 @@ class Competition:
         ...     location=Location(CountryCode("ES")),
         ...     team_1_name="Europe",
         ...     team_2_name="USA",
-        ...     handicap_settings=HandicapSettings(HandicapType.PERCENTAGE, 90)
+        ...     play_mode=PlayMode.HANDICAP
         ... )
         >>> comp.status
         <CompetitionStatus.DRAFT: 'DRAFT'>
@@ -87,7 +87,7 @@ class Competition:
         location: Location,
         team_1_name: str,
         team_2_name: str,
-        handicap_settings: HandicapSettings,
+        play_mode: PlayMode,
         max_players: int = 24,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
@@ -106,7 +106,7 @@ class Competition:
             location: Ubicación geográfica
             team_1_name: Nombre del equipo 1
             team_2_name: Nombre del equipo 2
-            handicap_settings: Configuración de hándicap
+            play_mode: Modo de juego (SCRATCH o HANDICAP)
             status: Estado inicial (default: DRAFT)
             created_at: Timestamp de creación
             updated_at: Timestamp de última actualización
@@ -123,7 +123,7 @@ class Competition:
         self.location = location
         self.team_1_name = team_1_name
         self.team_2_name = team_2_name
-        self.handicap_settings = handicap_settings
+        self.play_mode = play_mode
         self.max_players = max_players
         self.team_assignment = team_assignment
         self.status = status
@@ -142,7 +142,7 @@ class Competition:
         location: Location,
         team_1_name: str,
         team_2_name: str,
-        handicap_settings: HandicapSettings,
+        play_mode: PlayMode,
         max_players: int = 24,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
     ) -> "Competition":
@@ -165,7 +165,7 @@ class Competition:
             location=location,
             team_1_name=team_1_name,
             team_2_name=team_2_name,
-            handicap_settings=handicap_settings,
+            play_mode=play_mode,
             max_players=max_players,
             team_assignment=team_assignment,
             status=CompetitionStatus.DRAFT,
@@ -397,7 +397,7 @@ class Competition:
         location: Location | None = None,
         team_1_name: str | None = None,
         team_2_name: str | None = None,
-        handicap_settings: HandicapSettings | None = None,
+        play_mode: PlayMode | None = None,
         max_players: int | None = None,
         team_assignment: TeamAssignment | None = None,
     ) -> None:
@@ -412,7 +412,7 @@ class Competition:
             location: Nueva ubicación (opcional)
             team_1_name: Nuevo nombre equipo 1 (opcional)
             team_2_name: Nuevo nombre equipo 2 (opcional)
-            handicap_settings: Nueva configuración hándicap (opcional)
+            play_mode: Nuevo modo de juego (opcional)
             max_players: Nuevo máximo de jugadores (opcional)
             team_assignment: Nueva asignación de equipos (opcional)
 
@@ -436,8 +436,8 @@ class Competition:
         if location is not None:
             self.location = location
 
-        if handicap_settings is not None:
-            self.handicap_settings = handicap_settings
+        if play_mode is not None:
+            self.play_mode = play_mode
 
         if max_players is not None:
             if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:

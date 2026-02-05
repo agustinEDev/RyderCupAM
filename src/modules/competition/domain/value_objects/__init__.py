@@ -4,11 +4,6 @@ from .competition_golf_course_id import CompetitionGolfCourseId
 from .competition_name import CompetitionName, InvalidCompetitionNameError
 from .date_range import DateRange, InvalidDateRangeError
 from .handicap_mode import HandicapMode
-from .handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-    InvalidHandicapSettingsError,
-)
 from .location import InvalidLocationError, Location
 from .match_format import MatchFormat
 from .match_id import MatchId
@@ -27,11 +22,8 @@ __all__ = [
     "CompetitionName",
     "DateRange",
     "HandicapMode",
-    "HandicapSettings",
-    "HandicapType",
     "InvalidCompetitionNameError",
     "InvalidDateRangeError",
-    "InvalidHandicapSettingsError",
     "InvalidLocationError",
     "Location",
     "MatchFormat",

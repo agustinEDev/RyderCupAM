@@ -51,15 +51,12 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -312,6 +309,7 @@ HandicapModeDecorator = _create_enum_decorator(HandicapMode)
 MatchStatusDecorator = _create_enum_decorator(MatchStatus)
 TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
 TeeCategoryDecorator = _create_enum_decorator(TeeCategory)
+PlayModeDecorator = _create_enum_decorator(PlayMode)
 
 
 # =============================================================================
@@ -495,33 +493,6 @@ class LocationComposite:
         return hash(None)
 
 
-class HandicapSettingsComposite:
-    """Composite helper para HandicapSettings Value Object (2 columnas)."""
-
-    def __init__(self, handicap_type: str, handicap_value: int | None):
-        if handicap_type:
-            h_type = HandicapType(handicap_type)
-            self.value = HandicapSettings(h_type, handicap_value)
-        else:
-            self.value = None
-
-    def __composite_values__(self):
-        if self.value:
-            return (self.value.type.value, self.value.percentage)
-        return (None, None)
-
-    def __eq__(self, other):
-        return isinstance(other, HandicapSettingsComposite) and self.value == other.value
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        if self.value:
-            return hash((self.value.type.value, self.value.percentage))
-        return hash(None)
-
-
 class CompetitionStatusComposite:
     """Composite helper para CompetitionStatus enum."""
 
@@ -603,8 +574,7 @@ competitions_table = Table(
     ),
     Column("team_1_name", String(100), nullable=False),
     Column("team_2_name", String(100), nullable=False),
-    Column("handicap_type", String(20), nullable=False),
-    Column("handicap_value", Integer, nullable=True),
+    Column("play_mode", PlayModeDecorator, nullable=False),
     Column("max_players", Integer, nullable=False, default=24),
     Column("team_assignment", String(20), nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
@@ -796,13 +766,7 @@ def start_competition_mappers():
                     "_secondary_country_code",
                     "_tertiary_country_code",
                 ),
-                "_handicap_type": competitions_table.c.handicap_type,
-                "_handicap_value": competitions_table.c.handicap_value,
-                "handicap_settings": composite(
-                    lambda t, v: HandicapSettings(HandicapType(t), v) if t else None,
-                    "_handicap_type",
-                    "_handicap_value",
-                ),
+                "play_mode": competitions_table.c.play_mode,
                 "_status_value": competitions_table.c.status,
                 "status": composite(
                     lambda s: CompetitionStatus(s) if s else CompetitionStatus.DRAFT,

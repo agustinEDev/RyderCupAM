@@ -58,7 +58,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -93,7 +93,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -115,15 +115,15 @@ class TestUpdateCompetitionUseCase:
         assert competition.dates.end_date == date(2025, 7, 3)
         assert competition.location.main_country.value == "FR"
 
-    async def test_should_update_handicap_from_scratch_to_percentage(
+    async def test_should_update_play_mode_from_scratch_to_handicap(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
-        Verifica que se puede cambiar el hándicap de SCRATCH a PERCENTAGE.
+        Verifica que se puede cambiar el play_mode de SCRATCH a HANDICAP.
 
-        Given: Competición con handicap SCRATCH
-        When: Se actualiza a PERCENTAGE con 90%
-        Then: El hándicap se actualiza correctamente
+        Given: Competición con play_mode SCRATCH
+        When: Se actualiza a HANDICAP
+        Then: El play_mode se actualiza correctamente
         """
         # Arrange
         create_use_case = CreateCompetitionUseCase(uow)
@@ -132,22 +132,21 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
         update_use_case = UpdateCompetitionUseCase(uow)
         update_request = UpdateCompetitionRequestDTO(
-            handicap_type="PERCENTAGE", handicap_percentage=90
+            play_mode="HANDICAP"
         )
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-        assert competition.handicap_settings.type.value == "PERCENTAGE"
-        assert competition.handicap_settings.percentage == 90
+        assert competition.play_mode.value == "HANDICAP"
 
     async def test_should_raise_error_when_competition_not_found(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -187,7 +186,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -218,7 +217,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -238,39 +237,6 @@ class TestUpdateCompetitionUseCase:
 
         assert "Solo se permite en estado DRAFT" in str(exc_info.value)
 
-    async def test_should_raise_error_when_percentage_missing(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Verifica que se lanza excepción si se pone PERCENTAGE sin porcentaje.
-
-        Given: Actualización con handicap_type PERCENTAGE
-        When: No se proporciona handicap_percentage
-        Then: Se lanza ValueError
-        """
-        # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
-        create_request = CreateCompetitionRequestDTO(
-            name="Test",
-            start_date=date(2025, 6, 1),
-            end_date=date(2025, 6, 3),
-            main_country="ES",
-            handicap_type="SCRATCH",
-        )
-        created = await create_use_case.execute(create_request, creator_id)
-
-        # Act & Assert
-        update_use_case = UpdateCompetitionUseCase(uow)
-        update_request = UpdateCompetitionRequestDTO(
-            handicap_type="PERCENTAGE"
-            # handicap_percentage falta!
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
-
-        assert "handicap_percentage es requerido" in str(exc_info.value)
-
     async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que la transacción se hace commit correctamente.
@@ -286,7 +252,7 @@ class TestUpdateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

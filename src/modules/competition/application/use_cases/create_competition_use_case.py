@@ -19,10 +19,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -105,10 +102,8 @@ class CreateCompetitionUseCase:
                 adjacent_country_2=request.adjacent_country_2,
             )
 
-            # 5. Construir HandicapSettings
-            handicap_settings = self._build_handicap_settings(
-                request.handicap_type, request.handicap_percentage
-            )
+            # 5. Construir PlayMode
+            play_mode = PlayMode(request.play_mode)
 
             # 6. Construir DateRange
             date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
@@ -125,7 +120,7 @@ class CreateCompetitionUseCase:
                 location=location,
                 team_1_name=request.team_1_name,
                 team_2_name=request.team_2_name,
-                handicap_settings=handicap_settings,
+                play_mode=play_mode,
                 max_players=request.max_players,
                 team_assignment=team_assignment_vo,
             )
@@ -154,9 +149,8 @@ class CreateCompetitionUseCase:
                 else None
             ),
             location=str(competition.location),
-            # Handicap
-            handicap_type=competition.handicap_settings.type.value,
-            handicap_percentage=competition.handicap_settings.percentage,
+            # Play Mode
+            play_mode=competition.play_mode.value,
             # Nombres de equipos
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,
@@ -168,25 +162,3 @@ class CreateCompetitionUseCase:
             updated_at=competition.updated_at,
         )
 
-    def _build_handicap_settings(
-        self, handicap_type: str, handicap_percentage: int | None
-    ) -> HandicapSettings:
-        """
-        Construye el Value Object HandicapSettings.
-
-        Args:
-            handicap_type: Tipo de hándicap (SCRATCH o PERCENTAGE)
-            handicap_percentage: Porcentaje (90, 95, 100) si es PERCENTAGE
-
-        Returns:
-            HandicapSettings configurado
-
-        Raises:
-            ValueError: Si el tipo o porcentaje no son válidos
-        """
-        h_type = HandicapType(handicap_type)
-
-        if h_type == HandicapType.SCRATCH:
-            return HandicapSettings(h_type, None)  # Scratch requiere None explícitamente
-        # PERCENTAGE requiere porcentaje
-        return HandicapSettings(h_type, handicap_percentage)

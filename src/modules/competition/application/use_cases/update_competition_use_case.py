@@ -17,10 +17,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -91,7 +88,6 @@ class UpdateCompetitionUseCase:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionNotEditableError: Si no está en estado DRAFT
-            ValueError: Si handicap_type es PERCENTAGE pero falta handicap_percentage
         """
         async with self._uow:
             # 1. Buscar la competición
@@ -131,11 +127,7 @@ class UpdateCompetitionUseCase:
                     adjacent_country_2=request.adjacent_country_2,
                 )
 
-            handicap_settings = None
-            if request.handicap_type:
-                handicap_settings = self._build_handicap_settings(
-                    request.handicap_type, request.handicap_percentage
-                )
+            play_mode = PlayMode(request.play_mode) if request.play_mode else None
 
             team_assignment = (
                 TeamAssignment(request.team_assignment) if request.team_assignment else None
@@ -146,7 +138,7 @@ class UpdateCompetitionUseCase:
                 name=name,
                 dates=dates,
                 location=location,
-                handicap_settings=handicap_settings,
+                play_mode=play_mode,
                 max_players=request.max_players,
                 team_assignment=team_assignment,
                 team_1_name=request.team_1_name,
@@ -163,37 +155,3 @@ class UpdateCompetitionUseCase:
             updated_at=competition.updated_at,
         )
 
-    def _build_handicap_settings(
-        self, handicap_type: str, handicap_percentage: int | None
-    ) -> HandicapSettings:
-        """
-        Construye el Value Object HandicapSettings.
-
-        Reglas:
-        - Si type es SCRATCH, percentage debe ser None
-        - Si type es PERCENTAGE, percentage debe ser 90, 95 o 100 (REQUERIDO)
-
-        Args:
-            handicap_type: Tipo de hándicap (SCRATCH o PERCENTAGE)
-            handicap_percentage: Porcentaje (None para SCRATCH, 90/95/100 para PERCENTAGE)
-
-        Returns:
-            HandicapSettings configurado
-
-        Raises:
-            ValueError: Si PERCENTAGE sin porcentaje o SCRATCH con porcentaje
-        """
-        h_type = HandicapType(handicap_type)
-
-        if h_type == HandicapType.SCRATCH:
-            # SCRATCH requiere None explícitamente
-            if handicap_percentage is not None:
-                raise ValueError(
-                    "handicap_percentage debe ser None cuando handicap_type es SCRATCH"
-                )
-            return HandicapSettings(h_type, None)
-        # PERCENTAGE requiere porcentaje obligatoriamente
-        if handicap_percentage is None:
-            raise ValueError("handicap_percentage es requerido cuando handicap_type es PERCENTAGE")
-        # HandicapSettings validará que sea 90, 95 o 100
-        return HandicapSettings(h_type, handicap_percentage)

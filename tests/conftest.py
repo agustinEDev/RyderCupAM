@@ -699,8 +699,7 @@ def sample_competition_data() -> dict:
         "main_country": "ES",
         "adjacent_country_1": None,
         "adjacent_country_2": None,
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 95,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -731,8 +730,7 @@ async def create_competition(
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
+            "play_mode": "HANDICAP",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }

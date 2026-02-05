@@ -433,9 +433,8 @@ class CompetitionDTOMapper:
             location=location_str,
             # Location - countries array
             countries=countries_list,
-            # Handicap
-            handicap_type=competition.handicap_settings.type.value,
-            handicap_percentage=competition.handicap_settings.percentage,
+            # Play Mode
+            play_mode=competition.play_mode.value,
             # Config
             max_players=competition.max_players,
             team_assignment=(
@@ -622,8 +621,7 @@ async def create_competition(
     - end_date: Fecha de fin (>= start_date)
     - main_country: Código ISO del país principal (ej: "ES")
     - adjacent_country_1/2: Países adyacentes opcionales
-    - handicap_type: "SCRATCH" o "PERCENTAGE"
-    - handicap_percentage: 90-100 (si type=PERCENTAGE)
+    - play_mode: "SCRATCH" o "HANDICAP"
     - max_players: Máximo de jugadores (default: 24)
     - team_assignment: "MANUAL" o "AUTOMATIC"
 
@@ -666,8 +664,7 @@ async def create_competition(
                 tertiary_country_code=enriched_dto.tertiary_country_code,
                 location=enriched_dto.location,
                 countries=enriched_dto.countries,
-                handicap_type=enriched_dto.handicap_type,
-                handicap_percentage=enriched_dto.handicap_percentage,
+                play_mode=enriched_dto.play_mode,
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
                 team_1_name=competition.team_1_name,
@@ -901,7 +898,7 @@ async def update_competition(
     **Request Body:** Todos los campos opcionales
     - name, start_date, end_date
     - main_country, adjacent_country_1, adjacent_country_2
-    - handicap_type, handicap_percentage
+    - play_mode
     - max_players, team_assignment
 
     **Returns:**

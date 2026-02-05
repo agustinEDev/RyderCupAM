@@ -133,8 +133,7 @@ class TestCompetitionRateLimiting:
                 "start_date": "2025-12-25",
                 "end_date": "2025-12-26",
                 "main_country": "ES",
-                "handicap_type": "PERCENTAGE",
-                "handicap_percentage": 95,
+                "play_mode": "HANDICAP",
                 "max_players": 100,
                 "team_assignment": "MANUAL",
             }
@@ -150,8 +149,7 @@ class TestCompetitionRateLimiting:
             "start_date": "2025-12-25",
             "end_date": "2025-12-26",
             "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
+            "play_mode": "HANDICAP",
             "max_players": 100,
             "team_assignment": "MANUAL",
         }

@@ -29,11 +29,8 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -86,7 +83,7 @@ class TestReorderGolfCoursesUseCase:
             name=CompetitionName("Test Competition"),
             dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
             location=Location(main_country=CountryCode("ES")),
-            handicap_settings=HandicapSettings(HandicapType.SCRATCH, None),
+            play_mode=PlayMode.SCRATCH,
             max_players=24,
             team_assignment=TeamAssignment.MANUAL,
             team_1_name="Team A",

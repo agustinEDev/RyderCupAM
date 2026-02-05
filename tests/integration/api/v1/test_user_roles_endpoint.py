@@ -71,8 +71,7 @@ async def test_get_my_roles_returns_is_admin_true_for_admin_user(client: AsyncCl
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 90,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -124,8 +123,7 @@ async def test_get_my_roles_returns_is_creator_true_for_creator(client: AsyncCli
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 90,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -176,8 +174,7 @@ async def test_get_my_roles_returns_is_player_true_for_enrolled_user(client: Asy
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 90,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -257,8 +254,7 @@ async def test_get_my_roles_all_false_for_unrelated_user(client: AsyncClient):
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 90,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -318,8 +314,7 @@ async def test_get_my_roles_creator_can_also_be_player(client: AsyncClient):
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 90,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
