@@ -4,10 +4,10 @@ TeeCategory Value Object - Categoría normalizada de tees.
 Permite cálculo consistente de Playing Handicap según WHS.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class TeeCategory(str, Enum):
+class TeeCategory(StrEnum):
     """
     Categorías normalizadas de tees para Playing Handicap (WHS).
 

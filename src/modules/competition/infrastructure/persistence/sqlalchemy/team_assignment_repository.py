@@ -21,14 +21,10 @@ class SQLAlchemyTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
     async def add(self, assignment: TeamAssignment) -> None:
         self._session.add(assignment)
 
-    async def find_by_id(
-        self, assignment_id: TeamAssignmentId
-    ) -> TeamAssignment | None:
+    async def find_by_id(self, assignment_id: TeamAssignmentId) -> TeamAssignment | None:
         return await self._session.get(TeamAssignment, assignment_id)
 
-    async def find_by_competition(
-        self, competition_id: CompetitionId
-    ) -> TeamAssignment | None:
+    async def find_by_competition(self, competition_id: CompetitionId) -> TeamAssignment | None:
         statement = (
             select(TeamAssignment)
             .where(TeamAssignment._competition_id == competition_id)

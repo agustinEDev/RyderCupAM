@@ -15,13 +15,13 @@ Resultado: Equipos equilibrados en términos de skill.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TypeVar
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class Team(str, Enum):
+class Team(StrEnum):
     """Equipo en la competición (A o B)."""
 
     A = "A"
@@ -111,9 +111,7 @@ class SnakeDraftService:
             raise ValueError("Snake draft requires at least 2 players")
 
         if len(players) % 2 != 0:
-            raise ValueError(
-                f"Snake draft requires even number of players, got {len(players)}"
-            )
+            raise ValueError(f"Snake draft requires even number of players, got {len(players)}")
 
         # Ordenar por handicap (menor primero = mejor jugador)
         sorted_players = sorted(players, key=lambda p: p.handicap)
@@ -190,8 +188,4 @@ class SnakeDraftService:
         Returns:
             Lista de UserIds del equipo (ordenados por draft_order)
         """
-        return [
-            r.user_id
-            for r in sorted(results, key=lambda x: x.draft_order)
-            if r.team == team
-        ]
+        return [r.user_id for r in sorted(results, key=lambda x: x.draft_order) if r.team == team]

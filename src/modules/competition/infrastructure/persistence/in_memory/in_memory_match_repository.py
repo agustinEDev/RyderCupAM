@@ -25,11 +25,7 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
         return self._matches.get(match_id)
 
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
-        return [
-            m
-            for m in self._matches.values()
-            if m.round_id == round_id
-        ]
+        return [m for m in self._matches.values() if m.round_id == round_id]
 
     async def delete(self, match_id: MatchId) -> bool:
         if match_id in self._matches:

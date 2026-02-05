@@ -2,10 +2,10 @@
 HandicapMode Value Object - Modo de handicap para Singles.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class HandicapMode(str, Enum):
+class HandicapMode(StrEnum):
     """
     Modo de cálculo de handicap para partidos Singles.
 

@@ -2,10 +2,10 @@
 ScheduleConfigMode Value Object - Modo de configuración del calendario.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class ScheduleConfigMode(str, Enum):
+class ScheduleConfigMode(StrEnum):
     """
     Modos de configuración del calendario de rondas.
 

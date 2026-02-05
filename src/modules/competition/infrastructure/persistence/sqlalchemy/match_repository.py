@@ -27,9 +27,7 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
 
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         statement = (
-            select(Match)
-            .where(Match._round_id == round_id)
-            .order_by(Match._match_number.asc())
+            select(Match).where(Match._round_id == round_id).order_by(Match._match_number.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

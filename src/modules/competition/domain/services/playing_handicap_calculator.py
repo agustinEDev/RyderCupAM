@@ -58,9 +58,7 @@ class TeeRating:
                 f"got {self.slope_rating}"
             )
         if not MIN_PAR <= self.par <= MAX_PAR:
-            raise ValueError(
-                f"par must be between {MIN_PAR} and {MAX_PAR}, got {self.par}"
-            )
+            raise ValueError(f"par must be between {MIN_PAR} and {MAX_PAR}, got {self.par}")
 
 
 class PlayingHandicapCalculator:
@@ -113,9 +111,7 @@ class PlayingHandicapCalculator:
         playing_handicap_raw = course_handicap * allowance_factor
 
         # Paso 3: Redondear al entero más cercano (0.5 hacia arriba)
-        playing_handicap = int(
-            playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        )
+        playing_handicap = int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
         # Playing Handicap no puede ser negativo
         return max(0, playing_handicap)

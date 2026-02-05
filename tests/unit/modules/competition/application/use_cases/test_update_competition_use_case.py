@@ -138,9 +138,7 @@ class TestUpdateCompetitionUseCase:
 
         # Act
         update_use_case = UpdateCompetitionUseCase(uow)
-        update_request = UpdateCompetitionRequestDTO(
-            play_mode="HANDICAP"
-        )
+        update_request = UpdateCompetitionRequestDTO(play_mode="HANDICAP")
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 

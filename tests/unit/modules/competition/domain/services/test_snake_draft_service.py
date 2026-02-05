@@ -90,10 +90,7 @@ class TestSnakeDraftServiceBasic:
     def test_assign_six_players_snake_pattern(self):
         """6 jugadores siguen patrón serpiente: A, B, B, A, A, B."""
         service = SnakeDraftService()
-        players = [
-            PlayerForDraft(UserId.generate(), Decimal(str(i * 2)))
-            for i in range(1, 7)
-        ]
+        players = [PlayerForDraft(UserId.generate(), Decimal(str(i * 2))) for i in range(1, 7)]
 
         results = service.assign_teams(players)
 
@@ -104,18 +101,25 @@ class TestSnakeDraftServiceBasic:
     def test_assign_twelve_players_snake_pattern(self):
         """12 jugadores (formato Ryder Cup) siguen patrón correcto."""
         service = SnakeDraftService()
-        players = [
-            PlayerForDraft(UserId.generate(), Decimal(str(i)))
-            for i in range(1, 13)
-        ]
+        players = [PlayerForDraft(UserId.generate(), Decimal(str(i))) for i in range(1, 13)]
 
         results = service.assign_teams(players)
 
         teams = [r.team for r in results]
         # Patrón para 12: A,B,B,A,A,B,B,A,A,B,B,A
         expected = [
-            Team.A, Team.B, Team.B, Team.A, Team.A, Team.B,
-            Team.B, Team.A, Team.A, Team.B, Team.B, Team.A,
+            Team.A,
+            Team.B,
+            Team.B,
+            Team.A,
+            Team.A,
+            Team.B,
+            Team.B,
+            Team.A,
+            Team.A,
+            Team.B,
+            Team.B,
+            Team.A,
         ]
         assert teams == expected
 
@@ -279,8 +283,7 @@ class TestSnakeDraftServiceIntegration:
 
         # Crear jugadores con handicaps 1-12
         players = [
-            PlayerForDraft(UserId.generate(), Decimal(str(i)), f"P{i}")
-            for i in range(1, 13)
+            PlayerForDraft(UserId.generate(), Decimal(str(i)), f"P{i}") for i in range(1, 13)
         ]
 
         results = service.assign_teams(players)

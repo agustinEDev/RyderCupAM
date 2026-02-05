@@ -76,7 +76,9 @@ def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
         validated = uuid.UUID(cookie_value)
         return str(validated)
     except (ValueError, AttributeError):
-        logger.debug(f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}...")
+        logger.debug(
+            f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}..."
+        )
         return None
 
 

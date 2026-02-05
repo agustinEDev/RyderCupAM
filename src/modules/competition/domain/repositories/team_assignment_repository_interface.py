@@ -16,16 +16,12 @@ class TeamAssignmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(
-        self, assignment_id: TeamAssignmentId
-    ) -> TeamAssignment | None:
+    async def find_by_id(self, assignment_id: TeamAssignmentId) -> TeamAssignment | None:
         """Busca una asignacion por su ID."""
         pass
 
     @abstractmethod
-    async def find_by_competition(
-        self, competition_id: CompetitionId
-    ) -> TeamAssignment | None:
+    async def find_by_competition(self, competition_id: CompetitionId) -> TeamAssignment | None:
         """Busca la asignacion activa de una competicion (solo puede haber una)."""
         pass
 

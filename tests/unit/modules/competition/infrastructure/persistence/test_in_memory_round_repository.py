@@ -58,6 +58,7 @@ class TestInMemoryRoundRepository:
         found = await self.repo.find_by_id(round_entity.id)
         assert found is not None
         from src.modules.competition.domain.value_objects.round_status import RoundStatus
+
         assert found.status == RoundStatus.PENDING_MATCHES
 
     @pytest.mark.asyncio
@@ -65,7 +66,9 @@ class TestInMemoryRoundRepository:
         """Encontrar rounds por competition_id."""
         other_comp_id = CompetitionId.generate()
 
-        round_1 = create_round(competition_id=self.competition_id, golf_course_id=self.golf_course_id)
+        round_1 = create_round(
+            competition_id=self.competition_id, golf_course_id=self.golf_course_id
+        )
         round_2 = create_round(
             competition_id=self.competition_id,
             golf_course_id=self.golf_course_id,

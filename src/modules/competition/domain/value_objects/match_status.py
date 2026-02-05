@@ -2,10 +2,10 @@
 MatchStatus Value Object - Estado de un partido.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class MatchStatus(str, Enum):
+class MatchStatus(StrEnum):
     """
     Estados del ciclo de vida de un partido.
 

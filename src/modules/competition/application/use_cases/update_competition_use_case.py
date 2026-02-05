@@ -154,4 +154,3 @@ class UpdateCompetitionUseCase:
             name=str(competition.name),
             updated_at=competition.updated_at,
         )
-

@@ -2,10 +2,10 @@
 MatchFormat Value Object - Formato de partido.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class MatchFormat(str, Enum):
+class MatchFormat(StrEnum):
     """
     Formatos de partido en competiciones Ryder Cup.
 

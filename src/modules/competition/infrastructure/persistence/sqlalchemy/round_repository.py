@@ -27,9 +27,7 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
     async def find_by_id(self, round_id: RoundId) -> Round | None:
         return await self._session.get(Round, round_id)
 
-    async def find_by_competition(
-        self, competition_id: CompetitionId
-    ) -> list[Round]:
+    async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         statement = (
             select(Round)
             .where(Round._competition_id == competition_id)

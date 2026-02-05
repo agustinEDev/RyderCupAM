@@ -27,9 +27,7 @@ class RoundRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_competition(
-        self, competition_id: CompetitionId
-    ) -> list[Round]:
+    async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         """Busca todas las rondas de una competicion."""
         pass
 

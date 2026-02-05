@@ -124,9 +124,7 @@ class RegisterDeviceUseCase:
                         existing_device.update_ip_address(request.ip_address)
                         await self._uow.user_devices.save(existing_device)
 
-                        logger.debug(
-                            f"Device identified via cookie: {existing_device.device_name}"
-                        )
+                        logger.debug(f"Device identified via cookie: {existing_device.device_name}")
 
                         return RegisterDeviceResponseDTO(
                             device_id=str(existing_device.id.value),

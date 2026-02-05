@@ -7,10 +7,10 @@ Workflow:
 - REJECTED: Admin rechaza (solo visible para Admin + owner)
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(StrEnum):
     """
     Estados de aprobación para GolfCourse.
 

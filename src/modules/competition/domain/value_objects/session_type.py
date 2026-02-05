@@ -2,10 +2,10 @@
 SessionType Value Object - Tipo de sesión en una jornada.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class SessionType(str, Enum):
+class SessionType(StrEnum):
     """
     Tipos de sesión en un día de competición.
 

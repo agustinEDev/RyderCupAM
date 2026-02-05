@@ -161,4 +161,3 @@ class CreateCompetitionUseCase:
             created_at=competition.created_at,
             updated_at=competition.updated_at,
         )
-

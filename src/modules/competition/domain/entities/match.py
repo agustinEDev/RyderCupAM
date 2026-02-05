@@ -162,10 +162,7 @@ class Match:
         Transición: SCHEDULED → IN_PROGRESS
         """
         if not self._status.can_start():
-            raise ValueError(
-                f"Cannot start match from status {self._status}. "
-                f"Expected SCHEDULED"
-            )
+            raise ValueError(f"Cannot start match from status {self._status}. Expected SCHEDULED")
         self._status = MatchStatus.IN_PROGRESS
         self._updated_at = datetime.now()
 
@@ -181,8 +178,7 @@ class Match:
         """
         if not self._status.can_record_scores():
             raise ValueError(
-                f"Cannot complete match from status {self._status}. "
-                f"Expected IN_PROGRESS"
+                f"Cannot complete match from status {self._status}. Expected IN_PROGRESS"
             )
         self._result = result
         self._status = MatchStatus.COMPLETED

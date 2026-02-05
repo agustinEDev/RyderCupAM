@@ -258,9 +258,7 @@ class TeamAssignmentIdDecorator(TypeDecorator):
     impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: TeamAssignmentId | str | None, dialect
-    ) -> str | None:
+    def process_bind_param(self, value: TeamAssignmentId | str | None, dialect) -> str | None:
         if isinstance(value, TeamAssignmentId):
             return str(value.value)
         if isinstance(value, str):

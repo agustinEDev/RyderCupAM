@@ -47,6 +47,7 @@ class TestInMemoryMatchRepository:
         found = await self.repo.find_by_id(match.id)
         assert found is not None
         from src.modules.competition.domain.value_objects.match_status import MatchStatus
+
         assert found.status == MatchStatus.IN_PROGRESS
 
     @pytest.mark.asyncio

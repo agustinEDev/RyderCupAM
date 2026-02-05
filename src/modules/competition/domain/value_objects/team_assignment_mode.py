@@ -2,10 +2,10 @@
 TeamAssignmentMode Value Object - Modo de asignación de equipos.
 """
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class TeamAssignmentMode(str, Enum):
+class TeamAssignmentMode(StrEnum):
     """
     Modos de asignación de jugadores a equipos.
 

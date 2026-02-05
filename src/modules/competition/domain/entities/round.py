@@ -113,10 +113,10 @@ class Round:
         """
         # Validar allowance_percentage si se proporciona (50-100 en incrementos de 5)
         if allowance_percentage is not None and allowance_percentage not in ALLOWED_PERCENTAGES:
-                raise ValueError(
-                    f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
-                    f"got {allowance_percentage}"
-                )
+            raise ValueError(
+                f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
+                f"got {allowance_percentage}"
+            )
 
         # Para SINGLES, si no se especifica handicap_mode, usar MATCH_PLAY por defecto
         effective_handicap_mode = handicap_mode
@@ -181,8 +181,7 @@ class Round:
         """
         if self._status != RoundStatus.PENDING_TEAMS:
             raise ValueError(
-                f"Cannot mark teams assigned from status {self._status}. "
-                f"Expected PENDING_TEAMS"
+                f"Cannot mark teams assigned from status {self._status}. Expected PENDING_TEAMS"
             )
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now()
@@ -206,10 +205,7 @@ class Round:
         Transición: SCHEDULED → IN_PROGRESS
         """
         if self._status != RoundStatus.SCHEDULED:
-            raise ValueError(
-                f"Cannot start round from status {self._status}. "
-                f"Expected SCHEDULED"
-            )
+            raise ValueError(f"Cannot start round from status {self._status}. Expected SCHEDULED")
         self._status = RoundStatus.IN_PROGRESS
         self._updated_at = datetime.now()
 
@@ -220,8 +216,7 @@ class Round:
         """
         if self._status != RoundStatus.IN_PROGRESS:
             raise ValueError(
-                f"Cannot complete round from status {self._status}. "
-                f"Expected IN_PROGRESS"
+                f"Cannot complete round from status {self._status}. Expected IN_PROGRESS"
             )
         self._status = RoundStatus.COMPLETED
         self._updated_at = datetime.now()
