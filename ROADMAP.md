@@ -208,39 +208,52 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 2 hours
 - **ADR**: ADR-036 (SBOM Submission via GitHub REST API)
 
-**Block 4: Domain Layer - Round & Match Entities (⏳ PENDING: Feb 5-7, 2026)**
-- **New Value Objects**:
+**Block 4: Domain Layer - Round & Match Entities (✅ COMPLETED: Feb 5, 2026)**
+- **New Value Objects (11)**:
   - `RoundId` (UUID) - Unique identifier for rounds
   - `MatchId` (UUID) - Unique identifier for matches
-  - `SessionType` (Enum): MORNING, AFTERNOON, SINGLE
-  - `MatchFormat` (Enum): SINGLES, FOURBALL, FOURSOMES
+  - `TeamAssignmentId` (UUID) - Unique identifier for team assignments
+  - `SessionType` (Enum): MORNING, AFTERNOON, EVENING
+  - `MatchFormat` (Enum): SINGLES, FOURBALL, FOURSOMES (with `players_per_team()`)
   - `MatchStatus` (Enum): SCHEDULED, IN_PROGRESS, COMPLETED, WALKOVER
-  - `RoundStatus` (Enum): PENDING_TEAMS, PENDING_MATCHES, SCHEDULED, IN_PROGRESS, COMPLETED
+  - `RoundStatus` (Enum): PENDING_TEAMS, PENDING_MATCHES, SCHEDULED, IN_PROGRESS, COMPLETED (with `can_modify()`, `can_generate_matches()`)
   - `TeamAssignmentMode` (Enum): AUTOMATIC, MANUAL
   - `ScheduleConfigMode` (Enum): AUTOMATIC, MANUAL
-- **New Entities**:
-  - `Round`: id, competition_id, golf_course_id, date, session_type, match_format, tee_male_id, tee_female_id, status
-  - `Match`: id, round_id, match_number, team_a_players[], team_b_players[], status, result
-  - `MatchPlayer`: user_id, playing_handicap, tee_category, strokes_received[]
-  - `TeamAssignment`: competition_id, mode, team_a_player_ids[], team_b_player_ids[]
-- **Domain Services**:
-  - `PlayingHandicapCalculator`: WHS formula `PH = (HI × SR / 113) + (CR - Par)`
-  - `SnakeDraftService`: Assigns players to teams by handicap in serpentine order
-  - `ScheduleGenerator`: Auto-generates rounds based on session count (Singles always last)
-  - `MatchGenerator`: Creates matches pairing players from Team A vs Team B
-- **Domain Events**:
-  - `TeamsAssignedEvent`, `RoundCreatedEvent`, `MatchCreatedEvent`, `MatchStartedEvent`, `MatchCompletedEvent`, `WalkoverDeclaredEvent`
+  - `HandicapMode` (Enum): STROKE_PLAY (95%), MATCH_PLAY (100%) - for SINGLES rounds
+  - `PlayMode` (Enum): STROKE_PLAY, MATCH_PLAY - Competition-level default
+- **New Entities (3)**:
+  - `Round`: id, competition_id, golf_course_id, round_date, session_type, match_format, status, handicap_mode, allowance_percentage
+    - Session-based model: each Round = one session (MORNING/AFTERNOON/EVENING), not a full day
+    - State machine: PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
+    - Tees NOT at Round level (managed per player via Enrollment.tee_category)
+  - `Match`: id, round_id, match_number, team_a_players[], team_b_players[], status
+    - MatchPlayer (frozen VO): user_id, playing_handicap, tee_category, strokes_received[]
+  - `TeamAssignment`: id, competition_id, mode, team_a_player_ids[], team_b_player_ids[]
+    - Validations: balanced teams, no overlap, no duplicates
+- **Domain Services (2)** (includes Block 8 PlayingHandicapCalculator - absorbed into Block 4):
+  - `PlayingHandicapCalculator`: WHS formula `PH = (HI x (SR / 113) + (CR - Par)) x Allowance%`
+    - Methods: calculate(), calculate_for_singles(), calculate_for_fourball(), calculate_for_foursomes()
+    - TeeRating dataclass with WHS validation (CR 55-85, SR 55-155, Par 66-76)
+  - `SnakeDraftService`: Serpentine team assignment (A,B,B,A,A,B pattern)
+    - Methods: assign_teams(), validate_team_balance(), get_team_players()
+  - `ScheduleGenerator` and `MatchGenerator`: Deferred to Block 6 (use case level)
+- **Two-Tier Handicap System** (ADR-037):
+  - Competition-level `PlayMode` sets tournament-wide default
+  - Round-level `handicap_mode`/`allowance_percentage` can override per session
+  - WHS defaults: Singles STROKE_PLAY 95%, MATCH_PLAY 100%, Fourball 90%, Foursomes 50%
+- **Enrollment Enhancement**: Added `tee_category` field (TeeCategory from Golf Course module)
 - **Business Rules**:
   - Teams must be assigned before generating matches
   - Teams must have equal player count
   - SINGLES: 1 player/team per match
   - FOURBALL/FOURSOMES: 2 players/team per match
-  - Player cannot be in two matches of same round
-  - All enrolled APPROVED players must participate
-  - Singles always last session (auto mode)
-  - Max 2 sessions per day (MORNING+AFTERNOON or SINGLE, not both)
-- **Tests**: +45 unit tests (Value Objects + Entities + Domain Services)
-- **Time**: 8-10 hours
+  - Allowance percentage must be 50-100 in increments of 5
+  - Only modifiable rounds: PENDING_TEAMS or PENDING_MATCHES status
+- **Domain Events**: Deferred to Block 6 (emitted from use cases)
+- **Tests**: 296 domain tests passing (14 test files: 9 VOs + 3 entities + 2 services)
+- **Time**: ~8 hours
+- **Commit**: 886f99f - feat(competition): implement Block 4 Domain Layer for Rounds & Matches
+- **ADR**: ADR-037 (Two-Tier Handicap Architecture and Session-Based Round Model)
 
 **Block 5: Infrastructure - Migrations & Mappers (⏳ PENDING: Feb 7-8, 2026)**
 - **Migrations**:
@@ -323,30 +336,12 @@ class GolfCourseRequest(BaseModel):
 - **Tests**: +24 integration tests (API endpoints)
 - **Time**: 8-10 hours
 
-**Block 8: Playing Handicap Calculator (⏳ PENDING: Feb 12-13, 2026)**
-- **Domain Service Implementation**:
-  ```python
-  class PlayingHandicapCalculator:
-      """WHS Official: PH = (HI × SR / 113) + (CR - Par)"""
-      @staticmethod
-      def calculate(handicap_index: float, slope_rating: int,
-                    course_rating: float, course_par: int) -> int:
-          slope_factor = slope_rating / 113
-          ph = (handicap_index * slope_factor) + (course_rating - course_par)
-          return round(ph)
-
-      @staticmethod
-      def calculate_strokes_received(playing_handicap: int, holes: list[Hole]) -> list[int]:
-          """Returns hole numbers where player receives stroke (by stroke_index)."""
-          sorted_holes = sorted(holes, key=lambda h: h.stroke_index)
-          return [h.hole_number for h in sorted_holes[:playing_handicap]]
-  ```
-- **Combined Handicap (Foursomes)**:
-  - Team playing handicap = average of both players' PH (rounded)
-  - Strokes given = difference between team handicaps
-- **Integration**: Called when generating matches, recalculated on player/tee change
-- **Tests**: +15 unit tests (calculator edge cases)
-- **Time**: 4-5 hours
+**Block 8: Playing Handicap Calculator (✅ ABSORBED INTO BLOCK 4: Feb 5, 2026)**
+- Implemented as `PlayingHandicapCalculator` domain service in Block 4
+- WHS formula with Decimal precision and ROUND_HALF_UP rounding
+- Format-specific methods: Singles (individual PH), Fourball (individual PH per player), Foursomes (team CH difference x allowance%)
+- TeeRating dataclass with WHS validation ranges
+- 30+ tests included in Block 4's 296 domain tests
 
 **Schedule Auto-Generation Rules:**
 | Sessions | Formats Generated (in order) |
@@ -371,17 +366,17 @@ Result: Balanced teams (~0.5 handicap difference)
 **Sprint 2 Block 4-8 Summary:**
 | Block | Description | Tests | Hours |
 |-------|-------------|-------|-------|
-| Block 4 | Domain (Entities, VOs, Services) | +45 | 8-10h |
+| Block 4 | Domain (Entities, VOs, Services) ✅ | 296 | ~8h |
 | Block 5 | Infrastructure (Migrations, Mappers, Repos) | +20 | 6-8h |
 | Block 6 | Application (Use Cases, DTOs) | +55 | 10-12h |
 | Block 7 | API (12 Endpoints) | +24 | 8-10h |
-| Block 8 | Playing Handicap Calculator | +15 | 4-5h |
-| **Total** | | **+159** | **36-45h** |
+| Block 8 | Playing Handicap Calculator ✅ (absorbed into Block 4) | - | - |
+| **Total** | | **+395** | **32-38h** |
 
 **ADRs Nuevos:**
-- **ADR-037:** Schedule Configuration Modes (Automatic vs Manual)
-- **ADR-038:** Team Assignment Snake Draft Algorithm
-- **ADR-039:** Match Format Business Rules
+- **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model (✅ Block 4)
+- **ADR-038:** Schedule Configuration Modes (Automatic vs Manual) (⏳ Block 6)
+- **ADR-039:** Match Format Business Rules (⏳ Block 6)
 
 ---
 
@@ -675,7 +670,7 @@ src/modules/ai/
 ## 🔗 References
 
 **Documentation:**
-- **ADRs:** `docs/architecture/decisions/ADR-*.md` (33 total ADRs)
+- **ADRs:** `docs/architecture/decisions/ADR-*.md` (37 total ADRs)
 - **CHANGELOG:** `CHANGELOG.md` (detailed change history)
 - **CLAUDE:** `CLAUDE.md` (complete project context)
 - **Frontend ROADMAP:** `../RyderCupWeb/ROADMAP.md`

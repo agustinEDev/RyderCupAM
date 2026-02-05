@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_No unreleased changes_
+### Added
+
+**Block 4: Domain Layer - Rounds & Matches (Sprint 2)**
+
+- **3 New Entities**:
+  - `Round`: Session-based tournament round with state machine (PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED)
+  - `Match`: Tournament match with team handicap calculations and state transitions
+  - `TeamAssignment`: Balanced team distribution with validation (equal sizes, no overlap)
+
+- **11 New Value Objects**:
+  - IDs: `RoundId`, `MatchId`, `TeamAssignmentId` (UUID-based)
+  - Enums: `SessionType` (MORNING/AFTERNOON/EVENING), `MatchFormat` (SINGLES/FOURBALL/FOURSOMES), `MatchStatus`, `RoundStatus`, `TeamAssignmentMode` (AUTOMATIC/MANUAL), `ScheduleConfigMode`, `HandicapMode` (STROKE_PLAY/MATCH_PLAY), `PlayMode`
+  - `MatchPlayer`: Frozen VO with playing handicap and strokes received per hole
+
+- **2 Domain Services**:
+  - `PlayingHandicapCalculator`: WHS formula `PH = (HI x (SR/113) + (CR-Par)) x Allowance%` with format-specific calculations (Singles, Fourball, Foursomes)
+  - `SnakeDraftService`: Serpentine team balancing algorithm (A,B,B,A,A,B pattern)
+
+- **Two-Tier Handicap System**: Competition-level `PlayMode` default + Round-level `HandicapMode`/`allowance_percentage` override with WHS-compliant defaults (Singles 95-100%, Fourball 90%, Foursomes 50%)
+- **ADR-037**: Two-Tier Handicap Architecture and Session-Based Round Model
+
+### Changed
+
+- `Enrollment` entity: Added `tee_category` field for player tee assignment
+- `value_objects/__init__.py`: Updated exports with 11 new value objects
+- `services/__init__.py`: Added PlayingHandicapCalculator and SnakeDraftService exports
+- `entities/__init__.py`: New package init with Round, Match, TeamAssignment exports
+
+### Testing
+
+- **296 competition domain tests passing** (100%)
+- New test files: 14 (3 entities + 2 services + 9 value objects)
 
 ## [2.0.5] - 2026-02-05 (Golf Courses Endpoint Fixes)
 
