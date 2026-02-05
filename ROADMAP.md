@@ -1,7 +1,7 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.4 (Production)
-> **Last Updated:** Feb 4, 2026
+> **Current Version:** 2.0.5 (Production)
+> **Last Updated:** Feb 5, 2026
 > **OWASP Score:** 9.4/10
 
 ---
@@ -208,36 +208,180 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 2 hours
 - **ADR**: ADR-036 (SBOM Submission via GitHub REST API)
 
-**Rounds Endpoints (4):**
+**Block 4: Domain Layer - Round & Match Entities (⏳ PENDING: Feb 5-7, 2026)**
+- **New Value Objects**:
+  - `RoundId` (UUID) - Unique identifier for rounds
+  - `MatchId` (UUID) - Unique identifier for matches
+  - `SessionType` (Enum): MORNING, AFTERNOON, SINGLE
+  - `MatchFormat` (Enum): SINGLES, FOURBALL, FOURSOMES
+  - `MatchStatus` (Enum): SCHEDULED, IN_PROGRESS, COMPLETED, WALKOVER
+  - `RoundStatus` (Enum): PENDING_TEAMS, PENDING_MATCHES, SCHEDULED, IN_PROGRESS, COMPLETED
+  - `TeamAssignmentMode` (Enum): AUTOMATIC, MANUAL
+  - `ScheduleConfigMode` (Enum): AUTOMATIC, MANUAL
+- **New Entities**:
+  - `Round`: id, competition_id, golf_course_id, date, session_type, match_format, tee_male_id, tee_female_id, status
+  - `Match`: id, round_id, match_number, team_a_players[], team_b_players[], status, result
+  - `MatchPlayer`: user_id, playing_handicap, tee_category, strokes_received[]
+  - `TeamAssignment`: competition_id, mode, team_a_player_ids[], team_b_player_ids[]
+- **Domain Services**:
+  - `PlayingHandicapCalculator`: WHS formula `PH = (HI × SR / 113) + (CR - Par)`
+  - `SnakeDraftService`: Assigns players to teams by handicap in serpentine order
+  - `ScheduleGenerator`: Auto-generates rounds based on session count (Singles always last)
+  - `MatchGenerator`: Creates matches pairing players from Team A vs Team B
+- **Domain Events**:
+  - `TeamsAssignedEvent`, `RoundCreatedEvent`, `MatchCreatedEvent`, `MatchStartedEvent`, `MatchCompletedEvent`, `WalkoverDeclaredEvent`
+- **Business Rules**:
+  - Teams must be assigned before generating matches
+  - Teams must have equal player count
+  - SINGLES: 1 player/team per match
+  - FOURBALL/FOURSOMES: 2 players/team per match
+  - Player cannot be in two matches of same round
+  - All enrolled APPROVED players must participate
+  - Singles always last session (auto mode)
+  - Max 2 sessions per day (MORNING+AFTERNOON or SINGLE, not both)
+- **Tests**: +45 unit tests (Value Objects + Entities + Domain Services)
+- **Time**: 8-10 hours
+
+**Block 5: Infrastructure - Migrations & Mappers (⏳ PENDING: Feb 7-8, 2026)**
+- **Migrations**:
+  - `xxx_create_team_assignments_table.py`: competition_id (FK), mode, team_a_players (JSON), team_b_players (JSON)
+  - `xxx_create_rounds_table.py`: id, competition_id (FK), golf_course_id (FK), date, session_type, match_format, tee_male_category, tee_female_category, status
+  - `xxx_create_matches_table.py`: id, round_id (FK), match_number, team_a (JSON), team_b (JSON), handicap_strokes_given, strokes_received_by, status, result (JSON)
+- **SQLAlchemy Mappers**:
+  - `TeamAssignmentMapper`: JSON columns for player arrays
+  - `RoundMapper`: relationships to Competition, GolfCourse
+  - `MatchMapper`: JSON columns for team players with playing_handicap
+- **Indexes**:
+  - `ix_rounds_competition_date` (competition_id, date)
+  - `ix_matches_round_id` (round_id)
+  - `ix_matches_status` (status) - for live leaderboard queries
+- **Repository Interfaces**:
+  - `ITeamAssignmentRepository`: save, find_by_competition
+  - `IRoundRepository`: save, find_by_id, find_by_competition, delete
+  - `IMatchRepository`: save, find_by_id, find_by_round, update_status, delete
+- **Repository Implementations**: SQLAlchemy + InMemory (tests)
+- **Tests**: +20 integration tests (repository + mapper)
+- **Time**: 6-8 hours
+
+**Block 6: Application Layer - Use Cases & DTOs (⏳ PENDING: Feb 8-10, 2026)**
+- **DTOs**:
+  - `ConfigureScheduleRequestDTO`: mode (AUTO/MANUAL), days[], default_tee_categories
+  - `ConfigureScheduleResponseDTO`: schedule preview with format_details
+  - `AssignTeamsRequestDTO`: mode, manual_assignments (optional)
+  - `AssignTeamsResponseDTO`: teams with players, average_handicap, balance_analysis
+  - `CreateRoundRequestDTO`: date, session_type, match_format, golf_course_id, tee_categories
+  - `GenerateMatchesRequestDTO`: mode, manual_pairings (optional)
+  - `MatchDetailDTO`: full match info with playing_handicaps, strokes_received
+  - `ScheduleResponseDTO`: complete schedule with days[], rounds[], matches[]
+- **Use Cases** (11 total):
+  1. `ConfigureScheduleUseCase`: Sets up competition schedule (auto/manual)
+  2. `AssignTeamsUseCase`: Assigns players to Team A/B (snake draft/manual)
+  3. `CreateRoundUseCase`: Creates individual round (manual mode only)
+  4. `UpdateRoundUseCase`: Updates round details (date, course, tees)
+  5. `DeleteRoundUseCase`: Removes round and its matches
+  6. `GetScheduleUseCase`: Returns complete schedule with nested rounds/matches
+  7. `GenerateMatchesUseCase`: Creates matches for a round (auto/manual pairing)
+  8. `GetMatchDetailUseCase`: Returns match with full player details
+  9. `ReassignMatchPlayersUseCase`: Changes players in a match
+  10. `UpdateMatchStatusUseCase`: SCHEDULED → IN_PROGRESS → COMPLETED
+  11. `DeclareWalkoverUseCase`: Records walkover result
+- **Validation Rules**:
+  - Competition must be in DRAFT state for configuration
+  - Teams must be assigned before match generation
+  - Cannot modify rounds/matches after competition is IN_PROGRESS
+- **Tests**: +55 unit tests (use cases)
+- **Time**: 10-12 hours
+
+**Block 7: API Layer - Endpoints (⏳ PENDING: Feb 10-12, 2026)**
+- **Schedule Configuration (1 endpoint)**:
+  ```
+  POST /api/v1/competitions/{comp_id}/schedule/configure
+  ```
+- **Team Assignment (1 endpoint)**:
+  ```
+  POST /api/v1/competitions/{comp_id}/teams/assign
+  ```
+- **Rounds (4 endpoints)**:
+  ```
+  POST   /api/v1/competitions/{comp_id}/rounds
+  PUT    /api/v1/rounds/{round_id}
+  DELETE /api/v1/rounds/{round_id}
+  GET    /api/v1/competitions/{comp_id}/schedule
+  ```
+- **Matches (6 endpoints)**:
+  ```
+  POST   /api/v1/rounds/{round_id}/matches/generate
+  GET    /api/v1/matches/{match_id}
+  PUT    /api/v1/matches/{match_id}/players
+  PUT    /api/v1/matches/{match_id}/status
+  POST   /api/v1/matches/{match_id}/walkover
+  DELETE /api/v1/matches/{match_id}
+  ```
+- **Authorization**:
+  - Configure/Assign/Create/Update/Delete: Creator or Admin only
+  - Get Schedule/Match: Any authenticated user (enrolled players)
+- **Tests**: +24 integration tests (API endpoints)
+- **Time**: 8-10 hours
+
+**Block 8: Playing Handicap Calculator (⏳ PENDING: Feb 12-13, 2026)**
+- **Domain Service Implementation**:
+  ```python
+  class PlayingHandicapCalculator:
+      """WHS Official: PH = (HI × SR / 113) + (CR - Par)"""
+      @staticmethod
+      def calculate(handicap_index: float, slope_rating: int,
+                    course_rating: float, course_par: int) -> int:
+          slope_factor = slope_rating / 113
+          ph = (handicap_index * slope_factor) + (course_rating - course_par)
+          return round(ph)
+
+      @staticmethod
+      def calculate_strokes_received(playing_handicap: int, holes: list[Hole]) -> list[int]:
+          """Returns hole numbers where player receives stroke (by stroke_index)."""
+          sorted_holes = sorted(holes, key=lambda h: h.stroke_index)
+          return [h.hole_number for h in sorted_holes[:playing_handicap]]
+  ```
+- **Combined Handicap (Foursomes)**:
+  - Team playing handicap = average of both players' PH (rounded)
+  - Strokes given = difference between team handicaps
+- **Integration**: Called when generating matches, recalculated on player/tee change
+- **Tests**: +15 unit tests (calculator edge cases)
+- **Time**: 4-5 hours
+
+**Schedule Auto-Generation Rules:**
+| Sessions | Formats Generated (in order) |
+|----------|------------------------------|
+| 1 | Singles |
+| 2 | Fourball → Singles |
+| 3 | Foursomes → Fourball → Singles |
+| 4 | Fourball → Foursomes → Fourball → Singles |
+| 5 | Foursomes → Fourball → Foursomes → Fourball → Singles |
+| 6+ | Alternates Fourball/Foursomes → Singles last |
+
+**Snake Draft Algorithm:**
 ```
-POST   /api/v1/competitions/{comp_id}/rounds
-PUT    /api/v1/rounds/{round_id}
-DELETE /api/v1/rounds/{round_id}
-GET    /api/v1/competitions/{comp_id}/schedule  # Rounds + matches nested
+Players sorted by handicap: [4.2, 8.1, 12.3, 15.0, 18.2, 22.5, 25.0, 28.4]
+Pick 1: Team A ← 4.2    Pick 2: Team B ← 8.1
+Pick 3: Team B ← 12.3   Pick 4: Team A ← 15.0
+Pick 5: Team A ← 18.2   Pick 6: Team B ← 22.5
+Pick 7: Team B ← 25.0   Pick 8: Team A ← 28.4
+Result: Balanced teams (~0.5 handicap difference)
 ```
 
-**Matches Endpoints (6):**
-```
-POST   /api/v1/rounds/{round_id}/matches
-GET    /api/v1/matches/{match_id}
-PUT    /api/v1/matches/{match_id}/players
-PUT    /api/v1/matches/{match_id}/status
-POST   /api/v1/matches/{match_id}/walkover
-DELETE /api/v1/matches/{match_id}
-```
+**Sprint 2 Block 4-8 Summary:**
+| Block | Description | Tests | Hours |
+|-------|-------------|-------|-------|
+| Block 4 | Domain (Entities, VOs, Services) | +45 | 8-10h |
+| Block 5 | Infrastructure (Migrations, Mappers, Repos) | +20 | 6-8h |
+| Block 6 | Application (Use Cases, DTOs) | +55 | 10-12h |
+| Block 7 | API (12 Endpoints) | +24 | 8-10h |
+| Block 8 | Playing Handicap Calculator | +15 | 4-5h |
+| **Total** | | **+159** | **36-45h** |
 
-**Playing Handicap Calculation (Domain Service):**
-```python
-class PlayingHandicapCalculator:
-    """WHS Official: PH = (HI × SR / 113) + (CR - Par)"""
-    @staticmethod
-    def calculate(handicap_index: float, tee: Tee, course_par: int) -> int:
-        slope_factor = tee.slope_rating / 113
-        ph = (handicap_index * slope_factor) + (tee.course_rating - course_par)
-        return round(ph)
-```
-
-**Validations:** SINGLES (1 player/team), FOURBALL/FOURSOMES (2 players/team), tee must exist in golf course, players must be enrolled with APPROVED status.
+**ADRs Nuevos:**
+- **ADR-037:** Schedule Configuration Modes (Automatic vs Manual)
+- **ADR-038:** Team Assignment Snake Draft Algorithm
+- **ADR-039:** Match Format Business Rules
 
 ---
 
@@ -382,12 +526,19 @@ class LeaderboardResponse(BaseModel):
 
 | Sprint | Backend Delivers | Frontend Consumes | Sync Point |
 |--------|----------------|------------------|------------|
-| Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | Fri, Jan 31 |
-| Sprint 2 (Block 0-1) | Competition-GolfCourse M2M | Multi-select courses + Reorder UI | Fri, Feb 13 |
-| Sprint 2 (Block 2-3) | Rounds + Matches Scheduling | Drag-drop + Match Wizard | Fri, Feb 20 |
+| Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | ✅ Jan 31 |
+| Sprint 2 (Block 0-3) | Competition-GolfCourse M2M + Code Quality | Multi-select courses + Reorder UI | ✅ Feb 4 |
+| Sprint 2 (Block 4-8) | Schedule Config + Teams + Rounds + Matches | Schedule Wizard + Team Assignment + Match Generation | 🔄 Feb 13 |
 | Sprint 3 | Invitations | Invitation Cards | Fri, Feb 27 |
 | Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
 | Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
+
+**Sprint 2 Block 4-8 Frontend Integration:**
+1. **Schedule Configuration**: Toggle Auto/Manual, day picker, session selector per day
+2. **Team Assignment**: Toggle Auto/Manual, drag-and-drop players to teams, handicap balance preview
+3. **Round Management**: Create/edit/delete rounds, golf course + tee selector
+4. **Match Generation**: Auto-generate or manual pairing, playing handicap display
+5. **Match Status**: Start/complete matches, walkover declaration
 
 **Protocol:** Backend deploys to dev → updates Swagger → notifies Frontend (Friday) → integration (Monday).
 
