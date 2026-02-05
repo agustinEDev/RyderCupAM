@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 _No unreleased changes_
 
+## [2.0.5] - 2026-02-05 (Golf Courses Endpoint Fixes)
+
+### Added
+
+- **Country Code Filter**: `GET /api/v1/golf-courses?country_code=ES` filters approved golf courses by country ISO code
+- **Enhanced Golf Course Response**: Added `course_type` and `total_par` fields to `GET /api/v1/competitions/{id}/golf-courses` endpoint
+
+### Fixed
+
+- **Competition Golf Courses Endpoint**: Fixed 500 error on `GET /api/v1/competitions/{id}/golf-courses`
+  - Corrected mapper initialization order for cross-module relationships
+  - Added explicit eager loading for golf course tees and holes
+  - Fixed Tee/Hole attribute access (`.category` instead of `.id`, `.number` instead of `.hole_number`)
+- **CSRF Exemptions**: Exempted `refresh-token` and `logout` endpoints from CSRF validation
+  - `refresh-token`: Protected by httpOnly cookie, CSRF token expires with access token
+  - `logout`: Session termination has low security risk (worst case: forced logout)
+- **Country Code Filter**: Fixed TypeDecorator compatibility by converting string to CountryCode VO
+
+### Security
+
+- **CSRF Configuration**: Two new exempt paths added with security rationale documented
+- **OWASP Compliance**: Maintained - exemptions follow defense-in-depth principle (httpOnly cookies as primary protection)
+
 ## [2.0.4] - 2026-02-04 (Cookie-Based Device Identification)
 
 ### Added
