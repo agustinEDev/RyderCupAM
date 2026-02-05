@@ -112,14 +112,32 @@ class GolfCourseRepository(IGolfCourseRepository):
         result = result.unique()
         return list(result.scalars().all())
 
-    async def find_approved(self) -> list[GolfCourse]:
+    async def find_approved(self, country_code: str | None = None) -> list[GolfCourse]:
         """
-        Busca todos los campos aprobados.
+        Busca todos los campos aprobados, opcionalmente filtrados por país.
+
+        Args:
+            country_code: Código ISO del país para filtrar (opcional)
 
         Returns:
             Lista de campos con status APPROVED
         """
-        return await self.find_by_approval_status(ApprovalStatus.APPROVED)
+        stmt = (
+            select(GolfCourse)
+            .where(golf_courses_table.c.approval_status == ApprovalStatus.APPROVED)
+            .options(
+                joinedload(GolfCourse._tees),
+                joinedload(GolfCourse._holes),
+            )
+            .order_by(golf_courses_table.c.created_at.desc())
+        )
+
+        if country_code:
+            stmt = stmt.where(golf_courses_table.c.country_code == country_code)
+
+        result = await self._session.execute(stmt)
+        result = result.unique()
+        return list(result.scalars().all())
 
     async def find_pending_approval(self) -> list[GolfCourse]:
         """

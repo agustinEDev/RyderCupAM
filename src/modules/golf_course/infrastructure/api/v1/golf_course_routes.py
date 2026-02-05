@@ -276,6 +276,9 @@ async def list_golf_courses(
     approval_status: str | None = Query(
         None, description="Filter by approval status (APPROVED, PENDING_APPROVAL, REJECTED)"
     ),
+    country_code: str | None = Query(
+        None, description="Filter by country ISO code (e.g., ES, AT, FR)"
+    ),
 ):
     """
     Endpoint: Listar campos de golf con filtros opcionales.
@@ -288,6 +291,7 @@ async def list_golf_courses(
     **Query Parameters**:
     - approval_status: Filtrar por estado (APPROVED, PENDING_APPROVAL, REJECTED)
       Default: APPROVED
+    - country_code: Filtrar por código ISO de país (ej: ES, AT, FR)
 
     **Responses**:
     - 200: Lista de campos
@@ -306,7 +310,7 @@ async def list_golf_courses(
 
         # Por defecto, listar solo aprobados (público)
         if approval_status is None or approval_status == "APPROVED":
-            request_dto = ListApprovedGolfCoursesRequestDTO()
+            request_dto = ListApprovedGolfCoursesRequestDTO(country_code=country_code)
             response = await approved_use_case.execute(request_dto)
             return {"golf_courses": response.golf_courses}
 

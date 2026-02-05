@@ -61,14 +61,20 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         """
         return [gc for gc in self._golf_courses.values() if gc.approval_status == approval_status]
 
-    async def find_approved(self) -> list[GolfCourse]:
+    async def find_approved(self, country_code: str | None = None) -> list[GolfCourse]:
         """
-        Busca todos los campos aprobados.
+        Busca todos los campos aprobados, opcionalmente filtrados por país.
+
+        Args:
+            country_code: Código ISO del país para filtrar (opcional)
 
         Returns:
             Lista de campos APPROVED
         """
-        return await self.find_by_approval_status(ApprovalStatus.APPROVED)
+        approved = await self.find_by_approval_status(ApprovalStatus.APPROVED)
+        if country_code:
+            return [gc for gc in approved if gc.country_code.value == country_code]
+        return approved
 
     async def find_pending_approval(self) -> list[GolfCourse]:
         """

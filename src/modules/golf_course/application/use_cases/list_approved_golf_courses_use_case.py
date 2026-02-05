@@ -34,14 +34,16 @@ class ListApprovedGolfCoursesUseCase:
         Ejecuta el caso de uso.
 
         Args:
-            request: Request vacío (no requiere parámetros)
+            request: Request con filtro opcional de país
 
         Returns:
             Response con la lista de campos aprobados
         """
         async with self._uow:
-            # 1. Obtener campos aprobados
-            golf_courses = await self._uow.golf_courses.find_approved()
+            # 1. Obtener campos aprobados (con filtro opcional de país)
+            golf_courses = await self._uow.golf_courses.find_approved(
+                country_code=request.country_code
+            )
 
             # 2. Mapear a Response DTOs
             response_dtos = [GolfCourseMapper.to_response_dto(gc) for gc in golf_courses]
