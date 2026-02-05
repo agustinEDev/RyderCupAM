@@ -779,6 +779,8 @@ class GolfCourseDetailDTO(BaseModel):
     id: UUID = Field(..., description="ID del campo de golf")
     name: str = Field(..., description="Nombre del campo")
     country_code: str = Field(..., description="Código ISO del país")
+    course_type: str = Field(..., description="Tipo de campo (STANDARD_18, PITCH_AND_PUTT, EXECUTIVE)")
+    total_par: int = Field(..., description="Par total del campo (suma de pares de los 18 hoyos)")
     tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
     holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")
 

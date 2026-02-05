@@ -1584,6 +1584,8 @@ async def list_competition_golf_courses(
                             id=golf_course.id.value,
                             name=golf_course.name,
                             country_code=golf_course.country_code.value,
+                            course_type=golf_course.course_type.value,
+                            total_par=golf_course.total_par,
                             tees=[
                                 TeeResponseDTO(
                                     category=tee.category.value,
