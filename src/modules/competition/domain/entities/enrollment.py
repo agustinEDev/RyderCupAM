@@ -7,6 +7,7 @@ Esta entidad gestiona el estado de participación de un jugador en un torneo.
 from datetime import datetime
 from decimal import Decimal
 
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -61,6 +62,7 @@ class Enrollment:
         status: EnrollmentStatus,
         team_id: str | None = None,
         custom_handicap: Decimal | None = None,
+        tee_category: TeeCategory | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -75,6 +77,7 @@ class Enrollment:
             status: Estado de la inscripción
             team_id: ID del equipo asignado (opcional)
             custom_handicap: Hándicap personalizado (opcional, DECIMAL(4,1))
+            tee_category: Categoría de tee elegida por el jugador (opcional)
             created_at: Timestamp de creación
             updated_at: Timestamp de última actualización
             domain_events: Lista de eventos de dominio
@@ -90,23 +93,29 @@ class Enrollment:
         self.status = status
         self.team_id = team_id
         self.custom_handicap = custom_handicap
+        self.tee_category = tee_category
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
 
     @classmethod
     def request(
-        cls, id: EnrollmentId, competition_id: CompetitionId, user_id: UserId
+        cls,
+        id: EnrollmentId,
+        competition_id: CompetitionId,
+        user_id: UserId,
+        tee_category: TeeCategory | None = None,
     ) -> "Enrollment":
         """
         Factory method para crear una solicitud de inscripción.
 
-        El jugador solicita unirse (REQUESTED).
+        El jugador solicita unirse (REQUESTED) y elige su tee.
 
         Args:
             id: ID del enrollment
             competition_id: ID de la competición
             user_id: ID del jugador
+            tee_category: Categoría de tee elegida por el jugador (opcional)
 
         Returns:
             Enrollment: Nueva inscripción con evento emitido
@@ -116,6 +125,7 @@ class Enrollment:
             competition_id=competition_id,
             user_id=user_id,
             status=EnrollmentStatus.REQUESTED,
+            tee_category=tee_category,
         )
 
         # Emitir evento
@@ -163,6 +173,7 @@ class Enrollment:
         competition_id: CompetitionId,
         user_id: UserId,
         custom_handicap: Decimal | None = None,
+        tee_category: TeeCategory | None = None,
     ) -> "Enrollment":
         """
         Factory method para inscripción directa por el creador.
@@ -174,6 +185,7 @@ class Enrollment:
             competition_id: ID de la competición
             user_id: ID del jugador
             custom_handicap: Hándicap personalizado (opcional)
+            tee_category: Categoría de tee asignada (opcional)
 
         Returns:
             Enrollment: Inscripción directamente aprobada con evento emitido
@@ -184,6 +196,7 @@ class Enrollment:
             user_id=user_id,
             status=EnrollmentStatus.APPROVED,
             custom_handicap=custom_handicap,
+            tee_category=tee_category,
         )
 
         # Emitir evento
@@ -426,6 +439,23 @@ class Enrollment:
         """
         self.custom_handicap = None
         self.updated_at = datetime.now()
+
+    def set_tee_category(self, tee_category: TeeCategory) -> None:
+        """
+        Establece o cambia la categoría de tee del jugador.
+
+        El creador puede cambiar el tee propuesto por el jugador
+        o establecerlo si no fue elegido al solicitar.
+
+        Args:
+            tee_category: Nueva categoría de tee
+        """
+        self.tee_category = tee_category
+        self.updated_at = datetime.now()
+
+    def has_tee_assigned(self) -> bool:
+        """Verifica si tiene tee asignado."""
+        return self.tee_category is not None
 
     # ===========================================
     # DOMAIN EVENTS
