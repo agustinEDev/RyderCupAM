@@ -5,7 +5,7 @@ Revises: 2b72b9741fd1
 Create Date: 2026-02-05 20:00:00.000000
 
 Sprint 2 Block 5 - Infrastructure Layer for Rounds, Matches, TeamAssignment.
-Also adds tee_category to enrollments and missing user_id index.
+Also adds tee_category to enrollments.
 """
 
 from typing import Sequence, Union
@@ -31,13 +31,6 @@ def upgrade() -> None:
     op.add_column(
         "enrollments",
         sa.Column("tee_category", sa.String(20), nullable=True),
-    )
-
-    # Add missing index on enrollments.user_id (FK without index)
-    op.create_index(
-        "ix_enrollments_user_id",
-        "enrollments",
-        ["user_id"],
     )
 
     # =========================================================================
@@ -198,5 +191,4 @@ def downgrade() -> None:
     op.drop_table("rounds")
 
     # Revert enrollment fixes
-    op.drop_index("ix_enrollments_user_id", table_name="enrollments")
     op.drop_column("enrollments", "tee_category")
