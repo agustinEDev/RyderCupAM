@@ -133,8 +133,7 @@ erDiagram
         CHAR(2) tertiary_country_code FK "nullable"
         VARCHAR(100) team_1_name
         VARCHAR(100) team_2_name
-        VARCHAR(20) handicap_type "SCRATCH | PERCENTAGE"
-        INT handicap_value "nullable - 90/95/100"
+        VARCHAR(20) play_mode "SCRATCH | HANDICAP"
         INT max_players
         VARCHAR(20) team_assignment "MANUAL | AUTOMATIC"
         VARCHAR(20) status "DRAFT | ACTIVE | CLOSED | IN_PROGRESS | COMPLETED | CANCELLED"

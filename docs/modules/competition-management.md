@@ -48,10 +48,10 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `max_players`: int (2-100 players)
 - `status`: CompetitionStatus (enum - DRAFT/ACTIVE/CLOSED/IN_PROGRESS/COMPLETED/CANCELLED)
 
-**Handicap Configuration:**
-- `handicap_settings`: HandicapSettings (Value Object)
-  - `type`: HandicapType (SCRATCH or PERCENTAGE)
-  - `percentage`: int (90/95/100, optional if PERCENTAGE)
+**Play Mode:**
+- `play_mode`: PlayMode (enum - SCRATCH/HANDICAP)
+  - SCRATCH: No handicap applied
+  - HANDICAP: Allowance percentages configured per Round (two-tier system, ADR-037)
 
 **Team Configuration:**
 - `team_assignment`: TeamAssignment (RANDOM or MANUAL)
@@ -156,7 +156,7 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `CompetitionName` - Validated name (3-100 chars, unique)
 - `DateRange` - Date range (start_date ≤ end_date)
 - `Location` - Up to 3 adjacent countries (main + 2 optional)
-- `HandicapSettings` - Handicap type + percentage
+- `PlayMode` - Play mode (SCRATCH/HANDICAP)
 - `CompetitionStatus` - Tournament status (6 possible states)
 - `EnrollmentId` - Unique enrollment UUID
 - `EnrollmentStatus` - Enrollment status (6 possible states)
@@ -272,8 +272,7 @@ CREATE TABLE competitions (
     secondary_country_code VARCHAR(2) REFERENCES countries(code),
     tertiary_country_code VARCHAR(2) REFERENCES countries(code),
     max_players INTEGER NOT NULL CHECK (max_players BETWEEN 2 AND 100),
-    handicap_type VARCHAR(20) NOT NULL,
-    handicap_percentage INTEGER,
+    play_mode VARCHAR(20) NOT NULL,
     team_assignment VARCHAR(20) NOT NULL,
     team_1_name VARCHAR(50),
     team_2_name VARCHAR(50),

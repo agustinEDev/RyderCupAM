@@ -177,7 +177,7 @@ Domain (Entities, VOs, Events, Repos)
 
 **Domain**:
 - Entities: `Competition`, `Enrollment`, `Country`
-- VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `HandicapSettings`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
+- VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `PlayMode`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
 - Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
 - Repos: `CompetitionRepositoryInterface`, `EnrollmentRepositoryInterface`, `CountryRepositoryInterface`
 
