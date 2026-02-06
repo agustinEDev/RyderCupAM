@@ -574,6 +574,12 @@ async def reassign_match_players(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+    except Exception as e:
+        logging.exception("Error inesperado en reassign_match_players: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
 
 
 # ======================================================================================

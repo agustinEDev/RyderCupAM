@@ -154,13 +154,13 @@ class ReassignMatchPlayersUseCase:
             )
             await self._uow.matches.add(new_match)
 
-        return ReassignMatchPlayersResponseDTO(
-            match_id=new_match.id.value,
-            new_status=new_match.status.value,
-            handicap_strokes_given=new_match.handicap_strokes_given,
-            strokes_given_to_team=new_match.strokes_given_to_team,
-            updated_at=new_match.updated_at,
-        )
+            return ReassignMatchPlayersResponseDTO(
+                match_id=new_match.id.value,
+                new_status=new_match.status.value,
+                handicap_strokes_given=new_match.handicap_strokes_given,
+                strokes_given_to_team=new_match.strokes_given_to_team or "",
+                updated_at=new_match.updated_at,
+            )
 
     async def _validate(self, request, user_id):
         """Validaciones: buscar match, ronda, competición, verificar creador y estado."""

@@ -604,7 +604,7 @@ class ReassignMatchPlayersResponseDTO(BaseModel):
     match_id: UUID = Field(..., description="ID del partido.")
     new_status: str = Field(..., description="Estado del partido.")
     handicap_strokes_given: int = Field(..., description="Nuevos golpes de ventaja.")
-    strokes_given_to_team: str = Field(..., description="Equipo que recibe golpes.")
+    strokes_given_to_team: str = Field(default="", description="Equipo que recibe golpes (A/B/'').")
     updated_at: datetime = Field(..., description="Fecha de actualización.")
 
     model_config = ConfigDict(from_attributes=True)
