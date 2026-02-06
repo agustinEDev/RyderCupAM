@@ -147,7 +147,7 @@ async def test_get_my_roles_returns_is_creator_true_for_creator(client: AsyncCli
 
     assert data["is_admin"] is False
     assert data["is_creator"] is True  # ← Creator de la competición
-    assert data["is_player"] is False  # No está auto-enrollado
+    assert data["is_player"] is True  # Auto-enrolled on creation
     assert data["competition_id"] == competition_id
 
 
@@ -327,24 +327,7 @@ async def test_get_my_roles_creator_can_also_be_player(client: AsyncClient):
     assert comp_response.status_code == status.HTTP_201_CREATED
     competition_id = comp_response.json()["id"]
 
-    # Activar competición
-    await client.post(
-        f"/api/v1/competitions/{competition_id}/activate",
-        cookies=creator_cookies,
-    )
-
-    # Creator se enrolla en su propia competición (enrollment directo)
-    enroll_response = await client.post(
-        f"/api/v1/competitions/{competition_id}/enrollments/direct",
-        json={
-            "competition_id": competition_id,
-            "user_id": str(creator_user["id"]),
-        },
-        cookies=creator_cookies,
-    )
-    assert enroll_response.status_code == status.HTTP_201_CREATED
-
-    # Consultar roles (debe ser CREATOR + PLAYER)
+    # Creator is auto-enrolled on creation, so just check roles directly
     response = await client.get(
         f"/api/v1/users/me/roles/{competition_id}",
         cookies=creator_cookies,
