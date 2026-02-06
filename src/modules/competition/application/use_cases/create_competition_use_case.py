@@ -9,6 +9,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionResponseDTO,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -19,6 +20,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -127,6 +129,14 @@ class CreateCompetitionUseCase:
 
             # 9. Persistir la competición
             await self._uow.competitions.add(competition)
+
+            # 10. Auto-enroll del creador como jugador APPROVED
+            creator_enrollment = Enrollment.direct_enroll(
+                id=EnrollmentId.generate(),
+                competition_id=competition.id,
+                user_id=creator_id,
+            )
+            await self._uow.enrollments.add(creator_enrollment)
 
         # 11. Retornar DTO de respuesta
         return CreateCompetitionResponseDTO(

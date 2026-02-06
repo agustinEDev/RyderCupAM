@@ -4,7 +4,7 @@ Round Entity - Sesión de competición.
 Representa una sesión de partidos (mañana/tarde/noche) en un día específico.
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
@@ -89,7 +89,7 @@ class Round:
             match_format: Formato de partido (SINGLES/FOURBALL/FOURSOMES)
             handicap_mode: Modo de handicap para SINGLES (MATCH_PLAY).
                            Ignorado para FOURBALL/FOURSOMES.
-            allowance_percentage: Porcentaje de allowance personalizado (1-100).
+            allowance_percentage: Porcentaje de allowance personalizado (50-100, en incrementos de 5).
                                    Si None, usa defaults WHS según formato.
 
         Returns:
@@ -114,7 +114,7 @@ class Round:
         if match_format != MatchFormat.SINGLES:
             effective_handicap_mode = None
 
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
         return cls(
             id=RoundId.generate(),
             competition_id=competition_id,
@@ -171,7 +171,7 @@ class Round:
                 f"Cannot mark teams assigned from status {self._status}. Expected PENDING_TEAMS"
             )
         self._status = RoundStatus.PENDING_MATCHES
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def mark_matches_generated(self) -> None:
         """
@@ -184,7 +184,7 @@ class Round:
                 f"Expected PENDING_MATCHES"
             )
         self._status = RoundStatus.SCHEDULED
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def start(self) -> None:
         """
@@ -194,7 +194,7 @@ class Round:
         if self._status != RoundStatus.SCHEDULED:
             raise ValueError(f"Cannot start round from status {self._status}. Expected SCHEDULED")
         self._status = RoundStatus.IN_PROGRESS
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def complete(self) -> None:
         """
@@ -206,7 +206,7 @@ class Round:
                 f"Cannot complete round from status {self._status}. Expected IN_PROGRESS"
             )
         self._status = RoundStatus.COMPLETED
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def update_details(
         self,
@@ -227,7 +227,7 @@ class Round:
             golf_course_id: Nuevo campo de golf
             match_format: Nuevo formato de partido
             handicap_mode: Nuevo modo de handicap (solo para SINGLES)
-            allowance_percentage: Nuevo porcentaje de allowance (1-100)
+            allowance_percentage: Nuevo porcentaje de allowance (50-100, en incrementos de 5)
             clear_allowance: Si True, vuelve al allowance por defecto WHS
 
         Raises:
@@ -271,7 +271,7 @@ class Round:
                 )
             self._allowance_percentage = allowance_percentage
 
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     # ==================== Query Methods ====================
 

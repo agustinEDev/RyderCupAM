@@ -6,6 +6,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     AssignTeamsRequestDTO,
     AssignTeamsResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+)
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -22,12 +25,6 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotFoundError(Exception):
-    """La competición no existe."""
-
-    pass
 
 
 class NotCompetitionCreatorError(Exception):
@@ -56,6 +53,12 @@ class OddPlayersError(Exception):
 
 class PlayerNotEnrolledError(Exception):
     """Un jugador de la asignación manual no está inscrito."""
+
+    pass
+
+
+class DuplicatePlayerInTeamsError(Exception):
+    """Un jugador aparece en ambos equipos."""
 
     pass
 
@@ -191,6 +194,15 @@ class AssignTeamsUseCase:
         if not request.team_a_player_ids or not request.team_b_player_ids:
             raise ValueError(
                 "Para modo MANUAL, se deben proporcionar team_a_player_ids y team_b_player_ids"
+            )
+
+        # Validar que no hay jugadores en ambos equipos
+        overlap = {str(uid) for uid in request.team_a_player_ids} & {
+            str(uid) for uid in request.team_b_player_ids
+        }
+        if overlap:
+            raise DuplicatePlayerInTeamsError(
+                f"Los siguientes jugadores aparecen en ambos equipos: {overlap}"
             )
 
         enrolled_user_ids = {str(e.user_id.value) for e in enrollments}

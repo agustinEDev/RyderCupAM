@@ -1,10 +1,13 @@
 """Caso de Uso: Eliminar Ronda/Sesión de competición."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.round_match_dto import (
     DeleteRoundRequestDTO,
     DeleteRoundResponseDTO,
+)
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -73,7 +76,7 @@ class DeleteRoundUseCase:
             )
 
             if not competition:
-                raise RoundNotFoundError("La competición asociada no existe")
+                raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
             if not competition.is_creator(user_id):
@@ -109,5 +112,5 @@ class DeleteRoundUseCase:
             id=request.round_id,
             deleted=True,
             matches_deleted=matches_deleted,
-            deleted_at=datetime.now(),
+            deleted_at=datetime.now(UTC).replace(tzinfo=None),
         )

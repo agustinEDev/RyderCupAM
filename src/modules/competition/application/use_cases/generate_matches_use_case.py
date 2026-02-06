@@ -1,10 +1,14 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
+import asyncio
 from decimal import Decimal
 
 from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     GenerateMatchesResponseDTO,
+)
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
 )
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -107,7 +111,7 @@ class GenerateMatchesUseCase:
             # 2. Buscar la competición
             competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
             if not competition:
-                raise RoundNotFoundError("La competición asociada no existe")
+                raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
             if not competition.is_creator(user_id):
@@ -197,6 +201,12 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index: list[int] = []
         user_handicap_map: dict[str, Decimal] = {}
 
+        if not is_scratch and not golf_course:
+            raise ValueError(
+                "Se requiere un campo de golf para el modo HANDICAP. "
+                "Asocie un campo de golf aprobado a la competición."
+            )
+
         if golf_course and not is_scratch:
             for tee in golf_course.tees:
                 total_par = sum(h.par for h in golf_course.holes)
@@ -214,8 +224,10 @@ class GenerateMatchesUseCase:
                 list(team_assignment.team_a_player_ids)
                 + list(team_assignment.team_b_player_ids)
             )
-            for pid in all_player_ids:
-                user = await self._user_repo.find_by_id(pid)
+            users = await asyncio.gather(
+                *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
+            )
+            for pid, user in zip(all_player_ids, users, strict=True):
                 if user and user.handicap is not None:
                     user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
 

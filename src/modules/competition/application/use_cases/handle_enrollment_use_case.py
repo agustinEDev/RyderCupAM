@@ -11,6 +11,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -108,6 +109,13 @@ class HandleEnrollmentUseCase:
 
             # 4. Ejecutar acción
             if request.action == "APPROVE":
+                # Verificar capacidad antes de aprobar
+                approved_count = await self._uow.enrollments.count_approved_by_competition(
+                    enrollment.competition_id
+                )
+                CompetitionPolicy.validate_capacity(
+                    approved_count, competition.max_players, enrollment.competition_id
+                )
                 enrollment.approve()
             elif request.action == "REJECT":
                 enrollment.reject()

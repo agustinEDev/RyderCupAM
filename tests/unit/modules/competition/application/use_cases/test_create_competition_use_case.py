@@ -232,6 +232,37 @@ class TestCreateCompetitionUseCase:
         competition = competitions[0]
         assert competition.play_mode.value == "HANDICAP"
 
+    async def test_should_auto_enroll_creator_as_approved_player(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        Verifica que el creador se auto-enrolla como jugador APPROVED.
+
+        Given: Datos válidos de competición
+        When: Se ejecuta el caso de uso
+        Then: Se crea un enrollment APPROVED para el creador
+        """
+        # Arrange
+        use_case = CreateCompetitionUseCase(uow)
+        request_dto = CreateCompetitionRequestDTO(
+            name="Auto Enroll Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+
+        # Act
+        response = await use_case.execute(request_dto, creator_id)
+
+        # Assert
+        enrollments = await uow.enrollments.find_all()
+        assert len(enrollments) == 1
+        enrollment = enrollments[0]
+        assert enrollment.user_id == creator_id
+        assert enrollment.competition_id.value == response.id
+        assert enrollment.status.value == "APPROVED"
+
     async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que la transacción se hace commit correctamente.

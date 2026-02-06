@@ -142,7 +142,7 @@ class PlayingHandicapCalculator:
         Returns:
             Tuple (player_ph, opponent_ph) con Playing Handicaps
         """
-        allowance = custom_allowance or handicap_mode.default_allowance()
+        allowance = custom_allowance if custom_allowance is not None else handicap_mode.default_allowance()
 
         player_ph = self.calculate(player_hi, player_tee, allowance)
         opponent_ph = self.calculate(opponent_hi, opponent_tee, allowance)
@@ -173,7 +173,7 @@ class PlayingHandicapCalculator:
         Returns:
             Tuple (player1_ph, player2_ph) con Playing Handicaps
         """
-        allowance = custom_allowance or FOURBALL_ALLOWANCE
+        allowance = custom_allowance if custom_allowance is not None else FOURBALL_ALLOWANCE
 
         player1_ph = self.calculate(player1_hi, player1_tee, allowance)
         player2_ph = self.calculate(player2_hi, player2_tee, allowance)
@@ -219,7 +219,7 @@ class PlayingHandicapCalculator:
             Diferencia = 6, 50% = 3 strokes
             Resultado: (3, 0) - Team A recibe 3 strokes
         """
-        allowance = custom_allowance or FOURSOMES_ALLOWANCE
+        allowance = custom_allowance if custom_allowance is not None else FOURSOMES_ALLOWANCE
 
         # Calcular Course Handicaps (sin allowance, para calcular diferencia)
         team1_ch = self._calculate_course_handicap(team1_hi_avg, team1_tee)

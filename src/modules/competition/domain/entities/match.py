@@ -4,7 +4,7 @@ Match Entity - Partido de una sesión.
 Representa un partido individual dentro de una sesión de competición.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
@@ -109,7 +109,7 @@ class Match:
         else:
             strokes_given_to_team = ""
 
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
         return cls(
             id=MatchId.generate(),
             round_id=round_id,
@@ -164,7 +164,7 @@ class Match:
         if not self._status.can_start():
             raise ValueError(f"Cannot start match from status {self._status}. Expected SCHEDULED")
         self._status = MatchStatus.IN_PROGRESS
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def complete(self, result: dict) -> None:
         """
@@ -182,7 +182,7 @@ class Match:
             )
         self._result = result
         self._status = MatchStatus.COMPLETED
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def declare_walkover(self, winning_team: str, reason: str | None = None) -> None:
         """
@@ -208,7 +208,7 @@ class Match:
             "reason": reason,
         }
         self._status = MatchStatus.WALKOVER
-        self._updated_at = datetime.now()
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     # ==================== Query Methods ====================
 

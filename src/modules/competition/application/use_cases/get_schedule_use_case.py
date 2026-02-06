@@ -11,16 +11,13 @@ from src.modules.competition.application.dto.round_match_dto import (
     ScheduleDayDTO,
     TeamAssignmentResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-
-
-class CompetitionNotFoundError(Exception):
-    """La competición no existe."""
-
-    pass
 
 
 class GetScheduleUseCase:

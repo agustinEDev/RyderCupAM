@@ -82,7 +82,7 @@ class TestCloseEnrollmentsUseCase:
         # Assert
         assert response.id == created.id
         assert response.status == "CLOSED"
-        assert response.total_enrollments == 0  # No hay inscripciones
+        assert response.total_enrollments == 1  # Solo el creador (auto-enrolled)
         assert response.closed_at is not None
 
         # Verificar que el estado se persistió correctamente
@@ -261,4 +261,4 @@ class TestCloseEnrollmentsUseCase:
             assert len(events) == 3
             assert events[2].__class__.__name__ == "CompetitionEnrollmentsClosedEvent"
             assert events[2].competition_id == str(created.id)
-            assert events[2].total_enrollments == 0
+            assert events[2].total_enrollments == 1  # Solo el creador (auto-enrolled)

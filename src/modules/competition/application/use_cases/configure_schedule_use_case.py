@@ -6,6 +6,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     ConfigureScheduleRequestDTO,
     ConfigureScheduleResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+)
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -13,14 +16,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotFoundError(Exception):
-    """La competición no existe."""
-
-    pass
 
 
 class NotCompetitionCreatorError(Exception):
@@ -84,10 +82,10 @@ class ConfigureScheduleUseCase:
                 )
 
             # MANUAL mode: solo ack
-            if request.mode == "MANUAL":
+            if request.mode == ScheduleConfigMode.MANUAL:
                 return ConfigureScheduleResponseDTO(
                     competition_id=request.competition_id,
-                    mode="MANUAL",
+                    mode=ScheduleConfigMode.MANUAL.value,
                     rounds_created=0,
                     message="Modo MANUAL configurado. Cree rondas individualmente.",
                 )
@@ -154,7 +152,7 @@ class ConfigureScheduleUseCase:
 
         return ConfigureScheduleResponseDTO(
             competition_id=request.competition_id,
-            mode="AUTOMATIC",
+            mode=ScheduleConfigMode.AUTOMATIC.value,
             rounds_created=rounds_created,
             message=f"Schedule generado con {rounds_created} rondas.",
         )

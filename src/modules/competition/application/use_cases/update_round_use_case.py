@@ -4,6 +4,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundRequestDTO,
     UpdateRoundResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -85,7 +88,7 @@ class UpdateRoundUseCase:
             )
 
             if not competition:
-                raise RoundNotFoundError("La competición asociada no existe")
+                raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
             if not competition.is_creator(user_id):

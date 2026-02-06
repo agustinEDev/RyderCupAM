@@ -122,7 +122,7 @@ class UpdateMatchStatusUseCase:
 
     async def _handle_complete(self, request, match, round_entity):
         """Ejecuta COMPLETE: match.complete() + auto-complete round."""
-        if not request.result:
+        if request.result is None:
             raise InvalidActionError("Se requiere 'result' para completar un partido")
         try:
             match.complete(request.result)
