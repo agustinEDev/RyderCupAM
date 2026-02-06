@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v2.0.3-dev (Current) + v2.1.0 Planning
-> **Last Updated:** February 4, 2026
+> **Version:** v2.0.5 (Current) + v2.1.0 Planning
+> **Last Updated:** February 6, 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -161,39 +161,44 @@ erDiagram
     }
 
     %% ========================================
-    %% ROUNDS & MATCHES (v2.1.0 - NEW)
+    %% ROUNDS, MATCHES & TEAMS (Sprint 2 - IMPLEMENTED)
     %% ========================================
 
     rounds {
-        UUID id PK
-        UUID competition_id FK
+        CHAR(36) id PK "UUID as CHAR(36)"
+        CHAR(36) competition_id FK
         UUID golf_course_id FK
-        DATE date
-        VARCHAR(20) session_type "MORNING | AFTERNOON | FULL_DAY"
+        DATE round_date
+        VARCHAR(20) session_type "MORNING | AFTERNOON | EVENING"
+        VARCHAR(20) match_format "SINGLES | FOURBALL | FOURSOMES"
+        VARCHAR(20) status "PENDING_TEAMS | PENDING_MATCHES | SCHEDULED | IN_PROGRESS | COMPLETED"
+        VARCHAR(20) handicap_mode "STROKE_PLAY | MATCH_PLAY (nullable)"
+        INT allowance_percentage "50-100 in 5% increments (nullable)"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
 
     matches {
-        UUID id PK
-        UUID round_id FK
-        VARCHAR(20) format "FOURBALL | FOURSOMES | SINGLES | GREENSOME"
-        VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | WALKOVER_TEAM_A | WALKOVER_TEAM_B"
-        INT starting_hole "1-18 for shotgun start"
-        UUID team_a_player_1_id FK
-        UUID team_a_player_1_tee_id FK
-        INT team_a_player_1_playing_handicap "Pre-calculated WHS"
-        UUID team_a_player_2_id FK "nullable for SINGLES"
-        UUID team_a_player_2_tee_id FK "nullable"
-        INT team_a_player_2_playing_handicap "nullable"
-        UUID team_b_player_1_id FK
-        UUID team_b_player_1_tee_id FK
-        INT team_b_player_1_playing_handicap
-        UUID team_b_player_2_id FK "nullable for SINGLES"
-        UUID team_b_player_2_tee_id FK "nullable"
-        INT team_b_player_2_playing_handicap "nullable"
+        CHAR(36) id PK "UUID as CHAR(36)"
+        CHAR(36) round_id FK
+        INT match_number "Order within round"
+        JSONB team_a_players "list[MatchPlayer] with playing_handicap"
+        JSONB team_b_players "list[MatchPlayer] with playing_handicap"
+        VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | WALKOVER"
+        INT handicap_strokes_given "Calculated strokes"
+        VARCHAR(1) strokes_given_to_team "A or B or empty"
+        JSONB result "nullable match result"
         TIMESTAMP created_at
         TIMESTAMP updated_at
+    }
+
+    team_assignments {
+        CHAR(36) id PK "UUID as CHAR(36)"
+        CHAR(36) competition_id FK "unique"
+        VARCHAR(20) mode "AUTOMATIC | MANUAL"
+        JSONB team_a_player_ids "list[UUID]"
+        JSONB team_b_player_ids "list[UUID]"
+        TIMESTAMP created_at
     }
 
     %% ========================================
@@ -261,12 +266,12 @@ erDiagram
     golf_courses ||--o{ tees : "has"
     golf_courses ||--o{ holes : "has"
     golf_courses ||--o{ rounds : "used_in"
-    tees ||--o{ matches : "player_uses (4x)"
 
     %% Competition Module
     competitions ||--o{ enrollments : "has"
     competitions ||--o{ competition_golf_courses : "has"
     competitions ||--o{ rounds : "has"
+    competitions ||--o| team_assignments : "has (0 or 1)"
     competitions ||--o{ invitations : "has"
     golf_courses ||--o{ competition_golf_courses : "used_in"
 
@@ -277,7 +282,7 @@ erDiagram
 
 ---
 
-## 📋 Current Tables (v2.0.2)
+## 📋 Current Tables (v2.0.5)
 
 | Table | Typical Records | Module | Version |
 |-------|-------------------|--------|---------|
@@ -290,11 +295,14 @@ erDiagram
 | `competitions` | 10-1,000 | Competition | v1.3.0 |
 | `enrollments` | 200-50,000 | Competition | v1.3.0 |
 | `competition_golf_courses` | 30-10,000 (1-10 per competition) | Competition | v2.0.2 |
+| `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 2 |
+| `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 2 |
+| `team_assignments` | 10-1,000 (1 per competition) | Competition | Sprint 2 |
 | `golf_courses` | 100-5,000 | Golf Courses | v2.0.1 |
 | `tees` | 300-25,000 (3-5 per course) | Golf Courses | v2.0.1 |
 | `holes` | 1,800-90,000 (18 per course) | Golf Courses | v2.0.1 |
 
-**Total current tables:** 12
+**Total current tables:** 15
 
 ---
 
@@ -302,14 +310,12 @@ erDiagram
 
 | Table | Typical Records | Module | Sprint |
 |-------|-------------------|--------|--------|
-| `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 2-3 |
-| `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 2-3 |
 | `invitations` | 500-100,000 | Competition | Sprint 3 |
 | `hole_scores` | 5,000-5,000,000 (72 per singles match, 144 fourball) | Scoring | Sprint 4 |
 
-**Total planned tables:** 4
+**Total planned tables:** 2
 
-**Total tables after v2.1.0 completion:** 16 tables
+**Total tables after v2.1.0 completion:** 17 tables
 
 ---
 
@@ -352,7 +358,7 @@ CREATE INDEX ix_competition_golf_courses_competition_id ON competition_golf_cour
 CREATE INDEX ix_competition_golf_courses_golf_course_id ON competition_golf_courses(golf_course_id);
 ```
 
-### New Indexes (v2.0.1 - v2.1.0)
+### Indexes (v2.0.1 - Sprint 2)
 ```sql
 -- golf_courses
 CREATE INDEX idx_golf_courses_country ON golf_courses(country_code);

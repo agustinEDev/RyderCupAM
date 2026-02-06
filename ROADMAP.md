@@ -1,18 +1,18 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
 > **Current Version:** 2.0.5 (Production)
-> **Last Updated:** Feb 5, 2026
+> **Last Updated:** Feb 6, 2026
 > **OWASP Score:** 9.4/10
 
 ---
 
 ## 📊 Current Status
 
-**Tests:** 1,201 (1,201 passing, 16 skipped, ~79s) | **Endpoints:** 54 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,282 (1,282 passing, 16 skipped, ~79s) | **Endpoints:** 65 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
-- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M (add/remove/reorder) ⭐ v2.0.2
+- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M, Rounds/Matches/Teams (11 use cases + 11 endpoints) ⭐ Sprint 2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
@@ -37,7 +37,7 @@
 | Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
 |--------|-------|-------|-----------|-------|------------|
 | **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
-| **Sprint 2** | Feb 3 - Feb 24 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | 🔄 Fri, Feb 13, Feb 20 |
+| **Sprint 2** | Feb 3 - Feb 6 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | ✅ COMPLETED Feb 6 |
 | **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 27 |
 | **Sprint 4** | Mar 4 - Mar 17 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 13 |
 | **Sprint 5** | Mar 18 - Mar 24 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 20 |
@@ -110,7 +110,7 @@ class GolfCourseRequest(BaseModel):
 
 ---
 
-#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS (Blocks 0-3 ✅ COMPLETED)
+#### Sprint 2: Competition Scheduling (1.5 weeks) - ✅ COMPLETED (Feb 6, 2026)
 
 **Block 0: Clean Architecture Refactor - UoW Pattern Consistency (✅ COMPLETED: Jan 31, 2026)**
 - **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
@@ -255,86 +255,74 @@ class GolfCourseRequest(BaseModel):
 - **Commit**: 886f99f - feat(competition): implement Block 4 Domain Layer for Rounds & Matches
 - **ADR**: ADR-037 (Two-Tier Handicap Architecture and Session-Based Round Model)
 
-**Block 5: Infrastructure - Migrations & Mappers (⏳ PENDING: Feb 7-8, 2026)**
-- **Migrations**:
-  - `xxx_create_team_assignments_table.py`: competition_id (FK), mode, team_a_players (JSON), team_b_players (JSON)
-  - `xxx_create_rounds_table.py`: id, competition_id (FK), golf_course_id (FK), date, session_type, match_format, tee_male_category, tee_female_category, status
-  - `xxx_create_matches_table.py`: id, round_id (FK), match_number, team_a (JSON), team_b (JSON), handicap_strokes_given, strokes_received_by, status, result (JSON)
-- **SQLAlchemy Mappers**:
-  - `TeamAssignmentMapper`: JSON columns for player arrays
-  - `RoundMapper`: relationships to Competition, GolfCourse
-  - `MatchMapper`: JSON columns for team players with playing_handicap
-- **Indexes**:
-  - `ix_rounds_competition_date` (competition_id, date)
-  - `ix_matches_round_id` (round_id)
-  - `ix_matches_status` (status) - for live leaderboard queries
-- **Repository Interfaces**:
-  - `ITeamAssignmentRepository`: save, find_by_competition
-  - `IRoundRepository`: save, find_by_id, find_by_competition, delete
-  - `IMatchRepository`: save, find_by_id, find_by_round, update_status, delete
-- **Repository Implementations**: SQLAlchemy + InMemory (tests)
-- **Tests**: +20 integration tests (repository + mapper)
-- **Time**: 6-8 hours
+**Block 5: Infrastructure - Migrations & Mappers (✅ COMPLETED: Feb 5, 2026)**
+- **Migration**: `a7f3b2c8d4e1_add_rounds_matches_team_assignments.py`
+  - 3 tables: `rounds`, `matches`, `team_assignments`
+  - Indexes: `ix_rounds_competition_date`, `ix_matches_round_id`, `ix_matches_status`
+  - JSONB columns for player arrays (MatchPlayersJsonType, UserIdsJsonType)
+- **SQLAlchemy Mappers** (imperative mapping with TypeDecorators):
+  - ID TypeDecorators: CHAR(36) ↔ UUID Value Objects (RoundId, MatchId, TeamAssignmentId)
+  - Enum TypeDecorators: Factory pattern for SessionType, MatchFormat, RoundStatus, MatchStatus, HandicapMode, TeamAssignmentMode
+  - JSONB TypeDecorators: MatchPlayersJsonType (list[MatchPlayer]), UserIdsJsonType (list[UserId])
+- **Repository Implementations**: SQLAlchemy + InMemory (tests) for Round, Match, TeamAssignment
+- **Unit of Work**: Updated CompetitionUnitOfWork with 6 repositories (competitions, enrollments, countries, rounds, matches, team_assignments)
+- **PlayMode Refactor Migration**: `b9e4f1a3c7d2_rename_handicap_to_play_mode.py` (HandicapSettings → PlayMode)
+- **Tests**: +52 tests (migration, mappers, repositories, UoW)
+- **Commits**: Block 5 implementation + PlayMode refactor (0b33d65)
 
-**Block 6: Application Layer - Use Cases & DTOs (⏳ PENDING: Feb 8-10, 2026)**
-- **DTOs**:
-  - `ConfigureScheduleRequestDTO`: mode (AUTO/MANUAL), days[], default_tee_categories
-  - `ConfigureScheduleResponseDTO`: schedule preview with format_details
-  - `AssignTeamsRequestDTO`: mode, manual_assignments (optional)
-  - `AssignTeamsResponseDTO`: teams with players, average_handicap, balance_analysis
-  - `CreateRoundRequestDTO`: date, session_type, match_format, golf_course_id, tee_categories
-  - `GenerateMatchesRequestDTO`: mode, manual_pairings (optional)
-  - `MatchDetailDTO`: full match info with playing_handicaps, strokes_received
-  - `ScheduleResponseDTO`: complete schedule with days[], rounds[], matches[]
+**Block 6: Application Layer - Use Cases & DTOs (✅ COMPLETED: Feb 6, 2026)**
+- **DTOs** (`round_match_dto.py` - ~30 DTOs):
+  - Shared: MatchPlayerResponseDTO, MatchResponseDTO, RoundResponseDTO, TeamAssignmentResponseDTO, ScheduleDayDTO
+  - CRUD: CreateRound(Request/Response/Body), UpdateRound(Request/Response/Body), DeleteRound(Request/Response)
+  - Reading: GetSchedule(Request/Response), GetMatchDetail(Request/Response)
+  - Teams: AssignTeams(Request/Response/Body), GenerateMatches(Request/Response/Body), ConfigureSchedule(Request/Response/Body)
+  - Transitions: UpdateMatchStatus(Request/Response/Body), DeclareWalkover(Request/Response/Body), ReassignMatchPlayers(Request/Response/Body)
+  - ManualPairingDTO for custom match generation
+  - Bug fix: `ScheduleDayDTO.date` renamed to `day_date` with alias="date" (Pydantic name collision)
 - **Use Cases** (11 total):
-  1. `ConfigureScheduleUseCase`: Sets up competition schedule (auto/manual)
-  2. `AssignTeamsUseCase`: Assigns players to Team A/B (snake draft/manual)
-  3. `CreateRoundUseCase`: Creates individual round (manual mode only)
-  4. `UpdateRoundUseCase`: Updates round details (date, course, tees)
-  5. `DeleteRoundUseCase`: Removes round and its matches
-  6. `GetScheduleUseCase`: Returns complete schedule with nested rounds/matches
-  7. `GenerateMatchesUseCase`: Creates matches for a round (auto/manual pairing)
-  8. `GetMatchDetailUseCase`: Returns match with full player details
-  9. `ReassignMatchPlayersUseCase`: Changes players in a match
-  10. `UpdateMatchStatusUseCase`: SCHEDULED → IN_PROGRESS → COMPLETED
-  11. `DeclareWalkoverUseCase`: Records walkover result
-- **Validation Rules**:
-  - Competition must be in DRAFT state for configuration
-  - Teams must be assigned before match generation
-  - Cannot modify rounds/matches after competition is IN_PROGRESS
-- **Tests**: +55 unit tests (use cases)
-- **Time**: 10-12 hours
+  1. `CreateRoundUseCase` (7 tests): Creates round with competition/GC validation
+  2. `UpdateRoundUseCase` (6 tests): Partial updates with state checks
+  3. `DeleteRoundUseCase` (5 tests): Cascade deletion with match cleanup
+  4. `GetScheduleUseCase` (4 tests): Nested DTOs grouped by day
+  5. `GetMatchDetailUseCase` (3 tests): Full match detail with round context
+  6. `AssignTeamsUseCase` (8 tests): Snake draft or manual assignment
+  7. `GenerateMatchesUseCase` (10 tests): PlayingHandicapCalculator integration
+  8. `ConfigureScheduleUseCase` (6 tests): Auto/manual schedule configuration
+  9. `UpdateMatchStatusUseCase` (5 tests): START/COMPLETE transitions
+  10. `DeclareWalkoverUseCase` (4 tests): Walkover with winning team
+  11. `ReassignMatchPlayersUseCase` (4 tests): Player swap with handicap recalculation
+- **Cross-module dependencies**: AssignTeams (UserRepository), GenerateMatches (GolfCourseRepository + UserRepository), ReassignMatchPlayers (GolfCourseRepository + UserRepository)
+- **Tests**: +74 unit tests (12 DTO + 62 use case)
+- **Helper refactoring**: Extracted methods in update_match_status and reassign_match_players to fix PLR0912
 
-**Block 7: API Layer - Endpoints (⏳ PENDING: Feb 10-12, 2026)**
-- **Schedule Configuration (1 endpoint)**:
-  ```
-  POST /api/v1/competitions/{comp_id}/schedule/configure
-  ```
-- **Team Assignment (1 endpoint)**:
-  ```
-  POST /api/v1/competitions/{comp_id}/teams/assign
-  ```
+**Block 7: API Layer - Endpoints (✅ COMPLETED: Feb 6, 2026)**
+- **New file**: `src/modules/competition/infrastructure/api/v1/round_match_routes.py`
+- **11 DI providers** in `src/config/dependencies.py` (8 UoW-only + 3 cross-module)
+- **Router registered** in `main.py` with prefix `/api/v1/competitions`
 - **Rounds (4 endpoints)**:
   ```
-  POST   /api/v1/competitions/{comp_id}/rounds
-  PUT    /api/v1/rounds/{round_id}
-  DELETE /api/v1/rounds/{round_id}
-  GET    /api/v1/competitions/{comp_id}/schedule
+  POST   /api/v1/competitions/{comp_id}/rounds            # 201 Created
+  PUT    /api/v1/competitions/rounds/{round_id}            # 200 OK
+  DELETE /api/v1/competitions/rounds/{round_id}            # 200 OK
+  GET    /api/v1/competitions/{comp_id}/schedule           # 200 OK
   ```
-- **Matches (6 endpoints)**:
+- **Matches (4 endpoints)**:
   ```
-  POST   /api/v1/rounds/{round_id}/matches/generate
-  GET    /api/v1/matches/{match_id}
-  PUT    /api/v1/matches/{match_id}/players
-  PUT    /api/v1/matches/{match_id}/status
-  POST   /api/v1/matches/{match_id}/walkover
-  DELETE /api/v1/matches/{match_id}
+  GET    /api/v1/competitions/matches/{match_id}           # 200 OK
+  PUT    /api/v1/competitions/matches/{match_id}/status    # 200 OK
+  POST   /api/v1/competitions/matches/{match_id}/walkover  # 200 OK
+  PUT    /api/v1/competitions/matches/{match_id}/players   # 200 OK
   ```
-- **Authorization**:
-  - Configure/Assign/Create/Update/Delete: Creator or Admin only
-  - Get Schedule/Match: Any authenticated user (enrolled players)
-- **Tests**: +24 integration tests (API endpoints)
-- **Time**: 8-10 hours
+- **Teams & Generation (3 endpoints)**:
+  ```
+  POST   /api/v1/competitions/{comp_id}/teams              # 201 Created
+  POST   /api/v1/competitions/rounds/{round_id}/matches/generate  # 201 Created
+  POST   /api/v1/competitions/{comp_id}/schedule/configure # 200 OK
+  ```
+- **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
+- **Exception handling**: 404 (NotFound), 403 (NotCreator), 400 (state/validation/business errors)
+- **Authorization**: All endpoints require authentication (get_current_user)
+- **Tests**: 1,282 unit tests passing (zero regressions)
 
 **Block 8: Playing Handicap Calculator (✅ ABSORBED INTO BLOCK 4: Feb 5, 2026)**
 - Implemented as `PlayingHandicapCalculator` domain service in Block 4
@@ -364,19 +352,19 @@ Result: Balanced teams (~0.5 handicap difference)
 ```
 
 **Sprint 2 Block 4-8 Summary:**
-| Block | Description | Tests | Hours |
-|-------|-------------|-------|-------|
-| Block 4 | Domain (Entities, VOs, Services) ✅ | 296 | ~8h |
-| Block 5 | Infrastructure (Migrations, Mappers, Repos) | +20 | 6-8h |
-| Block 6 | Application (Use Cases, DTOs) | +55 | 10-12h |
-| Block 7 | API (12 Endpoints) | +24 | 8-10h |
-| Block 8 | Playing Handicap Calculator ✅ (absorbed into Block 4) | - | - |
-| **Total** | | **+395** | **32-38h** |
+| Block | Description | Tests | Status |
+|-------|-------------|-------|--------|
+| Block 4 | Domain (Entities, VOs, Services) | 296 | ✅ Feb 5 |
+| Block 5 | Infrastructure (Migrations, Mappers, Repos) | +52 | ✅ Feb 5 |
+| Block 6 | Application (Use Cases, DTOs) | +74 | ✅ Feb 6 |
+| Block 7 | API (11 Endpoints, 11 DI providers) | 0 regressions | ✅ Feb 6 |
+| Block 8 | Playing Handicap Calculator (absorbed into Block 4) | - | ✅ Feb 5 |
+| **Total** | **Sprint 2 complete** | **+422 tests** | **✅ All blocks** |
 
 **ADRs Nuevos:**
 - **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model (✅ Block 4)
-- **ADR-038:** Schedule Configuration Modes (Automatic vs Manual) (⏳ Block 6)
-- **ADR-039:** Match Format Business Rules (⏳ Block 6)
+- **ADR-038:** Schedule Configuration Modes (Automatic vs Manual) (✅ Block 6)
+- **ADR-039:** Match Format Business Rules (✅ Block 6)
 
 ---
 
@@ -523,7 +511,7 @@ class LeaderboardResponse(BaseModel):
 |--------|----------------|------------------|------------|
 | Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | ✅ Jan 31 |
 | Sprint 2 (Block 0-3) | Competition-GolfCourse M2M + Code Quality | Multi-select courses + Reorder UI | ✅ Feb 4 |
-| Sprint 2 (Block 4-8) | Schedule Config + Teams + Rounds + Matches | Schedule Wizard + Team Assignment + Match Generation | 🔄 Feb 13 |
+| Sprint 2 (Block 4-8) | Schedule Config + Teams + Rounds + Matches | Schedule Wizard + Team Assignment + Match Generation | ✅ Feb 6 |
 | Sprint 3 | Invitations | Invitation Cards | Fri, Feb 27 |
 | Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
 | Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
@@ -760,5 +748,5 @@ src/modules/ai/
 
 ---
 
-**Next Review:** v2.0.1 Sprint 1 (Feb 7, 2026)
+**Next Review:** v2.0.1 Sprint 3 (Feb 25, 2026)
 **Owner:** Backend Team

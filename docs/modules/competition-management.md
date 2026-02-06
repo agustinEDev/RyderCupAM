@@ -381,12 +381,14 @@ CREATE TABLE country_adjacencies (
 ## 🧪 Testing
 
 ### Statistics
-- **Total Competition Domain:** 296 tests (100% passing) ⭐ Sprint 2 Block 4
+- **Total Competition Module:** 554 tests (100% passing) ⭐ Sprint 2 Complete
 - **Unit Tests (Domain - Base):** 62 tests (entities, value objects, repositories)
-- **Unit Tests (Domain - Rounds & Matches):** 234 tests (11 VOs + 3 entities + 2 services) ⭐
-- **Unit Tests (Application):** 84 tests (use cases + Golf Courses M2M)
-- **Unit Tests (DTOs):** 49 tests (validations)
+- **Unit Tests (Domain - Rounds & Matches):** 234 tests (11 VOs + 3 entities + 2 services) ⭐ Block 4
+- **Unit Tests (Infrastructure):** 52 tests (migration, mappers, repositories, UoW) ⭐ Block 5
+- **Unit Tests (Application):** 146 tests (84 base + 62 round/match/team use cases) ⭐ Block 6
+- **Unit Tests (DTOs):** 61 tests (49 base + 12 round/match DTOs) ⭐ Block 6
 - **Integration Tests:** 9 tests (API endpoints)
+- **API Endpoints:** 35 total (14 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams) ⭐ Block 7
 
 ### Structure
 ```
@@ -394,9 +396,9 @@ tests/unit/modules/competition/
 ├── domain/value_objects/test_*.py (20 base + 9 new VOs)
 ├── domain/entities/test_*.py (3 new: round, match, team_assignment)
 ├── domain/services/test_*.py (2 new: handicap_calculator, snake_draft)
-├── application/dto/test_*.py (49 tests)
-├── application/use_cases/test_*.py (84 tests)
-└── infrastructure/ (pending)
+├── application/dto/test_*.py (61 tests: 49 base + 12 round/match)
+├── application/use_cases/test_*.py (146 tests: 84 base + 62 round/match/team)
+└── infrastructure/persistence/ (52 tests: mappers, repos, UoW)
 
 tests/integration/api/v1/
 ├── test_competition_routes.py
@@ -557,4 +559,4 @@ REJECTED    CANCELLED
 ---
 
 **Last Updated:** 5 February 2026
-**Version:** Sprint 2 Block 4 (Rounds & Matches Domain Layer)
+**Version:** Sprint 2 Complete (Blocks 0-8: Domain + Infrastructure + Application + API)

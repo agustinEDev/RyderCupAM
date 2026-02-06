@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-**Block 4: Domain Layer - Rounds & Matches (Sprint 2)**
+**Sprint 2: Competition Scheduling - Complete (Blocks 0-8)**
+
+**Block 4: Domain Layer - Rounds & Matches**
 
 - **3 New Entities**:
   - `Round`: Session-based tournament round with state machine (PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED)
@@ -28,17 +30,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Two-Tier Handicap System**: Competition-level `PlayMode` default + Round-level `HandicapMode`/`allowance_percentage` override with WHS-compliant defaults (Singles 95-100%, Fourball 90%, Foursomes 50%)
 - **ADR-037**: Two-Tier Handicap Architecture and Session-Based Round Model
 
+**Block 5: Infrastructure - Migrations & Mappers**
+
+- **Migration** `a7f3b2c8d4e1`: 3 new tables (`rounds`, `matches`, `team_assignments`) with indexes
+- **Migration** `b9e4f1a3c7d2`: HandicapSettings → PlayMode refactor (rename column + convert values)
+- **SQLAlchemy Mappers**: TypeDecorators for IDs (CHAR(36) ↔ UUID VOs), Enums (string ↔ enum), JSONB (MatchPlayers, UserIds)
+- **Repositories**: SQLAlchemy + InMemory implementations for Round, Match, TeamAssignment
+- **Unit of Work**: CompetitionUnitOfWork expanded to 6 repositories
+
+**Block 6: Application Layer - Use Cases & DTOs**
+
+- **~30 DTOs** in `round_match_dto.py`: Request/Response/Body DTOs for all 11 use cases + shared response DTOs
+- **11 Use Cases**:
+  - CRUD: CreateRound, UpdateRound, DeleteRound
+  - Reading: GetSchedule (grouped by day), GetMatchDetail
+  - Teams: AssignTeams (snake draft/manual), GenerateMatches (with PlayingHandicapCalculator), ConfigureSchedule
+  - Transitions: UpdateMatchStatus (START/COMPLETE), DeclareWalkover, ReassignMatchPlayers (with handicap recalculation)
+- **Cross-module integration**: AssignTeams, GenerateMatches, ReassignMatchPlayers use UserRepository and/or GolfCourseRepository
+
+**Block 7: API Layer - 11 Endpoints**
+
+- **New file**: `round_match_routes.py` with 11 REST endpoints
+- **Rounds**: POST (create), PUT (update), DELETE, GET (schedule)
+- **Matches**: GET (detail), PUT (status), POST (walkover), PUT (players)
+- **Teams & Generation**: POST (assign teams), POST (generate matches), POST (configure schedule)
+- **11 DI providers** in `dependencies.py` (8 UoW-only + 3 cross-module)
+- **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
+- **Exception mapping**: 404 (NotFound), 403 (NotCreator), 400 (business errors)
+
 ### Changed
 
 - `Enrollment` entity: Added `tee_category` field for player tee assignment
+- `HandicapSettings` replaced with `PlayMode` enum (breaking API change: `handicap_type` + `handicap_percentage` → `play_mode`)
 - `value_objects/__init__.py`: Updated exports with 11 new value objects
 - `services/__init__.py`: Added PlayingHandicapCalculator and SnakeDraftService exports
 - `entities/__init__.py`: New package init with Round, Match, TeamAssignment exports
+- `dependencies.py`: 11 new DI providers for round/match/team use cases
+- `main.py`: Registered `round_match_routes` router
 
 ### Testing
 
-- **296 competition domain tests passing** (100%)
-- New test files: 14 (3 entities + 2 services + 9 value objects)
+- **1,282 unit tests passing** (100%) — +422 tests from Sprint 2 Blocks 4-7
+  - Block 4: 296 domain tests (14 files: 3 entities + 2 services + 9 VOs)
+  - Block 5: 52 infrastructure tests (migration, mappers, repositories, UoW)
+  - Block 6: 74 application tests (12 DTO + 62 use case)
+  - Block 7: 0 regressions on full suite
 
 ## [2.0.5] - 2026-02-05 (Golf Courses Endpoint Fixes)
 

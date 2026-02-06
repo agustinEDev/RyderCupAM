@@ -10,7 +10,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1202%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1282%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,11 +29,12 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **54 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,202 tests** passing (100% success rate, ~79s execution)
+- ✅ **65 REST API endpoints** fully documented (Swagger UI)
+- ✅ **1,282 tests** passing (100% success rate, ~79s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
+- ✅ **Rounds, Matches & Teams** - Full tournament scheduling with WHS handicap calculation (Sprint 2)
 - ✅ **Competition ↔ GolfCourse M2M** - Multi-course tournaments with ordering (v2.0.2)
 - ✅ **10 CI/CD jobs** - GitHub Actions pipeline (~3min)
 - ✅ **Device Fingerprinting** - Advanced session management with auto-registration
@@ -179,7 +180,8 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ Custom handicap override per competition
 - ✅ 166 countries with multilanguage support
 - ✅ **Competition ↔ GolfCourse M2M** (v2.0.2) - Multi-course tournaments with ordering
-- ✅ 24 endpoints (14 competition + 8 enrollment + 2 countries + 4 golf courses)
+- ✅ **Rounds & Matches** (Sprint 2) - Session-based scheduling, match generation, WHS handicap calculation
+- ✅ 35 endpoints (14 competition + 8 enrollment + 2 countries + 4 golf courses + 11 rounds/matches)
 
 ### Security Features (v1.13.1)
 - ✅ **httpOnly Cookies** - XSS prevention for tokens
@@ -198,7 +200,14 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### What's New
 
-**v2.0.2-dev (In Development)**
+**v2.0.5 (Sprint 2 Complete - Feb 6, 2026)**
+- ✅ **Rounds & Matches System**: Full session-based scheduling (MORNING/AFTERNOON/EVENING), match generation, team assignment
+- ✅ **Playing Handicap Calculator**: WHS formula with format-specific allowances (Singles, Fourball, Foursomes)
+- ✅ **Snake Draft Service**: Balanced automatic team assignment (A,B,B,A serpentine pattern)
+- ✅ **11 new API endpoints**: CRUD rounds, match management, team assignment, match generation
+- ✅ **+80 tests** (554 total competition module tests)
+
+**v2.0.2 (Feb 1, 2026)**
 - ✅ **Competition ↔ GolfCourse M2M**: Multi-course tournaments with add/remove/reorder operations
 - ✅ **Mixed UUID Types Support**: CHAR(36) and UUID(as_uuid=True) compatibility in associations
 
@@ -210,14 +219,9 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER)
 
 ### Coming Soon (Competition Module Evolution)
-- 🔄 **Round Planning** - Manual match scheduling with drag-drop
-- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation
-- 🔄 **Invitation System** - Email invitations with secure tokens
-- 🔄 **Playing Handicap** - WHS automatic calculation per tee
-- 🔄 **Match Play Scoring** - Net scores, hole winners, standings
-- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache
-
-**Timeline**: Feb 3 - Mar 24, 2026 (7 weeks) | **~30 more endpoints** | **~106+ more tests**
+- 🔄 **Invitation System** - Email invitations with secure tokens (Sprint 3)
+- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation (Sprint 4)
+- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache (Sprint 5)
 
 ---
 
@@ -275,19 +279,19 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v2.0.1)
+### Test Statistics (v2.0.5)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,177** | ✅ 100% passing | 90%+ |
+| **Total** | **1,282** | ✅ 100% passing | 90%+ |
 | User Module | 588 | ✅ 100% | 92% |
-| Competition Module | 174 | ✅ 100% | 91% |
+| Competition Module | 554 | ✅ 100% | 91% |
 | Golf Course Module | 51 | ✅ 100% | 93% |
 | Security Suite | 34 | ✅ 100% | 95% |
 | Shared | 138 | ✅ 100% | 88% |
 | Integration | 100 | ✅ 100% | - |
 
-**Execution Time**: ~142 seconds (with pytest-xdist parallelization)
+**Execution Time**: ~75 seconds (with pytest-xdist parallelization)
 
 **Test Types**:
 - Unit tests (domain + application logic)
@@ -360,7 +364,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (50 total)
+### Available Endpoints (65 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>
@@ -443,6 +447,32 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 - `PUT /api/v1/golf-courses/{id}` - Creator submits update (clone-based)
 - `PUT /api/v1/golf-courses/admin/updates/{id}/approve` - Admin approves update
 - `PUT /api/v1/golf-courses/admin/updates/{id}/reject` - Admin rejects update
+</details>
+
+<details>
+<summary><b>Rounds & Schedule (4 endpoints)</b></summary>
+
+- `POST /api/v1/competitions/{id}/rounds` - Create round
+- `PUT /api/v1/competitions/rounds/{id}` - Update round
+- `DELETE /api/v1/competitions/rounds/{id}` - Delete round
+- `GET /api/v1/competitions/{id}/schedule` - Get competition schedule
+</details>
+
+<details>
+<summary><b>Match Management (4 endpoints)</b></summary>
+
+- `GET /api/v1/competitions/matches/{id}` - Get match detail
+- `PUT /api/v1/competitions/matches/{id}/status` - Update match status
+- `POST /api/v1/competitions/matches/{id}/walkover` - Declare walkover
+- `PUT /api/v1/competitions/matches/{id}/players` - Reassign match players
+</details>
+
+<details>
+<summary><b>Teams & Generation (3 endpoints)</b></summary>
+
+- `POST /api/v1/competitions/{id}/teams` - Assign teams (automatic/manual)
+- `POST /api/v1/competitions/rounds/{id}/matches/generate` - Generate matches
+- `POST /api/v1/competitions/{id}/schedule/configure` - Configure schedule
 </details>
 
 <details>
@@ -536,35 +566,24 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.1 (Production)
+### Current Version: v2.0.5 (Production)
 
-**Latest Features** (Sprint 1 - Jan 31, 2026):
-- **Golf Course Module**: Complete CRUD with Admin approval workflow + Update system
-- **10 new endpoints**: Request, Admin create, Approve/Reject, Update workflow (clone-based)
-- **RBAC Foundation** (v2.0.0): Three-tier role system (ADMIN, CREATOR, PLAYER)
-- **+51 tests** (28 integration, 23 unit) - Total: 1,177 passing
-- **WHS-compliant validation**: 2-6 tees, 18 holes, Course/Slope ratings
+**Latest Features** (Sprint 2 Complete - Feb 6, 2026):
+- **Rounds & Matches System**: Session-based scheduling, match generation, WHS handicap calculation
+- **Playing Handicap Calculator**: WHS formula with format-specific allowances
+- **Snake Draft Service**: Balanced automatic team assignment
+- **11 new endpoints**: Round CRUD, match management, team assignment, match generation
+- **+80 tests** (554 total competition module) - Total: 1,282 passing
+- **Competition ↔ GolfCourse M2M** (v2.0.2): Multi-course tournaments with ordering
 
-### Coming Next: Sprint 2-5 - Competition Module Evolution ⭐
-
-**Timeline**: Feb 3 - Mar 24, 2026 (7 weeks)
-**Effort**: ~334h | **Endpoints**: +23 | **Tests**: +79
-
-**Planned Features**:
-- Competition-GolfCourse Many-to-Many relationship
-- Round planning and match scheduling
-- Live scoring with dual validation (player + marker)
-- Invitation system with secure tokens
-- Playing handicap calculation (WHS formula)
-- Match play scoring with standings
-- Real-time leaderboards with Redis cache
+### Coming Next: Sprint 3-5 - Invitations, Scoring & Leaderboards
 
 **Sprint Breakdown**:
 1. ✅ **Sprint 1** (Jan 27 - Jan 31): Golf Courses - 10 endpoints (COMPLETED)
-2. **Sprint 2** (Feb 3 - Feb 24): Competition-GolfCourse + Rounds + Matches - 14 endpoints
-3. **Sprint 3** (Feb 25 - Mar 3): Invitations - 5 endpoints
-4. **Sprint 4** (Mar 4 - Mar 17): Scoring System - 4 endpoints
-5. **Sprint 5** (Mar 18 - Mar 24): Leaderboards - 2 endpoints
+2. ✅ **Sprint 2** (Feb 3 - Feb 6): Competition-GolfCourse + Rounds + Matches - 15 endpoints (COMPLETED)
+3. **Sprint 3** (Feb 2026): Invitations - 5 endpoints
+4. **Sprint 4** (Mar 2026): Scoring System - 4 endpoints
+5. **Sprint 5** (Mar 2026): Leaderboards - 2 endpoints
 
 See [ROADMAP.md](ROADMAP.md) for complete version planning.
 
@@ -630,6 +649,5 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 ### ⭐ Star this repository if you find it useful!
 
-**Made with ❤️ for the golf community**
 
 </div>
