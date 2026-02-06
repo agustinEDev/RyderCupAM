@@ -8,6 +8,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -90,7 +91,7 @@ class DeclareWalkoverUseCase:
             round_status_changed = None
             all_matches = await self._uow.matches.find_by_round(match.round_id)
             all_finished = all(m.is_finished() for m in all_matches)
-            if all_finished and round_entity.status.value == "IN_PROGRESS":
+            if all_finished and round_entity.status == RoundStatus.IN_PROGRESS:
                 round_entity.complete()
                 await self._uow.rounds.update(round_entity)
                 round_status_changed = round_entity.status.value

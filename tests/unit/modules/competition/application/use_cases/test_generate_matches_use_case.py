@@ -36,6 +36,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
@@ -529,13 +530,8 @@ class TestGenerateMatchesUseCase:
         assert len(first_match_ids) == 2
 
         # Volver la ronda a PENDING_MATCHES para regenerar
-        # (Acceso directo al atributo interno para simular re-generacion)
-        round_entity._status = (
-            __import__(
-                "src.modules.competition.domain.value_objects.round_status",
-                fromlist=["RoundStatus"],
-            ).RoundStatus.PENDING_MATCHES
-        )
+        # (test-only direct mutation to simulate re-generation scenario)
+        round_entity._status = RoundStatus.PENDING_MATCHES
         async with uow:
             await uow.rounds.update(round_entity)
 

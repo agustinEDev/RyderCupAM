@@ -16,7 +16,9 @@ from src.modules.competition.domain.services.snake_draft_service import (
     Team,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -97,7 +99,7 @@ class AssignTeamsUseCase:
                 )
 
             # 3. Verificar estado CLOSED
-            if not competition.status.value == "CLOSED":
+            if competition.status != CompetitionStatus.CLOSED:
                 raise CompetitionNotClosedError(
                     f"La competición debe estar en estado CLOSED. "
                     f"Estado actual: {competition.status.value}"
@@ -147,7 +149,7 @@ class AssignTeamsUseCase:
             # 7. Transicionar rondas PENDING_TEAMS → PENDING_MATCHES
             rounds = await self._uow.rounds.find_by_competition(competition_id)
             for round_entity in rounds:
-                if round_entity.status.value == "PENDING_TEAMS":
+                if round_entity.status == RoundStatus.PENDING_TEAMS:
                     round_entity.mark_teams_assigned()
                     await self._uow.rounds.update(round_entity)
 

@@ -524,7 +524,7 @@ class Competition:
             )
 
         # Validación: no duplicados
-        if self._has_golf_course(golf_course_id):
+        if self.has_golf_course(golf_course_id):
             raise ValueError(f"El campo de golf {golf_course_id} ya está añadido a la competición")
 
         # Calcular próximo display_order automáticamente
@@ -666,7 +666,7 @@ class Competition:
             self.location.adjacent_country_2 and country_code == self.location.adjacent_country_2
         )
 
-    def _has_golf_course(self, golf_course_id: GolfCourseId) -> bool:
+    def has_golf_course(self, golf_course_id: GolfCourseId) -> bool:
         """
         Verifica si un campo de golf ya está en la competición.
 

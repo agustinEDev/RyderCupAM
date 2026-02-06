@@ -165,10 +165,10 @@ class TestGetScheduleUseCase:
         assert response.days[0].day_date == date(2026, 6, 1)
         assert len(response.days[0].rounds) == 2
 
-        # Verificar que las rondas estan ordenadas por session_type (alphabetical)
+        # Verificar que las rondas estan ordenadas cronologicamente
         round_dtos = response.days[0].rounds
-        assert round_dtos[0].session_type == "AFTERNOON"
-        assert round_dtos[1].session_type == "MORNING"
+        assert round_dtos[0].session_type == "MORNING"
+        assert round_dtos[1].session_type == "AFTERNOON"
 
         # Verificar partidos en cada ronda
         assert len(round_dtos[0].matches) == 1

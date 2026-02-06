@@ -7,6 +7,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -93,7 +94,7 @@ class UpdateRoundUseCase:
                 )
 
             # 4. Verificar competición CLOSED
-            if not competition.status.value == "CLOSED":
+            if competition.status != CompetitionStatus.CLOSED:
                 raise CompetitionNotClosedError(
                     f"La competición debe estar en estado CLOSED. "
                     f"Estado actual: {competition.status.value}"
@@ -103,7 +104,7 @@ class UpdateRoundUseCase:
             golf_course_id = None
             if request.golf_course_id:
                 golf_course_id = GolfCourseId(request.golf_course_id)
-                if not competition._has_golf_course(golf_course_id):
+                if not competition.has_golf_course(golf_course_id):
                     raise GolfCourseNotInCompetitionError(
                         f"El campo de golf {request.golf_course_id} no está "
                         f"asociado a la competición"

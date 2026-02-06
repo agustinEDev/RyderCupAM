@@ -9,6 +9,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -81,7 +82,7 @@ class DeleteRoundUseCase:
                 )
 
             # 4. Verificar competición CLOSED
-            if not competition.status.value == "CLOSED":
+            if competition.status != CompetitionStatus.CLOSED:
                 raise CompetitionNotClosedError(
                     f"La competición debe estar en estado CLOSED. "
                     f"Estado actual: {competition.status.value}"

@@ -11,6 +11,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -45,7 +46,7 @@ class ConfigureScheduleUseCase:
     Caso de uso para configurar el schedule de la competición.
 
     AUTOMATIC: genera rondas según rotación de formato.
-    - Sesiones se distribuyen: Foursomes, Fourball, Singles (última siempre Singles)
+    - Sesiones se distribuyen: Fourball, Foursomes alternando, Singles siempre última
     - Se rotan campos de golf por display_order
     - Sesiones por día configurables (1-3, default 2)
 
@@ -77,7 +78,7 @@ class ConfigureScheduleUseCase:
                 )
 
             # 3. Verificar estado CLOSED
-            if not competition.status.value == "CLOSED":
+            if competition.status != CompetitionStatus.CLOSED:
                 raise CompetitionNotClosedError(
                     f"La competición debe estar en CLOSED. Estado: {competition.status.value}"
                 )
@@ -113,20 +114,21 @@ class ConfigureScheduleUseCase:
             sessions_per_day = request.sessions_per_day or 2
             session_types = [SessionType.MORNING, SessionType.AFTERNOON, SessionType.EVENING]
 
-            # Rotación de formatos: Foursomes, Fourball, ..., Singles al final
-            format_rotation = [MatchFormat.FOURSOMES, MatchFormat.FOURBALL, MatchFormat.SINGLES]
+            # Generar secuencia de formatos según ROADMAP:
+            # 1→Singles, 2→Fourball→Singles, 3→Foursomes→Fourball→Singles,
+            # 4→Fourball→Foursomes→Fourball→Singles, 5+→alternando, Singles última
+            session_formats = self._build_format_sequence(total_sessions)
 
             current_date = competition.dates.start_date
             rounds_created = 0
             session_in_day = 0
 
             for i in range(total_sessions):
-                # Seleccionar formato según rotación
-                if i == total_sessions - 1:
-                    # Última sesión siempre Singles
-                    match_format = MatchFormat.SINGLES
-                else:
-                    match_format = format_rotation[i % len(format_rotation)]
+                # Parar si pasamos del end_date
+                if current_date > competition.dates.end_date:
+                    break
+
+                match_format = session_formats[i]
 
                 # Seleccionar campo de golf (rotación por display_order)
                 gc = golf_courses[i % len(golf_courses)]
@@ -149,8 +151,6 @@ class ConfigureScheduleUseCase:
                 if session_in_day >= sessions_per_day:
                     session_in_day = 0
                     current_date += timedelta(days=1)
-                    # No pasar del end_date
-                    current_date = min(current_date, competition.dates.end_date)
 
         return ConfigureScheduleResponseDTO(
             competition_id=request.competition_id,
@@ -158,3 +158,35 @@ class ConfigureScheduleUseCase:
             rounds_created=rounds_created,
             message=f"Schedule generado con {rounds_created} rondas.",
         )
+
+    @staticmethod
+    def _build_format_sequence(total_sessions: int) -> list[MatchFormat]:
+        """
+        Construye la secuencia de formatos para N sesiones.
+
+        Reglas (ROADMAP):
+        - 1 sesión: [Singles]
+        - 2 sesiones: [Fourball, Singles]
+        - 3 sesiones: [Foursomes, Fourball, Singles]
+        - 4+: alterna Fourball/Foursomes, Singles siempre última
+        """
+        if total_sessions <= 0:
+            return []
+        if total_sessions == 1:
+            return [MatchFormat.SINGLES]
+
+        # Generar las N-1 sesiones previas alternando Fourball/Foursomes
+        # Patrón de alternancia: Fourball, Foursomes, Fourball, Foursomes, ...
+        alternation = [MatchFormat.FOURBALL, MatchFormat.FOURSOMES]
+        preceding: list[MatchFormat] = []
+        for i in range(total_sessions - 1):
+            preceding.append(alternation[i % 2])
+
+        # Invertir para que la secuencia final quede correcta:
+        # 2 sesiones: [Fourball] + Singles
+        # 3 sesiones: [Foursomes, Fourball] + Singles
+        # 4 sesiones: [Fourball, Foursomes, Fourball] + Singles
+        preceding.reverse()
+
+        preceding.append(MatchFormat.SINGLES)
+        return preceding

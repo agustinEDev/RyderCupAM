@@ -8,6 +8,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -114,7 +115,7 @@ class UpdateMatchStatusUseCase:
         except ValueError as e:
             raise InvalidActionError(str(e)) from e
 
-        if round_entity.status.value == "SCHEDULED":
+        if round_entity.status == RoundStatus.SCHEDULED:
             round_entity.start()
             return round_entity.status.value
         return None
@@ -128,9 +129,12 @@ class UpdateMatchStatusUseCase:
         except ValueError as e:
             raise InvalidActionError(str(e)) from e
 
+        # Persist match status before querying so find_by_round sees the update
+        await self._uow.matches.update(match)
+
         all_matches = await self._uow.matches.find_by_round(match.round_id)
         all_finished = all(m.is_finished() for m in all_matches)
-        if all_finished and round_entity.status.value == "IN_PROGRESS":
+        if all_finished and round_entity.status == RoundStatus.IN_PROGRESS:
             round_entity.complete()
             return round_entity.status.value
         return None

@@ -118,9 +118,13 @@ class GetScheduleUseCase:
             )
             days_map[round_entity.round_date].append(round_dto)
 
-        # 6. Construir días ordenados
+        # 6. Construir días ordenados (cronológico: MORNING → AFTERNOON → EVENING)
+        session_order = {"MORNING": 0, "AFTERNOON": 1, "EVENING": 2}
         days = [
-            ScheduleDayDTO(date=d, rounds=sorted(r, key=lambda x: x.session_type))
+            ScheduleDayDTO(
+                date=d,
+                rounds=sorted(r, key=lambda x: session_order.get(x.session_type.upper(), 99)),
+            )
             for d, r in sorted(days_map.items())
         ]
 
