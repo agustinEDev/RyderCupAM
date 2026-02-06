@@ -1,0 +1,308 @@
+"""Caso de Uso: Generar partidos para una ronda."""
+
+from decimal import Decimal
+
+from src.modules.competition.application.dto.round_match_dto import (
+    GenerateMatchesRequestDTO,
+    GenerateMatchesResponseDTO,
+)
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+    TeeRating,
+)
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.match_player import MAX_HOLES, MatchPlayer
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
+from src.modules.user.domain.value_objects.user_id import UserId
+
+
+class RoundNotFoundError(Exception):
+    """La ronda no existe."""
+
+    pass
+
+
+class CompetitionNotClosedError(Exception):
+    """La competición no está en estado CLOSED."""
+
+    pass
+
+
+class NotCompetitionCreatorError(Exception):
+    """El usuario no es el creador."""
+
+    pass
+
+
+class RoundNotPendingMatchesError(Exception):
+    """La ronda no está en estado PENDING_MATCHES."""
+
+    pass
+
+
+class NoTeamAssignmentError(Exception):
+    """No hay asignación de equipos."""
+
+    pass
+
+
+class InsufficientPlayersError(Exception):
+    """No hay suficientes jugadores para el formato."""
+
+    pass
+
+
+class TeeCategoryNotFoundError(Exception):
+    """No se encontró la categoría de tee del jugador en el campo."""
+
+    pass
+
+
+class GenerateMatchesUseCase:
+    """
+    Caso de uso para generar partidos en una ronda.
+
+    Flujo:
+    1. Obtener ronda y competición
+    2. Obtener asignación de equipos
+    3. Obtener enrollments con handicaps
+    4. Obtener campo de golf y tees
+    5. Calcular Playing Handicaps (WHS)
+    6. Crear partidos (AUTO: por ranking, MANUAL: pairings del request)
+    7. Transicionar ronda PENDING_MATCHES → SCHEDULED
+
+    SCRATCH mode: todos playing_handicap=0, strokes_received=()
+    """
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        golf_course_repository: IGolfCourseRepository,
+        user_repository: UserRepositoryInterface,
+    ):
+        self._uow = uow
+        self._gc_repo = golf_course_repository
+        self._user_repo = user_repository
+
+    async def execute(
+        self, request: GenerateMatchesRequestDTO, user_id: UserId
+    ) -> GenerateMatchesResponseDTO:
+        async with self._uow:
+            # 1. Buscar la ronda
+            round_id = RoundId(request.round_id)
+            round_entity = await self._uow.rounds.find_by_id(round_id)
+
+            if not round_entity:
+                raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
+
+            # 2. Buscar la competición
+            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+            if not competition:
+                raise RoundNotFoundError("La competición asociada no existe")
+
+            # 3. Verificar creador
+            if not competition.is_creator(user_id):
+                raise NotCompetitionCreatorError("Solo el creador puede generar partidos")
+
+            # 4. Verificar competición CLOSED
+            if not competition.status.value == "CLOSED":
+                raise CompetitionNotClosedError(
+                    f"La competición debe estar en CLOSED. Estado: {competition.status.value}"
+                )
+
+            # 5. Verificar ronda PENDING_MATCHES
+            if not round_entity.can_generate_matches():
+                raise RoundNotPendingMatchesError(
+                    f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
+                )
+
+            # 6. Obtener asignación de equipos
+            team_assignment = await self._uow.team_assignments.find_by_competition(
+                round_entity.competition_id
+            )
+            if not team_assignment:
+                raise NoTeamAssignmentError(
+                    "No hay asignación de equipos. Use AssignTeamsUseCase primero."
+                )
+
+            # 7. Obtener enrollments y campo
+            enrollments = await self._uow.enrollments.find_by_competition_and_status(
+                round_entity.competition_id, EnrollmentStatus.APPROVED
+            )
+
+            # Mapear user_id → enrollment
+            enrollment_map = {str(e.user_id.value): e for e in enrollments}
+
+            # 8. Obtener campo de golf y tees
+            golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+
+            # 9. Determinar modo de juego
+            is_scratch = competition.play_mode == PlayMode.SCRATCH
+            allowance = round_entity.get_effective_allowance()
+            calculator = PlayingHandicapCalculator()
+
+            # 10. Construir map de tee ratings
+            tee_ratings = {}
+            if golf_course and not is_scratch:
+                for tee in golf_course.tees:
+                    total_par = sum(h.par for h in golf_course.holes)
+                    tee_ratings[tee.category.value] = TeeRating(
+                        course_rating=Decimal(str(tee.course_rating)),
+                        slope_rating=tee.slope_rating,
+                        par=total_par,
+                    )
+
+            # 11. Eliminar partidos existentes (re-generación)
+            existing_matches = await self._uow.matches.find_by_round(round_id)
+            for m in existing_matches:
+                await self._uow.matches.delete(m.id)
+
+            # 12. Generar partidos
+            players_per_team = round_entity.players_per_team_in_match()
+            team_a_ids = list(team_assignment.team_a_player_ids)
+            team_b_ids = list(team_assignment.team_b_player_ids)
+
+            if request.manual_pairings:
+                matches_created = await self._generate_manual(
+                    request, round_entity, enrollment_map, tee_ratings,
+                    calculator, allowance, is_scratch,
+                )
+            else:
+                matches_created = await self._generate_auto(
+                    round_entity, team_a_ids, team_b_ids,
+                    enrollment_map, tee_ratings, calculator,
+                    allowance, is_scratch, players_per_team,
+                )
+
+            # 13. Transicionar ronda
+            round_entity.mark_matches_generated()
+            await self._uow.rounds.update(round_entity)
+
+        return GenerateMatchesResponseDTO(
+            round_id=round_entity.id.value,
+            matches_generated=matches_created,
+            round_status=round_entity.status.value,
+        )
+
+    async def _generate_auto(
+        self, round_entity, team_a_ids, team_b_ids,
+        enrollment_map, tee_ratings, calculator, allowance, is_scratch,
+        players_per_team,
+    ):
+        """Genera partidos automáticamente emparejando por ranking."""
+        # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
+        num_matches = min(len(team_a_ids), len(team_b_ids)) // players_per_team
+        if num_matches == 0:
+            raise InsufficientPlayersError(
+                f"No hay suficientes jugadores para formato "
+                f"{round_entity.match_format.value} ({players_per_team} por equipo)"
+            )
+
+        matches_created = 0
+        for i in range(num_matches):
+            start = i * players_per_team
+            end = start + players_per_team
+
+            a_players_ids = team_a_ids[start:end]
+            b_players_ids = team_b_ids[start:end]
+
+            team_a_match_players = [
+                self._build_match_player(
+                    uid, enrollment_map, tee_ratings, calculator, allowance, is_scratch
+                )
+                for uid in a_players_ids
+            ]
+            team_b_match_players = [
+                self._build_match_player(
+                    uid, enrollment_map, tee_ratings, calculator, allowance, is_scratch
+                )
+                for uid in b_players_ids
+            ]
+
+            match = Match.create(
+                round_id=round_entity.id,
+                match_number=i + 1,
+                team_a_players=team_a_match_players,
+                team_b_players=team_b_match_players,
+            )
+            await self._uow.matches.add(match)
+            matches_created += 1
+
+        return matches_created
+
+    async def _generate_manual(
+        self, request, round_entity, enrollment_map, tee_ratings,
+        calculator, allowance, is_scratch,
+    ):
+        """Genera partidos según emparejamientos manuales."""
+        matches_created = 0
+        for i, pairing in enumerate(request.manual_pairings):
+            team_a_match_players = [
+                self._build_match_player(
+                    UserId(uid), enrollment_map, tee_ratings, calculator, allowance, is_scratch
+                )
+                for uid in pairing.team_a_player_ids
+            ]
+            team_b_match_players = [
+                self._build_match_player(
+                    UserId(uid), enrollment_map, tee_ratings, calculator, allowance, is_scratch
+                )
+                for uid in pairing.team_b_player_ids
+            ]
+
+            match = Match.create(
+                round_id=round_entity.id,
+                match_number=i + 1,
+                team_a_players=team_a_match_players,
+                team_b_players=team_b_match_players,
+            )
+            await self._uow.matches.add(match)
+            matches_created += 1
+
+        return matches_created
+
+    def _build_match_player(
+        self, user_id, enrollment_map, tee_ratings, calculator, allowance, is_scratch,
+    ) -> MatchPlayer:
+        """Construye un MatchPlayer con handicap calculado."""
+        enrollment = enrollment_map.get(str(user_id.value))
+        tee_category = enrollment.tee_category if enrollment and enrollment.tee_category else TeeCategory.AMATEUR_MALE
+
+        if is_scratch:
+            return MatchPlayer.create(
+                user_id=user_id,
+                playing_handicap=0,
+                tee_category=tee_category,
+                strokes_received=[],
+            )
+
+        # Obtener handicap index
+        if enrollment and enrollment.custom_handicap is not None:
+            handicap_index = enrollment.custom_handicap
+        else:
+            handicap_index = Decimal("0")
+
+        # Obtener tee rating
+        tee_rating = tee_ratings.get(tee_category.value)
+        if tee_rating:
+            playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
+        else:
+            playing_handicap = 0
+
+        # Calcular strokes_received (hoyos donde recibe golpe, basado en stroke index)
+        strokes_received = tuple(range(1, playing_handicap + 1)) if playing_handicap <= MAX_HOLES else tuple(range(1, MAX_HOLES + 1))
+
+        return MatchPlayer.create(
+            user_id=user_id,
+            playing_handicap=playing_handicap,
+            tee_category=tee_category,
+            strokes_received=list(strokes_received),
+        )
