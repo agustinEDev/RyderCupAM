@@ -33,7 +33,7 @@ class TestCreateRoundRequestDTO:
             round_date=date(2026, 6, 15),
             session_type="MORNING",
             match_format="SINGLES",
-            handicap_mode="STROKE_PLAY",
+            handicap_mode="MATCH_PLAY",
             allowance_percentage=95,
         )
 
@@ -42,7 +42,7 @@ class TestCreateRoundRequestDTO:
         assert dto.round_date == date(2026, 6, 15)
         assert dto.session_type == "MORNING"
         assert dto.match_format == "SINGLES"
-        assert dto.handicap_mode == "STROKE_PLAY"
+        assert dto.handicap_mode == "MATCH_PLAY"
         assert dto.allowance_percentage == 95
 
     def test_create_round_uppercase_session_type(self):

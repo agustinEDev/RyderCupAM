@@ -342,19 +342,6 @@ class TestRoundHandicapConfiguration:
         assert round.handicap_mode == HandicapMode.MATCH_PLAY
         assert round.allowance_percentage is None
 
-    def test_singles_with_stroke_play_mode(self):
-        """SINGLES puede especificar STROKE_PLAY."""
-        round = Round.create(
-            competition_id=CompetitionId.generate(),
-            golf_course_id=GolfCourseId.generate(),
-            round_date=date(2026, 3, 15),
-            session_type=SessionType.MORNING,
-            match_format=MatchFormat.SINGLES,
-            handicap_mode=HandicapMode.STROKE_PLAY,
-        )
-
-        assert round.handicap_mode == HandicapMode.STROKE_PLAY
-
     def test_fourball_ignores_handicap_mode(self):
         """FOURBALL ignora handicap_mode (es siempre None)."""
         round = Round.create(
@@ -363,7 +350,7 @@ class TestRoundHandicapConfiguration:
             round_date=date(2026, 3, 15),
             session_type=SessionType.MORNING,
             match_format=MatchFormat.FOURBALL,
-            handicap_mode=HandicapMode.STROKE_PLAY,  # Debería ignorarse
+            handicap_mode=HandicapMode.MATCH_PLAY,  # Debería ignorarse
         )
 
         assert round.handicap_mode is None
@@ -447,19 +434,6 @@ class TestRoundEffectiveAllowance:
 
         assert round.get_effective_allowance() == 100
 
-    def test_singles_stroke_play_default_95(self):
-        """SINGLES STROKE_PLAY usa 95% por defecto."""
-        round = Round.create(
-            competition_id=CompetitionId.generate(),
-            golf_course_id=GolfCourseId.generate(),
-            round_date=date(2026, 3, 15),
-            session_type=SessionType.MORNING,
-            match_format=MatchFormat.SINGLES,
-            handicap_mode=HandicapMode.STROKE_PLAY,
-        )
-
-        assert round.get_effective_allowance() == 95
-
     def test_fourball_default_90(self):
         """FOURBALL usa 90% por defecto."""
         round = Round.create(
@@ -512,9 +486,9 @@ class TestRoundUpdateHandicapSettings:
             handicap_mode=HandicapMode.MATCH_PLAY,
         )
 
-        round.update_details(handicap_mode=HandicapMode.STROKE_PLAY)
+        round.update_details(handicap_mode=HandicapMode.MATCH_PLAY)
 
-        assert round.handicap_mode == HandicapMode.STROKE_PLAY
+        assert round.handicap_mode == HandicapMode.MATCH_PLAY
 
     def test_update_allowance_percentage(self):
         """Puede actualizar allowance_percentage."""
@@ -554,7 +528,7 @@ class TestRoundUpdateHandicapSettings:
             round_date=date(2026, 3, 15),
             session_type=SessionType.MORNING,
             match_format=MatchFormat.SINGLES,
-            handicap_mode=HandicapMode.STROKE_PLAY,
+            handicap_mode=HandicapMode.MATCH_PLAY,
         )
 
         round.update_details(match_format=MatchFormat.FOURBALL)

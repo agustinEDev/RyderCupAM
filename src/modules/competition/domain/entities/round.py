@@ -17,23 +17,10 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 # Porcentajes de allowance permitidos (50-100 en incrementos de 5)
 ALLOWED_PERCENTAGES = frozenset(range(50, 101, 5))  # {50, 55, 60, ..., 95, 100}
 
-# Allowances por defecto según WHS
-DEFAULT_ALLOWANCES: dict[MatchFormat, dict[HandicapMode, int] | int] = {
-    MatchFormat.SINGLES: {
-        HandicapMode.STROKE_PLAY: 95,
-        HandicapMode.MATCH_PLAY: 100,
-    },
-    MatchFormat.FOURBALL: 90,
-    MatchFormat.FOURSOMES: 50,  # Se aplica a la DIFERENCIA entre equipos
-}
-
-# Constantes tipadas para acceso directo sin casts
-SINGLES_ALLOWANCES: dict[HandicapMode, int] = {
-    HandicapMode.STROKE_PLAY: 95,
-    HandicapMode.MATCH_PLAY: 100,
-}
+# Allowances por defecto según WHS (Ryder Cup = Match Play)
+SINGLES_ALLOWANCE: int = 100  # Match Play
 FOURBALL_ALLOWANCE: int = 90
-FOURSOMES_ALLOWANCE: int = 50
+FOURSOMES_ALLOWANCE: int = 50  # Se aplica a la DIFERENCIA entre equipos
 
 
 class Round:
@@ -100,10 +87,10 @@ class Round:
             round_date: Fecha de la sesión
             session_type: Tipo de sesión (MORNING/AFTERNOON/EVENING)
             match_format: Formato de partido (SINGLES/FOURBALL/FOURSOMES)
-            handicap_mode: Modo de handicap para SINGLES (STROKE_PLAY/MATCH_PLAY).
+            handicap_mode: Modo de handicap para SINGLES (MATCH_PLAY).
                            Ignorado para FOURBALL/FOURSOMES.
             allowance_percentage: Porcentaje de allowance personalizado (1-100).
-                                   Si None, usa DEFAULT_ALLOWANCES según formato.
+                                   Si None, usa defaults WHS según formato.
 
         Returns:
             Nueva instancia de Round con status PENDING_TEAMS
@@ -310,8 +297,7 @@ class Round:
 
         Si se configuró un allowance_percentage personalizado, lo retorna.
         Si no, retorna el valor por defecto según WHS:
-        - SINGLES STROKE_PLAY: 95%
-        - SINGLES MATCH_PLAY: 100%
+        - SINGLES: 100% (Match Play)
         - FOURBALL: 90%
         - FOURSOMES: 50% (aplicado a la DIFERENCIA entre equipos)
 
@@ -321,11 +307,8 @@ class Round:
         if self._allowance_percentage is not None:
             return self._allowance_percentage
 
-        # Obtener default según formato
         if self._match_format == MatchFormat.SINGLES:
-            # Para SINGLES, depende del handicap_mode
-            mode = self._handicap_mode or HandicapMode.MATCH_PLAY
-            return SINGLES_ALLOWANCES[mode]
+            return SINGLES_ALLOWANCE
 
         if self._match_format == MatchFormat.FOURBALL:
             return FOURBALL_ALLOWANCE
@@ -372,7 +355,7 @@ class Round:
 
     @property
     def handicap_mode(self) -> HandicapMode | None:
-        """Modo de handicap (solo para SINGLES: STROKE_PLAY/MATCH_PLAY)."""
+        """Modo de handicap (solo para SINGLES: MATCH_PLAY)."""
         return self._handicap_mode
 
     @property

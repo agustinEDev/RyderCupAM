@@ -188,24 +188,6 @@ class TestPlayingHandicapCalculatorSingles:
         assert player_ph == 16
         assert opponent_ph == 11
 
-    def test_singles_stroke_play_uses_95_percent(self):
-        """SINGLES STROKE_PLAY usa 95% allowance por defecto."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        player_ph, opponent_ph = calculator.calculate_for_singles(
-            player_hi=Decimal("20.0"),
-            player_tee=tee,
-            opponent_hi=Decimal("10.0"),
-            opponent_tee=tee,
-            handicap_mode=HandicapMode.STROKE_PLAY,
-        )
-
-        # HI=20 × 95% = 19
-        # HI=10 × 95% = 9.5 → 10
-        assert player_ph == 19
-        assert opponent_ph == 10
-
     def test_singles_custom_allowance_overrides_default(self):
         """Custom allowance reemplaza el default del modo."""
         calculator = PlayingHandicapCalculator()

@@ -55,7 +55,7 @@ class RoundResponseDTO(BaseModel):
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
     match_format: str = Field(..., description="Formato de partido (SINGLES/FOURBALL/FOURSOMES).")
     status: str = Field(..., description="Estado de la ronda.")
-    handicap_mode: str | None = Field(None, description="Modo de handicap (STROKE_PLAY/MATCH_PLAY).")
+    handicap_mode: str | None = Field(None, description="Modo de handicap (MATCH_PLAY).")
     allowance_percentage: int | None = Field(
         None, description="Porcentaje de allowance personalizado."
     )
@@ -111,7 +111,7 @@ class CreateRoundRequestDTO(BaseModel):
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
     match_format: str = Field(..., description="Formato (SINGLES/FOURBALL/FOURSOMES).")
     handicap_mode: str | None = Field(
-        None, description="Modo de handicap para SINGLES (STROKE_PLAY/MATCH_PLAY)."
+        None, description="Modo de handicap para SINGLES (MATCH_PLAY)."
     )
     allowance_percentage: int | None = Field(
         None, ge=50, le=100, description="Porcentaje de allowance personalizado (50-100)."

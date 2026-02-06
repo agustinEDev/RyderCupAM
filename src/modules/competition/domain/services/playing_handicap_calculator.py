@@ -136,7 +136,7 @@ class PlayingHandicapCalculator:
             player_tee: TeeRating del jugador
             opponent_hi: Handicap Index del oponente
             opponent_tee: TeeRating del oponente
-            handicap_mode: STROKE_PLAY (95%) o MATCH_PLAY (100%)
+            handicap_mode: MATCH_PLAY (100%)
             custom_allowance: Allowance personalizado (opcional)
 
         Returns:
