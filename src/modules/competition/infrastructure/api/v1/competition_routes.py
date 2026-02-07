@@ -1592,6 +1592,7 @@ async def list_competition_golf_courses(
                             tees=[
                                 TeeResponseDTO(
                                     category=tee.category.value,
+                                    gender=tee.gender.value if tee.gender else None,
                                     identifier=tee.identifier,
                                     course_rating=float(tee.course_rating),
                                     slope_rating=int(tee.slope_rating),

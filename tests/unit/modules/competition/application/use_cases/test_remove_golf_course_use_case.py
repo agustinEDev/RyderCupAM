@@ -47,6 +47,7 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 
 @pytest.mark.asyncio
@@ -101,13 +102,15 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         """Fixture que crea un campo de golf APPROVED en España."""
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Amarillo",
                 course_rating=72.5,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Blanco",
                 course_rating=70.0,
                 slope_rating=120,
@@ -289,13 +292,15 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         # Arrange: Crear 3 campos
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Amarillo",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Blanco",
                 course_rating=70.0,
                 slope_rating=120,

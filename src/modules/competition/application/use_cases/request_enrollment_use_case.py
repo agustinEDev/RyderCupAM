@@ -20,6 +20,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -120,10 +121,12 @@ class RequestEnrollmentUseCase:
             # MaxEnrollmentsExceededViolation, EnrollmentPastStartDateViolation propagate as-is
 
             # 4. Crear enrollment con factory method
+            tee_category = TeeCategory(request.tee_category) if request.tee_category else None
             enrollment = Enrollment.request(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
                 user_id=user_id,
+                tee_category=tee_category,
             )
 
             # 5. Persistir

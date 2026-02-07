@@ -34,6 +34,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -93,14 +94,16 @@ class TestDeclareWalkoverUseCase:
         player_a = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         return player_a, player_b
 

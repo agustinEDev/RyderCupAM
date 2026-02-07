@@ -25,6 +25,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import I
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class MatchNotFoundError(Exception):
@@ -99,17 +100,19 @@ class ReassignMatchPlayersUseCase:
             allowance = round_entity.get_effective_allowance()
             calculator = PlayingHandicapCalculator()
 
-            # Obtener tee ratings, holes y user handicaps
-            tee_ratings: dict = {}
+            # Obtener tee ratings, holes, user handicaps and genders
+            tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
             holes_by_stroke_index: list[int] = []
             user_handicap_map: dict[str, Decimal] = {}
+            user_gender_map: dict[str, Gender | None] = {}
 
             if not is_scratch:
                 golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
                 if golf_course:
                     total_par = sum(h.par for h in golf_course.holes)
                     for tee in golf_course.tees:
-                        tee_ratings[tee.category.value] = TeeRating(
+                        gender_key = tee.gender.value if tee.gender else None
+                        tee_ratings[(tee.category.value, gender_key)] = TeeRating(
                             course_rating=Decimal(str(tee.course_rating)),
                             slope_rating=tee.slope_rating,
                             par=total_par,
@@ -118,7 +121,7 @@ class ReassignMatchPlayersUseCase:
                         h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
                     ]
 
-                # Fetch user handicaps for fallback chain
+                # Fetch user handicaps and genders for fallback chain
                 all_player_ids = [
                     UserId(uid) for uid in
                     list(request.team_a_player_ids) + list(request.team_b_player_ids)
@@ -127,8 +130,10 @@ class ReassignMatchPlayersUseCase:
                     *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
                 )
                 for pid, user in zip(all_player_ids, users, strict=True):
-                    if user and user.handicap is not None:
-                        user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                    if user:
+                        if user.handicap is not None:
+                            user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                        user_gender_map[str(pid.value)] = user.gender
 
             # 7. Construir nuevos MatchPlayers
             def build_player(uid_value):
@@ -141,13 +146,22 @@ class ReassignMatchPlayersUseCase:
                 tee_category = (
                     enrollment.tee_category
                     if enrollment.tee_category
-                    else TeeCategory.AMATEUR_MALE
+                    else TeeCategory.AMATEUR
                 )
+                user_gender = user_gender_map.get(str(uid_value))
+
+                # Auto-resolve tee: (category, user_gender) → (category, None)
+                tee_gender = user_gender
+                tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
+                if tee_key not in tee_ratings:
+                    tee_key = (tee_category.value, None)
+                    tee_gender = None
 
                 if is_scratch:
                     return MatchPlayer.create(
                         user_id=uid, playing_handicap=0,
                         tee_category=tee_category, strokes_received=[],
+                        tee_gender=tee_gender,
                     )
 
                 # Handicap fallback: custom_handicap > user.handicap > 0
@@ -158,7 +172,7 @@ class ReassignMatchPlayersUseCase:
                 else:
                     handicap_index = Decimal("0")
 
-                tee_rating = tee_ratings.get(tee_category.value)
+                tee_rating = tee_ratings.get(tee_key)
                 playing_handicap = (
                     calculator.calculate(handicap_index, tee_rating, allowance)
                     if tee_rating else 0
@@ -169,6 +183,7 @@ class ReassignMatchPlayersUseCase:
                 return MatchPlayer.create(
                     user_id=uid, playing_handicap=playing_handicap,
                     tee_category=tee_category, strokes_received=strokes_received,
+                    tee_gender=tee_gender,
                 )
 
             team_a_players = [build_player(uid) for uid in request.team_a_player_ids]

@@ -35,14 +35,16 @@ class TestRequestGolfCourse:
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Blanco",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
                     "par": 72,
@@ -77,7 +79,8 @@ class TestRequestGolfCourse:
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
@@ -103,14 +106,16 @@ class TestRequestGolfCourse:
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Blanco",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
                     "par": 72,
@@ -141,14 +146,16 @@ class TestRequestGolfCourse:
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Blanco",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
                     "par": 72,
@@ -605,14 +612,16 @@ class TestCreateDirectGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanco",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 130,
                     "par": 72,
@@ -648,14 +657,16 @@ class TestCreateDirectGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanco",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 130,
                     "par": 72,
@@ -714,14 +725,16 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanc",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 74.0,
                     "slope_rating": 138,
                     "par": 72,
                 },
                 {
                     "identifier": "Jaune",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 133,
                     "par": 72,
@@ -786,14 +799,16 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Bianco",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 73.5,
                     "slope_rating": 136,
                     "par": 72,
                 },
                 {
                     "identifier": "Giallo",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 71.5,
                     "slope_rating": 131,
                     "par": 72,
@@ -839,14 +854,16 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Branco",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.8,
                     "slope_rating": 134,
                     "par": 72,
                 },
                 {
                     "identifier": "Amarelo",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.8,
                     "slope_rating": 129,
                     "par": 72,
@@ -888,14 +905,16 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
                     "par": 72,
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,
                     "par": 72,
@@ -956,14 +975,16 @@ class TestApproveUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Weiß",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 74.5,
                     "slope_rating": 140,
                     "par": 72,
                 },
                 {
                     "identifier": "Gelb",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
@@ -1033,14 +1054,16 @@ class TestApproveUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
                     "par": 72,
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,
                     "par": 72,
@@ -1112,14 +1135,16 @@ class TestRejectUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Wit",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 133,
                     "par": 72,
                 },
                 {
                     "identifier": "Geel",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 128,
                     "par": 72,
@@ -1190,14 +1215,16 @@ class TestRejectUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
                     "par": 72,
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,
                     "par": 72,

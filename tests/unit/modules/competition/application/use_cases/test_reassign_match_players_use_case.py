@@ -49,6 +49,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -138,7 +139,7 @@ class TestReassignMatchPlayersUseCase:
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
                 user_id=player_id,
-                tee_category=TeeCategory.AMATEUR_MALE,
+                tee_category=TeeCategory.AMATEUR,
             )
             async with uow:
                 await uow.enrollments.add(enrollment)
@@ -190,14 +191,16 @@ class TestReassignMatchPlayersUseCase:
         original_player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         original_player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match = Match.create(
             round_id=round_entity.id,
@@ -265,14 +268,16 @@ class TestReassignMatchPlayersUseCase:
         player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match = Match.create(
             round_id=round_entity.id,
@@ -335,14 +340,16 @@ class TestReassignMatchPlayersUseCase:
         player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match = Match.create(
             round_id=round_entity.id,
@@ -406,14 +413,16 @@ class TestReassignMatchPlayersUseCase:
         original_player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         original_player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match = Match.create(
             round_id=round_entity.id,

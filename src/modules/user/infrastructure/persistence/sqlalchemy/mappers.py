@@ -109,6 +109,8 @@ users_table = Table(
     Column("locked_until", DateTime, nullable=True),
     # RBAC field (v2.0.0)
     Column("is_admin", Boolean, nullable=False, default=False),
+    # Gender field (tee system refactor)
+    Column("gender", String(10), nullable=True),
 )
 
 

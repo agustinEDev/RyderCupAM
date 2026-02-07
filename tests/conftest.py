@@ -770,14 +770,16 @@ def sample_golf_course_data() -> dict:
         "tees": [
             {
                 "identifier": "Amarillo",
-                "tee_category": "CHAMPIONSHIP_MALE",
+                "tee_category": "CHAMPIONSHIP",
+                "tee_gender": "MALE",
                 "course_rating": 72.5,
                 "slope_rating": 135,
                 "par": 72,
             },
             {
                 "identifier": "Blanco",
-                "tee_category": "AMATEUR_MALE",
+                "tee_category": "AMATEUR",
+                "tee_gender": "MALE",
                 "course_rating": 70.8,
                 "slope_rating": 130,
                 "par": 72,
@@ -830,14 +832,16 @@ async def create_golf_course(
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Blanco",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
                     "par": 72,

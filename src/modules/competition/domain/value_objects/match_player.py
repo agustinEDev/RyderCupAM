@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 MAX_HOLES = 18
 
@@ -21,6 +22,7 @@ class MatchPlayer:
     - Su ID de usuario
     - El handicap de juego calculado (Playing Handicap)
     - La categoría de tee que usa
+    - El género del tee seleccionado
     - Los hoyos donde recibe golpes
 
     Características:
@@ -32,14 +34,16 @@ class MatchPlayer:
         >>> player = MatchPlayer(
         ...     user_id=UserId.generate(),
         ...     playing_handicap=12,
-        ...     tee_category=TeeCategory.AMATEUR_MALE,
-        ...     strokes_received=[1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6]
+        ...     tee_category=TeeCategory.AMATEUR,
+        ...     tee_gender=Gender.MALE,
+        ...     strokes_received=(1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6)
         ... )
     """
 
     user_id: UserId
     playing_handicap: int
     tee_category: TeeCategory
+    tee_gender: Gender | None  # Gender del tee usado (MALE/FEMALE/None)
     strokes_received: tuple[int, ...]  # Hoyos donde recibe golpe (inmutable)
 
     def __post_init__(self):
@@ -63,6 +67,7 @@ class MatchPlayer:
         playing_handicap: int,
         tee_category: TeeCategory,
         strokes_received: list[int] | tuple[int, ...],
+        tee_gender: Gender | None = None,
     ) -> "MatchPlayer":
         """
         Factory method para crear un MatchPlayer.
@@ -72,6 +77,7 @@ class MatchPlayer:
             playing_handicap: Handicap de juego calculado
             tee_category: Categoría de tee que usa
             strokes_received: Lista de hoyos donde recibe golpe
+            tee_gender: Género del tee (MALE/FEMALE/None)
 
         Returns:
             Nueva instancia de MatchPlayer
@@ -80,6 +86,7 @@ class MatchPlayer:
             user_id=user_id,
             playing_handicap=playing_handicap,
             tee_category=tee_category,
+            tee_gender=tee_gender,
             strokes_received=tuple(strokes_received),
         )
 

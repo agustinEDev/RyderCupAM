@@ -16,6 +16,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 
 class RequestGolfCourseUseCase:
@@ -75,6 +76,7 @@ class RequestGolfCourseUseCase:
             tees = [
                 Tee(
                     category=TeeCategory(tee_dto.tee_category),
+                    gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
                     identifier=tee_dto.identifier,
                     course_rating=tee_dto.course_rating,
                     slope_rating=tee_dto.slope_rating,

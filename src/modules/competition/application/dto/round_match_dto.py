@@ -18,6 +18,7 @@ class MatchPlayerResponseDTO(BaseModel):
     user_id: UUID = Field(..., description="ID del jugador.")
     playing_handicap: int = Field(..., description="Handicap de juego calculado.")
     tee_category: str = Field(..., description="Categoría de tee usada.")
+    tee_gender: str | None = Field(None, description="Género del tee usado (MALE/FEMALE/null).")
     strokes_received: list[int] = Field(
         default_factory=list, description="Hoyos donde recibe golpe."
     )

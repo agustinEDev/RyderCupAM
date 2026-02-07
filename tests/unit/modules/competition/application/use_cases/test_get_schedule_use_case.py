@@ -31,6 +31,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -100,14 +101,16 @@ class TestGetScheduleUseCase:
         player_a = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match_1 = Match.create(
             round_id=round_1.id,
@@ -122,26 +125,30 @@ class TestGetScheduleUseCase:
         player_c = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=5,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_d = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=3,
-            tee_category=TeeCategory.AMATEUR_FEMALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.FEMALE,
         )
         player_e = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=4,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_f = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=2,
-            tee_category=TeeCategory.AMATEUR_FEMALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.FEMALE,
         )
         match_2 = Match.create(
             round_id=round_2.id,
@@ -250,14 +257,16 @@ class TestGetScheduleUseCase:
         player_a = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         match_day1 = Match.create(
             round_id=round_day1.id,
@@ -269,26 +278,30 @@ class TestGetScheduleUseCase:
         player_c = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_d = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=8,
-            tee_category=TeeCategory.AMATEUR_FEMALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.FEMALE,
         )
         player_e = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=6,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.MALE,
         )
         player_f = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=4,
-            tee_category=TeeCategory.AMATEUR_FEMALE,
+            tee_category=TeeCategory.AMATEUR,
             strokes_received=[],
+            tee_gender=Gender.FEMALE,
         )
         match_day2 = Match.create(
             round_id=round_day2.id,

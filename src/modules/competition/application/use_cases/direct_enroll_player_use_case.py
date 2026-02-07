@@ -18,6 +18,7 @@ from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -120,11 +121,13 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 5. Crear enrollment con factory method (directamente APPROVED)
+            tee_category = TeeCategory(request.tee_category) if request.tee_category else None
             enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
                 user_id=player_id,
                 custom_handicap=request.custom_handicap,
+                tee_category=tee_category,
             )
 
             # 6. Persistir

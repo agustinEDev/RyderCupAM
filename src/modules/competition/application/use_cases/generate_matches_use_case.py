@@ -30,6 +30,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import I
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -139,8 +140,8 @@ class GenerateMatchesUseCase:
             allowance = round_entity.get_effective_allowance()
             calculator = PlayingHandicapCalculator()
 
-            # 10. Construir datos de handicap (tee ratings, holes, user handicaps)
-            tee_ratings, holes_by_stroke_index, user_handicap_map = (
+            # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
+            tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map = (
                 await self._build_handicap_data(
                     golf_course, is_scratch, team_assignment,
                 )
@@ -163,14 +164,14 @@ class GenerateMatchesUseCase:
                 matches_created = await self._generate_manual(
                     request, round_entity, enrollment_map, tee_ratings,
                     calculator, allowance, is_scratch,
-                    user_handicap_map, holes_by_stroke_index,
+                    user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
             else:
                 matches_created = await self._generate_auto(
                     round_entity, team_a_ids, team_b_ids,
                     enrollment_map, tee_ratings, calculator,
                     allowance, is_scratch, players_per_team,
-                    user_handicap_map, holes_by_stroke_index,
+                    user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
 
             # 13. Transicionar ronda
@@ -184,10 +185,11 @@ class GenerateMatchesUseCase:
         )
 
     async def _build_handicap_data(self, golf_course, is_scratch, team_assignment):
-        """Pre-fetch tee ratings, hole stroke order, and user handicaps."""
-        tee_ratings: dict = {}
+        """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
+        tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
         user_handicap_map: dict[str, Decimal] = {}
+        user_gender_map: dict[str, Gender | None] = {}
 
         if not is_scratch and not golf_course:
             raise ValueError(
@@ -198,7 +200,8 @@ class GenerateMatchesUseCase:
         if golf_course and not is_scratch:
             for tee in golf_course.tees:
                 total_par = sum(h.par for h in golf_course.holes)
-                tee_ratings[tee.category.value] = TeeRating(
+                gender_key = tee.gender.value if tee.gender else None
+                tee_ratings[(tee.category.value, gender_key)] = TeeRating(
                     course_rating=Decimal(str(tee.course_rating)),
                     slope_rating=tee.slope_rating,
                     par=total_par,
@@ -216,15 +219,17 @@ class GenerateMatchesUseCase:
                 *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
             )
             for pid, user in zip(all_player_ids, users, strict=True):
-                if user and user.handicap is not None:
-                    user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                if user:
+                    if user.handicap is not None:
+                        user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                    user_gender_map[str(pid.value)] = user.gender
 
-        return tee_ratings, holes_by_stroke_index, user_handicap_map
+        return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
 
     async def _generate_auto(
         self, round_entity, team_a_ids, team_b_ids,
         enrollment_map, tee_ratings, calculator, allowance, is_scratch,
-        players_per_team, user_handicap_map, holes_by_stroke_index,
+        players_per_team, user_handicap_map, holes_by_stroke_index, user_gender_map,
     ):
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
@@ -246,14 +251,14 @@ class GenerateMatchesUseCase:
             team_a_match_players = [
                 self._build_match_player(
                     uid, enrollment_map, tee_ratings, calculator, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
                 for uid in a_players_ids
             ]
             team_b_match_players = [
                 self._build_match_player(
                     uid, enrollment_map, tee_ratings, calculator, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
                 for uid in b_players_ids
             ]
@@ -272,7 +277,7 @@ class GenerateMatchesUseCase:
     async def _generate_manual(
         self, request, round_entity, enrollment_map, tee_ratings,
         calculator, allowance, is_scratch,
-        user_handicap_map, holes_by_stroke_index,
+        user_handicap_map, holes_by_stroke_index, user_gender_map,
     ):
         """Genera partidos según emparejamientos manuales."""
         # Validar que todos los jugadores estén inscritos (APPROVED)
@@ -288,14 +293,14 @@ class GenerateMatchesUseCase:
             team_a_match_players = [
                 self._build_match_player(
                     UserId(uid), enrollment_map, tee_ratings, calculator, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
                 for uid in pairing.team_a_player_ids
             ]
             team_b_match_players = [
                 self._build_match_player(
                     UserId(uid), enrollment_map, tee_ratings, calculator, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
                 for uid in pairing.team_b_player_ids
             ]
@@ -313,11 +318,23 @@ class GenerateMatchesUseCase:
 
     def _build_match_player(
         self, user_id, enrollment_map, tee_ratings, calculator, allowance,
-        is_scratch, user_handicap_map, holes_by_stroke_index,
+        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
     ) -> MatchPlayer:
-        """Construye un MatchPlayer con handicap calculado."""
+        """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         enrollment = enrollment_map.get(str(user_id.value))
-        tee_category = enrollment.tee_category if enrollment and enrollment.tee_category else TeeCategory.AMATEUR_MALE
+        tee_category = (
+            enrollment.tee_category if enrollment and enrollment.tee_category
+            else TeeCategory.AMATEUR
+        )
+        user_gender = user_gender_map.get(str(user_id.value))
+
+        # Auto-resolve tee: (category, user_gender) → (category, None) fallback
+        tee_gender = user_gender
+        tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
+        if tee_key not in tee_ratings:
+            # Fallback: try gender-neutral version
+            tee_key = (tee_category.value, None)
+            tee_gender = None
 
         if is_scratch:
             return MatchPlayer.create(
@@ -325,6 +342,7 @@ class GenerateMatchesUseCase:
                 playing_handicap=0,
                 tee_category=tee_category,
                 strokes_received=[],
+                tee_gender=tee_gender,
             )
 
         # Handicap fallback: custom_handicap > user.handicap > 0
@@ -336,11 +354,11 @@ class GenerateMatchesUseCase:
             handicap_index = Decimal("0")
 
         # Obtener tee rating - raise if missing
-        tee_rating = tee_ratings.get(tee_category.value)
+        tee_rating = tee_ratings.get(tee_key)
         if not tee_rating:
             raise TeeCategoryNotFoundError(
                 f"No se encontró tee rating para categoría '{tee_category.value}' "
-                f"en el campo de golf"
+                f"(gender: {tee_gender}) en el campo de golf"
             )
 
         playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
@@ -355,6 +373,7 @@ class GenerateMatchesUseCase:
             playing_handicap=playing_handicap,
             tee_category=tee_category,
             strokes_received=strokes_received,
+            tee_gender=tee_gender,
         )
 
     @staticmethod

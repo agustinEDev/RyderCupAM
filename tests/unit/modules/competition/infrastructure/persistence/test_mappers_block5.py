@@ -27,6 +27,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 )
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 # ==================== ID TypeDecorators ====================
 
@@ -198,13 +199,15 @@ class TestMatchPlayersJsonType:
         self.player_1 = MatchPlayer(
             user_id=self.user_id_1,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
             strokes_received=(1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6),
         )
         self.player_2 = MatchPlayer(
             user_id=self.user_id_2,
             playing_handicap=8,
-            tee_category=TeeCategory.CHAMPIONSHIP_FEMALE,
+            tee_category=TeeCategory.CHAMPIONSHIP,
+            tee_gender=Gender.FEMALE,
             strokes_received=(1, 3, 5, 7, 9, 11, 13, 15),
         )
 
@@ -217,7 +220,8 @@ class TestMatchPlayersJsonType:
         assert len(result) == 2
         assert result[0]["user_id"] == str(self.user_id_1.value)
         assert result[0]["playing_handicap"] == 12
-        assert result[0]["tee_category"] == "AMATEUR_MALE"
+        assert result[0]["tee_category"] == "AMATEUR"
+        assert result[0]["tee_gender"] == "MALE"
         assert result[0]["strokes_received"] == [1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6]
 
     def test_deserialize_match_players(self):
@@ -226,7 +230,8 @@ class TestMatchPlayersJsonType:
             {
                 "user_id": str(self.user_id_1.value),
                 "playing_handicap": 12,
-                "tee_category": "AMATEUR_MALE",
+                "tee_category": "AMATEUR",
+                "tee_gender": "MALE",
                 "strokes_received": [1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6],
             },
         ]
@@ -238,7 +243,8 @@ class TestMatchPlayersJsonType:
         assert isinstance(player, MatchPlayer)
         assert player.user_id == self.user_id_1
         assert player.playing_handicap == 12
-        assert player.tee_category == TeeCategory.AMATEUR_MALE
+        assert player.tee_category == TeeCategory.AMATEUR
+        assert player.tee_gender == Gender.MALE
         assert player.strokes_received == (1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6)
 
     def test_roundtrip(self):

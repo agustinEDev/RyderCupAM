@@ -11,6 +11,7 @@ from src.modules.competition.domain.value_objects.match_status import MatchStatu
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 def create_match_player(handicap: int = 10) -> MatchPlayer:
@@ -18,7 +19,8 @@ def create_match_player(handicap: int = 10) -> MatchPlayer:
     return MatchPlayer.create(
         user_id=UserId.generate(),
         playing_handicap=handicap,
-        tee_category=TeeCategory.AMATEUR_MALE,
+        tee_category=TeeCategory.AMATEUR,
+        tee_gender=Gender.MALE,
         strokes_received=list(range(1, handicap + 1)) if handicap > 0 else [],
     )
 

@@ -16,6 +16,7 @@ from src.modules.competition.domain.value_objects.team_assignment_mode import (
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 def create_round(
@@ -43,13 +44,15 @@ def create_match(
     player_a = MatchPlayer(
         user_id=UserId.generate(),
         playing_handicap=12,
-        tee_category=TeeCategory.AMATEUR_MALE,
+        tee_category=TeeCategory.AMATEUR,
+        tee_gender=Gender.MALE,
         strokes_received=(1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6),
     )
     player_b = MatchPlayer(
         user_id=UserId.generate(),
         playing_handicap=8,
-        tee_category=TeeCategory.AMATEUR_MALE,
+        tee_category=TeeCategory.AMATEUR,
+        tee_gender=Gender.MALE,
         strokes_received=(1, 3, 5, 7, 9, 11, 13, 15),
     )
     return Match.create(

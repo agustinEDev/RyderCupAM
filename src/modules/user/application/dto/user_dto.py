@@ -64,6 +64,11 @@ class RegisterUserRequestDTO(BaseModel):
         le=54.0,
         description="Hándicap manual (opcional). Solo se usa si no se encuentra en RFEG.",
     )
+    gender: str | None = Field(
+        None,
+        pattern="^(MALE|FEMALE)$",
+        description="Género del usuario (MALE/FEMALE). Opcional. Usado para resolución automática de tees.",
+    )
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -154,11 +159,15 @@ class UserResponseDTO(BaseModel):
         default=False,
         description="Indica si el usuario tiene privilegios de administrador del sistema (RBAC).",
     )
+    gender: str | None = Field(
+        None,
+        description="Género del usuario (MALE/FEMALE). Usado para resolución automática de tees.",
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("id", "email", "country_code", "handicap", mode="before")
+    @field_validator("id", "email", "country_code", "handicap", "gender", mode="before")
     @classmethod
     def convert_value_objects(cls, v):
         """

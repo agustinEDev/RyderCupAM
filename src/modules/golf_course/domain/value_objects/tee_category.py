@@ -1,7 +1,7 @@
 """
-TeeCategory Value Object - Categoría normalizada de tees.
+TeeCategory Value Object - Categoría normalizada de tees por dificultad.
 
-Permite cálculo consistente de Playing Handicap según WHS.
+El género se gestiona por separado en el campo `gender` de cada Tee.
 """
 
 from enum import StrEnum
@@ -9,26 +9,22 @@ from enum import StrEnum
 
 class TeeCategory(StrEnum):
     """
-    Categorías normalizadas de tees para Playing Handicap (WHS).
+    Categorías normalizadas de tees por nivel de dificultad (WHS).
 
-    - CHAMPIONSHIP_MALE: Tees campeonato masculino (máxima dificultad)
-    - AMATEUR_MALE: Tees amateur masculino (estándar)
-    - SENIOR_MALE: Tees senior masculino
-    - CHAMPIONSHIP_FEMALE: Tees campeonato femenino
-    - AMATEUR_FEMALE: Tees amateur femenino (estándar)
-    - SENIOR_FEMALE: Tees senior femenino
+    - CHAMPIONSHIP: Tees campeonato (máxima dificultad)
+    - AMATEUR: Tees amateur (estándar)
+    - SENIOR: Tees senior
+    - FORWARD: Tees adelantados (menor distancia)
     - JUNIOR: Tees para jugadores junior
 
     Cada tee tiene slope_rating y course_rating para cálculo de PH.
-    Ver ADR-023 para detalles sobre Playing Handicap WHS.
+    El género (MALE/FEMALE/None) se almacena como campo separado en Tee.
     """
 
-    CHAMPIONSHIP_MALE = "CHAMPIONSHIP_MALE"
-    AMATEUR_MALE = "AMATEUR_MALE"
-    SENIOR_MALE = "SENIOR_MALE"
-    CHAMPIONSHIP_FEMALE = "CHAMPIONSHIP_FEMALE"
-    AMATEUR_FEMALE = "AMATEUR_FEMALE"
-    SENIOR_FEMALE = "SENIOR_FEMALE"
+    CHAMPIONSHIP = "CHAMPIONSHIP"
+    AMATEUR = "AMATEUR"
+    SENIOR = "SENIOR"
+    FORWARD = "FORWARD"
     JUNIOR = "JUNIOR"
 
     def __str__(self) -> str:

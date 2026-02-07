@@ -80,6 +80,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
@@ -323,7 +324,8 @@ class MatchPlayersJsonType(TypeDecorator):
     {
         "user_id": "uuid-string",
         "playing_handicap": 12,
-        "tee_category": "AMATEUR_MALE",
+        "tee_category": "AMATEUR",
+        "tee_gender": "MALE",
         "strokes_received": [1, 3, 5, 7]
     }
     """
@@ -339,6 +341,7 @@ class MatchPlayersJsonType(TypeDecorator):
                 "user_id": str(p.user_id.value),
                 "playing_handicap": p.playing_handicap,
                 "tee_category": p.tee_category.value,
+                "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
             }
             for p in value
@@ -353,6 +356,7 @@ class MatchPlayersJsonType(TypeDecorator):
                 user_id=UserId(uuid.UUID(p["user_id"])),
                 playing_handicap=p["playing_handicap"],
                 tee_category=TeeCategory(p["tee_category"]),
+                tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 strokes_received=tuple(p["strokes_received"]),
             )
             players.append(player)

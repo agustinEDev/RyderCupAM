@@ -52,6 +52,7 @@ from src.modules.golf_course.domain.value_objects.tee_category import TeeCategor
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -589,26 +590,27 @@ class TestGenerateMatchesUseCase:
 
     def _build_mock_golf_course(
         self,
-        tee_categories: list[TeeCategory] | None = None,
+        tee_configs: list[tuple[TeeCategory, Gender | None]] | None = None,
     ) -> MagicMock:
         """
         Helper que construye un mock de GolfCourse con tees y 18 holes.
 
         Args:
-            tee_categories: Categorias de tee a incluir.
-                Defaults to [AMATEUR_MALE].
+            tee_configs: List of (category, gender) tuples for tees.
+                Defaults to [(AMATEUR, Gender.MALE)].
 
         Returns:
             Mock de GolfCourse con tees y holes configurados.
         """
-        if tee_categories is None:
-            tee_categories = [TeeCategory.AMATEUR_MALE]
+        if tee_configs is None:
+            tee_configs = [(TeeCategory.AMATEUR, Gender.MALE)]
 
         # Crear tees mock
         tees = []
-        for cat in tee_categories:
+        for cat, gender in tee_configs:
             tee = MagicMock()
             tee.category = cat
+            tee.gender = gender
             tee.course_rating = Decimal("71.2")
             tee.slope_rating = 128
             tees.append(tee)
@@ -629,20 +631,24 @@ class TestGenerateMatchesUseCase:
 
         return golf_course
 
-    def _build_mock_user(self, user_id: UserId, handicap_value: float) -> MagicMock:
+    def _build_mock_user(
+        self, user_id: UserId, handicap_value: float, gender: Gender | None = Gender.MALE
+    ) -> MagicMock:
         """
-        Helper que construye un mock de User con un handicap.
+        Helper que construye un mock de User con un handicap y genero.
 
         Args:
             user_id: ID del usuario.
             handicap_value: Valor del handicap.
+            gender: Genero del usuario (default: MALE).
 
         Returns:
-            Mock de User con handicap configurado.
+            Mock de User con handicap y gender configurados.
         """
         user = MagicMock()
         user.id = user_id
         user.handicap = Handicap(handicap_value)
+        user.gender = gender
         return user
 
     async def _create_teams_and_enrollments_with_tees(
@@ -651,7 +657,7 @@ class TestGenerateMatchesUseCase:
         competition: Competition,
         team_a_size: int = 2,
         team_b_size: int = 2,
-        tee_category: TeeCategory = TeeCategory.AMATEUR_MALE,
+        tee_category: TeeCategory = TeeCategory.AMATEUR,
     ) -> tuple[list[UserId], list[UserId]]:
         """
         Helper que crea equipos y enrollments con tee_category asignado.
@@ -697,7 +703,7 @@ class TestGenerateMatchesUseCase:
         """
         Verifica que en modo HANDICAP se calculan playing_handicap y strokes_received.
 
-        Given: Competicion HANDICAP con campo de golf (AMATEUR_MALE tee) y jugadores con handicap
+        Given: Competicion HANDICAP con campo de golf (AMATEUR tee) y jugadores con handicap
         When: Se generan partidos automaticamente
         Then: Todos los jugadores tienen playing_handicap > 0 y strokes_received no vacio
         """
@@ -707,11 +713,11 @@ class TestGenerateMatchesUseCase:
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
         await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 2, 2, TeeCategory.AMATEUR_MALE
+            uow, competition, 2, 2, TeeCategory.AMATEUR
         )
 
-        # Mock golf course con tee AMATEUR_MALE
-        mock_gc = self._build_mock_golf_course([TeeCategory.AMATEUR_MALE])
+        # Mock golf course con tee AMATEUR + MALE
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # Mock user_repo para devolver usuarios con handicap
@@ -782,7 +788,7 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_a,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
         )
         enrollment_a.set_custom_handicap(Decimal("10.0"))
         async with uow:
@@ -794,18 +800,18 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_b,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR_MALE,
+            tee_category=TeeCategory.AMATEUR,
         )
         async with uow:
             await uow.enrollments.add(enrollment_b)
 
         # Mock golf course
-        mock_gc = self._build_mock_golf_course([TeeCategory.AMATEUR_MALE])
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
-        # Mock user_repo: both users have handicap 15.0
+        # Mock user_repo: both users have handicap 15.0, gender MALE
         async def mock_find_user(uid):
-            return self._build_mock_user(uid, 15.0)
+            return self._build_mock_user(uid, 15.0, Gender.MALE)
 
         user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
 
@@ -850,7 +856,7 @@ class TestGenerateMatchesUseCase:
         """
         Verifica que se lanza TeeCategoryNotFoundError cuando el tee del jugador no existe en el campo.
 
-        Given: Jugador con tee_category CHAMPIONSHIP_FEMALE pero campo solo tiene AMATEUR_MALE
+        Given: Jugador con tee_category CHAMPIONSHIP pero campo solo tiene AMATEUR tee
         When: Se generan partidos en modo HANDICAP
         Then: Se lanza TeeCategoryNotFoundError
         """
@@ -862,16 +868,16 @@ class TestGenerateMatchesUseCase:
 
         # Crear equipos con tee_category que NO esta en el campo
         await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 1, 1, TeeCategory.CHAMPIONSHIP_FEMALE
+            uow, competition, 1, 1, TeeCategory.CHAMPIONSHIP
         )
 
-        # Mock golf course con SOLO AMATEUR_MALE (no CHAMPIONSHIP_FEMALE)
-        mock_gc = self._build_mock_golf_course([TeeCategory.AMATEUR_MALE])
+        # Mock golf course con SOLO AMATEUR+MALE (no CHAMPIONSHIP)
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # Mock user_repo
         async def mock_find_user(uid):
-            return self._build_mock_user(uid, 12.0)
+            return self._build_mock_user(uid, 12.0, Gender.MALE)
 
         user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
 
