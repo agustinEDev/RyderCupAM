@@ -54,6 +54,10 @@ from src.modules.competition.application.dto.competition_dto import (
     TeeResponseDTO,
     UpdateCompetitionRequestDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
     CompetitionNotFoundError as ActivateNotFoundError,
@@ -80,9 +84,7 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
     NotCompetitionCreatorError as CloseNotCreatorError,
 )
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
-    CompetitionNotFoundError as CompleteNotFoundError,
     CompleteCompetitionUseCase,
-    NotCompetitionCreatorError as CompleteNotCreatorError,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
@@ -90,12 +92,9 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
-    CompetitionNotFoundError as DeleteNotFoundError,
     DeleteCompetitionUseCase,
-    NotCompetitionCreatorError as DeleteNotCreatorError,
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
-    CompetitionNotFoundError as GetNotFoundError,
     GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
@@ -103,9 +102,7 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     CompetitionNotDraftError as RemoveGCNotDraftError,
-    CompetitionNotFoundError as RemoveGCNotFoundError,
     GolfCourseNotAssignedError,
-    NotCompetitionCreatorError as RemoveGCNotCreatorError,
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
@@ -143,6 +140,15 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Aliases for shared exceptions (used in per-endpoint except blocks)
+CompleteNotFoundError = CompetitionNotFoundError
+CompleteNotCreatorError = NotCompetitionCreatorError
+DeleteNotFoundError = CompetitionNotFoundError
+DeleteNotCreatorError = NotCompetitionCreatorError
+GetNotFoundError = CompetitionNotFoundError
+RemoveGCNotFoundError = CompetitionNotFoundError
+RemoveGCNotCreatorError = NotCompetitionCreatorError
 
 logger = logging.getLogger(__name__)
 

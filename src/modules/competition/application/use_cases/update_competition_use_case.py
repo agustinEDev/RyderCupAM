@@ -8,6 +8,10 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
     UpdateCompetitionResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -20,18 +24,6 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """Excepción lanzada cuando el usuario no es el creador de la competición."""
-
-    pass
 
 
 class CompetitionNotEditableError(Exception):

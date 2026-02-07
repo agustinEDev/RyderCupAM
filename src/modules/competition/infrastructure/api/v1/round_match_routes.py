@@ -57,6 +57,13 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundRequestDTO,
     UpdateRoundResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError as StatusCompNotFoundError,
+    NotCompetitionCreatorError as ReassignNotCreatorError,
+    NotCompetitionCreatorError as StatusNotCreatorError,
+    NotCompetitionCreatorError as WalkoverNotCreatorError,
+    RoundNotFoundError as StatusRoundNotFoundError,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
@@ -87,7 +94,6 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
     DeclareWalkoverUseCase,
     InvalidWalkoverError,
     MatchNotFoundError as WalkoverMatchNotFoundError,
-    NotCompetitionCreatorError as WalkoverNotCreatorError,
 )
 from src.modules.competition.application.use_cases.delete_round_use_case import (
     CompetitionNotClosedError as DeleteRoundNotClosedError,
@@ -117,7 +123,8 @@ from src.modules.competition.application.use_cases.get_schedule_use_case import 
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     MatchNotFoundError as ReassignMatchNotFoundError,
     MatchNotScheduledError,
-    NotCompetitionCreatorError as ReassignNotCreatorError,
+    NoTeamAssignmentError as ReassignNoTeamAssignmentError,
+    PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
     PlayerNotInTeamError,
     ReassignMatchPlayersUseCase,
 )
@@ -125,7 +132,6 @@ from src.modules.competition.application.use_cases.update_match_status_use_case 
     CompetitionNotInProgressError as StatusNotInProgressError,
     InvalidActionError,
     MatchNotFoundError as StatusMatchNotFoundError,
-    NotCompetitionCreatorError as StatusNotCreatorError,
     UpdateMatchStatusUseCase,
 )
 from src.modules.competition.application.use_cases.update_round_use_case import (
@@ -440,7 +446,11 @@ async def update_match_status(
         )
         return await use_case.execute(request_dto, current_user_id)
 
-    except StatusMatchNotFoundError as e:
+    except (
+        StatusMatchNotFoundError,
+        StatusRoundNotFoundError,
+        StatusCompNotFoundError,
+    ) as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
@@ -569,6 +579,8 @@ async def reassign_match_players(
     except (
         MatchNotScheduledError,
         PlayerNotInTeamError,
+        ReassignNoTeamAssignmentError,
+        ReassignPlayerNotEnrolledError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -578,7 +590,7 @@ async def reassign_match_players(
         logging.exception("Error inesperado en reassign_match_players: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail="Internal server error",
         ) from e
 
 

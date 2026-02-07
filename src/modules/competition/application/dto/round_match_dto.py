@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
+
 # ======================================================================================
 # Shared Response DTOs
 # ======================================================================================
@@ -446,21 +448,13 @@ class ConfigureScheduleRequestDTO(BaseModel):
     """DTO de entrada para configurar el schedule."""
 
     competition_id: UUID = Field(..., description="ID de la competición.")
-    mode: str = Field(..., description="Modo: AUTOMATIC o MANUAL.")
+    mode: ScheduleConfigMode = Field(..., description="Modo: AUTOMATIC o MANUAL.")
     total_sessions: int | None = Field(
         None, ge=1, le=18, description="Total de sesiones (solo AUTO)."
     )
     sessions_per_day: int | None = Field(
         None, ge=1, le=3, description="Sesiones por día (solo AUTO)."
     )
-
-    @field_validator("mode", mode="before")
-    @classmethod
-    def uppercase_mode(cls, v):
-        """Convierte mode a mayúsculas."""
-        if v:
-            return v.upper().strip()
-        return v
 
 
 class ConfigureScheduleResponseDTO(BaseModel):
@@ -477,17 +471,9 @@ class ConfigureScheduleResponseDTO(BaseModel):
 class ConfigureScheduleBodyDTO(BaseModel):
     """DTO para el body del endpoint. competition_id viene del path."""
 
-    mode: str = Field(..., description="Modo: AUTOMATIC o MANUAL.")
+    mode: ScheduleConfigMode = Field(..., description="Modo: AUTOMATIC o MANUAL.")
     total_sessions: int | None = Field(None, ge=1, le=18, description="Total sesiones.")
     sessions_per_day: int | None = Field(None, ge=1, le=3, description="Sesiones por día.")
-
-    @field_validator("mode", mode="before")
-    @classmethod
-    def uppercase_mode(cls, v):
-        """Convierte mode a mayúsculas."""
-        if v:
-            return v.upper().strip()
-        return v
 
 
 # ======================================================================================

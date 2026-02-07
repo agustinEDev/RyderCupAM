@@ -113,6 +113,24 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def find_by_id_for_update(self, competition_id: CompetitionId) -> Competition | None:
+        """
+        Busca una competición por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Args:
+            competition_id: ID de la competición
+
+        Returns:
+            Optional[Competition]: La competición encontrada o None
+        """
+        stmt = (
+            select(Competition)
+            .where(Competition.id == competition_id)
+            .with_for_update()
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Competition]:

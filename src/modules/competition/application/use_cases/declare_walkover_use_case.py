@@ -4,6 +4,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     DeclareWalkoverRequestDTO,
     DeclareWalkoverResponseDTO,
 )
+from src.modules.competition.application.exceptions import NotCompetitionCreatorError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -19,13 +20,7 @@ class MatchNotFoundError(Exception):
 
 
 class CompetitionNotInProgressError(Exception):
-    """La competición no está en progreso."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """El usuario no es el creador."""
+    """La competicion no esta en progreso."""
 
     pass
 
@@ -40,9 +35,9 @@ class DeclareWalkoverUseCase:
     """
     Caso de uso para declarar walkover (victoria por incomparecencia).
 
-    Transición: SCHEDULED o IN_PROGRESS → WALKOVER
+    Transicion: SCHEDULED o IN_PROGRESS -> WALKOVER
     Auto-complete round si todos los partidos terminaron.
-    La competición debe estar IN_PROGRESS.
+    La competicion debe estar IN_PROGRESS.
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -59,23 +54,23 @@ class DeclareWalkoverUseCase:
             if not match:
                 raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
-            # 2. Buscar ronda y competición
+            # 2. Buscar ronda y competicion
             round_entity = await self._uow.rounds.find_by_id(match.round_id)
             if not round_entity:
                 raise MatchNotFoundError("La ronda asociada no existe")
 
             competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
             if not competition:
-                raise MatchNotFoundError("La competición asociada no existe")
+                raise MatchNotFoundError("La competicion asociada no existe")
 
             # 3. Verificar creador
             if not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede declarar walkover")
 
-            # 4. Verificar competición IN_PROGRESS
+            # 4. Verificar competicion IN_PROGRESS
             if not competition.is_in_progress():
                 raise CompetitionNotInProgressError(
-                    f"La competición debe estar IN_PROGRESS. "
+                    f"La competicion debe estar IN_PROGRESS. "
                     f"Estado: {competition.status.value}"
                 )
 

@@ -7,7 +7,11 @@ from src.modules.competition.application.dto.round_match_dto import (
     DeleteRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionNotClosedError,
     CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+    RoundNotFoundError,
+    RoundNotModifiableError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -15,30 +19,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class RoundNotFoundError(Exception):
-    """La ronda no existe."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """El usuario no es el creador de la competición."""
-
-    pass
-
-
-class RoundNotModifiableError(Exception):
-    """La ronda no puede eliminarse en su estado actual."""
-
-    pass
-
-
-class CompetitionNotClosedError(Exception):
-    """La competición no está en estado CLOSED."""
-
-    pass
 
 
 class DeleteRoundUseCase:

@@ -7,7 +7,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     AssignTeamsResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionNotClosedError,
     CompetitionNotFoundError,
+    NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -25,18 +27,6 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class NotCompetitionCreatorError(Exception):
-    """El usuario no es el creador de la competición."""
-
-    pass
-
-
-class CompetitionNotClosedError(Exception):
-    """La competición no está en estado CLOSED."""
-
-    pass
 
 
 class InsufficientPlayersError(Exception):

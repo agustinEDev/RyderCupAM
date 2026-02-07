@@ -302,7 +302,8 @@ class Round:
         - FOURSOMES: 50% (aplicado a la DIFERENCIA entre equipos)
 
         Returns:
-            Porcentaje de allowance (1-100)
+            Porcentaje de allowance (50-100, múltiplos de 5 si es personalizado,
+            o el default WHS según formato)
         """
         if self._allowance_percentage is not None:
             return self._allowance_percentage

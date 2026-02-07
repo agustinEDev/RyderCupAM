@@ -4,6 +4,11 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateMatchStatusRequestDTO,
     UpdateMatchStatusResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+    RoundNotFoundError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -19,19 +24,13 @@ class MatchNotFoundError(Exception):
 
 
 class CompetitionNotInProgressError(Exception):
-    """La competición no está en progreso."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """El usuario no es el creador."""
+    """La competicion no esta en progreso."""
 
     pass
 
 
 class InvalidActionError(Exception):
-    """Acción inválida para el estado actual del partido."""
+    """Accion invalida para el estado actual del partido."""
 
     pass
 
@@ -41,10 +40,10 @@ class UpdateMatchStatusUseCase:
     Caso de uso para actualizar el estado de un partido.
 
     Acciones:
-    - START: SCHEDULED → IN_PROGRESS (auto-start round si está SCHEDULED)
-    - COMPLETE: IN_PROGRESS → COMPLETED (auto-complete round si todos terminaron)
+    - START: SCHEDULED -> IN_PROGRESS (auto-start round si esta SCHEDULED)
+    - COMPLETE: IN_PROGRESS -> COMPLETED (auto-complete round si todos terminaron)
 
-    La competición debe estar IN_PROGRESS.
+    La competicion debe estar IN_PROGRESS.
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -57,7 +56,7 @@ class UpdateMatchStatusUseCase:
             # 1-4. Validaciones
             match, round_entity = await self._validate(request, user_id)
 
-            # 5. Ejecutar acción
+            # 5. Ejecutar accion
             if request.action == "START":
                 round_status_changed = self._handle_start(match, round_entity)
             elif request.action == "COMPLETE":
@@ -66,7 +65,7 @@ class UpdateMatchStatusUseCase:
                 )
             else:
                 raise InvalidActionError(
-                    f"Acción inválida: {request.action}. Use START o COMPLETE"
+                    f"Accion invalida: {request.action}. Use START o COMPLETE"
                 )
 
             if round_status_changed:
@@ -81,7 +80,7 @@ class UpdateMatchStatusUseCase:
         )
 
     async def _validate(self, request, user_id):
-        """Validaciones: buscar match, ronda, competición, verificar creador y estado."""
+        """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
         match = await self._uow.matches.find_by_id(match_id)
 
@@ -90,18 +89,18 @@ class UpdateMatchStatusUseCase:
 
         round_entity = await self._uow.rounds.find_by_id(match.round_id)
         if not round_entity:
-            raise MatchNotFoundError("La ronda asociada no existe")
+            raise RoundNotFoundError("La ronda asociada no existe")
 
         competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
         if not competition:
-            raise MatchNotFoundError("La competición asociada no existe")
+            raise CompetitionNotFoundError("La competicion asociada no existe")
 
         if not competition.is_creator(user_id):
             raise NotCompetitionCreatorError("Solo el creador puede actualizar partidos")
 
         if not competition.is_in_progress():
             raise CompetitionNotInProgressError(
-                f"La competición debe estar IN_PROGRESS. "
+                f"La competicion debe estar IN_PROGRESS. "
                 f"Estado: {competition.status.value}"
             )
 

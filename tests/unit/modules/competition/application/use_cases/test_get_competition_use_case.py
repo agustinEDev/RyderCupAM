@@ -8,11 +8,11 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
-    CompetitionNotFoundError,
     GetCompetitionUseCase,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId

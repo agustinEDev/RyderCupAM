@@ -9,10 +9,12 @@ from src.modules.competition.application.dto.competition_dto import (
     CompleteCompetitionRequestDTO,
     CreateCompetitionRequestDTO,
 )
-from src.modules.competition.application.use_cases.complete_competition_use_case import (
+from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
-    CompleteCompetitionUseCase,
     NotCompetitionCreatorError,
+)
+from src.modules.competition.application.use_cases.complete_competition_use_case import (
+    CompleteCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,

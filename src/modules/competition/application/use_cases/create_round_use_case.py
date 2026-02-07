@@ -5,7 +5,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionNotClosedError,
     CompetitionNotFoundError,
+    NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -18,18 +20,6 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class NotCompetitionCreatorError(Exception):
-    """El usuario no es el creador de la competición."""
-
-    pass
-
-
-class CompetitionNotClosedError(Exception):
-    """La competición no está en estado CLOSED."""
-
-    pass
 
 
 class GolfCourseNotInCompetitionError(Exception):

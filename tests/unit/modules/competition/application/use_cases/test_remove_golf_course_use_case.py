@@ -17,11 +17,13 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     RemoveGolfCourseRequestDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     CompetitionNotDraftError,
-    CompetitionNotFoundError,
     GolfCourseNotAssignedError,
-    NotCompetitionCreatorError,
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import Competition
