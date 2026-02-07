@@ -97,6 +97,9 @@ class ConfigureScheduleUseCase:
                     await self._uow.matches.delete(m.id)
                 await self._uow.rounds.delete(r.id)
 
+            if existing_rounds:
+                await self._uow.flush()  # Forzar DELETE antes de INSERT (unique constraint)
+
             # 6. Generar rondas automáticamente
             total_sessions = request.total_sessions or 3
             sessions_per_day = request.sessions_per_day or 2

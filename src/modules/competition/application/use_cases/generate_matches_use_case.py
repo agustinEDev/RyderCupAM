@@ -151,6 +151,9 @@ class GenerateMatchesUseCase:
             for m in existing_matches:
                 await self._uow.matches.delete(m.id)
 
+            if existing_matches:
+                await self._uow.flush()  # Forzar DELETE antes de INSERT (unique constraint)
+
             # 12. Generar partidos
             players_per_team = round_entity.players_per_team_in_match()
             team_a_ids = list(team_assignment.team_a_player_ids)
