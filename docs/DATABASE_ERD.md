@@ -45,6 +45,7 @@ erDiagram
         INT failed_login_attempts "default 0 - v1.13.0"
         TIMESTAMP locked_until "nullable - v1.13.0"
         BOOLEAN is_admin "default false - v2.0.0"
+        VARCHAR(10) gender "MALE | FEMALE | NULL"
         CHAR(2) country_code FK "nullable"
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -102,10 +103,10 @@ erDiagram
         UUID id PK
         UUID golf_course_id FK
         VARCHAR(50) identifier "60 | White | Championship | etc"
-        VARCHAR(30) category "CHAMPIONSHIP_MALE | AMATEUR_MALE | etc"
+        VARCHAR(30) category "CHAMPIONSHIP | AMATEUR | SENIOR | FORWARD | JUNIOR"
+        VARCHAR(10) tee_gender "MALE | FEMALE | NULL"
         FLOAT slope_rating "55-155"
         FLOAT course_rating
-        VARCHAR(10) gender "MALE | FEMALE | UNISEX"
         TIMESTAMP created_at
     }
 
@@ -182,8 +183,8 @@ erDiagram
         CHAR(36) id PK "UUID as CHAR(36)"
         CHAR(36) round_id FK
         INT match_number "Order within round"
-        JSONB team_a_players "list[MatchPlayer] with playing_handicap"
-        JSONB team_b_players "list[MatchPlayer] with playing_handicap"
+        JSONB team_a_players "list[MatchPlayer] with playing_handicap, tee_category, tee_gender"
+        JSONB team_b_players "list[MatchPlayer] with playing_handicap, tee_category, tee_gender"
         VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | WALKOVER"
         INT handicap_strokes_given "Calculated strokes"
         VARCHAR(1) strokes_given_to_team "A or B or empty"

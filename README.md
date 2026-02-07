@@ -213,7 +213,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 **v2.0.1 (Jan 30, 2026)**
 - ✅ **Golf Course Module**: Creator requests, Admin approval workflow, Clone-based updates
-- ✅ **WHS Validation**: 2-6 tees, 18 holes, stroke indices, par totals
+- ✅ **WHS Validation**: 2-10 tees (5 categories × gender), 18 holes, stroke indices, par totals
 
 **v2.0.0 (Jan 27, 2026)**
 - ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER)

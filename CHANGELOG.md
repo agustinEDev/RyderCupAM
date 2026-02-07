@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+**⛳ TeeCategory Refactoring (7→5 + Gender)**
+- `TeeCategory` reduced from 7 gender-combined values to 5 neutral difficulty levels: `CHAMPIONSHIP`, `AMATEUR`, `SENIOR`, `FORWARD`, `JUNIOR`
+- New shared `Gender` enum (`MALE`/`FEMALE`) in `src/shared/domain/value_objects/gender.py`
+- `Tee` entity gains nullable `gender` field; `GolfCourse` validates 2-10 tees with unique `(category, gender)` pairs
+- `User` entity gains nullable `gender` field for automatic tee resolution at match generation
+- `MatchPlayer` VO gains `tee_gender` field for match-level tee tracking
+- Match generation auto-resolves tee using `(enrollment.tee_category, user.gender)` with null fallback
+- Enrollment DTOs now expose `tee_category` selection for player preference
+- Alembic migration `c3d5e7f9a1b2` for schema changes
+- All 1,292 tests updated and passing
+
 ### Added
 
 **Sprint 2: Competition Scheduling - Complete (Blocks 0-8)**
@@ -158,6 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Renamed `FORWARD_FEMALE` → `SENIOR_FEMALE` (matches DB migration)
 - Added `JUNIOR` category for junior players
 - Full enum (7 values): `CHAMPIONSHIP_MALE`, `AMATEUR_MALE`, `SENIOR_MALE`, `CHAMPIONSHIP_FEMALE`, `AMATEUR_FEMALE`, `SENIOR_FEMALE`, `JUNIOR`
+- **Note**: Later refactored to 5 neutral values + separate Gender field (see [Unreleased])
 
 **🐳 Docker/Render Compatibility**
 - Updated `entrypoint.sh` regex to accept `postgresql+asyncpg://` URLs

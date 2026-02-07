@@ -134,7 +134,8 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 **Frozen dataclass (immutable):**
 - `user_id`: UserId
 - `playing_handicap`: int (calculated via WHS formula, ≥ 0)
-- `tee_category`: TeeCategory
+- `tee_category`: TeeCategory (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)
+- `tee_gender`: Gender | None (MALE, FEMALE, or null)
 - `strokes_received`: tuple[int, ...] (hole numbers where player receives a stroke, 1-18)
 
 ### Entity: Country (Shared Domain)

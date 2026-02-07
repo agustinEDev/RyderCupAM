@@ -42,7 +42,7 @@ Each `Round` = one session (MORNING, AFTERNOON, or EVENING), not a full day.
 
 - A competition day with Foursomes AM + Singles PM = 2 Round entities
 - Each Round has exactly one `MatchFormat` and one `GolfCourseId`
-- Tees are NOT defined at Round level; each player has their `tee_category` in Enrollment
+- Tees are NOT defined at Round level; each player has their `tee_category` + `tee_gender` resolved at match generation from Enrollment + User.gender
 
 **WHS Default Allowances** (constants in Round entity):
 | Format | Mode | Allowance |

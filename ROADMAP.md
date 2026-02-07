@@ -106,7 +106,7 @@ class GolfCourseRequest(BaseModel):
         return holes
 ```
 
-**Validations:** Exactly 18 holes, unique stroke indices 1-18, total par 66-76, 2-6 tees.
+**Validations:** Exactly 18 holes, unique stroke indices 1-18, total par 66-76, 2-10 tees.
 
 ---
 
@@ -467,7 +467,7 @@ class LeaderboardResponse(BaseModel):
 
 **Enums:**
 - CourseType: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
-- TeeCategory (7 values): CHAMPIONSHIP_MALE, AMATEUR_MALE, SENIOR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, SENIOR_FEMALE, JUNIOR
+- TeeCategory (5 values): CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR (+ separate Gender field: MALE/FEMALE/null per Tee)
 - ApprovalStatus: PENDING_APPROVAL, APPROVED, REJECTED
 - MatchFormat, MatchStatus, InvitationStatus, ScoreStatus (v2.1.0)
 

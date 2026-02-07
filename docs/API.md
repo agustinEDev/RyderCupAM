@@ -579,8 +579,9 @@ REJECTED    CANCELLED
 - `name` (string, required, 3-200 chars)
 - `country_code` (string, required, ISO 3166-1 alpha-2)
 - `course_type` (enum, required: "STANDARD_18" | "PITCH_AND_PUTT" | "EXECUTIVE")
-- `tees` (array, required, 2-6 tees)
-  - `tee_category` (string, required: "CHAMPIONSHIP_MALE", "AMATEUR_MALE", etc.)
+- `tees` (array, required, 2-10 tees)
+  - `tee_category` (string, required: "CHAMPIONSHIP", "AMATEUR", "SENIOR", "FORWARD", "JUNIOR")
+  - `tee_gender` (string, optional: "MALE", "FEMALE", or null)
   - `identifier` (string, required: "Amarillo", "Oro", "1", etc.)
   - `course_rating` (float, required, 50.0-90.0)
   - `slope_rating` (int, required, 55-155)
@@ -639,7 +640,7 @@ PENDING_APPROVAL → APPROVED
 - **Validation**:
   - Exactly 18 holes with unique stroke indices (1-18)
   - Total par between 66 and 76
-  - 2-6 tees per course with valid WHS ratings
+  - 2-10 tees per course with valid WHS ratings (unique category+gender pairs)
   - Course rating: 50.0-90.0 (WHS standard)
   - Slope rating: 55-155 (WHS standard)
 - **Tee categories normalized**: Uses WHS standard categories
