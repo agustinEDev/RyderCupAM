@@ -14,64 +14,51 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .competition_repository_interface import CompetitionRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
+from .match_repository_interface import MatchRepositoryInterface
+from .round_repository_interface import RoundRepositoryInterface
+from .team_assignment_repository_interface import TeamAssignmentRepositoryInterface
 
 
 class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     """
-    Interfaz específica para el Unit of Work del módulo de competiciones.
+    Interfaz especifica para el Unit of Work del modulo de competiciones.
 
     Proporciona acceso coordinado a todos los repositorios relacionados
     con el dominio de competiciones, manteniendo consistencia transaccional.
-
-    Uso típico en casos de uso:
-    ```python
-    async def create_competition(self, request: CreateCompetitionRequest) -> CompetitionResponse:
-        async with self._uow:
-            # Verificar que el nombre no existe
-            if await self._uow.competitions.exists_with_name(request.name):
-                raise CompetitionAlreadyExistsError("Name already used")
-
-            # Crear y guardar competición
-            competition = Competition.create(...)
-            await self._uow.competitions.save(competition)
-
-            # Commit automático al salir del contexto
-
-        return CompetitionResponse.from_competition(competition)
-    ```
     """
 
     @property
     @abstractmethod
     def competitions(self) -> CompetitionRepositoryInterface:
-        """
-        Acceso al repositorio de competiciones dentro de la transacción.
-
-        Returns:
-            CompetitionRepositoryInterface: Repositorio de competiciones transaccional
-        """
+        """Acceso al repositorio de competiciones."""
         pass
 
     @property
     @abstractmethod
     def enrollments(self) -> EnrollmentRepositoryInterface:
-        """
-        Acceso al repositorio de inscripciones dentro de la transacción.
-
-        Returns:
-            EnrollmentRepositoryInterface: Repositorio de inscripciones transaccional
-        """
+        """Acceso al repositorio de inscripciones."""
         pass
 
     @property
     @abstractmethod
     def countries(self) -> CountryRepositoryInterface:
-        """
-        Acceso al repositorio de países dentro de la transacción.
+        """Acceso al repositorio de paises."""
+        pass
 
-        Necesario para validar países y adyacencias al crear/actualizar competiciones.
+    @property
+    @abstractmethod
+    def rounds(self) -> RoundRepositoryInterface:
+        """Acceso al repositorio de rondas."""
+        pass
 
-        Returns:
-            CountryRepositoryInterface: Repositorio de países transaccional
-        """
+    @property
+    @abstractmethod
+    def matches(self) -> MatchRepositoryInterface:
+        """Acceso al repositorio de partidos."""
+        pass
+
+    @property
+    @abstractmethod
+    def team_assignments(self) -> TeamAssignmentRepositoryInterface:
+        """Acceso al repositorio de asignaciones de equipos."""
         pass

@@ -52,7 +52,7 @@ class TestCreateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
             max_players=24,
             team_assignment="MANUAL",
             team_1_name="Europa",
@@ -99,8 +99,7 @@ class TestCreateCompetitionUseCase:
             main_country="ES",
             adjacent_country_1="PT",
             adjacent_country_2="FR",
-            handicap_type="PERCENTAGE",
-            handicap_percentage=90,
+            play_mode="HANDICAP",
         )
 
         # Act
@@ -134,7 +133,7 @@ class TestCreateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         await use_case.execute(existing_request, creator_id)
 
@@ -144,7 +143,7 @@ class TestCreateCompetitionUseCase:
             start_date=date(2025, 8, 1),
             end_date=date(2025, 8, 3),
             main_country="FR",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
 
         with pytest.raises(CompetitionAlreadyExistsError) as exc_info:
@@ -169,7 +168,7 @@ class TestCreateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="XX",  # País inexistente
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
 
         # Act & Assert
@@ -196,7 +195,7 @@ class TestCreateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             adjacent_country_1="IT",  # Italia no es adyacente a España
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
 
         # Act & Assert
@@ -205,25 +204,24 @@ class TestCreateCompetitionUseCase:
 
         assert "no es adyacente" in str(exc_info.value)
 
-    async def test_should_create_with_percentage_handicap(
+    async def test_should_create_with_handicap_play_mode(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
-        Verifica que se puede crear competición con hándicap por porcentaje.
+        Verifica que se puede crear competición con play_mode HANDICAP.
 
-        Given: Datos con handicap_type PERCENTAGE y handicap_percentage 95
+        Given: Datos con play_mode HANDICAP
         When: Se ejecuta el caso de uso
-        Then: La competición se crea con hándicap configurado
+        Then: La competición se crea con play_mode configurado
         """
         # Arrange
         use_case = CreateCompetitionUseCase(uow)
         request_dto = CreateCompetitionRequestDTO(
-            name="Percentage Cup",
+            name="Handicap Cup",
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="FR",
-            handicap_type="PERCENTAGE",
-            handicap_percentage=95,
+            play_mode="HANDICAP",
         )
 
         # Act
@@ -232,8 +230,38 @@ class TestCreateCompetitionUseCase:
         # Assert
         competitions = await uow.competitions.find_all()
         competition = competitions[0]
-        assert competition.handicap_settings.type.value == "PERCENTAGE"
-        assert competition.handicap_settings.percentage == 95
+        assert competition.play_mode.value == "HANDICAP"
+
+    async def test_should_auto_enroll_creator_as_approved_player(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        Verifica que el creador se auto-enrolla como jugador APPROVED.
+
+        Given: Datos válidos de competición
+        When: Se ejecuta el caso de uso
+        Then: Se crea un enrollment APPROVED para el creador
+        """
+        # Arrange
+        use_case = CreateCompetitionUseCase(uow)
+        request_dto = CreateCompetitionRequestDTO(
+            name="Auto Enroll Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+
+        # Act
+        response = await use_case.execute(request_dto, creator_id)
+
+        # Assert
+        enrollments = await uow.enrollments.find_all()
+        assert len(enrollments) == 1
+        enrollment = enrollments[0]
+        assert enrollment.user_id == creator_id
+        assert enrollment.competition_id.value == response.id
+        assert enrollment.status.value == "APPROVED"
 
     async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
@@ -250,7 +278,7 @@ class TestCreateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
 
         # Act

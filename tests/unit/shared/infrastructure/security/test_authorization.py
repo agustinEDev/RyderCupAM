@@ -24,11 +24,8 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -112,7 +109,7 @@ def competition(creator_user):
         location=Location(CountryCode("ES")),
         team_1_name="Europe",
         team_2_name="USA",
-        handicap_settings=HandicapSettings(HandicapType.PERCENTAGE, 90),
+        play_mode=PlayMode.HANDICAP,
         max_players=24,
         status=CompetitionStatus.DRAFT,
     )

@@ -90,6 +90,22 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, competition_id: CompetitionId) -> Competition | None:
+        """
+        Busca una competición por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Útil para: Operaciones que requieren consistencia transaccional,
+        como la aprobación de inscripciones con validación de capacidad.
+
+        Args:
+            competition_id: El identificador único de la competición
+
+        Returns:
+            Optional[Competition]: La competición encontrada o None
+        """
+        pass
+
+    @abstractmethod
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Competition]:

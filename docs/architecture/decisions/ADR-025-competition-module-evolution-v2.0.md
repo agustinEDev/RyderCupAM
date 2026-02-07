@@ -27,8 +27,9 @@ Competition Module lacks: golf courses, round planning, live scoring, dual valid
 **Decision**: Hybrid free nomenclature + internal category.
 
 - `identifier`: "60", "Blancas", "Championship" (free text)
-- `category`: TeeCategory enum (CHAMPIONSHIP_MALE, AMATEUR_MALE, etc.)
-- `slope_rating`, `course_rating`, `gender`
+- `category`: TeeCategory enum (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)
+- `tee_gender`: Gender (MALE, FEMALE, or null) — independent field per tee
+- `slope_rating`, `course_rating`
 
 **Reason**: International flexibility + statistical normalization.
 
@@ -70,7 +71,7 @@ Competition Module lacks: golf courses, round planning, live scoring, dual valid
 
 **New**: `GolfCourse`, `Round`, `Match`, `Invitation`, `HoleScore`
 
-**Key Enums**: `TeeCategory`, `MatchFormat`, `MatchStatus`, `InvitationStatus`, `ScoreStatus`
+**Key Enums**: `TeeCategory` (5 values + separate `Gender`), `MatchFormat`, `MatchStatus`, `InvitationStatus`, `ScoreStatus`
 
 ## Consequences
 

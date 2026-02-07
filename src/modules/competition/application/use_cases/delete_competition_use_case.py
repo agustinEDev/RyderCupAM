@@ -1,8 +1,8 @@
 """
-Caso de Uso: Eliminar Competition (eliminación física).
+Caso de Uso: Eliminar Competition (eliminacion fisica).
 
-Permite eliminar físicamente una competición en estado DRAFT.
-Solo el creador puede realizar esta acción.
+Permite eliminar fisicamente una competicion en estado DRAFT.
+Solo el creador puede realizar esta accion.
 """
 
 from datetime import datetime
@@ -11,6 +11,10 @@ from src.modules.competition.application.dto.competition_dto import (
     DeleteCompetitionRequestDTO,
     DeleteCompetitionResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -18,27 +22,15 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """Excepción lanzada cuando el usuario no es el creador de la competición."""
-
-    pass
-
-
 class CompetitionNotDeletableError(Exception):
-    """Excepción lanzada cuando la competición no está en estado DRAFT."""
+    """Excepcion lanzada cuando la competicion no esta en estado DRAFT."""
 
     pass
 
 
 class DeleteCompetitionUseCase:
     """
-    Caso de uso para eliminar físicamente una competición.
+    Caso de uso para eliminar fisicamente una competicion.
 
     Restricciones:
     - Solo se puede eliminar en estado DRAFT
@@ -46,11 +38,11 @@ class DeleteCompetitionUseCase:
     - Se elimina permanentemente de la BD (incluyendo enrollments si existieran)
 
     Orquesta:
-    1. Buscar la competición por ID
+    1. Buscar la competicion por ID
     2. Verificar que el usuario sea el creador
-    3. Verificar que esté en estado DRAFT
-    4. Eliminar la competición del repositorio
-    5. Commit de la transacción
+    3. Verificar que este en estado DRAFT
+    4. Eliminar la competicion del repositorio
+    5. Commit de la transaccion
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -66,22 +58,22 @@ class DeleteCompetitionUseCase:
         self, request: DeleteCompetitionRequestDTO, user_id: UserId
     ) -> DeleteCompetitionResponseDTO:
         """
-        Ejecuta el caso de uso de eliminación de competición.
+        Ejecuta el caso de uso de eliminacion de competicion.
 
         Args:
-            request: DTO con el ID de la competición a eliminar
-            user_id: ID del usuario que solicita la eliminación
+            request: DTO con el ID de la competicion a eliminar
+            user_id: ID del usuario que solicita la eliminacion
 
         Returns:
-            DTO con confirmación de eliminación
+            DTO con confirmacion de eliminacion
 
         Raises:
-            CompetitionNotFoundError: Si la competición no existe
+            CompetitionNotFoundError: Si la competicion no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDeletableError: Si la competición no está en estado DRAFT
+            CompetitionNotDeletableError: Si la competicion no esta en estado DRAFT
         """
         async with self._uow:
-            # 1. Buscar la competición
+            # 1. Buscar la competicion
             competition_id = CompetitionId(request.competition_id)
             competition = await self._uow.competitions.find_by_id(competition_id)
 
@@ -92,9 +84,9 @@ class DeleteCompetitionUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError("Solo el creador puede eliminar la competición")
+                raise NotCompetitionCreatorError("Solo el creador puede eliminar la competicion")
 
-            # 3. Verificar que esté en estado DRAFT
+            # 3. Verificar que este en estado DRAFT
             if not competition.is_draft():
                 raise CompetitionNotDeletableError(
                     f"Solo se pueden eliminar competiciones en estado DRAFT. "
@@ -105,7 +97,7 @@ class DeleteCompetitionUseCase:
             competition_id_value = competition.id.value
             competition_name = str(competition.name)
 
-            # 5. Eliminar la competición
+            # 5. Eliminar la competicion
             await self._uow.competitions.delete(competition_id)
 
         # 7. Retornar DTO de respuesta

@@ -699,8 +699,7 @@ def sample_competition_data() -> dict:
         "main_country": "ES",
         "adjacent_country_1": None,
         "adjacent_country_2": None,
-        "handicap_type": "PERCENTAGE",
-        "handicap_percentage": 95,
+        "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
     }
@@ -731,8 +730,7 @@ async def create_competition(
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
+            "play_mode": "HANDICAP",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -772,14 +770,16 @@ def sample_golf_course_data() -> dict:
         "tees": [
             {
                 "identifier": "Amarillo",
-                "tee_category": "CHAMPIONSHIP_MALE",
+                "tee_category": "CHAMPIONSHIP",
+                "tee_gender": "MALE",
                 "course_rating": 72.5,
                 "slope_rating": 135,
                 "par": 72,
             },
             {
                 "identifier": "Blanco",
-                "tee_category": "AMATEUR_MALE",
+                "tee_category": "AMATEUR",
+                "tee_gender": "MALE",
                 "course_rating": 70.8,
                 "slope_rating": 130,
                 "par": 72,
@@ -832,14 +832,16 @@ async def create_golf_course(
             "tees": [
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP_MALE",
+                    "tee_category": "CHAMPIONSHIP",
+                    "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
                     "identifier": "Blanco",
-                    "tee_category": "AMATEUR_MALE",
+                    "tee_category": "AMATEUR",
+                    "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
                     "par": 72,

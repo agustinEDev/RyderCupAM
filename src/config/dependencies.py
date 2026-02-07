@@ -14,6 +14,9 @@ from src.modules.competition.application.use_cases.activate_competition_use_case
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.assign_teams_use_case import (
+    AssignTeamsUseCase,
+)
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
 )
@@ -26,17 +29,38 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.configure_schedule_use_case import (
+    ConfigureScheduleUseCase,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.create_round_use_case import (
+    CreateRoundUseCase,
+)
+from src.modules.competition.application.use_cases.declare_walkover_use_case import (
+    DeclareWalkoverUseCase,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     DeleteCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.delete_round_use_case import (
+    DeleteRoundUseCase,
+)
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
 )
+from src.modules.competition.application.use_cases.generate_matches_use_case import (
+    GenerateMatchesUseCase,
+)
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.get_match_detail_use_case import (
+    GetMatchDetailUseCase,
+)
+from src.modules.competition.application.use_cases.get_schedule_use_case import (
+    GetScheduleUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -46,6 +70,9 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
+    ReassignMatchPlayersUseCase,
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
@@ -64,6 +91,12 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.update_match_status_use_case import (
+    UpdateMatchStatusUseCase,
+)
+from src.modules.competition.application.use_cases.update_round_use_case import (
+    UpdateRoundUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
@@ -963,6 +996,101 @@ def get_list_enrollments_use_case(
 ) -> ListEnrollmentsUseCase:
     """Proveedor del caso de uso ListEnrollmentsUseCase."""
     return ListEnrollmentsUseCase(uow)
+
+
+# ======================================================================================
+# ROUND, MATCH & TEAM ASSIGNMENT USE CASE PROVIDERS (Sprint 2 - Block 7)
+# ======================================================================================
+
+
+def get_create_round_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CreateRoundUseCase:
+    """Proveedor del caso de uso CreateRoundUseCase."""
+    return CreateRoundUseCase(uow)
+
+
+def get_update_round_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UpdateRoundUseCase:
+    """Proveedor del caso de uso UpdateRoundUseCase."""
+    return UpdateRoundUseCase(uow)
+
+
+def get_delete_round_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> DeleteRoundUseCase:
+    """Proveedor del caso de uso DeleteRoundUseCase."""
+    return DeleteRoundUseCase(uow)
+
+
+def get_get_schedule_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetScheduleUseCase:
+    """Proveedor del caso de uso GetScheduleUseCase."""
+    return GetScheduleUseCase(uow)
+
+
+def get_get_match_detail_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetMatchDetailUseCase:
+    """Proveedor del caso de uso GetMatchDetailUseCase."""
+    return GetMatchDetailUseCase(uow)
+
+
+def get_update_match_status_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UpdateMatchStatusUseCase:
+    """Proveedor del caso de uso UpdateMatchStatusUseCase."""
+    return UpdateMatchStatusUseCase(uow)
+
+
+def get_declare_walkover_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> DeclareWalkoverUseCase:
+    """Proveedor del caso de uso DeclareWalkoverUseCase."""
+    return DeclareWalkoverUseCase(uow)
+
+
+def get_configure_schedule_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ConfigureScheduleUseCase:
+    """Proveedor del caso de uso ConfigureScheduleUseCase."""
+    return ConfigureScheduleUseCase(uow)
+
+
+def get_assign_teams_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AssignTeamsUseCase:
+    """Proveedor del caso de uso AssignTeamsUseCase (cross-module: Competition + User)."""
+    return AssignTeamsUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_generate_matches_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GenerateMatchesUseCase:
+    """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
+    return GenerateMatchesUseCase(
+        uow=uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+    )
+
+
+def get_reassign_match_players_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ReassignMatchPlayersUseCase:
+    """Proveedor del caso de uso ReassignMatchPlayersUseCase (cross-module: Competition + GolfCourse + User)."""
+    return ReassignMatchPlayersUseCase(
+        uow=uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+    )
 
 
 # ============================================================================

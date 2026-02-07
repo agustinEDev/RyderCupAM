@@ -32,6 +32,7 @@ from src.config.settings import settings  # noqa: E402
 from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     competition_routes,
     enrollment_routes,
+    round_match_routes,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
@@ -274,6 +275,11 @@ app.include_router(
 
 app.include_router(
     competition_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    round_match_routes.router,
     prefix="/api/v1/competitions",
 )
 

@@ -38,6 +38,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
 # ============================================================================
@@ -100,6 +101,23 @@ class UserIdType(sqlalchemy.types.TypeDecorator[UserId]):
         if value is None:
             return None
         return UserId(uuid.UUID(value))
+
+
+class GenderType(sqlalchemy.types.TypeDecorator[Gender]):
+    """TypeDecorator para Gender Value Object (nullable)."""
+
+    impl = String(10)
+    cache_ok = True
+
+    def process_bind_param(self, value: Gender | None, dialect: Any) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect: Any) -> Gender | None:
+        if value is None:
+            return None
+        return Gender(value)
 
 
 # ============================================================================
@@ -172,7 +190,13 @@ golf_course_tees_table = Table(
         "tee_category",
         SQLEnum(TeeCategory, name="tee_category_enum", create_type=False),
         nullable=False,
-        comment="Categoría normalizada WHS (CHAMPIONSHIP_MALE, etc.)",
+        comment="Categoría normalizada WHS (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)",
+    ),
+    Column(
+        "tee_gender",
+        GenderType,
+        nullable=True,
+        comment="Género del tee (MALE, FEMALE, o NULL para gender-neutral)",
     ),
     Column(
         "identifier",
@@ -198,7 +222,8 @@ golf_course_tees_table = Table(
     CheckConstraint(
         "slope_rating >= 55 AND slope_rating <= 155", name="ck_tees_slope_rating_range"
     ),
-    UniqueConstraint("golf_course_id", "tee_category", name="uq_golf_course_tees_category"),
+    # Unique index on (golf_course_id, tee_category, COALESCE(tee_gender, 'NONE'))
+    # created in Alembic migration c3d5e7f9a1b2 as functional index
     comment="Tees (salidas) de campos de golf con ratings WHS",
 )
 
@@ -247,6 +272,8 @@ def start_golf_course_mappers():
             properties={
                 # Map database column tee_category to entity attribute category
                 "category": golf_course_tees_table.c.tee_category,
+                # Map database column tee_gender to entity attribute gender
+                "gender": golf_course_tees_table.c.tee_gender,
             },
         )
 

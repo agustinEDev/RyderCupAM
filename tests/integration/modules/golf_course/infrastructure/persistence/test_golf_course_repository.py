@@ -22,6 +22,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 # Marcar todos los tests de este fichero como 'integration' y 'skip'
 # RAZÓN: Estos tests requieren fixtures de usuarios creados via API (no SQL raw).
@@ -46,19 +47,22 @@ def valid_tees():
     """Crea 3 tees válidos para tests de integración."""
     return [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_MALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR_MALE,
+            category=TeeCategory.AMATEUR,
+            gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.2,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_FEMALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=75.0,
             slope_rating=140,
@@ -586,37 +590,43 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
     # Arrange
     all_tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_MALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.MALE,
             identifier="Negro",
             course_rating=75.0,
             slope_rating=145,
         ),
         Tee(
-            category=TeeCategory.AMATEUR_MALE,
+            category=TeeCategory.AMATEUR,
+            gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.0,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.SENIOR_MALE,
+            category=TeeCategory.SENIOR,
+            gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.0,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_FEMALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.FEMALE,
             identifier="Azul",
             course_rating=76.0,
             slope_rating=142,
         ),
         Tee(
-            category=TeeCategory.AMATEUR_FEMALE,
+            category=TeeCategory.AMATEUR,
+            gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=73.5,
             slope_rating=136,
         ),
         Tee(
-            category=TeeCategory.SENIOR_FEMALE,
+            category=TeeCategory.SENIOR,
+            gender=Gender.FEMALE,
             identifier="Verde",
             course_rating=71.5,
             slope_rating=130,
@@ -640,9 +650,9 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
     retrieved = await repository.find_by_id(golf_course.id)
     assert retrieved is not None
     assert len(retrieved.tees) == 6
-    # Verificar que las categorías son únicas
-    categories = {tee.category for tee in retrieved.tees}
-    assert len(categories) == 6
+    # Verificar que las combinaciones (categoría, gender) son únicas
+    combos = {(tee.category, tee.gender) for tee in retrieved.tees}
+    assert len(combos) == 6
 
 
 async def test_repository_preserves_hole_order(db_session, valid_tees):

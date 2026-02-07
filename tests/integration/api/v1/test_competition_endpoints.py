@@ -39,8 +39,7 @@ class TestCreateCompetition:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
-            "handicap_type": "PERCENTAGE",
-            "handicap_percentage": 95,
+            "play_mode": "HANDICAP",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -65,7 +64,7 @@ class TestCreateCompetition:
             "start_date": "2025-12-01",
             "end_date": "2025-12-03",
             "main_country": "ES",
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -87,7 +86,7 @@ class TestCreateCompetition:
             "start_date": "2025-12-10",
             "end_date": "2025-12-05",
             "main_country": "ES",
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -131,7 +130,7 @@ class TestListCompetitions:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "FR",
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 16,
             "team_assignment": "MANUAL",
         }
@@ -167,7 +166,7 @@ class TestListCompetitions:
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
                 "main_country": "ES",
-                "handicap_type": "SCRATCH",
+                "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
             },
@@ -200,7 +199,7 @@ class TestListCompetitions:
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
                 "main_country": "ES",
-                "handicap_type": "SCRATCH",
+                "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
             },
@@ -213,7 +212,7 @@ class TestListCompetitions:
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
                 "main_country": "ES",
-                "handicap_type": "SCRATCH",
+                "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
             },
@@ -226,7 +225,7 @@ class TestListCompetitions:
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
                 "main_country": "ES",
-                "handicap_type": "SCRATCH",
+                "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
             },
@@ -539,7 +538,7 @@ class TestEdgeCases:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "ES",
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -604,7 +603,7 @@ class TestEdgeCases:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "main_country": "XX",  # País inválido
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }
@@ -634,7 +633,7 @@ class TestEdgeCases:
             "end_date": end.isoformat(),
             "main_country": "ES",
             "adjacent_country_1": "JP",  # Japón no es adyacente a España
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
             "max_players": 24,
             "team_assignment": "MANUAL",
         }

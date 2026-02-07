@@ -22,11 +22,8 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
-from src.modules.competition.domain.value_objects.handicap_settings import (
-    HandicapSettings,
-    HandicapType,
-)
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -42,6 +39,7 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -81,7 +79,7 @@ class TestAddGolfCourseToCompetitionUseCase:
             name=CompetitionName("Test Competition"),
             dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
             location=Location(main_country=CountryCode("ES")),
-            handicap_settings=HandicapSettings(HandicapType.SCRATCH, None),
+            play_mode=PlayMode.SCRATCH,
             max_players=24,
             team_assignment=TeamAssignment.MANUAL,
             team_1_name="Team A",
@@ -98,13 +96,15 @@ class TestAddGolfCourseToCompetitionUseCase:
         """Fixture que crea un campo de golf APPROVED en España."""
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Amarillo",
                 course_rating=72.5,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Blanco",
                 course_rating=70.0,
                 slope_rating=120,
@@ -304,13 +304,15 @@ class TestAddGolfCourseToCompetitionUseCase:
         # Arrange
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Amarillo",
                 course_rating=72.5,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Blanco",
                 course_rating=70.0,
                 slope_rating=120,
@@ -361,13 +363,15 @@ class TestAddGolfCourseToCompetitionUseCase:
         # Arrange
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Jaune",
                 course_rating=72.0,
                 slope_rating=128,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Blanc",
                 course_rating=70.0,
                 slope_rating=120,
@@ -451,13 +455,15 @@ class TestAddGolfCourseToCompetitionUseCase:
         for i in range(3):
             tees = [
                 Tee(
-                    category=TeeCategory.CHAMPIONSHIP_MALE,
+                    category=TeeCategory.CHAMPIONSHIP,
+                    gender=Gender.MALE,
                     identifier=f"Tee{i}",
                     course_rating=72.0,
                     slope_rating=130,
                 ),
                 Tee(
-                    category=TeeCategory.AMATEUR_MALE,
+                    category=TeeCategory.AMATEUR,
+                    gender=Gender.MALE,
                     identifier=f"Blanco{i}",
                     course_rating=70.0,
                     slope_rating=120,

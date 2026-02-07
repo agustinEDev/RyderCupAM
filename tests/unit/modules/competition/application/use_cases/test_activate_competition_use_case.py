@@ -63,7 +63,7 @@ class TestActivateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -121,7 +121,7 @@ class TestActivateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -152,7 +152,7 @@ class TestActivateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -185,7 +185,7 @@ class TestActivateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -226,7 +226,7 @@ class TestActivateCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

@@ -41,6 +41,10 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Busca una competición por su ID."""
         return self._competitions.get(competition_id)
 
+    async def find_by_id_for_update(self, competition_id: CompetitionId) -> Competition | None:
+        """Busca una competición por su ID con bloqueo (no-op en memoria)."""
+        return self._competitions.get(competition_id)
+
     async def find_by_creator(self, creator_id: UserId) -> list[Competition]:
         """Busca todas las competiciones creadas por un usuario."""
         return [comp for comp in self._competitions.values() if comp.creator_id == creator_id]

@@ -131,8 +131,7 @@ class ListUserDevicesUseCase:
                     created_at=device.created_at,
                     is_active=device.is_active,
                     is_current_device=(
-                        current_device_id is not None
-                        and str(device.id.value) == current_device_id
+                        current_device_id is not None and str(device.id.value) == current_device_id
                     ),
                 )
                 for device in devices

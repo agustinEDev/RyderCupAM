@@ -1,8 +1,8 @@
 """
-Caso de Uso: Eliminar Campo de Golf de Competición.
+Caso de Uso: Eliminar Campo de Golf de Competicion.
 
-Permite desasociar un campo de golf de una competición en estado DRAFT.
-Solo el creador puede realizar esta acción.
+Permite desasociar un campo de golf de una competicion en estado DRAFT.
+Solo el creador puede realizar esta accion.
 """
 
 from datetime import UTC, datetime
@@ -10,6 +10,10 @@ from datetime import UTC, datetime
 from src.modules.competition.application.dto.competition_dto import (
     RemoveGolfCourseRequestDTO,
     RemoveGolfCourseResponseDTO,
+)
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -19,46 +23,34 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """Excepción lanzada cuando el usuario no es el creador de la competición."""
-
-    pass
-
-
 class CompetitionNotDraftError(Exception):
-    """Excepción lanzada cuando la competición no está en estado DRAFT."""
+    """Excepcion lanzada cuando la competicion no esta en estado DRAFT."""
 
     pass
 
 
 class GolfCourseNotAssignedError(Exception):
-    """Excepción lanzada cuando el campo de golf no está asociado a la competición."""
+    """Excepcion lanzada cuando el campo de golf no esta asociado a la competicion."""
 
     pass
 
 
 class RemoveGolfCourseFromCompetitionUseCase:
     """
-    Caso de uso para eliminar un campo de golf de una competición.
+    Caso de uso para eliminar un campo de golf de una competicion.
 
     Restricciones:
-    - La competición debe estar en estado DRAFT
+    - La competicion debe estar en estado DRAFT
     - Solo el creador puede eliminar campos
-    - El campo debe estar actualmente asociado a la competición
+    - El campo debe estar actualmente asociado a la competicion
 
     Orquesta:
-    1. Buscar la competición por ID
+    1. Buscar la competicion por ID
     2. Verificar que el usuario sea el creador
-    3. Verificar que esté en estado DRAFT
-    4. Eliminar el campo de la competición (validación de existencia en el dominio)
-    5. Guardar la competición actualizada
-    6. Commit de la transacción
+    3. Verificar que este en estado DRAFT
+    4. Eliminar el campo de la competicion (validacion de existencia en el dominio)
+    5. Guardar la competicion actualizada
+    6. Commit de la transaccion
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -74,23 +66,23 @@ class RemoveGolfCourseFromCompetitionUseCase:
         self, request: RemoveGolfCourseRequestDTO, user_id: UserId
     ) -> RemoveGolfCourseResponseDTO:
         """
-        Ejecuta el caso de uso de eliminar campo de golf de competición.
+        Ejecuta el caso de uso de eliminar campo de golf de competicion.
 
         Args:
             request: DTO con competition_id y golf_course_id
-            user_id: ID del usuario que solicita la operación
+            user_id: ID del usuario que solicita la operacion
 
         Returns:
-            DTO con confirmación de eliminación
+            DTO con confirmacion de eliminacion
 
         Raises:
-            CompetitionNotFoundError: Si la competición no existe
+            CompetitionNotFoundError: Si la competicion no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDraftError: Si la competición no está en estado DRAFT
-            GolfCourseNotAssignedError: Si el campo no está asociado a la competición
+            CompetitionNotDraftError: Si la competicion no esta en estado DRAFT
+            GolfCourseNotAssignedError: Si el campo no esta asociado a la competicion
         """
         async with self._uow:
-            # 1. Buscar la competición
+            # 1. Buscar la competicion
             competition_id = CompetitionId(request.competition_id)
             competition = await self._uow.competitions.find_by_id(competition_id)
 
@@ -102,25 +94,25 @@ class RemoveGolfCourseFromCompetitionUseCase:
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError(
-                    "Solo el creador puede eliminar campos de golf de la competición"
+                    "Solo el creador puede eliminar campos de golf de la competicion"
                 )
 
-            # 3. Verificar que esté en estado DRAFT
+            # 3. Verificar que este en estado DRAFT
             if not competition.is_draft():
                 raise CompetitionNotDraftError(
                     f"Solo se pueden eliminar campos en estado DRAFT. "
                     f"Estado actual: {competition.status.value}"
                 )
 
-            # 4. Eliminar el campo de la competición (validación en dominio)
+            # 4. Eliminar el campo de la competicion (validacion en dominio)
             golf_course_id = GolfCourseId(request.golf_course_id)
             try:
                 competition.remove_golf_course(golf_course_id)
             except ValueError as e:
-                # El campo no está asociado
+                # El campo no esta asociado
                 raise GolfCourseNotAssignedError(str(e)) from e
 
-            # 5. Guardar la competición actualizada
+            # 5. Guardar la competicion actualizada
             await self._uow.competitions.update(competition)
 
         # 6. Construir respuesta

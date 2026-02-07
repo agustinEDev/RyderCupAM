@@ -25,6 +25,7 @@ from src.modules.golf_course.domain.value_objects.tee_category import TeeCategor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.entities.country import Country
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -66,13 +67,15 @@ class TestUpdateGolfCourseUseCase:
             course_type=CourseType.STANDARD_18,
             tees=[
                 TeeDTO(
-                    tee_category="CHAMPIONSHIP_MALE",
+                    tee_category="CHAMPIONSHIP",
+                    tee_gender="MALE",
                     identifier="Blanco",
                     course_rating=73.0,
                     slope_rating=135,
                 ),
                 TeeDTO(
-                    tee_category="AMATEUR_MALE",
+                    tee_category="AMATEUR",
+                    tee_gender="MALE",
                     identifier="Amarillo",
                     course_rating=71.0,
                     slope_rating=130,
@@ -90,13 +93,15 @@ class TestUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,
@@ -211,13 +216,15 @@ class TestUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,
@@ -322,13 +329,15 @@ class TestUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,

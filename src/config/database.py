@@ -31,7 +31,12 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # 2. Crear un motor (engine) asíncrono
-async_engine = create_async_engine(DATABASE_URL, echo=False)  # echo=False para no llenar los logs
+async_engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,  # Detecta conexiones muertas antes de reutilizarlas
+    pool_recycle=1800,    # Recicla conexiones cada 30 min (evita stale connections)
+)
 
 
 # 3. Crear un "sessionmaker" asíncrono

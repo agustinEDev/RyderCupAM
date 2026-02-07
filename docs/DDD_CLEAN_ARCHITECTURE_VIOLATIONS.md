@@ -461,7 +461,7 @@ infrastructure/api/v1/
 **Examples:**
 - `UpdateGolfCourseUseCase`: 136-226 lines of if/else business logic
 - `ReorderGolfCoursesUseCase`: 126-158 lines of ordering logic
-- `UpdateCompetitionUseCase`: Building HandicapSettings in use case
+- `UpdateCompetitionUseCase`: Building PlayMode in use case
 
 **Violation:**
 - Business rules are in the **application layer** instead of **domain layer**

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 from ..events.account_locked_event import AccountLockedEvent
 from ..events.account_unlocked_event import AccountUnlockedEvent
@@ -84,6 +85,7 @@ class User:
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
         is_admin: bool = False,
+        gender: Gender | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
         self.id = id
@@ -103,6 +105,7 @@ class User:
         self.failed_login_attempts = failed_login_attempts
         self.locked_until = locked_until
         self.is_admin = is_admin
+        self.gender = gender
         self._domain_events = domain_events or []
 
     def get_full_name(self) -> str:
@@ -184,6 +187,7 @@ class User:
         plain_password: str,
         country_code_str: str | None = None,
         is_admin: bool = False,
+        gender: Gender | None = None,
     ) -> "User":
         """
         Factory method para crear usuario con Value Objects.
@@ -195,6 +199,7 @@ class User:
             plain_password: Password en texto plano
             country_code_str: Código ISO del país (opcional, ej: "ES", "FR")
             is_admin: Si el usuario tiene privilegios de administrador (default: False)
+            gender: Género del usuario (opcional, MALE/FEMALE)
 
         Returns:
             User: Nueva instancia con ID generado y Value Objects
@@ -218,6 +223,7 @@ class User:
             updated_at=datetime.now(),
             country_code=country_code,
             is_admin=is_admin,
+            gender=gender,
         )
 
         # Generar evento de registro

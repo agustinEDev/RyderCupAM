@@ -243,7 +243,7 @@ class DeviceFingerprint:
         # Fallback si no se pudo parsear
         if browser == "Unknown" and os_name == "Unknown":
             # Últimos 3 dígitos de la IP como identificador
-            ip_suffix = ip_address.split(".")[-1] if "." in ip_address else "xxx"
+            ip_suffix = ip_address.rsplit(".", maxsplit=1)[-1] if "." in ip_address else "xxx"
             return f"Unknown Device (IP: ...{ip_suffix})"
 
         return f"{browser} on {os_name}"

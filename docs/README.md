@@ -228,5 +228,5 @@ Si encuentras errores o quieres mejorar la documentación:
 
 ---
 
-**Last Updated:** 8 January 2026
-**Version:** v1.13.0
+**Last Updated:** 6 February 2026
+**Version:** v2.0.5 (Sprint 2 Complete)

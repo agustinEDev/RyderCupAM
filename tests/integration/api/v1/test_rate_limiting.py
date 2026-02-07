@@ -263,7 +263,7 @@ class TestRateLimitingCompetition:
             "team_assignment": "MANUAL",
             "team_1_name": "Europe",
             "team_2_name": "USA",
-            "handicap_type": "SCRATCH",
+            "play_mode": "SCRATCH",
         }
 
         # Realizar 10 peticiones (dentro del límite)

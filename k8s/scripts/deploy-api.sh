@@ -21,7 +21,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuración
-DOCKER_IMAGE="agustinedev/rydercupam-app"
+DOCKER_IMAGE="agustinedev/rydercupam-api"
 DEPLOYMENT_NAME="rydercup-api"
 CONTAINER_NAME="fastapi"
 VERSION="${1:-latest}"  # Usar argumento o "latest" por defecto

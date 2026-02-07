@@ -4,6 +4,8 @@ Tee Entity - Salida de un campo de golf con ratings WHS.
 
 from dataclasses import dataclass
 
+from src.shared.domain.value_objects.gender import Gender
+
 from ..value_objects.tee_category import TeeCategory
 
 
@@ -13,7 +15,8 @@ class Tee:
     Tee (salida) de un campo de golf.
 
     Attributes:
-        category: Categoría normalizada (AMATEUR_MALE, CHAMPIONSHIP_FEMALE, etc.)
+        category: Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)
+        gender: Género del tee (MALE/FEMALE/None). Nullable para todas las categorías.
         identifier: Identificador libre del tee (ej: "Amarillo", "Blanco", "Rojo")
         slope_rating: Slope Rating WHS (55-155, típico 113)
         course_rating: Course Rating WHS (decimal, ej: 71.5)
@@ -23,7 +26,8 @@ class Tee:
 
     Example:
         >>> tee = Tee(
-        ...     category=TeeCategory.AMATEUR_MALE,
+        ...     category=TeeCategory.AMATEUR,
+        ...     gender=Gender.MALE,
         ...     identifier="Amarillo",
         ...     slope_rating=126,
         ...     course_rating=71.5
@@ -31,6 +35,7 @@ class Tee:
     """
 
     category: TeeCategory
+    gender: Gender | None  # MALE, FEMALE, or None (gender-neutral)
     identifier: str  # Color o nombre del tee (libre)
     slope_rating: int  # 55-155 (WHS)
     course_rating: float  # Course Rating (WHS)

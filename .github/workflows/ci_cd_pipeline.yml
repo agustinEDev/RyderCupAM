@@ -1049,6 +1049,8 @@ jobs:
 
     steps:
       - name: Generate Pipeline Summary
+        env:
+          COMMIT_MSG_INPUT: ${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}
         run: |
           # Function to get emoji for job result
           get_emoji() {
@@ -1091,19 +1093,12 @@ jobs:
           SKIPPED_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "skipped" | wc -l)
 
           # Sanitize commit message for markdown table
-          COMMIT_MSG_RAW="${{ github.event.head_commit.message }}"
-
-          # Fallback to PR title if commit message is empty
-          if [ -z "$COMMIT_MSG_RAW" ]; then
-            COMMIT_MSG_RAW="${{ github.event.pull_request.title }}"
-          fi
-
-          # Fallback to "N/A" if still empty
-          if [ -z "$COMMIT_MSG_RAW" ]; then
+          # COMMIT_MSG_INPUT is passed via env: block to avoid bash injection from multiline messages
+          if [ -z "$COMMIT_MSG_INPUT" ]; then
             SANITIZED_COMMIT_MSG="N/A"
           else
-            # Extract only first line (title) for commit message to avoid multi-line bash issues
-            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_RAW" | head -n 1 | sed 's/|/\\|/g')
+            # Extract only first line (title) and escape pipe chars for markdown table
+            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_INPUT" | head -n 1 | sed 's/|/\\|/g')
           fi
 
           # Calculate percentages using python (guaranteed available in GitHub Actions)

@@ -152,7 +152,7 @@ class TestListEnrollments:
         )
 
         assert response.status_code == 200
-        assert response.json() == []
+        assert len(response.json()) == 1  # Creator auto-enrolled
 
     @pytest.mark.asyncio
     async def test_list_enrollments_with_data(self, client: AsyncClient):
@@ -181,7 +181,7 @@ class TestListEnrollments:
         )
 
         assert response.status_code == 200
-        assert len(response.json()) == 2
+        assert len(response.json()) == 3  # Creator auto-enrolled + 2 players
 
 
 class TestApproveRejectEnrollment:
@@ -505,8 +505,8 @@ class TestEnrollmentEdgeCases:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["status"] == "APPROVED"
+        assert len(data) == 2  # Creator auto-enrolled APPROVED + player1 APPROVED
+        assert all(d["status"] == "APPROVED" for d in data)
 
     @pytest.mark.asyncio
     async def test_direct_enroll_with_custom_handicap(self, client: AsyncClient):
