@@ -186,70 +186,63 @@ print_success "PVC creado"
 echo ""
 
 # ==========================================
-# PASO 8: Construir imágenes Docker (OPCIONAL)
+# PASO 8: Construir imágenes Docker
 # ==========================================
-print_step "¿Construir imágenes Docker localmente?"
-echo ""
-echo "Esto construirá las imágenes del backend y frontend con el código actual."
-echo "Recomendado si has hecho cambios en el código."
-echo ""
-read -p "¿Quieres construir las imágenes Docker localmente? (Y/n): " -n 1 -r
-echo
-echo ""
+print_step "Construyendo imágenes Docker con el código actual..."
 
-if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    print_step "Construyendo imágenes Docker..."
+# Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
+FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
+BACKEND_DIR="$PROJECT_ROOT"
 
-    # Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
-    FRONTEND_DIR="$(cd "$PROJECT_ROOT/../RyderCupWeb" && pwd)"
-    BACKEND_DIR="$PROJECT_ROOT"
-
-    # Verificar que existen los Dockerfiles
-    if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
-        print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
-        exit 1
-    fi
-
-    if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
-        print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
-        exit 1
-    fi
-
-    # Construir imagen del Backend
-    print_step "Construyendo imagen del Backend (FastAPI)..."
-    docker build -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
-    print_success "Imagen del backend construida"
-
-    # Construir imagen del Frontend
-    print_step "Construyendo imagen del Frontend (React + Vite)..."
-    docker build -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
-    print_success "Imagen del frontend construida"
-
-    # Cargar imágenes en el cluster de Kind
-    print_step "Cargando imágenes en el cluster de Kind..."
-    kind load docker-image agustinedev/rydercupam-api:latest --name ${CLUSTER_NAME}
-    kind load docker-image agustinedev/rydercupam-web:latest --name ${CLUSTER_NAME}
-    print_success "Imágenes cargadas en el cluster"
-
-    echo ""
+if [ -d "$FRONTEND_CANDIDATE" ]; then
+    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
 else
-    print_warning "Saltando construcción de imágenes"
-    print_warning "Se usarán las imágenes existentes en el cluster"
-    echo ""
+    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
+    exit 1
 fi
 
-# ==========================================
-# PASO 9: Crear almacenamiento persistente
-# ==========================================
-print_step "Creando PersistentVolumeClaim para PostgreSQL..."
+# Verificar que existen los Dockerfiles
+if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
+    exit 1
+fi
 
-kubectl apply -f "$K8S_DIR/postgres-pvc.yaml"
+if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
+    exit 1
+fi
 
-print_success "PVC creado"
+# Construir imagen del Backend
+print_step "Construyendo imagen del Backend (FastAPI)..."
+docker build --no-cache -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
+print_success "Imagen del backend construida"
+
+# Construir imagen del Frontend
+print_step "Construyendo imagen del Frontend (React + Vite)..."
+docker build --no-cache -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
+print_success "Imagen del frontend construida"
+
+# Pre-pull PostgreSQL image si no existe localmente
+if ! docker image inspect postgres:15 &> /dev/null; then
+    print_step "Descargando imagen PostgreSQL 15..."
+    docker pull postgres:15
+    print_success "Imagen PostgreSQL descargada"
+fi
+
+# Cargar imágenes en el cluster de Kind
+print_step "Cargando imágenes en el cluster de Kind..."
+kind load docker-image agustinedev/rydercupam-api:latest --name ${CLUSTER_NAME}
+kind load docker-image agustinedev/rydercupam-web:latest --name ${CLUSTER_NAME}
+
+# postgres:15 es multi-plataforma y kind load falla con ella — usar save/import
+print_step "Cargando imagen PostgreSQL en Kind (save/import)..."
+docker save postgres:15 | docker exec -i ${CLUSTER_NAME}-control-plane ctr --namespace=k8s.io images import -
+print_success "Imágenes cargadas en el cluster (API + Frontend + PostgreSQL)"
+
 echo ""
 
 # ==========================================
-# PASO 10: Desplegar PostgreSQL
+# PASO 9: Desplegar PostgreSQL
 # ==========================================
 print_step "Desplegando PostgreSQL..."
 
@@ -263,7 +256,7 @@ print_success "PostgreSQL desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 11: Desplegar Backend (FastAPI)
+# PASO 10: Desplegar Backend (FastAPI)
 # ==========================================
 print_step "Desplegando Backend (FastAPI)..."
 
@@ -277,7 +270,7 @@ print_success "Backend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 12: Desplegar Frontend (React + nginx)
+# PASO 11: Desplegar Frontend (React + nginx)
 # ==========================================
 print_step "Desplegando Frontend (React + nginx)..."
 
@@ -291,7 +284,7 @@ print_success "Frontend desplegado y listo"
 echo ""
 
 # ==========================================
-# PASO 13: Verificar deployment
+# PASO 12: Verificar deployment
 # ==========================================
 print_step "Verificando deployment completo..."
 
@@ -318,7 +311,7 @@ fi
 echo ""
 
 # ==========================================
-# PASO 14: Instrucciones finales
+# PASO 13: Instrucciones finales
 # ==========================================
 print_success "🎉 ¡Deployment completado exitosamente!"
 echo ""

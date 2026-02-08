@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**v2.0.0** · 29 January 2026 · RBAC Foundation + Sprint 1
+**v2.0.5** · 6 February 2026 · Sprint 2 Complete (Rounds, Matches & Teams)
 
 ---
 
@@ -177,7 +177,7 @@ Domain (Entities, VOs, Events, Repos)
 
 **Domain**:
 - Entities: `Competition`, `Enrollment`, `Country`
-- VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `HandicapSettings`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
+- VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `PlayMode`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
 - Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
 - Repos: `CompetitionRepositoryInterface`, `EnrollmentRepositoryInterface`, `CountryRepositoryInterface`
 
@@ -346,20 +346,20 @@ API → UseCase → HandicapService.search(name) → RFEG
 **Strategy**: Test Pyramid (89% unit, 11% integration)
 
 ```
-672 tests (100% passing)
-├── Unit: 595+ tests
+1,282 tests (100% passing, 16 skipped)
+├── Unit: 1,200+ tests
 │   ├── User Module: 308 tests
-│   ├── Competition Module: 173 tests
-│   ├── Shared: 60 tests
-│   └── Other: 54+ tests
-└── Integration: 72+ tests
-    ├── API: ~60 tests
-    └── Domain Events: ~12 tests
+│   ├── Competition Module: 554 tests (296 domain + 130 application + 52 infra + 76 DTO)
+│   ├── Shared: 138 tests
+│   └── Other: 200+ tests
+└── Integration: 80+ tests
+    ├── API: ~70 tests
+    └── Security: 34 tests
 ```
 
 **Coverage**: >90% in business logic
 **Email Verification**: 100% (24 tests across 3 layers)
-**Competition Module**: 97.6% (174 comprehensive tests)
+**Competition Module**: 554 tests (domain + application + infrastructure + API)
 **Performance**: ~30s (parallelized with pytest-xdist)
 
 **CI/CD**: Tests run automatically on GitHub Actions (Python 3.11, 3.12)
@@ -483,11 +483,14 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Module | Status | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Complete + Auth + Email | 308+ | 10 |
-| Competition | ✅ Complete + Enrollments | 174 | 20 |
+| User | ✅ Complete + Auth + Email | 308+ | 17 |
+| Competition | ✅ Complete + Enrollments + Rounds/Matches/Teams | 554 | 35 |
+| Golf Course | ✅ Complete + Approval Workflow | 18+ | 10 |
+| Shared | ✅ Countries + Security | 138 | 2 |
 | CI/CD | ✅ GitHub Actions | - | - |
 | Kubernetes | ✅ Complete deployment | - | - |
-| Real-time Scoring | ⏳ Pending | 0 | 0 |
+| Invitations | ⏳ Sprint 3 | 0 | 0 |
+| Scoring | ⏳ Sprint 4 | 0 | 0 |
 
 ### Implemented Value Objects (69 tests)
 

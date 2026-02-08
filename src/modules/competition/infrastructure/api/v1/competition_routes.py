@@ -54,6 +54,10 @@ from src.modules.competition.application.dto.competition_dto import (
     TeeResponseDTO,
     UpdateCompetitionRequestDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
     CompetitionNotFoundError as ActivateNotFoundError,
@@ -80,9 +84,7 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
     NotCompetitionCreatorError as CloseNotCreatorError,
 )
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
-    CompetitionNotFoundError as CompleteNotFoundError,
     CompleteCompetitionUseCase,
-    NotCompetitionCreatorError as CompleteNotCreatorError,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
@@ -90,12 +92,9 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
-    CompetitionNotFoundError as DeleteNotFoundError,
     DeleteCompetitionUseCase,
-    NotCompetitionCreatorError as DeleteNotCreatorError,
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
-    CompetitionNotFoundError as GetNotFoundError,
     GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
@@ -103,9 +102,7 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     CompetitionNotDraftError as RemoveGCNotDraftError,
-    CompetitionNotFoundError as RemoveGCNotFoundError,
     GolfCourseNotAssignedError,
-    NotCompetitionCreatorError as RemoveGCNotCreatorError,
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
@@ -143,6 +140,15 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Aliases for shared exceptions (used in per-endpoint except blocks)
+CompleteNotFoundError = CompetitionNotFoundError
+CompleteNotCreatorError = NotCompetitionCreatorError
+DeleteNotFoundError = CompetitionNotFoundError
+DeleteNotCreatorError = NotCompetitionCreatorError
+GetNotFoundError = CompetitionNotFoundError
+RemoveGCNotFoundError = CompetitionNotFoundError
+RemoveGCNotCreatorError = NotCompetitionCreatorError
 
 logger = logging.getLogger(__name__)
 
@@ -433,9 +439,8 @@ class CompetitionDTOMapper:
             location=location_str,
             # Location - countries array
             countries=countries_list,
-            # Handicap
-            handicap_type=competition.handicap_settings.type.value,
-            handicap_percentage=competition.handicap_settings.percentage,
+            # Play Mode
+            play_mode=competition.play_mode.value,
             # Config
             max_players=competition.max_players,
             team_assignment=(
@@ -622,8 +627,7 @@ async def create_competition(
     - end_date: Fecha de fin (>= start_date)
     - main_country: Código ISO del país principal (ej: "ES")
     - adjacent_country_1/2: Países adyacentes opcionales
-    - handicap_type: "SCRATCH" o "PERCENTAGE"
-    - handicap_percentage: 90-100 (si type=PERCENTAGE)
+    - play_mode: "SCRATCH" o "HANDICAP"
     - max_players: Máximo de jugadores (default: 24)
     - team_assignment: "MANUAL" o "AUTOMATIC"
 
@@ -666,8 +670,7 @@ async def create_competition(
                 tertiary_country_code=enriched_dto.tertiary_country_code,
                 location=enriched_dto.location,
                 countries=enriched_dto.countries,
-                handicap_type=enriched_dto.handicap_type,
-                handicap_percentage=enriched_dto.handicap_percentage,
+                play_mode=enriched_dto.play_mode,
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
                 team_1_name=competition.team_1_name,
@@ -901,7 +904,7 @@ async def update_competition(
     **Request Body:** Todos los campos opcionales
     - name, start_date, end_date
     - main_country, adjacent_country_1, adjacent_country_2
-    - handicap_type, handicap_percentage
+    - play_mode
     - max_players, team_assignment
 
     **Returns:**
@@ -1589,6 +1592,7 @@ async def list_competition_golf_courses(
                             tees=[
                                 TeeResponseDTO(
                                     category=tee.category.value,
+                                    gender=tee.gender.value if tee.gender else None,
                                     identifier=tee.identifier,
                                     course_rating=float(tee.course_rating),
                                     slope_rating=int(tee.slope_rating),
@@ -1612,7 +1616,9 @@ async def list_competition_golf_courses(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error loading golf courses for competition {competition_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error loading golf courses for competition {competition_id}: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno al cargar campos de golf: {type(e).__name__}",

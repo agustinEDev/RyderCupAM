@@ -21,6 +21,7 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,13 +56,15 @@ class TestApproveUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees_original = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,
@@ -84,13 +87,15 @@ class TestApproveUpdateGolfCourseUseCase:
         # Clone PENDING con cambios
         tees_clone = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="Blue",
                 course_rating=74.0,
                 slope_rating=135,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Red",
                 course_rating=72.0,
                 slope_rating=130,
@@ -207,13 +212,15 @@ class TestApproveUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP_MALE,
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR_MALE,
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,

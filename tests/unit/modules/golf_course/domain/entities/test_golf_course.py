@@ -19,6 +19,7 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 # ============================================================================
 # Fixtures
@@ -30,19 +31,22 @@ def valid_tees():
     """Crea 3 tees válidos para tests."""
     return [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_MALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR_MALE,
+            category=TeeCategory.AMATEUR,
+            gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.2,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_FEMALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=75.0,
             slope_rating=140,
@@ -300,7 +304,8 @@ def test_create_golf_course_invalid_tees_count_too_few(valid_holes):
     # Given
     only_one_tee = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP_MALE,
+            category=TeeCategory.CHAMPIONSHIP,
+            gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
@@ -308,7 +313,7 @@ def test_create_golf_course_invalid_tees_count_too_few(valid_holes):
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Golf course must have between 2 and 6 tees"):
+    with pytest.raises(ValueError, match="Golf course must have between 2 and 10 tees"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
@@ -321,38 +326,43 @@ def test_create_golf_course_invalid_tees_count_too_few(valid_holes):
 
 def test_create_golf_course_invalid_tees_count_too_many(valid_holes):
     """
-    GIVEN: Más de 6 tees
+    GIVEN: Más de 10 tees
     WHEN: Se intenta crear un GolfCourse
     THEN: Se lanza ValueError
     """
-    # Given - Usar las 6 categorías reales + 1 repetida = 7 tees
-    all_categories = [
-        TeeCategory.CHAMPIONSHIP_MALE,
-        TeeCategory.AMATEUR_MALE,
-        TeeCategory.SENIOR_MALE,
-        TeeCategory.CHAMPIONSHIP_FEMALE,
-        TeeCategory.AMATEUR_FEMALE,
-        TeeCategory.SENIOR_FEMALE,
-        TeeCategory.CHAMPIONSHIP_MALE,  # Repetida para hacer 7
+    # Given - 5 categories x 2 genders = 10 unique combos + 1 extra = 11 tees
+    category_gender_combos = [
+        (TeeCategory.CHAMPIONSHIP, Gender.MALE),
+        (TeeCategory.CHAMPIONSHIP, Gender.FEMALE),
+        (TeeCategory.AMATEUR, Gender.MALE),
+        (TeeCategory.AMATEUR, Gender.FEMALE),
+        (TeeCategory.SENIOR, Gender.MALE),
+        (TeeCategory.SENIOR, Gender.FEMALE),
+        (TeeCategory.FORWARD, Gender.MALE),
+        (TeeCategory.FORWARD, Gender.FEMALE),
+        (TeeCategory.JUNIOR, Gender.MALE),
+        (TeeCategory.JUNIOR, Gender.FEMALE),
+        (TeeCategory.CHAMPIONSHIP, Gender.MALE),  # Repeated to make 11
     ]
-    seven_tees = [
+    eleven_tees = [
         Tee(
             category=cat,
+            gender=gender,
             identifier=f"Tee {i}",
             course_rating=70.0,
             slope_rating=120,
         )
-        for i, cat in enumerate(all_categories)
+        for i, (cat, gender) in enumerate(category_gender_combos)
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Golf course must have between 2 and 6 tees"):
+    with pytest.raises(ValueError, match="Golf course must have between 2 and 10 tees"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
             creator_id=UserId.generate(),
-            tees=seven_tees,
+            tees=eleven_tees,
             holes=valid_holes,
         )
 

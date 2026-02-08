@@ -19,7 +19,7 @@ We need to implement the Competition module to manage Ryder Cup format tournamen
 
 ## Options Considered
 
-1. **HandicapSettings**: Complete calculation vs policy only
+1. **PlayMode**: Complete calculation vs policy only
 2. **Enrollment States**: 4 basic states vs 6 states with CANCELLED
 3. **Country Management**: Complete submodule vs pragmatic shared domain
 
@@ -38,18 +38,17 @@ We need to implement the Competition module to manage Ryder Cup format tournamen
   - **REJECTED**: Creator rejects request
   - **WITHDRAWN**: Player withdraws after being approved
 
-### HandicapSettings: Policy Only
+### PlayMode: Policy Only
 
-**Decision**: Store only type (SCRATCH/PERCENTAGE) and percentage (90/95/100).
+**Decision**: Store only play mode (SCRATCH/HANDICAP). Allowance percentages are configured per Round (ADR-037).
 
 ```python
-@dataclass(frozen=True)
-class HandicapSettings:
-    type: HandicapType
-    percentage: Optional[int]  # 90, 95, 100
+class PlayMode(str, Enum):
+    SCRATCH = "SCRATCH"
+    HANDICAP = "HANDICAP"
 ```
 
-**Reason**: Complete World Handicap System calculation (Course Rating, Slope Rating) requires field-specific and round data. This calculation will move to the future **Match** entity.
+**Reason**: Complete World Handicap System calculation (Course Rating, Slope Rating) requires field-specific and round data. Allowance percentages (90/95/100%) are now configured per Round via the two-tier handicap system (ADR-037), not at Competition level.
 
 ### Country Management: Shared Domain
 
@@ -75,12 +74,12 @@ class Country:
 
 ### Positive ✅
 - Clear semantics between CANCELLED/REJECTED/WITHDRAWN for auditing
-- Simple HandicapSettings allows adding complete calculation in Match without refactoring
+- Simple PlayMode allows Round-level handicap configuration without refactoring (ADR-037)
 - Pragmatic multilanguage (name_en, name_es columns)
 - Clean Architecture: Validation with repository in Use Case, pure VOs
 
 ### Negative ⚠️
-- Handicap logic in two places (Competition policy + Match calculation)
+- Handicap logic in two places (Competition PlayMode + Round allowance percentages)
 - Adding languages requires migration (vs separate table)
 
 ## Implementation

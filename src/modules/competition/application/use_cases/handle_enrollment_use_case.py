@@ -8,21 +8,17 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class EnrollmentNotFoundError(Exception):
     """Excepción lanzada cuando la inscripción no existe."""
-
-    pass
-
-
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
 
     pass
 
@@ -93,8 +89,10 @@ class HandleEnrollmentUseCase:
             if not enrollment:
                 raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
-            # 2. Obtener competición
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
+            # 2. Obtener competición con bloqueo de fila (previene TOCTOU en validación de capacidad)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competición no encontrada: {enrollment.competition_id}"
@@ -108,6 +106,13 @@ class HandleEnrollmentUseCase:
 
             # 4. Ejecutar acción
             if request.action == "APPROVE":
+                # Verificar capacidad antes de aprobar
+                approved_count = await self._uow.enrollments.count_approved_by_competition(
+                    enrollment.competition_id
+                )
+                CompetitionPolicy.validate_capacity(
+                    approved_count, competition.max_players, enrollment.competition_id
+                )
                 enrollment.approve()
             elif request.action == "REJECT":
                 enrollment.reject()

@@ -2,10 +2,10 @@
 CourseType Value Object - Tipo de campo de golf.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class CourseType(str, Enum):
+class CourseType(StrEnum):
     """
     Tipos de campos de golf soportados.
 

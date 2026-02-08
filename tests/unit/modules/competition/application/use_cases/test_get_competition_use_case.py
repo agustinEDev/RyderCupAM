@@ -8,11 +8,11 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
-    CompetitionNotFoundError,
     GetCompetitionUseCase,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -56,8 +56,7 @@ class TestGetCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             adjacent_country_1="PT",
-            handicap_type="PERCENTAGE",
-            handicap_percentage=90,
+            play_mode="HANDICAP",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -74,18 +73,17 @@ class TestGetCompetitionUseCase:
         assert competition.dates.end_date == date(2025, 6, 3)
         assert competition.location.main_country.value == "ES"
         assert competition.location.adjacent_country_1.value == "PT"
-        assert competition.handicap_settings.type.value == "PERCENTAGE"
-        assert competition.handicap_settings.percentage == 90
+        assert competition.play_mode.value == "HANDICAP"
 
-    async def test_should_get_competition_with_scratch_handicap(
+    async def test_should_get_competition_with_scratch_play_mode(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
-        Verifica que se obtiene correctamente una competición con hándicap SCRATCH.
+        Verifica que se obtiene correctamente una competición con play_mode SCRATCH.
 
-        Given: Competición con handicap SCRATCH
+        Given: Competición con play_mode SCRATCH
         When: Se solicita por ID
-        Then: El DTO muestra percentage como None
+        Then: El DTO muestra play_mode como SCRATCH
         """
         # Arrange
         create_use_case = CreateCompetitionUseCase(uow)
@@ -94,7 +92,7 @@ class TestGetCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="FR",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -103,8 +101,7 @@ class TestGetCompetitionUseCase:
         competition = await get_use_case.execute(CompetitionId(created.id))
 
         # Assert
-        assert competition.handicap_settings.type.value == "SCRATCH"
-        assert competition.handicap_settings.percentage is None
+        assert competition.play_mode.value == "SCRATCH"
 
     async def test_should_raise_error_when_competition_not_found(self, uow: InMemoryUnitOfWork):
         """
@@ -141,7 +138,7 @@ class TestGetCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="IT",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

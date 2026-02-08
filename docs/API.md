@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 54 active
-**Version**: v2.0.3-dev
-**Last Updated**: 4 February 2026
+**Total Endpoints**: 65 active
+**Version**: v2.0.5
+**Last Updated**: 6 February 2026
 
 ---
 
@@ -57,6 +57,23 @@ Competition-GolfCourse Management (4 endpoints) ⭐ v2.0.2
 ├── DELETE /api/v1/competitions/{id}/golf-courses/{gc_id} # Remove golf course
 ├── PUT    /api/v1/competitions/{id}/golf-courses/reorder # Reorder all courses
 └── GET    /api/v1/competitions/{id}/golf-courses    # List competition's golf courses
+
+Rounds & Schedule Management (4 endpoints) ⭐ Sprint 2
+├── POST   /api/v1/competitions/{id}/rounds          # Create round/session
+├── PUT    /api/v1/competitions/rounds/{id}           # Update round details
+├── DELETE /api/v1/competitions/rounds/{id}           # Delete round + cascade matches
+└── GET    /api/v1/competitions/{id}/schedule         # Get full schedule grouped by day
+
+Match Management (4 endpoints) ⭐ Sprint 2
+├── GET    /api/v1/competitions/matches/{id}          # Match detail with players/handicaps
+├── PUT    /api/v1/competitions/matches/{id}/status   # Start or complete match
+├── POST   /api/v1/competitions/matches/{id}/walkover # Declare walkover
+└── PUT    /api/v1/competitions/matches/{id}/players  # Reassign players (recalc handicaps)
+
+Teams & Generation (3 endpoints) ⭐ Sprint 2
+├── POST   /api/v1/competitions/{id}/teams            # Assign teams (snake draft/manual)
+├── POST   /api/v1/competitions/rounds/{id}/matches/generate # Generate matches for round
+└── POST   /api/v1/competitions/{id}/schedule/configure # Configure schedule (auto/manual)
 
 Enrollment Management (8 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
@@ -360,8 +377,7 @@ Returns a `UserRolesResponseDTO` object detailing the user's roles.
 - `secondary_country_code` (string, optional, must be adjacent)
 - `tertiary_country_code` (string, optional, must be adjacent)
 - `max_players` (int, required, 2-100)
-- `handicap_type` (enum, required: "SCRATCH" | "PERCENTAGE")
-- `handicap_percentage` (int, optional, 90/95/100, required if PERCENTAGE)
+- `play_mode` (enum, required: "SCRATCH" | "HANDICAP")
 - `team_assignment` (enum, required: "RANDOM" | "MANUAL")
 - `team_1_name` (string, optional, max 50)
 - `team_2_name` (string, optional, max 50)
@@ -401,6 +417,47 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
 - CANCELLED: Cancelled from any status
 
 **📋 See complete module:** `docs/modules/competition-management.md`
+
+---
+
+## 📅 Rounds, Matches & Teams ⭐ Sprint 2
+
+### Rounds & Schedule
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/competitions/{id}/rounds` | POST | Creator | 10/min | Create round/session (CLOSED competition) |
+| `/competitions/rounds/{id}` | PUT | Creator | 10/min | Update round details (PENDING_TEAMS/PENDING_MATCHES) |
+| `/competitions/rounds/{id}` | DELETE | Creator | 10/min | Delete round + cascade matches |
+| `/competitions/{id}/schedule` | GET | Auth | 20/min | Full schedule grouped by day |
+| `/competitions/{id}/schedule/configure` | POST | Creator | 10/min | Configure schedule (auto/manual) |
+
+### Matches
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/competitions/matches/{id}` | GET | Auth | 20/min | Match detail with players/handicaps |
+| `/competitions/matches/{id}/status` | PUT | Creator | 10/min | Start or complete match |
+| `/competitions/matches/{id}/walkover` | POST | Creator | 10/min | Declare walkover |
+| `/competitions/matches/{id}/players` | PUT | Creator | 10/min | Reassign players (recalculates handicaps) |
+| `/competitions/rounds/{id}/matches/generate` | POST | Creator | 10/min | Generate matches for round |
+
+### Teams
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/competitions/{id}/teams` | POST | Creator | 10/min | Assign teams (snake draft or manual) |
+
+### Round States
+```
+PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
+```
+
+### Match States
+```
+SCHEDULED → IN_PROGRESS → COMPLETED
+                        → WALKOVER
+```
 
 ---
 
@@ -522,8 +579,9 @@ REJECTED    CANCELLED
 - `name` (string, required, 3-200 chars)
 - `country_code` (string, required, ISO 3166-1 alpha-2)
 - `course_type` (enum, required: "STANDARD_18" | "PITCH_AND_PUTT" | "EXECUTIVE")
-- `tees` (array, required, 2-6 tees)
-  - `tee_category` (string, required: "CHAMPIONSHIP_MALE", "AMATEUR_MALE", etc.)
+- `tees` (array, required, 2-10 tees)
+  - `tee_category` (string, required: "CHAMPIONSHIP", "AMATEUR", "SENIOR", "FORWARD", "JUNIOR")
+  - `tee_gender` (string, optional: "MALE", "FEMALE", or null)
   - `identifier` (string, required: "Amarillo", "Oro", "1", etc.)
   - `course_rating` (float, required, 50.0-90.0)
   - `slope_rating` (int, required, 55-155)
@@ -582,7 +640,7 @@ PENDING_APPROVAL → APPROVED
 - **Validation**:
   - Exactly 18 holes with unique stroke indices (1-18)
   - Total par between 66 and 76
-  - 2-6 tees per course with valid WHS ratings
+  - 2-10 tees per course with valid WHS ratings (unique category+gender pairs)
   - Course rating: 50.0-90.0 (WHS standard)
   - Slope rating: 55-155 (WHS standard)
 - **Tee categories normalized**: Uses WHS standard categories
