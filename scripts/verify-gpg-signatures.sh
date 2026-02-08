@@ -113,26 +113,25 @@ while IFS= read -r commit; do
     PARENT_COUNT=$(git rev-list --parents -n 1 "$commit" | wc -w)
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
-    # Skip ALL merge commits (signature not required for merges)
-    if [ "$PARENT_COUNT" -ge 2 ]; then
+    # Detect GitHub web-flow commits (merge or squash merge via GitHub UI/API)
+    IS_GITHUB_WEBFLOW=false
+    if echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
+       echo "$COMMIT_AUTHOR" | grep -iq "GitHub"; then
+        IS_GITHUB_WEBFLOW=true
+    fi
+
+    # Skip merge commits and GitHub web-flow commits (squash merges)
+    if [ "$PARENT_COUNT" -ge 2 ] || [ "$IS_GITHUB_WEBFLOW" = true ]; then
         MERGE_COUNT=$((MERGE_COUNT + 1))
 
-        # Detect if it's a GitHub auto-merge for reporting purposes
-        IS_GITHUB_MERGE=false
-        if echo "$COMMIT_AUTHOR" | grep -iq "GitHub" || \
-           echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
-           echo "$COMMIT_MSG" | grep -q "Merge pull request" || \
-           echo "$COMMIT_MSG" | grep -Eq "^Merge [0-9a-f]{8,40} into [0-9a-f]{8,40}"; then
-            IS_GITHUB_MERGE=true
+        if [ "$IS_GITHUB_WEBFLOW" = true ]; then
             GITHUB_AUTO_MERGE_COUNT=$((GITHUB_AUTO_MERGE_COUNT + 1))
-        fi
-
-        # All merge commits are excluded from signature verification
-        echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
-        echo "   Author: $COMMIT_AUTHOR"
-        if [ "$IS_GITHUB_MERGE" = true ]; then
-            echo "   Type: GITHUB AUTO-MERGE (signature not required)"
-        else
+            echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
+            echo "   Type: GITHUB WEB-FLOW (signature not required)"
+        elif [ "$PARENT_COUNT" -ge 2 ]; then
+            echo -e "🔀 ${YELLOW}$COMMIT_SHORT${NC} - $COMMIT_MSG"
+            echo "   Author: $COMMIT_AUTHOR"
             echo "   Type: MERGE COMMIT (signature not required)"
         fi
         VALID_COUNT=$((VALID_COUNT + 1))
