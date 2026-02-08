@@ -173,6 +173,37 @@ def validate_user_agent(user_agent: str | None) -> str | None:
     return ua_clean
 
 
+def _is_trusted_proxy(proxy_ip: str, trusted_proxies: list[str]) -> bool:
+    """
+    Verifica si una IP pertenece a la lista de proxies confiables.
+
+    Soporta tanto IPs exactas como notación CIDR (ej: "10.0.0.0/8").
+    Entradas inválidas en trusted_proxies se ignoran silenciosamente.
+
+    Args:
+        proxy_ip: IP del proxy a verificar
+        trusted_proxies: Lista de IPs exactas o rangos CIDR confiables
+
+    Returns:
+        True si proxy_ip está en la lista de confianza, False en caso contrario
+    """
+    try:
+        addr = ipaddress.ip_address(proxy_ip)
+    except ValueError:
+        return False
+
+    for trusted in trusted_proxies:
+        try:
+            network = ipaddress.ip_network(trusted, strict=False)
+            if addr in network:
+                return True
+        except ValueError:
+            logger.warning(f"Invalid trusted proxy entry ignored: '{trusted}'")
+            continue
+
+    return False
+
+
 def get_trusted_client_ip(
     request: Request,
     trusted_proxies: list[str] | None = None,
@@ -254,7 +285,7 @@ def get_trusted_client_ip(
             logger.warning(f"Invalid True-Client-IP header ignored: {true_client_ip.strip()}")
 
     # 3. Headers de proxy (solo si proxy es confiable)
-    is_trusted_proxy = trusted_proxies and proxy_ip and proxy_ip in trusted_proxies
+    is_trusted_proxy = trusted_proxies and proxy_ip and _is_trusted_proxy(proxy_ip, trusted_proxies)
 
     if is_trusted_proxy:
         forwarded_for = request.headers.get("X-Forwarded-For")

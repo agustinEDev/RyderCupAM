@@ -68,11 +68,13 @@ class Settings:
     SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
     SENTRY_PROFILES_SAMPLE_RATE: float = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
 
-    # Trusted Proxies Configuration (v1.13.1)
-    # Lista de IPs de proxies/load balancers confiables para prevenir IP spoofing
-    # Formato: Lista separada por comas
+    # Trusted Proxies Configuration (v1.13.1, CIDR support v2.0.7)
+    # Lista de IPs o rangos CIDR de proxies/load balancers confiables
+    # Formato: Lista separada por comas (IPs exactas o notación CIDR)
+    # - Ejemplo exacta: 10.0.0.1
+    # - Ejemplo CIDR: 10.0.0.0/8 (confía en toda la red 10.x.x.x)
     # - Local: Vacío (no usar headers de proxy)
-    # - Producción: IPs de Render.com load balancers o Nginx
+    # - Producción (Render): 10.0.0.0/8 (load balancers internos)
     # Si está vacío, get_trusted_client_ip() NO confiará en X-Forwarded-For/X-Real-IP
     TRUSTED_PROXIES: ClassVar[list[str]] = [
         ip.strip() for ip in os.getenv("TRUSTED_PROXIES", "").split(",") if ip.strip()

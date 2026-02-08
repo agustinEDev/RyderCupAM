@@ -21,6 +21,7 @@ from unittest.mock import Mock
 from fastapi import Request
 
 from src.shared.infrastructure.http.http_context_validator import (
+    _is_trusted_proxy,
     get_trusted_client_ip,
     get_user_agent,
     validate_ip_address,
@@ -677,3 +678,192 @@ class TestGetUserAgent:
 
         # Then
         assert result is None
+
+
+# ============================================================================
+# TEST SUITE: _is_trusted_proxy() - CIDR Support
+# ============================================================================
+
+
+class TestIsTrustedProxy:
+    """
+    Test Suite para _is_trusted_proxy().
+
+    Casos de prueba:
+    - IP exacta (backward compatible)
+    - Notación CIDR (IPv4 e IPv6)
+    - Mezcla de IPs exactas y CIDR
+    - Entradas inválidas en trusted_proxies
+    - IP fuera de rango CIDR
+    """
+
+    def test_exact_ip_match(self):
+        """
+        Given: proxy_ip coincide exactamente con una entrada en trusted_proxies
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna True (backward compatible)
+        """
+        assert _is_trusted_proxy("10.0.0.1", ["10.0.0.1"]) is True
+
+    def test_exact_ip_no_match(self):
+        """
+        Given: proxy_ip NO coincide con ninguna entrada en trusted_proxies
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna False
+        """
+        assert _is_trusted_proxy("10.0.0.2", ["10.0.0.1"]) is False
+
+    def test_cidr_ipv4_match(self):
+        """
+        Given: proxy_ip está dentro de un rango CIDR configurado (10.0.0.0/8)
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna True
+        """
+        assert _is_trusted_proxy("10.1.2.3", ["10.0.0.0/8"]) is True
+
+    def test_cidr_ipv4_no_match(self):
+        """
+        Given: proxy_ip está fuera del rango CIDR configurado
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna False
+        """
+        assert _is_trusted_proxy("192.168.1.1", ["10.0.0.0/8"]) is False
+
+    def test_cidr_small_subnet(self):
+        """
+        Given: proxy_ip dentro de un /24 subnet
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna True
+        """
+        assert _is_trusted_proxy("172.16.0.100", ["172.16.0.0/24"]) is True
+        assert _is_trusted_proxy("172.16.1.1", ["172.16.0.0/24"]) is False
+
+    def test_mixed_exact_and_cidr(self):
+        """
+        Given: trusted_proxies contiene IPs exactas y rangos CIDR
+        When: _is_trusted_proxy() es llamada con IPs que coinciden con cada tipo
+        Then: Retorna True para ambos tipos
+        """
+        trusted = ["192.168.1.1", "10.0.0.0/8"]
+        assert _is_trusted_proxy("192.168.1.1", trusted) is True  # Exacta
+        assert _is_trusted_proxy("10.5.6.7", trusted) is True  # CIDR
+        assert _is_trusted_proxy("172.16.0.1", trusted) is False  # Ninguna
+
+    def test_invalid_trusted_entry_ignored(self):
+        """
+        Given: trusted_proxies contiene entradas inválidas junto con válidas
+        When: _is_trusted_proxy() es llamada
+        Then: Entradas inválidas se ignoran, las válidas funcionan
+        """
+        trusted = ["not-an-ip", "10.0.0.0/8"]
+        assert _is_trusted_proxy("10.1.2.3", trusted) is True
+
+    def test_invalid_proxy_ip(self):
+        """
+        Given: proxy_ip no es una IP válida
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna False
+        """
+        assert _is_trusted_proxy("not-an-ip", ["10.0.0.0/8"]) is False
+
+    def test_ipv6_cidr_match(self):
+        """
+        Given: proxy_ip IPv6 dentro de un rango CIDR IPv6
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna True
+        """
+        assert _is_trusted_proxy("2001:db8::1", ["2001:db8::/32"]) is True
+        assert _is_trusted_proxy("2001:db9::1", ["2001:db8::/32"]) is False
+
+    def test_empty_trusted_proxies(self):
+        """
+        Given: trusted_proxies vacío
+        When: _is_trusted_proxy() es llamada
+        Then: Retorna False
+        """
+        assert _is_trusted_proxy("10.0.0.1", []) is False
+
+
+class TestGetTrustedClientIPWithCIDR:
+    """
+    Test Suite para get_trusted_client_ip() con soporte CIDR.
+
+    Valida que la integración CIDR funciona end-to-end con el flujo
+    completo de extracción de IP del cliente.
+    """
+
+    def test_cidr_trusted_proxy_with_forwarded_for(self):
+        """
+        Given: Request de proxy en rango CIDR con X-Forwarded-For
+        When: get_trusted_client_ip() es llamada con CIDR en trusted_proxies
+        Then: Retorna la IP del cliente real del header
+        """
+        # Given
+        request = Mock(spec=Request)
+        request.client = Mock(host="10.1.2.3")  # IP dentro de 10.0.0.0/8
+        request.headers = {"X-Forwarded-For": "203.0.113.45, 10.1.2.3"}
+
+        trusted_proxies = ["10.0.0.0/8"]
+
+        # When
+        result = get_trusted_client_ip(request, trusted_proxies)
+
+        # Then
+        assert result == "203.0.113.45"
+
+    def test_cidr_untrusted_proxy_ignores_headers(self):
+        """
+        Given: Request de proxy fuera del rango CIDR con X-Forwarded-For
+        When: get_trusted_client_ip() es llamada
+        Then: Ignora headers y retorna IP directa
+        """
+        # Given
+        request = Mock(spec=Request)
+        request.client = Mock(host="192.168.1.100")  # Fuera de 10.0.0.0/8
+        request.headers = {"X-Forwarded-For": "1.2.3.4"}
+
+        trusted_proxies = ["10.0.0.0/8"]
+
+        # When
+        result = get_trusted_client_ip(request, trusted_proxies)
+
+        # Then
+        assert result == "192.168.1.100"
+
+    def test_mixed_cidr_and_exact_trusted_proxies(self):
+        """
+        Given: trusted_proxies con mezcla de CIDR y IPs exactas
+        When: Request viene de IP en rango CIDR
+        Then: Se reconoce como proxy confiable
+        """
+        # Given
+        request = Mock(spec=Request)
+        request.client = Mock(host="10.50.0.1")
+        request.headers = {"X-Forwarded-For": "203.0.113.45"}
+
+        trusted_proxies = ["192.168.1.1", "10.0.0.0/8"]
+
+        # When
+        result = get_trusted_client_ip(request, trusted_proxies)
+
+        # Then
+        assert result == "203.0.113.45"
+
+    def test_cidr_with_real_ip_header(self):
+        """
+        Given: Request de proxy CIDR con X-Real-IP
+        When: get_trusted_client_ip() es llamada
+        Then: Retorna la IP del header X-Real-IP
+        """
+        # Given
+        request = Mock(spec=Request)
+        request.client = Mock(host="10.0.5.10")
+        request.headers = {"X-Real-IP": "203.0.113.99"}
+
+        trusted_proxies = ["10.0.0.0/8"]
+
+        # When
+        result = get_trusted_client_ip(request, trusted_proxies)
+
+        # Then
+        assert result == "203.0.113.99"
