@@ -24,6 +24,8 @@ NC='\033[0m' # No Color
 DOCKER_IMAGE="agustinedev/rydercupam-web"
 DEPLOYMENT_NAME="rydercup-frontend"
 CONTAINER_NAME="nginx"
+CLUSTER_NAME="rydercupam-cluster"
+NAMESPACE="rydercupfriends"
 VERSION="${1:-latest}"  # Usar argumento o "latest" por defecto
 
 # Funciones de output
@@ -81,8 +83,23 @@ check_prerequisites() {
     fi
     print_success "Cluster: OK"
 
+    # Verificar Kind
+    if ! command -v kind &> /dev/null; then
+        print_error "Kind no está instalado"
+        exit 1
+    fi
+    print_success "Kind: OK"
+
+    # Verificar que el cluster Kind existe
+    if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+        print_error "El cluster Kind '${CLUSTER_NAME}' no existe"
+        print_info "Ejecuta primero: ./scripts/deploy-cluster.sh"
+        exit 1
+    fi
+    print_success "Cluster Kind '${CLUSTER_NAME}': OK"
+
     # Verificar que el deployment existe
-    if ! kubectl get deployment $DEPLOYMENT_NAME -n rydercupfriends &> /dev/null; then
+    if ! kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE &> /dev/null; then
         print_error "El deployment '$DEPLOYMENT_NAME' no existe en el cluster"
         print_info "Ejecuta primero: ./scripts/deploy-cluster.sh"
         exit 1
@@ -117,7 +134,7 @@ build_docker_image() {
     print_info "Directorio: $FRONTEND_DIR"
 
     # Construir la imagen
-    if docker build -t "$tag" "$FRONTEND_DIR"; then
+    if docker build --no-cache -t "$tag" "$FRONTEND_DIR"; then
         print_success "Imagen construida exitosamente: $tag"
     else
         print_error "Error al construir la imagen Docker"
@@ -131,33 +148,24 @@ build_docker_image() {
     fi
 }
 
-# Función para subir la imagen a Docker Hub
-push_docker_image() {
-    print_step "Subiendo imagen a Docker Hub..."
+# Función para cargar la imagen en el cluster Kind
+load_to_kind() {
+    print_step "Cargando imagen en el cluster Kind..."
 
     local tag="${DOCKER_IMAGE}:${VERSION}"
 
-    # Verificar login en Docker Hub
-    if ! docker info | grep -q "Username:"; then
-        print_warning "No estás logueado en Docker Hub"
-        print_info "Ejecutando: docker login"
-        docker login
-    fi
-
-    # Subir la imagen
-    print_info "Pushing: $tag"
-    if docker push "$tag"; then
-        print_success "Imagen subida exitosamente: $tag"
+    print_info "Loading: $tag → ${CLUSTER_NAME}"
+    if kind load docker-image "$tag" --name ${CLUSTER_NAME}; then
+        print_success "Imagen cargada en Kind: $tag"
     else
-        print_error "Error al subir la imagen a Docker Hub"
-        print_info "Verifica tus credenciales con: docker login"
+        print_error "Error al cargar la imagen en Kind"
         exit 1
     fi
 
-    # Si no es "latest", también pushear latest
+    # Si no es "latest", también cargar latest
     if [ "$VERSION" != "latest" ]; then
-        print_info "Pushing: ${DOCKER_IMAGE}:latest"
-        docker push "${DOCKER_IMAGE}:latest"
+        print_info "Loading: ${DOCKER_IMAGE}:latest"
+        kind load docker-image "${DOCKER_IMAGE}:latest" --name ${CLUSTER_NAME}
     fi
 }
 
@@ -167,14 +175,14 @@ update_deployment() {
 
     local tag="${DOCKER_IMAGE}:${VERSION}"
 
-    # Si es "latest", usar rollout restart (fuerza a descargar nueva imagen)
+    # Si es "latest", usar rollout restart (fuerza a usar nueva imagen)
     if [ "$VERSION" == "latest" ]; then
-        print_info "Reiniciando deployment (pulling latest image)..."
-        kubectl rollout restart deployment/$DEPLOYMENT_NAME -n rydercupfriends
+        print_info "Reiniciando deployment (usando nueva imagen)..."
+        kubectl rollout restart deployment/$DEPLOYMENT_NAME -n $NAMESPACE
     else
         # Si es una versión específica, actualizar la imagen
         print_info "Actualizando imagen a: $tag"
-        kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$tag -n rydercupfriends
+        kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$tag -n $NAMESPACE
     fi
 
     print_success "Comando de actualización ejecutado"
@@ -187,11 +195,11 @@ wait_for_rollout() {
     print_info "Estado del rollout:"
 
     # Esperar con timeout de 5 minutos
-    if kubectl rollout status deployment/$DEPLOYMENT_NAME -n rydercupfriends --timeout=5m; then
+    if kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=5m; then
         print_success "Rollout completado exitosamente"
     else
         print_error "El rollout ha tardado más de 5 minutos o ha fallado"
-        print_warning "Verifica los logs: kubectl logs deployment/$DEPLOYMENT_NAME -n rydercupfriends"
+        print_warning "Verifica los logs: kubectl logs deployment/$DEPLOYMENT_NAME -n $NAMESPACE"
         exit 1
     fi
 }
@@ -202,18 +210,18 @@ verify_deployment() {
 
     echo ""
     echo "📋 Estado de los pods:"
-    kubectl get pods -l component=frontend -n rydercupfriends
+    kubectl get pods -l component=frontend -n $NAMESPACE
 
     echo ""
     echo "🔍 Imagen actual en los pods:"
-    kubectl get pods -l component=frontend -n rydercupfriends -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+    kubectl get pods -l component=frontend -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
     echo ""
     print_info "Últimos logs del deployment:"
-    kubectl logs deployment/$DEPLOYMENT_NAME -n rydercupfriends --tail=20
+    kubectl logs deployment/$DEPLOYMENT_NAME -n $NAMESPACE --tail=20
 
     # Verificar que todos los pods están Ready
-    local ready_pods=$(kubectl get pods -l component=frontend -n rydercupfriends -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
+    local ready_pods=$(kubectl get pods -l component=frontend -n $NAMESPACE -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
     if [[ "$ready_pods" == *"False"* ]]; then
         print_warning "Algunos pods no están listos. Verifica los logs."
     else
@@ -227,7 +235,7 @@ print_summary() {
 
     echo ""
     echo -e "${GREEN}✅ Imagen Docker construida: ${DOCKER_IMAGE}:${VERSION}${NC}"
-    echo -e "${GREEN}✅ Imagen subida a Docker Hub${NC}"
+    echo -e "${GREEN}✅ Imagen cargada en Kind (${CLUSTER_NAME})${NC}"
     echo -e "${GREEN}✅ Deployment actualizado en Kubernetes${NC}"
     echo -e "${GREEN}✅ Rolling update completado sin downtime${NC}"
 
@@ -238,9 +246,9 @@ print_summary() {
 
     echo ""
     print_info "Comandos útiles:"
-    echo "  • Ver logs: kubectl logs deployment/$DEPLOYMENT_NAME -n rydercupfriends -f"
-    echo "  • Ver estado: kubectl get pods -l component=frontend -n rydercupfriends"
-    echo "  • Rollback: kubectl rollout undo deployment/$DEPLOYMENT_NAME -n rydercupfriends"
+    echo "  • Ver logs: kubectl logs deployment/$DEPLOYMENT_NAME -n $NAMESPACE -f"
+    echo "  • Ver estado: kubectl get pods -l component=frontend -n $NAMESPACE"
+    echo "  • Rollback: kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE"
 
     echo ""
 }
@@ -270,7 +278,7 @@ print_header "🔧 INICIANDO DEPLOYMENT"
 
 check_prerequisites
 build_docker_image
-push_docker_image
+load_to_kind
 update_deployment
 wait_for_rollout
 verify_deployment

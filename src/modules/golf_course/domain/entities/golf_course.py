@@ -37,7 +37,7 @@ class GolfCourse:
     - Exactamente 18 hoyos
     - Stroke indices únicos (1-18)
     - Par total entre 66 y 76
-    - 2-10 tees (5 categorías × 2 géneros max)
+    - 2-10 tees (5 categorías x 2 géneros max)
     - Unique (category, gender) combinations
     - No mezclar gendered/non-gendered tees de la misma categoría
     - Estados inmutables: APPROVED/REJECTED

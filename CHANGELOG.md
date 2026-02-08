@@ -33,14 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **11 New Value Objects**:
   - IDs: `RoundId`, `MatchId`, `TeamAssignmentId` (UUID-based)
-  - Enums: `SessionType` (MORNING/AFTERNOON/EVENING), `MatchFormat` (SINGLES/FOURBALL/FOURSOMES), `MatchStatus`, `RoundStatus`, `TeamAssignmentMode` (AUTOMATIC/MANUAL), `ScheduleConfigMode`, `HandicapMode` (STROKE_PLAY/MATCH_PLAY), `PlayMode`
+  - Enums: `SessionType` (MORNING/AFTERNOON/EVENING), `MatchFormat` (SINGLES/FOURBALL/FOURSOMES), `MatchStatus`, `RoundStatus`, `TeamAssignmentMode` (AUTOMATIC/MANUAL), `ScheduleConfigMode`, `HandicapMode` (STROKE_PLAY/MATCH_PLAY), `PlayMode` (SCRATCH/HANDICAP)
   - `MatchPlayer`: Frozen VO with playing handicap and strokes received per hole
 
 - **2 Domain Services**:
   - `PlayingHandicapCalculator`: WHS formula `PH = (HI x (SR/113) + (CR-Par)) x Allowance%` with format-specific calculations (Singles, Fourball, Foursomes)
   - `SnakeDraftService`: Serpentine team balancing algorithm (A,B,B,A,A,B pattern)
 
-- **Two-Tier Handicap System**: Competition-level `PlayMode` default + Round-level `HandicapMode`/`allowance_percentage` override with WHS-compliant defaults (Singles 95-100%, Fourball 90%, Foursomes 50%)
+- **Two-Tier Handicap System**: Competition-level `PlayMode` (SCRATCH/HANDICAP) default + Round-level `HandicapMode` (STROKE_PLAY/MATCH_PLAY)/`allowance_percentage` override with WHS-compliant defaults (Singles 95-100%, Fourball 90%, Foursomes 50%)
 - **ADR-037**: Two-Tier Handicap Architecture and Session-Based Round Model
 
 **Block 5: Infrastructure - Migrations & Mappers**

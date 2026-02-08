@@ -8,7 +8,10 @@ from src.modules.competition.application.dto.enrollment_dto import (
     DirectEnrollPlayerRequestDTO,
     DirectEnrollPlayerResponseDTO,
 )
-from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    InvalidTeeCategoryError,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -121,7 +124,13 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 5. Crear enrollment con factory method (directamente APPROVED)
-            tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+            try:
+                tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+            except ValueError as e:
+                raise InvalidTeeCategoryError(
+                    f"Valor de tee_category no válido: '{request.tee_category}'. "
+                    f"Valores permitidos: {[c.value for c in TeeCategory]}"
+                ) from e
             enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,

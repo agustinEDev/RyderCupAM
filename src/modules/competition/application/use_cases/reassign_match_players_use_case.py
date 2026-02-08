@@ -77,7 +77,7 @@ class ReassignMatchPlayersUseCase:
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
 
-    async def execute(
+    async def execute(  # noqa: PLR0915
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId
     ) -> ReassignMatchPlayersResponseDTO:
         async with self._uow:
@@ -108,18 +108,22 @@ class ReassignMatchPlayersUseCase:
 
             if not is_scratch:
                 golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-                if golf_course:
-                    total_par = sum(h.par for h in golf_course.holes)
-                    for tee in golf_course.tees:
-                        gender_key = tee.gender.value if tee.gender else None
-                        tee_ratings[(tee.category.value, gender_key)] = TeeRating(
-                            course_rating=Decimal(str(tee.course_rating)),
-                            slope_rating=tee.slope_rating,
-                            par=total_par,
-                        )
-                    holes_by_stroke_index = [
-                        h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
-                    ]
+                if not golf_course:
+                    raise ValueError(
+                        "Se requiere un campo de golf para el modo HANDICAP. "
+                        "Asocie un campo de golf aprobado a la competición."
+                    )
+                total_par = sum(h.par for h in golf_course.holes)
+                for tee in golf_course.tees:
+                    gender_key = tee.gender.value if tee.gender else None
+                    tee_ratings[(tee.category.value, gender_key)] = TeeRating(
+                        course_rating=Decimal(str(tee.course_rating)),
+                        slope_rating=tee.slope_rating,
+                        par=total_par,
+                    )
+                holes_by_stroke_index = [
+                    h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
+                ]
 
                 # Fetch user handicaps and genders for fallback chain
                 all_player_ids = [

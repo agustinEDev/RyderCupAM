@@ -53,7 +53,7 @@ spec:
       containers:
         - name: fastapi                    # Nombre del contenedor
           image: agustinedev/rydercupam-api:latest     # Imagen construida por deploy-cluster.sh
-          imagePullPolicy: Always          # Siempre descargar última versión
+          imagePullPolicy: Never           # Usar imagen cargada en Kind (kind load)
 
           # ==========================================
           # PUERTOS - Qué puertos expone

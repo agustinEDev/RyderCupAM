@@ -181,7 +181,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ 166 countries with multilanguage support
 - ✅ **Competition ↔ GolfCourse M2M** (v2.0.2) - Multi-course tournaments with ordering
 - ✅ **Rounds & Matches** (Sprint 2) - Session-based scheduling, match generation, WHS handicap calculation
-- ✅ 35 endpoints (14 competition + 8 enrollment + 2 countries + 4 golf courses + 11 rounds/matches)
+- ✅ 35 endpoints (10 competition + 8 enrollment + 2 countries + 4 golf courses + 11 rounds/matches)
 
 ### Security Features (v1.13.1)
 - ✅ **httpOnly Cookies** - XSS prevention for tokens
@@ -364,7 +364,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (65 total)
+### Available Endpoints (61 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>

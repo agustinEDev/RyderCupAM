@@ -8,6 +8,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_cancel_enrollment_use_case,
@@ -89,6 +90,20 @@ router = APIRouter()
 
 
 # ======================================================================================
+# REQUEST BODY MODELS (Presentation Layer)
+# ======================================================================================
+
+
+class RequestEnrollmentBody(BaseModel):
+    """Body opcional para solicitar inscripción con selección de tee."""
+
+    tee_category: str | None = Field(
+        None,
+        description="Categoría de tee preferida (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
+    )
+
+
+# ======================================================================================
 # HELPER: EnrollmentDTOMapper (Presentation Layer Logic)
 # ======================================================================================
 
@@ -130,6 +145,7 @@ class EnrollmentDTOMapper:
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
+            tee_category=enrollment.tee_category,
             created_at=enrollment.created_at,
             updated_at=enrollment.updated_at,
         )
@@ -181,6 +197,7 @@ class EnrollmentDTOMapper:
 )
 async def request_enrollment(
     competition_id: UUID,
+    body: RequestEnrollmentBody | None = None,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RequestEnrollmentUseCase = Depends(get_request_enrollment_use_case),
 ):
@@ -189,10 +206,13 @@ async def request_enrollment(
 
     El usuario actual se inscribe en la competición especificada.
     La inscripción queda en estado REQUESTED hasta que el creador la apruebe.
+    Opcionalmente puede indicar su categoría de tee preferida.
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(
-            competition_id=competition_id, user_id=current_user.id
+            competition_id=competition_id,
+            user_id=current_user.id,
+            tee_category=body.tee_category if body else None,
         )
         return await use_case.execute(request_dto)
 
@@ -229,6 +249,7 @@ async def direct_enroll_player(
             competition_id=competition_id,
             user_id=request.user_id,
             custom_handicap=request.custom_handicap,
+            tee_category=request.tee_category,
         )
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id)

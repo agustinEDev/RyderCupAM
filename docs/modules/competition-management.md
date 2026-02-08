@@ -54,7 +54,7 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
   - HANDICAP: Allowance percentages configured per Round (two-tier system, ADR-037)
 
 **Team Configuration:**
-- `team_assignment`: TeamAssignment (RANDOM or MANUAL)
+- `team_assignment`: TeamAssignment (AUTOMATIC or MANUAL)
 - `team_1_name`: str (optional, max 50)
 - `team_2_name`: str (optional, max 50)
 
@@ -173,8 +173,8 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `RoundStatus` - Round state (PENDING_TEAMS/PENDING_MATCHES/SCHEDULED/IN_PROGRESS/COMPLETED) with `can_modify()`, `can_generate_matches()`
 - `TeamAssignmentMode` - Team assignment method (AUTOMATIC/MANUAL)
 - `ScheduleConfigMode` - Schedule configuration method (AUTOMATIC/MANUAL)
-- `HandicapMode` - Handicap calculation mode for SINGLES (STROKE_PLAY 95%/MATCH_PLAY 100%)
-- `PlayMode` - Competition-level default handicap mode (STROKE_PLAY/MATCH_PLAY)
+- `HandicapMode` - Handicap calculation mode for SINGLES (STROKE_PLAY/MATCH_PLAY)
+- `PlayMode` - Competition-level default play mode (SCRATCH/HANDICAP)
 
 ---
 

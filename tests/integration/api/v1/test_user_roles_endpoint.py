@@ -299,7 +299,7 @@ async def test_get_my_roles_creator_can_also_be_player(client: AsyncClient):
     Then: Retorna is_creator=True Y is_player=True simultáneamente
     """
     # Crear creator y su competición
-    creator_user, creator_cookies = await create_and_login_user(
+    _creator_user, creator_cookies = await create_and_login_user(
         client,
         email=f"creator_{uuid4()}@test.com",
         password="SecurePass123!",

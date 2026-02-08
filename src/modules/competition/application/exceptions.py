@@ -29,3 +29,9 @@ class CompetitionNotClosedError(Exception):
     """La competición no está en estado CLOSED."""
 
     pass
+
+
+class InvalidTeeCategoryError(ValueError):
+    """El valor de tee_category no es válido."""
+
+    pass

@@ -31,8 +31,37 @@ def upgrade() -> None:
     # 3. Drop old unique constraint on (golf_course_id, tee_category)
     op.drop_constraint("uq_golf_course_tees_category", "golf_course_tees", type_="unique")
 
-    # 4. Replace tee_category_enum with new 5 values
-    # Drop old enum and create new one
+    # 4. Split legacy combined tee_category values into tee_category + tee_gender
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'MALE', tee_category = 'CHAMPIONSHIP' "
+        "WHERE tee_category = 'CHAMPIONSHIP_MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'FEMALE', tee_category = 'CHAMPIONSHIP' "
+        "WHERE tee_category = 'CHAMPIONSHIP_FEMALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'MALE', tee_category = 'AMATEUR' "
+        "WHERE tee_category = 'AMATEUR_MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'FEMALE', tee_category = 'AMATEUR' "
+        "WHERE tee_category = 'AMATEUR_FEMALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'MALE', tee_category = 'SENIOR' "
+        "WHERE tee_category = 'SENIOR_MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'FEMALE', tee_category = 'SENIOR' "
+        "WHERE tee_category = 'SENIOR_FEMALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = NULL "
+        "WHERE tee_category = 'JUNIOR'"
+    )
+
+    # 5. Replace tee_category_enum with new 5 values
     op.execute("ALTER TABLE golf_course_tees ALTER COLUMN tee_category TYPE VARCHAR(20)")
     op.execute("DROP TYPE IF EXISTS tee_category_enum")
     op.execute(
@@ -44,7 +73,7 @@ def upgrade() -> None:
         "TYPE tee_category_enum USING tee_category::tee_category_enum"
     )
 
-    # 5. Create functional unique index for (golf_course_id, tee_category, COALESCE(tee_gender, 'NONE'))
+    # 6. Create functional unique index for (golf_course_id, tee_category, COALESCE(tee_gender, 'NONE'))
     op.execute(
         "CREATE UNIQUE INDEX uq_golf_course_tees_cat_gender "
         "ON golf_course_tees (golf_course_id, tee_category, COALESCE(tee_gender, 'NONE'))"
@@ -54,6 +83,32 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Remove functional unique index
     op.execute("DROP INDEX IF EXISTS uq_golf_course_tees_cat_gender")
+
+    # Reconstruct combined legacy values from tee_category + tee_gender
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'CHAMPIONSHIP_MALE' "
+        "WHERE tee_category = 'CHAMPIONSHIP' AND tee_gender = 'MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'CHAMPIONSHIP_FEMALE' "
+        "WHERE tee_category = 'CHAMPIONSHIP' AND tee_gender = 'FEMALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'AMATEUR_MALE' "
+        "WHERE tee_category = 'AMATEUR' AND tee_gender = 'MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'AMATEUR_FEMALE' "
+        "WHERE tee_category = 'AMATEUR' AND tee_gender = 'FEMALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'SENIOR_MALE' "
+        "WHERE tee_category = 'SENIOR' AND tee_gender = 'MALE'"
+    )
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'SENIOR_FEMALE' "
+        "WHERE tee_category = 'SENIOR' AND tee_gender = 'FEMALE'"
+    )
 
     # Revert tee_category_enum to old 7 values
     op.execute("ALTER TABLE golf_course_tees ALTER COLUMN tee_category TYPE VARCHAR(20)")

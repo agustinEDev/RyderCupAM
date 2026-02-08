@@ -220,10 +220,10 @@ class GolfCourseRequest(BaseModel):
   - `TeamAssignmentMode` (Enum): AUTOMATIC, MANUAL
   - `ScheduleConfigMode` (Enum): AUTOMATIC, MANUAL
   - `HandicapMode` (Enum): STROKE_PLAY (95%), MATCH_PLAY (100%) - for SINGLES rounds
-  - `PlayMode` (Enum): STROKE_PLAY, MATCH_PLAY - Competition-level default
+  - `PlayMode` (Enum): SCRATCH, HANDICAP - Competition-level default
 - **New Entities (3)**:
   - `Round`: id, competition_id, golf_course_id, round_date, session_type, match_format, status, handicap_mode, allowance_percentage
-    - Session-based model: each Round = one session (MORNING/AFTERNOON/EVENING), not a full day
+    - Session-based model: each Round = one session (MORNING/AFTERNOON/EVENING), not a full-day
     - State machine: PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
     - Tees NOT at Round level (managed per player via Enrollment.tee_category)
   - `Match`: id, round_id, match_number, team_a_players[], team_b_players[], status
