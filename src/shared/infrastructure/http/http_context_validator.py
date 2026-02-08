@@ -198,7 +198,7 @@ def _is_trusted_proxy(proxy_ip: str, trusted_proxies: list[str]) -> bool:
             if addr in network:
                 return True
         except ValueError:
-            logger.warning(f"Invalid trusted proxy entry ignored: '{trusted}'")
+            logger.warning("Invalid trusted proxy entry ignored from trusted_proxies configuration")
             continue
 
     return False
