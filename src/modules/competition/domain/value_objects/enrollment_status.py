@@ -4,10 +4,10 @@ EnrollmentStatus Value Object - Estado de una inscripción en una competición.
 Define los estados posibles de la inscripción de un jugador.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnrollmentStatus(str, Enum):
+class EnrollmentStatus(StrEnum):
     """
     Enum para los estados de inscripción de un jugador.
 

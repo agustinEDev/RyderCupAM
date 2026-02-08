@@ -37,6 +37,7 @@ class GolfCourseMapper:
             tees=[
                 TeeDTO(
                     tee_category=tee.category.value,
+                    tee_gender=tee.gender.value if tee.gender else None,
                     identifier=tee.identifier,
                     course_rating=tee.course_rating,
                     slope_rating=tee.slope_rating,

@@ -20,6 +20,7 @@ from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,14 @@ class RegisterUserUseCase:
                     raise ValueError(f"El código de país '{request.country_code}' no es válido.")
 
             # 2. Crear la entidad de dominio User
+            gender = Gender(request.gender) if request.gender else None
             new_user = User.create(
                 email_str=request.email,
                 plain_password=request.password,
                 first_name=request.first_name,
                 last_name=request.last_name,
                 country_code_str=request.country_code,
+                gender=gender,
             )
 
             # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)

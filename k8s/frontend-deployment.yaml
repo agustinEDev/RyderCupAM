@@ -54,7 +54,7 @@ spec:
       containers:
         - name: nginx                           # Nombre del contenedor
           image: agustinedev/rydercupam-web:latest  # Imagen Docker Hub
-          imagePullPolicy: Always               # Siempre descargar última versión
+          imagePullPolicy: Never                # Usar imagen cargada en Kind (kind load)
 
           # ==========================================
           # PUERTOS

@@ -9,14 +9,16 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     DeleteCompetitionRequestDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
-    CompetitionNotFoundError,
     DeleteCompetitionUseCase,
-    NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -63,7 +65,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -121,7 +123,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -152,7 +154,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -191,7 +193,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -232,7 +234,7 @@ class TestDeleteCompetitionUseCase:
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
-            handicap_type="SCRATCH",
+            play_mode="SCRATCH",
         )
         created = await create_use_case.execute(create_request, creator_id)
 

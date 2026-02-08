@@ -23,6 +23,8 @@ NC='\033[0m' # No Color
 NAMESPACE="rydercupfriends"
 POSTGRES_DEPLOYMENT="postgres"
 API_DEPLOYMENT="rydercup-api"
+API_DOCKER_IMAGE="agustinedev/rydercupam-api"
+CLUSTER_NAME="rydercupam-cluster"
 FORCE_MODE="${1}"
 
 # Output functions
@@ -73,12 +75,63 @@ check_prerequisites() {
     fi
     print_success "Cluster: Connected"
 
+    # Check Kind
+    if ! command -v kind &> /dev/null; then
+        print_error "Kind is not installed"
+        exit 1
+    fi
+    print_success "Kind: OK"
+
+    # Check Kind cluster exists
+    if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+        print_error "Kind cluster '${CLUSTER_NAME}' does not exist"
+        print_info "Run: ./scripts/deploy-cluster.sh"
+        exit 1
+    fi
+    print_success "Cluster Kind '${CLUSTER_NAME}': OK"
+
     # Check namespace exists
     if ! kubectl get namespace "$NAMESPACE" &> /dev/null; then
         print_error "Namespace '$NAMESPACE' does not exist"
         exit 1
     fi
     print_success "Namespace: OK"
+}
+
+# Build API image (contains Alembic migrations) and load into Kind
+build_and_load_api_image() {
+    print_step "Building API image (contains migration code)..."
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+    if [ ! -f "$PROJECT_ROOT/docker/Dockerfile" ]; then
+        print_error "Dockerfile not found at: $PROJECT_ROOT/docker/"
+        exit 1
+    fi
+
+    # Build
+    if docker build --no-cache -f "$PROJECT_ROOT/docker/Dockerfile" -t "${API_DOCKER_IMAGE}:latest" "$PROJECT_ROOT"; then
+        print_success "API image built successfully"
+    else
+        print_error "Failed to build API image"
+        exit 1
+    fi
+
+    # Load into Kind
+    print_info "Loading API image into Kind cluster..."
+    if kind load docker-image "${API_DOCKER_IMAGE}:latest" --name ${CLUSTER_NAME}; then
+        print_success "API image loaded into Kind"
+    else
+        print_error "Failed to load API image into Kind"
+        exit 1
+    fi
+
+    # Restart API deployment to pick up new image (with latest migrations)
+    print_info "Restarting API deployment to use new image..."
+    kubectl rollout restart deployment/$API_DEPLOYMENT -n $NAMESPACE
+    kubectl rollout status deployment/$API_DEPLOYMENT -n $NAMESPACE --timeout=5m
+    print_success "API deployment restarted with new image"
 }
 
 # Display warning
@@ -301,6 +354,7 @@ main() {
     
     check_prerequisites
     show_warning
+    build_and_load_api_image
     get_db_pod
     check_db_health
     create_backup

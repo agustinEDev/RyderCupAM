@@ -16,7 +16,10 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 class TeeDTO(BaseModel):
     """DTO para representar un tee (salida)."""
 
-    tee_category: str = Field(..., description="Categoría normalizada (CHAMPIONSHIP_MALE, etc.)")
+    tee_category: str = Field(
+        ..., description="Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)"
+    )
+    tee_gender: str | None = Field(None, description="Género del tee (MALE/FEMALE/null)")
     identifier: str = Field(
         ..., description="Identificador libre del campo (Amarillo, Oro, 1, etc.)"
     )
@@ -51,7 +54,7 @@ class RequestGolfCourseRequestDTO(BaseModel):
         ..., min_length=2, max_length=2, description="Código ISO del país (ES, FR, etc.)"
     )
     course_type: CourseType = Field(..., description="Tipo de campo (STANDARD_18, etc.)")
-    tees: list[TeeDTO] = Field(..., min_length=2, max_length=6, description="2-6 tees")
+    tees: list[TeeDTO] = Field(..., min_length=2, max_length=10, description="2-10 tees")
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
@@ -186,7 +189,7 @@ class UpdateGolfCourseRequestDTO(BaseModel):
         ..., min_length=2, max_length=2, description="Código ISO del país (ES, FR, etc.)"
     )
     course_type: CourseType = Field(..., description="Tipo de campo (STANDARD_18, etc.)")
-    tees: list[TeeDTO] = Field(..., min_length=2, max_length=6, description="2-6 tees")
+    tees: list[TeeDTO] = Field(..., min_length=2, max_length=10, description="2-10 tees")
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )

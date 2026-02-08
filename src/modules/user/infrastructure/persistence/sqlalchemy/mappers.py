@@ -21,6 +21,7 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
@@ -53,6 +54,24 @@ class UserIdDecorator(TypeDecorator):
         if value is None:
             return None
         return UserId(uuid.UUID(value))
+
+
+# --- TypeDecorator para Gender ---
+class GenderDecorator(TypeDecorator):
+    """Convierte entre Gender enum y string en BD."""
+
+    impl = String(10)
+    cache_ok = True
+
+    def process_bind_param(self, value: Gender | None, dialect) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect) -> Gender | None:
+        if value is None:
+            return None
+        return Gender(value)
 
 
 # --- TypeDecorator para Handicap ---
@@ -109,6 +128,8 @@ users_table = Table(
     Column("locked_until", DateTime, nullable=True),
     # RBAC field (v2.0.0)
     Column("is_admin", Boolean, nullable=False, default=False),
+    # Gender field (tee system refactor)
+    Column("gender", GenderDecorator(), nullable=True),
 )
 
 

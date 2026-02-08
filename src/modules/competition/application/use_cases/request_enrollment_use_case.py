@@ -1,12 +1,16 @@
 """
-Caso de Uso: Solicitar Inscripción (Request Enrollment).
+Caso de Uso: Solicitar Inscripcion (Request Enrollment).
 
-Permite a un jugador solicitar inscribirse en una competición.
+Permite a un jugador solicitar inscribirse en una competicion.
 """
 
 from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
     RequestEnrollmentResponseDTO,
+)
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    InvalidTeeCategoryError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -19,42 +23,37 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
-
-    pass
-
-
 class CompetitionNotActiveError(Exception):
-    """Excepción lanzada cuando la competición no está en estado ACTIVE."""
+    """Excepcion lanzada cuando la competicion no esta en estado ACTIVE."""
 
     pass
 
 
 class AlreadyEnrolledError(Exception):
-    """Excepción lanzada cuando el usuario ya tiene una inscripción en esta competición."""
+    """Excepcion lanzada cuando el usuario ya tiene una inscripcion en esta competicion."""
 
     pass
 
 
 class RequestEnrollmentUseCase:
     """
-    Caso de uso para solicitar inscripción en una competición.
+    Caso de uso para solicitar inscripcion en una competicion.
 
     Orquesta:
-    1. Validación de existencia de la competición
-    2. Validación de estado ACTIVE
-    3. Validación de no duplicidad de inscripción
-    4. Creación del enrollment con estado REQUESTED
+    1. Validacion de existencia de la competicion
+    2. Validacion de estado ACTIVE
+    3. Validacion de no duplicidad de inscripcion
+    4. Creacion del enrollment con estado REQUESTED
     5. Persistencia mediante UoW
 
     Reglas de negocio:
-    - La competición debe existir
-    - La competición debe estar en estado ACTIVE
-    - El usuario no puede tener otra inscripción activa en la misma competición
+    - La competicion debe existir
+    - La competicion debe estar en estado ACTIVE
+    - El usuario no puede tener otra inscripcion activa en la misma competicion
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -68,28 +67,28 @@ class RequestEnrollmentUseCase:
 
     async def execute(self, request: RequestEnrollmentRequestDTO) -> RequestEnrollmentResponseDTO:
         """
-        Ejecuta el caso de uso de solicitud de inscripción.
+        Ejecuta el caso de uso de solicitud de inscripcion.
 
         Args:
             request: DTO con competition_id y user_id
 
         Returns:
-            DTO con los datos de la inscripción creada
+            DTO con los datos de la inscripcion creada
 
         Raises:
-            CompetitionNotFoundError: Si la competición no existe
-            CompetitionNotActiveError: Si la competición no está activa
-            AlreadyEnrolledError: Si el usuario ya está inscrito
+            CompetitionNotFoundError: Si la competicion no existe
+            CompetitionNotActiveError: Si la competicion no esta activa
+            AlreadyEnrolledError: Si el usuario ya esta inscrito
         """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             user_id = UserId(request.user_id)
 
-            # 1. Verificar que la competición existe
+            # 1. Verificar que la competicion existe
             competition = await self._uow.competitions.find_by_id(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
-                    f"Competición no encontrada: {request.competition_id}"
+                    f"Competicion no encontrada: {request.competition_id}"
                 )
 
             # 2. Verificar capacidad disponible
@@ -100,7 +99,7 @@ class RequestEnrollmentUseCase:
                 approved_count, competition.max_players, competition_id
             )
 
-            # 3. Business logic guards: Validar enrollment completo (duplicados, límites, temporal, estado)
+            # 3. Business logic guards: Validar enrollment completo (duplicados, limites, temporal, estado)
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
                 user_id, competition_id
             )
@@ -125,10 +124,18 @@ class RequestEnrollmentUseCase:
             # MaxEnrollmentsExceededViolation, EnrollmentPastStartDateViolation propagate as-is
 
             # 4. Crear enrollment con factory method
+            try:
+                tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+            except ValueError as e:
+                raise InvalidTeeCategoryError(
+                    f"Valor de tee_category no válido: '{request.tee_category}'. "
+                    f"Valores permitidos: {[c.value for c in TeeCategory]}"
+                ) from e
             enrollment = Enrollment.request(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
                 user_id=user_id,
+                tee_category=tee_category,
             )
 
             # 5. Persistir

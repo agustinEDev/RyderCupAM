@@ -9,23 +9,15 @@ from src.modules.competition.application.dto.competition_dto import (
     StartCompetitionRequestDTO,
     StartCompetitionResponseDTO,
 )
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotFoundError(Exception):
-    """Excepción lanzada cuando la competición no existe."""
-
-    pass
-
-
-class NotCompetitionCreatorError(Exception):
-    """Excepción lanzada cuando el usuario no es el creador de la competición."""
-
-    pass
 
 
 class StartCompetitionUseCase:

@@ -48,13 +48,13 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `max_players`: int (2-100 players)
 - `status`: CompetitionStatus (enum - DRAFT/ACTIVE/CLOSED/IN_PROGRESS/COMPLETED/CANCELLED)
 
-**Handicap Configuration:**
-- `handicap_settings`: HandicapSettings (Value Object)
-  - `type`: HandicapType (SCRATCH or PERCENTAGE)
-  - `percentage`: int (90/95/100, optional if PERCENTAGE)
+**Play Mode:**
+- `play_mode`: PlayMode (enum - SCRATCH/HANDICAP)
+  - SCRATCH: No handicap applied
+  - HANDICAP: Allowance percentages configured per Round (two-tier system, ADR-037)
 
 **Team Configuration:**
-- `team_assignment`: TeamAssignment (RANDOM or MANUAL)
+- `team_assignment`: TeamAssignment (AUTOMATIC or MANUAL)
 - `team_1_name`: str (optional, max 50)
 - `team_2_name`: str (optional, max 50)
 
@@ -78,6 +78,66 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `created_at`: datetime
 - `updated_at`: datetime
 
+### Entity: Round (Session) ⭐ Sprint 2 Block 4
+
+**Identification:**
+- `id`: RoundId (Value Object - UUID)
+- `competition_id`: CompetitionId
+- `golf_course_id`: GolfCourseId
+
+**Session Configuration:**
+- `round_date`: date (day of the session)
+- `session_type`: SessionType (MORNING/AFTERNOON/EVENING)
+- `match_format`: MatchFormat (SINGLES/FOURBALL/FOURSOMES)
+- `status`: RoundStatus (PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED)
+
+**Handicap Configuration (Two-Tier System):**
+- `handicap_mode`: HandicapMode | None (STROKE_PLAY/MATCH_PLAY, only for SINGLES)
+- `allowance_percentage`: int | None (50-100 in steps of 5, None = WHS default)
+- WHS defaults: Singles STROKE_PLAY 95%, MATCH_PLAY 100%, Fourball 90%, Foursomes 50%
+
+**Timestamps:**
+- `created_at`: datetime
+- `updated_at`: datetime
+
+### Entity: Match ⭐ Sprint 2 Block 4
+
+**Identification:**
+- `id`: MatchId (Value Object - UUID)
+- `round_id`: RoundId
+
+**Match Data:**
+- `match_number`: int (order within round)
+- `team_a_players`: tuple[MatchPlayer, ...] (1 for SINGLES, 2 for FOURBALL/FOURSOMES)
+- `team_b_players`: tuple[MatchPlayer, ...] (mirrored)
+- `status`: MatchStatus (SCHEDULED → IN_PROGRESS → COMPLETED | WALKOVER)
+
+### Entity: TeamAssignment ⭐ Sprint 2 Block 4
+
+**Identification:**
+- `id`: TeamAssignmentId (Value Object - UUID)
+- `competition_id`: CompetitionId
+
+**Assignment Data:**
+- `mode`: TeamAssignmentMode (AUTOMATIC/MANUAL)
+- `team_a_player_ids`: tuple[UserId, ...]
+- `team_b_player_ids`: tuple[UserId, ...]
+- `created_at`: datetime
+
+**Business Rules:**
+- Teams must have equal player count
+- No player can be in both teams
+- No duplicate players within a team
+
+### Value Object: MatchPlayer ⭐ Sprint 2 Block 4
+
+**Frozen dataclass (immutable):**
+- `user_id`: UserId
+- `playing_handicap`: int (calculated via WHS formula, ≥ 0)
+- `tee_category`: TeeCategory (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)
+- `tee_gender`: Gender | None (MALE, FEMALE, or null)
+- `strokes_received`: tuple[int, ...] (hole numbers where player receives a stroke, 1-18)
+
 ### Entity: Country (Shared Domain)
 
 **Identification:**
@@ -92,16 +152,52 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 
 ## 🏭 Value Objects Implemented
 
-### Competition Module (9 VOs)
+### Competition Module - Base (9 VOs)
 - `CompetitionId` - Unique competition UUID
 - `CompetitionName` - Validated name (3-100 chars, unique)
 - `DateRange` - Date range (start_date ≤ end_date)
 - `Location` - Up to 3 adjacent countries (main + 2 optional)
-- `HandicapSettings` - Handicap type + percentage
+- `PlayMode` - Play mode (SCRATCH/HANDICAP)
 - `CompetitionStatus` - Tournament status (6 possible states)
 - `EnrollmentId` - Unique enrollment UUID
 - `EnrollmentStatus` - Enrollment status (6 possible states)
 - `CountryCode` - ISO 3166-1 alpha-2 code (shared)
+
+### Competition Module - Rounds & Matches (11 VOs) ⭐ Sprint 2 Block 4
+- `RoundId` - Unique round UUID
+- `MatchId` - Unique match UUID
+- `TeamAssignmentId` - Unique team assignment UUID
+- `SessionType` - Session time (MORNING/AFTERNOON/EVENING)
+- `MatchFormat` - Match format (SINGLES/FOURBALL/FOURSOMES) with `players_per_team()`
+- `MatchStatus` - Match state (SCHEDULED/IN_PROGRESS/COMPLETED/WALKOVER)
+- `RoundStatus` - Round state (PENDING_TEAMS/PENDING_MATCHES/SCHEDULED/IN_PROGRESS/COMPLETED) with `can_modify()`, `can_generate_matches()`
+- `TeamAssignmentMode` - Team assignment method (AUTOMATIC/MANUAL)
+- `ScheduleConfigMode` - Schedule configuration method (AUTOMATIC/MANUAL)
+- `HandicapMode` - Handicap calculation mode for SINGLES (STROKE_PLAY/MATCH_PLAY)
+- `PlayMode` - Competition-level default play mode (SCRATCH/HANDICAP)
+
+---
+
+## 🔧 Domain Services ⭐ Sprint 2 Block 4
+
+### PlayingHandicapCalculator
+WHS formula: `PH = (HI x (SR / 113) + (CR - Par)) x Allowance%`
+
+**Methods:**
+- `calculate(handicap_index, tee_rating, allowance_percentage)` → int
+- `calculate_for_singles(player_hi, player_tee, opponent_hi, opponent_tee, handicap_mode)` → tuple
+- `calculate_for_fourball(player1_hi, player1_tee, player2_hi, player2_tee)` → tuple
+- `calculate_for_foursomes(team1_hi_avg, team1_tee, team2_hi_avg, team2_tee)` → tuple (strokes to each team)
+
+### SnakeDraftService
+Serpentine algorithm for balanced team assignment.
+
+**Pattern:** A,B,B,A,A,B,B,A... (players sorted by handicap, best first)
+
+**Methods:**
+- `assign_teams(players, first_pick)` → list[DraftResult]
+- `validate_team_balance(results)` → bool
+- `get_team_players(results, team)` → list[UserId]
 
 ---
 
@@ -177,8 +273,7 @@ CREATE TABLE competitions (
     secondary_country_code VARCHAR(2) REFERENCES countries(code),
     tertiary_country_code VARCHAR(2) REFERENCES countries(code),
     max_players INTEGER NOT NULL CHECK (max_players BETWEEN 2 AND 100),
-    handicap_type VARCHAR(20) NOT NULL,
-    handicap_percentage INTEGER,
+    play_mode VARCHAR(20) NOT NULL,
     team_assignment VARCHAR(20) NOT NULL,
     team_1_name VARCHAR(50),
     team_2_name VARCHAR(50),
@@ -287,23 +382,29 @@ CREATE TABLE country_adjacencies (
 ## 🧪 Testing
 
 ### Statistics
-- **Total Competition Module:** 174 tests (97.6% passing)
-- **Unit Tests (Domain):** 38 tests (entities, value objects, repositories)
-- **Unit Tests (Application):** 58 tests (use cases)
-- **Unit Tests (DTOs):** 48 tests (validations)
-- **Integration Tests:** Included in general test suite (API endpoints)
+- **Total Competition Module:** 554 tests (100% passing) ⭐ Sprint 2 Complete
+- **Unit Tests (Domain - Base):** 62 tests (entities, value objects, repositories)
+- **Unit Tests (Domain - Rounds & Matches):** 234 tests (11 VOs + 3 entities + 2 services) ⭐ Block 4
+- **Unit Tests (Infrastructure):** 52 tests (migration, mappers, repositories, UoW) ⭐ Block 5
+- **Unit Tests (Application):** 146 tests (84 base + 62 round/match/team use cases) ⭐ Block 6
+- **Unit Tests (DTOs):** 61 tests (49 base + 12 round/match DTOs) ⭐ Block 6
+- **Integration Tests:** 9 tests (API endpoints)
+- **API Endpoints:** 35 total (10 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams) ⭐ Block 7
 
 ### Structure
-```
+```text
 tests/unit/modules/competition/
-├── domain/value_objects/test_*.py (38 tests)
-├── application/dto/test_*.py (48 tests)
-├── application/use_cases/test_*.py (58 tests)
-└── infrastructure/ (pending)
+├── domain/value_objects/test_*.py (20 base + 9 new VOs)
+├── domain/entities/test_*.py (3 new: round, match, team_assignment)
+├── domain/services/test_*.py (2 new: handicap_calculator, snake_draft)
+├── application/dto/test_*.py (61 tests: 49 base + 12 round/match)
+├── application/use_cases/test_*.py (146 tests: 84 base + 62 round/match/team)
+└── infrastructure/persistence/ (52 tests: mappers, repos, UoW)
 
 tests/integration/api/v1/
 ├── test_competition_routes.py
-└── test_enrollment_routes.py
+├── test_enrollment_routes.py
+└── test_competition_golf_courses_routes.py
 ```
 
 ### Execution
@@ -421,6 +522,8 @@ REJECTED    CANCELLED
 - **ADR-005:** Repository Pattern
 - **ADR-006:** Unit of Work Pattern
 - **ADR-007:** Domain Events Pattern
+- **ADR-026:** Playing Handicap WHS Calculation
+- **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model ⭐ Sprint 2
 
 ### Testing
 - **Unit Tests:** `tests/unit/modules/competition/`
@@ -456,5 +559,5 @@ REJECTED    CANCELLED
 
 ---
 
-**Last Updated:** 8 January 2026
-**Version:** v1.13.0
+**Last Updated:** 5 February 2026
+**Version:** Sprint 2 Complete (Blocks 0-8: Domain + Infrastructure + Application + API)

@@ -7,7 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_No unreleased changes_
+### Changed
+
+**⛳ TeeCategory Refactoring (7→5 + Gender)**
+- `TeeCategory` reduced from 7 gender-combined values to 5 neutral difficulty levels: `CHAMPIONSHIP`, `AMATEUR`, `SENIOR`, `FORWARD`, `JUNIOR`
+- New shared `Gender` enum (`MALE`/`FEMALE`) in `src/shared/domain/value_objects/gender.py`
+- `Tee` entity gains nullable `gender` field; `GolfCourse` validates 2-10 tees with unique `(category, gender)` pairs
+- `User` entity gains nullable `gender` field for automatic tee resolution at match generation
+- `MatchPlayer` VO gains `tee_gender` field for match-level tee tracking
+- Match generation auto-resolves tee using `(enrollment.tee_category, user.gender)` with null fallback
+- Enrollment DTOs now expose `tee_category` selection for player preference
+- Alembic migration `c3d5e7f9a1b2` for schema changes
+- All 1,282 tests updated and passing
+
+### Added
+
+**Sprint 2: Competition Scheduling - Complete (Blocks 0-8)**
+
+**Block 4: Domain Layer - Rounds & Matches**
+
+- **3 New Entities**:
+  - `Round`: Session-based tournament round with state machine (PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED)
+  - `Match`: Tournament match with team handicap calculations and state transitions
+  - `TeamAssignment`: Balanced team distribution with validation (equal sizes, no overlap)
+
+- **11 New Value Objects**:
+  - IDs: `RoundId`, `MatchId`, `TeamAssignmentId` (UUID-based)
+  - Enums: `SessionType` (MORNING/AFTERNOON/EVENING), `MatchFormat` (SINGLES/FOURBALL/FOURSOMES), `MatchStatus`, `RoundStatus`, `TeamAssignmentMode` (AUTOMATIC/MANUAL), `ScheduleConfigMode`, `HandicapMode` (STROKE_PLAY/MATCH_PLAY), `PlayMode` (SCRATCH/HANDICAP)
+  - `MatchPlayer`: Frozen VO with playing handicap and strokes received per hole
+
+- **2 Domain Services**:
+  - `PlayingHandicapCalculator`: WHS formula `PH = (HI x (SR/113) + (CR-Par)) x Allowance%` with format-specific calculations (Singles, Fourball, Foursomes)
+  - `SnakeDraftService`: Serpentine team balancing algorithm (A,B,B,A,A,B pattern)
+
+- **Two-Tier Handicap System**: Competition-level `PlayMode` (SCRATCH/HANDICAP) default + Round-level `HandicapMode` (STROKE_PLAY/MATCH_PLAY)/`allowance_percentage` override with WHS-compliant defaults (Singles 95-100%, Fourball 90%, Foursomes 50%)
+- **ADR-037**: Two-Tier Handicap Architecture and Session-Based Round Model
+
+**Block 5: Infrastructure - Migrations & Mappers**
+
+- **Migration** `a7f3b2c8d4e1`: 3 new tables (`rounds`, `matches`, `team_assignments`) with indexes
+- **Migration** `b9e4f1a3c7d2`: HandicapSettings → PlayMode refactor (rename column + convert values)
+- **SQLAlchemy Mappers**: TypeDecorators for IDs (CHAR(36) ↔ UUID VOs), Enums (string ↔ enum), JSONB (MatchPlayers, UserIds)
+- **Repositories**: SQLAlchemy + InMemory implementations for Round, Match, TeamAssignment
+- **Unit of Work**: CompetitionUnitOfWork expanded to 6 repositories
+
+**Block 6: Application Layer - Use Cases & DTOs**
+
+- **~30 DTOs** in `round_match_dto.py`: Request/Response/Body DTOs for all 11 use cases + shared response DTOs
+- **11 Use Cases**:
+  - CRUD: CreateRound, UpdateRound, DeleteRound
+  - Reading: GetSchedule (grouped by day), GetMatchDetail
+  - Teams: AssignTeams (snake draft/manual), GenerateMatches (with PlayingHandicapCalculator), ConfigureSchedule
+  - Transitions: UpdateMatchStatus (START/COMPLETE), DeclareWalkover, ReassignMatchPlayers (with handicap recalculation)
+- **Cross-module integration**: AssignTeams, GenerateMatches, ReassignMatchPlayers use UserRepository and/or GolfCourseRepository
+
+**Block 7: API Layer - 11 Endpoints**
+
+- **New file**: `round_match_routes.py` with 11 REST endpoints
+- **Rounds**: POST (create), PUT (update), DELETE, GET (schedule)
+- **Matches**: GET (detail), PUT (status), POST (walkover), PUT (players)
+- **Teams & Generation**: POST (assign teams), POST (generate matches), POST (configure schedule)
+- **11 DI providers** in `dependencies.py` (8 UoW-only + 3 cross-module)
+- **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
+- **Exception mapping**: 404 (NotFound), 403 (NotCreator), 400 (business errors)
+
+### Changed (Sprint 2)
+
+- `Enrollment` entity: Added `tee_category` field for player tee assignment
+- `HandicapSettings` replaced with `PlayMode` enum (breaking API change: `handicap_type` + `handicap_percentage` → `play_mode`)
+- `value_objects/__init__.py`: Updated exports with 11 new value objects
+- `services/__init__.py`: Added PlayingHandicapCalculator and SnakeDraftService exports
+- `entities/__init__.py`: New package init with Round, Match, TeamAssignment exports
+- `dependencies.py`: 11 new DI providers for round/match/team use cases
+- `main.py`: Registered `round_match_routes` router
+
+### Testing
+
+- **1,282 unit tests passing** (100%) — +422 tests from Sprint 2 Blocks 4-7
+  - Block 4: 296 domain tests (14 files: 3 entities + 2 services + 9 VOs)
+  - Block 5: 52 infrastructure tests (migration, mappers, repositories, UoW)
+  - Block 6: 74 application tests (12 DTO + 62 use case)
+  - Block 7: 0 regressions on full suite
+
+## [2.0.5] - 2026-02-05 (Golf Courses Endpoint Fixes)
+
+### Added
+
+- **Country Code Filter**: `GET /api/v1/golf-courses?country_code=ES` filters approved golf courses by country ISO code
+- **Enhanced Golf Course Response**: Added `course_type` and `total_par` fields to `GET /api/v1/competitions/{id}/golf-courses` endpoint
+
+### Fixed
+
+- **Competition Golf Courses Endpoint**: Fixed 500 error on `GET /api/v1/competitions/{id}/golf-courses`
+  - Corrected mapper initialization order for cross-module relationships
+  - Added explicit eager loading for golf course tees and holes
+  - Fixed Tee/Hole attribute access (`.category` instead of `.id`, `.number` instead of `.hole_number`)
+- **CSRF Exemptions**: Exempted `refresh-token` and `logout` endpoints from CSRF validation
+  - `refresh-token`: Protected by httpOnly cookie, CSRF token expires with access token
+  - `logout`: Session termination has low security risk (worst case: forced logout)
+- **Country Code Filter**: Fixed TypeDecorator compatibility by converting string to CountryCode VO
+
+### Security
+
+- **CSRF Configuration**: Two new exempt paths added with security rationale documented
+- **OWASP Compliance**: Maintained - exemptions follow defense-in-depth principle (httpOnly cookies as primary protection)
 
 ## [2.0.4] - 2026-02-04 (Cookie-Based Device Identification)
 
@@ -68,6 +171,7 @@ _No unreleased changes_
 - Renamed `FORWARD_FEMALE` → `SENIOR_FEMALE` (matches DB migration)
 - Added `JUNIOR` category for junior players
 - Full enum (7 values): `CHAMPIONSHIP_MALE`, `AMATEUR_MALE`, `SENIOR_MALE`, `CHAMPIONSHIP_FEMALE`, `AMATEUR_FEMALE`, `SENIOR_FEMALE`, `JUNIOR`
+- **Note**: Later refactored to 5 neutral values + separate Gender field (see [Unreleased])
 
 **🐳 Docker/Render Compatibility**
 - Updated `entrypoint.sh` regex to accept `postgresql+asyncpg://` URLs

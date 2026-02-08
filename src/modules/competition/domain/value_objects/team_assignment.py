@@ -4,10 +4,10 @@ TeamAssignment Value Object - Tipo de asignación de equipos en una competición
 Define cómo se asignan los jugadores a los equipos en un torneo formato Ryder Cup.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class TeamAssignment(str, Enum):
+class TeamAssignment(StrEnum):
     """
     Enum para los tipos de asignación de equipos.
 

@@ -37,7 +37,9 @@ class GolfCourse:
     - Exactamente 18 hoyos
     - Stroke indices únicos (1-18)
     - Par total entre 66 y 76
-    - 2-6 tees
+    - 2-10 tees (5 categorías x 2 géneros max)
+    - Unique (category, gender) combinations
+    - No mezclar gendered/non-gendered tees de la misma categoría
     - Estados inmutables: APPROVED/REJECTED
 
     Example:
@@ -323,6 +325,7 @@ class GolfCourse:
         for tee in tees:
             new_tee = TeeEntity(
                 category=tee.category,
+                gender=tee.gender,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
@@ -395,6 +398,7 @@ class GolfCourse:
 
             new_tee = Tee(
                 category=tee.category,
+                gender=tee.gender,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
@@ -450,13 +454,36 @@ class GolfCourse:
 
     def _validate_tees(self) -> None:
         """
-        Valida que haya entre 2 y 6 tees.
+        Valida tees: cantidad 2-10, unicidad (category, gender), consistencia gendered.
 
         Raises:
             ValueError: Si la validación falla
         """
-        if not (2 <= len(self._tees) <= 6):  # noqa: PLR2004
-            raise ValueError(f"Golf course must have between 2 and 6 tees, got {len(self._tees)}")
+        if not (2 <= len(self._tees) <= 10):  # noqa: PLR2004
+            raise ValueError(f"Golf course must have between 2 and 10 tees, got {len(self._tees)}")
+
+        # Unicidad: combinación (category, gender) debe ser única
+        seen_combos: set[tuple[str, str | None]] = set()
+        for tee in self._tees:
+            gender_val = tee.gender.value if tee.gender else None
+            combo = (tee.category.value, gender_val)
+            if combo in seen_combos:
+                raise ValueError(
+                    f"Duplicate tee combination: ({tee.category.value}, {gender_val or 'None'})"
+                )
+            seen_combos.add(combo)
+
+        # Consistencia: para una misma categoría, no mezclar gendered y non-gendered
+        from collections import defaultdict
+
+        gender_by_category: dict[str, set[str | None]] = defaultdict(set)
+        for tee in self._tees:
+            gender_val = tee.gender.value if tee.gender else None
+            gender_by_category[tee.category.value].add(gender_val)
+
+        for cat, genders in gender_by_category.items():
+            if None in genders and len(genders) > 1:
+                raise ValueError(f"Category '{cat}' cannot mix gendered and non-gendered tees")
 
     # Domain Events Management
 

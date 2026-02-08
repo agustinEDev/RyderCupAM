@@ -1,18 +1,18 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.4 (Production)
-> **Last Updated:** Feb 4, 2026
+> **Current Version:** 2.0.5 (Production)
+> **Last Updated:** Feb 6, 2026
 > **OWASP Score:** 9.4/10
 
 ---
 
 ## 📊 Current Status
 
-**Tests:** 1,201 (1,201 passing, 16 skipped, ~79s) | **Endpoints:** 54 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,282 (1,282 passing, 16 skipped, ~79s) | **Endpoints:** 65 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
-- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M (add/remove/reorder) ⭐ v2.0.2
+- **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M, Rounds/Matches/Teams (11 use cases + 11 endpoints) ⭐ Sprint 2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
@@ -37,7 +37,7 @@
 | Sprint | Dates | Hours | Endpoints | Tests | Sync Point |
 |--------|-------|-------|-----------|-------|------------|
 | **Sprint 1** | Jan 27 - Jan 31 | 60h | 11 (RBAC + Golf Courses) | 51+ | ✅ COMPLETED |
-| **Sprint 2** | Feb 3 - Feb 24 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | 🔄 Fri, Feb 13, Feb 20 |
+| **Sprint 2** | Feb 3 - Feb 6 | 134h | 14 (Competition-GolfCourse + Rounds + Matches) | 73+ | ✅ COMPLETED Feb 6 |
 | **Sprint 3** | Feb 25 - Mar 3 | 48h | 5 (Invitations) | 12+ | 🔄 Fri, Feb 27 |
 | **Sprint 4** | Mar 4 - Mar 17 | 92h | 4 (Scoring) | 20+ | 🔄 Fri, Mar 13 |
 | **Sprint 5** | Mar 18 - Mar 24 | 60h | 2 (Leaderboards) | 10+ | 🔄 Fri, Mar 20 |
@@ -106,11 +106,11 @@ class GolfCourseRequest(BaseModel):
         return holes
 ```
 
-**Validations:** Exactly 18 holes, unique stroke indices 1-18, total par 66-76, 2-6 tees.
+**Validations:** Exactly 18 holes, unique stroke indices 1-18, total par 66-76, 2-10 tees.
 
 ---
 
-#### Sprint 2: Competition Scheduling (1.5 weeks) - 🔄 IN PROGRESS (Blocks 0-3 ✅ COMPLETED)
+#### Sprint 2: Competition Scheduling (1.5 weeks) - ✅ COMPLETED (Feb 6, 2026)
 
 **Block 0: Clean Architecture Refactor - UoW Pattern Consistency (✅ COMPLETED: Jan 31, 2026)**
 - **Issue**: Competition (14 use cases) and User (2 use cases) modules have explicit `await self._uow.commit()` calls
@@ -208,36 +208,163 @@ class GolfCourseRequest(BaseModel):
 - **Time**: 2 hours
 - **ADR**: ADR-036 (SBOM Submission via GitHub REST API)
 
-**Rounds Endpoints (4):**
+**Block 4: Domain Layer - Round & Match Entities (✅ COMPLETED: Feb 5, 2026)**
+- **New Value Objects (11)**:
+  - `RoundId` (UUID) - Unique identifier for rounds
+  - `MatchId` (UUID) - Unique identifier for matches
+  - `TeamAssignmentId` (UUID) - Unique identifier for team assignments
+  - `SessionType` (Enum): MORNING, AFTERNOON, EVENING
+  - `MatchFormat` (Enum): SINGLES, FOURBALL, FOURSOMES (with `players_per_team()`)
+  - `MatchStatus` (Enum): SCHEDULED, IN_PROGRESS, COMPLETED, WALKOVER
+  - `RoundStatus` (Enum): PENDING_TEAMS, PENDING_MATCHES, SCHEDULED, IN_PROGRESS, COMPLETED (with `can_modify()`, `can_generate_matches()`)
+  - `TeamAssignmentMode` (Enum): AUTOMATIC, MANUAL
+  - `ScheduleConfigMode` (Enum): AUTOMATIC, MANUAL
+  - `HandicapMode` (Enum): STROKE_PLAY (95%), MATCH_PLAY (100%) - for SINGLES rounds
+  - `PlayMode` (Enum): SCRATCH, HANDICAP - Competition-level default
+- **New Entities (3)**:
+  - `Round`: id, competition_id, golf_course_id, round_date, session_type, match_format, status, handicap_mode, allowance_percentage
+    - Session-based model: each Round = one session (MORNING/AFTERNOON/EVENING), not a full-day
+    - State machine: PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
+    - Tees NOT at Round level (managed per player via Enrollment.tee_category)
+  - `Match`: id, round_id, match_number, team_a_players[], team_b_players[], status
+    - MatchPlayer (frozen VO): user_id, playing_handicap, tee_category, strokes_received[]
+  - `TeamAssignment`: id, competition_id, mode, team_a_player_ids[], team_b_player_ids[]
+    - Validations: balanced teams, no overlap, no duplicates
+- **Domain Services (2)** (includes Block 8 PlayingHandicapCalculator - absorbed into Block 4):
+  - `PlayingHandicapCalculator`: WHS formula `PH = (HI x (SR / 113) + (CR - Par)) x Allowance%`
+    - Methods: calculate(), calculate_for_singles(), calculate_for_fourball(), calculate_for_foursomes()
+    - TeeRating dataclass with WHS validation (CR 55-85, SR 55-155, Par 66-76)
+  - `SnakeDraftService`: Serpentine team assignment (A,B,B,A,A,B pattern)
+    - Methods: assign_teams(), validate_team_balance(), get_team_players()
+  - `ScheduleGenerator` and `MatchGenerator`: Deferred to Block 6 (use case level)
+- **Two-Tier Handicap System** (ADR-037):
+  - Competition-level `PlayMode` sets tournament-wide default
+  - Round-level `handicap_mode`/`allowance_percentage` can override per session
+  - WHS defaults: Singles STROKE_PLAY 95%, MATCH_PLAY 100%, Fourball 90%, Foursomes 50%
+- **Enrollment Enhancement**: Added `tee_category` field (TeeCategory from Golf Course module)
+- **Business Rules**:
+  - Teams must be assigned before generating matches
+  - Teams must have equal player count
+  - SINGLES: 1 player/team per match
+  - FOURBALL/FOURSOMES: 2 players/team per match
+  - Allowance percentage must be 50-100 in increments of 5
+  - Only modifiable rounds: PENDING_TEAMS or PENDING_MATCHES status
+- **Domain Events**: Deferred to Block 6 (emitted from use cases)
+- **Tests**: 296 domain tests passing (14 test files: 9 VOs + 3 entities + 2 services)
+- **Time**: ~8 hours
+- **Commit**: 886f99f - feat(competition): implement Block 4 Domain Layer for Rounds & Matches
+- **ADR**: ADR-037 (Two-Tier Handicap Architecture and Session-Based Round Model)
+
+**Block 5: Infrastructure - Migrations & Mappers (✅ COMPLETED: Feb 5, 2026)**
+- **Migration**: `a7f3b2c8d4e1_add_rounds_matches_team_assignments.py`
+  - 3 tables: `rounds`, `matches`, `team_assignments`
+  - Indexes: `ix_rounds_competition_date`, `ix_matches_round_id`, `ix_matches_status`
+  - JSONB columns for player arrays (MatchPlayersJsonType, UserIdsJsonType)
+- **SQLAlchemy Mappers** (imperative mapping with TypeDecorators):
+  - ID TypeDecorators: CHAR(36) ↔ UUID Value Objects (RoundId, MatchId, TeamAssignmentId)
+  - Enum TypeDecorators: Factory pattern for SessionType, MatchFormat, RoundStatus, MatchStatus, HandicapMode, TeamAssignmentMode
+  - JSONB TypeDecorators: MatchPlayersJsonType (list[MatchPlayer]), UserIdsJsonType (list[UserId])
+- **Repository Implementations**: SQLAlchemy + InMemory (tests) for Round, Match, TeamAssignment
+- **Unit of Work**: Updated CompetitionUnitOfWork with 6 repositories (competitions, enrollments, countries, rounds, matches, team_assignments)
+- **PlayMode Refactor Migration**: `b9e4f1a3c7d2_rename_handicap_to_play_mode.py` (HandicapSettings → PlayMode)
+- **Tests**: +52 tests (migration, mappers, repositories, UoW)
+- **Commits**: Block 5 implementation + PlayMode refactor (0b33d65)
+
+**Block 6: Application Layer - Use Cases & DTOs (✅ COMPLETED: Feb 6, 2026)**
+- **DTOs** (`round_match_dto.py` - ~30 DTOs):
+  - Shared: MatchPlayerResponseDTO, MatchResponseDTO, RoundResponseDTO, TeamAssignmentResponseDTO, ScheduleDayDTO
+  - CRUD: CreateRound(Request/Response/Body), UpdateRound(Request/Response/Body), DeleteRound(Request/Response)
+  - Reading: GetSchedule(Request/Response), GetMatchDetail(Request/Response)
+  - Teams: AssignTeams(Request/Response/Body), GenerateMatches(Request/Response/Body), ConfigureSchedule(Request/Response/Body)
+  - Transitions: UpdateMatchStatus(Request/Response/Body), DeclareWalkover(Request/Response/Body), ReassignMatchPlayers(Request/Response/Body)
+  - ManualPairingDTO for custom match generation
+  - Bug fix: `ScheduleDayDTO.date` renamed to `day_date` with alias="date" (Pydantic name collision)
+- **Use Cases** (11 total):
+  1. `CreateRoundUseCase` (7 tests): Creates round with competition/GC validation
+  2. `UpdateRoundUseCase` (6 tests): Partial updates with state checks
+  3. `DeleteRoundUseCase` (5 tests): Cascade deletion with match cleanup
+  4. `GetScheduleUseCase` (4 tests): Nested DTOs grouped by day
+  5. `GetMatchDetailUseCase` (3 tests): Full match detail with round context
+  6. `AssignTeamsUseCase` (8 tests): Snake draft or manual assignment
+  7. `GenerateMatchesUseCase` (10 tests): PlayingHandicapCalculator integration
+  8. `ConfigureScheduleUseCase` (6 tests): Auto/manual schedule configuration
+  9. `UpdateMatchStatusUseCase` (5 tests): START/COMPLETE transitions
+  10. `DeclareWalkoverUseCase` (4 tests): Walkover with winning team
+  11. `ReassignMatchPlayersUseCase` (4 tests): Player swap with handicap recalculation
+- **Cross-module dependencies**: AssignTeams (UserRepository), GenerateMatches (GolfCourseRepository + UserRepository), ReassignMatchPlayers (GolfCourseRepository + UserRepository)
+- **Tests**: +74 unit tests (12 DTO + 62 use case)
+- **Helper refactoring**: Extracted methods in update_match_status and reassign_match_players to fix PLR0912
+
+**Block 7: API Layer - Endpoints (✅ COMPLETED: Feb 6, 2026)**
+- **New file**: `src/modules/competition/infrastructure/api/v1/round_match_routes.py`
+- **11 DI providers** in `src/config/dependencies.py` (8 UoW-only + 3 cross-module)
+- **Router registered** in `main.py` with prefix `/api/v1/competitions`
+- **Rounds (4 endpoints)**:
+  ```
+  POST   /api/v1/competitions/{comp_id}/rounds            # 201 Created
+  PUT    /api/v1/competitions/rounds/{round_id}            # 200 OK
+  DELETE /api/v1/competitions/rounds/{round_id}            # 200 OK
+  GET    /api/v1/competitions/{comp_id}/schedule           # 200 OK
+  ```
+- **Matches (4 endpoints)**:
+  ```
+  GET    /api/v1/competitions/matches/{match_id}           # 200 OK
+  PUT    /api/v1/competitions/matches/{match_id}/status    # 200 OK
+  POST   /api/v1/competitions/matches/{match_id}/walkover  # 200 OK
+  PUT    /api/v1/competitions/matches/{match_id}/players   # 200 OK
+  ```
+- **Teams & Generation (3 endpoints)**:
+  ```
+  POST   /api/v1/competitions/{comp_id}/teams              # 201 Created
+  POST   /api/v1/competitions/rounds/{round_id}/matches/generate  # 201 Created
+  POST   /api/v1/competitions/{comp_id}/schedule/configure # 200 OK
+  ```
+- **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
+- **Exception handling**: 404 (NotFound), 403 (NotCreator), 400 (state/validation/business errors)
+- **Authorization**: All endpoints require authentication (get_current_user)
+- **Tests**: 1,282 unit tests passing (zero regressions)
+
+**Block 8: Playing Handicap Calculator (✅ ABSORBED INTO BLOCK 4: Feb 5, 2026)**
+- Implemented as `PlayingHandicapCalculator` domain service in Block 4
+- WHS formula with Decimal precision and ROUND_HALF_UP rounding
+- Format-specific methods: Singles (individual PH), Fourball (individual PH per player), Foursomes (team CH difference x allowance%)
+- TeeRating dataclass with WHS validation ranges
+- 30+ tests included in Block 4's 296 domain tests
+
+**Schedule Auto-Generation Rules:**
+| Sessions | Formats Generated (in order) |
+|----------|------------------------------|
+| 1 | Singles |
+| 2 | Fourball → Singles |
+| 3 | Foursomes → Fourball → Singles |
+| 4 | Fourball → Foursomes → Fourball → Singles |
+| 5 | Foursomes → Fourball → Foursomes → Fourball → Singles |
+| 6+ | Alternates Fourball/Foursomes → Singles last |
+
+**Snake Draft Algorithm:**
 ```
-POST   /api/v1/competitions/{comp_id}/rounds
-PUT    /api/v1/rounds/{round_id}
-DELETE /api/v1/rounds/{round_id}
-GET    /api/v1/competitions/{comp_id}/schedule  # Rounds + matches nested
+Players sorted by handicap: [4.2, 8.1, 12.3, 15.0, 18.2, 22.5, 25.0, 28.4]
+Pick 1: Team A ← 4.2    Pick 2: Team B ← 8.1
+Pick 3: Team B ← 12.3   Pick 4: Team A ← 15.0
+Pick 5: Team A ← 18.2   Pick 6: Team B ← 22.5
+Pick 7: Team B ← 25.0   Pick 8: Team A ← 28.4
+Result: Balanced teams (~0.5 handicap difference)
 ```
 
-**Matches Endpoints (6):**
-```
-POST   /api/v1/rounds/{round_id}/matches
-GET    /api/v1/matches/{match_id}
-PUT    /api/v1/matches/{match_id}/players
-PUT    /api/v1/matches/{match_id}/status
-POST   /api/v1/matches/{match_id}/walkover
-DELETE /api/v1/matches/{match_id}
-```
+**Sprint 2 Block 4-8 Summary:**
+| Block | Description | Tests | Status |
+|-------|-------------|-------|--------|
+| Block 4 | Domain (Entities, VOs, Services) | 296 | ✅ Feb 5 |
+| Block 5 | Infrastructure (Migrations, Mappers, Repos) | +52 | ✅ Feb 5 |
+| Block 6 | Application (Use Cases, DTOs) | +74 | ✅ Feb 6 |
+| Block 7 | API (11 Endpoints, 11 DI providers) | 0 regressions | ✅ Feb 6 |
+| Block 8 | Playing Handicap Calculator (absorbed into Block 4) | - | ✅ Feb 5 |
+| **Total** | **Sprint 2 complete** | **+422 tests** | **✅ All blocks** |
 
-**Playing Handicap Calculation (Domain Service):**
-```python
-class PlayingHandicapCalculator:
-    """WHS Official: PH = (HI × SR / 113) + (CR - Par)"""
-    @staticmethod
-    def calculate(handicap_index: float, tee: Tee, course_par: int) -> int:
-        slope_factor = tee.slope_rating / 113
-        ph = (handicap_index * slope_factor) + (tee.course_rating - course_par)
-        return round(ph)
-```
-
-**Validations:** SINGLES (1 player/team), FOURBALL/FOURSOMES (2 players/team), tee must exist in golf course, players must be enrolled with APPROVED status.
+**New ADRs:**
+- **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model (✅ Block 4)
+- **ADR-038:** Schedule Configuration Modes (Automatic vs Manual) (✅ Block 6)
+- **ADR-039:** Match Format Business Rules (✅ Block 6)
 
 ---
 
@@ -340,7 +467,7 @@ class LeaderboardResponse(BaseModel):
 
 **Enums:**
 - CourseType: STANDARD_18, PITCH_AND_PUTT, EXECUTIVE
-- TeeCategory (7 values): CHAMPIONSHIP_MALE, AMATEUR_MALE, SENIOR_MALE, CHAMPIONSHIP_FEMALE, AMATEUR_FEMALE, SENIOR_FEMALE, JUNIOR
+- TeeCategory (5 values): CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR (+ separate Gender field: MALE/FEMALE/null per Tee)
 - ApprovalStatus: PENDING_APPROVAL, APPROVED, REJECTED
 - MatchFormat, MatchStatus, InvitationStatus, ScoreStatus (v2.1.0)
 
@@ -382,12 +509,19 @@ class LeaderboardResponse(BaseModel):
 
 | Sprint | Backend Delivers | Frontend Consumes | Sync Point |
 |--------|----------------|------------------|------------|
-| Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | Fri, Jan 31 |
-| Sprint 2 (Block 0-1) | Competition-GolfCourse M2M | Multi-select courses + Reorder UI | Fri, Feb 13 |
-| Sprint 2 (Block 2-3) | Rounds + Matches Scheduling | Drag-drop + Match Wizard | Fri, Feb 20 |
+| Sprint 1 | RBAC + Golf Courses | User Management + Course Selector | ✅ Jan 31 |
+| Sprint 2 (Block 0-3) | Competition-GolfCourse M2M + Code Quality | Multi-select courses + Reorder UI | ✅ Feb 4 |
+| Sprint 2 (Block 4-8) | Schedule Config + Teams + Rounds + Matches | Schedule Wizard + Team Assignment + Match Generation | ✅ Feb 6 |
 | Sprint 3 | Invitations | Invitation Cards | Fri, Feb 27 |
 | Sprint 4 | Scoring | 3 Tabs + Validation | Fri, Mar 13 |
 | Sprint 5 | Leaderboards | Public Leaderboard + Polling | Fri, Mar 20 |
+
+**Sprint 2 Block 4-8 Frontend Integration:**
+1. **Schedule Configuration**: Toggle Auto/Manual, day picker, session selector per day
+2. **Team Assignment**: Toggle Auto/Manual, drag-and-drop players to teams, handicap balance preview
+3. **Round Management**: Create/edit/delete rounds, golf course + tee selector
+4. **Match Generation**: Auto-generate or manual pairing, playing handicap display
+5. **Match Status**: Start/complete matches, walkover declaration
 
 **Protocol:** Backend deploys to dev → updates Swagger → notifies Frontend (Friday) → integration (Monday).
 
@@ -524,7 +658,7 @@ src/modules/ai/
 ## 🔗 References
 
 **Documentation:**
-- **ADRs:** `docs/architecture/decisions/ADR-*.md` (33 total ADRs)
+- **ADRs:** `docs/architecture/decisions/ADR-*.md` (37 total ADRs)
 - **CHANGELOG:** `CHANGELOG.md` (detailed change history)
 - **CLAUDE:** `CLAUDE.md` (complete project context)
 - **Frontend ROADMAP:** `../RyderCupWeb/ROADMAP.md`
@@ -614,5 +748,5 @@ src/modules/ai/
 
 ---
 
-**Next Review:** v2.0.1 Sprint 1 (Feb 7, 2026)
+**Next Review:** v2.0.1 Sprint 3 (Feb 25, 2026)
 **Owner:** Backend Team
