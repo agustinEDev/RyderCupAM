@@ -137,13 +137,7 @@ PAYLOAD=$(cat <<EOF
       "file": {
         "source_location": "requirements.txt"
       },
-      "resolved": $(jq '.components | map({
-        "package_url": .purl,
-        "name": .name,
-        "version": .version,
-        "scope": "runtime",
-        "dependencies": []
-      })' "$SBOM_FILE")
+      "resolved": $(jq '[.components[] | select(.purl != null)] | map({key: .purl, value: {"package_url": .purl, "relationship": "direct", "scope": "runtime", "dependencies": []}}) | from_entries' "$SBOM_FILE")
     }
   }
 }
