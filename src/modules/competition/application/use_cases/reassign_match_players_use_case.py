@@ -177,9 +177,14 @@ class ReassignMatchPlayersUseCase:
                     handicap_index = Decimal("0")
 
                 tee_rating = tee_ratings.get(tee_key)
-                playing_handicap = (
-                    calculator.calculate(handicap_index, tee_rating, allowance) if tee_rating else 0
-                )
+                if tee_rating is None:
+                    raise ValueError(
+                        f"No se encontró tee rating para el jugador {uid_value} "
+                        f"(tee_key: {tee_key}) en el campo de golf. "
+                        f"Verifique que el campo tiene un tee configurado para "
+                        f"categoría={tee_category.value}, género={tee_gender}"
+                    )
+                playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
                 strokes_received = self._compute_strokes_received(
                     playing_handicap, holes_by_stroke_index
                 )

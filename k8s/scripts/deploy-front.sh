@@ -164,8 +164,13 @@ load_to_kind() {
 
     # Si no es "latest", también cargar latest
     if [ "$VERSION" != "latest" ]; then
-        print_info "Loading: ${DOCKER_IMAGE}:latest"
-        kind load docker-image "${DOCKER_IMAGE}:latest" --name ${CLUSTER_NAME}
+        print_info "Loading: ${DOCKER_IMAGE}:latest → ${CLUSTER_NAME}"
+        if kind load docker-image "${DOCKER_IMAGE}:latest" --name ${CLUSTER_NAME}; then
+            print_success "Imagen cargada en Kind: ${DOCKER_IMAGE}:latest"
+        else
+            print_error "Error al cargar ${DOCKER_IMAGE}:latest en Kind"
+            exit 1
+        fi
     fi
 }
 

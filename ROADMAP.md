@@ -361,7 +361,7 @@ Result: Balanced teams (~0.5 handicap difference)
 | Block 8 | Playing Handicap Calculator (absorbed into Block 4) | - | ✅ Feb 5 |
 | **Total** | **Sprint 2 complete** | **+422 tests** | **✅ All blocks** |
 
-**ADRs Nuevos:**
+**New ADRs:**
 - **ADR-037:** Two-Tier Handicap Architecture and Session-Based Round Model (✅ Block 4)
 - **ADR-038:** Schedule Configuration Modes (Automatic vs Manual) (✅ Block 6)
 - **ADR-039:** Match Format Business Rules (✅ Block 6)

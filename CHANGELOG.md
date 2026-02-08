@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Match generation auto-resolves tee using `(enrollment.tee_category, user.gender)` with null fallback
 - Enrollment DTOs now expose `tee_category` selection for player preference
 - Alembic migration `c3d5e7f9a1b2` for schema changes
-- All 1,292 tests updated and passing
+- All 1,282 tests updated and passing
 
 ### Added
 
@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
 - **Exception mapping**: 404 (NotFound), 403 (NotCreator), 400 (business errors)
 
-### Changed
+### Changed (Sprint 2)
 
 - `Enrollment` entity: Added `tee_category` field for player tee assignment
 - `HandicapSettings` replaced with `PlayMode` enum (breaking API change: `handicap_type` + `handicap_percentage` → `play_mode`)

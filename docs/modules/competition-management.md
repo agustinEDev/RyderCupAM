@@ -389,10 +389,10 @@ CREATE TABLE country_adjacencies (
 - **Unit Tests (Application):** 146 tests (84 base + 62 round/match/team use cases) ⭐ Block 6
 - **Unit Tests (DTOs):** 61 tests (49 base + 12 round/match DTOs) ⭐ Block 6
 - **Integration Tests:** 9 tests (API endpoints)
-- **API Endpoints:** 35 total (14 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams) ⭐ Block 7
+- **API Endpoints:** 35 total (10 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams) ⭐ Block 7
 
 ### Structure
-```
+```text
 tests/unit/modules/competition/
 ├── domain/value_objects/test_*.py (20 base + 9 new VOs)
 ├── domain/entities/test_*.py (3 new: round, match, team_assignment)

@@ -42,6 +42,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
+    InvalidTeeCategoryError,
 )
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
@@ -222,6 +223,8 @@ async def request_enrollment(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RequestAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except InvalidTeeCategoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -262,6 +265,8 @@ async def direct_enroll_player(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except InvalidTeeCategoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get(

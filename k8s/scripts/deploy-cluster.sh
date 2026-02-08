@@ -191,8 +191,15 @@ echo ""
 print_step "Construyendo imágenes Docker con el código actual..."
 
 # Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
-FRONTEND_DIR="$(cd "$PROJECT_ROOT/../RyderCupWeb" && pwd)"
+FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
 BACKEND_DIR="$PROJECT_ROOT"
+
+if [ -d "$FRONTEND_CANDIDATE" ]; then
+    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
+else
+    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
+    exit 1
+fi
 
 # Verificar que existen los Dockerfiles
 if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then

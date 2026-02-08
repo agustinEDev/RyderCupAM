@@ -6,7 +6,8 @@ Create Date: 2026-02-07 20:00:00.000000
 
 Refactors TeeCategory from 7 gender-combined values to 5 difficulty-only values.
 Adds gender column to golf_course_tees and users tables.
-No data migration needed (all users are test data).
+Includes data migration to split combined tee_category values (e.g. CHAMPIONSHIP_MALE)
+into separate tee_category (CHAMPIONSHIP) and tee_gender (MALE) columns.
 """
 
 from typing import Sequence, Union
@@ -89,6 +90,18 @@ def downgrade() -> None:
     # Convert tee_category to VARCHAR first (remove new enum constraint)
     op.execute("ALTER TABLE golf_course_tees ALTER COLUMN tee_category TYPE VARCHAR(20)")
     op.execute("DROP TYPE IF EXISTS tee_category_enum")
+
+    # Map FORWARD (new-only category) to JUNIOR (safe old value)
+    op.execute(
+        "UPDATE golf_course_tees SET tee_category = 'JUNIOR' "
+        "WHERE tee_category = 'FORWARD'"
+    )
+
+    # Normalize NULL tee_gender: default to MALE for gendered categories
+    op.execute(
+        "UPDATE golf_course_tees SET tee_gender = 'MALE' "
+        "WHERE tee_gender IS NULL AND tee_category IN ('CHAMPIONSHIP', 'AMATEUR', 'SENIOR')"
+    )
 
     # Reconstruct combined legacy values from tee_category + tee_gender
     op.execute(
