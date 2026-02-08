@@ -16,7 +16,9 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 class TeeDTO(BaseModel):
     """DTO para representar un tee (salida)."""
 
-    tee_category: str = Field(..., description="Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)")
+    tee_category: str = Field(
+        ..., description="Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)"
+    )
     tee_gender: str | None = Field(None, description="Género del tee (MALE/FEMALE/null)")
     identifier: str = Field(
         ..., description="Identificador libre del campo (Amarillo, Oro, 1, etc.)"

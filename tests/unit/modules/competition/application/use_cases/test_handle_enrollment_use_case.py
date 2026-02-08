@@ -95,9 +95,7 @@ class TestHandleEnrollmentUseCase:
         Then: El enrollment pasa a APPROVED
         """
         created = await self._create_active_competition(uow, creator_id)
-        enrollment = await self._create_requested_enrollment(
-            uow, created.id, other_user_id
-        )
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
         use_case = HandleEnrollmentUseCase(uow)
         request = HandleEnrollmentRequestDTO(
@@ -118,9 +116,7 @@ class TestHandleEnrollmentUseCase:
         Then: El enrollment pasa a REJECTED
         """
         created = await self._create_active_competition(uow, creator_id)
-        enrollment = await self._create_requested_enrollment(
-            uow, created.id, other_user_id
-        )
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
         use_case = HandleEnrollmentUseCase(uow)
         request = HandleEnrollmentRequestDTO(
@@ -158,9 +154,7 @@ class TestHandleEnrollmentUseCase:
         Then: Se lanza NotCreatorError
         """
         created = await self._create_active_competition(uow, creator_id)
-        enrollment = await self._create_requested_enrollment(
-            uow, created.id, other_user_id
-        )
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
         use_case = HandleEnrollmentUseCase(uow)
         request = HandleEnrollmentRequestDTO(
@@ -196,15 +190,11 @@ class TestHandleEnrollmentUseCase:
         Then: Se lanza CompetitionFullViolation
         """
         # max_players=2, el creador ya ocupa 1 plaza (auto-enroll)
-        created = await self._create_active_competition(
-            uow, creator_id, max_players=2
-        )
+        created = await self._create_active_competition(uow, creator_id, max_players=2)
 
         # Crear un segundo jugador y aprobarlo para llenar la competición
         player2_id = UserId(uuid4())
-        enrollment2 = await self._create_requested_enrollment(
-            uow, created.id, player2_id
-        )
+        enrollment2 = await self._create_requested_enrollment(uow, created.id, player2_id)
 
         use_case = HandleEnrollmentUseCase(uow)
         approve_request = HandleEnrollmentRequestDTO(
@@ -217,9 +207,7 @@ class TestHandleEnrollmentUseCase:
 
         # Crear un tercer jugador e intentar aprobar
         player3_id = UserId(uuid4())
-        enrollment3 = await self._create_requested_enrollment(
-            uow, created.id, player3_id
-        )
+        enrollment3 = await self._create_requested_enrollment(uow, created.id, player3_id)
 
         approve_request3 = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment3.id.value,
@@ -237,15 +225,11 @@ class TestHandleEnrollmentUseCase:
         When: El creador rechaza un enrollment pendiente
         Then: Se rechaza correctamente (reject no verifica capacidad)
         """
-        created = await self._create_active_competition(
-            uow, creator_id, max_players=2
-        )
+        created = await self._create_active_competition(uow, creator_id, max_players=2)
 
         # Llenar la competición: aprobar a un segundo jugador
         player2_id = UserId(uuid4())
-        enrollment2 = await self._create_requested_enrollment(
-            uow, created.id, player2_id
-        )
+        enrollment2 = await self._create_requested_enrollment(uow, created.id, player2_id)
 
         use_case = HandleEnrollmentUseCase(uow)
         approve_req = HandleEnrollmentRequestDTO(
@@ -256,9 +240,7 @@ class TestHandleEnrollmentUseCase:
 
         # Crear un tercer jugador pendiente
         player3_id = UserId(uuid4())
-        enrollment3 = await self._create_requested_enrollment(
-            uow, created.id, player3_id
-        )
+        enrollment3 = await self._create_requested_enrollment(uow, created.id, player3_id)
 
         # Rechazar debería funcionar aunque la competición esté llena
         reject_req = HandleEnrollmentRequestDTO(

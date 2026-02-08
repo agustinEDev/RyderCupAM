@@ -266,9 +266,7 @@ class TestCreateRoundUseCase:
         Then: Se lanza GolfCourseNotInCompetitionError
         """
         # Arrange
-        await self._create_closed_competition_with_course(
-            uow, creator_id, golf_course_id
-        )
+        await self._create_closed_competition_with_course(uow, creator_id, golf_course_id)
         competition = (await uow.competitions.find_all())[0]
         other_golf_course_id = GolfCourseId(uuid4())
 

@@ -30,18 +30,14 @@ class GetMatchDetailUseCase:
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
         self._uow = uow
 
-    async def execute(
-        self, request: GetMatchDetailRequestDTO
-    ) -> GetMatchDetailResponseDTO:
+    async def execute(self, request: GetMatchDetailRequestDTO) -> GetMatchDetailResponseDTO:
         async with self._uow:
             # 1. Buscar el partido
             match_id = MatchId(request.match_id)
             match = await self._uow.matches.find_by_id(match_id)
 
             if not match:
-                raise MatchNotFoundError(
-                    f"No existe partido con ID {request.match_id}"
-                )
+                raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
             # 2. Buscar la ronda para info adicional
             round_entity = await self._uow.rounds.find_by_id(match.round_id)

@@ -314,9 +314,7 @@ class TestGenerateMatchesUseCase:
         round_entity = await self._create_round_pending_matches(
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
-        team_a, team_b = await self._create_teams_and_enrollments(
-            uow, competition, 2, 2
-        )
+        team_a, team_b = await self._create_teams_and_enrollments(uow, competition, 2, 2)
 
         use_case = GenerateMatchesUseCase(
             uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
@@ -384,9 +382,7 @@ class TestGenerateMatchesUseCase:
         """
         # Arrange
         competition = await self._create_closed_competition(uow, creator_id)
-        round_entity = await self._create_round_pending_matches(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_pending_matches(uow, competition, golf_course_id)
 
         other_user_id = UserId(uuid4())
         use_case = GenerateMatchesUseCase(
@@ -453,9 +449,7 @@ class TestGenerateMatchesUseCase:
         """
         # Arrange
         competition = await self._create_closed_competition(uow, creator_id)
-        round_entity = await self._create_round_pending_matches(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_pending_matches(uow, competition, golf_course_id)
         # No se crea team assignment
 
         use_case = GenerateMatchesUseCase(
@@ -742,10 +736,14 @@ class TestGenerateMatchesUseCase:
         assert len(matches) == 2
         for m in matches:
             for p in m.team_a_players:
-                assert p.playing_handicap > 0, "HANDICAP mode should produce non-zero playing_handicap"
+                assert p.playing_handicap > 0, (
+                    "HANDICAP mode should produce non-zero playing_handicap"
+                )
                 assert len(p.strokes_received) > 0, "HANDICAP mode should produce strokes_received"
             for p in m.team_b_players:
-                assert p.playing_handicap > 0, "HANDICAP mode should produce non-zero playing_handicap"
+                assert p.playing_handicap > 0, (
+                    "HANDICAP mode should produce non-zero playing_handicap"
+                )
                 assert len(p.strokes_received) > 0, "HANDICAP mode should produce strokes_received"
 
     async def test_should_use_custom_handicap_over_user_handicap(

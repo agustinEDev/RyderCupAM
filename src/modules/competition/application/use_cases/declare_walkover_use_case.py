@@ -70,8 +70,7 @@ class DeclareWalkoverUseCase:
             # 4. Verificar competicion IN_PROGRESS
             if not competition.is_in_progress():
                 raise CompetitionNotInProgressError(
-                    f"La competicion debe estar IN_PROGRESS. "
-                    f"Estado: {competition.status.value}"
+                    f"La competicion debe estar IN_PROGRESS. Estado: {competition.status.value}"
                 )
 
             # 5. Declarar walkover

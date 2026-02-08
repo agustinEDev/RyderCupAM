@@ -460,9 +460,7 @@ class GolfCourse:
             ValueError: Si la validación falla
         """
         if not (2 <= len(self._tees) <= 10):  # noqa: PLR2004
-            raise ValueError(
-                f"Golf course must have between 2 and 10 tees, got {len(self._tees)}"
-            )
+            raise ValueError(f"Golf course must have between 2 and 10 tees, got {len(self._tees)}")
 
         # Unicidad: combinación (category, gender) debe ser única
         seen_combos: set[tuple[str, str | None]] = set()
@@ -471,8 +469,7 @@ class GolfCourse:
             combo = (tee.category.value, gender_val)
             if combo in seen_combos:
                 raise ValueError(
-                    f"Duplicate tee combination: ({tee.category.value}, "
-                    f"{gender_val or 'None'})"
+                    f"Duplicate tee combination: ({tee.category.value}, {gender_val or 'None'})"
                 )
             seen_combos.add(combo)
 
@@ -486,9 +483,7 @@ class GolfCourse:
 
         for cat, genders in gender_by_category.items():
             if None in genders and len(genders) > 1:
-                raise ValueError(
-                    f"Category '{cat}' cannot mix gendered and non-gendered tees"
-                )
+                raise ValueError(f"Category '{cat}' cannot mix gendered and non-gendered tees")
 
     # Domain Events Management
 

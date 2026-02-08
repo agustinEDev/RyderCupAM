@@ -317,9 +317,7 @@ class TestConfigureScheduleUseCase:
         Then: Se lanza NoGolfCoursesError
         """
         # Arrange - competicion CLOSED sin golf courses
-        competition = await self._create_closed_competition_without_courses(
-            uow, creator_id
-        )
+        competition = await self._create_closed_competition_without_courses(uow, creator_id)
         use_case = ConfigureScheduleUseCase(uow=uow)
         request = ConfigureScheduleRequestDTO(
             competition_id=str(competition.id.value),

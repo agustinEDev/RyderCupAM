@@ -142,7 +142,9 @@ class PlayingHandicapCalculator:
         Returns:
             Tuple (player_ph, opponent_ph) con Playing Handicaps
         """
-        allowance = custom_allowance if custom_allowance is not None else handicap_mode.default_allowance()
+        allowance = (
+            custom_allowance if custom_allowance is not None else handicap_mode.default_allowance()
+        )
 
         player_ph = self.calculate(player_hi, player_tee, allowance)
         opponent_ph = self.calculate(opponent_hi, opponent_tee, allowance)

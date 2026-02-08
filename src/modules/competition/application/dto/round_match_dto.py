@@ -95,9 +95,7 @@ class ScheduleDayDTO(BaseModel):
     day_date: date = Field(..., alias="date", description="Fecha del día.")
 
     model_config = ConfigDict(populate_by_name=True)
-    rounds: list[RoundResponseDTO] = Field(
-        default_factory=list, description="Rondas de ese día."
-    )
+    rounds: list[RoundResponseDTO] = Field(default_factory=list, description="Rondas de ese día.")
 
 
 # ======================================================================================
@@ -198,9 +196,7 @@ class UpdateRoundRequestDTO(BaseModel):
     match_format: str | None = Field(None, description="Nuevo formato.")
     handicap_mode: str | None = Field(None, description="Nuevo modo de handicap.")
     allowance_percentage: int | None = Field(None, ge=50, le=100, description="Nuevo allowance.")
-    clear_allowance: bool = Field(
-        default=False, description="Resetear allowance al default WHS."
-    )
+    clear_allowance: bool = Field(default=False, description="Resetear allowance al default WHS.")
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
@@ -374,12 +370,8 @@ class AssignTeamsResponseDTO(BaseModel):
     id: UUID = Field(..., description="ID de la asignación.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     mode: str = Field(..., description="Modo usado.")
-    team_a_player_ids: list[UUID] = Field(
-        default_factory=list, description="Jugadores equipo A."
-    )
-    team_b_player_ids: list[UUID] = Field(
-        default_factory=list, description="Jugadores equipo B."
-    )
+    team_a_player_ids: list[UUID] = Field(default_factory=list, description="Jugadores equipo A.")
+    team_b_player_ids: list[UUID] = Field(default_factory=list, description="Jugadores equipo B.")
     created_at: datetime = Field(..., description="Fecha de creación.")
 
     model_config = ConfigDict(from_attributes=True)

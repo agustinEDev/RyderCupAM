@@ -150,9 +150,7 @@ class TestUpdateRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         use_case = UpdateRoundUseCase(uow=uow)
         request = UpdateRoundRequestDTO(
@@ -209,9 +207,7 @@ class TestUpdateRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         use_case = UpdateRoundUseCase(uow=uow)
         request = UpdateRoundRequestDTO(
@@ -240,9 +236,7 @@ class TestUpdateRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         # Transicionar a SCHEDULED
         round_entity.mark_teams_assigned()
@@ -278,9 +272,7 @@ class TestUpdateRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         other_golf_course_id = GolfCourseId(uuid4())
 
@@ -314,13 +306,17 @@ class TestUpdateRoundUseCase:
 
         # Crear ronda MORNING
         await self._create_round_for_competition(
-            uow, competition, golf_course_id,
+            uow,
+            competition,
+            golf_course_id,
             session_type=SessionType.MORNING,
         )
 
         # Crear ronda AFTERNOON
         afternoon_round = await self._create_round_for_competition(
-            uow, competition, golf_course_id,
+            uow,
+            competition,
+            golf_course_id,
             session_type=SessionType.AFTERNOON,
         )
 

@@ -90,7 +90,9 @@ class HandleEnrollmentUseCase:
                 raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competición con bloqueo de fila (previene TOCTOU en validación de capacidad)
-            competition = await self._uow.competitions.find_by_id_for_update(enrollment.competition_id)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competición no encontrada: {enrollment.competition_id}"

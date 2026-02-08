@@ -82,9 +82,7 @@ class TestGetMatchDetailUseCase:
             await uow.rounds.add(round_entity)
         return round_entity
 
-    async def test_should_return_match_detail(
-        self, uow: InMemoryUnitOfWork, round_entity
-    ):
+    async def test_should_return_match_detail(self, uow: InMemoryUnitOfWork, round_entity):
         """
         Verifica que se retorna el detalle completo de un partido.
 
@@ -134,7 +132,20 @@ class TestGetMatchDetailUseCase:
         assert response.team_a_players[0].user_id == user_a_id.value
         assert response.team_a_players[0].playing_handicap == 12
         assert response.team_a_players[0].tee_category == "AMATEUR"
-        assert response.team_a_players[0].strokes_received == [1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6]
+        assert response.team_a_players[0].strokes_received == [
+            1,
+            3,
+            5,
+            7,
+            9,
+            11,
+            13,
+            15,
+            17,
+            2,
+            4,
+            6,
+        ]
 
         # Assert: jugadores equipo B
         assert len(response.team_b_players) == 1
@@ -152,9 +163,7 @@ class TestGetMatchDetailUseCase:
         assert response.handicap_strokes_given >= 0
         assert response.result is None
 
-    async def test_should_fail_when_match_not_found(
-        self, uow: InMemoryUnitOfWork
-    ):
+    async def test_should_fail_when_match_not_found(self, uow: InMemoryUnitOfWork):
         """
         Verifica que se lanza error cuando el partido no existe.
 
@@ -173,9 +182,7 @@ class TestGetMatchDetailUseCase:
 
         assert str(fake_id) in str(exc_info.value)
 
-    async def test_should_include_round_context(
-        self, uow: InMemoryUnitOfWork, competition
-    ):
+    async def test_should_include_round_context(self, uow: InMemoryUnitOfWork, competition):
         """
         Verifica que el detalle del partido incluye informacion de la ronda.
 

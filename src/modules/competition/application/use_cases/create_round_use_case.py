@@ -70,9 +70,7 @@ class CreateRoundUseCase:
 
             # 2. Verificar creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede crear rondas"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede crear rondas")
 
             # 3. Verificar estado CLOSED
             if competition.status != CompetitionStatus.CLOSED:
@@ -85,12 +83,13 @@ class CreateRoundUseCase:
             golf_course_id = GolfCourseId(request.golf_course_id)
             if not competition.has_golf_course(golf_course_id):
                 raise GolfCourseNotInCompetitionError(
-                    f"El campo de golf {request.golf_course_id} no está asociado "
-                    f"a la competición"
+                    f"El campo de golf {request.golf_course_id} no está asociado a la competición"
                 )
 
             # 5. Verificar fecha dentro del rango
-            if not (competition.dates.start_date <= request.round_date <= competition.dates.end_date):
+            if not (
+                competition.dates.start_date <= request.round_date <= competition.dates.end_date
+            ):
                 raise DateOutOfRangeError(
                     f"La fecha {request.round_date} está fuera del rango "
                     f"({competition.dates.start_date} - {competition.dates.end_date})"

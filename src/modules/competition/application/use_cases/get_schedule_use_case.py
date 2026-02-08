@@ -33,9 +33,7 @@ class GetScheduleUseCase:
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
         self._uow = uow
 
-    async def execute(
-        self, request: GetScheduleRequestDTO
-    ) -> GetScheduleResponseDTO:
+    async def execute(self, request: GetScheduleRequestDTO) -> GetScheduleResponseDTO:
         async with self._uow:
             # 1. Verificar que la competición existe
             competition_id = CompetitionId(request.competition_id)
@@ -58,9 +56,7 @@ class GetScheduleUseCase:
                 total_matches += len(matches)
 
             # 4. Obtener asignación de equipos
-            team_assignment = await self._uow.team_assignments.find_by_competition(
-                competition_id
-            )
+            team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
 
         # 5. Agrupar rondas por día
         days_map = defaultdict(list)
@@ -106,7 +102,9 @@ class GetScheduleUseCase:
                 session_type=round_entity.session_type.value,
                 match_format=round_entity.match_format.value,
                 status=round_entity.status.value,
-                handicap_mode=round_entity.handicap_mode.value if round_entity.handicap_mode else None,
+                handicap_mode=round_entity.handicap_mode.value
+                if round_entity.handicap_mode
+                else None,
                 allowance_percentage=round_entity.allowance_percentage,
                 effective_allowance=round_entity.get_effective_allowance(),
                 matches=match_dtos,

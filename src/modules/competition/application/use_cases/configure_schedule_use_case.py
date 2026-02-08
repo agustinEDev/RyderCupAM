@@ -61,9 +61,7 @@ class ConfigureScheduleUseCase:
 
             # 2. Verificar creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede configurar el schedule"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede configurar el schedule")
 
             # 3. Verificar estado CLOSED
             if competition.status != CompetitionStatus.CLOSED:
@@ -84,9 +82,7 @@ class ConfigureScheduleUseCase:
             # 4. Verificar campos de golf
             golf_courses = competition.golf_courses
             if not golf_courses:
-                raise NoGolfCoursesError(
-                    "La competición no tiene campos de golf asociados"
-                )
+                raise NoGolfCoursesError("La competición no tiene campos de golf asociados")
 
             # 5. Eliminar rondas existentes
             existing_rounds = await self._uow.rounds.find_by_competition(competition_id)

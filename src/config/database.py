@@ -35,7 +35,7 @@ async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     pool_pre_ping=True,  # Detecta conexiones muertas antes de reutilizarlas
-    pool_recycle=1800,    # Recicla conexiones cada 30 min (evita stale connections)
+    pool_recycle=1800,  # Recicla conexiones cada 30 min (evita stale connections)
 )
 
 

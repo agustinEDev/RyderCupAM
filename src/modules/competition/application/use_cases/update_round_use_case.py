@@ -58,23 +58,17 @@ class UpdateRoundUseCase:
             round_entity = await self._uow.rounds.find_by_id(round_id)
 
             if not round_entity:
-                raise RoundNotFoundError(
-                    f"No existe ronda con ID {request.round_id}"
-                )
+                raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
 
             # 2. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(
-                round_entity.competition_id
-            )
+            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede actualizar rondas"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
 
             # 4. Verificar competición CLOSED
             if competition.status != CompetitionStatus.CLOSED:
@@ -107,8 +101,7 @@ class UpdateRoundUseCase:
                 for existing in existing_rounds:
                     if existing.id != round_entity.id and existing.session_type == check_session:
                         raise DuplicateSessionError(
-                            f"Ya existe una sesión {check_session.value} "
-                            f"en la fecha {check_date}"
+                            f"Ya existe una sesión {check_session.value} en la fecha {check_date}"
                         )
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)

@@ -127,8 +127,8 @@ class ReassignMatchPlayersUseCase:
 
                 # Fetch user handicaps and genders for fallback chain
                 all_player_ids = [
-                    UserId(uid) for uid in
-                    list(request.team_a_player_ids) + list(request.team_b_player_ids)
+                    UserId(uid)
+                    for uid in list(request.team_a_player_ids) + list(request.team_b_player_ids)
                 ]
                 users = await asyncio.gather(
                     *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
@@ -148,9 +148,7 @@ class ReassignMatchPlayersUseCase:
                         f"El jugador {uid_value} no tiene inscripción aprobada"
                     )
                 tee_category = (
-                    enrollment.tee_category
-                    if enrollment.tee_category
-                    else TeeCategory.AMATEUR
+                    enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
                 )
                 user_gender = user_gender_map.get(str(uid_value))
 
@@ -163,8 +161,10 @@ class ReassignMatchPlayersUseCase:
 
                 if is_scratch:
                     return MatchPlayer.create(
-                        user_id=uid, playing_handicap=0,
-                        tee_category=tee_category, strokes_received=[],
+                        user_id=uid,
+                        playing_handicap=0,
+                        tee_category=tee_category,
+                        strokes_received=[],
                         tee_gender=tee_gender,
                     )
 
@@ -178,15 +178,16 @@ class ReassignMatchPlayersUseCase:
 
                 tee_rating = tee_ratings.get(tee_key)
                 playing_handicap = (
-                    calculator.calculate(handicap_index, tee_rating, allowance)
-                    if tee_rating else 0
+                    calculator.calculate(handicap_index, tee_rating, allowance) if tee_rating else 0
                 )
                 strokes_received = self._compute_strokes_received(
                     playing_handicap, holes_by_stroke_index
                 )
                 return MatchPlayer.create(
-                    user_id=uid, playing_handicap=playing_handicap,
-                    tee_category=tee_category, strokes_received=strokes_received,
+                    user_id=uid,
+                    playing_handicap=playing_handicap,
+                    tee_category=tee_category,
+                    strokes_received=strokes_received,
                     tee_gender=tee_gender,
                 )
 
@@ -259,7 +260,8 @@ class ReassignMatchPlayersUseCase:
 
     @staticmethod
     def _compute_strokes_received(
-        playing_handicap: int, holes_by_stroke_index: list[int],
+        playing_handicap: int,
+        holes_by_stroke_index: list[int],
     ) -> list[int]:
         """Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index."""
         if not holes_by_stroke_index or playing_handicap <= 0:

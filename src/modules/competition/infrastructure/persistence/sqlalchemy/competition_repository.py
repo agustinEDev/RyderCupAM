@@ -123,11 +123,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
-        stmt = (
-            select(Competition)
-            .where(Competition.id == competition_id)
-            .with_for_update()
-        )
+        stmt = select(Competition).where(Competition.id == competition_id).with_for_update()
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 

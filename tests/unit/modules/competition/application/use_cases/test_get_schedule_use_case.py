@@ -181,9 +181,7 @@ class TestGetScheduleUseCase:
         assert len(round_dtos[0].matches) == 1
         assert len(round_dtos[1].matches) == 1
 
-    async def test_should_return_empty_schedule(
-        self, uow: InMemoryUnitOfWork, competition
-    ):
+    async def test_should_return_empty_schedule(self, uow: InMemoryUnitOfWork, competition):
         """
         Verifica que se retorna un schedule vacio cuando no hay rondas.
 
@@ -203,9 +201,7 @@ class TestGetScheduleUseCase:
         assert response.total_matches == 0
         assert response.team_assignment is None
 
-    async def test_should_fail_when_competition_not_found(
-        self, uow: InMemoryUnitOfWork
-    ):
+    async def test_should_fail_when_competition_not_found(self, uow: InMemoryUnitOfWork):
         """
         Verifica que se lanza error cuando la competicion no existe.
 
@@ -224,9 +220,7 @@ class TestGetScheduleUseCase:
 
         assert str(fake_id) in str(exc_info.value)
 
-    async def test_should_return_multi_day_schedule(
-        self, uow: InMemoryUnitOfWork, competition
-    ):
+    async def test_should_return_multi_day_schedule(self, uow: InMemoryUnitOfWork, competition):
         """
         Verifica que rondas en dias distintos se agrupan correctamente.
 

@@ -87,9 +87,7 @@ class AssignTeamsUseCase:
 
             # 2. Verificar creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede asignar equipos"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede asignar equipos")
 
             # 3. Verificar estado CLOSED
             if competition.status != CompetitionStatus.CLOSED:
@@ -106,14 +104,12 @@ class AssignTeamsUseCase:
             MIN_PLAYERS = 2  # noqa: N806
             if len(enrollments) < MIN_PLAYERS:
                 raise InsufficientPlayersError(
-                    f"Se necesitan al menos 2 jugadores aprobados. "
-                    f"Hay {len(enrollments)}"
+                    f"Se necesitan al menos 2 jugadores aprobados. Hay {len(enrollments)}"
                 )
 
             if len(enrollments) % 2 != 0:
                 raise OddPlayersError(
-                    f"Se necesita un número par de jugadores. "
-                    f"Hay {len(enrollments)}"
+                    f"Se necesita un número par de jugadores. Hay {len(enrollments)}"
                 )
 
             mode = TeamAssignmentMode(request.mode)
@@ -121,9 +117,7 @@ class AssignTeamsUseCase:
             if mode == TeamAssignmentMode.AUTOMATIC:
                 team_a_ids, team_b_ids = await self._auto_assign(enrollments)
             else:
-                team_a_ids, team_b_ids = self._manual_assign(
-                    request, enrollments
-                )
+                team_a_ids, team_b_ids = self._manual_assign(request, enrollments)
 
             # 5. Eliminar asignación previa si existe (re-asignación)
             existing = await self._uow.team_assignments.find_by_competition(competition_id)
@@ -168,9 +162,7 @@ class AssignTeamsUseCase:
                     handicap = Decimal(str(user.handicap.value))
                 else:
                     handicap = Decimal("0")
-            players.append(
-                PlayerForDraft(user_id=enrollment.user_id, handicap=handicap)
-            )
+            players.append(PlayerForDraft(user_id=enrollment.user_id, handicap=handicap))
 
         draft_service = SnakeDraftService()
         results = draft_service.assign_teams(players)
@@ -200,17 +192,13 @@ class AssignTeamsUseCase:
         team_a_ids = []
         for uid in request.team_a_player_ids:
             if str(uid) not in enrolled_user_ids:
-                raise PlayerNotEnrolledError(
-                    f"El jugador {uid} no está inscrito como APPROVED"
-                )
+                raise PlayerNotEnrolledError(f"El jugador {uid} no está inscrito como APPROVED")
             team_a_ids.append(UserId(uid))
 
         team_b_ids = []
         for uid in request.team_b_player_ids:
             if str(uid) not in enrolled_user_ids:
-                raise PlayerNotEnrolledError(
-                    f"El jugador {uid} no está inscrito como APPROVED"
-                )
+                raise PlayerNotEnrolledError(f"El jugador {uid} no está inscrito como APPROVED")
             team_b_ids.append(UserId(uid))
 
         return team_a_ids, team_b_ids

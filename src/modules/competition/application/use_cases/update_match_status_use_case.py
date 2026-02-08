@@ -60,13 +60,9 @@ class UpdateMatchStatusUseCase:
             if request.action == "START":
                 round_status_changed = self._handle_start(match, round_entity)
             elif request.action == "COMPLETE":
-                round_status_changed = await self._handle_complete(
-                    request, match, round_entity
-                )
+                round_status_changed = await self._handle_complete(request, match, round_entity)
             else:
-                raise InvalidActionError(
-                    f"Accion invalida: {request.action}. Use START o COMPLETE"
-                )
+                raise InvalidActionError(f"Accion invalida: {request.action}. Use START o COMPLETE")
 
             if round_status_changed:
                 await self._uow.rounds.update(round_entity)
@@ -100,8 +96,7 @@ class UpdateMatchStatusUseCase:
 
         if not competition.is_in_progress():
             raise CompetitionNotInProgressError(
-                f"La competicion debe estar IN_PROGRESS. "
-                f"Estado: {competition.status.value}"
+                f"La competicion debe estar IN_PROGRESS. Estado: {competition.status.value}"
             )
 
         return match, round_entity

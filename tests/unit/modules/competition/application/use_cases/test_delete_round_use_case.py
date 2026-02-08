@@ -152,9 +152,7 @@ class TestDeleteRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         use_case = DeleteRoundUseCase(uow=uow)
         request = DeleteRoundRequestDTO(round_id=round_entity.id.value)
@@ -185,9 +183,7 @@ class TestDeleteRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         # Crear 2 partidos asociados a la ronda
         player_a1 = MatchPlayer.create(
@@ -284,9 +280,7 @@ class TestDeleteRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         use_case = DeleteRoundUseCase(uow=uow)
         request = DeleteRoundRequestDTO(round_id=round_entity.id.value)
@@ -312,9 +306,7 @@ class TestDeleteRoundUseCase:
         competition = await self._create_closed_competition_with_course(
             uow, creator_id, golf_course_id
         )
-        round_entity = await self._create_round_for_competition(
-            uow, competition, golf_course_id
-        )
+        round_entity = await self._create_round_for_competition(uow, competition, golf_course_id)
 
         # Transicionar a SCHEDULED
         round_entity.mark_teams_assigned()

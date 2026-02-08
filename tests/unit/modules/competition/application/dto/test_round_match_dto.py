@@ -154,8 +154,7 @@ class TestConfigureScheduleRequestDTO:
 
         errors = exc_info.value.errors()
         assert any(
-            e["loc"] == ("sessions_per_day",) and e["type"] == "less_than_equal"
-            for e in errors
+            e["loc"] == ("sessions_per_day",) and e["type"] == "less_than_equal" for e in errors
         )
 
 
