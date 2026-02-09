@@ -49,3 +49,6 @@ data:
   #
   # Para producción, cambiar a: https://rydercupfriends.com
   FRONTEND_URL: "http://localhost:8080"
+
+  # GitHub Issues - contact form creates issues in this repo
+  GITHUB_ISSUES_REPO: "agustinEDev/RyderCupWeb"

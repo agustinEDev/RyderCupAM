@@ -113,6 +113,12 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.support.application.use_cases.submit_contact_use_case import (
+    SubmitContactUseCase,
+)
+from src.modules.support.infrastructure.services.github_issue_service import (
+    GitHubIssueService,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.token_service_interface import ITokenService
@@ -1103,6 +1109,23 @@ def get_unlock_account_use_case(
 ) -> UnlockAccountUseCase:
     """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0 - Account Lockout)."""
     return UnlockAccountUseCase(uow)
+
+
+# ============================================================================
+# SUPPORT MODULE - Dependency Injection
+# ============================================================================
+
+
+def get_github_issue_service():
+    """Proveedor del servicio de GitHub Issues."""
+    return GitHubIssueService()
+
+
+def get_submit_contact_use_case(
+    github_issue_service=Depends(get_github_issue_service),
+):
+    """Proveedor del caso de uso SubmitContactUseCase."""
+    return SubmitContactUseCase(github_issue_service)
 
 
 # ============================================================================

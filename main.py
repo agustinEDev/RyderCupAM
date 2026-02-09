@@ -41,6 +41,7 @@ from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # 
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (  # noqa: E402
     start_golf_course_mappers,
 )
+from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
     device_routes,
@@ -299,6 +300,12 @@ app.include_router(
     golf_course_routes.router,
     prefix="/api/v1",
     tags=["Golf Courses"],
+)
+
+app.include_router(
+    support_routes.router,
+    prefix="/api/v1/support",
+    tags=["Support"],
 )
 
 

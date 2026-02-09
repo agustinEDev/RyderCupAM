@@ -76,6 +76,10 @@ services:
       - MAILGUN_FROM_EMAIL=${MAILGUN_FROM_EMAIL:-}
       - MAILGUN_API_URL=${MAILGUN_API_URL:-https://api.eu.mailgun.net/v3}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+
+      # GitHub Issues Configuration (optional - can be empty)
+      - GH_ISSUES_TOKEN=${GH_ISSUES_TOKEN:-}
+      - GITHUB_ISSUES_REPO=${GITHUB_ISSUES_REPO:-}
     depends_on:
       db:
         condition: service_healthy
