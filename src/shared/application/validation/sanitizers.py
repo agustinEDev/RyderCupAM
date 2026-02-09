@@ -67,7 +67,8 @@ def sanitize_html(text: str | None, *, allow_whitespace: bool = True) -> str | N
 
     # 1. Eliminar cualquier tag HTML PRIMERO (antes de escape)
     # Regex para detectar patrones como <tag>, </tag>, <tag attr="value">
-    sanitized = re.sub(r"<[^>]+>", "", text)
+    # Uses [^<>]+ (not [^>]+) to prevent polynomial backtracking (ReDoS)
+    sanitized = re.sub(r"<[^<>]+>", "", text)
 
     # 2. Escape de entidades HTML existentes
     # Esto convierte < a &lt;, > a &gt;, etc.
