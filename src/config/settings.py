@@ -88,5 +88,11 @@ class Settings:
         "TRUST_CLOUDFLARE_HEADERS", "false"
     ).lower() in ("true", "1", "yes")
 
+    # GitHub Issues Configuration (Support Module)
+    # Token: Personal Access Token with 'repo' scope for creating issues
+    # Repo: owner/repo format (e.g., "agustinEDev/RyderCupWeb")
+    GH_ISSUES_TOKEN: str = os.getenv("GH_ISSUES_TOKEN", "")
+    GITHUB_ISSUES_REPO: str = os.getenv("GITHUB_ISSUES_REPO", "agustinEDev/RyderCupWeb")
+
 
 settings = Settings()
