@@ -1,19 +1,20 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.7 (Production)
-> **Last Updated:** Feb 8, 2026
+> **Current Version:** 2.0.8 (Production)
+> **Last Updated:** Feb 9, 2026
 > **OWASP Score:** 9.4/10
 
 ---
 
 ## 📊 Current Status
 
-**Tests:** 1,306 (1,306 passing, 16 skipped, ~79s) | **Endpoints:** 69 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,598 (1,598 passing, 15 skipped, ~90s) | **Endpoints:** 71 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
 - **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M, Rounds/Matches/Teams (11 use cases + 11 endpoints) ⭐ Sprint 2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
+- **Support:** Contact form → GitHub Issues (1 endpoint, rate limited 3/hour) ⭐ v2.0.8
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
 **OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐

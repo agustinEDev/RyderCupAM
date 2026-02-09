@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.7-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.8-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1306%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1598%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,13 +29,14 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **69 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,306 tests** passing (100% success rate, ~79s execution)
+- ✅ **71 REST API endpoints** fully documented (Swagger UI)
+- ✅ **1,598 tests** passing (100% success rate, ~90s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
 - ✅ **Rounds, Matches & Teams** - Full tournament scheduling with WHS handicap calculation (Sprint 2)
 - ✅ **Competition ↔ GolfCourse M2M** - Multi-course tournaments with ordering (v2.0.2)
+- ✅ **Support Contact Form** - Public endpoint that creates GitHub Issues (v2.0.8)
 - ✅ **10 CI/CD jobs** - GitHub Actions pipeline (~3min)
 - ✅ **Device Fingerprinting** - Advanced session management with auto-registration
 - ✅ **Email Verification** - Bilingual templates (ES/EN) via Mailgun
@@ -183,6 +184,14 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **Rounds & Matches** (Sprint 2) - Session-based scheduling, match generation, WHS handicap calculation
 - ✅ 35 endpoints (10 competition + 8 enrollment + 2 countries + 4 golf courses + 11 rounds/matches)
 
+### Support Module (v2.0.8)
+- ✅ **Contact Form** - Public endpoint for support requests (no authentication required)
+- ✅ **GitHub Issues Integration** - Submissions create issues in the project repository via GitHub REST API
+- ✅ **Category Mapping** - BUG, FEATURE, QUESTION, OTHER → GitHub labels (bug, enhancement, question, other)
+- ✅ **Input Sanitization** - HTML/XSS prevention on all fields
+- ✅ **Rate Limiting** - 3 requests per hour per IP
+- ✅ 1 endpoint: `POST /api/v1/support/contact`
+
 ### Security Features (v1.13.1)
 - ✅ **httpOnly Cookies** - XSS prevention for tokens
 - ✅ **Session Timeout** - 15min access tokens, 7-day refresh tokens
@@ -199,6 +208,13 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **Sentry Integration** - Error tracking + APM + profiling
 
 ### What's New
+
+**v2.0.8 (Feb 9, 2026)**
+- ✅ **Support Module**: Contact form endpoint (`POST /api/v1/support/contact`) — creates GitHub Issues via REST API
+- ✅ **GitHub Issues Integration**: Sanitized inputs, category-to-label mapping (bug, enhancement, question, other)
+- ✅ **Rate Limited**: 3 requests/hour per IP, no authentication required, CSRF exempt
+- ✅ **K8s restart script**: `restart-cluster.sh` — reloads ConfigMaps/Secrets without rebuilding images
+- ✅ **+25 tests** (1,598 total)
 
 **v2.0.7 (Feb 8, 2026)**
 - ✅ **CIDR Support for TRUSTED_PROXIES**: Subnet matching (e.g., `10.0.0.0/8`) for cloud infrastructure
@@ -250,7 +266,8 @@ src/
 │   │   ├── application/     # Use Cases, DTOs
 │   │   └── infrastructure/  # API, DB, External Services
 │   ├── competition/
-│   └── ... (future modules)
+│   ├── golf_course/
+│   └── support/
 ├── shared/                  # Cross-cutting concerns
 └── config/                  # Settings, dependencies
 ```
@@ -292,19 +309,20 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v2.0.7)
+### Test Statistics (v2.0.8)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,306** | ✅ 100% passing | 90%+ |
-| User Module | 588 | ✅ 100% | 92% |
-| Competition Module | 554 | ✅ 100% | 91% |
-| Golf Course Module | 51 | ✅ 100% | 93% |
-| Security Suite | 34 | ✅ 100% | 95% |
-| Shared | 138 | ✅ 100% | 88% |
-| Integration | 100 | ✅ 100% | - |
+| **Total** | **1,598** | ✅ 100% passing | 90%+ |
+| User Module | 501 | ✅ 100% | 92% |
+| Competition Module | 559 | ✅ 100% | 91% |
+| Golf Course Module | 38 | ✅ 100% | 93% |
+| Support Module | 25 | ✅ 100% | 95% |
+| Shared | 208 | ✅ 100% | 88% |
+| Security Suite | 45 | ✅ 100% | 95% |
+| Integration | 222 | ✅ 100% | - |
 
-**Execution Time**: ~75 seconds (with pytest-xdist parallelization)
+**Execution Time**: ~90 seconds (with pytest-xdist parallelization)
 
 **Test Types**:
 - Unit tests (domain + application logic)
@@ -377,7 +395,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (61 total)
+### Available Endpoints (71 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>
@@ -495,6 +513,12 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 - `GET /api/v1/countries/{code}/adjacent`
 </details>
 
+<details>
+<summary><b>Support (1 endpoint)</b></summary>
+
+- `POST /api/v1/support/contact` - Submit contact form (creates GitHub Issue)
+</details>
+
 **Interactive Documentation**: http://localhost:8000/docs
 
 ---
@@ -579,15 +603,12 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.7 (Production)
+### Current Version: v2.0.8 (Production)
 
-**Latest Features** (Sprint 2 Complete - Feb 6, 2026):
-- **Rounds & Matches System**: Session-based scheduling, match generation, WHS handicap calculation
-- **Playing Handicap Calculator**: WHS formula with format-specific allowances
-- **Snake Draft Service**: Balanced automatic team assignment
-- **11 new endpoints**: Round CRUD, match management, team assignment, match generation
-- **+80 tests** (554 total competition module) - Total: 1,306 passing
-- **Competition ↔ GolfCourse M2M** (v2.0.2): Multi-course tournaments with ordering
+**Latest Features** (v2.0.8 - Feb 9, 2026):
+- **Support Module**: Contact form → GitHub Issues integration (1 endpoint, 25 tests)
+- **K8s restart script**: Reload ConfigMaps/Secrets without rebuilding images
+- **Total: 71 endpoints, 1,598 tests passing**
 
 ### Coming Next: Sprint 3-5 - Invitations, Scoring & Leaderboards
 

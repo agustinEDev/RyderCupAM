@@ -18,7 +18,7 @@ src/
 │   └── settings.py     # Environment vars
 │
 ├── modules/            # Módulos de negocio
-│   └── user/
+│   ├── user/
 │       ├── domain/
 │       │   ├── entities/        # User (with login/logout methods)
 │       │   ├── value_objects/   # UserId, Email, Password, Handicap
@@ -42,6 +42,18 @@ src/
 │           ├── api/v1/          # FastAPI routes (auth_routes, user_routes, handicap_routes)
 │           ├── persistence/     # SQLAlchemy repos + UnitOfWork impl
 │           └── external/        # RFEG service, mocks
+│   ├── competition/            # Competition module (same structure)
+│   ├── golf_course/            # Golf Course module (same structure)
+│   └── support/                # Support module ⭐ v2.0.8
+│       ├── domain/
+│       │   └── value_objects/  # ContactCategory
+│       ├── application/
+│       │   ├── dto/            # ContactRequestDTO, ContactResponseDTO
+│       │   ├── ports/          # IGitHubIssueService
+│       │   └── use_cases/      # SubmitContactUseCase
+│       └── infrastructure/
+│           ├── api/v1/         # support_routes.py
+│           └── services/       # GitHubIssueService
 │
 └── shared/
     ├── domain/         # Base classes (DomainEvent, Entity)

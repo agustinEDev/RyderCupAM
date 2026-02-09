@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 _No unreleased changes._
 
+## [2.0.8] - 2026-02-09 (Support Module + Contact Form)
+
+### Added
+
+- **Support Module**: New `POST /api/v1/support/contact` endpoint — public contact form that creates GitHub Issues via REST API
+- **GitHub Issues Integration**: Category-to-label mapping (BUG→bug, FEATURE→enhancement, QUESTION→question, OTHER→other)
+- **Clean Architecture**: Full module structure (domain/application/infrastructure) with IGitHubIssueService port/adapter pattern
+- **Input Sanitization**: All contact form inputs sanitized via existing `sanitize_html()` before creating issues
+- **K8s restart script**: `k8s/scripts/restart-cluster.sh` — reloads ConfigMaps/Secrets and restarts deployments without rebuilding images (supports `--api`, `--front`, `--db`, `--all`)
+- +25 unit tests (ContactCategory enum, ContactRequestDTO validation, SubmitContactUseCase with mocked service)
+
+### Changed
+
+- **CSRF Exemption**: Added `/api/v1/support/contact` to CSRF exempt paths (public endpoint, no session)
+- **Settings**: Added `GH_ISSUES_TOKEN` and `GITHUB_ISSUES_REPO` environment variables
+- **Dependencies**: Added `get_github_issue_service()` and `get_submit_contact_use_case()` DI providers
+
+### Security
+
+- **Rate Limiting**: Contact endpoint limited to 3 requests/hour per IP
+- **No Authentication Required**: Public endpoint, consistent with frontend contact page
+- **OWASP Score**: Maintained at 9.5/10
+
+### Testing
+
+- **1,598 tests passing** (100%) — +25 tests from Support Module
+
 ## [2.0.7] - 2026-02-08 (CIDR Proxy Support + Hotfixes)
 
 ### Added
