@@ -56,7 +56,10 @@ class GitHubIssueService(IGitHubIssueService):
             )
 
             if response.status_code == HTTPStatus.CREATED:
-                issue_url = response.json().get("html_url", "unknown")
+                try:
+                    issue_url = response.json().get("html_url", "unknown")
+                except (ValueError, requests.exceptions.JSONDecodeError):
+                    issue_url = "unknown"
                 logger.info(f"GitHub issue created successfully: {issue_url}")
                 return True
 
