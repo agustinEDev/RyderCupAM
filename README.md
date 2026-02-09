@@ -29,7 +29,7 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **65 REST API endpoints** fully documented (Swagger UI)
+- ✅ **69 REST API endpoints** fully documented (Swagger UI)
 - ✅ **1,306 tests** passing (100% success rate, ~79s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
