@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.5-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.7-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1282%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-1306%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -30,7 +30,7 @@
 ### 🎯 Key Highlights
 
 - ✅ **65 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,282 tests** passing (100% success rate, ~79s execution)
+- ✅ **1,306 tests** passing (100% success rate, ~79s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
@@ -200,6 +200,19 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### What's New
 
+**v2.0.7 (Feb 8, 2026)**
+- ✅ **CIDR Support for TRUSTED_PROXIES**: Subnet matching (e.g., `10.0.0.0/8`) for cloud infrastructure
+- ✅ **SBOM Fix**: Corrected GitHub API payload format for dependency snapshot submission
+- ✅ **GPG Web-Flow Fix**: CI/CD pipeline now handles GitHub squash merge commits correctly
+- ✅ **CodeQL Security Fix**: Redacted sensitive proxy values from security logs
+
+**v2.0.6 (Feb 7, 2026)**
+- ✅ **TeeCategory Refactoring**: 5 neutral categories + separate Gender field (MALE/FEMALE)
+- ✅ **Enrollment tee_category API**: Request and direct enrollment endpoints support tee_category
+- ✅ **GenderDecorator Fix**: SQLAlchemy TypeDecorator for Gender enum (was raw string)
+- ✅ **Deploy Scripts**: Kind cluster deployment automation (deploy-cluster, deploy-api, deploy-front, deploy-db)
+- ✅ **+24 tests** (1,306 total)
+
 **v2.0.5 (Sprint 2 Complete - Feb 6, 2026)**
 - ✅ **Rounds & Matches System**: Full session-based scheduling (MORNING/AFTERNOON/EVENING), match generation, team assignment
 - ✅ **Playing Handicap Calculator**: WHS formula with format-specific allowances (Singles, Fourball, Foursomes)
@@ -279,11 +292,11 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v2.0.5)
+### Test Statistics (v2.0.7)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,282** | ✅ 100% passing | 90%+ |
+| **Total** | **1,306** | ✅ 100% passing | 90%+ |
 | User Module | 588 | ✅ 100% | 92% |
 | Competition Module | 554 | ✅ 100% | 91% |
 | Golf Course Module | 51 | ✅ 100% | 93% |
@@ -566,14 +579,14 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.5 (Production)
+### Current Version: v2.0.7 (Production)
 
 **Latest Features** (Sprint 2 Complete - Feb 6, 2026):
 - **Rounds & Matches System**: Session-based scheduling, match generation, WHS handicap calculation
 - **Playing Handicap Calculator**: WHS formula with format-specific allowances
 - **Snake Draft Service**: Balanced automatic team assignment
 - **11 new endpoints**: Round CRUD, match management, team assignment, match generation
-- **+80 tests** (554 total competition module) - Total: 1,282 passing
+- **+80 tests** (554 total competition module) - Total: 1,306 passing
 - **Competition ↔ GolfCourse M2M** (v2.0.2): Multi-course tournaments with ordering
 
 ### Coming Next: Sprint 3-5 - Invitations, Scoring & Leaderboards

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [2.0.7] - 2026-02-08 (CIDR Proxy Support + Hotfixes)
+
+### Added
+
+- **CIDR Notation for TRUSTED_PROXIES**: Subnet matching support (e.g., `10.0.0.0/8`, `172.16.0.0/12`) for cloud infrastructure proxy validation
+- +24 unit tests for CIDR matching in HTTP context validator
+
+### Fixed
+
+- **SBOM Submission**: Corrected GitHub API payload format for dependency snapshot submission (`submit-sbom-to-github.sh`)
+- **GPG Verification**: CI/CD pipeline now correctly handles GitHub web-flow squash merge commits (skips GPG check for `noreply@github.com` committer)
+- **CodeQL Security**: Redacted sensitive trusted proxy configuration values from security log messages
+
+### Security
+
+- **OWASP Score**: Maintained at 9.5/10
+- Trusted proxy validation now supports CIDR ranges for Render/cloud infrastructure compatibility
+
+## [2.0.6] - 2026-02-07 (TeeCategory Refactoring + Deploy Scripts)
+
 ### Changed
 
 **⛳ TeeCategory Refactoring (7→5 + Gender)**
@@ -18,7 +40,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Match generation auto-resolves tee using `(enrollment.tee_category, user.gender)` with null fallback
 - Enrollment DTOs now expose `tee_category` selection for player preference
 - Alembic migration `c3d5e7f9a1b2` for schema changes
-- All 1,282 tests updated and passing
+
+### Added
+
+- **Enrollment tee_category API**: `request_enrollment` and `direct_enroll_player` endpoints accept optional `tee_category`
+- **GenderDecorator TypeDecorator**: SQLAlchemy TypeDecorator for Gender enum in User mapper
+- **Deploy Scripts** (`k8s/scripts/`): `deploy-cluster.sh`, `deploy-api.sh`, `deploy-front.sh`, `deploy-db.sh` for Kind cluster automation
+- **imagePullPolicy: Never**: Fixed Kubernetes deployments for Kind image loading
+
+### Fixed
+
+- **User Mapper GenderDecorator**: Fixed `AttributeError: 'str' has no attribute 'value'` in generate_matches by replacing `String(10)` with `GenderDecorator()` TypeDecorator
+
+### Testing
+
+- **1,306 tests passing** (100%) — +24 tests from TeeCategory refactoring and CIDR support
+
+## [2.0.5] - 2026-02-06 (Sprint 2 Complete - Rounds, Matches & Teams)
 
 ### Added
 
@@ -71,6 +109,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Rate limiting**: POST/PUT/DELETE 10/min, GET 20/min
 - **Exception mapping**: 404 (NotFound), 403 (NotCreator), 400 (business errors)
 
+**Other Additions**
+
+- **Country Code Filter**: `GET /api/v1/golf-courses?country_code=ES` filters approved golf courses by country ISO code
+- **Enhanced Golf Course Response**: Added `course_type` and `total_par` fields to `GET /api/v1/competitions/{id}/golf-courses` endpoint
+
 ### Changed (Sprint 2)
 
 - `Enrollment` entity: Added `tee_category` field for player tee assignment
@@ -80,21 +123,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `entities/__init__.py`: New package init with Round, Match, TeamAssignment exports
 - `dependencies.py`: 11 new DI providers for round/match/team use cases
 - `main.py`: Registered `round_match_routes` router
-
-### Testing
-
-- **1,282 unit tests passing** (100%) — +422 tests from Sprint 2 Blocks 4-7
-  - Block 4: 296 domain tests (14 files: 3 entities + 2 services + 9 VOs)
-  - Block 5: 52 infrastructure tests (migration, mappers, repositories, UoW)
-  - Block 6: 74 application tests (12 DTO + 62 use case)
-  - Block 7: 0 regressions on full suite
-
-## [2.0.5] - 2026-02-05 (Golf Courses Endpoint Fixes)
-
-### Added
-
-- **Country Code Filter**: `GET /api/v1/golf-courses?country_code=ES` filters approved golf courses by country ISO code
-- **Enhanced Golf Course Response**: Added `course_type` and `total_par` fields to `GET /api/v1/competitions/{id}/golf-courses` endpoint
 
 ### Fixed
 
@@ -106,6 +134,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `refresh-token`: Protected by httpOnly cookie, CSRF token expires with access token
   - `logout`: Session termination has low security risk (worst case: forced logout)
 - **Country Code Filter**: Fixed TypeDecorator compatibility by converting string to CountryCode VO
+
+### Testing
+
+- **1,282 unit tests passing** (100%) — +422 tests from Sprint 2 Blocks 4-7
+  - Block 4: 296 domain tests (14 files: 3 entities + 2 services + 9 VOs)
+  - Block 5: 52 infrastructure tests (migration, mappers, repositories, UoW)
+  - Block 6: 74 application tests (12 DTO + 62 use case)
+  - Block 7: 0 regressions on full suite
 
 ### Security
 
@@ -731,38 +767,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - ✅ `pytest tests/ -n auto` → 1021 passed, 2 skipped in 61.56s
 
 **Pipeline Status:** ✅ Ready for GitHub Actions (all checks will pass)
-
----
-
-## [1.12.1] - 2026-01-05
-
-### Added - Snyk Code (SAST) Integration ✅ COMPLETADO (5 Ene 2026)
-
-**🔍 Análisis Estático de Código Fuente en CI/CD** (OWASP A03, A02, A01)
-
-- ✅ Snyk Code (SAST) integrado en pipeline CI/CD
-- ✅ Escaneo automático de código fuente en `src/`
-- ✅ Detección de vulnerabilidades en código propio:
-  - SQL Injection
-  - XSS (Cross-Site Scripting)
-  - Hardcoded secrets
-  - Path Traversal
-  - Weak Cryptography
-  - Command Injection
-- ✅ 2 tipos de análisis en Job 8:
-  - Snyk Test (SCA): Escaneo de dependencias
-  - Snyk Code (SAST): Escaneo de código fuente
-- ✅ Reportes separados: `snyk-dependencies-report.json` + `snyk-code-report.json`
-- ✅ Resumen automático con contador de issues por tipo
-- ✅ Artifacts con retención de 30 días
-- ✅ Resultados enviados a Snyk dashboard
-
-**Archivos Modificados:**
-- `.github/workflows/ci_cd_pipeline.yml` (Job 8 mejorado: +47 líneas, -6 líneas)
-
-**Impacto:** Doble capa de seguridad en CI/CD (SCA + SAST). Detección temprana de vulnerabilidades antes de mergear a main. Compliance OWASP mejorado para A03 (Injection), A02 (Cryptographic Failures), A01 (Access Control).
-
-**PR:** #39
 
 ---
 
