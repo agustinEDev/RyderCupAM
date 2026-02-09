@@ -48,8 +48,7 @@ _No unreleased changes._
 - **SBOM Submission**: Corrected GitHub API payload format for dependency snapshot submission (`submit-sbom-to-github.sh`)
 - **GPG Verification**: CI/CD pipeline now correctly handles GitHub web-flow squash merge commits (skips GPG check for `noreply@github.com` committer)
 - **CodeQL Security**: Redacted sensitive trusted proxy configuration values from security log messages
-- **Golf Course `approval_status`**: Include `approval_status` in golf course detail responses to allow frontend activation of competitions; prevents defaulting to PENDING_APPROVAL when the field is missing from the DTO serialization
-- **Golf Course `approval_status`**: Include `approval_status` in competition golf courses response (`GolfCourseDetailDTO`); prevents frontend from defaulting to `PENDING_APPROVAL` which blocked competition activation
+- **Golf Course `approval_status`**: Include `approval_status` in `GolfCourseDetailDTO` responses to allow frontend activation of competitions; prevents defaulting to `PENDING_APPROVAL` when the field is missing from the DTO serialization
 
 ### Security
 
