@@ -765,6 +765,7 @@ class GolfCourseDetailDTO(BaseModel):
         ..., description="Tipo de campo (STANDARD_18, PITCH_AND_PUTT, EXECUTIVE)"
     )
     total_par: int = Field(..., description="Par total del campo (suma de pares de los 18 hoyos)")
+    approval_status: str = Field(..., description="Estado de aprobación (PENDING_APPROVAL, APPROVED, REJECTED)")
     tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
     holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")
 
