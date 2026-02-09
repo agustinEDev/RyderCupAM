@@ -1,19 +1,20 @@
 # 🗺️ Roadmap - RyderCupFriends Backend
 
-> **Current Version:** 2.0.5 (Production)
-> **Last Updated:** Feb 6, 2026
+> **Current Version:** 2.0.8 (Production)
+> **Last Updated:** Feb 9, 2026
 > **OWASP Score:** 9.4/10
 
 ---
 
 ## 📊 Current Status
 
-**Tests:** 1,282 (1,282 passing, 16 skipped, ~79s) | **Endpoints:** 65 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,598 (1,598 passing, 15 skipped, ~90s) | **Endpoints:** 66 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation
 - **Competition:** CRUD, Enrollments, Countries (166 + 614 borders), State Machine (6 states), Competition ↔ GolfCourse M2M, Rounds/Matches/Teams (11 use cases + 11 endpoints) ⭐ Sprint 2
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
+- **Support:** Contact form → GitHub Issues (1 endpoint, rate limited 3/hour) ⭐ v2.0.8
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
 
 **OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐
@@ -22,13 +23,13 @@
 
 ## 🎯 Future Roadmap
 
-### v2.0.1 - Competition Module Evolution ⭐ TOP PRIORITY
+### Competition Module Evolution (v2.0.0 → v2.0.7+)
 
 **Dates:** Jan 27 - Mar 24, 2026 (8 weeks) | **Effort:** 394h | **Tests:** 130+ | **Endpoints:** 34
 
 **Goal:** Complete Ryder Cup tournament management system with golf courses, scheduling, live scoring with dual validation, and real-time leaderboards.
 
-**Note:** Minor version bump (v2.0.0 was RBAC Foundation). Major changes: 34 endpoints, 13 entities, 8 weeks development.
+**Status:** Sprints 1-2 ✅ COMPLETED (v2.0.0 → v2.0.7) | Sprint 3 next
 
 ---
 
@@ -645,7 +646,8 @@ src/modules/ai/
 2026 Q1  │ ✅ v1.13.0 - Security Hardening (COMPLETED)
           │ ✅ v1.13.1 - Device Detection + HTTP Security (COMPLETED)
           │ ✅ v2.0.0 - RBAC Foundation (Jan 29, 2026) (COMPLETED)
-          │ ⭐ v2.0.1 - Competition Module Evolution (Jan 27 - Mar 24) ← IN PROGRESS
+          │ ✅ v2.0.1-v2.0.7 - Competition Module (Sprints 1-2 COMPLETED)
+          │ ⭐ Sprint 3: Invitations (Feb 25 - Mar 3) ← NEXT
 2026 Q2  │ v2.1.0 - Compliance (GDPR, Audit Logging, Avatars)
           │ v2.2.0 - AI & RAG Module (Golf Rules Assistant)
 2026 Q3  │ v2.1.1 - WebSocket, Custom points
@@ -748,5 +750,5 @@ src/modules/ai/
 
 ---
 
-**Next Review:** v2.0.1 Sprint 3 (Feb 25, 2026)
+**Next Review:** Sprint 3 - Invitations (Feb 25, 2026)
 **Owner:** Backend Team

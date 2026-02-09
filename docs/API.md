@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 65 active
-**Version**: v2.0.5
-**Last Updated**: 6 February 2026
+**Total Endpoints**: 66 active
+**Version**: v2.0.8
+**Last Updated**: 9 February 2026
 
 ---
 
@@ -100,6 +100,9 @@ Golf Course Management (10 endpoints) ⭐ v2.0.1
 ├── PUT  /api/v1/golf-courses/{id}       # Submit update (Creator, clone-based workflow)
 ├── PUT  /api/v1/golf-courses/admin/updates/{id}/approve # Approve update (Admin)
 └── PUT  /api/v1/golf-courses/admin/updates/{id}/reject  # Reject update (Admin)
+
+Support (1 endpoint) ⭐ v2.0.8
+└── POST /api/v1/support/contact         # Submit contact form (creates GitHub Issue)
 ```
 
 ---
@@ -657,6 +660,50 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
+## 📨 Support ⭐ v2.0.8
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/support/contact` | POST | No | 3/hour | Submit contact form (creates GitHub Issue) |
+
+### Main Fields
+
+**Contact Request:**
+- `name` (string, required, 2-100 chars)
+- `email` (string, required, valid email)
+- `category` (enum, required: "BUG", "FEATURE", "QUESTION", "OTHER")
+- `subject` (string, required, 3-200 chars)
+- `message` (string, required, 10-5000 chars)
+
+**Contact Response:**
+- `message` (string) - Confirmation message
+
+### Category → GitHub Label Mapping
+
+| Category | GitHub Label |
+|----------|-------------|
+| BUG | `bug` |
+| FEATURE | `enhancement` |
+| QUESTION | `question` |
+| OTHER | `other` |
+
+### Business Rules
+
+- **Public endpoint**: No authentication required
+- **CSRF exempt**: No session to protect
+- **Rate limited**: 3 requests/hour per IP (SlowAPI)
+- **Input sanitization**: All fields sanitized via `sanitize_html()` before creating issue
+- **GitHub Integration**: Creates issues in configured repo via REST API (`GH_ISSUES_TOKEN` + `GITHUB_ISSUES_REPO`)
+- **Error handling**: Returns 502 Bad Gateway if GitHub API fails
+
+### Architecture (Clean Architecture)
+
+- **Domain**: `ContactCategory` value object (StrEnum with `to_github_label()`)
+- **Application**: `SubmitContactUseCase` + `IGitHubIssueService` port + `ContactRequestDTO`/`ContactResponseDTO`
+- **Infrastructure**: `GitHubIssueService` adapter (GitHub REST API) + `support_routes.py`
+
+---
+
 ## 📖 Swagger UI (Interactive Documentation)
 
 ### Access
@@ -709,6 +756,7 @@ PENDING_APPROVAL → APPROVED
 | POST /auth/resend-verification | 3/hour | Protect Mailgun |
 | POST /handicaps/update | 5/hour | Protect RFEG API |
 | POST /competitions | 10/hour | Anti competition spam |
+| POST /support/contact | 3/hour | Anti contact form spam |
 
 ### HTTP Status Codes
 
@@ -761,5 +809,5 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
-**Last Updated:** 31 January 2026
-**Version:** v2.0.2-dev
+**Last Updated:** 9 February 2026
+**Version:** v2.0.8
