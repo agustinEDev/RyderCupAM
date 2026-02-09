@@ -8,7 +8,7 @@
 
 ## 📊 Current Status
 
-**Tests:** 1,598 (1,598 passing, 15 skipped, ~90s) | **Endpoints:** 71 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
+**Tests:** 1,598 (1,598 passing, 15 skipped, ~90s) | **Endpoints:** 66 REST API | **CI/CD:** GitHub Actions (10 jobs, ~3min)
 
 **Completed Modules:**
 - **User:** Login, Register, Email Verification, Password Reset, Handicap (RFEG), Device Fingerprinting, RBAC Foundation

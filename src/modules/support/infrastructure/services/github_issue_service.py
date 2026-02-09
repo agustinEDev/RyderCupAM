@@ -4,6 +4,7 @@ GitHub Issue Service - Infrastructure Layer
 Implementación concreta del servicio de GitHub Issues usando la REST API.
 """
 
+import asyncio
 import logging
 from http import HTTPStatus
 
@@ -26,8 +27,8 @@ class GitHubIssueService(IGitHubIssueService):
         """
         Crea una issue en GitHub.
 
-        Usa requests.post() (síncrono) ya que la librería requests
-        ya está en requirements.txt y la operación es rápida.
+        Usa asyncio.to_thread() para ejecutar requests.post() sin bloquear
+        el event loop de asyncio.
         """
         token = settings.GH_ISSUES_TOKEN
         repo = settings.GITHUB_ISSUES_REPO
@@ -50,7 +51,9 @@ class GitHubIssueService(IGitHubIssueService):
         }
 
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response = await asyncio.to_thread(
+                requests.post, url, json=payload, headers=headers, timeout=10
+            )
 
             if response.status_code == HTTPStatus.CREATED:
                 issue_url = response.json().get("html_url", "unknown")

@@ -29,7 +29,7 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **71 REST API endpoints** fully documented (Swagger UI)
+- ✅ **66 REST API endpoints** fully documented (Swagger UI)
 - ✅ **1,598 tests** passing (100% success rate, ~90s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
@@ -608,7 +608,7 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 **Latest Features** (v2.0.8 - Feb 9, 2026):
 - **Support Module**: Contact form → GitHub Issues integration (1 endpoint, 25 tests)
 - **K8s restart script**: Reload ConfigMaps/Secrets without rebuilding images
-- **Total: 71 endpoints, 1,598 tests passing**
+- **Total: 66 endpoints, 1,598 tests passing**
 
 ### Coming Next: Sprint 3-5 - Invitations, Scoring & Leaderboards
 

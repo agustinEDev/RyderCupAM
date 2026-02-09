@@ -3,7 +3,7 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 71 active
+**Total Endpoints**: 66 active
 **Version**: v2.0.8
 **Last Updated**: 9 February 2026
 

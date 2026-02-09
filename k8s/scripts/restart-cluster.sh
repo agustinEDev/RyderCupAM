@@ -146,7 +146,15 @@ case "$TARGET" in
         restart_deployment "rydercup-frontend" "frontend"
         ;;
     --db)
-        restart_deployment "postgres" "database"
+        echo -e "${YELLOW}⚠️  WARNING: Restarting the postgres deployment will drop all active DB connections.${NC}"
+        echo -e "${YELLOW}   This may cause brief downtime for the API.${NC}"
+        read -r -p "Are you sure you want to restart postgres? (yes/no): " confirm
+        if [ "$confirm" = "yes" ]; then
+            restart_deployment "postgres" "database"
+        else
+            echo -e "${RED}❌ Database restart cancelled.${NC}"
+            exit 0
+        fi
         ;;
     --all)
         restart_deployment "rydercup-api" "api"

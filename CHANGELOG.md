@@ -30,7 +30,7 @@ _No unreleased changes._
 
 - **Rate Limiting**: Contact endpoint limited to 3 requests/hour per IP
 - **No Authentication Required**: Public endpoint, consistent with frontend contact page
-- **OWASP Score**: Maintained at 9.5/10
+- **OWASP Score**: Maintained at 9.4/10
 
 ### Testing
 
@@ -53,7 +53,7 @@ _No unreleased changes._
 
 ### Security
 
-- **OWASP Score**: Maintained at 9.5/10
+- **OWASP Score**: Maintained at 9.4/10
 - Trusted proxy validation now supports CIDR ranges for Render/cloud infrastructure compatibility
 
 ## [2.0.6] - 2026-02-07 (TeeCategory Refactoring + Deploy Scripts)
@@ -244,7 +244,7 @@ _No unreleased changes._
 
 ### Security
 
-**OWASP Score**: Maintained at 9.5/10
+**OWASP Score**: Maintained at 9.4/10
 - **A01 (Broken Access Control)**: Improved - More reliable device tracking, no false duplicates from IP rotation
 - **A02 (Cryptographic Failures)**: Unchanged - UUID v4 for device_id, httpOnly cookie protection
 - **A07 (Authentication Failures)**: Improved - Eliminates false logouts from dynamic IP changes

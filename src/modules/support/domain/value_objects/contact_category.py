@@ -4,10 +4,10 @@ Contact Category Value Object
 Categorías de contacto para el formulario de soporte.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ContactCategory(str, Enum):
+class ContactCategory(StrEnum):
     """Categorías disponibles para el formulario de contacto."""
 
     BUG = "BUG"
