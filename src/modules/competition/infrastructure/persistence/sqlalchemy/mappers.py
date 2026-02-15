@@ -742,11 +742,21 @@ def start_competition_mappers():
             Competition,
             competitions_table,
             properties={
+                # ID and scalar fields → private attrs
+                "_id": competitions_table.c.id,
+                "_creator_id": competitions_table.c.creator_id,
+                "_team_1_name": competitions_table.c.team_1_name,
+                "_team_2_name": competitions_table.c.team_2_name,
+                "_play_mode": competitions_table.c.play_mode,
+                "_max_players": competitions_table.c.max_players,
+                "_created_at": competitions_table.c.created_at,
+                "_updated_at": competitions_table.c.updated_at,
+                # Composite VOs → private attrs
                 "_name_value": competitions_table.c.name,
-                "name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
+                "_name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
                 "_start_date": competitions_table.c.start_date,
                 "_end_date": competitions_table.c.end_date,
-                "dates": composite(
+                "_dates": composite(
                     lambda s, e: DateRange(s, e) if s and e else None,
                     "_start_date",
                     "_end_date",
@@ -754,7 +764,7 @@ def start_competition_mappers():
                 "_country_code": competitions_table.c.country_code,
                 "_secondary_country_code": competitions_table.c.secondary_country_code,
                 "_tertiary_country_code": competitions_table.c.tertiary_country_code,
-                "location": composite(
+                "_location": composite(
                     lambda c1, c2, c3: (
                         Location(
                             main_country=c1,
@@ -768,18 +778,17 @@ def start_competition_mappers():
                     "_secondary_country_code",
                     "_tertiary_country_code",
                 ),
-                "play_mode": competitions_table.c.play_mode,
                 "_status_value": competitions_table.c.status,
-                "status": composite(
+                "_status": composite(
                     lambda s: CompetitionStatus(s) if s else CompetitionStatus.DRAFT,
                     "_status_value",
                 ),
                 "_team_assignment_value": competitions_table.c.team_assignment,
-                "team_assignment": composite(
+                "_team_assignment": composite(
                     lambda t: TeamAssignmentVO(t) if t else TeamAssignmentVO.MANUAL,
                     "_team_assignment_value",
                 ),
-                "max_players": competitions_table.c.max_players,
+                # Relationships
                 "_golf_courses": relationship(
                     CompetitionGolfCourse,
                     cascade="all, delete-orphan",
@@ -795,9 +804,18 @@ def start_competition_mappers():
             Enrollment,
             enrollments_table,
             properties={
+                # Private attrs mapping
+                "_id": enrollments_table.c.id,
+                "_competition_id": enrollments_table.c.competition_id,
+                "_user_id": enrollments_table.c.user_id,
+                "_team_id": enrollments_table.c.team_id,
+                "_custom_handicap": enrollments_table.c.custom_handicap,
+                "_tee_category": enrollments_table.c.tee_category,
+                "_created_at": enrollments_table.c.created_at,
+                "_updated_at": enrollments_table.c.updated_at,
+                # Composite VOs → private attrs
                 "_status_value": enrollments_table.c.status,
-                "status": composite(EnrollmentStatus, "_status_value"),
-                "custom_handicap": enrollments_table.c.custom_handicap,
+                "_status": composite(EnrollmentStatus, "_status_value"),
             },
         )
 
