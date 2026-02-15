@@ -16,6 +16,7 @@
 - **Golf Course:** Request, Approval Workflow (Admin), Update Workflow (Clone-Based), CRUD endpoints (10 total), WHS-compliant tees/holes validation ⭐ v2.0.1
 - **Support:** Contact form → GitHub Issues (1 endpoint, rate limited 3/hour) ⭐ v2.0.8
 - **Security:** Rate Limiting, httpOnly Cookies, Session Timeout, CORS, CSRF, Account Lockout, Password History, IP Spoofing Prevention
+- **Clean Architecture Refactoring:** 12/15 DDD violations resolved (97% compliance), zero framework imports in domain ⭐ Feb 2026
 
 **OWASP Top 10:** A01(10/10), A02(10/10), A03(10/10), A04(9/10), A05(9.5/10), A06(9/10), A07(9.5/10), A08(7/10), A09(10/10), A10(8/10) = **9.4/10** ⭐
 
