@@ -32,14 +32,15 @@ class CreatorDTO(BaseModel):
     para evitar múltiples llamadas API desde el frontend.
 
     Campos incluidos:
-    - Datos personales: id, first_name, last_name, email
+    - Datos personales: id, first_name, last_name
     - Datos de juego: handicap, country_code
+    - Email: solo incluido cuando explícitamente solicitado (privacidad)
     """
 
     id: UUID = Field(..., description="ID único del usuario creador")
     first_name: str = Field(..., description="Nombre del creador")
     last_name: str = Field(..., description="Apellido del creador")
-    email: str = Field(..., description="Email del creador")
+    email: str | None = Field(None, description="Email del creador (solo con include_email)")
     handicap: float | None = Field(None, description="Handicap actual del creador")
     country_code: str | None = Field(None, description="Código ISO del país del creador")
 

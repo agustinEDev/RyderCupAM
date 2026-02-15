@@ -54,11 +54,8 @@ class CompetitionDTOMapper:
         # Obtener enrollment status del usuario actual (si existe)
         user_enrollment_status = None
         try:
-            user_enrollments = await uow.enrollments.find_by_user(current_user_id)
-            # Filtrar por esta competición específica
-            user_enrollment = next(
-                (e for e in user_enrollments if e.competition_id == competition.id),
-                None,
+            user_enrollment = await uow.enrollments.find_by_user_and_competition(
+                current_user_id, competition.id
             )
             if user_enrollment:
                 user_enrollment_status = (
@@ -66,15 +63,20 @@ class CompetitionDTOMapper:
                     if hasattr(user_enrollment.status, "value")
                     else user_enrollment.status
                 )
-                logger.info(
-                    f"✅ Found enrollment for user {current_user_id.value} in competition {competition.id.value}: {user_enrollment_status}"
+                logger.debug(
+                    "Found enrollment for user %s in competition %s: %s",
+                    current_user_id.value,
+                    competition.id.value,
+                    user_enrollment_status,
                 )
             else:
-                logger.info(
-                    f"[INFO] No enrollment found for user {current_user_id.value} in competition {competition.id.value}"
+                logger.debug(
+                    "No enrollment found for user %s in competition %s",
+                    current_user_id.value,
+                    competition.id.value,
                 )
-        except Exception as e:
-            logger.error(f"❌ Error fetching user enrollment: {e}")
+        except Exception:
+            logger.exception("Error fetching user enrollment")
             user_enrollment_status = None
 
         # Formatear location
@@ -216,20 +218,25 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
+        *,
+        include_email: bool = False,
     ) -> CreatorDTO | None:
-        """Obtiene la información del creador de una competición."""
-        async with user_uow:
-            creator = await user_uow.users.find_by_id(creator_id)
+        """
+        Obtiene la información del creador de una competición.
 
-            if not creator:
-                logger.warning(f"Creator with id {creator_id.value} not found")
-                return None
+        Assumes caller manages the user_uow transaction context.
+        """
+        creator = await user_uow.users.find_by_id(creator_id)
 
-            return CreatorDTO(
-                id=creator.id.value,
-                first_name=creator.first_name,
-                last_name=creator.last_name,
-                email=str(creator.email),
-                handicap=creator.handicap.value if creator.handicap else None,
-                country_code=(creator.country_code.value if creator.country_code else None),
-            )
+        if not creator:
+            logger.warning("Creator with id %s not found", creator_id.value)
+            return None
+
+        return CreatorDTO(
+            id=creator.id.value,
+            first_name=creator.first_name,
+            last_name=creator.last_name,
+            email=str(creator.email) if include_email else None,
+            handicap=creator.handicap.value if creator.handicap else None,
+            country_code=(creator.country_code.value if creator.country_code else None),
+        )

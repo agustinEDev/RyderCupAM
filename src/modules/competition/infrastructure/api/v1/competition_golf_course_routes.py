@@ -204,6 +204,7 @@ async def reorder_golf_courses(
 async def list_competition_golf_courses(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - Auth required
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
 ):
     """Obtiene la lista ordenada de campos de golf asociados a una competición."""
@@ -273,5 +274,5 @@ async def list_competition_golf_courses(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno al cargar campos de golf: {type(e).__name__}",
+            detail="Error interno al cargar campos de golf",
         ) from e

@@ -181,7 +181,7 @@ async def _get_user_competitions(
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
     result = []
-    async with uow:
+    async with uow, user_uow:
         for competition in competitions:
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
@@ -237,7 +237,7 @@ async def create_competition(
 
         response = await use_case.execute(competition_data, creator_id)
 
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(CompetitionId(response.id))
 
             if not competition:
@@ -358,7 +358,7 @@ async def get_competition(
 
         competition = await use_case.execute(competition_vo_id)
 
-        async with uow:
+        async with uow, user_uow:
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
             )
@@ -394,7 +394,7 @@ async def update_competition(
 
         await use_case.execute(competition_vo_id, request, current_user_id)
 
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow

@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
@@ -14,6 +14,7 @@ from src.config.dependencies import (
     get_start_competition_use_case,
     get_uow,
 )
+from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
@@ -85,7 +86,9 @@ router = APIRouter()
     description="Activa una competición para abrir inscripciones. Solo el creador.",
     tags=["Competitions - State Transitions"],
 )
+@limiter.limit("10/minute")
 async def activate_competition(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ActivateCompetitionUseCase = Depends(get_activate_competition_use_case),
@@ -100,7 +103,7 @@ async def activate_competition(
         await use_case.execute(request_dto, current_user_id)
 
         competition_vo_id = CompetitionId(competition_id)
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
@@ -124,7 +127,9 @@ async def activate_competition(
     description="Cierra las inscripciones de una competición. Solo el creador.",
     tags=["Competitions - State Transitions"],
 )
+@limiter.limit("10/minute")
 async def close_enrollments(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CloseEnrollmentsUseCase = Depends(get_close_enrollments_use_case),
@@ -139,7 +144,7 @@ async def close_enrollments(
         await use_case.execute(request_dto, current_user_id)
 
         competition_vo_id = CompetitionId(competition_id)
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
@@ -163,7 +168,9 @@ async def close_enrollments(
     description="Inicia el torneo. Solo el creador.",
     tags=["Competitions - State Transitions"],
 )
+@limiter.limit("10/minute")
 async def start_competition(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: StartCompetitionUseCase = Depends(get_start_competition_use_case),
@@ -178,7 +185,7 @@ async def start_competition(
         await use_case.execute(request_dto, current_user_id)
 
         competition_vo_id = CompetitionId(competition_id)
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
@@ -202,7 +209,9 @@ async def start_competition(
     description="Finaliza el torneo. Solo el creador.",
     tags=["Competitions - State Transitions"],
 )
+@limiter.limit("10/minute")
 async def complete_competition(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CompleteCompetitionUseCase = Depends(get_complete_competition_use_case),
@@ -217,7 +226,7 @@ async def complete_competition(
         await use_case.execute(request_dto, current_user_id)
 
         competition_vo_id = CompetitionId(competition_id)
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
@@ -241,7 +250,9 @@ async def complete_competition(
     description="Cancela una competición. Solo el creador.",
     tags=["Competitions - State Transitions"],
 )
+@limiter.limit("10/minute")
 async def cancel_competition(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CancelCompetitionUseCase = Depends(get_cancel_competition_use_case),
@@ -256,7 +267,7 @@ async def cancel_competition(
         await use_case.execute(request_dto, current_user_id)
 
         competition_vo_id = CompetitionId(competition_id)
-        async with uow:
+        async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow

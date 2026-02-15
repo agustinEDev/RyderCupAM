@@ -107,9 +107,9 @@ def start_user_device_mappers():
             },
         )
 
-    # Event listener: initialize _domain_events when SQLAlchemy loads from DB
-    # (replaces @reconstructor that was previously in the domain entity)
-    @event.listens_for(UserDevice, "load")
-    def _init_user_device_domain_events(target, _context):
-        if not hasattr(target, "_domain_events"):
-            target._domain_events = []
+        # Event listener: initialize _domain_events when SQLAlchemy loads from DB
+        # (replaces @reconstructor that was previously in the domain entity)
+        @event.listens_for(UserDevice, "load")
+        def _init_user_device_domain_events(target, _context):
+            if not hasattr(target, "_domain_events"):
+                target._domain_events = []

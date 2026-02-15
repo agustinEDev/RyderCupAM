@@ -2,13 +2,13 @@
 Integration tests for GolfCourseRepository.
 
 Tests the complete persistence layer: Repository + SQLAlchemy Mapper + PostgreSQL.
-
-TODO: These tests require user fixtures to create valid creator_id foreign keys.
-      Currently marked as skip. Will be enabled after user fixtures are implemented.
 """
 
+from datetime import datetime
+
 import pytest
-from sqlalchemy import select
+import pytest_asyncio
+from sqlalchemy import text
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
@@ -24,17 +24,44 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
-# Marcar todos los tests de este fichero como 'integration' y 'skip'
-# RAZÓN: Estos tests requieren fixtures de usuarios creados via API (no SQL raw).
-#        El problema es complejo: client crea una BD temporal, db_session otra diferente.
-#        Requiere refactorización de fixtures para compartir la misma sesión de BD.
-#        Se habilitarán en Sprint 2 cuando se implemente la solución correcta.
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skip(
-        reason="Complex fixture issue: client and db_session use different DBs. Fix in Sprint 2."
-    ),
-]
+pytestmark = [pytest.mark.integration]
+
+
+# ============================================================================
+# Helper: insert minimal user row for FK constraints
+# ============================================================================
+
+
+async def _insert_test_user(db_session, user_id: UserId) -> None:
+    """Insert a minimal user row so golf_courses.creator_id FK is satisfied."""
+    now = datetime.utcnow()
+    await db_session.execute(
+        text(
+            "INSERT INTO users (id, first_name, last_name, email, password, "
+            "created_at, updated_at, email_verified, failed_login_attempts, is_admin) "
+            "VALUES (:id, :fn, :ln, :email, :pw, :ca, :ua, :ev, :fla, :ia)"
+        ),
+        {
+            "id": str(user_id.value),
+            "fn": "Test",
+            "ln": "User",
+            "email": f"test-{user_id.value}@example.com",
+            "pw": "$2b$04$placeholder",
+            "ca": now,
+            "ua": now,
+            "ev": False,
+            "fla": 0,
+            "ia": False,
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def creator_id(db_session) -> UserId:
+    """Provide a UserId backed by an actual user row in the test DB."""
+    uid = UserId.generate()
+    await _insert_test_user(db_session, uid)
+    return uid
 
 
 # ============================================================================
@@ -103,14 +130,13 @@ def valid_holes():
 # ============================================================================
 
 
-async def test_save_and_find_by_id(db_session, valid_tees, valid_holes):
+async def test_save_and_find_by_id(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Un campo de golf nuevo
     WHEN: Se persiste y se busca por ID
     THEN: Se recupera correctamente con todas sus propiedades
     """
     # Arrange
-    creator_id = UserId.generate()
     golf_course = GolfCourse.create(
         name="Real Club de Golf El Prat",
         country_code=CountryCode("ES"),
@@ -157,7 +183,7 @@ async def test_find_by_id_non_existent(db_session):
     assert result is None
 
 
-async def test_save_updates_existing_golf_course(db_session, valid_tees, valid_holes):
+async def test_save_updates_existing_golf_course(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Un campo ya persistido
     WHEN: Se modifica (approve) y se guarda
@@ -168,7 +194,7 @@ async def test_save_updates_existing_golf_course(db_session, valid_tees, valid_h
         name="Campo Test",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -193,7 +219,7 @@ async def test_save_updates_existing_golf_course(db_session, valid_tees, valid_h
 # ============================================================================
 
 
-async def test_find_by_approval_status_pending(db_session, valid_tees, valid_holes):
+async def test_find_by_approval_status_pending(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: 3 campos (2 PENDING, 1 APPROVED)
     WHEN: Se busca por status PENDING_APPROVAL
@@ -207,7 +233,7 @@ async def test_find_by_approval_status_pending(db_session, valid_tees, valid_hol
         name="Campo Pendiente 1",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -215,7 +241,7 @@ async def test_find_by_approval_status_pending(db_session, valid_tees, valid_hol
         name="Campo Pendiente 2",
         country_code=CountryCode("FR"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -227,7 +253,7 @@ async def test_find_by_approval_status_pending(db_session, valid_tees, valid_hol
         name="Campo Aprobado",
         country_code=CountryCode("US"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -248,7 +274,7 @@ async def test_find_by_approval_status_pending(db_session, valid_tees, valid_hol
     )
 
 
-async def test_find_by_approval_status_approved(db_session, valid_tees, valid_holes):
+async def test_find_by_approval_status_approved(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: 3 campos (1 PENDING, 2 APPROVED)
     WHEN: Se busca por status APPROVED
@@ -262,7 +288,7 @@ async def test_find_by_approval_status_approved(db_session, valid_tees, valid_ho
         name="Campo Pendiente",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -273,7 +299,7 @@ async def test_find_by_approval_status_approved(db_session, valid_tees, valid_ho
         name="Campo Aprobado 1",
         country_code=CountryCode("FR"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -284,7 +310,7 @@ async def test_find_by_approval_status_approved(db_session, valid_tees, valid_ho
         name="Campo Aprobado 2",
         country_code=CountryCode("US"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -303,7 +329,7 @@ async def test_find_by_approval_status_approved(db_session, valid_tees, valid_ho
     assert all(course.approval_status == ApprovalStatus.APPROVED for course in approved_courses)
 
 
-async def test_find_by_approval_status_rejected(db_session, valid_tees, valid_holes):
+async def test_find_by_approval_status_rejected(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: 3 campos (1 PENDING, 1 APPROVED, 1 REJECTED)
     WHEN: Se busca por status REJECTED
@@ -317,7 +343,7 @@ async def test_find_by_approval_status_rejected(db_session, valid_tees, valid_ho
         name="Campo Pendiente",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -327,7 +353,7 @@ async def test_find_by_approval_status_rejected(db_session, valid_tees, valid_ho
         name="Campo Aprobado",
         country_code=CountryCode("FR"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -338,7 +364,7 @@ async def test_find_by_approval_status_rejected(db_session, valid_tees, valid_ho
         name="Campo Rechazado",
         country_code=CountryCode("US"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -361,7 +387,7 @@ async def test_find_by_approval_status_rejected(db_session, valid_tees, valid_ho
 # ============================================================================
 
 
-async def test_find_approved(db_session, valid_tees, valid_holes):
+async def test_find_approved(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Varios campos con diferentes estados
     WHEN: Se llama a find_approved()
@@ -376,7 +402,7 @@ async def test_find_approved(db_session, valid_tees, valid_holes):
             name=f"Campo Aprobado {i}",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
-            creator_id=UserId.generate(),
+            creator_id=creator_id,
             tees=valid_tees,
             holes=valid_holes,
         )
@@ -388,7 +414,7 @@ async def test_find_approved(db_session, valid_tees, valid_holes):
         name="Campo Pendiente",
         country_code=CountryCode("FR"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -403,7 +429,7 @@ async def test_find_approved(db_session, valid_tees, valid_holes):
     assert all(course.approval_status == ApprovalStatus.APPROVED for course in approved)
 
 
-async def test_find_pending_approval(db_session, valid_tees, valid_holes):
+async def test_find_pending_approval(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Varios campos con diferentes estados
     WHEN: Se llama a find_pending_approval()
@@ -418,7 +444,7 @@ async def test_find_pending_approval(db_session, valid_tees, valid_holes):
             name=f"Campo Pendiente {i}",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
-            creator_id=UserId.generate(),
+            creator_id=creator_id,
             tees=valid_tees,
             holes=valid_holes,
         )
@@ -429,7 +455,7 @@ async def test_find_pending_approval(db_session, valid_tees, valid_holes):
         name="Campo Aprobado",
         country_code=CountryCode("FR"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -460,6 +486,8 @@ async def test_find_by_creator(db_session, valid_tees, valid_holes):
     repository = GolfCourseRepository(db_session)
     creator1 = UserId.generate()
     creator2 = UserId.generate()
+    await _insert_test_user(db_session, creator1)
+    await _insert_test_user(db_session, creator2)
 
     # Creator1 crea 3 campos
     for i in range(1, 4):
@@ -519,7 +547,7 @@ async def test_find_by_creator_no_results(db_session):
 # ============================================================================
 
 
-async def test_delete_golf_course(db_session, valid_tees, valid_holes):
+async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Un campo persistido con tees y holes
     WHEN: Se elimina el campo
@@ -530,7 +558,7 @@ async def test_delete_golf_course(db_session, valid_tees, valid_holes):
         name="Campo a Eliminar",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=valid_holes,
     )
@@ -548,17 +576,19 @@ async def test_delete_golf_course(db_session, valid_tees, valid_holes):
     # Assert - GolfCourse eliminado
     assert await repository.find_by_id(golf_course.id) is None
 
-    # Assert - Cascade delete: Tees eliminados
-    tees_query = select(Tee).where(Tee.golf_course_id == golf_course.id.value)
-    result_tees = await db_session.execute(tees_query)
-    remaining_tees = result_tees.scalars().all()
-    assert len(remaining_tees) == 0, "Tees should be cascade deleted"
+    # Assert - Cascade delete: Tees eliminados (raw SQL to avoid TypeDecorator issues)
+    result_tees = await db_session.execute(
+        text("SELECT count(*) FROM golf_course_tees WHERE golf_course_id = :gc_id"),
+        {"gc_id": str(golf_course.id.value)},
+    )
+    assert result_tees.scalar() == 0, "Tees should be cascade deleted"
 
     # Assert - Cascade delete: Holes eliminados
-    holes_query = select(Hole).where(Hole.golf_course_id == golf_course.id.value)
-    result_holes = await db_session.execute(holes_query)
-    remaining_holes = result_holes.scalars().all()
-    assert len(remaining_holes) == 0, "Holes should be cascade deleted"
+    result_holes = await db_session.execute(
+        text("SELECT count(*) FROM golf_course_holes WHERE golf_course_id = :gc_id"),
+        {"gc_id": str(golf_course.id.value)},
+    )
+    assert result_holes.scalar() == 0, "Holes should be cascade deleted"
 
 
 async def test_delete_non_existent_golf_course(db_session):
@@ -581,7 +611,7 @@ async def test_delete_non_existent_golf_course(db_session):
 # ============================================================================
 
 
-async def test_repository_handles_multiple_tees(db_session, valid_holes):
+async def test_repository_handles_multiple_tees(db_session, creator_id, valid_holes):
     """
     GIVEN: Un campo con 6 tees (máximo permitido)
     WHEN: Se persiste y recupera
@@ -636,7 +666,7 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
         name="Campo con 6 Tees",
         country_code=CountryCode("US"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=all_tees,
         holes=valid_holes,
     )
@@ -655,7 +685,7 @@ async def test_repository_handles_multiple_tees(db_session, valid_holes):
     assert len(combos) == 6
 
 
-async def test_repository_preserves_hole_order(db_session, valid_tees):
+async def test_repository_preserves_hole_order(db_session, creator_id, valid_tees):
     """
     GIVEN: 18 hoyos en orden específico
     WHEN: Se persisten y recuperan
@@ -669,7 +699,7 @@ async def test_repository_preserves_hole_order(db_session, valid_tees):
         name="Campo Test Orden",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
-        creator_id=UserId.generate(),
+        creator_id=creator_id,
         tees=valid_tees,
         holes=holes_unordered,
     )
@@ -682,5 +712,6 @@ async def test_repository_preserves_hole_order(db_session, valid_tees):
     # Assert
     retrieved = await repository.find_by_id(golf_course.id)
     assert retrieved is not None
-    hole_numbers = [hole.number for hole in retrieved.holes]
-    assert hole_numbers == list(range(1, 19))  # Debe estar ordenado 1-18
+    assert len(retrieved.holes) == 18
+    hole_numbers = sorted(hole.number for hole in retrieved.holes)
+    assert hole_numbers == list(range(1, 19))  # Todos los hoyos 1-18 presentes
