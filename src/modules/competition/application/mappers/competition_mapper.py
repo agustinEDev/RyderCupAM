@@ -53,31 +53,27 @@ class CompetitionDTOMapper:
 
         # Obtener enrollment status del usuario actual (si existe)
         user_enrollment_status = None
-        try:
-            user_enrollment = await uow.enrollments.find_by_user_and_competition(
-                current_user_id, competition.id
+        user_enrollment = await uow.enrollments.find_by_user_and_competition(
+            current_user_id, competition.id
+        )
+        if user_enrollment:
+            user_enrollment_status = (
+                user_enrollment.status.value
+                if hasattr(user_enrollment.status, "value")
+                else user_enrollment.status
             )
-            if user_enrollment:
-                user_enrollment_status = (
-                    user_enrollment.status.value
-                    if hasattr(user_enrollment.status, "value")
-                    else user_enrollment.status
-                )
-                logger.debug(
-                    "Found enrollment for user %s in competition %s: %s",
-                    current_user_id.value,
-                    competition.id.value,
-                    user_enrollment_status,
-                )
-            else:
-                logger.debug(
-                    "No enrollment found for user %s in competition %s",
-                    current_user_id.value,
-                    competition.id.value,
-                )
-        except Exception:
-            logger.exception("Error fetching user enrollment")
-            user_enrollment_status = None
+            logger.debug(
+                "Found enrollment for user %s in competition %s: %s",
+                current_user_id.value,
+                competition.id.value,
+                user_enrollment_status,
+            )
+        else:
+            logger.debug(
+                "No enrollment found for user %s in competition %s",
+                current_user_id.value,
+                competition.id.value,
+            )
 
         # Formatear location
         location_str = await CompetitionDTOMapper._format_location(competition, uow)

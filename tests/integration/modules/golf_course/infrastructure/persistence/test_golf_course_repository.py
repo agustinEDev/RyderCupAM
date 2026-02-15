@@ -4,7 +4,7 @@ Integration tests for GolfCourseRepository.
 Tests the complete persistence layer: Repository + SQLAlchemy Mapper + PostgreSQL.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -34,7 +34,7 @@ pytestmark = [pytest.mark.integration]
 
 async def _insert_test_user(db_session, user_id: UserId) -> None:
     """Insert a minimal user row so golf_courses.creator_id FK is satisfied."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     await db_session.execute(
         text(
             "INSERT INTO users (id, first_name, last_name, email, password, "

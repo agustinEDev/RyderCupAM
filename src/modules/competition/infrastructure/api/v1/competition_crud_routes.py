@@ -150,43 +150,48 @@ async def _fetch_enrolled_competitions(
 async def _get_user_competitions(
     uow, use_case, current_user_id, status_filter, search_name, search_creator
 ):
-    """Obtiene competiciones donde el usuario es creador O está inscrito."""
-    async with uow:
-        created_competitions = await _fetch_competitions_by_status(
-            use_case,
-            status_filter,
-            str(current_user_id.value),
-            search_name,
-            search_creator,
-        )
+    """Obtiene competiciones donde el usuario es creador O está inscrito.
 
-        enrollments = await uow.enrollments.find_by_user(current_user_id)
+    Assumes caller manages the uow transaction context.
+    """
+    created_competitions = await _fetch_competitions_by_status(
+        use_case,
+        status_filter,
+        str(current_user_id.value),
+        search_name,
+        search_creator,
+    )
 
-        enrollment_status_map = {
-            enrollment.competition_id: enrollment.status for enrollment in enrollments
-        }
+    enrollments = await uow.enrollments.find_by_user(current_user_id)
 
-        created_competition_ids = [c.id for c in created_competitions]
+    enrollment_status_map = {
+        enrollment.competition_id: enrollment.status for enrollment in enrollments
+    }
 
-        enrolled_competitions = await _fetch_enrolled_competitions(
-            uow,
-            enrollments,
-            created_competition_ids,
-            status_filter,
-            enrollment_status_map,
-        )
+    created_competition_ids = [c.id for c in created_competitions]
 
-        return created_competitions + enrolled_competitions
+    enrolled_competitions = await _fetch_enrolled_competitions(
+        uow,
+        enrollments,
+        created_competition_ids,
+        status_filter,
+        enrollment_status_map,
+    )
+
+    return created_competitions + enrolled_competitions
 
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
+    """Convierte entidades Competition a DTOs.
+
+    Assumes caller manages the uow/user_uow transaction context.
+    """
     result = []
-    async with uow, user_uow:
-        for competition in competitions:
-            dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
-            )
-            result.append(dto)
+    for competition in competitions:
+        dto = await CompetitionDTOMapper.to_response_dto(
+            competition, current_user_id, uow, user_uow
+        )
+        result.append(dto)
     return result
 
 
@@ -290,7 +295,9 @@ async def create_competition(
     description="Obtiene lista de competiciones con filtros opcionales.",
     tags=["Competitions"],
 )
+@limiter.limit("30/minute")
 async def list_competitions(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListCompetitionsUseCase = Depends(get_list_competitions_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
@@ -313,24 +320,30 @@ async def list_competitions(
         current_user_id = UserId(str(current_user.id))
         sanitized_creator_id = _sanitize_creator_id(creator_id)
 
-        if my_competitions is True:
-            competitions = await _get_user_competitions(
-                uow, use_case, current_user_id, status_filter, search_name, search_creator,
-            )
-        elif my_competitions is False:
-            competitions = await _get_all_competitions(
-                use_case, status_filter, sanitized_creator_id, search_name, search_creator,
-            )
-            async with uow:
+        async with uow, user_uow:
+            if my_competitions is True:
+                competitions = await _get_user_competitions(
+                    uow, use_case, current_user_id, status_filter,
+                    search_name, search_creator,
+                )
+            elif my_competitions is False:
+                competitions = await _get_all_competitions(
+                    use_case, status_filter, sanitized_creator_id,
+                    search_name, search_creator,
+                )
                 competitions = await _exclude_user_competitions(
                     competitions, current_user_id, uow
                 )
-        else:
-            competitions = await _get_all_competitions(
-                use_case, status_filter, sanitized_creator_id, search_name, search_creator,
+            else:
+                competitions = await _get_all_competitions(
+                    use_case, status_filter, sanitized_creator_id,
+                    search_name, search_creator,
+                )
+
+            result = await _map_competitions_to_dtos(
+                competitions, current_user_id, uow, user_uow
             )
 
-        result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -396,6 +409,13 @@ async def update_competition(
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
+
+            if not competition:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Competition {competition_vo_id.value} not found after update",
+                )
+
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
             )

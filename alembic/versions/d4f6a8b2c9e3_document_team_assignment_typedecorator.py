@@ -12,10 +12,6 @@ to prevent Alembic autogenerate from detecting a spurious ALTER.
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
-
-from alembic import op
-
 # revision identifiers, used by Alembic.
 revision: str = "d4f6a8b2c9e3"
 down_revision: str | None = "c3d5e7f9a1b2"
@@ -29,21 +25,9 @@ def upgrade() -> None:
     # to TeamAssignmentModeDecorator (which wraps String(20)) for the
     # competitions.team_assignment column, ensuring Alembic's history
     # stays in sync with the mapper definition.
-    op.alter_column(
-        "competitions",
-        "team_assignment",
-        existing_type=sa.String(length=20),
-        type_=sa.String(length=20),
-        existing_nullable=False,
-    )
+    pass
 
 
 def downgrade() -> None:
     # No-op: reverting the TypeDecorator change has no DB-level effect.
-    op.alter_column(
-        "competitions",
-        "team_assignment",
-        existing_type=sa.String(length=20),
-        type_=sa.String(length=20),
-        existing_nullable=False,
-    )
+    pass
