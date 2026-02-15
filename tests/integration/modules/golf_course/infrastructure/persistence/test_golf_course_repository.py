@@ -713,5 +713,5 @@ async def test_repository_preserves_hole_order(db_session, creator_id, valid_tee
     retrieved = await repository.find_by_id(golf_course.id)
     assert retrieved is not None
     assert len(retrieved.holes) == 18
-    hole_numbers = sorted(hole.number for hole in retrieved.holes)
-    assert hole_numbers == list(range(1, 19))  # Todos los hoyos 1-18 presentes
+    hole_numbers = [hole.number for hole in retrieved.holes]
+    assert hole_numbers == list(range(1, 19))  # Orden preservado 1-18

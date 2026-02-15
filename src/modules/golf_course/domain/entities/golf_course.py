@@ -597,7 +597,7 @@ class GolfCourse:
 
     @property
     def holes(self) -> list[Hole]:
-        return self._holes.copy()
+        return sorted(self._holes, key=lambda h: h.number)
 
     @property
     def approval_status(self) -> ApprovalStatus:

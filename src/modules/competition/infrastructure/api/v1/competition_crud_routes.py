@@ -46,8 +46,6 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     CompetitionNotEditableError,
-    CompetitionNotFoundError as UpdateNotFoundError,
-    NotCompetitionCreatorError as UpdateNotCreatorError,
     UpdateCompetitionUseCase,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -63,11 +61,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-
-# Aliases for shared exceptions
-DeleteNotFoundError = CompetitionNotFoundError
-DeleteNotCreatorError = NotCompetitionCreatorError
-GetNotFoundError = CompetitionNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +371,7 @@ async def get_competition(
 
         return dto
 
-    except GetNotFoundError as e:
+    except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -422,9 +415,9 @@ async def update_competition(
 
         return dto
 
-    except UpdateNotFoundError as e:
+    except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except UpdateNotCreatorError as e:
+    except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionNotEditableError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -454,9 +447,9 @@ async def delete_competition(
 
         return
 
-    except DeleteNotFoundError as e:
+    except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except DeleteNotCreatorError as e:
+    except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionNotDeletableError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
