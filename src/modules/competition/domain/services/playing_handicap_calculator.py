@@ -242,6 +242,47 @@ class PlayingHandicapCalculator:
             return 0, strokes
         return 0, 0  # Mismo CH, nadie recibe strokes
 
+    @staticmethod
+    def compute_strokes_received(
+        playing_handicap: int,
+        holes_by_stroke_index: list[int],
+    ) -> list[int]:
+        """
+        Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index.
+
+        Distribuye strokes siguiendo el orden de stroke index de los hoyos.
+        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around).
+
+        Args:
+            playing_handicap: Playing Handicap calculado del jugador
+            holes_by_stroke_index: Números de hoyo ordenados por stroke index
+
+        Returns:
+            Lista de números de hoyo donde el jugador recibe golpe
+        """
+        if not holes_by_stroke_index or playing_handicap <= 0:
+            return []
+
+        max_holes = len(holes_by_stroke_index)
+        result: list[int] = []
+        remaining = playing_handicap
+        while remaining > 0:
+            take = min(remaining, len(holes_by_stroke_index))
+            result.extend(holes_by_stroke_index[:take])
+            remaining -= take
+
+        # Deduplicate: si hay wrap-around, limitar a MAX_HOLES unique entries
+        seen: set[int] = set()
+        unique: list[int] = []
+        for h in result:
+            if h not in seen:
+                seen.add(h)
+                unique.append(h)
+            if len(unique) >= max_holes:
+                break
+
+        return unique
+
     def _calculate_course_handicap(
         self,
         handicap_index: Decimal,

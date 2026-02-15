@@ -12,6 +12,7 @@ from src.modules.competition.application.dto.competition_dto import (
     ReorderGolfCoursesResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionNotDraftError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -22,12 +23,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotDraftError(Exception):
-    """Excepción lanzada cuando la competición no está en estado DRAFT."""
-
-    pass
 
 
 class InvalidReorderError(Exception):

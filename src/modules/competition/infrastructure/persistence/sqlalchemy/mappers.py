@@ -578,7 +578,7 @@ competitions_table = Table(
     Column("team_2_name", String(100), nullable=False),
     Column("play_mode", PlayModeDecorator, nullable=False),
     Column("max_players", Integer, nullable=False, default=24),
-    Column("team_assignment", String(20), nullable=False, default="MANUAL"),
+    Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),

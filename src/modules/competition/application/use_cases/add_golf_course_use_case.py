@@ -12,6 +12,7 @@ from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionNotDraftError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -25,12 +26,6 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionNotDraftError(Exception):
-    """Excepción lanzada cuando la competición no está en estado DRAFT."""
-
-    pass
 
 
 class GolfCourseNotFoundError(Exception):

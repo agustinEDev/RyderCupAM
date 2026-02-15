@@ -30,7 +30,9 @@ from src.config.rate_limit import limiter  # noqa: E402
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
 from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
-    competition_routes,
+    competition_crud_routes,
+    competition_golf_course_routes,
+    competition_state_routes,
     enrollment_routes,
     round_match_routes,
 )
@@ -275,7 +277,17 @@ app.include_router(
 )
 
 app.include_router(
-    competition_routes.router,
+    competition_crud_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    competition_state_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    competition_golf_course_routes.router,
     prefix="/api/v1/competitions",
 )
 

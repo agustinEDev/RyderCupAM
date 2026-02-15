@@ -100,7 +100,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         stmt = (
             select(Competition)
-            .where(Competition.id == competition_id)
+            .where(Competition._id == competition_id)
             .options(
                 selectinload(Competition._golf_courses)
                 .selectinload(CompetitionGolfCourse.golf_course)
@@ -123,7 +123,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
-        stmt = select(Competition).where(Competition.id == competition_id).with_for_update()
+        stmt = select(Competition).where(Competition._id == competition_id).with_for_update()
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -143,8 +143,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         statement = (
             select(Competition)
-            .where(Competition.creator_id == creator_id)
-            .order_by(Competition.created_at.desc())  # Más recientes primero
+            .where(Competition._creator_id == creator_id)
+            .order_by(Competition._created_at.desc())  # Más recientes primero
             .limit(limit)
             .offset(offset)
         )
@@ -171,7 +171,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         statement = (
             select(Competition)
             .where(Competition._status_value == status.value)
-            .order_by(Competition.created_at.desc())
+            .order_by(Competition._created_at.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -241,7 +241,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .where(
                 and_(
                     Competition._name_value == str(name),
-                    Competition.creator_id == creator_id,
+                    Competition._creator_id == creator_id,
                 )
             )
         )
@@ -261,7 +261,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         statement = (
             select(Competition)
-            .order_by(Competition.created_at.desc())  # Más recientes primero
+            .order_by(Competition._created_at.desc())  # Más recientes primero
             .limit(limit)
             .offset(offset)
         )
@@ -281,7 +281,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         statement = (
             select(func.count())
             .select_from(Competition)
-            .where(Competition.creator_id == creator_id)
+            .where(Competition._creator_id == creator_id)
         )
         result = await self._session.execute(statement)
         return result.scalar_one()
@@ -321,7 +321,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
         # Si hay búsqueda por creador, necesitamos hacer JOIN con User
         if search_creator:
-            query = query.join(User, Competition.creator_id == User.id)
+            query = query.join(User, Competition._creator_id == User.id)
 
         # Lista de condiciones WHERE
         conditions = []
@@ -345,14 +345,14 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
         # Apply filter: creator user ID
         if creator_id:
-            conditions.append(Competition.creator_id == creator_id)
+            conditions.append(Competition._creator_id == creator_id)
 
         # Aplicar condiciones si existen
         if conditions:
             query = query.where(and_(*conditions))
 
         # Ordenar y paginar
-        query = query.order_by(Competition.created_at.desc()).limit(limit).offset(offset)
+        query = query.order_by(Competition._created_at.desc()).limit(limit).offset(offset)
 
         # Ejecutar query
         result = await self._session.execute(query)

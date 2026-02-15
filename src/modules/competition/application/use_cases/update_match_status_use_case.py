@@ -6,6 +6,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    MatchNotFoundError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
@@ -15,12 +16,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class MatchNotFoundError(Exception):
-    """El partido no existe."""
-
-    pass
 
 
 class CompetitionNotInProgressError(Exception):
