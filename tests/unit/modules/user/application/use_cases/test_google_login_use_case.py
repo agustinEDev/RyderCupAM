@@ -123,7 +123,7 @@ class TestGoogleLoginUseCaseAutoRegister:
 
         user = await uow.users.find_by_email(Email("oauth@example.com"))
         assert user is not None
-        assert user.has_password() is False
+        assert user.has_password is False
 
     async def test_auto_register_user_email_verified(
         self, use_case, uow, google_oauth_service, google_user_info, login_request

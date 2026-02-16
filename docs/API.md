@@ -146,9 +146,26 @@ Support (1 endpoint) ⭐ v2.0.8
 - `access_token` (string, JWT) - LEGACY, use cookie
 - `refresh_token` (string, JWT) - LEGACY, use cookie
 - `csrf_token` (string, 256-bit) - CSRF protection token (v1.13.0)
-- `user` (object) - User data
+- `user` (object) - User data (see User Object below)
 - httpOnly Cookies: `access_token` (15 min), `refresh_token` (7 days)
 - Cookie NO httpOnly: `csrf_token` (15 min, readable by JS)
+
+**User Object (UserResponseDTO):**
+Returned in all endpoints that include user data (login, current-user, register, refresh-token, etc.)
+- `id` (string, UUID) - User ID
+- `email` (string) - User email
+- `first_name` (string) - First name
+- `last_name` (string) - Last name
+- `country_code` (string, nullable) - ISO 3166-1 alpha-2
+- `handicap` (float, nullable) - Golf handicap
+- `handicap_updated_at` (datetime, nullable) - Last handicap update
+- `email_verified` (bool) - Whether email is verified
+- `is_admin` (bool) - Global admin flag
+- `gender` (string, nullable) - "MALE" or "FEMALE"
+- `auth_providers` (string[], default `[]`) - Linked OAuth providers (e.g. `["google"]`) ⭐ v2.0.10
+- `has_password` (bool, default `true`) - Whether user has a password set ⭐ v2.0.10
+- `created_at` (datetime) - Account creation timestamp
+- `updated_at` (datetime) - Last update timestamp
 
 **Forgot Password Request:**
 - `email` (string, required)
@@ -211,7 +228,7 @@ Support (1 endpoint) ⭐ v2.0.8
 **Response (200 OK):**
 - `access_token`, `refresh_token`, `csrf_token` - JWT tokens
 - `token_type` - "bearer"
-- `user` - User data (id, email, first_name, last_name, email_verified, etc.)
+- `user` - User data (see User Object in Authentication section, includes `auth_providers` and `has_password`)
 - `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
 - `device_id`, `should_set_device_cookie` - Device registration info
 
@@ -868,4 +885,4 @@ PENDING_APPROVAL → APPROVED
 ---
 
 **Last Updated:** 16 February 2026
-**Version:** Sprint 3 Block 1 (Google OAuth)
+**Version:** Sprint 3 Block 1.1 (auth_providers + has_password in UserResponseDTO)
