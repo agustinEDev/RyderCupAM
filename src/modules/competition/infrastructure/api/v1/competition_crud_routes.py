@@ -10,7 +10,6 @@ from src.config.dependencies import (
     get_create_competition_use_case,
     get_current_user,
     get_delete_competition_use_case,
-    get_get_competition_use_case,
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
@@ -37,9 +36,6 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
-)
-from src.modules.competition.application.use_cases.get_competition_use_case import (
-    GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
@@ -353,7 +349,6 @@ async def list_competitions(
 async def get_competition(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: GetCompetitionUseCase = Depends(get_get_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ):
@@ -362,10 +357,6 @@ async def get_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        # Validate existence via use case (raises CompetitionNotFoundError)
-        await use_case.execute(competition_vo_id)
-
-        # Re-fetch inside UoW to avoid detached entity issues
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
 
@@ -381,8 +372,6 @@ async def get_competition(
 
         return dto
 
-    except CompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
