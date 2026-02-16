@@ -362,9 +362,19 @@ async def get_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        competition = await use_case.execute(competition_vo_id)
+        # Validate existence via use case (raises CompetitionNotFoundError)
+        await use_case.execute(competition_vo_id)
 
+        # Re-fetch inside UoW to avoid detached entity issues
         async with uow, user_uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+
+            if not competition:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Competition {competition_vo_id.value} not found",
+                )
+
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow
             )
@@ -385,9 +395,11 @@ async def get_competition(
     description="Actualiza una competición (SOLO en estado DRAFT y SOLO el creador).",
     tags=["Competitions"],
 )
+@limiter.limit("10/hour")
 async def update_competition(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,
-    request: UpdateCompetitionRequestDTO,
+    competition_data: UpdateCompetitionRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UpdateCompetitionUseCase = Depends(get_update_competition_use_case),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
@@ -398,7 +410,7 @@ async def update_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        await use_case.execute(competition_vo_id, request, current_user_id)
+        await use_case.execute(competition_vo_id, competition_data, current_user_id)
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
@@ -430,12 +442,12 @@ async def update_competition(
     description="Elimina físicamente una competición (SOLO en estado DRAFT y SOLO el creador).",
     tags=["Competitions"],
 )
+@limiter.limit("10/hour")
 async def delete_competition(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
-    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),  # noqa: ARG001
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),  # noqa: ARG001
 ):
     """Endpoint para eliminar físicamente una competición."""
     try:

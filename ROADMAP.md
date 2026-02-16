@@ -28,7 +28,7 @@
 
 ### Endpoints (5)
 
-```
+```http
 POST /api/v1/competitions/{id}/invitations            # Invitar por user ID
 POST /api/v1/competitions/{id}/invitations/by-email    # Invitar por email
 GET  /api/v1/invitations/me                            # Mis invitaciones pendientes
@@ -108,7 +108,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 ## Timeline
 
-```
+```text
 2025 Q4  │ v1.0.0 → v1.8.0   Auth, Security, Email, Handicap
 2026 Q1  │ v1.11.0 → v1.13.1  Password Reset, CI/CD, Security Hardening
          │ v2.0.0 → v2.0.8    RBAC, Golf Courses, Scheduling, Support
