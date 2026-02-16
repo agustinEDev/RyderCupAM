@@ -5,16 +5,11 @@ from src.modules.competition.application.dto.round_match_dto import (
     GetMatchDetailResponseDTO,
     MatchPlayerResponseDTO,
 )
+from src.modules.competition.application.exceptions import MatchNotFoundError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
-
-
-class MatchNotFoundError(Exception):
-    """El partido no existe."""
-
-    pass
 
 
 class GetMatchDetailUseCase:

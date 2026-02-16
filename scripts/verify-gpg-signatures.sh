@@ -114,9 +114,10 @@ while IFS= read -r commit; do
     PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract commit itself
 
     # Detect GitHub web-flow commits (merge or squash merge via GitHub UI/API)
+    # Primary signal: committer email set by GitHub's server (not forgeable by users)
     IS_GITHUB_WEBFLOW=false
-    if echo "$COMMIT_EMAIL" | grep -iq "noreply@github.com" || \
-       echo "$COMMIT_AUTHOR" | grep -iq "GitHub"; then
+    COMMITTER_EMAIL=$(git log -1 --format="%ce" "$commit")
+    if echo "$COMMITTER_EMAIL" | grep -iq "noreply@github.com"; then
         IS_GITHUB_WEBFLOW=true
     fi
 

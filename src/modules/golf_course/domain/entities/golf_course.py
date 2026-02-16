@@ -7,8 +7,6 @@ Ver ADR-032 para detalles del workflow de aprobación.
 
 from datetime import UTC, datetime
 
-from sqlalchemy.orm import reconstructor
-
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -109,16 +107,6 @@ class GolfCourse:
         # Validar invariantes
         self._validate_holes()
         self._validate_tees()
-
-    @reconstructor
-    def _init_on_load(self) -> None:
-        """
-        SQLAlchemy reconstructor - called after entity is loaded from database.
-
-        Ensures _domain_events is initialized when SQLAlchemy hydrates the entity.
-        """
-        if not hasattr(self, "_domain_events"):
-            self._domain_events: list[DomainEvent] = []
 
     @classmethod
     def create(
@@ -349,6 +337,81 @@ class GolfCourse:
         self._validate_holes()
         self._validate_tees()
 
+    def apply_update(
+        self,
+        name: str,
+        country_code: CountryCode,
+        course_type: CourseType,
+        tees: list[Tee],
+        holes: list[Hole],
+        is_admin: bool,
+    ) -> "GolfCourse | None":
+        """
+        Aplica una actualización al campo de golf según las reglas de negocio.
+
+        Reglas:
+        - REJECTED → error (no editable)
+        - Admin → siempre in-place (retorna None)
+        - Creator + PENDING → in-place (retorna None)
+        - Creator + APPROVED → crea clone (retorna el clone)
+
+        Args:
+            name: Nuevo nombre
+            country_code: Nuevo código de país
+            course_type: Nuevo tipo de campo
+            tees: Nueva lista de tees
+            holes: Nueva lista de hoyos
+            is_admin: Si el usuario es Admin
+
+        Returns:
+            None si se actualizó in-place, GolfCourse clone si se creó propuesta
+
+        Raises:
+            ValueError: Si el campo está REJECTED
+        """
+        if self._approval_status == ApprovalStatus.REJECTED:
+            raise ValueError(
+                "Cannot edit a REJECTED golf course. Please create a new request instead."
+            )
+
+        # Admin o PENDING_APPROVAL → actualización in-place
+        if is_admin or self._approval_status == ApprovalStatus.PENDING_APPROVAL:
+            self.update(name=name, country_code=country_code, course_type=course_type,
+                        tees=tees, holes=holes)
+            return None
+
+        # Creator + APPROVED → crear clone como update proposal
+        clone = GolfCourse.create(
+            name=name,
+            country_code=country_code,
+            course_type=course_type,
+            creator_id=self._creator_id,
+            tees=tees,
+            holes=holes,
+        )
+
+        # Reconstruir clone con campos especiales (link al original, status PENDING)
+        clone_proposal = GolfCourse.reconstruct(
+            id=clone.id,
+            name=clone.name,
+            country_code=clone.country_code,
+            course_type=clone.course_type,
+            creator_id=clone.creator_id,
+            tees=clone.tees,
+            holes=clone.holes,
+            approval_status=ApprovalStatus.PENDING_APPROVAL,
+            rejection_reason=None,
+            created_at=clone.created_at,
+            updated_at=clone.updated_at,
+            original_golf_course_id=self._id,
+            is_pending_update=False,
+        )
+
+        # Marcar original como "tiene cambios pendientes"
+        self.mark_as_pending_update()
+
+        return clone_proposal
+
     def mark_as_pending_update(self) -> None:
         """
         Marca este campo como 'tiene cambios pendientes de aprobación'.
@@ -534,7 +597,7 @@ class GolfCourse:
 
     @property
     def holes(self) -> list[Hole]:
-        return self._holes.copy()
+        return sorted(self._holes, key=lambda h: h.number)
 
     @property
     def approval_status(self) -> ApprovalStatus:

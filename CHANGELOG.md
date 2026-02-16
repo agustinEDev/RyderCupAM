@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Refactored
+
+- **Clean Architecture Compliance**: Resolved 12/15 DDD violations (90% → 97% compliance)
+  - Remove `@reconstructor` from domain — use SQLAlchemy event listeners in infrastructure
+  - Encapsulate Competition (13 attrs) and Enrollment (9 attrs) entities with private attrs + properties
+  - Move business logic to domain: `Competition.reorder_golf_courses()`, `GolfCourse.apply_update()`, `PlayingHandicapCalculator.compute_strokes_received()`, `ScheduleFormatService.build_format_sequence()`
+  - Inject domain services via DI: `SnakeDraftService`, `PlayingHandicapCalculator`, `ScheduleFormatService`
+  - Split `competition_routes.py` (1627 lines) → 3 focused route files + `CompetitionDTOMapper` moved to application layer
+  - Fix `team_assignment` TypeDecorator: `String(20)` → `TeamAssignmentModeDecorator`
+  - Centralize 10 Golf Course DI functions from routes to `dependencies.py`
+  - Centralize duplicated exceptions: `MatchNotFoundError`, `CompetitionNotDraftError`, `InsufficientPlayersError`
+  - Add `max_players` constructor validation (MIN=2, MAX=100)
+  - Simplify `reassign_match_players_use_case` — extract helper methods, remove `noqa: PLR0915`
+
+### Removed
+
+- `docs/DDD_CLEAN_ARCHITECTURE_VIOLATIONS.md` — all actionable violations resolved, report no longer needed
 
 ## [2.0.8] - 2026-02-09 (Support Module + Contact Form)
 

@@ -24,7 +24,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.config.dependencies import get_current_user, get_golf_course_uow
+from src.config.dependencies import (
+    get_approve_golf_course_use_case,
+    get_approve_update_golf_course_use_case,
+    get_create_direct_golf_course_use_case,
+    get_current_user,
+    get_get_golf_course_by_id_use_case,
+    get_list_approved_golf_courses_use_case,
+    get_list_pending_golf_courses_use_case,
+    get_reject_golf_course_use_case,
+    get_reject_update_golf_course_use_case,
+    get_request_golf_course_use_case,
+    get_update_golf_course_use_case,
+)
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ApproveGolfCourseRequestDTO,
     ApproveUpdateGolfCourseRequestDTO,
@@ -66,9 +78,6 @@ from src.modules.golf_course.application.use_cases.request_golf_course_use_case 
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,
 )
-from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
-    GolfCourseUnitOfWorkInterface,
-)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -78,81 +87,6 @@ logger = logging.getLogger(__name__)
 
 # Router
 router = APIRouter(prefix="/golf-courses")
-
-
-# ============================================================================
-# Dependency Injection Helpers
-# ============================================================================
-
-
-def get_request_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> RequestGolfCourseUseCase:
-    """Dependency injection para RequestGolfCourseUseCase."""
-    return RequestGolfCourseUseCase(uow)
-
-
-def get_get_golf_course_by_id_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> GetGolfCourseByIdUseCase:
-    """Dependency injection para GetGolfCourseByIdUseCase."""
-    return GetGolfCourseByIdUseCase(uow)
-
-
-def get_list_approved_golf_courses_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> ListApprovedGolfCoursesUseCase:
-    """Dependency injection para ListApprovedGolfCoursesUseCase."""
-    return ListApprovedGolfCoursesUseCase(uow)
-
-
-def get_list_pending_golf_courses_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> ListPendingGolfCoursesUseCase:
-    """Dependency injection para ListPendingGolfCoursesUseCase."""
-    return ListPendingGolfCoursesUseCase(uow)
-
-
-def get_approve_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> ApproveGolfCourseUseCase:
-    """Dependency injection para ApproveGolfCourseUseCase."""
-    return ApproveGolfCourseUseCase(uow)
-
-
-def get_reject_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> RejectGolfCourseUseCase:
-    """Dependency injection para RejectGolfCourseUseCase."""
-    return RejectGolfCourseUseCase(uow)
-
-
-def get_create_direct_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> CreateDirectGolfCourseUseCase:
-    """Dependency injection para CreateDirectGolfCourseUseCase."""
-    return CreateDirectGolfCourseUseCase(uow)
-
-
-def get_update_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> UpdateGolfCourseUseCase:
-    """Dependency injection para UpdateGolfCourseUseCase."""
-    return UpdateGolfCourseUseCase(uow)
-
-
-def get_approve_update_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> ApproveUpdateGolfCourseUseCase:
-    """Dependency injection para ApproveUpdateGolfCourseUseCase."""
-    return ApproveUpdateGolfCourseUseCase(uow)
-
-
-def get_reject_update_golf_course_use_case(
-    uow: Annotated[GolfCourseUnitOfWorkInterface, Depends(get_golf_course_uow)],
-) -> RejectUpdateGolfCourseUseCase:
-    """Dependency injection para RejectUpdateGolfCourseUseCase."""
-    return RejectUpdateGolfCourseUseCase(uow)
 
 
 # ============================================================================

@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import column_property, relationship
@@ -324,3 +325,10 @@ def start_golf_course_mappers():
                 ),
             },
         )
+
+        # Event listener: initialize _domain_events when SQLAlchemy loads from DB
+        # (replaces @reconstructor that was previously in the domain entity)
+        @event.listens_for(GolfCourse, "load")
+        def _init_golf_course_domain_events(target, _context):
+            if not hasattr(target, "_domain_events"):
+                target._domain_events = []

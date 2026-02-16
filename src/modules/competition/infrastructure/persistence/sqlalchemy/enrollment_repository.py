@@ -80,8 +80,8 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         statement = (
             select(Enrollment)
-            .where(Enrollment.competition_id == competition_id)
-            .order_by(Enrollment.created_at.asc())  # Primero en inscribirse, primero en lista
+            .where(Enrollment._competition_id == competition_id)
+            .order_by(Enrollment._created_at.asc())  # Primero en inscribirse, primero en lista
             .limit(limit)
             .offset(offset)
         )
@@ -114,11 +114,11 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             select(Enrollment)
             .where(
                 and_(
-                    Enrollment.competition_id == competition_id,
+                    Enrollment._competition_id == competition_id,
                     Enrollment._status_value == status.value,
                 )
             )
-            .order_by(Enrollment.created_at.asc())
+            .order_by(Enrollment._created_at.asc())
             .limit(limit)
             .offset(offset)
         )
@@ -141,8 +141,8 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         statement = (
             select(Enrollment)
-            .where(Enrollment.user_id == user_id)
-            .order_by(Enrollment.created_at.desc())  # Más recientes primero
+            .where(Enrollment._user_id == user_id)
+            .order_by(Enrollment._created_at.desc())  # Más recientes primero
             .limit(limit)
             .offset(offset)
         )
@@ -164,8 +164,8 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         statement = select(Enrollment).where(
             and_(
-                Enrollment.user_id == user_id,
-                Enrollment.competition_id == competition_id,
+                Enrollment._user_id == user_id,
+                Enrollment._competition_id == competition_id,
             )
         )
         result = await self._session.execute(statement)
@@ -191,8 +191,8 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .select_from(Enrollment)
             .where(
                 and_(
-                    Enrollment.user_id == user_id,
-                    Enrollment.competition_id == competition_id,
+                    Enrollment._user_id == user_id,
+                    Enrollment._competition_id == competition_id,
                 )
             )
         )
@@ -214,7 +214,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .select_from(Enrollment)
             .where(
                 and_(
-                    Enrollment.competition_id == competition_id,
+                    Enrollment._competition_id == competition_id,
                     Enrollment._status_value == EnrollmentStatus.APPROVED.value,
                 )
             )
@@ -252,7 +252,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .select_from(Enrollment)
             .where(
                 and_(
-                    Enrollment.user_id == user_id,
+                    Enrollment._user_id == user_id,
                     Enrollment._status_value.in_(
                         [
                             EnrollmentStatus.APPROVED.value,
@@ -280,7 +280,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             .select_from(Enrollment)
             .where(
                 and_(
-                    Enrollment.competition_id == competition_id,
+                    Enrollment._competition_id == competition_id,
                     Enrollment._status_value == EnrollmentStatus.REQUESTED.value,
                 )
             )
@@ -305,11 +305,11 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             select(Enrollment)
             .where(
                 and_(
-                    Enrollment.competition_id == competition_id,
-                    Enrollment.team_id == team_id,
+                    Enrollment._competition_id == competition_id,
+                    Enrollment._team_id == team_id,
                 )
             )
-            .order_by(Enrollment.created_at.asc())
+            .order_by(Enrollment._created_at.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

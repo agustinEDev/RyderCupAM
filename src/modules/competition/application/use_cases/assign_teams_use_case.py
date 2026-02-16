@@ -9,6 +9,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
     CompetitionNotFoundError,
+    InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
@@ -27,12 +28,6 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class InsufficientPlayersError(Exception):
-    """No hay suficientes jugadores aprobados."""
-
-    pass
 
 
 class OddPlayersError(Exception):
@@ -68,9 +63,11 @@ class AssignTeamsUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
+        snake_draft_service: SnakeDraftService | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repository
+        self._draft_service = snake_draft_service or SnakeDraftService()
 
     async def execute(
         self, request: AssignTeamsRequestDTO, user_id: UserId
@@ -164,11 +161,10 @@ class AssignTeamsUseCase:
                     handicap = Decimal("0")
             players.append(PlayerForDraft(user_id=enrollment.user_id, handicap=handicap))
 
-        draft_service = SnakeDraftService()
-        results = draft_service.assign_teams(players)
+        results = self._draft_service.assign_teams(players)
 
-        team_a_ids = draft_service.get_team_players(results, Team.A)
-        team_b_ids = draft_service.get_team_players(results, Team.B)
+        team_a_ids = self._draft_service.get_team_players(results, Team.A)
+        team_b_ids = self._draft_service.get_team_players(results, Team.B)
         return team_a_ids, team_b_ids
 
     def _manual_assign(self, request, enrollments):
