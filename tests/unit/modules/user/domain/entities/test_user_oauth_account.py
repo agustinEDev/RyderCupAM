@@ -8,7 +8,7 @@ Este archivo contiene tests que verifican:
 - Validaciones
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.events.google_account_linked_event import (
@@ -134,10 +134,8 @@ class TestUserOAuthAccountCreation:
         Then: created_at se establece a datetime.now(UTC)
         """
         # Arrange
-        from datetime import timezone
-
         user_id = UserId.generate()
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
 
         # Act
         account = UserOAuthAccount(
@@ -149,7 +147,7 @@ class TestUserOAuthAccountCreation:
         )
 
         # Assert
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         assert before <= account.created_at <= after
 
 
