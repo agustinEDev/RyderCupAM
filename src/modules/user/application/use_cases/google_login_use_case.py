@@ -64,57 +64,65 @@ class GoogleLoginUseCase:
     async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool]:
         """
         Resuelve el usuario para el login de Google.
+        Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
 
         Returns:
             Tuple of (user, is_new_user)
         """
-        # Buscar OAuth account existente
-        oauth_account = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
-            OAuthProvider.GOOGLE, google_info.google_user_id
-        )
+        async with self._uow:
+            # Buscar OAuth account existente
+            oauth_account = (
+                await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_info.google_user_id
+                )
+            )
 
-        if oauth_account:
-            user = await self._uow.users.find_by_id(oauth_account.user_id)
-            if not user:
-                raise ValueError("User associated with OAuth account not found")
-            return user, False
+            if oauth_account:
+                user = await self._uow.users.find_by_id(oauth_account.user_id)
+                if not user:
+                    raise ValueError("User associated with OAuth account not found")
+                return user, False
 
-        # Buscar usuario por email
-        email = Email(google_info.email)
-        user = await self._uow.users.find_by_email(email)
+            # Buscar usuario por email
+            email = Email(google_info.email)
+            user = await self._uow.users.find_by_email(email)
 
-        if user:
-            return await self._auto_link_existing_user(user, google_info), False
+            if user:
+                return await self._auto_link_existing_user(user, google_info), False
 
-        return await self._auto_register_new_user(google_info), True
+            return await self._auto_register_new_user(google_info), True
 
     async def _auto_link_existing_user(
         self, user: User, google_info: GoogleUserInfo
     ) -> User:
-        """Auto-link Google account to existing user found by email."""
+        """
+        Auto-link Google account to existing user found by email.
+        Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
+        """
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
             provider=OAuthProvider.GOOGLE,
             provider_user_id=google_info.google_user_id,
             provider_email=google_info.email,
         )
-        async with self._uow:
-            await self._uow.oauth_accounts.save(new_oauth)
+        await self._uow.oauth_accounts.save(new_oauth)
 
-        if not user.email_verified:
-            user.email_verified = True
-            user.updated_at = datetime.now()
-            async with self._uow:
-                await self._uow.users.save(user)
+        if not user.email_verified and google_info.email_verified:
+            user.verify_email_from_oauth()
 
+        await self._uow.users.save(user)
         return user
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
-        """Auto-register a new user from Google profile."""
+        """
+        Auto-register a new user from Google profile.
+        Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
+        """
         user = User.create_from_oauth(
             first_name=google_info.first_name,
             last_name=google_info.last_name,
             email_str=google_info.email,
+            email_verified=google_info.email_verified,
         )
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
@@ -122,10 +130,8 @@ class GoogleLoginUseCase:
             provider_user_id=google_info.google_user_id,
             provider_email=google_info.email,
         )
-        async with self._uow:
-            await self._uow.users.save(user)
-            await self._uow.oauth_accounts.save(new_oauth)
-
+        await self._uow.users.save(user)
+        await self._uow.oauth_accounts.save(new_oauth)
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
@@ -169,7 +175,7 @@ class GoogleLoginUseCase:
             request.authorization_code
         )
 
-        # 2. Resolve user (existing OAuth, auto-link, or auto-register)
+        # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
         user, is_new_user = await self._resolve_user(google_info)
 
         # 3. Check lockout

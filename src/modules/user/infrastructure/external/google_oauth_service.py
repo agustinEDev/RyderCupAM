@@ -93,5 +93,6 @@ class GoogleOAuthService(IGoogleOAuthService):
                 email=email,
                 first_name=userinfo.get("given_name", ""),
                 last_name=userinfo.get("family_name", ""),
+                email_verified=bool(userinfo.get("email_verified", False)),
                 picture_url=userinfo.get("picture"),
             )

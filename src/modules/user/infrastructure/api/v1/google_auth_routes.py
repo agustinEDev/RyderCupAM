@@ -97,12 +97,21 @@ async def google_login(
     except AccountLockedException as e:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
-            detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
+            detail="Account temporarily locked. Please try again later.",
         ) from e
     except ValueError as e:
+        error_msg = str(e)
+        # Map known errors to safe client-facing messages
+        safe_messages = {
+            "Invalid or expired Google authorization code": "Invalid or expired Google authorization code",
+            "Google did not return an access token": "Google authentication failed",
+            "Failed to retrieve user information from Google": "Google authentication failed",
+            "Google user info is missing required fields (sub, email)": "Google authentication failed",
+        }
+        detail = safe_messages.get(error_msg, "Google authentication failed")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=detail,
         ) from e
 
     # Set cookies (same as email login)
@@ -134,9 +143,16 @@ async def link_google_account(
     try:
         return await use_case.execute(link_data, str(current_user.id))
     except ValueError as e:
+        error_msg = str(e)
+        safe_messages = {
+            "This Google account is already linked to another user": error_msg,
+            "You already have a Google account linked": error_msg,
+            "Invalid or expired Google authorization code": "Invalid or expired Google authorization code",
+        }
+        detail = safe_messages.get(error_msg, "Failed to link Google account")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=detail,
         ) from e
 
 
@@ -157,7 +173,13 @@ async def unlink_google_account(
     try:
         return await use_case.execute(str(current_user.id))
     except ValueError as e:
+        error_msg = str(e)
+        safe_messages = {
+            "No Google account linked to this user": error_msg,
+            "Cannot unlink Google account: it is your only authentication method. Set a password first.": error_msg,
+        }
+        detail = safe_messages.get(error_msg, "Failed to unlink Google account")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=detail,
         ) from e

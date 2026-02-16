@@ -7,9 +7,6 @@ Caso de uso para desvincular una cuenta de Google de un usuario autenticado.
 from datetime import datetime
 
 from src.modules.user.application.dto.oauth_dto import UnlinkGoogleAccountResponseDTO
-from src.modules.user.domain.events.google_account_unlinked_event import (
-    GoogleAccountUnlinkedEvent,
-)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -43,36 +40,33 @@ class UnlinkGoogleAccountUseCase:
         """
         uid = UserId(user_id)
 
-        # Buscar OAuth account
-        oauth_account = await self._uow.oauth_accounts.find_by_user_id_and_provider(
-            uid, OAuthProvider.GOOGLE
-        )
-        if not oauth_account:
-            raise ValueError("No Google account linked to this user")
-
-        # Guard: verificar que el usuario tiene password
-        user = await self._uow.users.find_by_id(uid)
-        if not user:
-            raise ValueError("User not found")
-
-        if not user.has_password():
-            raise ValueError(
-                "Cannot unlink Google account: it is your only authentication method. "
-                "Set a password first."
-            )
-
-        # Eliminar OAuth account
+        # Lecturas, validaciones, delete y evento en una sola transacción
         async with self._uow:
-            await self._uow.oauth_accounts.delete(oauth_account)
+            # Buscar OAuth account
+            oauth_account = await self._uow.oauth_accounts.find_by_user_id_and_provider(
+                uid, OAuthProvider.GOOGLE
+            )
+            if not oauth_account:
+                raise ValueError("No Google account linked to this user")
 
-        # Emitir evento en el usuario
-        user._add_domain_event(
-            GoogleAccountUnlinkedEvent(
-                user_id=str(uid.value),
+            # Guard: verificar que el usuario tiene password
+            user = await self._uow.users.find_by_id(uid)
+            if not user:
+                raise ValueError("User not found")
+
+            if not user.has_password():
+                raise ValueError(
+                    "Cannot unlink Google account: it is your only authentication method. "
+                    "Set a password first."
+                )
+
+            # Eliminar OAuth account y emitir evento atómicamente
+            await self._uow.oauth_accounts.delete(oauth_account)
+            user.record_google_unlinked(
                 provider=OAuthProvider.GOOGLE.value,
                 unlinked_at=datetime.now(),
             )
-        )
+            await self._uow.users.save(user)
 
         return UnlinkGoogleAccountResponseDTO(
             message="Google account unlinked successfully",

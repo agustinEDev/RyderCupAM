@@ -40,13 +40,39 @@ class UserOAuthAccount:
         created_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
-        self.id = id or OAuthAccountId.generate()
-        self.user_id = user_id
-        self.provider = provider
-        self.provider_user_id = provider_user_id
-        self.provider_email = provider_email
-        self.created_at = created_at or datetime.now()
+        self._id = id or OAuthAccountId.generate()
+        self._user_id = user_id
+        self._provider = provider
+        self._provider_user_id = provider_user_id
+        self._provider_email = provider_email
+        self._created_at = created_at or datetime.now()
         self._domain_events = domain_events or []
+
+    # === Read-only Properties ===
+
+    @property
+    def id(self) -> OAuthAccountId:
+        return self._id
+
+    @property
+    def user_id(self) -> UserId:
+        return self._user_id
+
+    @property
+    def provider(self) -> OAuthProvider:
+        return self._provider
+
+    @property
+    def provider_user_id(self) -> str:
+        return self._provider_user_id
+
+    @property
+    def provider_email(self) -> str:
+        return self._provider_email
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
 
     @classmethod
     def create(
@@ -82,7 +108,7 @@ class UserOAuthAccount:
                 user_id=str(user_id.value),
                 provider=provider.value,
                 provider_email=provider_email,
-                linked_at=account.created_at,
+                linked_at=account._created_at,
             )
         )
 

@@ -113,5 +113,12 @@ def start_oauth_account_mappers():
         mapper_registry.map_imperatively(
             UserOAuthAccount,
             user_oauth_accounts_table,
-            properties={},
+            properties={
+                "_id": user_oauth_accounts_table.c.id,
+                "_user_id": user_oauth_accounts_table.c.user_id,
+                "_provider": user_oauth_accounts_table.c.provider,
+                "_provider_user_id": user_oauth_accounts_table.c.provider_user_id,
+                "_provider_email": user_oauth_accounts_table.c.provider_email,
+                "_created_at": user_oauth_accounts_table.c.created_at,
+            },
         )

@@ -64,6 +64,7 @@ def google_user_info():
         email="oauth@example.com",
         first_name="Google",
         last_name="User",
+        email_verified=True,
         picture_url="https://lh3.googleusercontent.com/photo.jpg",
     )
 

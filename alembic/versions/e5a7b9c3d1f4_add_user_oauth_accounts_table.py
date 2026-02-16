@@ -63,7 +63,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Revert password to NOT NULL (will fail if OAuth-only users exist)
+    # Pre-check: fail fast if any users have NULL passwords (OAuth-only users)
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text("SELECT COUNT(*) FROM users WHERE password IS NULL")
+    )
+    null_password_count = result.scalar()
+    if null_password_count > 0:
+        raise RuntimeError(
+            f"Cannot downgrade: {null_password_count} user(s) have NULL passwords "
+            f"(OAuth-only accounts). Assign passwords to these users before downgrading."
+        )
+
+    # Revert password to NOT NULL (safe — no NULL values exist)
     op.alter_column(
         "users",
         "password",

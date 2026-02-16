@@ -8,6 +8,7 @@ from src.shared.domain.value_objects.gender import Gender
 from ..events.account_locked_event import AccountLockedEvent
 from ..events.account_unlocked_event import AccountUnlockedEvent
 from ..events.email_verified_event import EmailVerifiedEvent
+from ..events.google_account_unlinked_event import GoogleAccountUnlinkedEvent
 from ..events.handicap_updated_event import HandicapUpdatedEvent
 from ..events.password_reset_completed_event import PasswordResetCompletedEvent
 from ..events.password_reset_requested_event import PasswordResetRequestedEvent
@@ -247,24 +248,26 @@ class User:
         first_name: str,
         last_name: str,
         email_str: str,
+        email_verified: bool = True,
         country_code_str: str | None = None,
         gender: Gender | None = None,
     ) -> "User":
         """
         Factory method para crear usuario desde OAuth (sin password).
 
-        El usuario se crea con email_verified=True ya que Google ya verificó el email.
+        El usuario se crea con email_verified según lo que indica el proveedor OAuth.
         No tiene password — debe vincular uno si desea login por email/password.
 
         Args:
             first_name: Nombre del usuario (de Google profile)
             last_name: Apellido del usuario (de Google profile)
-            email_str: Email verificado por Google
+            email_str: Email del usuario en Google
+            email_verified: Si Google verificó el email (default True)
             country_code_str: Código ISO del país (opcional)
             gender: Género del usuario (opcional)
 
         Returns:
-            User: Nueva instancia sin password, email verificado
+            User: Nueva instancia sin password
         """
         user_id = UserId.generate()
         email = Email(email_str)
@@ -280,7 +283,7 @@ class User:
             handicap_updated_at=None,
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            email_verified=True,
+            email_verified=email_verified,
             country_code=country_code,
             gender=gender,
         )
@@ -291,6 +294,8 @@ class User:
                 email=email_str,
                 first_name=first_name,
                 last_name=last_name,
+                registration_method="google",
+                is_email_verified=email_verified,
             )
         )
 
@@ -321,6 +326,34 @@ class User:
         if not hasattr(self, "_domain_events"):
             self._domain_events = []
         return len(self._domain_events) > 0
+
+    def verify_email_from_oauth(self) -> None:
+        """
+        Marca el email como verificado tras auto-link con cuenta OAuth.
+
+        Google ya verificó el email del usuario, por lo que podemos
+        confirmar la verificación sin token.
+        Solo actúa si el email aún no está verificado.
+        """
+        if not self.email_verified:
+            self.email_verified = True
+            self.updated_at = datetime.now()
+
+    def record_google_unlinked(self, provider: str, unlinked_at: datetime) -> None:
+        """
+        Registra un evento de desvinculación de cuenta Google.
+
+        Args:
+            provider: Proveedor OAuth desvinculado (ej: "google")
+            unlinked_at: Timestamp de la desvinculación
+        """
+        self._add_domain_event(
+            GoogleAccountUnlinkedEvent(
+                user_id=str(self.id.value),
+                provider=provider,
+                unlinked_at=unlinked_at,
+            )
+        )
 
     def record_logout(self, logged_out_at: datetime, token_used: str | None = None) -> None:
         """

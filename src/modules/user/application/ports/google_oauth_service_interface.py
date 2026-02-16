@@ -16,6 +16,7 @@ class GoogleUserInfo:
     email: str
     first_name: str
     last_name: str
+    email_verified: bool = False
     picture_url: str | None = None
 
 

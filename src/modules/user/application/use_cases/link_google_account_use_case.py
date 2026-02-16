@@ -56,30 +56,31 @@ class LinkGoogleAccountUseCase:
             request.authorization_code
         )
 
-        # Verificar que la cuenta Google no está vinculada a otro usuario
-        existing = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
-            OAuthProvider.GOOGLE, google_info.google_user_id
-        )
-        if existing:
-            raise ValueError("This Google account is already linked to another user")
-
-        # Verificar que el usuario no tiene ya un link Google
         uid = UserId(user_id)
-        existing_for_user = await self._uow.oauth_accounts.find_by_user_id_and_provider(
-            uid, OAuthProvider.GOOGLE
-        )
-        if existing_for_user:
-            raise ValueError("You already have a Google account linked")
 
-        # Crear y persistir la vinculación
-        oauth_account = UserOAuthAccount.create(
-            user_id=uid,
-            provider=OAuthProvider.GOOGLE,
-            provider_user_id=google_info.google_user_id,
-            provider_email=google_info.email,
-        )
-
+        # Lecturas y escritura en una sola transacción (previene TOCTOU)
         async with self._uow:
+            # Verificar que la cuenta Google no está vinculada a otro usuario
+            existing = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_info.google_user_id
+            )
+            if existing:
+                raise ValueError("This Google account is already linked to another user")
+
+            # Verificar que el usuario no tiene ya un link Google
+            existing_for_user = await self._uow.oauth_accounts.find_by_user_id_and_provider(
+                uid, OAuthProvider.GOOGLE
+            )
+            if existing_for_user:
+                raise ValueError("You already have a Google account linked")
+
+            # Crear y persistir la vinculación
+            oauth_account = UserOAuthAccount.create(
+                user_id=uid,
+                provider=OAuthProvider.GOOGLE,
+                provider_user_id=google_info.google_user_id,
+                provider_email=google_info.email,
+            )
             await self._uow.oauth_accounts.save(oauth_account)
 
         return LinkGoogleAccountResponseDTO(

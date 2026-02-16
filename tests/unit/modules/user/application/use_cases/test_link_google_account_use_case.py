@@ -41,6 +41,7 @@ def google_user_info():
         email="link@gmail.com",
         first_name="Link",
         last_name="User",
+        email_verified=True,
     )
 
 

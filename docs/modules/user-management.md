@@ -336,7 +336,7 @@ pytest tests/unit/modules/user/ -n auto
 - `InMemoryUserOAuthAccountRepository` - OAuth account tests ⭐ Sprint 3
 - `InMemoryUnitOfWork` - Transaction tests
 
-**📋 See test doubles:** `tests/in_memory/`
+**📋 See test doubles:** `src/modules/user/infrastructure/persistence/in_memory/`
 
 ---
 
