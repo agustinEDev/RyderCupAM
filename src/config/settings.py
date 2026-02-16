@@ -94,5 +94,10 @@ class Settings:
     GH_ISSUES_TOKEN: str = os.getenv("GH_ISSUES_TOKEN", "")
     GITHUB_ISSUES_REPO: str = os.getenv("GITHUB_ISSUES_REPO", "agustinEDev/RyderCupWeb")
 
+    # Google OAuth Configuration (Sprint 3)
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5173/auth/google/callback")
+
 
 settings = Settings()

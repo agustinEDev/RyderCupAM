@@ -19,6 +19,9 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_oauth_account_repository_interface import (
+    UserOAuthAccountRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -81,6 +84,10 @@ class TestUserUnitOfWorkInterface:
 
             @property
             def user_devices(self):
+                return MagicMock()
+
+            @property
+            def oauth_accounts(self):
                 return MagicMock()
 
             async def __aenter__(self):
@@ -196,6 +203,10 @@ class TestUserUnitOfWorkContractCompliance:
             def user_devices(self) -> UserDeviceRepositoryInterface:
                 return AsyncMock(spec=UserDeviceRepositoryInterface)
 
+            @property
+            def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+                return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -271,6 +282,10 @@ class TestUserUnitOfWorkContractCompliance:
             def user_devices(self) -> UserDeviceRepositoryInterface:
                 return AsyncMock(spec=UserDeviceRepositoryInterface)
 
+            @property
+            def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+                return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -337,6 +352,10 @@ class TestUserUnitOfWorkIntegration:
             @property
             def user_devices(self) -> UserDeviceRepositoryInterface:
                 return AsyncMock(spec=UserDeviceRepositoryInterface)
+
+            @property
+            def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+                return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
 
             async def __aenter__(self):
                 return self

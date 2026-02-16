@@ -20,28 +20,36 @@ src/
 ├── modules/            # Módulos de negocio
 │   ├── user/
 │       ├── domain/
-│       │   ├── entities/        # User (with login/logout methods)
-│       │   ├── value_objects/   # UserId, Email, Password, Handicap
+│       │   ├── entities/        # User, UserOAuthAccount (Sprint 3)
+│       │   ├── value_objects/   # UserId, Email, Password, Handicap,
+│       │   │                    # OAuthAccountId, OAuthProvider (Sprint 3)
 │       │   ├── events/          # UserRegistered, HandicapUpdated,
 │       │   │                    # UserLoggedIn, UserLoggedOut,
-│       │   │                    # UserProfileUpdated, UserEmailChanged, UserPasswordChanged
-│       │   │                    # EmailVerifiedEvent
-│       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork)
+│       │   │                    # UserProfileUpdated, UserEmailChanged, UserPasswordChanged,
+│       │   │                    # EmailVerifiedEvent,
+│       │   │                    # GoogleAccountLinkedEvent, GoogleAccountUnlinkedEvent (Sprint 3)
+│       │   ├── repositories/    # Interfaces (UserRepository, UnitOfWork,
+│       │   │                    # UserOAuthAccountRepository) (Sprint 3)
 │       │   ├── services/        # Domain services (interfaces)
 │       │   └── errors/          # Domain exceptions
 │       │
 │       ├── application/
 │       │   ├── use_cases/       # RegisterUser, LoginUser, LogoutUser,
 │       │   │                    # UpdateProfile, UpdateSecurity,
-│       │   │                    # UpdateHandicap, FindUser, VerifyEmail
+│       │   │                    # UpdateHandicap, FindUser, VerifyEmail,
+│       │   │                    # GoogleLogin, LinkGoogleAccount, UnlinkGoogleAccount (Sprint 3)
 │       │   ├── dto/             # Request/Response DTOs (Login, Logout,
-│       │   │                    # UpdateProfile, UpdateSecurity, VerifyEmail)
+│       │   │                    # UpdateProfile, UpdateSecurity, VerifyEmail,
+│       │   │                    # OAuth DTOs) (Sprint 3)
+│       │   ├── ports/           # IGoogleOAuthService (Sprint 3)
 │       │   └── handlers/        # Event handlers
 │       │
 │       └── infrastructure/
-│           ├── api/v1/          # FastAPI routes (auth_routes, user_routes, handicap_routes)
+│           ├── api/v1/          # FastAPI routes (auth_routes, user_routes,
+│           │                    # handicap_routes, google_auth_routes) (Sprint 3)
 │           ├── persistence/     # SQLAlchemy repos + UnitOfWork impl
-│           └── external/        # RFEG service, mocks
+│           │                    # + UserOAuthAccountRepository (Sprint 3)
+│           └── external/        # RFEG service, GoogleOAuthService (Sprint 3)
 │   ├── competition/            # Competition module (same structure)
 │   ├── golf_course/            # Golf Course module (same structure)
 │   └── support/                # Support module ⭐ v2.0.8
