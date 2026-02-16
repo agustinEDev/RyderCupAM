@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 66 active
-**Version**: v2.0.8
-**Last Updated**: 9 February 2026
+**Total Endpoints**: 69 active
+**Version**: Sprint 3 Block 1
+**Last Updated**: 16 February 2026
 
 ---
 
@@ -24,6 +24,11 @@ Authentication (11 endpoints)
 ├── POST /api/v1/auth/reset-password     # Complete password reset
 ├── GET  /api/v1/auth/validate-reset-token/:token # Validate reset token
 └── POST /api/v1/auth/unlock-account     # Manual account unlock (Admin, v1.13.0)
+
+Google OAuth (3 endpoints) ⭐ Sprint 3
+├── POST   /api/v1/auth/google           # Login/register with Google (public, auto-link/auto-register)
+├── POST   /api/v1/auth/google/link      # Link Google account to existing user (auth + CSRF)
+└── DELETE /api/v1/auth/google/unlink    # Unlink Google account (auth + CSRF)
 
 User Management (4 endpoints)
 ├── GET   /api/v1/users/search           # Search users by email/name
@@ -185,6 +190,59 @@ Support (1 endpoint) ⭐ v2.0.8
 - **Account Lockout (v1.13.0):** 10 failed attempts → 30 min lockout, auto-unlock, HTTP 423 Locked
 
 **📋 See details:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
+
+---
+
+## 🔐 Google OAuth ⭐ Sprint 3
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/auth/google` | POST | No | 5/min | Login/register with Google OAuth |
+| `/auth/google/link` | POST | Yes | - | Link Google account to existing user |
+| `/auth/google/unlink` | DELETE | Yes | - | Unlink Google account |
+
+### Login/Register with Google
+
+**POST /api/v1/auth/google** (Public, CSRF exempt)
+
+**Request:**
+- `authorization_code` (string, required) - Google authorization code from OAuth consent screen
+
+**Response (200 OK):**
+- `access_token`, `refresh_token`, `csrf_token` - JWT tokens
+- `token_type` - "bearer"
+- `user` - User data (id, email, first_name, last_name, email_verified, etc.)
+- `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
+- `device_id`, `should_set_device_cookie` - Device registration info
+
+**httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, if new device)
+
+### Three Login Flows
+
+1. **Existing OAuth account** → Direct login (`is_new_user=false`)
+2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`)
+3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`)
+
+### Link/Unlink Google Account
+
+**POST /auth/google/link** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
+- Links Google account to the authenticated user
+- Errors if Google account already linked to another user, or user already has Google linked
+
+**DELETE /auth/google/unlink** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
+- Unlinks Google account from the authenticated user
+- **Guard:** Cannot unlink if user has no password (would lose only auth method)
+
+### Error Codes
+
+| Code | Meaning |
+|------|---------|
+| 400 | Invalid/expired authorization code, already linked, no Google linked |
+| 401 | Not authenticated (link/unlink only) |
+| 423 | Account locked (brute force protection) |
+| 429 | Rate limit exceeded (login only) |
+
+**📋 See frontend integration:** `docs/FRONTEND_INTEGRATION.md`
 
 ---
 
@@ -809,5 +867,5 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
-**Last Updated:** 9 February 2026
-**Version:** v2.0.8
+**Last Updated:** 16 February 2026
+**Version:** Sprint 3 Block 1 (Google OAuth)

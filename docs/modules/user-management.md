@@ -28,6 +28,11 @@ Module responsible for user management, including registration, JWT authenticati
 11. **UpdateUserHandicapUseCase** - Get handicap from RFEG API
 12. **BatchUpdateHandicapsUseCase** - Batch handicap update (cron job)
 
+### Google OAuth ⭐ Sprint 3
+13. **GoogleLoginUseCase** - Login/register with Google (3 flows: existing OAuth, auto-link, auto-register)
+14. **LinkGoogleAccountUseCase** - Link Google account to existing user
+15. **UnlinkGoogleAccountUseCase** - Unlink Google account (guard: must have password)
+
 ---
 
 ## 🗃️ Domain Model
@@ -56,6 +61,20 @@ Module responsible for user management, including registration, JWT authenticati
 - `created_at`: datetime
 - `updated_at`: datetime
 
+### Entity: UserOAuthAccount ⭐ Sprint 3
+
+**Fields:**
+- `id`: OAuthAccountId (Value Object - UUID)
+- `user_id`: UserId (FK to User)
+- `provider`: OAuthProvider (Value Object - "google", extensible)
+- `provider_user_id`: str (Google sub ID)
+- `provider_email`: str
+- `created_at`: datetime
+
+**Factory method:** `create(user_id, provider, provider_user_id, provider_email)` → emits `GoogleAccountLinkedEvent`
+
+**📋 See implementation:** `src/modules/user/domain/entities/user_oauth_account.py`
+
 ### Value Objects
 
 **Implemented:**
@@ -64,6 +83,8 @@ Module responsible for user management, including registration, JWT authenticati
 - `Password` - OWASP ASVS V2.1 validation (12 chars min, complexity, blacklist)
 - `Handicap` - Range validation [-10.0, 54.0]
 - `CountryCode` - ISO 3166-1 alpha-2 validation
+- `OAuthAccountId` - Unique OAuth account UUID ⭐ Sprint 3
+- `OAuthProvider` - StrEnum: GOOGLE (extensible) ⭐ Sprint 3
 
 **📋 See implementation:** `src/modules/user/domain/value_objects/`
 
@@ -79,6 +100,8 @@ Module responsible for user management, including registration, JWT authenticati
 7. `RefreshTokenRevokedEvent` - Refresh token revoked - Security
 8. `PasswordChangedEvent` - Password changed - Security
 9. `EmailChangedEvent` - Email changed - Security
+10. `GoogleAccountLinkedEvent` - Google account linked ⭐ Sprint 3
+11. `GoogleAccountUnlinkedEvent` - Google account unlinked ⭐ Sprint 3
 
 **📋 See security events:** `src/shared/domain/events/security_events.py`
 
@@ -93,10 +116,13 @@ Module responsible for user management, including registration, JWT authenticati
   - find_by_id, find_by_email, add, update, delete, exists_by_email
 - `RefreshTokenRepositoryInterface` - Refresh token management
   - save, find_by_token_hash, revoke_all_for_user, delete_expired
+- `UserOAuthAccountRepositoryInterface` - OAuth account management ⭐ Sprint 3
+  - save, find_by_provider_and_provider_user_id, find_by_user_id, find_by_user_id_and_provider, delete
 
 **Implementations (Infrastructure Layer):**
 - `SQLAlchemyUserRepository` - Async persistence with PostgreSQL
 - `SQLAlchemyRefreshTokenRepository` - Refresh token persistence
+- `SQLAlchemyUserOAuthAccountRepository` - OAuth account persistence ⭐ Sprint 3
 
 **📋 See implementation:** `src/modules/user/infrastructure/persistence/sqlalchemy/`
 
@@ -107,6 +133,7 @@ Module responsible for user management, including registration, JWT authenticati
 UserUnitOfWorkInterface
 ├── users: UserRepositoryInterface
 ├── refresh_tokens: RefreshTokenRepositoryInterface
+├── oauth_accounts: UserOAuthAccountRepositoryInterface  # Sprint 3
 ├── async commit()
 ├── async rollback()
 └── async __aenter__() / __aexit__()
@@ -133,10 +160,12 @@ UserUnitOfWorkInterface
 **Interfaces (Application Layer):**
 - `IEmailService` - Email sending (Port)
 - `ITokenService` - JWT token generation (Port)
+- `IGoogleOAuthService` - Google OAuth token exchange (Port) ⭐ Sprint 3
 
 **Implementations (Infrastructure Layer):**
 - `EmailService` - Mailgun API (EU region)
 - `JWTTokenService` - python-jose, HS256 algorithm
+- `GoogleOAuthService` - Google OAuth via httpx (token exchange + userinfo) ⭐ Sprint 3
 
 **Dependency Injection:**
 - Configured in `src/config/dependencies.py`
@@ -187,7 +216,7 @@ UserUnitOfWorkInterface
 CREATE TABLE users (
     id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255),  -- nullable: OAuth-only users have no password
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     handicap DECIMAL(4,1),
@@ -246,6 +275,11 @@ CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 - `POST /api/v1/users/handicaps/update` - Get from RFEG API
 - `POST /api/v1/users/handicaps/batch-update` - Batch update (admin)
 
+### Google OAuth ⭐ Sprint 3
+- `POST /api/v1/auth/google` - Login/register with Google (public, 5/min rate limit)
+- `POST /api/v1/auth/google/link` - Link Google to existing account (auth + CSRF)
+- `DELETE /api/v1/auth/google/unlink` - Unlink Google account (auth + CSRF)
+
 **📋 See complete documentation:** `docs/API.md`
 
 **📋 See Postman Collection:** `docs/postman_collection.json`
@@ -261,11 +295,12 @@ CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 - **httpx** - HTTP client for integration tests
 
 ### Statistics
-- **Total User Module:** 507 tests (100% passing)
-- **Unit Tests:** 308 tests
-  - Domain: 49 tests (entities)
+- **Total User Module:** 608+ tests (100% passing) ⭐ Sprint 3
+- **Unit Tests:** 409+ tests
+  - Domain: 76+ tests (entities, VOs, events) — includes 27 OAuth domain tests
   - Value Objects: Complete validation tests
-  - Use Cases: 83 tests
+  - Use Cases: 106+ tests — includes 23 OAuth use case tests
+  - Infrastructure: 18+ tests — includes OAuth repo + service tests
 - **Integration Tests:** 72 tests (API endpoints)
 
 ### Structure
@@ -298,6 +333,7 @@ pytest tests/unit/modules/user/ -n auto
 ### Test Doubles (In-Memory)
 - `InMemoryUserRepository` - Tests without PostgreSQL
 - `InMemoryRefreshTokenRepository` - Refresh token tests
+- `InMemoryUserOAuthAccountRepository` - OAuth account tests ⭐ Sprint 3
 - `InMemoryUnitOfWork` - Transaction tests
 
 **📋 See test doubles:** `tests/in_memory/`
@@ -420,5 +456,5 @@ pytest tests/unit/modules/user/ -n auto
 
 ---
 
-**Last Updated:** 8 January 2026
-**Version:** v1.13.0
+**Last Updated:** 16 February 2026
+**Version:** Sprint 3 Block 1 (Google OAuth)
