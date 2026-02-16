@@ -15,9 +15,9 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.schedule_format_service import ScheduleFormatService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -43,8 +43,13 @@ class ConfigureScheduleUseCase:
     Elimina rondas existentes antes de re-configurar (AUTO).
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        schedule_format_service: ScheduleFormatService | None = None,
+    ):
         self._uow = uow
+        self._format_service = schedule_format_service or ScheduleFormatService()
 
     async def execute(
         self, request: ConfigureScheduleRequestDTO, user_id: UserId
@@ -101,10 +106,8 @@ class ConfigureScheduleUseCase:
             sessions_per_day = request.sessions_per_day or 2
             session_types = [SessionType.MORNING, SessionType.AFTERNOON, SessionType.EVENING]
 
-            # Generar secuencia de formatos según ROADMAP:
-            # 1→Singles, 2→Fourball→Singles, 3→Foursomes→Fourball→Singles,
-            # 4→Fourball→Foursomes→Fourball→Singles, 5+→alternando, Singles última
-            session_formats = self._build_format_sequence(total_sessions)
+            # Generar secuencia de formatos via domain service
+            session_formats = self._format_service.build_format_sequence(total_sessions)
 
             current_date = competition.dates.start_date
             rounds_created = 0
@@ -146,34 +149,3 @@ class ConfigureScheduleUseCase:
             message=f"Schedule generado con {rounds_created} rondas.",
         )
 
-    @staticmethod
-    def _build_format_sequence(total_sessions: int) -> list[MatchFormat]:
-        """
-        Construye la secuencia de formatos para N sesiones.
-
-        Reglas (ROADMAP):
-        - 1 sesión: [Singles]
-        - 2 sesiones: [Fourball, Singles]
-        - 3 sesiones: [Foursomes, Fourball, Singles]
-        - 4+: alterna Fourball/Foursomes, Singles siempre última
-        """
-        if total_sessions <= 0:
-            return []
-        if total_sessions == 1:
-            return [MatchFormat.SINGLES]
-
-        # Generar las N-1 sesiones previas alternando Fourball/Foursomes
-        # Patrón de alternancia: Fourball, Foursomes, Fourball, Foursomes, ...
-        alternation = [MatchFormat.FOURBALL, MatchFormat.FOURSOMES]
-        preceding: list[MatchFormat] = []
-        for i in range(total_sessions - 1):
-            preceding.append(alternation[i % 2])
-
-        # Invertir para que la secuencia final quede correcta:
-        # 2 sesiones: [Fourball] + Singles
-        # 3 sesiones: [Foursomes, Fourball] + Singles
-        # 4 sesiones: [Fourball, Foursomes, Fourball] + Singles
-        preceding.reverse()
-
-        preceding.append(MatchFormat.SINGLES)
-        return preceding

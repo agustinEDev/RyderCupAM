@@ -31,6 +31,24 @@ class CompetitionNotClosedError(Exception):
     pass
 
 
+class MatchNotFoundError(Exception):
+    """El partido no existe."""
+
+    pass
+
+
+class CompetitionNotDraftError(Exception):
+    """La competición no está en estado DRAFT."""
+
+    pass
+
+
+class InsufficientPlayersError(Exception):
+    """No hay suficientes jugadores aprobados."""
+
+    pass
+
+
 class InvalidTeeCategoryError(ValueError):
     """El valor de tee_category no es válido."""
 

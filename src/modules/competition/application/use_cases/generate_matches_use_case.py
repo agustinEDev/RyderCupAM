@@ -10,6 +10,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
     CompetitionNotFoundError,
+    InsufficientPlayersError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
@@ -23,7 +24,7 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.value_objects.match_player import MAX_HOLES, MatchPlayer
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -41,12 +42,6 @@ class RoundNotPendingMatchesError(Exception):
 
 class NoTeamAssignmentError(Exception):
     """No hay asignación de equipos."""
-
-    pass
-
-
-class InsufficientPlayersError(Exception):
-    """No hay suficientes jugadores para el formato."""
 
     pass
 
@@ -78,10 +73,12 @@ class GenerateMatchesUseCase:
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repository: IGolfCourseRepository,
         user_repository: UserRepositoryInterface,
+        handicap_calculator: PlayingHandicapCalculator | None = None,
     ):
         self._uow = uow
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
+        self._calculator = handicap_calculator or PlayingHandicapCalculator()
 
     async def execute(
         self, request: GenerateMatchesRequestDTO, user_id: UserId
@@ -138,7 +135,7 @@ class GenerateMatchesUseCase:
             # 9. Determinar modo de juego
             is_scratch = competition.play_mode == PlayMode.SCRATCH
             allowance = round_entity.get_effective_allowance()
-            calculator = PlayingHandicapCalculator()
+            calculator = self._calculator
 
             # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
             (
@@ -438,7 +435,7 @@ class GenerateMatchesUseCase:
         playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
 
         # Calcular strokes_received usando stroke_index del campo
-        strokes_received = self._compute_strokes_received(playing_handicap, holes_by_stroke_index)
+        strokes_received = calculator.compute_strokes_received(playing_handicap, holes_by_stroke_index)
 
         return MatchPlayer.create(
             user_id=user_id,
@@ -448,36 +445,3 @@ class GenerateMatchesUseCase:
             tee_gender=tee_gender,
         )
 
-    @staticmethod
-    def _compute_strokes_received(
-        playing_handicap: int,
-        holes_by_stroke_index: list[int],
-    ) -> list[int]:
-        """
-        Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index.
-
-        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around).
-        """
-        if not holes_by_stroke_index or playing_handicap <= 0:
-            return []
-
-        result: list[int] = []
-        remaining = playing_handicap
-        while remaining > 0:
-            take = min(remaining, len(holes_by_stroke_index))
-            result.extend(holes_by_stroke_index[:take])
-            remaining -= take
-
-        # Deduplicate: si hay wrap-around el jugador recibe doble golpe
-        # en los mismos hoyos, pero MatchPlayer no permite duplicados,
-        # así que limitamos a MAX_HOLES unique entries
-        seen: set[int] = set()
-        unique: list[int] = []
-        for h in result:
-            if h not in seen:
-                seen.add(h)
-                unique.append(h)
-            if len(unique) >= MAX_HOLES:
-                break
-
-        return unique

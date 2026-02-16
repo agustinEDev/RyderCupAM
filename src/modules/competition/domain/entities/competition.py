@@ -56,6 +56,7 @@ class Competition:
     - El nombre debe ser válido
     - Las fechas deben ser un rango válido
     - Los nombres de equipos no pueden estar vacíos
+    - max_players debe estar entre MIN_PLAYERS y MAX_PLAYERS
     - Solo se puede modificar configuración en estado DRAFT
     - Las transiciones de estado deben ser válidas
 
@@ -95,40 +96,24 @@ class Competition:
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
-        """
-        Constructor de Competition.
-
-        Args:
-            id: Identificador único de la competición
-            creator_id: ID del usuario que creó el torneo
-            name: Nombre del torneo
-            dates: Rango de fechas del torneo
-            location: Ubicación geográfica
-            team_1_name: Nombre del equipo 1
-            team_2_name: Nombre del equipo 2
-            play_mode: Modo de juego (SCRATCH o HANDICAP)
-            status: Estado inicial (default: DRAFT)
-            created_at: Timestamp de creación
-            updated_at: Timestamp de última actualización
-            domain_events: Lista de eventos de dominio
-        """
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
+        self._validate_max_players(max_players)
 
-        # Asignación de atributos
-        self.id = id
-        self.creator_id = creator_id
-        self.name = name
-        self.dates = dates
-        self.location = location
-        self.team_1_name = team_1_name
-        self.team_2_name = team_2_name
-        self.play_mode = play_mode
-        self.max_players = max_players
-        self.team_assignment = team_assignment
-        self.status = status
-        self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
+        # Asignación de atributos privados (encapsulación)
+        self._id = id
+        self._creator_id = creator_id
+        self._name = name
+        self._dates = dates
+        self._location = location
+        self._team_1_name = team_1_name
+        self._team_2_name = team_2_name
+        self._play_mode = play_mode
+        self._max_players = max_players
+        self._team_assignment = team_assignment
+        self._status = status
+        self._created_at = created_at or datetime.now()
+        self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
         self._golf_courses: list[CompetitionGolfCourse] = []
 
@@ -150,12 +135,6 @@ class Competition:
         Factory method para crear una nueva competición.
 
         Crea la competición y emite el evento CompetitionCreatedEvent.
-
-        Args:
-            (mismos que __init__)
-
-        Returns:
-            Competition: Nueva instancia con evento emitido
         """
         competition = cls(
             id=id,
@@ -173,25 +152,17 @@ class Competition:
 
         # Emitir evento de creación
         event = CompetitionCreatedEvent(
-            competition_id=str(competition.id),
-            creator_id=str(competition.creator_id),
-            name=str(competition.name),
+            competition_id=str(competition._id),
+            creator_id=str(competition._creator_id),
+            name=str(competition._name),
         )
         competition._add_domain_event(event)
 
         return competition
 
-    def _validate_team_names(self, team_1_name: str, team_2_name: str) -> None:
-        """
-        Valida que los nombres de equipos sean válidos.
-
-        Args:
-            team_1_name: Nombre del equipo 1
-            team_2_name: Nombre del equipo 2
-
-        Raises:
-            ValueError: Si algún nombre está vacío o los nombres son iguales
-        """
+    @staticmethod
+    def _validate_team_names(team_1_name: str, team_2_name: str) -> None:
+        """Valida que los nombres de equipos sean válidos."""
         if not team_1_name or not team_1_name.strip():
             raise ValueError("El nombre del equipo 1 no puede estar vacío")
 
@@ -201,59 +172,103 @@ class Competition:
         if team_1_name.strip().lower() == team_2_name.strip().lower():
             raise ValueError("Los nombres de los equipos deben ser diferentes")
 
+    @staticmethod
+    def _validate_max_players(max_players: int) -> None:
+        """Valida que max_players esté en rango válido."""
+        if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
+            raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
+
+    # ===========================================
+    # PROPERTIES (Encapsulación — solo lectura)
+    # ===========================================
+
+    @property
+    def id(self) -> CompetitionId:
+        return self._id
+
+    @property
+    def creator_id(self) -> UserId:
+        return self._creator_id
+
+    @property
+    def name(self) -> CompetitionName:
+        return self._name
+
+    @property
+    def dates(self) -> DateRange:
+        return self._dates
+
+    @property
+    def location(self) -> Location:
+        return self._location
+
+    @property
+    def team_1_name(self) -> str:
+        return self._team_1_name
+
+    @property
+    def team_2_name(self) -> str:
+        return self._team_2_name
+
+    @property
+    def play_mode(self) -> PlayMode:
+        return self._play_mode
+
+    @property
+    def max_players(self) -> int:
+        return self._max_players
+
+    @property
+    def team_assignment(self) -> TeamAssignment:
+        return self._team_assignment
+
+    @property
+    def status(self) -> CompetitionStatus:
+        return self._status
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
+
+    @property
+    def updated_at(self) -> datetime:
+        return self._updated_at
+
     # ===========================================
     # MÉTODOS DE CONSULTA (QUERIES)
     # ===========================================
 
     def is_creator(self, user_id: UserId) -> bool:
-        """
-        Verifica si un usuario es el creador del torneo.
-
-        Args:
-            user_id: ID del usuario a verificar
-
-        Returns:
-            bool: True si es el creador
-        """
-        return self.creator_id == user_id
+        """Verifica si un usuario es el creador del torneo."""
+        return self._creator_id == user_id
 
     def is_draft(self) -> bool:
         """Verifica si el torneo está en borrador."""
-        return self.status == CompetitionStatus.DRAFT
+        return self._status == CompetitionStatus.DRAFT
 
     def is_active(self) -> bool:
         """Verifica si el torneo está activo (inscripciones abiertas)."""
-        return self.status == CompetitionStatus.ACTIVE
+        return self._status == CompetitionStatus.ACTIVE
 
     def is_in_progress(self) -> bool:
         """Verifica si el torneo está en curso."""
-        return self.status == CompetitionStatus.IN_PROGRESS
+        return self._status == CompetitionStatus.IN_PROGRESS
 
     def is_completed(self) -> bool:
         """Verifica si el torneo ha finalizado."""
-        return self.status == CompetitionStatus.COMPLETED
+        return self._status == CompetitionStatus.COMPLETED
 
     def is_cancelled(self) -> bool:
         """Verifica si el torneo fue cancelado."""
-        return self.status == CompetitionStatus.CANCELLED
+        return self._status == CompetitionStatus.CANCELLED
 
     def allows_enrollments(self) -> bool:
-        """
-        Verifica si el torneo permite inscripciones.
-
-        Returns:
-            bool: True si está en estado ACTIVE
-        """
-        return self.status == CompetitionStatus.ACTIVE
+        """Verifica si el torneo permite inscripciones."""
+        return self._status == CompetitionStatus.ACTIVE
 
     def allows_modifications(self) -> bool:
-        """
-        Verifica si el torneo permite modificar configuración.
-
-        Returns:
-            bool: True si está en estado DRAFT
-        """
-        return self.status == CompetitionStatus.DRAFT
+        """Verifica si el torneo permite modificar configuración."""
+        return self._status == CompetitionStatus.DRAFT
 
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
@@ -263,31 +278,21 @@ class Competition:
         """
         Activa el torneo (DRAFT → ACTIVE).
 
-        Abre las inscripciones para jugadores.
-
-        Business Rules:
-        - Requiere al menos 1 campo de golf asignado
-
         Raises:
-            CompetitionStateError: Si la transición no es válida o falta campo de golf
+            CompetitionStateError: Si la transición no es válida
         """
-        if not self.status.can_transition_to(CompetitionStatus.ACTIVE):
+        if not self._status.can_transition_to(CompetitionStatus.ACTIVE):
             raise CompetitionStateError(
-                f"No se puede activar una competición en estado {self.status.value}"
+                f"No se puede activar una competición en estado {self._status.value}"
             )
 
-        # TODO: Re-enable after updating tests to add golf courses before activate
-        # TODO(v2.0.2): Restaurar validación de golf courses una vez actualizados los 24 tests existentes
-        # Debe requerir al menos 1 campo de golf antes de activar
+        self._status = CompetitionStatus.ACTIVE
+        self._updated_at = datetime.now()
 
-        self.status = CompetitionStatus.ACTIVE
-        self.updated_at = datetime.now()
-
-        # Emitir evento
         event = CompetitionActivatedEvent(
-            competition_id=str(self.id),
-            name=str(self.name),
-            start_date=self.dates.start_date.isoformat(),
+            competition_id=str(self._id),
+            name=str(self._name),
+            start_date=self._dates.start_date.isoformat(),
         )
         self._add_domain_event(event)
 
@@ -295,25 +300,19 @@ class Competition:
         """
         Cierra las inscripciones (ACTIVE → CLOSED).
 
-        Ya no se permiten nuevas inscripciones.
-
-        Args:
-            total_enrollments: Número total de inscripciones aprobadas
-
         Raises:
             CompetitionStateError: Si la transición no es válida
         """
-        if not self.status.can_transition_to(CompetitionStatus.CLOSED):
+        if not self._status.can_transition_to(CompetitionStatus.CLOSED):
             raise CompetitionStateError(
-                f"No se pueden cerrar inscripciones en estado {self.status.value}"
+                f"No se pueden cerrar inscripciones en estado {self._status.value}"
             )
 
-        self.status = CompetitionStatus.CLOSED
-        self.updated_at = datetime.now()
+        self._status = CompetitionStatus.CLOSED
+        self._updated_at = datetime.now()
 
-        # Emitir evento
         event = CompetitionEnrollmentsClosedEvent(
-            competition_id=str(self.id), total_enrollments=total_enrollments
+            competition_id=str(self._id), total_enrollments=total_enrollments
         )
         self._add_domain_event(event)
 
@@ -321,68 +320,60 @@ class Competition:
         """
         Inicia el torneo (CLOSED → IN_PROGRESS).
 
-        El torneo comienza, los matches pueden jugarse.
-
         Raises:
             CompetitionStateError: Si la transición no es válida
         """
-        if not self.status.can_transition_to(CompetitionStatus.IN_PROGRESS):
+        if not self._status.can_transition_to(CompetitionStatus.IN_PROGRESS):
             raise CompetitionStateError(
-                f"No se puede iniciar una competición en estado {self.status.value}"
+                f"No se puede iniciar una competición en estado {self._status.value}"
             )
 
-        self.status = CompetitionStatus.IN_PROGRESS
-        self.updated_at = datetime.now()
+        self._status = CompetitionStatus.IN_PROGRESS
+        self._updated_at = datetime.now()
 
-        # Emitir evento
-        event = CompetitionStartedEvent(competition_id=str(self.id), name=str(self.name))
+        event = CompetitionStartedEvent(competition_id=str(self._id), name=str(self._name))
         self._add_domain_event(event)
 
     def complete(self) -> None:
         """
         Finaliza el torneo (IN_PROGRESS → COMPLETED).
 
-        El torneo ha terminado.
-
         Raises:
             CompetitionStateError: Si la transición no es válida
         """
-        if not self.status.can_transition_to(CompetitionStatus.COMPLETED):
+        if not self._status.can_transition_to(CompetitionStatus.COMPLETED):
             raise CompetitionStateError(
-                f"No se puede completar una competición en estado {self.status.value}"
+                f"No se puede completar una competición en estado {self._status.value}"
             )
 
-        self.status = CompetitionStatus.COMPLETED
-        self.updated_at = datetime.now()
+        self._status = CompetitionStatus.COMPLETED
+        self._updated_at = datetime.now()
 
-        # Emitir evento
-        event = CompetitionCompletedEvent(competition_id=str(self.id), name=str(self.name))
+        event = CompetitionCompletedEvent(competition_id=str(self._id), name=str(self._name))
         self._add_domain_event(event)
 
     def cancel(self, reason: str | None = None) -> None:
         """
         Cancela el torneo (cualquier estado → CANCELLED).
 
-        Args:
-            reason: Razón opcional de la cancelación
-
         Raises:
             CompetitionStateError: Si ya está en estado final
         """
-        if self.status.is_final():
+        if self._status.is_final():
             raise CompetitionStateError(
-                f"No se puede cancelar una competición en estado final {self.status.value}"
+                f"No se puede cancelar una competición en estado final {self._status.value}"
             )
 
-        if not self.status.can_transition_to(CompetitionStatus.CANCELLED):
-            raise CompetitionStateError(f"No se puede cancelar desde estado {self.status.value}")
+        if not self._status.can_transition_to(CompetitionStatus.CANCELLED):
+            raise CompetitionStateError(
+                f"No se puede cancelar desde estado {self._status.value}"
+            )
 
-        self.status = CompetitionStatus.CANCELLED
-        self.updated_at = datetime.now()
+        self._status = CompetitionStatus.CANCELLED
+        self._updated_at = datetime.now()
 
-        # Emitir evento
         event = CompetitionCancelledEvent(
-            competition_id=str(self.id), name=str(self.name), reason=reason
+            competition_id=str(self._id), name=str(self._name), reason=reason
         )
         self._add_domain_event(event)
 
@@ -402,19 +393,7 @@ class Competition:
         team_assignment: TeamAssignment | None = None,
     ) -> None:
         """
-        Actualiza la información del torneo.
-
-        Solo permitido en estado DRAFT.
-
-        Args:
-            name: Nuevo nombre (opcional)
-            dates: Nuevas fechas (opcional)
-            location: Nueva ubicación (opcional)
-            team_1_name: Nuevo nombre equipo 1 (opcional)
-            team_2_name: Nuevo nombre equipo 2 (opcional)
-            play_mode: Nuevo modo de juego (opcional)
-            max_players: Nuevo máximo de jugadores (opcional)
-            team_assignment: Nueva asignación de equipos (opcional)
+        Actualiza la información del torneo. Solo permitido en estado DRAFT.
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -422,46 +401,43 @@ class Competition:
         """
         if not self.allows_modifications():
             raise CompetitionStateError(
-                f"No se puede modificar la configuración en estado {self.status.value}. "
+                f"No se puede modificar la configuración en estado {self._status.value}. "
                 f"Solo se permite en estado DRAFT."
             )
 
-        # Actualizar campos si se proporcionan
         if name is not None:
-            self.name = name
+            self._name = name
 
         if dates is not None:
-            self.dates = dates
+            self._dates = dates
 
         if location is not None:
-            self.location = location
+            self._location = location
 
         if play_mode is not None:
-            self.play_mode = play_mode
+            self._play_mode = play_mode
 
         if max_players is not None:
-            if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
-                raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
-            self.max_players = max_players
+            self._validate_max_players(max_players)
+            self._max_players = max_players
 
         if team_assignment is not None:
-            self.team_assignment = team_assignment
+            self._team_assignment = team_assignment
 
         # Validar y actualizar nombres de equipos
-        updated_team_1 = team_1_name if team_1_name is not None else self.team_1_name
-        updated_team_2 = team_2_name if team_2_name is not None else self.team_2_name
+        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
+        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
         self._validate_team_names(updated_team_1, updated_team_2)
 
         if team_1_name is not None:
-            self.team_1_name = team_1_name
+            self._team_1_name = team_1_name
 
         if team_2_name is not None:
-            self.team_2_name = team_2_name
+            self._team_2_name = team_2_name
 
-        self.updated_at = datetime.now()
+        self._updated_at = datetime.now()
 
-        # Emitir evento
-        event = CompetitionUpdatedEvent(competition_id=str(self.id), name=str(self.name))
+        event = CompetitionUpdatedEvent(competition_id=str(self._id), name=str(self._name))
         self._add_domain_event(event)
 
     # ===========================================
@@ -501,126 +477,143 @@ class Competition:
         - El país del campo debe ser compatible con la location de la competición
         - No se permiten duplicados
 
-        Args:
-            golf_course_id: ID del campo de golf a añadir
-            country_code: Código del país del campo (para validación)
-
         Raises:
             CompetitionStateError: Si no está en DRAFT
             ValueError: Si el país no es compatible o el campo ya existe
         """
-        # Validación: solo en DRAFT
-        if self.status != CompetitionStatus.DRAFT:
+        if self._status != CompetitionStatus.DRAFT:
             raise CompetitionStateError(
                 f"Solo puedes añadir campos de golf en estado DRAFT. "
-                f"Estado actual: {self.status.value}"
+                f"Estado actual: {self._status.value}"
             )
 
-        # Validación: país compatible
         if not self._is_country_compatible(country_code):
             raise ValueError(
                 f"El campo de golf está en {country_code.value}, "
-                f"que no es compatible con la location de la competición: {self.location}"
+                f"que no es compatible con la location de la competición: {self._location}"
             )
 
-        # Validación: no duplicados
         if self.has_golf_course(golf_course_id):
-            raise ValueError(f"El campo de golf {golf_course_id} ya está añadido a la competición")
+            raise ValueError(
+                f"El campo de golf {golf_course_id} ya está añadido a la competición"
+            )
 
-        # Calcular próximo display_order automáticamente
         next_order = len(self._golf_courses) + 1
 
-        # Crear asociación
         association = CompetitionGolfCourse.create(
-            competition_id=self.id,
+            competition_id=self._id,
             golf_course_id=golf_course_id,
             display_order=next_order,
         )
 
-        # Añadir a la colección
         self._golf_courses.append(association)
-        self.updated_at = datetime.now()
+        self._updated_at = datetime.now()
 
     def remove_golf_course(self, golf_course_id: GolfCourseId) -> None:
         """
-        Quita un campo de golf de la competición.
-
-        Reordena automáticamente los campos restantes (1, 2, 3...).
-
-        Business Rules:
-        - Solo en estado DRAFT
-
-        Args:
-            golf_course_id: ID del campo de golf a quitar
+        Quita un campo de golf de la competición. Reordena automáticamente.
 
         Raises:
             CompetitionStateError: Si no está en DRAFT
             ValueError: Si el campo no existe
         """
-        # Validación: solo en DRAFT
-        if self.status != CompetitionStatus.DRAFT:
+        if self._status != CompetitionStatus.DRAFT:
             raise CompetitionStateError(
                 f"Solo puedes quitar campos de golf en estado DRAFT. "
-                f"Estado actual: {self.status.value}"
+                f"Estado actual: {self._status.value}"
             )
 
-        # Ordenar por display_order para mantener el orden correcto después de remover
         sorted_golf_courses = sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
 
-        # Buscar el campo en la lista ordenada
         field_to_remove = None
         for cgc in sorted_golf_courses:
             if cgc.golf_course_id == golf_course_id:
                 field_to_remove = cgc
                 break
 
-        # Validación: el campo debe existir
         if field_to_remove is None:
             raise ValueError(f"El campo de golf {golf_course_id} no está en la competición")
 
-        # Remover de la lista ordenada
         sorted_golf_courses.remove(field_to_remove)
-
-        # Actualizar self._golf_courses con la lista ordenada (sin el campo removido)
         self._golf_courses = sorted_golf_courses
 
-        # Reordenar automáticamente (1, 2, 3...) sobre la lista ordenada
         for i, cgc in enumerate(self._golf_courses, start=1):
             cgc.change_order(i)
 
-        self.updated_at = datetime.now()
+        self._updated_at = datetime.now()
+
+    def validate_reorder(self, golf_course_ids: list[GolfCourseId]) -> None:
+        """
+        Valida que una lista de golf_course_ids es válida para reordenar.
+
+        Raises:
+            CompetitionStateError: Si no está en DRAFT
+            ValueError: Si los IDs no coinciden con los campos actuales
+        """
+        if self._status != CompetitionStatus.DRAFT:
+            raise CompetitionStateError(
+                f"Solo puedes reordenar campos de golf en estado DRAFT. "
+                f"Estado actual: {self._status.value}"
+            )
+
+        if len(golf_course_ids) != len(self._golf_courses):
+            raise ValueError(
+                f"Debes especificar el orden para todos los campos. "
+                f"Esperados: {len(self._golf_courses)}, Recibidos: {len(golf_course_ids)}"
+            )
+
+        current_ids = {cgc.golf_course_id for cgc in self._golf_courses}
+        new_ids = set(golf_course_ids)
+        if current_ids != new_ids:
+            raise ValueError(
+                "La lista de IDs no coincide con los campos actuales de la competición"
+            )
+
+    def reorder_golf_courses_phase1(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
+        """
+        Fase 1 de reordenación: asigna valores temporales altos para evitar
+        violaciones de UNIQUE constraint en BD.
+
+        Debe llamarse flush() entre phase1 y phase2.
+        """
+        for idx, (golf_course_id, _) in enumerate(new_order):
+            for cgc in self._golf_courses:
+                if cgc.golf_course_id == golf_course_id:
+                    cgc.change_order(10000 + idx + 1)
+                    break
+
+    def reorder_golf_courses_phase2(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
+        """
+        Fase 2 de reordenación: asigna los valores finales (1, 2, 3...).
+        """
+        for golf_course_id, new_display_order in new_order:
+            for cgc in self._golf_courses:
+                if cgc.golf_course_id == golf_course_id:
+                    cgc.change_order(new_display_order)
+                    break
+
+        self._updated_at = datetime.now()
 
     def reorder_golf_courses(self, new_order: list[tuple[GolfCourseId, int]]) -> None:
         """
-        Cambia el orden de los campos de golf.
-
-        Business Rules:
-        - Solo en DRAFT
-        - Todos los campos deben tener orden único
-        - El orden debe ser secuencial (1, 2, 3... sin huecos)
-
-        Args:
-            new_order: Lista de tuplas (golf_course_id, new_display_order)
+        Cambia el orden de los campos de golf (single-phase, for non-DB contexts).
 
         Raises:
             CompetitionStateError: Si no está en DRAFT
             ValueError: Si hay órdenes duplicados o no secuenciales
         """
-        # Validación: solo en DRAFT
-        if self.status != CompetitionStatus.DRAFT:
+        if self._status != CompetitionStatus.DRAFT:
             raise CompetitionStateError(
                 f"Solo puedes reordenar campos de golf en estado DRAFT. "
-                f"Estado actual: {self.status.value}"
+                f"Estado actual: {self._status.value}"
             )
 
-        # Validación: mismo número de campos
         if len(new_order) != len(self._golf_courses):
             raise ValueError(
                 f"Debes especificar el orden para todos los campos. "
                 f"Esperados: {len(self._golf_courses)}, Recibidos: {len(new_order)}"
             )
 
-        # Validación: orden secuencial (1, 2, 3...)
         orders = [order for _, order in new_order]
         expected_orders = list(range(1, len(new_order) + 1))
         if sorted(orders) != expected_orders:
@@ -628,9 +621,7 @@ class Competition:
                 f"El orden debe ser secuencial (1, 2, 3...). Recibido: {sorted(orders)}"
             )
 
-        # Aplicar nuevo orden directamente
         for golf_course_id, new_display_order in new_order:
-            # Buscar el campo
             for cgc in self._golf_courses:
                 if cgc.golf_course_id == golf_course_id:
                     cgc.change_order(new_display_order)
@@ -638,54 +629,27 @@ class Competition:
             else:
                 raise ValueError(f"Campo {golf_course_id} no encontrado")
 
-        self.updated_at = datetime.now()
+        self._updated_at = datetime.now()
 
     def _is_country_compatible(self, country_code: CountryCode) -> bool:
-        """
-        Verifica si un país es compatible con la location de la competición.
-
-        Un país es compatible si:
-        - Es el país principal de la location, O
-        - Es uno de los países adyacentes (si existen)
-
-        Args:
-            country_code: Código del país a verificar
-
-        Returns:
-            True si es compatible, False en caso contrario
-        """
-        # País principal siempre es compatible
-        if country_code == self.location.main_country:
+        """Verifica si un país es compatible con la location de la competición."""
+        if country_code == self._location.main_country:
             return True
 
-        # Países adyacentes son compatibles
-        if self.location.adjacent_country_1 and country_code == self.location.adjacent_country_1:
+        if self._location.adjacent_country_1 and country_code == self._location.adjacent_country_1:
             return True
 
         return bool(
-            self.location.adjacent_country_2 and country_code == self.location.adjacent_country_2
+            self._location.adjacent_country_2 and country_code == self._location.adjacent_country_2
         )
 
     def has_golf_course(self, golf_course_id: GolfCourseId) -> bool:
-        """
-        Verifica si un campo de golf ya está en la competición.
-
-        Args:
-            golf_course_id: ID del campo a buscar
-
-        Returns:
-            True si ya existe, False en caso contrario
-        """
+        """Verifica si un campo de golf ya está en la competición."""
         return any(cgc.golf_course_id == golf_course_id for cgc in self._golf_courses)
 
     @property
     def golf_courses(self) -> list[CompetitionGolfCourse]:
-        """
-        Retorna la lista de campos de golf (ordenados por display_order).
-
-        Returns:
-            Lista de CompetitionGolfCourse ordenada por display_order
-        """
+        """Retorna la lista de campos de golf (ordenados por display_order)."""
         return sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
 
     # ===========================================
@@ -694,12 +658,12 @@ class Competition:
 
     def __str__(self) -> str:
         """Representación string legible."""
-        return f"{self.name} ({self.status.value})"
+        return f"{self._name} ({self._status.value})"
 
     def __eq__(self, other) -> bool:
         """Operador de igualdad - Comparación por identidad (ID)."""
-        return isinstance(other, Competition) and self.id == other.id
+        return isinstance(other, Competition) and self._id == other._id
 
     def __hash__(self) -> int:
         """Hash del objeto basado en el ID."""
-        return hash(self.id)
+        return hash(self._id)

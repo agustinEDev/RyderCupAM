@@ -7,7 +7,10 @@ from src.modules.competition.application.dto.round_match_dto import (
     ReassignMatchPlayersRequestDTO,
     ReassignMatchPlayersResponseDTO,
 )
-from src.modules.competition.application.exceptions import NotCompetitionCreatorError
+from src.modules.competition.application.exceptions import (
+    MatchNotFoundError,
+    NotCompetitionCreatorError,
+)
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -18,7 +21,7 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.match_player import MAX_HOLES, MatchPlayer
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -26,12 +29,6 @@ from src.modules.golf_course.domain.value_objects.tee_category import TeeCategor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
-
-
-class MatchNotFoundError(Exception):
-    """El partido no existe."""
-
-    pass
 
 
 class MatchNotScheduledError(Exception):
@@ -72,12 +69,14 @@ class ReassignMatchPlayersUseCase:
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repository: IGolfCourseRepository,
         user_repository: UserRepositoryInterface,
+        handicap_calculator: PlayingHandicapCalculator | None = None,
     ):
         self._uow = uow
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
+        self._calculator = handicap_calculator or PlayingHandicapCalculator()
 
-    async def execute(  # noqa: PLR0915
+    async def execute(
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId
     ) -> ReassignMatchPlayersResponseDTO:
         async with self._uow:
@@ -98,106 +97,31 @@ class ReassignMatchPlayersUseCase:
 
             is_scratch = competition.play_mode == PlayMode.SCRATCH
             allowance = round_entity.get_effective_allowance()
-            calculator = PlayingHandicapCalculator()
 
-            # Obtener tee ratings, holes, user handicaps and genders
-            tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
-            holes_by_stroke_index: list[int] = []
-            user_handicap_map: dict[str, Decimal] = {}
-            user_gender_map: dict[str, Gender | None] = {}
-
-            if not is_scratch:
-                golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-                if not golf_course:
-                    raise ValueError(
-                        "Se requiere un campo de golf para el modo HANDICAP. "
-                        "Asocie un campo de golf aprobado a la competición."
-                    )
-                total_par = sum(h.par for h in golf_course.holes)
-                for tee in golf_course.tees:
-                    gender_key = tee.gender.value if tee.gender else None
-                    tee_ratings[(tee.category.value, gender_key)] = TeeRating(
-                        course_rating=Decimal(str(tee.course_rating)),
-                        slope_rating=tee.slope_rating,
-                        par=total_par,
-                    )
-                holes_by_stroke_index = [
-                    h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
-                ]
-
-                # Fetch user handicaps and genders for fallback chain
-                all_player_ids = [
-                    UserId(uid)
-                    for uid in list(request.team_a_player_ids) + list(request.team_b_player_ids)
-                ]
-                users = await asyncio.gather(
-                    *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
-                )
-                for pid, user in zip(all_player_ids, users, strict=True):
-                    if user:
-                        if user.handicap is not None:
-                            user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
-                        user_gender_map[str(pid.value)] = user.gender
+            # Obtener handicap data (tee ratings, holes, user handicaps, genders)
+            all_player_ids = [
+                UserId(uid)
+                for uid in list(request.team_a_player_ids) + list(request.team_b_player_ids)
+            ]
+            tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map = (
+                await self._build_handicap_data(round_entity, is_scratch, all_player_ids)
+            )
 
             # 7. Construir nuevos MatchPlayers
-            def build_player(uid_value):
-                uid = UserId(uid_value)
-                enrollment = enrollment_map.get(str(uid_value))
-                if not enrollment:
-                    raise PlayerNotEnrolledError(
-                        f"El jugador {uid_value} no tiene inscripción aprobada"
-                    )
-                tee_category = (
-                    enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
+            team_a_players = [
+                self._build_match_player(
+                    uid, enrollment_map, tee_ratings, allowance,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
-                user_gender = user_gender_map.get(str(uid_value))
-
-                # Auto-resolve tee: (category, user_gender) → (category, None)
-                tee_gender = user_gender
-                tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
-                if tee_key not in tee_ratings:
-                    tee_key = (tee_category.value, None)
-                    tee_gender = None
-
-                if is_scratch:
-                    return MatchPlayer.create(
-                        user_id=uid,
-                        playing_handicap=0,
-                        tee_category=tee_category,
-                        strokes_received=[],
-                        tee_gender=tee_gender,
-                    )
-
-                # Handicap fallback: custom_handicap > user.handicap > 0
-                if enrollment.custom_handicap is not None:
-                    handicap_index = enrollment.custom_handicap
-                elif str(uid_value) in user_handicap_map:
-                    handicap_index = user_handicap_map[str(uid_value)]
-                else:
-                    handicap_index = Decimal("0")
-
-                tee_rating = tee_ratings.get(tee_key)
-                if tee_rating is None:
-                    raise ValueError(
-                        f"No se encontró tee rating para el jugador {uid_value} "
-                        f"(tee_key: {tee_key}) en el campo de golf. "
-                        f"Verifique que el campo tiene un tee configurado para "
-                        f"categoría={tee_category.value}, género={tee_gender}"
-                    )
-                playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
-                strokes_received = self._compute_strokes_received(
-                    playing_handicap, holes_by_stroke_index
+                for uid in request.team_a_player_ids
+            ]
+            team_b_players = [
+                self._build_match_player(
+                    uid, enrollment_map, tee_ratings, allowance,
+                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
                 )
-                return MatchPlayer.create(
-                    user_id=uid,
-                    playing_handicap=playing_handicap,
-                    tee_category=tee_category,
-                    strokes_received=strokes_received,
-                    tee_gender=tee_gender,
-                )
-
-            team_a_players = [build_player(uid) for uid in request.team_a_player_ids]
-            team_b_players = [build_player(uid) for uid in request.team_b_player_ids]
+                for uid in request.team_b_player_ids
+            ]
 
             # 8. Eliminar partido viejo y crear nuevo
             await self._uow.matches.delete(match.id)
@@ -218,6 +142,103 @@ class ReassignMatchPlayersUseCase:
                 strokes_given_to_team=new_match.strokes_given_to_team or "",
                 updated_at=new_match.updated_at,
             )
+
+    async def _build_handicap_data(self, round_entity, is_scratch, all_player_ids):
+        """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
+        tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
+        holes_by_stroke_index: list[int] = []
+        user_handicap_map: dict[str, Decimal] = {}
+        user_gender_map: dict[str, Gender | None] = {}
+
+        if not is_scratch:
+            golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+            if not golf_course:
+                raise ValueError(
+                    "Se requiere un campo de golf para el modo HANDICAP. "
+                    "Asocie un campo de golf aprobado a la competición."
+                )
+            total_par = sum(h.par for h in golf_course.holes)
+            for tee in golf_course.tees:
+                gender_key = tee.gender.value if tee.gender else None
+                tee_ratings[(tee.category.value, gender_key)] = TeeRating(
+                    course_rating=Decimal(str(tee.course_rating)),
+                    slope_rating=tee.slope_rating,
+                    par=total_par,
+                )
+            holes_by_stroke_index = [
+                h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
+            ]
+
+            users = await asyncio.gather(
+                *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
+            )
+            for pid, user in zip(all_player_ids, users, strict=True):
+                if user:
+                    if user.handicap is not None:
+                        user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
+                    user_gender_map[str(pid.value)] = user.gender
+
+        return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
+
+    def _build_match_player(
+        self, uid_value, enrollment_map, tee_ratings, allowance,
+        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
+    ) -> MatchPlayer:
+        """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
+        uid = UserId(uid_value)
+        enrollment = enrollment_map.get(str(uid_value))
+        if not enrollment:
+            raise PlayerNotEnrolledError(
+                f"El jugador {uid_value} no tiene inscripción aprobada"
+            )
+        tee_category = (
+            enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
+        )
+        user_gender = user_gender_map.get(str(uid_value))
+
+        # Auto-resolve tee: (category, user_gender) → (category, None)
+        tee_gender = user_gender
+        tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
+        if tee_key not in tee_ratings:
+            tee_key = (tee_category.value, None)
+            tee_gender = None
+
+        if is_scratch:
+            return MatchPlayer.create(
+                user_id=uid,
+                playing_handicap=0,
+                tee_category=tee_category,
+                strokes_received=[],
+                tee_gender=tee_gender,
+            )
+
+        # Handicap fallback: custom_handicap > user.handicap > 0
+        if enrollment.custom_handicap is not None:
+            handicap_index = enrollment.custom_handicap
+        elif str(uid_value) in user_handicap_map:
+            handicap_index = user_handicap_map[str(uid_value)]
+        else:
+            handicap_index = Decimal("0")
+
+        tee_rating = tee_ratings.get(tee_key)
+        if tee_rating is None:
+            raise ValueError(
+                f"No se encontró tee rating para el jugador {uid_value} "
+                f"(tee_key: {tee_key}) en el campo de golf. "
+                f"Verifique que el campo tiene un tee configurado para "
+                f"categoría={tee_category.value}, género={tee_gender}"
+            )
+        playing_handicap = self._calculator.calculate(handicap_index, tee_rating, allowance)
+        strokes_received = self._calculator.compute_strokes_received(
+            playing_handicap, holes_by_stroke_index
+        )
+        return MatchPlayer.create(
+            user_id=uid,
+            playing_handicap=playing_handicap,
+            tee_category=tee_category,
+            strokes_received=strokes_received,
+            tee_gender=tee_gender,
+        )
 
     async def _validate(self, request, user_id):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
@@ -263,29 +284,3 @@ class ReassignMatchPlayersUseCase:
             if str(uid) not in team_b_set:
                 raise PlayerNotInTeamError(f"El jugador {uid} no pertenece al equipo B")
 
-    @staticmethod
-    def _compute_strokes_received(
-        playing_handicap: int,
-        holes_by_stroke_index: list[int],
-    ) -> list[int]:
-        """Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index."""
-        if not holes_by_stroke_index or playing_handicap <= 0:
-            return []
-
-        result: list[int] = []
-        remaining = playing_handicap
-        while remaining > 0:
-            take = min(remaining, len(holes_by_stroke_index))
-            result.extend(holes_by_stroke_index[:take])
-            remaining -= take
-
-        seen: set[int] = set()
-        unique: list[int] = []
-        for h in result:
-            if h not in seen:
-                seen.add(h)
-                unique.append(h)
-            if len(unique) >= MAX_HOLES:
-                break
-
-        return unique

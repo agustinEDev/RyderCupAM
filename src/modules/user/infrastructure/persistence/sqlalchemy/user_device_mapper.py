@@ -8,7 +8,7 @@ Mapeo imperativo entre la entidad UserDevice y la tabla user_devices.
 import contextlib
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, event
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user_device import UserDevice
@@ -106,3 +106,10 @@ def start_user_device_mappers():
                 "_created_at": user_devices_table.c.created_at,
             },
         )
+
+        # Event listener: initialize _domain_events when SQLAlchemy loads from DB
+        # (replaces @reconstructor that was previously in the domain entity)
+        @event.listens_for(UserDevice, "load")
+        def _init_user_device_domain_events(target, _context):
+            if not hasattr(target, "_domain_events"):
+                target._domain_events = []

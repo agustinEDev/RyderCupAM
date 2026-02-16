@@ -104,8 +104,47 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+)
+from src.modules.competition.domain.services.schedule_format_service import (
+    ScheduleFormatService,
+)
+from src.modules.competition.domain.services.snake_draft_service import (
+    SnakeDraftService,
+)
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
+)
+from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
+    ApproveGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.approve_update_golf_course_use_case import (
+    ApproveUpdateGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.create_direct_golf_course_use_case import (
+    CreateDirectGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.get_golf_course_by_id_use_case import (
+    GetGolfCourseByIdUseCase,
+)
+from src.modules.golf_course.application.use_cases.list_approved_golf_courses_use_case import (
+    ListApprovedGolfCoursesUseCase,
+)
+from src.modules.golf_course.application.use_cases.list_pending_golf_courses_use_case import (
+    ListPendingGolfCoursesUseCase,
+)
+from src.modules.golf_course.application.use_cases.reject_golf_course_use_case import (
+    RejectGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.reject_update_golf_course_use_case import (
+    RejectUpdateGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.request_golf_course_use_case import (
+    RequestGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
+    UpdateGolfCourseUseCase,
 )
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -1062,7 +1101,7 @@ def get_configure_schedule_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
 ) -> ConfigureScheduleUseCase:
     """Proveedor del caso de uso ConfigureScheduleUseCase."""
-    return ConfigureScheduleUseCase(uow)
+    return ConfigureScheduleUseCase(uow, schedule_format_service=ScheduleFormatService())
 
 
 def get_assign_teams_use_case(
@@ -1070,7 +1109,11 @@ def get_assign_teams_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> AssignTeamsUseCase:
     """Proveedor del caso de uso AssignTeamsUseCase (cross-module: Competition + User)."""
-    return AssignTeamsUseCase(uow=uow, user_repository=user_uow.users)
+    return AssignTeamsUseCase(
+        uow=uow,
+        user_repository=user_uow.users,
+        snake_draft_service=SnakeDraftService(),
+    )
 
 
 def get_generate_matches_use_case(
@@ -1083,6 +1126,7 @@ def get_generate_matches_use_case(
         uow=uow,
         golf_course_repository=gc_uow.golf_courses,
         user_repository=user_uow.users,
+        handicap_calculator=PlayingHandicapCalculator(),
     )
 
 
@@ -1096,6 +1140,7 @@ def get_reassign_match_players_use_case(
         uow=uow,
         golf_course_repository=gc_uow.golf_courses,
         user_repository=user_uow.users,
+        handicap_calculator=PlayingHandicapCalculator(),
     )
 
 
@@ -1126,6 +1171,81 @@ def get_submit_contact_use_case(
 ):
     """Proveedor del caso de uso SubmitContactUseCase."""
     return SubmitContactUseCase(github_issue_service)
+
+
+# ============================================================================
+# GOLF COURSE MODULE - Dependency Injection
+# ============================================================================
+
+
+def get_request_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> RequestGolfCourseUseCase:
+    """Proveedor del caso de uso RequestGolfCourseUseCase."""
+    return RequestGolfCourseUseCase(uow)
+
+
+def get_get_golf_course_by_id_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetGolfCourseByIdUseCase:
+    """Proveedor del caso de uso GetGolfCourseByIdUseCase."""
+    return GetGolfCourseByIdUseCase(uow)
+
+
+def get_list_approved_golf_courses_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListApprovedGolfCoursesUseCase:
+    """Proveedor del caso de uso ListApprovedGolfCoursesUseCase."""
+    return ListApprovedGolfCoursesUseCase(uow)
+
+
+def get_list_pending_golf_courses_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListPendingGolfCoursesUseCase:
+    """Proveedor del caso de uso ListPendingGolfCoursesUseCase."""
+    return ListPendingGolfCoursesUseCase(uow)
+
+
+def get_approve_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ApproveGolfCourseUseCase:
+    """Proveedor del caso de uso ApproveGolfCourseUseCase."""
+    return ApproveGolfCourseUseCase(uow)
+
+
+def get_reject_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> RejectGolfCourseUseCase:
+    """Proveedor del caso de uso RejectGolfCourseUseCase."""
+    return RejectGolfCourseUseCase(uow)
+
+
+def get_create_direct_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> CreateDirectGolfCourseUseCase:
+    """Proveedor del caso de uso CreateDirectGolfCourseUseCase."""
+    return CreateDirectGolfCourseUseCase(uow)
+
+
+def get_update_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> UpdateGolfCourseUseCase:
+    """Proveedor del caso de uso UpdateGolfCourseUseCase."""
+    return UpdateGolfCourseUseCase(uow)
+
+
+def get_approve_update_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ApproveUpdateGolfCourseUseCase:
+    """Proveedor del caso de uso ApproveUpdateGolfCourseUseCase."""
+    return ApproveUpdateGolfCourseUseCase(uow)
+
+
+def get_reject_update_golf_course_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> RejectUpdateGolfCourseUseCase:
+    """Proveedor del caso de uso RejectUpdateGolfCourseUseCase."""
+    return RejectUpdateGolfCourseUseCase(uow)
 
 
 # ============================================================================
