@@ -9,6 +9,9 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_oauth_account_repository_interface import (
+    UserOAuthAccountRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -23,6 +26,9 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_reposi
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_repository import (
     SQLAlchemyUserDeviceRepository,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_oauth_account_repository import (
+    SQLAlchemyUserOAuthAccountRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
@@ -46,6 +52,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         self._refresh_tokens = SQLAlchemyRefreshTokenRepository(session)
         self._password_history = SQLAlchemyPasswordHistoryRepository(session)
         self._user_devices = SQLAlchemyUserDeviceRepository(session)
+        self._oauth_accounts = SQLAlchemyUserOAuthAccountRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
@@ -62,6 +69,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     @property
     def user_devices(self) -> UserDeviceRepositoryInterface:
         return self._user_devices
+
+    @property
+    def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+        return self._oauth_accounts
 
     async def __aenter__(self):
         return self

@@ -7,6 +7,9 @@ from src.modules.user.domain.repositories.refresh_token_repository_interface imp
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_oauth_account_repository_interface import (
+    UserOAuthAccountRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -21,6 +24,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_refresh_tok
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_device_repository import (
     InMemoryUserDeviceRepository,
+)
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_oauth_account_repository import (
+    InMemoryUserOAuthAccountRepository,
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_repository import (
     InMemoryUserRepository,
@@ -37,6 +43,7 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
         self._refresh_tokens = InMemoryRefreshTokenRepository()
         self._password_history = InMemoryPasswordHistoryRepository()
         self._user_devices = InMemoryUserDeviceRepository()
+        self._oauth_accounts = InMemoryUserOAuthAccountRepository()
         self.committed = False
 
     @property
@@ -58,6 +65,11 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
     def user_devices(self) -> UserDeviceRepositoryInterface:
         """Propiedad para acceder al repositorio de user devices."""
         return self._user_devices
+
+    @property
+    def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+        """Propiedad para acceder al repositorio de OAuth accounts."""
+        return self._oauth_accounts
 
     async def __aenter__(self):
         self.committed = False

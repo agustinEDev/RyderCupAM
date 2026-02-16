@@ -122,8 +122,11 @@ class User:
             self.has_valid_email()
             and self.first_name.strip() != ""
             and self.last_name.strip() != ""
-            and self.password is not None
         )
+
+    def has_password(self) -> bool:
+        """Verifica si el usuario tiene password (False para OAuth-only users)."""
+        return self.password is not None
 
     def is_system_admin(self) -> bool:
         """
@@ -238,6 +241,61 @@ class User:
 
         return user
 
+    @classmethod
+    def create_from_oauth(
+        cls,
+        first_name: str,
+        last_name: str,
+        email_str: str,
+        country_code_str: str | None = None,
+        gender: Gender | None = None,
+    ) -> "User":
+        """
+        Factory method para crear usuario desde OAuth (sin password).
+
+        El usuario se crea con email_verified=True ya que Google ya verificó el email.
+        No tiene password — debe vincular uno si desea login por email/password.
+
+        Args:
+            first_name: Nombre del usuario (de Google profile)
+            last_name: Apellido del usuario (de Google profile)
+            email_str: Email verificado por Google
+            country_code_str: Código ISO del país (opcional)
+            gender: Género del usuario (opcional)
+
+        Returns:
+            User: Nueva instancia sin password, email verificado
+        """
+        user_id = UserId.generate()
+        email = Email(email_str)
+        country_code = CountryCode(country_code_str) if country_code_str else None
+
+        user = cls(
+            id=user_id,
+            email=email,
+            password=None,
+            first_name=first_name,
+            last_name=last_name,
+            handicap=None,
+            handicap_updated_at=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            email_verified=True,
+            country_code=country_code,
+            gender=gender,
+        )
+
+        user._add_domain_event(
+            UserRegisteredEvent(
+                user_id=str(user_id.value),
+                email=email_str,
+                first_name=first_name,
+                last_name=last_name,
+            )
+        )
+
+        return user
+
     # === Métodos para manejo de eventos de dominio ===
 
     def _add_domain_event(self, event: DomainEvent) -> None:
@@ -286,6 +344,7 @@ class User:
         ip_address: str | None = None,
         user_agent: str | None = None,
         session_id: str | None = None,
+        login_method: str = "email",
     ) -> None:
         """
         Registra un evento de login exitoso para este usuario.
@@ -295,6 +354,7 @@ class User:
             ip_address: Dirección IP desde donde se hizo login (opcional)
             user_agent: User agent del browser/app (opcional)
             session_id: ID de la sesión creada (opcional)
+            login_method: Método de login ("email" o "google")
         """
         self._add_domain_event(
             UserLoggedInEvent(
@@ -303,7 +363,7 @@ class User:
                 ip_address=ip_address,
                 user_agent=user_agent,
                 session_id=session_id,
-                login_method="email",  # Por ahora solo email, preparado para OAuth
+                login_method=login_method,
             )
         )
 

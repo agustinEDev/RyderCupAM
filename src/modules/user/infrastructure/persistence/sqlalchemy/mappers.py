@@ -108,7 +108,7 @@ users_table = Table(
     Column("first_name", String(50), nullable=False),
     Column("last_name", String(50), nullable=False),
     Column("email", String(255), nullable=False, unique=True),
-    Column("password", String(255), nullable=False),
+    Column("password", String(255), nullable=True),  # Nullable for OAuth-only users
     Column("handicap", HandicapDecorator, nullable=True),
     Column("handicap_updated_at", DateTime, nullable=True),
     Column("created_at", DateTime, nullable=False),
@@ -171,7 +171,11 @@ def start_mappers():
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (  # noqa: PLC0415
         start_user_device_mappers,
     )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_oauth_account_mapper import (  # noqa: PLC0415
+        start_oauth_account_mappers,
+    )
 
     start_refresh_token_mappers()
     start_password_history_mappers()
     start_user_device_mappers()
+    start_oauth_account_mappers()
