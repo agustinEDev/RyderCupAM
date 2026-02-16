@@ -18,6 +18,9 @@ from ..repositories.refresh_token_repository_interface import (
 from ..repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
+from ..repositories.user_oauth_account_repository_interface import (
+    UserOAuthAccountRepositoryInterface,
+)
 from ..repositories.user_repository_interface import UserRepositoryInterface
 
 
@@ -28,11 +31,12 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
     Proporciona acceso coordinated a todos los repositorios relacionados
     con el dominio de usuarios, manteniendo consistencia transaccional.
 
-    Repositorios incluidos (v1.13.0):
+    Repositorios incluidos (v1.13.0, v3.0.0):
     - users: UserRepositoryInterface
     - refresh_tokens: RefreshTokenRepositoryInterface (Session Timeout)
     - password_history: PasswordHistoryRepositoryInterface (Password History)
     - user_devices: UserDeviceRepositoryInterface (Device Fingerprinting)
+    - oauth_accounts: UserOAuthAccountRepositoryInterface (Google OAuth)
 
     Uso típico en casos de uso:
     ```python
@@ -121,5 +125,21 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             UserDeviceRepositoryInterface: Repositorio de user devices transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
+        """
+        Acceso al repositorio de cuentas OAuth dentro de la transacción.
+
+        Google OAuth (Sprint 3):
+        - Permite vincular/desvincular cuentas OAuth
+        - Permite buscar por proveedor + ID del proveedor
+        - Mantiene consistencia transaccional con users
+
+        Returns:
+            UserOAuthAccountRepositoryInterface: Repositorio de OAuth accounts transaccional
         """
         pass

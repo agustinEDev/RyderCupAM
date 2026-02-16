@@ -52,6 +52,7 @@ EXEMPT_PATHS: Final[set[str]] = {
     "/api/v1/auth/reset-password",  # Public endpoint (token in URL)
     "/api/v1/auth/verify-email",  # Public endpoint (token in URL)
     "/api/v1/support/contact",  # Public endpoint - no existing session
+    "/api/v1/auth/google",  # Public endpoint - Google OAuth login/register
 }
 
 # Exempt methods (métodos seguros según RFC 7231)

@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** v2.0.5 (Current) + v2.1.0 Planning
-> **Last Updated:** February 6, 2026
+> **Version:** Sprint 3 Block 1 (Current) + v2.1.0 Planning
+> **Last Updated:** February 16, 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -35,7 +35,7 @@ erDiagram
         VARCHAR(50) first_name
         VARCHAR(50) last_name
         VARCHAR(255) email UK
-        VARCHAR(255) password
+        VARCHAR(255) password "nullable - OAuth users have no password"
         FLOAT handicap "nullable"
         TIMESTAMP handicap_updated_at "nullable"
         BOOLEAN email_verified
@@ -78,6 +78,15 @@ erDiagram
         VARCHAR(64) fingerprint_hash UK
         BOOLEAN is_active "default true - v1.13.0"
         TIMESTAMP last_used_at
+        TIMESTAMP created_at
+    }
+
+    user_oauth_accounts {
+        UUID id PK "Sprint 3"
+        UUID user_id FK
+        VARCHAR(20) provider "google (extensible)"
+        VARCHAR(255) provider_user_id "Google sub ID"
+        VARCHAR(255) provider_email
         TIMESTAMP created_at
     }
 
@@ -254,6 +263,7 @@ erDiagram
     users ||--o{ refresh_tokens : "has"
     users ||--o{ password_history : "has"
     users ||--o{ user_devices : "has"
+    users ||--o{ user_oauth_accounts : "has"
     user_devices ||--o{ refresh_tokens : "generates"
     users ||--o{ competitions : "creates"
     users ||--o{ enrollments : "enrolls_in"
@@ -283,7 +293,7 @@ erDiagram
 
 ---
 
-## 📋 Current Tables (v2.0.5)
+## 📋 Current Tables (Sprint 3 Block 1)
 
 | Table | Typical Records | Module | Version |
 |-------|-------------------|--------|---------|
@@ -293,6 +303,7 @@ erDiagram
 | `refresh_tokens` | 100-50,000 | User | v1.8.0 |
 | `password_history` | 500-50,000 (5 per user) | User | v1.13.0 |
 | `user_devices` | 200-100,000 (2-10 per user) | User | v1.13.0 |
+| `user_oauth_accounts` | 100-10,000 (0-1 per user) | User | Sprint 3 |
 | `competitions` | 10-1,000 | Competition | v1.3.0 |
 | `enrollments` | 200-50,000 | Competition | v1.3.0 |
 | `competition_golf_courses` | 30-10,000 (1-10 per competition) | Competition | v2.0.2 |
@@ -303,7 +314,7 @@ erDiagram
 | `tees` | 300-25,000 (3-5 per course) | Golf Courses | v2.0.1 |
 | `holes` | 1,800-90,000 (18 per course) | Golf Courses | v2.0.1 |
 
-**Total current tables:** 15
+**Total current tables:** 16
 
 ---
 
@@ -316,7 +327,7 @@ erDiagram
 
 **Total planned tables:** 2
 
-**Total tables after v2.1.0 completion:** 17 tables
+**Total tables after v2.1.0 completion:** 18 tables
 
 ---
 
@@ -343,6 +354,10 @@ CREATE INDEX idx_password_history_created_at ON password_history(created_at);
 CREATE INDEX idx_user_devices_user_id ON user_devices(user_id);
 CREATE INDEX idx_user_devices_fingerprint_hash ON user_devices(fingerprint_hash);
 CREATE UNIQUE INDEX idx_user_devices_active_fingerprint ON user_devices(user_id, fingerprint_hash) WHERE is_active = TRUE; -- v1.13.0
+
+-- user_oauth_accounts (Sprint 3)
+CREATE INDEX idx_user_oauth_accounts_user_id ON user_oauth_accounts(user_id);
+CREATE UNIQUE INDEX uq_user_oauth_accounts_provider_user ON user_oauth_accounts(provider, provider_user_id);
 
 -- competitions
 CREATE INDEX idx_competitions_creator ON competitions(creator_id);

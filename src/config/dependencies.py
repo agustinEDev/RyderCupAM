@@ -160,10 +160,19 @@ from src.modules.support.infrastructure.services.github_issue_service import (
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.google_oauth_service_interface import (
+    IGoogleOAuthService,
+)
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
+)
+from src.modules.user.application.use_cases.google_login_use_case import (
+    GoogleLoginUseCase,
+)
+from src.modules.user.application.use_cases.link_google_account_use_case import (
+    LinkGoogleAccountUseCase,
 )
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
@@ -192,6 +201,9 @@ from src.modules.user.application.use_cases.reset_password_use_case import (
 )
 from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
+)
+from src.modules.user.application.use_cases.unlink_google_account_use_case import (
+    UnlinkGoogleAccountUseCase,
 )
 from src.modules.user.application.use_cases.unlock_account_use_case import (
     UnlockAccountUseCase,
@@ -224,6 +236,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.external.google_oauth_service import (
+    GoogleOAuthService,
+)
 from src.modules.user.infrastructure.external.rfeg_handicap_service import (
     RFEGHandicapService,
 )
@@ -1279,3 +1294,38 @@ def get_revoke_device_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
     """
     return RevokeDeviceUseCase(uow)
+
+
+# ============================================================================
+# Google OAuth Use Cases (Sprint 3)
+# ============================================================================
+
+
+def get_google_oauth_service() -> IGoogleOAuthService:
+    """Proveedor del servicio de Google OAuth."""
+    return GoogleOAuthService()
+
+
+def get_google_login_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    token_service: ITokenService = Depends(get_token_service),
+    google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+) -> GoogleLoginUseCase:
+    """Proveedor del caso de uso GoogleLoginUseCase."""
+    return GoogleLoginUseCase(uow, token_service, google_oauth_service, register_device_use_case)
+
+
+def get_link_google_account_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
+) -> LinkGoogleAccountUseCase:
+    """Proveedor del caso de uso LinkGoogleAccountUseCase."""
+    return LinkGoogleAccountUseCase(uow, google_oauth_service)
+
+
+def get_unlink_google_account_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UnlinkGoogleAccountUseCase:
+    """Proveedor del caso de uso UnlinkGoogleAccountUseCase."""
+    return UnlinkGoogleAccountUseCase(uow)

@@ -47,6 +47,7 @@ from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E4
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
     device_routes,
+    google_auth_routes,
     handicap_routes,
     user_routes,
 )
@@ -254,6 +255,12 @@ if ENV != "production":
 # Incluir los routers de la API
 app.include_router(
     auth_routes.router,
+    prefix="/api/v1/auth",
+    tags=["Authentication"],
+)
+
+app.include_router(
+    google_auth_routes.router,
     prefix="/api/v1/auth",
     tags=["Authentication"],
 )

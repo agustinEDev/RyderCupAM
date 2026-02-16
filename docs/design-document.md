@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**v2.0.5** · 6 February 2026 · Sprint 2 Complete (Rounds, Matches & Teams)
+**Sprint 3 Block 1** · 16 February 2026 · Google OAuth
 
 ---
 
@@ -22,8 +22,10 @@ Amateur golf tournament system in Ryder Cup format.
 - ✅ CSRF protection + secure HTTP headers
 - ✅ Handicap system (RFEG integration)
 - ✅ Competition Module (Ryder Cup format tournaments)
+- ✅ Google OAuth (login/register, link/unlink) ⭐ Sprint 3
 - ✅ CI/CD Pipeline (GitHub Actions)
 - ✅ Kubernetes deployment (local & production-ready)
+- ⏳ Invitations (Sprint 3 Block 2)
 - ⏳ Real-time scoring (planned)
 
 ---
@@ -147,23 +149,24 @@ Domain (Entities, VOs, Events, Repos)
 ### User Management
 
 **Domain**:
-- Entity: `User`
-- VOs: `UserId`, `Email`, `Password`, `Handicap`
-- Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`
-- Repos: `UserRepositoryInterface`
+- Entities: `User`, `UserOAuthAccount` ⭐ Sprint 3
+- VOs: `UserId`, `Email`, `Password`, `Handicap`, `OAuthAccountId`, `OAuthProvider` ⭐ Sprint 3
+- Events: `UserRegistered`, `HandicapUpdated`, `UserLoggedIn`, `UserLoggedOut`, `UserProfileUpdated`, `UserEmailChanged`, `UserPasswordChanged`, `GoogleAccountLinkedEvent`, `GoogleAccountUnlinkedEvent` ⭐ Sprint 3
+- Repos: `UserRepositoryInterface`, `UserOAuthAccountRepositoryInterface` ⭐ Sprint 3
 - Services: `HandicapService` (interface)
 - Email Verification: Fields `email_verified`, `verification_token`, event `EmailVerifiedEvent`
 
 **Application**:
-- Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`
-- DTOs: Request/Response
+- Use Cases: `RegisterUser`, `LoginUser`, `LogoutUser`, `UpdateProfile`, `UpdateSecurity`, `UpdateHandicap`, `UpdateHandicapManually`, `UpdateMultipleHandicaps`, `FindUser`, `GoogleLogin`, `LinkGoogleAccount`, `UnlinkGoogleAccount` ⭐ Sprint 3
+- DTOs: Request/Response (including OAuth DTOs) ⭐ Sprint 3
+- Ports: `IGoogleOAuthService` ⭐ Sprint 3
 - Handlers: `UserRegisteredEventHandler`
 - Email Verification: `VerifyEmailUseCase`, integrated in registration
 
 **Infrastructure**:
-- Routes: `/auth/*`, `/handicaps/*`, `/users/*`
-- Repos: `SQLAlchemyUserRepository`
-- External: `RFEGHandicapService`, `MockHandicapService`
+- Routes: `/auth/*`, `/auth/google/*` ⭐ Sprint 3, `/handicaps/*`, `/users/*`
+- Repos: `SQLAlchemyUserRepository`, `SQLAlchemyUserOAuthAccountRepository` ⭐ Sprint 3
+- External: `RFEGHandicapService`, `MockHandicapService`, `GoogleOAuthService` ⭐ Sprint 3
 - Email Verification: Service `EmailService` (Mailgun), endpoint `/api/v1/auth/verify-email`
 
 **Email Verification**:
@@ -210,7 +213,7 @@ Domain (Entities, VOs, Events, Repos)
 User:
     id: UserId (UUID)
     email: Email (validated, normalized)
-    password: Password (bcrypt, rounds=12)
+    password: Password? (bcrypt, rounds=12, nullable for OAuth-only users)
     first_name: str
     last_name: str
     handicap: float? (-10.0 to 54.0)
@@ -226,7 +229,7 @@ User:
 CREATE TABLE users (
     id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255),  -- nullable: OAuth-only users have no password
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     handicap FLOAT,
@@ -326,6 +329,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `POST /api/v1/auth/login` - JWT authentication + UserLoggedInEvent
 - `POST /api/v1/auth/logout` - Logout with audit + UserLoggedOutEvent
 - `POST /api/v1/auth/verify-email` - Email verification (token via email)
+- `POST /api/v1/auth/google` - Login/register with Google OAuth ⭐ Sprint 3
+- `POST /api/v1/auth/google/link` - Link Google to existing account ⭐ Sprint 3
+- `DELETE /api/v1/auth/google/unlink` - Unlink Google account ⭐ Sprint 3
 
 ### Handicaps
 - `POST /api/v1/handicaps/update` - RFEG lookup + fallback
@@ -454,7 +460,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 ## 📊 Project Metrics
 
-**Last Updated**: 28 January 2026
+**Last Updated**: 16 February 2026
 
 ### Infrastructure
 
@@ -470,9 +476,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 672 (100% passing) |
-| Unit tests | 595+ tests |
-| Integration tests | 72+ tests |
+| Total tests | 1,668 (100% passing) |
+| Unit tests | 1,432 tests |
+| Integration tests | 236 tests |
 | Coverage | >90% |
 | Email Verification | 100% (24 tests) |
 | Competition Module | 97.6% (174 tests) |
@@ -483,13 +489,13 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Module | Status | Tests | Endpoints |
 |--------|--------|-------|-----------|
-| User | ✅ Complete + Auth + Email | 308+ | 17 |
+| User | ✅ Complete + Auth + Email + Google OAuth | 608+ | 20 |
 | Competition | ✅ Complete + Enrollments + Rounds/Matches/Teams | 554 | 35 |
-| Golf Course | ✅ Complete + Approval Workflow | 18+ | 10 |
-| Shared | ✅ Countries + Security | 138 | 2 |
+| Golf Course | ✅ Complete + Approval Workflow | 38+ | 10 |
+| Shared | ✅ Countries + Security | 208 | 2 |
 | CI/CD | ✅ GitHub Actions | - | - |
 | Kubernetes | ✅ Complete deployment | - | - |
-| Invitations | ⏳ Sprint 3 | 0 | 0 |
+| Invitations | ⏳ Sprint 3 Block 2 | 0 | 0 |
 | Scoring | ⏳ Sprint 4 | 0 | 0 |
 
 ### Implemented Value Objects (69 tests)
@@ -522,7 +528,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `UpdateMultipleHandicapsUseCase` - Batch update with statistics
 - `FindUserUseCase` (10 tests) - Search by email or name
 
-### API Endpoints Active (30)
+### API Endpoints Active (69)
 - `/api/v1/auth/register`, `/login`, `/logout`, `/verify-email`
 - `/api/v1/users/profile`, `/security`, `/search`
 - `/api/v1/handicaps/update`, `/update-manual`, `/update-multiple`
