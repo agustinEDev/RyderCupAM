@@ -46,6 +46,13 @@ def upgrade() -> None:
         ["provider", "provider_user_id"],
     )
 
+    # Unique constraint: one user can only have one account per provider
+    op.create_unique_constraint(
+        "uq_user_provider",
+        "user_oauth_accounts",
+        ["user_id", "provider"],
+    )
+
     # Index for user_id lookups
     op.create_index(
         "ix_oauth_accounts_user_id",
@@ -85,5 +92,6 @@ def downgrade() -> None:
 
     # Drop table (cascades indexes and constraints)
     op.drop_index("ix_oauth_accounts_user_id", table_name="user_oauth_accounts")
+    op.drop_constraint("uq_user_provider", "user_oauth_accounts", type_="unique")
     op.drop_constraint("uq_oauth_provider_user", "user_oauth_accounts", type_="unique")
     op.drop_table("user_oauth_accounts")

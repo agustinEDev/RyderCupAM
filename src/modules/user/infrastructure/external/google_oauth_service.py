@@ -44,55 +44,63 @@ class GoogleOAuthService(IGoogleOAuthService):
         Raises:
             ValueError: Si el código es inválido, expirado, o Google API falla
         """
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # 1. Exchange code for tokens
-            token_response = await client.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "code": authorization_code,
-                    "client_id": settings.GOOGLE_CLIENT_ID,
-                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-                    "grant_type": "authorization_code",
-                },
-            )
-
-            if token_response.status_code != HTTP_OK:
-                logger.warning(
-                    f"Google token exchange failed: {token_response.status_code} - "
-                    f"{token_response.text[:200]}"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # 1. Exchange code for tokens
+                token_response = await client.post(
+                    GOOGLE_TOKEN_URL,
+                    data={
+                        "code": authorization_code,
+                        "client_id": settings.GOOGLE_CLIENT_ID,
+                        "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                        "grant_type": "authorization_code",
+                    },
                 )
-                raise ValueError("Invalid or expired Google authorization code")
 
-            token_data = token_response.json()
-            access_token = token_data.get("access_token")
-            if not access_token:
-                raise ValueError("Google did not return an access token")
+                if token_response.status_code != HTTP_OK:
+                    logger.warning(
+                        f"Google token exchange failed: {token_response.status_code} - "
+                        f"{token_response.text[:200]}"
+                    )
+                    raise ValueError("Invalid or expired Google authorization code")
 
-            # 2. Get user info
-            userinfo_response = await client.get(
-                GOOGLE_USERINFO_URL,
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
+                token_data = token_response.json()
+                access_token = token_data.get("access_token")
+                if not access_token:
+                    raise ValueError("Google did not return an access token")
 
-            if userinfo_response.status_code != HTTP_OK:
-                logger.warning(
-                    f"Google userinfo request failed: {userinfo_response.status_code}"
+                # 2. Get user info
+                userinfo_response = await client.get(
+                    GOOGLE_USERINFO_URL,
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
-                raise ValueError("Failed to retrieve user information from Google")
 
-            userinfo = userinfo_response.json()
+                if userinfo_response.status_code != HTTP_OK:
+                    logger.warning(
+                        f"Google userinfo request failed: {userinfo_response.status_code}"
+                    )
+                    raise ValueError("Failed to retrieve user information from Google")
 
-            google_user_id = userinfo.get("sub")
-            email = userinfo.get("email")
-            if not google_user_id or not email:
-                raise ValueError("Google user info is missing required fields (sub, email)")
+                userinfo = userinfo_response.json()
 
-            return GoogleUserInfo(
-                google_user_id=google_user_id,
-                email=email,
-                first_name=userinfo.get("given_name", ""),
-                last_name=userinfo.get("family_name", ""),
-                email_verified=bool(userinfo.get("email_verified", False)),
-                picture_url=userinfo.get("picture"),
-            )
+                google_user_id = userinfo.get("sub")
+                email = userinfo.get("email")
+                if not google_user_id or not email:
+                    raise ValueError("Google user info is missing required fields (sub, email)")
+
+                return GoogleUserInfo(
+                    google_user_id=google_user_id,
+                    email=email,
+                    first_name=userinfo.get("given_name", ""),
+                    last_name=userinfo.get("family_name", ""),
+                    email_verified=bool(userinfo.get("email_verified", False)),
+                    picture_url=userinfo.get("picture"),
+                )
+        except ValueError:
+            raise
+        except (httpx.RequestError, httpx.TimeoutException) as exc:
+            logger.warning(f"Google OAuth network error: {exc}")
+            raise ValueError(
+                f"Failed to communicate with Google OAuth service: {exc}"
+            ) from exc

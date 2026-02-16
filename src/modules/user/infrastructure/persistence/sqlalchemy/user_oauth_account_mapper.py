@@ -97,6 +97,8 @@ user_oauth_accounts_table = Table(
     Column("created_at", DateTime, nullable=False),
     # Unique constraint: una cuenta de proveedor solo puede vincularse una vez
     UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_user"),
+    # Unique constraint: un usuario solo puede tener una cuenta por proveedor
+    UniqueConstraint("user_id", "provider", name="uq_user_provider"),
     # Index para búsquedas por user_id
     Index("ix_oauth_accounts_user_id", "user_id"),
 )

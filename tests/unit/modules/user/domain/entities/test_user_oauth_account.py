@@ -131,11 +131,13 @@ class TestUserOAuthAccountCreation:
         Test: El constructor inicializa created_at por defecto
         Given: Constructor sin created_at explícito
         When: Se crea UserOAuthAccount
-        Then: created_at se establece a datetime.now()
+        Then: created_at se establece a datetime.now(UTC)
         """
         # Arrange
+        from datetime import timezone
+
         user_id = UserId.generate()
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
 
         # Act
         account = UserOAuthAccount(
@@ -147,7 +149,7 @@ class TestUserOAuthAccountCreation:
         )
 
         # Assert
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
         assert before <= account.created_at <= after
 
 

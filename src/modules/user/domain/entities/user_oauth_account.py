@@ -4,7 +4,7 @@ User OAuth Account Entity - Domain Layer
 Representa una cuenta OAuth vinculada a un usuario del sistema.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -45,7 +45,7 @@ class UserOAuthAccount:
         self._provider = provider
         self._provider_user_id = provider_user_id
         self._provider_email = provider_email
-        self._created_at = created_at or datetime.now()
+        self._created_at = created_at or datetime.now(UTC)
         self._domain_events = domain_events or []
 
     # === Read-only Properties ===
@@ -100,7 +100,7 @@ class UserOAuthAccount:
             provider=provider,
             provider_user_id=provider_user_id,
             provider_email=provider_email,
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC),
         )
 
         account._add_domain_event(
