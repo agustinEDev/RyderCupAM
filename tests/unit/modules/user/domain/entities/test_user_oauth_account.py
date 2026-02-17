@@ -8,7 +8,7 @@ Este archivo contiene tests que verifican:
 - Validaciones
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.events.google_account_linked_event import (
@@ -131,11 +131,11 @@ class TestUserOAuthAccountCreation:
         Test: El constructor inicializa created_at por defecto
         Given: Constructor sin created_at explícito
         When: Se crea UserOAuthAccount
-        Then: created_at se establece a datetime.now(UTC)
+        Then: created_at se establece a datetime.now()
         """
         # Arrange
         user_id = UserId.generate()
-        before = datetime.now(UTC)
+        before = datetime.now()
 
         # Act
         account = UserOAuthAccount(
@@ -147,7 +147,7 @@ class TestUserOAuthAccountCreation:
         )
 
         # Assert
-        after = datetime.now(UTC)
+        after = datetime.now()
         assert before <= account.created_at <= after
 
 
