@@ -163,6 +163,15 @@ class UserResponseDTO(BaseModel):
         None,
         description="Género del usuario (MALE/FEMALE). Usado para resolución automática de tees.",
     )
+    # OAuth & Auth Method fields (v2.0.10)
+    auth_providers: list[str] = Field(
+        default_factory=list,
+        description="Proveedores OAuth vinculados al usuario (ej: ['google']). Vacío si solo usa email/password.",
+    )
+    has_password: bool = Field(
+        default=True,
+        description="True si el usuario tiene contraseña configurada. False si se registró solo con OAuth.",
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)

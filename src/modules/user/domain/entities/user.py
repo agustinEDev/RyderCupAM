@@ -125,6 +125,7 @@ class User:
             and self.last_name.strip() != ""
         )
 
+    @property
     def has_password(self) -> bool:
         """Verifica si el usuario tiene password (False para OAuth-only users)."""
         return self.password is not None
