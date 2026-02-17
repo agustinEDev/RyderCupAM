@@ -4,7 +4,7 @@
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
 **Total Endpoints**: 69 active
-**Version**: Sprint 3 Block 1
+**Version**: Sprint 3 Block 1.1 (auth_providers + has_password in UserResponseDTO)
 **Last Updated**: 16 February 2026
 
 ---
