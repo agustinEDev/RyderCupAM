@@ -121,13 +121,13 @@ class TestUserCreateFromOAuth:
 
 
 class TestUserHasPassword:
-    """Tests para el método has_password()"""
+    """Tests para la propiedad has_password"""
 
     def test_has_password_true_for_normal_user(self):
         """
-        Test: has_password() retorna True para usuarios normales
+        Test: has_password retorna True para usuarios normales
         Given: Usuario creado con password
-        When: Se verifica has_password()
+        When: Se verifica has_password
         Then: Retorna True
         """
         # Arrange
@@ -139,13 +139,13 @@ class TestUserHasPassword:
         )
 
         # Act & Assert
-        assert user.has_password() is True
+        assert user.has_password is True
 
     def test_has_password_false_for_oauth_user(self):
         """
-        Test: has_password() retorna False para usuarios OAuth
+        Test: has_password retorna False para usuarios OAuth
         Given: Usuario creado desde OAuth (sin password)
-        When: Se verifica has_password()
+        When: Se verifica has_password
         Then: Retorna False
         """
         # Arrange
@@ -156,7 +156,7 @@ class TestUserHasPassword:
         )
 
         # Act & Assert
-        assert user.has_password() is False
+        assert user.has_password is False
 
 
 class TestUserIsValidOAuth:

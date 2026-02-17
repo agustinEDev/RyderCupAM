@@ -54,7 +54,7 @@ class UnlinkGoogleAccountUseCase:
             if not user:
                 raise ValueError("User not found")
 
-            if not user.has_password():
+            if not user.has_password:
                 raise ValueError(
                     "Cannot unlink Google account: it is your only authentication method. "
                     "Set a password first."
