@@ -57,7 +57,23 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvitationRateLimitViolation,
     SelfInvitationViolation,
 )
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+
+
+def _validate_status_filter(status_filter: str | None) -> str | None:
+    """Valida el status filter contra InvitationStatus antes de pasar al use case."""
+    if status_filter is None:
+        return None
+    try:
+        InvitationStatus(status_filter)
+        return status_filter
+    except ValueError:
+        valid = [s.value for s in InvitationStatus]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status filter: '{status_filter}'. Valid values: {valid}",
+        )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -196,9 +212,10 @@ async def list_my_invitations(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
+    validated_status = _validate_status_filter(status_filter)
     return await use_case.execute(
         user_id=str(current_user.id),
-        status_filter=status_filter,
+        status_filter=validated_status,
         page=page,
         limit=limit,
     )
@@ -261,11 +278,12 @@ async def list_competition_invitations(
     limit: int = Query(20, ge=1, le=100),
 ):
     try:
+        validated_status = _validate_status_filter(status_filter)
         return await use_case.execute(
             competition_id=str(competition_id),
             current_user_id=str(current_user.id),
             is_admin=current_user.is_admin,
-            status_filter=status_filter,
+            status_filter=validated_status,
             page=page,
             limit=limit,
         )

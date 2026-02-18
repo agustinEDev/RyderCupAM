@@ -57,7 +57,6 @@ class TestInvitationAcceptedEvent:
             invitation_id="inv-1",
             competition_id="comp-1",
             invitee_user_id="user-2",
-            enrollment_id="enr-1",
         )
         assert isinstance(event, DomainEvent)
 
@@ -66,12 +65,10 @@ class TestInvitationAcceptedEvent:
             invitation_id="inv-1",
             competition_id="comp-1",
             invitee_user_id="user-2",
-            enrollment_id="enr-1",
         )
         assert event.invitation_id == "inv-1"
         assert event.competition_id == "comp-1"
         assert event.invitee_user_id == "user-2"
-        assert event.enrollment_id == "enr-1"
 
 
 class TestInvitationDeclinedEvent:

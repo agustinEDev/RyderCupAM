@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 
+from ..events.invitation_accepted_event import InvitationAcceptedEvent
 from ..events.invitation_created_event import InvitationCreatedEvent
 from ..events.invitation_declined_event import InvitationDeclinedEvent
 from ..exceptions.competition_violations import (
@@ -228,6 +229,13 @@ class Invitation:
         self._status = InvitationStatus.ACCEPTED
         self._responded_at = datetime.now()
         self._updated_at = datetime.now()
+
+        event = InvitationAcceptedEvent(
+            invitation_id=str(self._id),
+            competition_id=str(self._competition_id),
+            invitee_user_id=str(self._invitee_user_id) if self._invitee_user_id else "",
+        )
+        self.add_domain_event(event)
 
     def decline(self) -> None:
         """Rechaza la invitacion (PENDING -> DECLINED)."""

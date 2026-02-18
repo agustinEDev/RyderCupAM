@@ -13,6 +13,8 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
+_DEDUP_OVERFETCH_BUFFER = 50
+
 
 class ListMyInvitationsUseCase:
     """Lista las invitaciones recibidas por el usuario actual."""
@@ -53,12 +55,12 @@ class ListMyInvitationsUseCase:
             invitations_by_email = []
             if user_email:
                 invitations_by_email = await self._uow.invitations.find_by_invitee_email(
-                    user_email, status=status_vo, limit=limit + offset + 50, offset=0
+                    user_email, status=status_vo, limit=limit + offset + _DEDUP_OVERFETCH_BUFFER, offset=0
                 )
 
             # Buscar por user_id (cubre invitaciones donde el user_id fue resuelto)
             invitations_by_user_id = await self._uow.invitations.find_by_invitee_user_id(
-                user_id_vo, status=status_vo, limit=limit + offset + 50, offset=0
+                user_id_vo, status=status_vo, limit=limit + offset + _DEDUP_OVERFETCH_BUFFER, offset=0
             )
 
             # Merge y deduplicar por ID

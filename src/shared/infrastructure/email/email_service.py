@@ -48,16 +48,7 @@ class EmailService(IEmailService, IInvitationEmailService):
         Returns:
             bool: True si el email se envió correctamente, False en caso contrario
         """
-        # Sanitizar user_name para prevenir inyección de headers (RFC 5322)
-        # Eliminar caracteres especiales que podrían romper el formato de email headers
-        safe_user_name = (
-            user_name.replace("\n", "")
-            .replace("\r", "")
-            .replace('"', "")
-            .replace("<", "")
-            .replace(">", "")
-            .strip()
-        )
+        safe_user_name = self._sanitize_name(user_name)
 
         verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
@@ -221,15 +212,7 @@ The Ryder Cup Friends Team
 
         Template bilingüe (ES/EN) con diseño consistente con verify_email.
         """
-        # Sanitizar user_name para prevenir inyección de headers
-        safe_user_name = (
-            user_name.replace("\n", "")
-            .replace("\r", "")
-            .replace('"', "")
-            .replace("<", "")
-            .replace(">", "")
-            .strip()
-        )
+        safe_user_name = self._sanitize_name(user_name)
 
         subject = "Resetea tu contraseña - Ryder Cup Friends | Reset your password"
 
@@ -391,15 +374,7 @@ The Ryder Cup Friends Team
 
         Template bilingüe (ES/EN) con información de seguridad.
         """
-        # Sanitizar user_name para prevenir inyección de headers
-        safe_user_name = (
-            user_name.replace("\n", "")
-            .replace("\r", "")
-            .replace('"', "")
-            .replace("<", "")
-            .replace(">", "")
-            .strip()
-        )
+        safe_user_name = self._sanitize_name(user_name)
 
         subject = (
             "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"

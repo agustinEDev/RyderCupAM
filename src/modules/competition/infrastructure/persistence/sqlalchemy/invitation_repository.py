@@ -37,7 +37,7 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         offset: int = 0,
     ) -> list[Invitation]:
         conditions = [Invitation._competition_id == competition_id]
-        if status:
+        if status is not None:
             conditions.append(Invitation._status == status)
 
         stmt = (
@@ -58,7 +58,7 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         offset: int = 0,
     ) -> list[Invitation]:
         conditions = [Invitation._invitee_email == email.strip().lower()]
-        if status:
+        if status is not None:
             conditions.append(Invitation._status == status)
 
         stmt = (
@@ -79,7 +79,7 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         offset: int = 0,
     ) -> list[Invitation]:
         conditions = [Invitation._invitee_user_id == user_id]
-        if status:
+        if status is not None:
             conditions.append(Invitation._status == status)
 
         stmt = (
@@ -112,9 +112,9 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         since: datetime | None = None,
     ) -> int:
         conditions = [Invitation._competition_id == competition_id]
-        if status:
+        if status is not None:
             conditions.append(Invitation._status == status)
-        if since:
+        if since is not None:
             conditions.append(Invitation._created_at >= since)
 
         stmt = select(func.count()).select_from(Invitation).where(and_(*conditions))
@@ -129,16 +129,16 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
     ) -> int:
         # Identity conditions use OR (email OR user_id match the same person)
         identity_conditions = []
-        if email:
+        if email is not None:
             identity_conditions.append(Invitation._invitee_email == email.strip().lower())
-        if user_id:
+        if user_id is not None:
             identity_conditions.append(Invitation._invitee_user_id == user_id)
 
         if not identity_conditions:
             return 0
 
         where_clauses = [or_(*identity_conditions)]
-        if status:
+        if status is not None:
             where_clauses.append(Invitation._status == status)
 
         stmt = select(func.count()).select_from(Invitation).where(and_(*where_clauses))

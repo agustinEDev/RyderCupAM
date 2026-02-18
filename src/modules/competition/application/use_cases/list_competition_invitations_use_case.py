@@ -65,15 +65,23 @@ class ListCompetitionInvitationsUseCase:
                 competition_id_vo, status=status_vo, limit=limit, offset=offset
             )
 
-            # 4. Check expiration on-read para PENDING
+            # 4. Check expiration on-read para PENDING y persistir cambios
+            expired_invitations = []
             for inv in invitations:
+                old_status = inv.status
                 inv.check_expiration()
+                if inv.status != old_status:
+                    expired_invitations.append(inv)
+
+            # Persistir invitaciones cuyo status cambio a EXPIRED
+            for inv in expired_invitations:
+                await self._uow.invitations.update(inv)
 
             # Filtrar de nuevo si el status cambio por expiracion
             if status_vo:
                 invitations = [inv for inv in invitations if inv.status == status_vo]
 
-            # 5. Total count
+            # 5. Total count (consistente con filtro post-expiracion)
             total_count = await self._uow.invitations.count_by_competition(
                 competition_id_vo, status=status_vo
             )

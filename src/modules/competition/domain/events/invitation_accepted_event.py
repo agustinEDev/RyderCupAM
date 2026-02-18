@@ -14,10 +14,8 @@ class InvitationAcceptedEvent(DomainEvent):
         invitation_id: ID de la invitacion (str UUID)
         competition_id: ID de la competicion (str UUID)
         invitee_user_id: ID del usuario que acepto (str UUID)
-        enrollment_id: ID del enrollment creado (str UUID)
     """
 
     invitation_id: str
     competition_id: str
     invitee_user_id: str
-    enrollment_id: str

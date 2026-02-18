@@ -35,6 +35,16 @@ from src.modules.user.domain.value_objects.user_id import UserId
 logger = logging.getLogger(__name__)
 
 
+def _mask_email(email: str) -> str:
+    """Enmascara un email para logging seguro (ej: t***@example.com)."""
+    parts = email.split("@")
+    if len(parts) != 2 or not parts[0]:
+        return "***"
+    local = parts[0]
+    masked_local = local[0] + "***" if len(local) > 1 else "***"
+    return f"{masked_local}@{parts[1]}"
+
+
 class SendInvitationByEmailUseCase:
     """Envia una invitacion a un email (usuario registrado o no)."""
 
@@ -161,7 +171,7 @@ class SendInvitationByEmailUseCase:
             except Exception as e:
                 logger.warning(
                     "Failed to send invitation email to %s: %s",
-                    invitation.invitee_email,
+                    _mask_email(invitation.invitee_email),
                     str(e),
                 )
 

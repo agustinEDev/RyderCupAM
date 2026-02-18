@@ -10,9 +10,6 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.events.invitation_accepted_event import (
-    InvitationAcceptedEvent,
-)
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
 )
@@ -53,12 +50,15 @@ class RespondToInvitationUseCase:
         # Obtener email del usuario actual
         async with self._user_uow:
             current_user = await self._user_uow.users.find_by_id(current_user_id)
-            current_user_email = str(current_user.email) if current_user else None
+            if not current_user:
+                raise NotInviteeError(
+                    "Authenticated user not found. Cannot respond to invitation."
+                )
+            current_user_email = str(current_user.email)
 
-        enrollment_id = None
-
+        # Fase 1: Verificar expiracion y persistir si cambio
+        non_pending_status = None
         async with self._uow:
-            # 1. Buscar y validar invitation
             invitation = await self._uow.invitations.find_by_id(invitation_id)
             if not invitation:
                 raise InvitationNotFoundError(
@@ -68,29 +68,51 @@ class RespondToInvitationUseCase:
             invitation.check_expiration()
 
             if not invitation.is_pending():
+                # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
+                await self._uow.invitations.update(invitation)
+                non_pending_status = invitation.status.value
+
+        # Si la invitacion no estaba pending, el commit ya ocurrio; ahora lanzamos
+        if non_pending_status:
+            raise InvalidInvitationStatusViolation(
+                f"Invitation is in status {non_pending_status}. "
+                "Only PENDING invitations can be responded to."
+            )
+
+        # Fase 2: Procesar la respuesta
+        enrollment_id = None
+        competition_name = None
+
+        async with self._uow:
+            # Re-fetch para tener la entidad en la sesion actual
+            invitation = await self._uow.invitations.find_by_id(invitation_id)
+            if not invitation or not invitation.is_pending():
                 raise InvalidInvitationStatusViolation(
-                    f"Invitation is in status {invitation.status.value}. "
-                    "Only PENDING invitations can be responded to."
+                    "Invitation is no longer pending."
                 )
 
-            # 2. Verificar current_user es invitee
+            # Verificar current_user es invitee
             is_invitee = invitation.is_for_user(current_user_id) or (
-                current_user_email and invitation.is_for_email(current_user_email)
+                invitation.is_for_email(current_user_email)
             )
             if not is_invitee:
                 raise NotInviteeError("You are not the invitee of this invitation.")
 
-            # 3. Ejecutar accion
+            # Ejecutar accion
             if action == "ACCEPT":
-                enrollment_id = await self._handle_accept(invitation, current_user_id)
+                enrollment_id, competition_name = await self._handle_accept(
+                    invitation, current_user_id
+                )
             else:
                 await self._handle_decline(invitation)
 
-        # 4. Construir respuesta enriquecida
-        return await self._build_response(invitation, enrollment_id)
+        # Construir respuesta enriquecida
+        return await self._build_response(
+            invitation, enrollment_id, competition_name
+        )
 
     async def _handle_accept(self, invitation, current_user_id: UserId):
-        """Procesa la aceptacion de una invitacion."""
+        """Procesa la aceptacion de una invitacion. Retorna (enrollment_id, competition_name)."""
         competition = await self._uow.competitions.find_by_id(invitation.competition_id)
         if not competition:
             raise CompetitionNotFoundError(
@@ -102,9 +124,9 @@ class RespondToInvitationUseCase:
         existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
             current_user_id, invitation.competition_id
         )
-        if existing_enrollment and existing_enrollment.is_approved():
+        if existing_enrollment:
             raise InvalidInvitationStatusViolation(
-                "User is already enrolled in this competition."
+                "User already has an enrollment in this competition."
             )
 
         approved_count = await self._uow.enrollments.count_approved_by_competition(
@@ -122,25 +144,19 @@ class RespondToInvitationUseCase:
             user_id=current_user_id,
         )
 
-        event = InvitationAcceptedEvent(
-            invitation_id=str(invitation.id),
-            competition_id=str(invitation.competition_id),
-            invitee_user_id=str(current_user_id),
-            enrollment_id=str(enrollment.id.value),
-        )
-        invitation.add_domain_event(event)
-
         await self._uow.enrollments.add(enrollment)
         await self._uow.invitations.update(invitation)
 
-        return enrollment.id.value
+        return enrollment.id.value, str(competition.name)
 
     async def _handle_decline(self, invitation):
         """Procesa el rechazo de una invitacion."""
         invitation.decline()
         await self._uow.invitations.update(invitation)
 
-    async def _build_response(self, invitation, enrollment_id) -> RespondInvitationResponseDTO:
+    async def _build_response(
+        self, invitation, enrollment_id, competition_name=None
+    ) -> RespondInvitationResponseDTO:
         """Construye el DTO de respuesta enriquecido con nombres."""
         async with self._user_uow:
             inviter_user = await self._user_uow.users.find_by_id(invitation.inviter_id)
@@ -158,11 +174,13 @@ class RespondToInvitationUseCase:
                 if invitee_user:
                     invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
 
-        async with self._uow:
-            competition = await self._uow.competitions.find_by_id(
-                invitation.competition_id
-            )
-            competition_name = str(competition.name) if competition else "Unknown"
+        # Solo buscar competition si no fue pasado (path DECLINE)
+        if not competition_name:
+            async with self._uow:
+                competition = await self._uow.competitions.find_by_id(
+                    invitation.competition_id
+                )
+                competition_name = str(competition.name) if competition else "Unknown"
 
         return RespondInvitationResponseDTO(
             id=invitation.id.value,
