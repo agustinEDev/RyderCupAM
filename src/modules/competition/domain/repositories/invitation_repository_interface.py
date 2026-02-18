@@ -94,5 +94,5 @@ class InvitationRepositoryInterface(ABC):
         user_id: UserId | None = None,
         status: InvitationStatus | None = None,
     ) -> int:
-        """Cuenta invitaciones para un invitado (por email y/o user_id)."""
+        """Cuenta invitaciones para un invitado (email OR user_id, AND status)."""
         pass

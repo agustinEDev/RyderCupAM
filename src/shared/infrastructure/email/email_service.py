@@ -609,6 +609,7 @@ The Ryder Cup Friends Team
         unregistered_es = ""
         unregistered_en = ""
         unregistered_html_es = ""
+        unregistered_html_en = ""
         if not safe_invitee:
             unregistered_es = (
                 f"\nAun no tienes cuenta? Registrate aqui: {register_link}\n"
@@ -619,7 +620,12 @@ The Ryder Cup Friends Team
             unregistered_html_es = f"""
             <p>Si aun no tienes cuenta, registrate primero:</p>
             <center>
-                <a href="{register_link}" class="button" style="background-color: #28a745;">Registrarme | Register</a>
+                <a href="{register_link}" class="button" style="background-color: #28a745;">Registrarme</a>
+            </center>"""
+            unregistered_html_en = f"""
+            <p>Don't have an account yet? Register first:</p>
+            <center>
+                <a href="{register_link}" class="button" style="background-color: #28a745;">Register</a>
             </center>"""
 
         text_body = f"""
@@ -742,6 +748,7 @@ The Ryder Cup Friends Team
             <center>
                 <a href="{invitations_link}" class="button">View my invitations</a>
             </center>
+            {unregistered_html_en}
 
             <div class="footer">
                 <p>Saludos | Best regards,<br>

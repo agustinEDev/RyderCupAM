@@ -202,6 +202,7 @@ class TestListCompetitionInvitationsUseCase:
         )
 
         assert len(result.invitations) == 2
+        assert result.total_count == 5
         assert result.page == 1
         assert result.limit == 2
 

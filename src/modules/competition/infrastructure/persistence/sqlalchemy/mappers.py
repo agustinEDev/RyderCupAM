@@ -758,14 +758,14 @@ invitations_table = Table(
     Column(
         "inviter_id",
         UserIdDecorator,
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     ),
     Column("invitee_email", String(254), nullable=False),
     Column(
         "invitee_user_id",
         UserIdDecorator,
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     ),
     Column("status", InvitationStatusDecorator, nullable=False),

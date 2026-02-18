@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.repositories.invitation_repository_interface import (
@@ -127,17 +127,20 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         user_id: UserId | None = None,
         status: InvitationStatus | None = None,
     ) -> int:
-        conditions = []
+        # Identity conditions use OR (email OR user_id match the same person)
+        identity_conditions = []
         if email:
-            conditions.append(Invitation._invitee_email == email.strip().lower())
+            identity_conditions.append(Invitation._invitee_email == email.strip().lower())
         if user_id:
-            conditions.append(Invitation._invitee_user_id == user_id)
-        if status:
-            conditions.append(Invitation._status == status)
+            identity_conditions.append(Invitation._invitee_user_id == user_id)
 
-        if not conditions:
+        if not identity_conditions:
             return 0
 
-        stmt = select(func.count()).select_from(Invitation).where(and_(*conditions))
+        where_clauses = [or_(*identity_conditions)]
+        if status:
+            where_clauses.append(Invitation._status == status)
+
+        stmt = select(func.count()).select_from(Invitation).where(and_(*where_clauses))
         result = await self._session.execute(stmt)
         return result.scalar() or 0

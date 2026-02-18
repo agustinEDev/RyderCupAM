@@ -108,7 +108,7 @@ class Invitation:
             inviter_id=str(invitation._inviter_id),
             invitee_email=invitation._invitee_email,
         )
-        invitation._add_domain_event(event)
+        invitation.add_domain_event(event)
 
         return invitation
 
@@ -249,7 +249,7 @@ class Invitation:
             competition_id=str(self._competition_id),
             invitee_user_id=str(self._invitee_user_id) if self._invitee_user_id else "",
         )
-        self._add_domain_event(event)
+        self.add_domain_event(event)
 
     def check_expiration(self) -> None:
         """Verifica y actualiza el estado si la invitacion ha expirado."""
@@ -266,7 +266,8 @@ class Invitation:
     # DOMAIN EVENTS
     # ===========================================
 
-    def _add_domain_event(self, event: DomainEvent) -> None:
+    def add_domain_event(self, event: DomainEvent) -> None:
+        """Registra un evento de dominio en la entidad."""
         if not hasattr(self, "_domain_events") or self._domain_events is None:
             self._domain_events: list[DomainEvent] = []
         self._domain_events.append(event)

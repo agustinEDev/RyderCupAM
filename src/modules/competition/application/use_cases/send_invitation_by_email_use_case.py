@@ -18,8 +18,6 @@ from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
     DuplicateInvitationViolation,
-    InvitationCompetitionStatusViolation,
-    InvitationRateLimitViolation,
     SelfInvitationViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -71,22 +69,16 @@ class SendInvitationByEmailUseCase:
                 )
 
             # 3. Validar estado de competicion
-            try:
-                CompetitionPolicy.can_send_invitation(competition.status)
-            except InvitationCompetitionStatusViolation:
-                raise
+            CompetitionPolicy.can_send_invitation(competition.status)
 
             # 3b. Validar rate limit (max_players invitaciones por hora)
             one_hour_ago = datetime.now() - timedelta(hours=1)
             recent_invitations = await self._uow.invitations.count_by_competition(
                 competition_id, since=one_hour_ago
             )
-            try:
-                CompetitionPolicy.validate_invitation_rate(
-                    recent_invitations, competition.max_players, competition_id
-                )
-            except InvitationRateLimitViolation:
-                raise
+            CompetitionPolicy.validate_invitation_rate(
+                recent_invitations, competition.max_players, competition_id
+            )
 
             # 4. Buscar user por email (puede no existir)
             invitee_user_id = None
@@ -95,7 +87,7 @@ class SendInvitationByEmailUseCase:
                 try:
                     email_vo = Email(request.invitee_email)
                     invitee_user = await self._user_uow.users.find_by_email(email_vo)
-                except (ValueError, Exception):
+                except ValueError:
                     invitee_user = None
 
                 if invitee_user:
@@ -108,18 +100,18 @@ class SendInvitationByEmailUseCase:
                             "Cannot invite yourself to a competition."
                         )
 
-                    # 5b. Verificar no enrollment activo
-                    async with self._uow:
-                        existing_enrollment = (
-                            await self._uow.enrollments.find_by_user_and_competition(
-                                invitee_user_id, competition_id
-                            )
-                        )
-                        if existing_enrollment and existing_enrollment.is_approved():
-                            raise AlreadyEnrolledInvitationViolation(
-                                f"User with email {request.invitee_email} is already "
-                                f"enrolled in competition {request.competition_id}."
-                            )
+            # 5b. Verificar no enrollment activo (ya dentro del UoW de competition)
+            if invitee_user_id:
+                existing_enrollment = (
+                    await self._uow.enrollments.find_by_user_and_competition(
+                        invitee_user_id, competition_id
+                    )
+                )
+                if existing_enrollment and existing_enrollment.is_approved():
+                    raise AlreadyEnrolledInvitationViolation(
+                        f"User with email {request.invitee_email} is already "
+                        f"enrolled in competition {request.competition_id}."
+                    )
 
             # 6. Verificar no invitation PENDING duplicada
             existing_invitation = (

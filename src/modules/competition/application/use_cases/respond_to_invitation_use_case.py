@@ -128,7 +128,7 @@ class RespondToInvitationUseCase:
             invitee_user_id=str(current_user_id),
             enrollment_id=str(enrollment.id.value),
         )
-        invitation._add_domain_event(event)
+        invitation.add_domain_event(event)
 
         await self._uow.enrollments.add(enrollment)
         await self._uow.invitations.update(invitation)

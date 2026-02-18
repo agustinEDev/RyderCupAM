@@ -78,50 +78,50 @@ class ListCompetitionInvitationsUseCase:
                 competition_id_vo, status=status_vo
             )
 
-            # 6. Enriquecer con nombres
+            # 6. Guardar datos intermedios
             competition_name = str(competition.name)
-            invitation_dtos = []
 
+        # 7. Enriquecer con nombres en una sola sesion de usuario
+        invitation_dtos = []
+        async with self._user_uow:
             for inv in invitations:
-                # Resolver inviter_name
-                async with self._user_uow:
-                    inviter_user = await self._user_uow.users.find_by_id(inv.inviter_id)
-                    inviter_name = (
-                        f"{inviter_user.first_name} {inviter_user.last_name}"
-                        if inviter_user
-                        else "Unknown"
-                    )
-
-                    # Resolver invitee_name
-                    invitee_name = None
-                    if inv.invitee_user_id:
-                        invitee_user = await self._user_uow.users.find_by_id(
-                            inv.invitee_user_id
-                        )
-                        if invitee_user:
-                            invitee_name = (
-                                f"{invitee_user.first_name} {invitee_user.last_name}"
-                            )
-
-                dto = InvitationResponseDTO(
-                    id=inv.id.value,
-                    competition_id=inv.competition_id.value,
-                    competition_name=competition_name,
-                    inviter_id=inv.inviter_id.value,
-                    inviter_name=inviter_name,
-                    invitee_email=inv.invitee_email,
-                    invitee_user_id=(
-                        inv.invitee_user_id.value if inv.invitee_user_id else None
-                    ),
-                    invitee_name=invitee_name,
-                    status=inv.status.value,
-                    personal_message=inv.personal_message,
-                    expires_at=inv.expires_at,
-                    responded_at=inv.responded_at,
-                    created_at=inv.created_at,
-                    updated_at=inv.updated_at,
+                inviter_user = await self._user_uow.users.find_by_id(inv.inviter_id)
+                inviter_name = (
+                    f"{inviter_user.first_name} {inviter_user.last_name}"
+                    if inviter_user
+                    else "Unknown"
                 )
-                invitation_dtos.append(dto)
+
+                invitee_name = None
+                if inv.invitee_user_id:
+                    invitee_user = await self._user_uow.users.find_by_id(
+                        inv.invitee_user_id
+                    )
+                    if invitee_user:
+                        invitee_name = (
+                            f"{invitee_user.first_name} {invitee_user.last_name}"
+                        )
+
+                invitation_dtos.append(
+                    InvitationResponseDTO(
+                        id=inv.id.value,
+                        competition_id=inv.competition_id.value,
+                        competition_name=competition_name,
+                        inviter_id=inv.inviter_id.value,
+                        inviter_name=inviter_name,
+                        invitee_email=inv.invitee_email,
+                        invitee_user_id=(
+                            inv.invitee_user_id.value if inv.invitee_user_id else None
+                        ),
+                        invitee_name=invitee_name,
+                        status=inv.status.value,
+                        personal_message=inv.personal_message,
+                        expires_at=inv.expires_at,
+                        responded_at=inv.responded_at,
+                        created_at=inv.created_at,
+                        updated_at=inv.updated_at,
+                    )
+                )
 
         return PaginatedInvitationResponseDTO(
             invitations=invitation_dtos,
