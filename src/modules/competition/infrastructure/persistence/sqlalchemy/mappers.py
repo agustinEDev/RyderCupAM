@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Table,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import composite, relationship
@@ -28,6 +29,7 @@ from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import (
@@ -51,6 +53,8 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_id import MatchId
@@ -131,6 +135,25 @@ class EnrollmentIdDecorator(TypeDecorator):
         if value is None:
             return None
         return EnrollmentId(uuid.UUID(value))
+
+
+class InvitationIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir InvitationId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: InvitationId | str | None, dialect) -> str | None:
+        if isinstance(value, InvitationId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> InvitationId | None:
+        if value is None:
+            return None
+        return InvitationId(uuid.UUID(value))
 
 
 class UserIdDecorator(TypeDecorator):
@@ -309,6 +332,7 @@ MatchStatusDecorator = _create_enum_decorator(MatchStatus)
 TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
 TeeCategoryDecorator = _create_enum_decorator(TeeCategory)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
+InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 
 
 # =============================================================================
@@ -718,6 +742,42 @@ team_assignments_table = Table(
 
 
 # =============================================================================
+# TABLA INVITATIONS
+# =============================================================================
+
+invitations_table = Table(
+    "invitations",
+    metadata,
+    Column("id", InvitationIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "inviter_id",
+        UserIdDecorator,
+        ForeignKey("users.id"),
+        nullable=False,
+    ),
+    Column("invitee_email", String(254), nullable=False),
+    Column(
+        "invitee_user_id",
+        UserIdDecorator,
+        ForeignKey("users.id"),
+        nullable=True,
+    ),
+    Column("status", InvitationStatusDecorator, nullable=False),
+    Column("personal_message", Text, nullable=True),
+    Column("expires_at", DateTime, nullable=False),
+    Column("responded_at", DateTime, nullable=True),
+    Column("created_at", DateTime, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
+)
+
+
+# =============================================================================
 # START MAPPERS - Funcion de inicializacion
 # =============================================================================
 
@@ -891,6 +951,26 @@ def start_competition_mappers():
                 "_team_a_player_ids": team_assignments_table.c.team_a_player_ids,
                 "_team_b_player_ids": team_assignments_table.c.team_b_player_ids,
                 "_created_at": team_assignments_table.c.created_at,
+            },
+        )
+
+    # Mapear Invitation
+    if Invitation not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            Invitation,
+            invitations_table,
+            properties={
+                "_id": invitations_table.c.id,
+                "_competition_id": invitations_table.c.competition_id,
+                "_inviter_id": invitations_table.c.inviter_id,
+                "_invitee_email": invitations_table.c.invitee_email,
+                "_invitee_user_id": invitations_table.c.invitee_user_id,
+                "_status": invitations_table.c.status,
+                "_personal_message": invitations_table.c.personal_message,
+                "_expires_at": invitations_table.c.expires_at,
+                "_responded_at": invitations_table.c.responded_at,
+                "_created_at": invitations_table.c.created_at,
+                "_updated_at": invitations_table.c.updated_at,
             },
         )
 
