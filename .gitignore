@@ -79,6 +79,7 @@ requirements.lock.metadata
 # ==================================
 docs/frontend-examples/
 docs/FRONTEND_INTEGRATION_v1.13.0.md
+docs/FRONTEND_INTEGRATION.md
 docker/.env
 
 # K8s database backups

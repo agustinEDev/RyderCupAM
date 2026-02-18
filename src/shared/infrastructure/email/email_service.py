@@ -5,17 +5,21 @@ Servicio para enviar emails usando Mailgun.
 """
 
 import logging
+from datetime import datetime
 
 import requests
 from fastapi import status
 
 from src.config.settings import settings
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
 
-class EmailService(IEmailService):
+class EmailService(IEmailService, IInvitationEmailService):
     """
     Implementación de IEmailService usando Mailgun.
 
@@ -530,6 +534,214 @@ The Ryder Cup Friends Team
                 <p style="margin: 0;"><strong>⚠️ Wasn't you?</strong></p>
                 <p style="margin: 10px 0 0 0;">If you did NOT make this change, your account may be compromised. Contact our support team immediately.</p>
             </div>
+
+            <div class="footer">
+                <p>Saludos | Best regards,<br>
+                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        return self._send_email(to_email, subject, text_body, html_body)
+
+    def _sanitize_name(self, name: str) -> str:
+        """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
+        return (
+            name.replace("\n", "")
+            .replace("\r", "")
+            .replace('"', "")
+            .replace("<", "")
+            .replace(">", "")
+            .strip()
+        )
+
+    async def send_invitation_email(
+        self,
+        to_email: str,
+        invitee_name: str | None,
+        inviter_name: str,
+        competition_name: str,
+        personal_message: str | None,
+        expires_at: datetime,
+    ) -> bool:
+        """
+        Envia un email de invitacion a una competicion.
+
+        Template bilingue (ES/EN) con diseno consistente.
+        """
+        safe_inviter = self._sanitize_name(inviter_name)
+        safe_competition = self._sanitize_name(competition_name)
+        safe_invitee = self._sanitize_name(invitee_name) if invitee_name else None
+
+        greeting_es = f"Hola {safe_invitee}" if safe_invitee else "Hola"
+        greeting_en = f"Hello {safe_invitee}" if safe_invitee else "Hello"
+
+        expires_str = expires_at.strftime("%d/%m/%Y")
+
+        # Mensaje personal (si existe)
+        personal_es = ""
+        personal_en = ""
+        personal_html_es = ""
+        personal_html_en = ""
+        if personal_message:
+            safe_message = self._sanitize_name(personal_message)
+            personal_es = f'\nMensaje de {safe_inviter}: "{safe_message}"\n'
+            personal_en = f'\nMessage from {safe_inviter}: "{safe_message}"\n'
+            personal_html_es = f"""
+            <div style="background-color: #f0f4f8; border-left: 4px solid #0066cc; padding: 15px; margin: 15px 0;">
+                <p style="margin: 0; font-style: italic;">"{safe_message}"</p>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">- {safe_inviter}</p>
+            </div>"""
+            personal_html_en = personal_html_es
+
+        invitations_link = f"{settings.FRONTEND_URL}/invitations"
+        register_link = f"{settings.FRONTEND_URL}/register"
+
+        subject = (
+            f"Te han invitado a {safe_competition} "
+            f"| You've been invited to {safe_competition}"
+        )
+
+        # Texto para no registrados
+        unregistered_es = ""
+        unregistered_en = ""
+        unregistered_html_es = ""
+        if not safe_invitee:
+            unregistered_es = (
+                f"\nAun no tienes cuenta? Registrate aqui: {register_link}\n"
+            )
+            unregistered_en = (
+                f"\nDon't have an account yet? Register here: {register_link}\n"
+            )
+            unregistered_html_es = f"""
+            <p>Si aun no tienes cuenta, registrate primero:</p>
+            <center>
+                <a href="{register_link}" class="button" style="background-color: #28a745;">Registrarme | Register</a>
+            </center>"""
+
+        text_body = f"""
+{greeting_es},
+
+{safe_inviter} te ha invitado a participar en la competicion "{safe_competition}" en Ryder Cup Friends.
+{personal_es}
+La invitacion expira el {expires_str}.
+
+Para responder a la invitacion, visita: {invitations_link}
+{unregistered_es}
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+{greeting_en},
+
+{safe_inviter} has invited you to join the competition "{safe_competition}" on Ryder Cup Friends.
+{personal_en}
+The invitation expires on {expires_str}.
+
+To respond to the invitation, visit: {invitations_link}
+{unregistered_en}
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .container {{
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 30px;
+        }}
+        .header {{
+            background-color: #0066cc;
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }}
+        .content {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 0 0 10px 10px;
+        }}
+        .button {{
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #0066cc;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: bold;
+        }}
+        .info-box {{
+            background-color: #e8f4fd;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            margin: 20px 0;
+        }}
+        .footer {{
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }}
+        .divider {{
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Invitacion a Competicion</h1>
+            <h2>Competition Invitation</h2>
+        </div>
+        <div class="content">
+            <!-- Spanish -->
+            <p>{greeting_es},</p>
+            <p><strong>{safe_inviter}</strong> te ha invitado a participar en la competicion:</p>
+
+            <div class="info-box">
+                <p style="margin: 0; font-size: 18px; font-weight: bold;">{safe_competition}</p>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expira el {expires_str}</p>
+            </div>
+            {personal_html_es}
+            <center>
+                <a href="{invitations_link}" class="button">Ver mis invitaciones</a>
+            </center>
+            {unregistered_html_es}
+
+            <div class="divider"></div>
+
+            <!-- English -->
+            <p>{greeting_en},</p>
+            <p><strong>{safe_inviter}</strong> has invited you to join the competition:</p>
+
+            <div class="info-box">
+                <p style="margin: 0; font-size: 18px; font-weight: bold;">{safe_competition}</p>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expires on {expires_str}</p>
+            </div>
+            {personal_html_en}
+            <center>
+                <a href="{invitations_link}" class="button">View my invitations</a>
+            </center>
 
             <div class="footer">
                 <p>Saludos | Best regards,<br>

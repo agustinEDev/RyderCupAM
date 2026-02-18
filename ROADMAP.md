@@ -1,32 +1,27 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Version:** 2.0.8 | **Tests:** 1,567 (1 skipped) | **Endpoints:** 66 | **OWASP:** 9.4/10
+> **Version:** 2.0.11 | **Tests:** 1,646 unit + 236 integration (1 skipped) | **Endpoints:** 74 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Feb 15, 2026
+> **Last Updated:** Feb 18, 2026
 
 ---
 
-## En Progreso
+## Completado: Sprint 3 — Google OAuth + Invitations
 
-### Clean Architecture Refactoring (PR #63)
+### Bloque 1: Google OAuth (Social Login) ✅ v2.0.9 → v2.0.11
 
-- **Rama:** `refactor/clean-architecture-violations`
-- **Objetivo:** Resolver violaciones DDD/Clean Architecture detectadas post-Sprint 2
-- **Resultado:** 12/15 violaciones resueltas (97% compliance)
-  - Zero framework imports en domain layer
-  - Entidades encapsuladas (Competition, Enrollment)
-  - DTO mappers movidos a application layer
-  - Competition routes dividido en 3 ficheros (CRUD, State, GolfCourse)
-  - Domain services inyectados via DI
-  - Excepciones centralizadas
+```http
+POST /api/v1/auth/google                              # Login/registro con Google
+POST /api/v1/auth/google/link                          # Vincular cuenta Google a usuario existente
+DELETE /api/v1/auth/google/unlink                      # Desvincular cuenta Google
+```
 
----
+- OAuth 2.0 Authorization Code Flow con PKCE
+- Tabla `user_oauth_accounts` (user_id, provider, provider_user_id, email)
+- `auth_providers` + `has_password` en UserResponseDTO (v2.0.10)
+- Hotfix: naive datetime en UserOAuthAccount (v2.0.11)
 
-## Próximo: Sprint 3 — Invitations (1 semana)
-
-**Objetivo:** Sistema de invitaciones para competiciones
-
-### Endpoints (5)
+### Bloque 2: Invitations ✅
 
 ```http
 POST /api/v1/competitions/{id}/invitations            # Invitar por user ID
@@ -36,12 +31,11 @@ POST /api/v1/invitations/{id}/respond                  # Aceptar/Rechazar
 GET  /api/v1/competitions/{id}/invitations             # Vista creador
 ```
 
-### Reglas clave
-
-- Token 256-bit (`secrets.token_urlsafe(32)`), SHA256 hash en BD, expira 7 días
+- Token 256-bit, SHA256 hash en BD, expira 7 días
 - Aceptar invitación → Enrollment status APPROVED (bypasses approval flow)
-- Emails bilingües ES/EN via Mailgun
-- Limpieza automática de tokens expirados (Celery, cada 6h)
+- Rate limiting: max_players invitaciones por hora por competición
+- **Emails bilingües ES/EN via Mailgun** (ISP: `IInvitationEmailService` port en Competition module)
+- Email no bloquea creación de invitación (fire-and-forget con try/except)
 
 ---
 
@@ -96,7 +90,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 ### v3.0.0 — Major Release (4-6 meses)
 
-- OAuth 2.0 / Social Login (Google, Apple)
+- Apple Sign In (requiere Apple Developer Program)
 - WebAuthn (Hardware Security Keys)
 - Push notifications (Firebase)
 - Payment system (Stripe)
@@ -112,7 +106,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 2025 Q4  │ v1.0.0 → v1.8.0   Auth, Security, Email, Handicap
 2026 Q1  │ v1.11.0 → v1.13.1  Password Reset, CI/CD, Security Hardening
          │ v2.0.0 → v2.0.8    RBAC, Golf Courses, Scheduling, Support
-         │ ⭐ Sprint 3         Invitations ← NEXT
+         │ v2.0.9 → v2.0.11   Sprint 3: Google OAuth + Invitations ✅
 2026 Q2  │ Sprint 4-5          Scoring + Leaderboards
          │ v2.1.0              Compliance (GDPR, Audit, Avatars)
          │ v2.2.0              AI & RAG Module
@@ -126,6 +120,9 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 | Version | Fecha | Highlights |
 |---------|-------|------------|
+| **v2.0.11** | Feb 17, 2026 | Hotfix: naive datetime in UserOAuthAccount |
+| **v2.0.10** | Feb 17, 2026 | auth_providers + has_password in UserResponseDTO |
+| **v2.0.9** | Feb 16, 2026 | Google OAuth (login, link, unlink) + Invitations (5 endpoints) |
 | **v2.0.8** | Feb 9, 2026 | Support Module (contact form → GitHub Issues) |
 | **v2.0.7** | Feb 8, 2026 | Gender-based tee categories, hotfixes |
 | **v2.0.1-v2.0.6** | Feb 1-6, 2026 | Sprint 2: Rounds, Matches, Teams (11 endpoints, 422 tests) |

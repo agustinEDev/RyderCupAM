@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import async_session_maker
 from src.config.settings import settings
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -1179,20 +1182,27 @@ def get_reassign_match_players_use_case(
 # ======================================================================================
 
 
+def get_invitation_email_service() -> IInvitationEmailService:
+    """Proveedor del servicio de email para invitaciones."""
+    return EmailService()
+
+
 def get_send_invitation_by_user_id_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IInvitationEmailService = Depends(get_invitation_email_service),
 ) -> SendInvitationByUserIdUseCase:
     """Proveedor del caso de uso SendInvitationByUserIdUseCase."""
-    return SendInvitationByUserIdUseCase(uow, user_uow)
+    return SendInvitationByUserIdUseCase(uow, user_uow, email_service)
 
 
 def get_send_invitation_by_email_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IInvitationEmailService = Depends(get_invitation_email_service),
 ) -> SendInvitationByEmailUseCase:
     """Proveedor del caso de uso SendInvitationByEmailUseCase."""
-    return SendInvitationByEmailUseCase(uow, user_uow)
+    return SendInvitationByEmailUseCase(uow, user_uow, email_service)
 
 
 def get_list_my_invitations_use_case(

@@ -1,5 +1,6 @@
 """Caso de Uso: Enviar Invitacion por User ID."""
 
+import logging
 from datetime import datetime, timedelta
 
 from src.modules.competition.application.dto.invitation_dto import (
@@ -10,6 +11,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InviteeNotFoundError,
     NotCompetitionCreatorError,
+)
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
 )
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -30,6 +34,8 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
+logger = logging.getLogger(__name__)
+
 
 class SendInvitationByUserIdUseCase:
     """Envia una invitacion a un usuario registrado por su user_id."""
@@ -38,9 +44,11 @@ class SendInvitationByUserIdUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        email_service: IInvitationEmailService | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
+        self._email_service = email_service
 
     async def execute(
         self, request: SendInvitationByUserIdRequestDTO
@@ -139,6 +147,22 @@ class SendInvitationByUserIdUseCase:
                 if inviter_user
                 else "Unknown"
             )
+
+        # 11. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
+        if self._email_service:
+            try:
+                await self._email_service.send_invitation_email(
+                    to_email=invitee_email,
+                    invitee_name=invitee_name,
+                    inviter_name=inviter_name,
+                    competition_name=str(competition.name),
+                    personal_message=invitation.personal_message,
+                    expires_at=invitation.expires_at,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to send invitation email to %s: %s", invitee_email, str(e)
+                )
 
         return InvitationResponseDTO(
             id=invitation.id.value,

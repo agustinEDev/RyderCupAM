@@ -1,6 +1,7 @@
 """Tests para SendInvitationByEmailUseCase."""
 
 from datetime import date
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -246,3 +247,72 @@ class TestSendInvitationByEmailUseCase:
 
         with pytest.raises(InvitationRateLimitViolation):
             await uc.execute(request)
+
+    async def test_should_call_email_service_for_registered_user(self, comp_uow, user_uow):
+        """Email service se llama con invitee_name para usuario registrado."""
+        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
+        await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        created = await self._create_active_competition(comp_uow, creator.id)
+
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow, email_service=mock_email)
+        request = SendInvitationByEmailRequestDTO(
+            competition_id=created.id,
+            inviter_id=creator.id.value,
+            invitee_email="invitee@test.com",
+            personal_message="Welcome!",
+        )
+        result = await uc.execute(request)
+
+        assert result.status == "PENDING"
+        mock_email.send_invitation_email.assert_called_once()
+        call_kwargs = mock_email.send_invitation_email.call_args[1]
+        assert call_kwargs["to_email"] == "invitee@test.com"
+        assert call_kwargs["invitee_name"] == "Invitee Player"
+        assert call_kwargs["inviter_name"] == "Creator Boss"
+        assert call_kwargs["competition_name"] == "Test Cup"
+        assert call_kwargs["personal_message"] == "Welcome!"
+
+    async def test_should_call_email_service_for_unregistered_user(self, comp_uow, user_uow):
+        """Email service se llama con invitee_name=None para email no registrado."""
+        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
+        created = await self._create_active_competition(comp_uow, creator.id)
+
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow, email_service=mock_email)
+        request = SendInvitationByEmailRequestDTO(
+            competition_id=created.id,
+            inviter_id=creator.id.value,
+            invitee_email="unknown@test.com",
+        )
+        result = await uc.execute(request)
+
+        assert result.status == "PENDING"
+        mock_email.send_invitation_email.assert_called_once()
+        call_kwargs = mock_email.send_invitation_email.call_args[1]
+        assert call_kwargs["to_email"] == "unknown@test.com"
+        assert call_kwargs["invitee_name"] is None
+
+    async def test_should_create_invitation_even_if_email_fails(self, comp_uow, user_uow):
+        """La invitacion se crea aunque el email falle."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(side_effect=Exception("Network error"))
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow, email_service=mock_email)
+        request = SendInvitationByEmailRequestDTO(
+            competition_id=created.id,
+            inviter_id=creator.id.value,
+            invitee_email="someone@test.com",
+        )
+        result = await uc.execute(request)
+
+        # Invitacion creada a pesar del error de email
+        assert result.status == "PENDING"
+        assert result.invitee_email == "someone@test.com"
