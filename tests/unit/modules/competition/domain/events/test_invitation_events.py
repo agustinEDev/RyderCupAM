@@ -92,10 +92,10 @@ class TestInvitationDeclinedEvent:
         assert event.competition_id == "comp-1"
         assert event.invitee_user_id == "user-2"
 
-    def test_invitee_user_id_can_be_empty_for_unregistered(self):
+    def test_invitee_user_id_can_be_none_for_unregistered(self):
         event = InvitationDeclinedEvent(
             invitation_id="inv-1",
             competition_id="comp-1",
-            invitee_user_id="",
+            invitee_user_id=None,
         )
-        assert event.invitee_user_id == ""
+        assert event.invitee_user_id is None

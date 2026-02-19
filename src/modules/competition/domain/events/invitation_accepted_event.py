@@ -18,4 +18,4 @@ class InvitationAcceptedEvent(DomainEvent):
 
     invitation_id: str
     competition_id: str
-    invitee_user_id: str
+    invitee_user_id: str | None

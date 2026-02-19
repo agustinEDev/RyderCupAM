@@ -4,6 +4,7 @@ Email Service - Infrastructure Layer
 Servicio para enviar emails usando Mailgun.
 """
 
+import html
 import logging
 from datetime import datetime
 
@@ -562,12 +563,12 @@ The Ryder Cup Friends Team
         personal_html_es = ""
         personal_html_en = ""
         if personal_message:
-            safe_message = self._sanitize_name(personal_message)
-            personal_es = f'\nMensaje de {safe_inviter}: "{safe_message}"\n'
-            personal_en = f'\nMessage from {safe_inviter}: "{safe_message}"\n'
+            escaped_message = html.escape(personal_message)
+            personal_es = f'\nMensaje de {safe_inviter}: "{personal_message}"\n'
+            personal_en = f'\nMessage from {safe_inviter}: "{personal_message}"\n'
             personal_html_es = f"""
             <div style="background-color: #f0f4f8; border-left: 4px solid #0066cc; padding: 15px; margin: 15px 0;">
-                <p style="margin: 0; font-style: italic;">"{safe_message}"</p>
+                <p style="margin: 0; font-style: italic;">"{escaped_message}"</p>
                 <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">- {safe_inviter}</p>
             </div>"""
             personal_html_en = personal_html_es
@@ -735,4 +736,5 @@ The Ryder Cup Friends Team
 </html>
         """
 
-        return self._send_email(to_email, subject, text_body, html_body)
+        recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
+        return self._send_email(recipient, subject, text_body, html_body)

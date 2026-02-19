@@ -60,9 +60,10 @@ class ListCompetitionInvitationsUseCase:
                     "Only the competition creator or an administrator can view invitations."
                 )
 
-            # 3. Obtener invitaciones con filtro
+            # 3. Obtener invitaciones con over-fetch para compensar expiraciones
+            fetch_limit = max(limit * 2, limit + 10)
             invitations = await self._uow.invitations.find_by_competition(
-                competition_id_vo, status=status_vo, limit=limit, offset=offset
+                competition_id_vo, status=status_vo, limit=fetch_limit, offset=offset
             )
 
             # 4. Check expiration on-read para PENDING y persistir cambios
@@ -77,9 +78,10 @@ class ListCompetitionInvitationsUseCase:
             for inv in expired_invitations:
                 await self._uow.invitations.update(inv)
 
-            # Filtrar de nuevo si el status cambio por expiracion
+            # Filtrar de nuevo si el status cambio por expiracion y recortar a limit
             if status_vo:
                 invitations = [inv for inv in invitations if inv.status == status_vo]
+            invitations = invitations[:limit]
 
             # 5. Total count (consistente con filtro post-expiracion)
             total_count = await self._uow.invitations.count_by_competition(

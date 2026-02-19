@@ -73,7 +73,7 @@ def _validate_status_filter(status_filter: str | None) -> str | None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid status filter: '{status_filter}'. Valid values: {valid}",
-        )
+        ) from None
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
