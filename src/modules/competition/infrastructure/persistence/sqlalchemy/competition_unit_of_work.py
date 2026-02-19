@@ -15,6 +15,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.invitation_repository_interface import (
+    InvitationRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
 )
@@ -29,6 +32,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_r
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
     SQLAlchemyEnrollmentRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_repository import (
+    SQLAlchemyInvitationRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
@@ -62,6 +68,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._rounds = SQLAlchemyRoundRepository(session)
         self._matches = SQLAlchemyMatchRepository(session)
         self._team_assignments = SQLAlchemyTeamAssignmentRepository(session)
+        self._invitations = SQLAlchemyInvitationRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -86,6 +93,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         return self._team_assignments
+
+    @property
+    def invitations(self) -> InvitationRepositoryInterface:
+        return self._invitations
 
     async def __aenter__(self):
         return self

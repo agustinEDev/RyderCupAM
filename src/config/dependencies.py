@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import async_session_maker
 from src.config.settings import settings
+from src.modules.competition.application.ports.invitation_email_service_interface import (
+    IInvitationEmailService,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -65,11 +68,17 @@ from src.modules.competition.application.use_cases.get_schedule_use_case import 
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.list_competition_invitations_use_case import (
+    ListCompetitionInvitationsUseCase,
+)
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
+    ListMyInvitationsUseCase,
 )
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     ReassignMatchPlayersUseCase,
@@ -82,6 +91,15 @@ from src.modules.competition.application.use_cases.reorder_golf_courses_use_case
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
+)
+from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
+    RespondToInvitationUseCase,
+)
+from src.modules.competition.application.use_cases.send_invitation_by_email_use_case import (
+    SendInvitationByEmailUseCase,
+)
+from src.modules.competition.application.use_cases.send_invitation_by_user_id_use_case import (
+    SendInvitationByUserIdUseCase,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
@@ -1157,6 +1175,58 @@ def get_reassign_match_players_use_case(
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
     )
+
+
+# ======================================================================================
+# INVITATION USE CASE PROVIDERS (Sprint 3 - Block 2)
+# ======================================================================================
+
+
+def get_invitation_email_service() -> IInvitationEmailService:
+    """Proveedor del servicio de email para invitaciones."""
+    return EmailService()
+
+
+def get_send_invitation_by_user_id_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IInvitationEmailService = Depends(get_invitation_email_service),
+) -> SendInvitationByUserIdUseCase:
+    """Proveedor del caso de uso SendInvitationByUserIdUseCase."""
+    return SendInvitationByUserIdUseCase(uow, user_uow, email_service)
+
+
+def get_send_invitation_by_email_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IInvitationEmailService = Depends(get_invitation_email_service),
+) -> SendInvitationByEmailUseCase:
+    """Proveedor del caso de uso SendInvitationByEmailUseCase."""
+    return SendInvitationByEmailUseCase(uow, user_uow, email_service)
+
+
+def get_list_my_invitations_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyInvitationsUseCase:
+    """Proveedor del caso de uso ListMyInvitationsUseCase."""
+    return ListMyInvitationsUseCase(uow, user_uow)
+
+
+def get_respond_to_invitation_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RespondToInvitationUseCase:
+    """Proveedor del caso de uso RespondToInvitationUseCase."""
+    return RespondToInvitationUseCase(uow, user_uow)
+
+
+def get_list_competition_invitations_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListCompetitionInvitationsUseCase:
+    """Proveedor del caso de uso ListCompetitionInvitationsUseCase."""
+    return ListCompetitionInvitationsUseCase(uow, user_uow)
 
 
 # ============================================================================

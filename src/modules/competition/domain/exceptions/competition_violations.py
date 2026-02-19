@@ -139,3 +139,50 @@ class MaxDurationExceededViolation(BusinessRuleViolation):
     """
 
     pass
+
+
+# =============================================================================
+# INVITATION VIOLATIONS
+# =============================================================================
+
+
+class DuplicateInvitationViolation(BusinessRuleViolation):
+    """Lanzada cuando ya existe una invitacion PENDING para ese email+competition."""
+
+    pass
+
+
+class InvitationExpiredViolation(BusinessRuleViolation):
+    """Lanzada cuando la invitacion ya ha expirado."""
+
+    pass
+
+
+class InvalidInvitationStatusViolation(BusinessRuleViolation):
+    """Lanzada cuando el estado de la invitacion no permite la operacion."""
+
+    pass
+
+
+class InvitationCompetitionStatusViolation(BusinessRuleViolation):
+    """Lanzada cuando el estado de la competicion no permite invitaciones."""
+
+    pass
+
+
+class SelfInvitationViolation(BusinessRuleViolation):
+    """Lanzada cuando el creador intenta invitarse a si mismo."""
+
+    pass
+
+
+class AlreadyEnrolledInvitationViolation(BusinessRuleViolation):
+    """Lanzada cuando el invitado ya esta inscrito en la competicion."""
+
+    pass
+
+
+class InvitationRateLimitViolation(BusinessRuleViolation):
+    """Lanzada cuando se excede el limite de invitaciones por hora para una competicion."""
+
+    pass
