@@ -34,6 +34,7 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     competition_golf_course_routes,
     competition_state_routes,
     enrollment_routes,
+    invitation_routes,
     round_match_routes,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
@@ -313,6 +314,12 @@ app.include_router(
     enrollment_routes.router,
     prefix="/api/v1",
     tags=["Enrollments"],
+)
+
+app.include_router(
+    invitation_routes.router,
+    prefix="/api/v1",
+    tags=["Invitations"],
 )
 
 app.include_router(

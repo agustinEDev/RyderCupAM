@@ -18,6 +18,8 @@ from ..exceptions.competition_violations import (
     EnrollmentPastStartDateViolation,
     InvalidCompetitionStatusViolation,
     InvalidDateRangeViolation,
+    InvitationCompetitionStatusViolation,
+    InvitationRateLimitViolation,
     MaxCompetitionsExceededViolation,
     MaxDurationExceededViolation,
     MaxEnrollmentsExceededViolation,
@@ -158,6 +160,79 @@ class CompetitionPolicy:
             raise CompetitionFullViolation(
                 f"Competition {competition_id} has reached maximum capacity "
                 f"({max_players} players). Current enrollments: {current_enrollments}."
+            )
+
+    @staticmethod
+    def can_send_invitation(competition_status: CompetitionStatus) -> None:
+        """
+        Valida si el estado de la competicion permite enviar invitaciones.
+
+        Allowed: ACTIVE, CLOSED, IN_PROGRESS.
+
+        Args:
+            competition_status: Estado actual de la competicion
+
+        Raises:
+            InvitationCompetitionStatusViolation: Si el estado no permite invitaciones
+        """
+        allowed = {
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+            CompetitionStatus.IN_PROGRESS,
+        }
+        if competition_status not in allowed:
+            raise InvitationCompetitionStatusViolation(
+                f"Competition status is {competition_status.value}. "
+                "Invitations only allowed in ACTIVE, CLOSED, or IN_PROGRESS status."
+            )
+
+    @staticmethod
+    def can_accept_invitation(competition_status: CompetitionStatus) -> None:
+        """
+        Valida si el estado de la competicion permite aceptar invitaciones.
+
+        Allowed: ACTIVE, CLOSED, IN_PROGRESS.
+
+        Args:
+            competition_status: Estado actual de la competicion
+
+        Raises:
+            InvitationCompetitionStatusViolation: Si el estado no permite aceptar
+        """
+        allowed = {
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+            CompetitionStatus.IN_PROGRESS,
+        }
+        if competition_status not in allowed:
+            raise InvitationCompetitionStatusViolation(
+                f"Competition status is {competition_status.value}. "
+                "Accepting invitations only allowed in ACTIVE, CLOSED, or IN_PROGRESS status."
+            )
+
+    @staticmethod
+    def validate_invitation_rate(
+        recent_invitations: int, max_players: int, competition_id: CompetitionId
+    ) -> None:
+        """
+        Valida que no se excedan las invitaciones por hora para una competicion.
+
+        El limite es max_players por hora: no tiene sentido enviar mas invitaciones
+        que participantes maximos en una hora.
+
+        Args:
+            recent_invitations: Invitaciones enviadas en la ultima hora
+            max_players: Capacidad maxima de la competicion
+            competition_id: ID de la competicion
+
+        Raises:
+            InvitationRateLimitViolation: Si se excede el limite
+        """
+        if recent_invitations >= max_players:
+            raise InvitationRateLimitViolation(
+                f"Competition {competition_id}: Too many invitations sent in the last hour "
+                f"({recent_invitations}/{max_players}). "
+                f"Limit is {max_players} invitations per hour."
             )
 
     @staticmethod

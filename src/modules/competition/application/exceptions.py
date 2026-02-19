@@ -53,3 +53,21 @@ class InvalidTeeCategoryError(ValueError):
     """El valor de tee_category no es válido."""
 
     pass
+
+
+class InvitationNotFoundError(Exception):
+    """La invitacion no existe."""
+
+    pass
+
+
+class InviteeNotFoundError(Exception):
+    """El invitee (user_id) no existe."""
+
+    pass
+
+
+class NotInviteeError(Exception):
+    """El usuario no es el invitee de la invitacion."""
+
+    pass

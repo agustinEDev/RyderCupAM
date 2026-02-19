@@ -14,6 +14,7 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .competition_repository_interface import CompetitionRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
+from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
 from .round_repository_interface import RoundRepositoryInterface
 from .team_assignment_repository_interface import TeamAssignmentRepositoryInterface
@@ -61,4 +62,10 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         """Acceso al repositorio de asignaciones de equipos."""
+        pass
+
+    @property
+    @abstractmethod
+    def invitations(self) -> InvitationRepositoryInterface:
+        """Acceso al repositorio de invitaciones."""
         pass
