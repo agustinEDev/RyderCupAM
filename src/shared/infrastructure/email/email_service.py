@@ -552,8 +552,15 @@ The Ryder Cup Friends Team
         safe_competition = self._sanitize_name(competition_name)
         safe_invitee = self._sanitize_name(invitee_name) if invitee_name else None
 
+        # HTML-escaped variants for HTML template interpolation
+        html_inviter = html.escape(safe_inviter)
+        html_competition = html.escape(safe_competition)
+        html_invitee = html.escape(safe_invitee) if safe_invitee else None
+
         greeting_es = f"Hola {safe_invitee}" if safe_invitee else "Hola"
         greeting_en = f"Hello {safe_invitee}" if safe_invitee else "Hello"
+        greeting_html_es = f"Hola {html_invitee}" if html_invitee else "Hola"
+        greeting_html_en = f"Hello {html_invitee}" if html_invitee else "Hello"
 
         expires_str = expires_at.strftime("%d/%m/%Y")
 
@@ -569,7 +576,7 @@ The Ryder Cup Friends Team
             personal_html_es = f"""
             <div style="background-color: #f0f4f8; border-left: 4px solid #0066cc; padding: 15px; margin: 15px 0;">
                 <p style="margin: 0; font-style: italic;">"{escaped_message}"</p>
-                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">- {safe_inviter}</p>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">- {html_inviter}</p>
             </div>"""
             personal_html_en = personal_html_es
 
@@ -697,11 +704,11 @@ The Ryder Cup Friends Team
         </div>
         <div class="content">
             <!-- Spanish -->
-            <p>{greeting_es},</p>
-            <p><strong>{safe_inviter}</strong> te ha invitado a participar en la competicion:</p>
+            <p>{greeting_html_es},</p>
+            <p><strong>{html_inviter}</strong> te ha invitado a participar en la competicion:</p>
 
             <div class="info-box">
-                <p style="margin: 0; font-size: 18px; font-weight: bold;">{safe_competition}</p>
+                <p style="margin: 0; font-size: 18px; font-weight: bold;">{html_competition}</p>
                 <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expira el {expires_str}</p>
             </div>
             {personal_html_es}
@@ -713,11 +720,11 @@ The Ryder Cup Friends Team
             <div class="divider"></div>
 
             <!-- English -->
-            <p>{greeting_en},</p>
-            <p><strong>{safe_inviter}</strong> has invited you to join the competition:</p>
+            <p>{greeting_html_en},</p>
+            <p><strong>{html_inviter}</strong> has invited you to join the competition:</p>
 
             <div class="info-box">
-                <p style="margin: 0; font-size: 18px; font-weight: bold;">{safe_competition}</p>
+                <p style="margin: 0; font-size: 18px; font-weight: bold;">{html_competition}</p>
                 <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expires on {expires_str}</p>
             </div>
             {personal_html_en}

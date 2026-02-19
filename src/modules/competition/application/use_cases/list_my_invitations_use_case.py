@@ -76,15 +76,11 @@ class ListMyInvitationsUseCase:
                         continue
                     all_invitations.append(inv)
 
+            # Total count from in-memory deduped+filtered list (consistent with expiration)
+            total_count = len(all_invitations)
+
             # Paginar desde la lista deduplicada
             paginated = all_invitations[offset : offset + limit]
-
-            # Total count via DB (OR semantics: email OR user_id)
-            total_count = await self._uow.invitations.count_by_invitee(
-                email=user_email,
-                user_id=user_id_vo,
-                status=status_vo,
-            )
 
             # Resolver competition_names dentro del comp UoW
             for inv in paginated:

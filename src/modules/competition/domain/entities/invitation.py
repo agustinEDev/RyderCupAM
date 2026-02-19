@@ -226,9 +226,10 @@ class Invitation:
                 f"Cannot accept invitation in status {self._status.value}."
             )
 
+        now = datetime.now()
         self._status = InvitationStatus.ACCEPTED
-        self._responded_at = datetime.now()
-        self._updated_at = datetime.now()
+        self._responded_at = now
+        self._updated_at = now
 
         event = InvitationAcceptedEvent(
             invitation_id=str(self._id),
@@ -248,9 +249,10 @@ class Invitation:
                 f"Cannot decline invitation in status {self._status.value}."
             )
 
+        now = datetime.now()
         self._status = InvitationStatus.DECLINED
-        self._responded_at = datetime.now()
-        self._updated_at = datetime.now()
+        self._responded_at = now
+        self._updated_at = now
 
         event = InvitationDeclinedEvent(
             invitation_id=str(self._id),

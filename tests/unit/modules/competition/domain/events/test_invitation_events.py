@@ -70,6 +70,23 @@ class TestInvitationAcceptedEvent:
         assert event.competition_id == "comp-1"
         assert event.invitee_user_id == "user-2"
 
+    def test_is_frozen(self):
+        event = InvitationAcceptedEvent(
+            invitation_id="inv-1",
+            competition_id="comp-1",
+            invitee_user_id="user-2",
+        )
+        with pytest.raises(AttributeError):
+            event.invitation_id = "changed"
+
+    def test_invitee_user_id_can_be_none_for_unregistered(self):
+        event = InvitationAcceptedEvent(
+            invitation_id="inv-1",
+            competition_id="comp-1",
+            invitee_user_id=None,
+        )
+        assert event.invitee_user_id is None
+
 
 class TestInvitationDeclinedEvent:
     """Tests para InvitationDeclinedEvent."""
@@ -91,6 +108,15 @@ class TestInvitationDeclinedEvent:
         assert event.invitation_id == "inv-1"
         assert event.competition_id == "comp-1"
         assert event.invitee_user_id == "user-2"
+
+    def test_is_frozen(self):
+        event = InvitationDeclinedEvent(
+            invitation_id="inv-1",
+            competition_id="comp-1",
+            invitee_user_id="user-2",
+        )
+        with pytest.raises(AttributeError):
+            event.invitation_id = "changed"
 
     def test_invitee_user_id_can_be_none_for_unregistered(self):
         event = InvitationDeclinedEvent(
