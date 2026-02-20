@@ -31,6 +31,13 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 16. **WithdrawEnrollmentUseCase** - Withdraw from competition
 17. **SetCustomHandicapUseCase** - Set custom handicap
 
+### Scoring & Leaderboard (5 use cases) ⭐ Sprint 4
+18. **GetScoringViewUseCase** - Unified scoring view (scores, standing, marker assignments)
+19. **SubmitHoleScoreUseCase** - Register own_score + marker_score with auto-validation
+20. **SubmitScorecardUseCase** - Deliver scorecard (all holes must be MATCH), auto-complete match/round
+21. **GetLeaderboardUseCase** - Leaderboard with Ryder Cup points per team
+22. **ConcedeMatchUseCase** - Concede match (player own team / creator any team)
+
 ---
 
 ## 🗃️ Domain Model
@@ -100,7 +107,7 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `created_at`: datetime
 - `updated_at`: datetime
 
-### Entity: Match ⭐ Sprint 2 Block 4
+### Entity: Match ⭐ Sprint 2 Block 4 + Sprint 4
 
 **Identification:**
 - `id`: MatchId (Value Object - UUID)
@@ -110,7 +117,52 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `match_number`: int (order within round)
 - `team_a_players`: tuple[MatchPlayer, ...] (1 for SINGLES, 2 for FOURBALL/FOURSOMES)
 - `team_b_players`: tuple[MatchPlayer, ...] (mirrored)
-- `status`: MatchStatus (SCHEDULED → IN_PROGRESS → COMPLETED | WALKOVER)
+- `status`: MatchStatus (SCHEDULED → IN_PROGRESS → COMPLETED | WALKOVER | CONCEDED)
+
+**Scoring Data (Sprint 4):**
+- `marker_assignments`: tuple[MarkerAssignment, ...] (who marks whom)
+- `scorecard_submitted_by`: tuple[UserId, ...] (players who submitted)
+- `is_decided`: bool (early termination — N up with M remaining, N > M)
+- `decided_result`: dict | None (winner + score, e.g., "3&2")
+
+**Scoring Methods:**
+- `set_marker_assignments(assignments)` — only SCHEDULED
+- `concede(conceding_team, reason)` — IN_PROGRESS → CONCEDED
+- `submit_scorecard(user_id)` — validates player, no duplicate
+- `mark_decided(result)` — sets is_decided flag
+- `has_submitted_scorecard(user_id)` → bool
+- `all_scorecards_submitted()` → bool
+- `get_player_team(user_id)` → "A"/"B"/None
+- `find_player(user_id)` → MatchPlayer | None
+- `get_all_player_ids()` → list[UserId]
+
+### Entity: HoleScore ⭐ Sprint 4
+
+**Identification:**
+- `id`: HoleScoreId (Value Object - UUID)
+- `match_id`: MatchId
+- `hole_number`: int (1-18)
+- `player_user_id`: UserId
+
+**Score Data:**
+- `team`: str ("A" or "B")
+- `own_score`: int | None (1-9 or None = picked up/not submitted)
+- `own_submitted`: bool (True when player has submitted)
+- `marker_score`: int | None (score entered by marker)
+- `marker_submitted`: bool (True when marker has submitted)
+- `strokes_received`: int (0 or 1, precalculated from MatchPlayer)
+- `net_score`: int | None (own_score - strokes_received when MATCH and own != None)
+- `validation_status`: ValidationStatus (PENDING/MATCH/MISMATCH)
+
+**Factory Methods:**
+- `create(match_id, hole_number, player_user_id, team, strokes_received)` → PENDING
+- `reconstruct(...)` → no validation
+
+**Business Methods:**
+- `set_own_score(score)` — validates 1-9 or None, marks own_submitted = True
+- `set_marker_score(score)` — validates 1-9 or None, marks marker_submitted = True
+- `recalculate_validation()` — PENDING/MATCH/MISMATCH based on submitted flags and score equality
+- `calculate_net_score()` — net = own_score - strokes_received (min 0) when MATCH
 
 ### Entity: TeamAssignment ⭐ Sprint 2 Block 4
 
@@ -169,12 +221,17 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `TeamAssignmentId` - Unique team assignment UUID
 - `SessionType` - Session time (MORNING/AFTERNOON/EVENING)
 - `MatchFormat` - Match format (SINGLES/FOURBALL/FOURSOMES) with `players_per_team()`
-- `MatchStatus` - Match state (SCHEDULED/IN_PROGRESS/COMPLETED/WALKOVER)
+- `MatchStatus` - Match state (SCHEDULED/IN_PROGRESS/COMPLETED/WALKOVER/CONCEDED) with `can_concede()`, `is_finished()`
 - `RoundStatus` - Round state (PENDING_TEAMS/PENDING_MATCHES/SCHEDULED/IN_PROGRESS/COMPLETED) with `can_modify()`, `can_generate_matches()`
 - `TeamAssignmentMode` - Team assignment method (AUTOMATIC/MANUAL)
 - `ScheduleConfigMode` - Schedule configuration method (AUTOMATIC/MANUAL)
 - `HandicapMode` - Handicap calculation mode for SINGLES (STROKE_PLAY/MATCH_PLAY)
 - `PlayMode` - Competition-level default play mode (SCRATCH/HANDICAP)
+
+### Competition Module - Scoring (3 VOs) ⭐ Sprint 4
+- `HoleScoreId` - Unique hole score UUID
+- `ValidationStatus` - Dual validation state (PENDING/MATCH/MISMATCH)
+- `MarkerAssignment` - Frozen dataclass: scorer_user_id, marks_user_id, marked_by_user_id
 
 ---
 
@@ -199,6 +256,24 @@ Serpentine algorithm for balanced team assignment.
 - `validate_team_balance(results)` → bool
 - `get_team_players(results, team)` → list[UserId]
 
+### ScoringService ⭐ Sprint 4
+Pure domain service for match play scoring logic.
+
+**Methods:**
+- `generate_marker_assignments(team_a, team_b, format)` → list[MarkerAssignment]
+  - SINGLES: reciprocal (A↔B)
+  - FOURBALL: crossed (A1→B1, A2→B2, B1→A1, B2→A2)
+  - FOURSOMES: one per team from opposing team
+- `get_affected_player_ids(match, scorer_user_id, format)` → list[UserId]
+  - SINGLES/FOURBALL: [scorer]; FOURSOMES: [scorer, teammate]
+- `get_affected_marked_player_ids(match, marked_player_id, format)` → list[UserId]
+- `calculate_hole_winner(team_a_nets, team_b_nets, format)` → "A"/"B"/"HALVED"
+  - SINGLES: 1v1 net; FOURBALL: best ball; FOURSOMES: single ball
+- `calculate_match_standing(hole_results)` → {leading_team, holes_up, holes_played, holes_remaining}
+- `is_match_decided(standing)` → bool (N up with M remaining, N > M)
+- `format_decided_result(hole_results)` → {winner, score} (e.g., "3&2", "1UP", "AS")
+- `calculate_ryder_cup_points(result, status)` → {team_a: float, team_b: float}
+
 ---
 
 ## 🔄 Domain Events Implemented
@@ -218,6 +293,16 @@ Serpentine algorithm for balanced team assignment.
 10. `EnrollmentApprovedEvent` - Enrollment approved
 11. `EnrollmentCancelledEvent` - Enrollment cancelled
 12. `EnrollmentWithdrawnEvent` - Player withdrawn
+
+### Invitation Events (3 events) ⭐ v2.0.12
+13. `InvitationCreatedEvent` - Invitation sent
+14. `InvitationAcceptedEvent` - Invitation accepted
+15. `InvitationDeclinedEvent` - Invitation declined
+
+### Scoring Events (3 events) ⭐ Sprint 4
+16. `HoleScoreSubmittedEvent` - Hole score registered
+17. `ScorecardSubmittedEvent` - Scorecard delivered
+18. `MatchConcededEvent` - Match conceded
 
 ---
 
@@ -250,6 +335,7 @@ CompetitionUnitOfWorkInterface
 ├── competitions: CompetitionRepositoryInterface
 ├── enrollments: EnrollmentRepositoryInterface
 ├── countries: CountryRepositoryInterface
+├── hole_scores: HoleScoreRepositoryInterface  ⭐ Sprint 4
 ├── async commit()
 ├── async rollback()
 └── async __aenter__() / __aexit__()
@@ -357,6 +443,20 @@ CREATE TABLE country_adjacencies (
 - `POST /api/v1/enrollments/{id}/withdraw` - Withdraw from competition
 - `PUT /api/v1/enrollments/{id}/handicap` - Set custom handicap
 
+### Invitation Management (5 endpoints) ⭐ v2.0.12
+- `POST /api/v1/competitions/{id}/invitations` - Invite by user ID
+- `POST /api/v1/competitions/{id}/invitations/by-email` - Invite by email
+- `GET /api/v1/invitations/me` - My pending invitations
+- `POST /api/v1/invitations/{id}/respond` - Accept/Decline
+- `GET /api/v1/competitions/{id}/invitations` - Creator view
+
+### Scoring & Leaderboard (5 endpoints) ⭐ Sprint 4
+- `GET /api/v1/competitions/matches/{id}/scoring-view` - Unified scoring view
+- `POST /api/v1/competitions/matches/{id}/scores/holes/{n}` - Submit hole score
+- `POST /api/v1/competitions/matches/{id}/scorecard/submit` - Submit scorecard
+- `GET /api/v1/competitions/{id}/leaderboard` - Competition leaderboard
+- `PUT /api/v1/competitions/matches/{id}/status` - Extended: CONCEDE action
+
 ### Country Management (2 endpoints - Shared)
 - `GET /api/v1/countries` - List active countries
 - `GET /api/v1/countries/{code}/adjacent` - Adjacent countries
@@ -382,29 +482,33 @@ CREATE TABLE country_adjacencies (
 ## 🧪 Testing
 
 ### Statistics
-- **Total Competition Module:** 554 tests (100% passing) ⭐ Sprint 2 Complete
+- **Total Competition Module:** ~970 tests (100% passing) ⭐ Sprint 4
 - **Unit Tests (Domain - Base):** 62 tests (entities, value objects, repositories)
-- **Unit Tests (Domain - Rounds & Matches):** 234 tests (11 VOs + 3 entities + 2 services) ⭐ Block 4
-- **Unit Tests (Infrastructure):** 52 tests (migration, mappers, repositories, UoW) ⭐ Block 5
-- **Unit Tests (Application):** 146 tests (84 base + 62 round/match/team use cases) ⭐ Block 6
-- **Unit Tests (DTOs):** 61 tests (49 base + 12 round/match DTOs) ⭐ Block 6
-- **Integration Tests:** 9 tests (API endpoints)
-- **API Endpoints:** 35 total (10 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams) ⭐ Block 7
+- **Unit Tests (Domain - Rounds & Matches):** 234 tests (11 VOs + 3 entities + 2 services) ⭐ Sprint 2
+- **Unit Tests (Domain - Scoring):** ~130 tests (HoleScore entity + ScoringService + events + VOs) ⭐ Sprint 4
+- **Unit Tests (Infrastructure):** ~66 tests (mappers, repositories, UoW) ⭐ Sprint 4
+- **Unit Tests (Application):** ~231 tests (base + round/match + invitations + scoring) ⭐ Sprint 4
+- **Unit Tests (DTOs):** ~76 tests (base + round/match + invitation + scoring DTOs) ⭐ Sprint 4
+- **Integration Tests:** 25 tests (API endpoints) ⭐ Sprint 4
+- **API Endpoints:** 45 total (10 Competition + 8 Enrollment + 2 Countries + 4 GC M2M + 11 Rounds/Matches/Teams + 5 Invitations + 5 Scoring) ⭐ Sprint 4
 
 ### Structure
 ```text
 tests/unit/modules/competition/
-├── domain/value_objects/test_*.py (20 base + 9 new VOs)
-├── domain/entities/test_*.py (3 new: round, match, team_assignment)
-├── domain/services/test_*.py (2 new: handicap_calculator, snake_draft)
-├── application/dto/test_*.py (61 tests: 49 base + 12 round/match)
-├── application/use_cases/test_*.py (146 tests: 84 base + 62 round/match/team)
-└── infrastructure/persistence/ (52 tests: mappers, repos, UoW)
+├── domain/value_objects/test_*.py (20 base + 9 R&M VOs + 3 scoring VOs)
+├── domain/entities/test_*.py (3 R&M + 1 invitation + 1 hole_score + 1 match_scoring)
+├── domain/services/test_*.py (2 base + 1 scoring_service)
+├── domain/events/test_scoring_events.py
+├── application/dto/test_*.py (49 base + 12 R&M + 15 invitation + 15 scoring)
+├── application/use_cases/test_*.py (84 base + 62 R&M + 43 invitation + 85 scoring)
+└── infrastructure/persistence/ (52 base + 14 scoring mappers)
 
 tests/integration/api/v1/
 ├── test_competition_routes.py
 ├── test_enrollment_routes.py
-└── test_competition_golf_courses_routes.py
+├── test_competition_golf_courses_routes.py
+├── test_invitation_endpoints.py ⭐ v2.0.12
+└── test_scoring_endpoints.py ⭐ Sprint 4
 ```
 
 ### Execution
@@ -559,5 +663,5 @@ REJECTED    CANCELLED
 
 ---
 
-**Last Updated:** 5 February 2026
-**Version:** Sprint 2 Complete (Blocks 0-8: Domain + Infrastructure + Application + API)
+**Last Updated:** 20 February 2026
+**Version:** Sprint 4 (Live Scoring + Leaderboard — 45 Competition Module endpoints)

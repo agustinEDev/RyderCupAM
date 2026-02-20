@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+**Sprint 4: Live Scoring + Leaderboard (8 bloques)**
+
+**Domain Layer**
+
+- **HoleScore entity**: New entity with dual validation (own_score + marker_score → PENDING/MATCH/MISMATCH)
+  - Pre-created 18 empty HoleScores per player when match starts (START)
+  - Fields: own_score, marker_score, own_submitted, marker_submitted, strokes_received, net_score, validation_status
+  - Factory methods: `create()`, `reconstruct()`
+  - Business methods: `set_own_score()`, `set_marker_score()`, `recalculate_validation()`, `calculate_net_score()`
+- **3 New Value Objects**: `HoleScoreId` (UUID), `ValidationStatus` (PENDING/MATCH/MISMATCH), `MarkerAssignment` (frozen dataclass)
+- **MatchStatus.CONCEDED**: New terminal state for match concession, `can_concede()`, updated `is_finished()`
+- **ScoringService** (domain service): Pure domain logic for match play scoring
+  - `generate_marker_assignments()`: reciprocal (Singles), crossed (Fourball), per-team (Foursomes)
+  - `get_affected_player_ids()` / `get_affected_marked_player_ids()`: Foursomes team expansion
+  - `calculate_hole_winner()`: net score comparison per format (Singles 1v1, Fourball best ball, Foursomes single ball)
+  - `calculate_match_standing()`: N up with M remaining, halved detection
+  - `is_match_decided()`: early termination check
+  - `format_decided_result()`: "3&2", "1UP", "AS" formatting
+  - `calculate_ryder_cup_points()`: team points from match result
+- **Match entity extensions**: `marker_assignments`, `scorecard_submitted_by`, `is_decided`, `decided_result` fields + 8 new methods (`concede()`, `submit_scorecard()`, `mark_decided()`, etc.)
+- **3 Domain Events**: `HoleScoreSubmittedEvent`, `ScorecardSubmittedEvent`, `MatchConcededEvent`
+- **HoleScoreRepositoryInterface**: `add()`, `update()`, `add_many()`, `find_by_match()`, `find_by_match_and_hole()`, `find_one()`, `find_by_match_and_player()`, `delete_by_match()`
+
+**Application Layer**
+
+- **~15 DTOs** in `scoring_dto.py`: `SubmitHoleScoreBodyDTO`, `ScoringViewResponseDTO`, `SubmitScorecardResponseDTO`, `LeaderboardResponseDTO` + sub-DTOs
+- **5 Use Cases**:
+  - `GetScoringViewUseCase`: Unified scoring view (scores, standing, marker assignments, decided status)
+  - `SubmitHoleScoreUseCase`: Register own_score + marker_score with Foursomes team expansion, auto-recalculate validation and standing
+  - `SubmitScorecardUseCase`: Validate all holes MATCH, submit scorecard, auto-complete match/round
+  - `GetLeaderboardUseCase`: Team points, match standings, player names resolved via user repo
+  - `ConcedeMatchUseCase`: Players concede own team, creator can concede any team
+- **5 New Exceptions**: `NotMatchPlayerError`, `ScorecardNotReadyError`, `ScorecardAlreadySubmittedError`, `MatchNotScoringError`, `InvalidHoleNumberError`
+
+**Infrastructure Layer**
+
+- **Alembic migration**: `hole_scores` table + 4 new columns on `matches` (marker_assignments JSONB, scorecard_submitted_by JSONB, is_decided BOOLEAN, decided_result JSONB)
+- **TypeDecorators**: `HoleScoreIdDecorator`, `ValidationStatusDecorator`, `MarkerAssignmentsJsonType`, `ScorecardSubmittedByJsonType`
+- **SQLAlchemy mapper**: Imperative mapping for HoleScore + extended Match mapping
+- **HoleScoreRepository**: SQLAlchemy implementation with private attr queries
+- **CompetitionUnitOfWork**: Extended with `hole_scores` repository property
+- **4 Scoring endpoints** in `scoring_routes.py`:
+  - `GET /matches/{match_id}/scoring-view`
+  - `POST /matches/{match_id}/scores/holes/{hole_number}`
+  - `POST /matches/{match_id}/scorecard/submit`
+  - `GET /competitions/{competition_id}/leaderboard`
+- **Match status endpoint extended**: `PUT /matches/{match_id}/status` accepts `action: "CONCEDE"` with `conceding_team` and `reason`
+- **Match generation integration**: Auto-generates marker_assignments via ScoringService
+- **Match start integration**: Pre-creates 18 HoleScore records per player with precalculated `strokes_received`
+- **4 New DI providers** in `dependencies.py`
+
+### Changed
+
+- **Match entity**: Added scoring-related fields and methods (marker_assignments, scorecard_submitted_by, is_decided, decided_result)
+- **MatchStatus enum**: Added CONCEDED state
+- **CompetitionUnitOfWorkInterface**: Added `hole_scores` property
+- **GenerateMatchesUseCase**: Now generates marker_assignments via ScoringService
+- **UpdateMatchStatusUseCase**: Pre-creates HoleScores on START, handles CONCEDE action
+
+### Testing
+
+- **1,871 unit tests passing** (100%) — +222 tests from Sprint 4
+- **252 integration tests** — +16 scoring E2E tests
+- New test files: `test_hole_score.py`, `test_scoring_service.py`, `test_match_scoring.py`, `test_scoring_events.py`, `test_scoring_dto.py`, `test_scoring_use_cases.py`, `test_scoring_mappers.py`, `test_scoring_endpoints.py`
+
 ### Refactored
 
 - **Clean Architecture Compliance**: Resolved 12/15 DDD violations (90% → 97% compliance)

@@ -1,8 +1,35 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Version:** 2.0.11 | **Tests:** 1,646 unit + 236 integration (1 skipped) | **Endpoints:** 74 | **OWASP:** 9.4/10
+> **Version:** 2.0.12 | **Tests:** 1,871 unit + 252 integration (1 skipped) | **Endpoints:** 79 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Feb 18, 2026
+> **Last Updated:** Feb 20, 2026
+
+---
+
+## Completado: Sprint 4 — Live Scoring + Leaderboard
+
+### Scoring + Leaderboard ✅ (8 bloques)
+
+```http
+GET  /api/v1/competitions/matches/{id}/scoring-view         # Vista unificada de scoring
+POST /api/v1/competitions/matches/{id}/scores/holes/{n}     # Registrar score hoyo a hoyo
+POST /api/v1/competitions/matches/{id}/scorecard/submit     # Entregar tarjeta
+GET  /api/v1/competitions/{id}/leaderboard                  # Leaderboard completo
+PUT  /api/v1/competitions/matches/{id}/status               # Extendido: action CONCEDE
+```
+
+- **Validación dual**: own_score (jugador) + marker_score (marcador) → PENDING/MATCH/MISMATCH
+- **Pre-creación 18 HoleScores vacíos** al iniciar match (START)
+- **Marker assignments**: recíproco (Singles), cruzado (Fourball), por equipo (Foursomes)
+- **Foursomes**: cualquier jugador del equipo puede registrar scores (último gana)
+- **Match Play standing**: N up con M remaining, early termination (is_decided)
+- **Concesión**: jugadores conceden su propio equipo, creator puede conceder cualquier equipo
+- **Scorecard submit**: requiere todos los hoyos en MATCH, auto-completa match/round
+- **Leaderboard**: suma Ryder Cup points por equipo, resuelve nombres con first_name + last_name
+- **ScoringService** (dominio puro): marker assignments, hole winner, standing, decided result, ryder cup points
+- **HoleScore entity**: own_score, marker_score, own_submitted, marker_submitted, validation_status, net_score
+- **MatchStatus CONCEDED**: nuevo estado terminal para concesión de partidos
+- 222 unit tests nuevos + 16 integration tests
 
 ---
 
@@ -21,7 +48,7 @@ DELETE /api/v1/auth/google/unlink                      # Desvincular cuenta Goog
 - `auth_providers` + `has_password` en UserResponseDTO (v2.0.10)
 - Hotfix: naive datetime en UserOAuthAccount (v2.0.11)
 
-### Bloque 2: Invitations ✅
+### Bloque 2: Invitations + Bilingual Emails ✅ v2.0.12
 
 ```http
 POST /api/v1/competitions/{id}/invitations            # Invitar por user ID
@@ -36,40 +63,14 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 - Rate limiting: max_players invitaciones por hora por competición
 - **Emails bilingües ES/EN via Mailgun** (ISP: `IInvitationEmailService` port en Competition module)
 - Email no bloquea creación de invitación (fire-and-forget con try/except)
+- HTML escaping en templates (`html.escape()` para body, `_sanitize_name()` para headers)
+- RFC 5322 display-name formatting para recipients
+- Domain Events: `InvitationCreatedEvent`, `InvitationAcceptedEvent`, `InvitationDeclinedEvent`
+- 194 unit tests nuevos, 4 rondas de code review
 
 ---
 
 ## Planificado
-
-### Sprint 4 — Scoring (2 semanas)
-
-**Objetivo:** Live scoring hoyo a hoyo con validación dual
-
-| Endpoint | Descripción |
-|----------|-------------|
-| `POST /matches/{id}/scores/holes/{n}` | Registrar score de un hoyo |
-| `GET /matches/{id}/scoring-view` | Vista unificada (3 tabs: input, scorecard, standing) |
-| `POST /matches/{id}/scorecard/submit` | Entregar tarjeta (requiere 18/18 validados) |
-| `GET /matches/{id}/scorecard` | Ver tarjeta completa |
-
-- **Validación dual:** Cada jugador registra SU score + marcador registra el suyo
-- **Match Play:** Net score = gross - strokes_received, lower net wins hole
-- **Bloqueo entrega:** No se puede entregar si hay discrepancias sin resolver
-
-### Sprint 5 — Leaderboards (1 semana)
-
-**Objetivo:** Leaderboards en tiempo real
-
-| Endpoint | Descripción |
-|----------|-------------|
-| `GET /competitions/{id}/leaderboard` | Leaderboard completo (público) |
-| `GET /competitions/{id}/leaderboard/live` | Solo partidos en curso |
-
-- Redis cache (TTL 30s) para live matches
-- Eager loading + DB indexes para < 200ms p95
-- Respuesta: standings por equipo, matches won/lost/halved, last_updated
-
----
 
 ### v2.1.0 — Compliance & Features (2-3 semanas)
 
@@ -106,9 +107,9 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 2025 Q4  │ v1.0.0 → v1.8.0   Auth, Security, Email, Handicap
 2026 Q1  │ v1.11.0 → v1.13.1  Password Reset, CI/CD, Security Hardening
          │ v2.0.0 → v2.0.8    RBAC, Golf Courses, Scheduling, Support
-         │ v2.0.9 → v2.0.11   Sprint 3: Google OAuth + Invitations ✅
-2026 Q2  │ Sprint 4-5          Scoring + Leaderboards
-         │ v2.1.0              Compliance (GDPR, Audit, Avatars)
+         │ v2.0.9 → v2.0.12   Sprint 3: Google OAuth + Invitations + Emails ✅
+2026 Q1  │ Sprint 4             Live Scoring + Leaderboard (5 endpoints, 238 tests) ✅
+2026 Q2  │ v2.1.0              Compliance (GDPR, Audit, Avatars)
          │ v2.2.0              AI & RAG Module
 2026 Q3  │ v2.1.1 - v2.1.2    WebSocket, Stats, Export PDF
 2026 Q4+ │ v3.0.0              Major Release
@@ -120,6 +121,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 | Version | Fecha | Highlights |
 |---------|-------|------------|
+| **v2.0.12** | Feb 19, 2026 | Invitations Module + Bilingual Emails (5 endpoints, 194 tests) |
 | **v2.0.11** | Feb 17, 2026 | Hotfix: naive datetime in UserOAuthAccount |
 | **v2.0.10** | Feb 17, 2026 | auth_providers + has_password in UserResponseDTO |
 | **v2.0.9** | Feb 16, 2026 | Google OAuth (login, link, unlink) + Invitations (5 endpoints) |

@@ -13,16 +13,18 @@ class MatchStatus(StrEnum):
     - IN_PROGRESS: En curso
     - COMPLETED: Finalizado normalmente
     - WALKOVER: Finalizado por incomparecencia (victoria por WO)
+    - CONCEDED: Finalizado por concesion de un equipo
     """
 
     SCHEDULED = "SCHEDULED"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     WALKOVER = "WALKOVER"
+    CONCEDED = "CONCEDED"
 
     def is_finished(self) -> bool:
         """Retorna True si el partido ha terminado."""
-        return self in {MatchStatus.COMPLETED, MatchStatus.WALKOVER}
+        return self in {MatchStatus.COMPLETED, MatchStatus.WALKOVER, MatchStatus.CONCEDED}
 
     def can_start(self) -> bool:
         """Retorna True si el partido puede iniciarse."""
@@ -30,6 +32,10 @@ class MatchStatus(StrEnum):
 
     def can_record_scores(self) -> bool:
         """Retorna True si se pueden registrar scores."""
+        return self == MatchStatus.IN_PROGRESS
+
+    def can_concede(self) -> bool:
+        """Retorna True si el partido puede ser concedido."""
         return self == MatchStatus.IN_PROGRESS
 
     def __str__(self) -> str:
