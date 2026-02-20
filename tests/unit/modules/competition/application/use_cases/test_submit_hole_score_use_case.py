@@ -151,8 +151,8 @@ class TestSubmitHoleScoreHappyPath:
         # Mock competition for scoring view
         mock_comp = MagicMock()
         mock_comp.id = mock_round.competition_id
-        mock_comp.team_a_name = "Team A"
-        mock_comp.team_b_name = "Team B"
+        mock_comp.team_1_name = "Team A"
+        mock_comp.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         # Set up marker assignments

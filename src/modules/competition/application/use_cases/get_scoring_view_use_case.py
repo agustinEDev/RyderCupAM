@@ -91,8 +91,8 @@ class GetScoringViewUseCase:
 
             standing = self._scoring_service.calculate_match_standing(hole_results_list)
             decided_result = DecidedResultDTO(**match.decided_result) if match.decided_result else None
-            team_a_name = competition.team_a_name if hasattr(competition, "team_a_name") else "Team A"
-            team_b_name = competition.team_b_name if hasattr(competition, "team_b_name") else "Team B"
+            team_a_name = competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
+            team_b_name = competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
 
             return ScoringViewResponseDTO(
                 match_id=str(match.id),
