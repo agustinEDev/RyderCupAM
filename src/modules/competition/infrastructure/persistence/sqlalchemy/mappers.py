@@ -9,6 +9,7 @@ import uuid
 from datetime import date
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -29,6 +30,7 @@ from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -53,9 +55,11 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.modules.competition.domain.value_objects.hole_score_id import HoleScoreId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
@@ -73,6 +77,7 @@ from src.modules.competition.domain.value_objects.team_assignment_id import (
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
+from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 
 # Golf Course Entity and Value Object (FK)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -192,6 +197,25 @@ class CountryCodeDecorator(TypeDecorator):
         if value is None:
             return None
         return CountryCode(value)
+
+
+class HoleScoreIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir HoleScoreId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: HoleScoreId | str | None, dialect) -> str | None:
+        if isinstance(value, HoleScoreId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> HoleScoreId | None:
+        if value is None:
+            return None
+        return HoleScoreId(uuid.UUID(value))
 
 
 class CompetitionGolfCourseIdDecorator(TypeDecorator):
@@ -333,6 +357,7 @@ TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
 TeeCategoryDecorator = _create_enum_decorator(TeeCategory)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
+ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
 
 
 # =============================================================================
@@ -419,6 +444,70 @@ class MatchResultJsonType(TypeDecorator):
 
     def process_result_value(self, value: dict | None, dialect) -> dict | None:
         return value
+
+
+class MarkerAssignmentsJsonType(TypeDecorator):
+    """
+    TypeDecorator para serializar tuple[MarkerAssignment, ...] a/desde JSONB.
+
+    Cada MarkerAssignment se serializa como:
+    {
+        "scorer_user_id": "uuid-string",
+        "marks_user_id": "uuid-string",
+        "marked_by_user_id": "uuid-string"
+    }
+
+    Retorna () (tupla vacia) para NULL en BD.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if not value:
+            return None
+        return [
+            {
+                "scorer_user_id": str(ma.scorer_user_id.value),
+                "marks_user_id": str(ma.marks_user_id.value),
+                "marked_by_user_id": str(ma.marked_by_user_id.value),
+            }
+            for ma in value
+        ]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple:
+        if not value:
+            return ()
+        return tuple(
+            MarkerAssignment(
+                scorer_user_id=UserId(uuid.UUID(ma["scorer_user_id"])),
+                marks_user_id=UserId(uuid.UUID(ma["marks_user_id"])),
+                marked_by_user_id=UserId(uuid.UUID(ma["marked_by_user_id"])),
+            )
+            for ma in value
+        )
+
+
+class ScorecardSubmittedByJsonType(TypeDecorator):
+    """
+    TypeDecorator para serializar tuple[UserId, ...] a/desde JSONB.
+
+    Similar a UserIdsJsonType pero retorna () para NULL en BD
+    (en vez de None), para coincidir con el default del Match entity.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if not value:
+            return None
+        return [str(uid.value) for uid in value]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple:
+        if not value:
+            return ()
+        return tuple(UserId(uuid.UUID(uid_str)) for uid_str in value)
 
 
 # =============================================================================
@@ -715,6 +804,10 @@ matches_table = Table(
     Column("handicap_strokes_given", Integer, nullable=False, default=0),
     Column("strokes_given_to_team", String(1), nullable=False, default=""),
     Column("result", MatchResultJsonType, nullable=True),
+    Column("marker_assignments", MarkerAssignmentsJsonType, nullable=True),
+    Column("scorecard_submitted_by", ScorecardSubmittedByJsonType, nullable=True),
+    Column("is_decided", Boolean, nullable=False, default=False),
+    Column("decided_result", MatchResultJsonType, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -778,6 +871,40 @@ invitations_table = Table(
 
 
 # =============================================================================
+# TABLA HOLE_SCORES
+# =============================================================================
+
+hole_scores_table = Table(
+    "hole_scores",
+    metadata,
+    Column("id", HoleScoreIdDecorator, primary_key=True),
+    Column(
+        "match_id",
+        MatchIdDecorator,
+        ForeignKey("matches.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("hole_number", Integer, nullable=False),
+    Column(
+        "player_user_id",
+        UserIdDecorator,
+        ForeignKey("users.id"),
+        nullable=False,
+    ),
+    Column("team", String(1), nullable=False),
+    Column("own_score", Integer, nullable=True),
+    Column("own_submitted", Boolean, nullable=False, default=False),
+    Column("marker_score", Integer, nullable=True),
+    Column("marker_submitted", Boolean, nullable=False, default=False),
+    Column("strokes_received", Integer, nullable=False, default=0),
+    Column("net_score", Integer, nullable=True),
+    Column("validation_status", ValidationStatusDecorator, nullable=False),
+    Column("created_at", DateTime, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
+)
+
+
+# =============================================================================
 # START MAPPERS - Funcion de inicializacion
 # =============================================================================
 
@@ -795,6 +922,8 @@ def start_competition_mappers():
     - Round entity -> rounds table
     - Match entity -> matches table
     - TeamAssignment entity -> team_assignments table
+    - Invitation entity -> invitations table
+    - HoleScore entity -> hole_scores table
     """
     # Mapear Competition
     if Competition not in mapper_registry.mappers:
@@ -934,6 +1063,10 @@ def start_competition_mappers():
                 "_handicap_strokes_given": matches_table.c.handicap_strokes_given,
                 "_strokes_given_to_team": matches_table.c.strokes_given_to_team,
                 "_result": matches_table.c.result,
+                "_marker_assignments": matches_table.c.marker_assignments,
+                "_scorecard_submitted_by": matches_table.c.scorecard_submitted_by,
+                "_is_decided": matches_table.c.is_decided,
+                "_decided_result": matches_table.c.decided_result,
                 "_created_at": matches_table.c.created_at,
                 "_updated_at": matches_table.c.updated_at,
             },
@@ -971,6 +1104,29 @@ def start_competition_mappers():
                 "_responded_at": invitations_table.c.responded_at,
                 "_created_at": invitations_table.c.created_at,
                 "_updated_at": invitations_table.c.updated_at,
+            },
+        )
+
+    # Mapear HoleScore
+    if HoleScore not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            HoleScore,
+            hole_scores_table,
+            properties={
+                "_id": hole_scores_table.c.id,
+                "_match_id": hole_scores_table.c.match_id,
+                "_hole_number": hole_scores_table.c.hole_number,
+                "_player_user_id": hole_scores_table.c.player_user_id,
+                "_team": hole_scores_table.c.team,
+                "_own_score": hole_scores_table.c.own_score,
+                "_own_submitted": hole_scores_table.c.own_submitted,
+                "_marker_score": hole_scores_table.c.marker_score,
+                "_marker_submitted": hole_scores_table.c.marker_submitted,
+                "_strokes_received": hole_scores_table.c.strokes_received,
+                "_net_score": hole_scores_table.c.net_score,
+                "_validation_status": hole_scores_table.c.validation_status,
+                "_created_at": hole_scores_table.c.created_at,
+                "_updated_at": hole_scores_table.c.updated_at,
             },
         )
 

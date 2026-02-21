@@ -3,9 +3,9 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 69 active
-**Version**: Sprint 3 Block 1.1 (auth_providers + has_password in UserResponseDTO)
-**Last Updated**: 16 February 2026
+**Total Endpoints**: 79 active
+**Version**: Sprint 4 (Live Scoring + Leaderboard)
+**Last Updated**: 20 February 2026
 
 ---
 
@@ -105,6 +105,20 @@ Golf Course Management (10 endpoints) ⭐ v2.0.1
 ├── PUT  /api/v1/golf-courses/{id}       # Submit update (Creator, clone-based workflow)
 ├── PUT  /api/v1/golf-courses/admin/updates/{id}/approve # Approve update (Admin)
 └── PUT  /api/v1/golf-courses/admin/updates/{id}/reject  # Reject update (Admin)
+
+Invitation Management (5 endpoints) ⭐ v2.0.12
+├── POST /api/v1/competitions/{id}/invitations          # Invite by user ID
+├── POST /api/v1/competitions/{id}/invitations/by-email # Invite by email
+├── GET  /api/v1/invitations/me                         # My pending invitations
+├── POST /api/v1/invitations/{id}/respond               # Accept/Decline invitation
+└── GET  /api/v1/competitions/{id}/invitations          # Creator view (all invitations)
+
+Scoring & Leaderboard (5 endpoints) ⭐ Sprint 4
+├── GET  /api/v1/competitions/matches/{id}/scoring-view          # Unified scoring view
+├── POST /api/v1/competitions/matches/{id}/scores/holes/{n}      # Submit hole score
+├── POST /api/v1/competitions/matches/{id}/scorecard/submit      # Submit scorecard
+├── GET  /api/v1/competitions/{id}/leaderboard                   # Competition leaderboard
+└── PUT  /api/v1/competitions/matches/{id}/status                # Extended: CONCEDE action
 
 Support (1 endpoint) ⭐ v2.0.8
 └── POST /api/v1/support/contact         # Submit contact form (creates GitHub Issue)
@@ -535,6 +549,7 @@ PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
 ```
 SCHEDULED → IN_PROGRESS → COMPLETED
                         → WALKOVER
+                        → CONCEDED  ⭐ Sprint 4
 ```
 
 ---
@@ -735,6 +750,173 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
+## 📨 Invitation Management ⭐ v2.0.12
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/competitions/{id}/invitations` | POST | Creator | max_players/h | Invite user by ID |
+| `/competitions/{id}/invitations/by-email` | POST | Creator | max_players/h | Invite user by email |
+| `/invitations/me` | GET | Yes | 20/min | List my pending invitations |
+| `/invitations/{id}/respond` | POST | Invitee | 10/min | Accept or decline invitation |
+| `/competitions/{id}/invitations` | GET | Creator | 20/min | List all invitations for competition |
+
+### Main Fields
+
+**Invite by User ID:**
+- `user_id` (string, required, UUID) - User to invite
+- `personal_message` (string, optional, max 500)
+
+**Invite by Email:**
+- `email` (string, required, valid email) - Email of invitee
+- `personal_message` (string, optional, max 500)
+
+**Respond to Invitation:**
+- `action` (enum, required: "ACCEPT" | "DECLINE")
+
+### Invitation Response
+
+- `id` (string, UUID) - Invitation ID
+- `competition_id` (string, UUID) - Competition ID
+- `competition_name` (string) - Competition name
+- `inviter_name` (string) - Name of person who invited
+- `invitee_email` (string) - Invitee email
+- `invitee_user_id` (string, nullable) - Invitee user ID (if registered)
+- `invitee_name` (string, nullable) - Invitee name (if registered)
+- `status` (string) - PENDING, ACCEPTED, DECLINED, EXPIRED
+- `personal_message` (string, nullable) - Personal message
+- `expires_at` (datetime) - Expiration timestamp (7 days)
+- `created_at` (datetime) - Creation timestamp
+
+### Business Rules
+
+- **Token**: 256-bit secure token, SHA256 hash stored in DB, expires in 7 days
+- **Accept**: Creates enrollment with APPROVED status (bypasses approval flow)
+- **Rate limiting**: max_players invitations per hour per competition
+- **Bilingual emails**: ES/EN via Mailgun (fire-and-forget, failure doesn't block invitation)
+- **Duplicate prevention**: Only one PENDING invitation per email per competition
+
+### Invitation States
+
+```
+PENDING → ACCEPTED
+        → DECLINED
+        → EXPIRED (automatic after 7 days)
+```
+
+---
+
+## 🏌️ Scoring & Leaderboard ⭐ Sprint 4
+
+| Endpoint | Method | Auth | Rate Limit | Description |
+|----------|--------|------|------------|-------------|
+| `/competitions/matches/{id}/scoring-view` | GET | Player | 20/min | Unified scoring view |
+| `/competitions/matches/{id}/scores/holes/{n}` | POST | Player | 10/min | Submit hole score |
+| `/competitions/matches/{id}/scorecard/submit` | POST | Player | 10/min | Submit scorecard |
+| `/competitions/{id}/leaderboard` | GET | Yes | 20/min | Competition leaderboard |
+| `/competitions/matches/{id}/status` | PUT | Player/Creator | 10/min | Concede match (extended) |
+
+### Get Scoring View
+
+**GET /api/v1/competitions/matches/{match_id}/scoring-view** (Enrolled player)
+
+Returns unified scoring data: hole-by-hole scores, validation statuses, match standing, marker assignments.
+
+**Response (200 OK):**
+- `match_id` (string, UUID)
+- `round_info` (object) - Round details (format, handicap_mode, golf_course)
+- `marker_assignments` (array) - Who marks whom
+- `players` (array) - Player details (user_id, name, team, playing_handicap)
+- `holes` (array of 18) - Per-hole data:
+  - `hole_number` (int, 1-18)
+  - `par` (int), `stroke_index` (int)
+  - `scores` (array) - Per-player: `own_score`, `marker_score`, `own_submitted`, `marker_submitted`, `validation_status`, `net_score`, `strokes_received`
+  - `result` (object) - Hole winner ("A"/"B"/"HALVED")
+- `standing` (object) - `leading_team`, `holes_up`, `holes_played`, `holes_remaining`, `is_decided`
+- `decided_result` (object, nullable) - `winner`, `score` (e.g., "3&2")
+- `scorecards_submitted` (array) - User IDs that have submitted
+
+### Submit Hole Score
+
+**POST /api/v1/competitions/matches/{match_id}/scores/holes/{hole_number}** (Match player)
+
+**Request:**
+- `own_score` (int | null, 1-9 or null for picked up)
+- `marked_player_id` (string, UUID) - The player being marked
+- `marked_score` (int | null, 1-9 or null for picked up)
+
+**Response (200 OK):** Returns full scoring-view (same as GET scoring-view).
+
+**Business Rules:**
+- Match must be IN_PROGRESS
+- Scorer must be a player in the match
+- `marked_player_id` must match marker assignments
+- **Foursomes**: Any team player can submit (last write wins), affects both team members
+- **Dual validation**: own_score → own_submitted, marked_score → marker_submitted
+- **Auto-recalculation**: validation_status, net_score, standing, is_decided
+
+### Submit Scorecard
+
+**POST /api/v1/competitions/matches/{match_id}/scorecard/submit** (Match player)
+
+**Response (200 OK):**
+- `match_id` (string, UUID)
+- `submitted_by` (string, UUID)
+- `all_submitted` (bool) - True if all players have submitted
+- `match_completed` (bool) - True if match auto-completed
+- `result` (object, nullable) - Final match result
+
+**Business Rules:**
+- Match must be IN_PROGRESS
+- All played holes must have `validation_status == MATCH`
+- Each player submits once (no duplicates)
+- When all players submit → match auto-completes with calculated result
+- If all matches in round completed → round auto-completes
+
+### Get Leaderboard
+
+**GET /api/v1/competitions/{competition_id}/leaderboard** (Any authenticated user)
+
+**Response (200 OK):**
+- `competition_id` (string, UUID)
+- `team_a` (object) - `name`, `points` (float)
+- `team_b` (object) - `name`, `points` (float)
+- `matches` (array) - Per match: `match_id`, `round_name`, `format`, `status`, `team_a_players`, `team_b_players`, `standing`, `result`, `points_a`, `points_b`
+
+**Ryder Cup Points:**
+- Win: 1.0 point
+- Halved: 0.5 points each
+- Loss: 0.0 points
+- IN_PROGRESS matches: show live standing (no points yet)
+
+### Concede Match
+
+**PUT /api/v1/competitions/matches/{match_id}/status** (Extended with CONCEDE action)
+
+**Request:**
+- `action` (string, required: "CONCEDE")
+- `conceding_team` (string, required: "A" or "B")
+- `reason` (string, optional)
+
+**Authorization:**
+- **Match players**: Can only concede their **own team**
+- **Competition creator**: Can concede **any team**
+
+**Business Rules:**
+- Match must be IN_PROGRESS
+- Sets match status to CONCEDED
+- Auto-completes round if all matches finished
+
+### Validation Status Flow
+
+```
+PENDING → MATCH    (own_score == marker_score, including null==null)
+        → MISMATCH (own_score != marker_score, including null vs number)
+```
+
+Both `own_submitted` AND `marker_submitted` must be true before validation resolves.
+
+---
+
 ## 📨 Support ⭐ v2.0.8
 
 | Endpoint | Method | Auth | Rate Limit | Description |
@@ -884,5 +1066,5 @@ PENDING_APPROVAL → APPROVED
 
 ---
 
-**Last Updated:** 16 February 2026
-**Version:** Sprint 3 Block 1.1 (auth_providers + has_password in UserResponseDTO)
+**Last Updated:** 20 February 2026
+**Version:** Sprint 4 (Live Scoring + Leaderboard — 79 endpoints)

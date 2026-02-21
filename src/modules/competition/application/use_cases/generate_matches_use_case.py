@@ -22,6 +22,7 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
     PlayingHandicapCalculator,
     TeeRating,
 )
+from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
@@ -74,11 +75,13 @@ class GenerateMatchesUseCase:
         golf_course_repository: IGolfCourseRepository,
         user_repository: UserRepositoryInterface,
         handicap_calculator: PlayingHandicapCalculator | None = None,
+        scoring_service: ScoringService | None = None,
     ):
         self._uow = uow
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
+        self._scoring_service = scoring_service or ScoringService()
 
     async def execute(
         self, request: GenerateMatchesRequestDTO, user_id: UserId
@@ -309,6 +312,11 @@ class GenerateMatchesUseCase:
                 team_a_players=team_a_match_players,
                 team_b_players=team_b_match_players,
             )
+            # Generate marker assignments for scoring
+            marker_assignments = self._scoring_service.generate_marker_assignments(
+                match.team_a_players, match.team_b_players, round_entity.match_format
+            )
+            match.set_marker_assignments(marker_assignments)
             await self._uow.matches.add(match)
             matches_created += 1
 
@@ -373,6 +381,11 @@ class GenerateMatchesUseCase:
                 team_a_players=team_a_match_players,
                 team_b_players=team_b_match_players,
             )
+            # Generate marker assignments for scoring
+            marker_assignments = self._scoring_service.generate_marker_assignments(
+                match.team_a_players, match.team_b_players, round_entity.match_format
+            )
+            match.set_marker_assignments(marker_assignments)
             await self._uow.matches.add(match)
             matches_created += 1
 

@@ -247,7 +247,13 @@ restart_database() {
     # Scale back up to 1
     print_info "Scaling up to 1 replica..."
     kubectl scale deployment "$POSTGRES_DEPLOYMENT" -n "$NAMESPACE" --replicas=1
-    
+
+    # Wait for pod to exist before waiting for readiness
+    print_info "Waiting for new pod to be created..."
+    until kubectl get pods -n "$NAMESPACE" -l component=database -o name 2>/dev/null | grep -q .; do
+        sleep 1
+    done
+
     # Wait for pod to be ready
     print_info "Waiting for new pod to be ready..."
     kubectl wait --for=condition=ready pod -l component=database -n "$NAMESPACE" --timeout=180s

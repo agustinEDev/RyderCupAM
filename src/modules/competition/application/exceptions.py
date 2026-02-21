@@ -71,3 +71,33 @@ class NotInviteeError(Exception):
     """El usuario no es el invitee de la invitacion."""
 
     pass
+
+
+class NotMatchPlayerError(Exception):
+    """El usuario no es un jugador del partido."""
+
+    pass
+
+
+class ScorecardNotReadyError(Exception):
+    """La tarjeta no esta lista para ser entregada (hay hoyos sin validar)."""
+
+    pass
+
+
+class ScorecardAlreadySubmittedError(Exception):
+    """El jugador ya entrego su tarjeta."""
+
+    pass
+
+
+class MatchNotScoringError(Exception):
+    """El partido no esta en estado para registrar scores."""
+
+    pass
+
+
+class InvalidHoleNumberError(Exception):
+    """El numero de hoyo no es valido."""
+
+    pass

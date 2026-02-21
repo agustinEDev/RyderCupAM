@@ -12,6 +12,7 @@ class TestMatchStatus:
         assert MatchStatus.IN_PROGRESS.value == "IN_PROGRESS"
         assert MatchStatus.COMPLETED.value == "COMPLETED"
         assert MatchStatus.WALKOVER.value == "WALKOVER"
+        assert MatchStatus.CONCEDED.value == "CONCEDED"
 
     def test_is_finished_completed(self):
         """COMPLETED es un estado finalizado."""
@@ -40,6 +41,18 @@ class TestMatchStatus:
         assert MatchStatus.IN_PROGRESS.can_record_scores() is True
         assert MatchStatus.SCHEDULED.can_record_scores() is False
         assert MatchStatus.COMPLETED.can_record_scores() is False
+
+    def test_is_finished_conceded(self):
+        """CONCEDED es un estado finalizado."""
+        assert MatchStatus.CONCEDED.is_finished() is True
+
+    def test_can_concede_in_progress(self):
+        """Solo IN_PROGRESS permite conceder."""
+        assert MatchStatus.IN_PROGRESS.can_concede() is True
+        assert MatchStatus.SCHEDULED.can_concede() is False
+        assert MatchStatus.COMPLETED.can_concede() is False
+        assert MatchStatus.WALKOVER.can_concede() is False
+        assert MatchStatus.CONCEDED.can_concede() is False
 
     def test_str_returns_value(self):
         """__str__ retorna el valor del enum."""
