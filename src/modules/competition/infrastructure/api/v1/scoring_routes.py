@@ -2,7 +2,7 @@
 Scoring Routes - API REST Layer (Infrastructure).
 
 Endpoints FastAPI para scoring en vivo del modulo Competition.
-4 endpoints: scoring-view, submit hole score, submit scorecard, leaderboard.
+5 endpoints: scoring-view, submit hole score, submit scorecard, leaderboard, concede.
 """
 
 import logging
@@ -20,6 +20,7 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.scoring_dto import (
+    ConcedeMatchBodyDTO,
     LeaderboardResponseDTO,
     ScoringViewResponseDTO,
     SubmitHoleScoreBodyDTO,
@@ -272,7 +273,7 @@ async def get_leaderboard(
 async def concede_match(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     match_id: UUID,
-    body: dict,
+    body: ConcedeMatchBodyDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ConcedeMatchUseCase = Depends(get_concede_match_use_case),
 ):
@@ -295,10 +296,8 @@ async def concede_match(
     """
     try:
         current_user_id = UserId(current_user.id)
-        conceding_team = body.get("conceding_team", "")
-        reason = body.get("reason")
         return await use_case.execute(
-            str(match_id), current_user_id, conceding_team, reason
+            str(match_id), current_user_id, body.conceding_team, body.reason
         )
 
     except MatchNotFoundError as e:

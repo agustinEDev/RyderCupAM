@@ -143,6 +143,13 @@ class SubmitScorecardResponseDTO(BaseModel):
     match_complete: bool
 
 
+class ConcedeMatchBodyDTO(BaseModel):
+    """Body del request para conceder un partido."""
+
+    conceding_team: str
+    reason: str | None = None
+
+
 class LeaderboardPlayerDTO(BaseModel):
     """Jugador en el leaderboard."""
 
