@@ -34,8 +34,8 @@ def upgrade() -> None:
         sa.Column("strokes_received", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("net_score", sa.Integer(), nullable=True),
         sa.Column("validation_status", sa.String(20), nullable=False, server_default="PENDING"),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["match_id"],
@@ -45,6 +45,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["player_user_id"],
             ["users.id"],
+            ondelete="CASCADE",
         ),
     )
 
