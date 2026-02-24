@@ -248,9 +248,15 @@ restart_database() {
     print_info "Scaling up to 1 replica..."
     kubectl scale deployment "$POSTGRES_DEPLOYMENT" -n "$NAMESPACE" --replicas=1
 
-    # Wait for pod to exist before waiting for readiness
+    # Wait for pod to exist before waiting for readiness (max 60s)
     print_info "Waiting for new pod to be created..."
+    local wait_count=0
     until kubectl get pods -n "$NAMESPACE" -l component=database -o name 2>/dev/null | grep -q .; do
+        wait_count=$((wait_count + 1))
+        if [ "$wait_count" -ge 60 ]; then
+            print_error "Timeout waiting for database pod to be created"
+            exit 1
+        fi
         sleep 1
     done
 
