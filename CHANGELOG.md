@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+**Backward Competition State Transitions**
+
+- **2 new domain events**: `CompetitionRevertedToClosedEvent`, `CompetitionEnrollmentsReopenedEvent`
+- **2 new entity methods**: `Competition.revert_to_closed()` (IN_PROGRESS → CLOSED), `Competition.reopen_enrollments()` (CLOSED → ACTIVE)
+- **2 new use cases**: `RevertCompetitionStatusUseCase`, `ReopenEnrollmentsUseCase`
+- **4 new DTOs**: Request/Response for each backward transition
+- **2 new API endpoints**:
+  - `PUT /api/v1/competitions/{id}/revert-status` — Revert to fix schedule issues
+  - `POST /api/v1/competitions/{id}/reopen-enrollments` — Reopen to add/remove players
+- **29 new tests**: 16 CompetitionStatus VO + 6 revert use case + 6 reopen use case + 4 integration + 1 entity test
+- **CompetitionStatus VO**: Added backward transitions (IN_PROGRESS → CLOSED, CLOSED → ACTIVE)
+
 **Sprint 4: Live Scoring + Leaderboard (8 bloques)**
 
 **Domain Layer**

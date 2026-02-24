@@ -519,6 +519,101 @@ class TestCompetitionStateTransitions:
 
         assert response.status_code == 400
 
+    @pytest.mark.asyncio
+    async def test_revert_status_in_progress_to_closed(self, client: AsyncClient):
+        """Revertir competición de IN_PROGRESS a CLOSED retorna 200."""
+        user = await create_authenticated_user(
+            client, "revert_status@test.com", "P@ssw0rd123!", "Revert", "Status"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Avanzar a IN_PROGRESS
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
+        )
+
+        # Revertir a CLOSED
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/revert-status",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "CLOSED"
+
+    @pytest.mark.asyncio
+    async def test_reopen_enrollments_closed_to_active(self, client: AsyncClient):
+        """Reabrir inscripciones de CLOSED a ACTIVE retorna 200."""
+        user = await create_authenticated_user(
+            client, "reopen_enroll@test.com", "P@ssw0rd123!", "Reopen", "Enroll"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Avanzar a CLOSED
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
+        )
+
+        # Reabrir inscripciones
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/reopen-enrollments",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ACTIVE"
+
+    @pytest.mark.asyncio
+    async def test_revert_status_from_wrong_state_returns_400(self, client: AsyncClient):
+        """Revertir desde estado que no es IN_PROGRESS retorna 400."""
+        user = await create_authenticated_user(
+            client, "revert_wrong@test.com", "P@ssw0rd123!", "Revert", "Wrong"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Competición está en DRAFT — no se puede revertir
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/revert-status",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_reopen_enrollments_from_wrong_state_returns_400(self, client: AsyncClient):
+        """Reabrir inscripciones desde ACTIVE (ya abierta) retorna 400."""
+        user = await create_authenticated_user(
+            client, "reopen_wrong@test.com", "P@ssw0rd123!", "Reopen", "Wrong"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Activar competición — no se puede reabrir desde ACTIVE
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
+        )
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/reopen-enrollments",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
 
 class TestEdgeCases:
     """Tests de edge cases para Competition"""

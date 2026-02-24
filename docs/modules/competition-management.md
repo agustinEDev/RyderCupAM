@@ -536,8 +536,12 @@ pytest tests/unit/modules/competition/ -n auto
 
 ```
 DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
-  ↓        ↓         ↓           ↓
-  └────────┴─────────┴───────────┴─→ CANCELLED
+  ↓        ↓    ↑    ↓    ↑       ↓
+  └────────┴────┘    ┴────┘       ┴─→ CANCELLED
+
+Backward transitions:
+  IN_PROGRESS → CLOSED    (revert-status: fix schedule issues)
+  CLOSED → ACTIVE         (reopen-enrollments: add/remove players)
 ```
 
 **States:**
@@ -545,13 +549,15 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
 - `ACTIVE` - Active, enrollments open
 - `CLOSED` - Enrollments closed, teams configured
 - `IN_PROGRESS` - Tournament in progress
-- `COMPLETED` - Tournament finished
-- `CANCELLED` - Cancelled from any status
+- `COMPLETED` - Tournament finished (terminal)
+- `CANCELLED` - Cancelled from any non-terminal status (terminal)
 
 **Rules:**
 - Only DRAFT is editable/deletable
 - Only ACTIVE accepts enrollments
 - Only creator can change states
+- Backward transitions allow fixing schedule (IN_PROGRESS → CLOSED) or adding players (CLOSED → ACTIVE)
+- Terminal states (COMPLETED, CANCELLED) cannot transition to any other state
 
 ### Enrollment Status (Enrollment Status)
 

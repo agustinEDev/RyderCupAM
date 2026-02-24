@@ -52,11 +52,13 @@ Competition Management (10 endpoints)
 ├── GET  /api/v1/competitions/{id}       # Get competition details
 ├── PUT  /api/v1/competitions/{id}       # Update competition (DRAFT only)
 ├── DELETE /api/v1/competitions/{id}     # Delete competition (DRAFT only)
-├── POST /api/v1/competitions/{id}/activate         # DRAFT → ACTIVE
-├── POST /api/v1/competitions/{id}/close-enrollments # ACTIVE → CLOSED
-├── POST /api/v1/competitions/{id}/start            # CLOSED → IN_PROGRESS
-├── POST /api/v1/competitions/{id}/complete         # IN_PROGRESS → COMPLETED
-└── POST /api/v1/competitions/{id}/cancel           # Any state → CANCELLED
+├── POST /api/v1/competitions/{id}/activate           # DRAFT → ACTIVE
+├── POST /api/v1/competitions/{id}/close-enrollments  # ACTIVE → CLOSED
+├── POST /api/v1/competitions/{id}/start              # CLOSED → IN_PROGRESS
+├── POST /api/v1/competitions/{id}/complete           # IN_PROGRESS → COMPLETED
+├── PUT  /api/v1/competitions/{id}/revert-status      # IN_PROGRESS → CLOSED ⭐ NEW
+├── POST /api/v1/competitions/{id}/reopen-enrollments # CLOSED → ACTIVE ⭐ NEW
+└── POST /api/v1/competitions/{id}/cancel             # Any state → CANCELLED
 
 Competition-GolfCourse Management (4 endpoints) ⭐ v2.0.2
 ├── POST   /api/v1/competitions/{id}/golf-courses    # Add golf course to competition
@@ -477,7 +479,29 @@ Returns a `UserRolesResponseDTO` object detailing the user's roles.
 | `/competitions/{id}/close-enrollments` | POST | Yes | Transition ACTIVE → CLOSED |
 | `/competitions/{id}/start` | POST | Yes | Transition CLOSED → IN_PROGRESS |
 | `/competitions/{id}/complete` | POST | Yes | Transition IN_PROGRESS → COMPLETED |
+| `/competitions/{id}/revert-status` | PUT | Yes | Transition IN_PROGRESS → CLOSED (fix schedule) |
+| `/competitions/{id}/reopen-enrollments` | POST | Yes | Transition CLOSED → ACTIVE (add players) |
 | `/competitions/{id}/cancel` | POST | Yes | Transition any status → CANCELLED |
+
+### Backward State Transitions
+
+**PUT /competitions/{id}/revert-status** — Revert IN_PROGRESS → CLOSED
+
+Use when the creator discovers schedule issues during play (wrong team assignments, missing rounds, incorrect match configuration). Reverting to CLOSED allows modifying teams, rounds, and matches before restarting.
+
+- **Auth:** Creator only
+- **Rate limit:** 10/minute
+- **Response:** Full `CompetitionResponseDTO` with status `CLOSED`
+- **Errors:** 404 (not found), 403 (not creator), 400 (wrong state)
+
+**POST /competitions/{id}/reopen-enrollments** — Reopen CLOSED → ACTIVE
+
+Use when the creator needs to add or remove players after closing enrollments. Reopening to ACTIVE allows new enrollment requests and invitation management.
+
+- **Auth:** Creator only
+- **Rate limit:** 10/minute
+- **Response:** Full `CompetitionResponseDTO` with status `ACTIVE`
+- **Errors:** 404 (not found), 403 (not creator), 400 (wrong state)
 
 ### Main Fields (Create/Update)
 

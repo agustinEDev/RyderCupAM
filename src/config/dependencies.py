@@ -95,6 +95,9 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
+    ReopenEnrollmentsUseCase,
+)
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
     ReorderGolfCoursesUseCase,
 )
@@ -103,6 +106,9 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
+)
+from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
+    RevertCompetitionStatusUseCase,
 )
 from src.modules.competition.application.use_cases.send_invitation_by_email_use_case import (
     SendInvitationByEmailUseCase,
@@ -1000,6 +1006,34 @@ def get_cancel_competition_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return CancelCompetitionUseCase(uow)
+
+
+def get_revert_competition_status_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RevertCompetitionStatusUseCase:
+    """
+    Proveedor del caso de uso RevertCompetitionStatusUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `RevertCompetitionStatusUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return RevertCompetitionStatusUseCase(uow)
+
+
+def get_reopen_enrollments_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ReopenEnrollmentsUseCase:
+    """
+    Proveedor del caso de uso ReopenEnrollmentsUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ReopenEnrollmentsUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return ReopenEnrollmentsUseCase(uow)
 
 
 def get_add_golf_course_to_competition_use_case(

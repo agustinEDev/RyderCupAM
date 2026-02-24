@@ -21,8 +21,12 @@ class CompetitionStatus(StrEnum):
 
     Transiciones válidas:
     DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
-               ↓         ↓          ↓
-           CANCELLED  CANCELLED  CANCELLED
+               ↓    ↑    ↓    ↑       ↓
+           CANCELLED  ACTIVE CANCELLED  CLOSED CANCELLED
+
+    Backward transitions:
+    - IN_PROGRESS → CLOSED: Revert to fix schedule issues
+    - CLOSED → ACTIVE: Reopen enrollments to add/remove players
     """
 
     DRAFT = "DRAFT"
@@ -59,10 +63,12 @@ class CompetitionStatus(StrEnum):
             },
             CompetitionStatus.CLOSED: {
                 CompetitionStatus.IN_PROGRESS,
+                CompetitionStatus.ACTIVE,
                 CompetitionStatus.CANCELLED,
             },
             CompetitionStatus.IN_PROGRESS: {
                 CompetitionStatus.COMPLETED,
+                CompetitionStatus.CLOSED,
                 CompetitionStatus.CANCELLED,
             },
             CompetitionStatus.COMPLETED: set(),  # Estado final

@@ -1,8 +1,24 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Versión:** 2.0.12 | **Tests:** 1,873 unit + 252 integration (1 skipped) | **Endpoints:** 80 | **OWASP:** 9.4/10
+> **Versión:** 2.0.14 | **Tests:** 1,902 unit + 256 integration (1 skipped) | **Endpoints:** 82 | **OWASP:** 9.4/10
 >
 > **Last Updated:** Feb 24, 2026
+
+---
+
+## Completado: Backward Competition State Transitions ⭐ v2.0.14
+
+```http
+PUT  /api/v1/competitions/{id}/revert-status       # IN_PROGRESS → CLOSED (fix schedule)
+POST /api/v1/competitions/{id}/reopen-enrollments   # CLOSED → ACTIVE (add/remove players)
+```
+
+- **CompetitionStatus VO**: Extended state machine with 2 backward transitions
+- **Competition entity**: `revert_to_closed()`, `reopen_enrollments()` command methods
+- **Domain events**: `CompetitionRevertedToClosedEvent`, `CompetitionEnrollmentsReopenedEvent`
+- **Use cases**: `RevertCompetitionStatusUseCase`, `ReopenEnrollmentsUseCase`
+- **Creator-only, rate limited** (10/min), same auth pattern as forward transitions
+- 29 new tests (16 VO + 12 use case + 4 integration + 1 entity)
 
 ---
 

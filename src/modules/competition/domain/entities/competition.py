@@ -20,6 +20,12 @@ from ..events.competition_created_event import CompetitionCreatedEvent
 from ..events.competition_enrollments_closed_event import (
     CompetitionEnrollmentsClosedEvent,
 )
+from ..events.competition_enrollments_reopened_event import (
+    CompetitionEnrollmentsReopenedEvent,
+)
+from ..events.competition_reverted_to_closed_event import (
+    CompetitionRevertedToClosedEvent,
+)
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
 from ..value_objects.competition_id import CompetitionId
@@ -374,6 +380,52 @@ class Competition:
 
         event = CompetitionCancelledEvent(
             competition_id=str(self._id), name=str(self._name), reason=reason
+        )
+        self._add_domain_event(event)
+
+    def revert_to_closed(self) -> None:
+        """
+        Revierte el torneo a CLOSED (IN_PROGRESS → CLOSED).
+
+        Permite al creador corregir el schedule (equipos, rondas, matches)
+        antes de reiniciar la competición.
+
+        Raises:
+            CompetitionStateError: Si la transición no es válida
+        """
+        if not self._status.can_transition_to(CompetitionStatus.CLOSED):
+            raise CompetitionStateError(
+                f"No se puede revertir a CLOSED desde estado {self._status.value}"
+            )
+
+        self._status = CompetitionStatus.CLOSED
+        self._updated_at = datetime.now()
+
+        event = CompetitionRevertedToClosedEvent(
+            competition_id=str(self._id), name=str(self._name)
+        )
+        self._add_domain_event(event)
+
+    def reopen_enrollments(self) -> None:
+        """
+        Reabre las inscripciones (CLOSED → ACTIVE).
+
+        Permite al creador añadir o modificar jugadores antes de
+        volver a cerrar inscripciones y configurar el schedule.
+
+        Raises:
+            CompetitionStateError: Si la transición no es válida
+        """
+        if not self._status.can_transition_to(CompetitionStatus.ACTIVE):
+            raise CompetitionStateError(
+                f"No se pueden reabrir inscripciones desde estado {self._status.value}"
+            )
+
+        self._status = CompetitionStatus.ACTIVE
+        self._updated_at = datetime.now()
+
+        event = CompetitionEnrollmentsReopenedEvent(
+            competition_id=str(self._id), name=str(self._name)
         )
         self._add_domain_event(event)
 

@@ -181,7 +181,7 @@ Domain (Entities, VOs, Events, Repos)
 **Domain**:
 - Entities: `Competition`, `Enrollment`, `Country`
 - VOs: `CompetitionId`, `CompetitionName`, `DateRange`, `Location`, `PlayMode`, `EnrollmentId`, `EnrollmentStatus`, `CountryCode`
-- Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
+- Events: `CompetitionCreated`, `CompetitionActivated`, `CompetitionStarted`, `CompetitionCompleted`, `CompetitionRevertedToClosed`, `CompetitionEnrollmentsReopened`, `EnrollmentRequested`, `EnrollmentApproved`, `EnrollmentCancelled`, `EnrollmentWithdrawn`
 - Repos: `CompetitionRepositoryInterface`, `EnrollmentRepositoryInterface`, `CountryRepositoryInterface`
 
 **Application**:
@@ -195,7 +195,7 @@ Domain (Entities, VOs, Events, Repos)
 - Seed Data: 166 countries + 614 border relations
 
 **Features**:
-- Complete tournament management (CRUD + state machine)
+- Complete tournament management (CRUD + state machine with backward transitions)
 - Enrollment system (requests, invitations, approvals)
 - Multi-country support (up to 3 adjacent countries)
 - Custom handicaps per enrollment
