@@ -43,6 +43,7 @@ class TestUserRepositoryInterface:
             "count_all",
             "find_by_verification_token",
             "find_by_password_reset_token",
+            "search_by_partial_name",
         }
 
         interface_methods = {
@@ -149,6 +150,7 @@ class TestUserRepositoryInterface:
             "count_all",
             "find_by_verification_token",
             "find_by_password_reset_token",
+            "search_by_partial_name",
         ]
 
         for method_name in methods_to_check:

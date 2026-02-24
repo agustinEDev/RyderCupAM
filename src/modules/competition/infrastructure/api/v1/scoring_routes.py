@@ -128,11 +128,11 @@ async def submit_hole_score(
     - Solo jugadores del partido pueden registrar scores
     - El partido debe estar IN_PROGRESS
     - Hoyo debe estar entre 1-18
-    - La tarjeta no debe haber sido entregada
+    - Los campos bloqueados tras la entrega se omiten silenciosamente
 
     **Returns:**
     - 200: Score registrado, retorna scoring-view actualizado
-    - 400: Hoyo invalido, tarjeta ya entregada
+    - 400: Hoyo inválido (los campos ya entregados se omiten, no se rechaza)
     - 403: No es jugador del partido
     - 404: Partido no encontrado
     - 409: Partido no en estado de scoring
@@ -290,7 +290,7 @@ async def concede_match(
 
     **Returns:**
     - 200: Partido concedido
-    - 400: Partido no en estado de scoring
+    - 409: Partido no en estado de scoring
     - 403: No es jugador ni creador
     - 404: Partido no encontrado
     """

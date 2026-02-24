@@ -94,17 +94,20 @@ async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     enrollments = enroll_resp.json()
     for e in enrollments:
         if e["status"] == "REQUESTED":
-            await client.post(f"/api/v1/enrollments/{e['id']}/approve")
+            approve_resp = await client.post(f"/api/v1/enrollments/{e['id']}/approve")
+            assert approve_resp.status_code == 200, f"Failed to approve enrollment {e['id']}: {approve_resp.text}"
 
     # 8. Retirar inscripción del creator (auto-enrolled) para mantener solo 2 jugadores
     set_auth_cookies(client, creator["cookies"])
     enroll_resp2 = await client.get(f"/api/v1/competitions/{comp_id}/enrollments")
     for e in enroll_resp2.json():
         if e["user_id"] == creator["user"]["id"] and e["status"] == "APPROVED":
-            await client.post(f"/api/v1/enrollments/{e['id']}/withdraw")
+            withdraw_resp = await client.post(f"/api/v1/enrollments/{e['id']}/withdraw")
+            assert withdraw_resp.status_code == 200, f"Failed to withdraw enrollment {e['id']}: {withdraw_resp.text}"
 
     # 9. Cerrar inscripciones
-    await client.post(f"/api/v1/competitions/{comp_id}/close-enrollments")
+    close_resp = await client.post(f"/api/v1/competitions/{comp_id}/close-enrollments")
+    assert close_resp.status_code == 200, f"Failed to close enrollments: {close_resp.text}"
 
     # 10. Crear ronda SINGLES (ANTES de asignar equipos para que se transicione a PENDING_MATCHES)
     set_auth_cookies(client, creator["cookies"])

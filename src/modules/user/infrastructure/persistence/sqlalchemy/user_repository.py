@@ -82,9 +82,9 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             select(User)
             .filter(
                 or_(
-                    func.lower(User.first_name).contains(query.lower()),
-                    func.lower(User.last_name).contains(query.lower()),
-                    func.lower(User.first_name + " " + User.last_name).contains(query.lower()),
+                    func.lower(User.first_name).contains(query.lower(), autoescape=True),
+                    func.lower(User.last_name).contains(query.lower(), autoescape=True),
+                    func.lower(User.first_name + " " + User.last_name).contains(query.lower(), autoescape=True),
                 )
             )
             .limit(limit)

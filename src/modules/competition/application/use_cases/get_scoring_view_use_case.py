@@ -22,6 +22,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.validation_status import (
+    ValidationStatus,
+)
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -196,7 +199,7 @@ class GetScoringViewUseCase:
 
     def _compute_hole_result(self, hole_hs_list, team_a_nets, team_b_nets, match_format, hole_results_list):
         """Calcula el resultado de un hoyo si hay scores validados."""
-        has_validated = any(hs.own_submitted and hs.marker_submitted for hs in hole_hs_list)
+        has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs_list)
         if not has_validated or not team_a_nets or not team_b_nets:
             return None
 

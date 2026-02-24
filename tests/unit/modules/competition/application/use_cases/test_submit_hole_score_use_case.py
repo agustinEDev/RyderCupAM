@@ -17,6 +17,7 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -37,7 +38,7 @@ def _make_player(user_id=None, handicap=10, strokes=()):
     )
 
 
-def _setup_match(uow, team_a, team_b, status=MatchStatus.IN_PROGRESS, match_format=MatchFormat.SINGLES):
+def _setup_match(uow, team_a, team_b, status=MatchStatus.IN_PROGRESS, match_format=MatchFormat.SINGLES, marker_assignments=None):
     """Creates a match and round in the UoW."""
     round_id = RoundId.generate()
 
@@ -55,6 +56,8 @@ def _setup_match(uow, team_a, team_b, status=MatchStatus.IN_PROGRESS, match_form
         team_a_players=team_a,
         team_b_players=team_b,
     )
+    if marker_assignments:
+        match.set_marker_assignments(marker_assignments)
     if status == MatchStatus.IN_PROGRESS:
         match.start()
     return match, mock_round
@@ -72,8 +75,14 @@ def scoring_service():
 
 @pytest.fixture
 def user_repo():
+    def _make_mock_user(uid):
+        user = MagicMock()
+        user.first_name = "Player"
+        user.last_name = str(uid)[:8]
+        return user
+
     repo = AsyncMock()
-    repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_by_id = AsyncMock(side_effect=_make_mock_user)
     return repo
 
 
@@ -111,7 +120,11 @@ class TestSubmitHoleScoreValidation:
     async def test_scorecard_submitted_skips_own_score_allows_marker(self, uow, user_repo, scoring_service):
         """Tras entregar tarjeta, own_score se ignora silenciosamente y marker_score se procesa."""
         a, b = _make_player(), _make_player()
-        match, mock_round = _setup_match(uow, [a], [b])
+        assignments = [
+            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+        ]
+        match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
@@ -133,14 +146,6 @@ class TestSubmitHoleScoreValidation:
         mock_comp.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
-        # Set up marker assignments
-        from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-        match._marker_assignments = (
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
-        )
-        await uow.matches.update(match)
-
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
         # Frontend envia own_score=5 pero debe ignorarse, marker_score=4 debe procesarse
         body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=4)
@@ -158,7 +163,11 @@ class TestSubmitHoleScoreValidation:
     async def test_marked_player_scorecard_submitted_skips_marker_allows_own(self, uow, user_repo, scoring_service):
         """Si el jugador que marcas ya entregó tarjeta, marker_score se ignora y own_score se procesa."""
         a, b = _make_player(), _make_player()
-        match, mock_round = _setup_match(uow, [a], [b])
+        assignments = [
+            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+        ]
+        match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
@@ -179,14 +188,6 @@ class TestSubmitHoleScoreValidation:
         mock_comp.team_1_name = "Team A"
         mock_comp.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
-
-        # Set up marker assignments
-        from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-        match._marker_assignments = (
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
-        )
-        await uow.matches.update(match)
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
         body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=7)
@@ -217,7 +218,11 @@ class TestSubmitHoleScoreHappyPath:
     @pytest.mark.asyncio
     async def test_updates_own_and_marker_scores(self, uow, user_repo, scoring_service):
         a, b = _make_player(), _make_player()
-        match, mock_round = _setup_match(uow, [a], [b])
+        assignments = [
+            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+        ]
+        match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
@@ -233,14 +238,6 @@ class TestSubmitHoleScoreHappyPath:
         mock_comp.team_1_name = "Team A"
         mock_comp.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
-
-        # Set up marker assignments
-        from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-        match._marker_assignments = (
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
-        )
-        await uow.matches.update(match)
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
         body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=4)

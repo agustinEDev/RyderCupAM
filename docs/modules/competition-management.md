@@ -165,8 +165,8 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `calculate_net_score()` — net = own_score - strokes_received (min 0) when MATCH
 
 **Scorecard Locking (granular, silent skip):**
-- If scorer submitted scorecard → `own_score` update silently ignored, `marked_score` still editable
-- If marked player submitted scorecard → `marked_score` update silently ignored, `own_score` still editable
+- If scorer submitted scorecard → `own_score` update silently ignored, `marker_score` still editable
+- If marked player submitted scorecard → `marker_score` update silently ignored, `own_score` still editable
 - Both locks can be active simultaneously (all updates silently ignored)
 
 ### Entity: TeamAssignment ⭐ Sprint 2 Block 4

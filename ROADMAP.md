@@ -1,6 +1,6 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Version:** 2.0.12 | **Tests:** 1,873 unit + 252 integration (1 skipped) | **Endpoints:** 80 | **OWASP:** 9.4/10
+> **Versión:** 2.0.12 | **Tests:** 1,873 unit + 252 integration (1 skipped) | **Endpoints:** 80 | **OWASP:** 9.4/10
 >
 > **Last Updated:** Feb 24, 2026
 

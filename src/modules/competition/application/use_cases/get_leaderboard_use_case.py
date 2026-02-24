@@ -80,34 +80,15 @@ class GetLeaderboardUseCase:
                         total_a_points += points["team_a"]
                         total_b_points += points["team_b"]
 
-                        # Use decided_result for correct "5&4" format
-                        if match.is_decided and match.decided_result:
-                            final_result = match.decided_result
-                        else:
-                            # Recompute from hole scores to find actual decision point
-                            final_result = await self._compute_decided_result(
-                                match, round_entity.match_format
-                            ) or match.result
-
+                        final_result = await self._resolve_final_result(match, round_entity)
                         result_dto = DecidedResultDTO(
                             winner=final_result.get("winner", ""),
                             score=final_result.get("score", ""),
                         )
                     elif match.status.can_record_scores():
-                        # In progress: compute standing from hole scores
-                        hole_scores = await self._uow.hole_scores.find_by_match(match.id)
-                        if hole_scores and round_entity.match_format:
-                            match_format = round_entity.match_format
-                            hole_results = self._compute_hole_results(
-                                hole_scores, match_format
-                            )
-                            if hole_results:
-                                standing = self._scoring_service.calculate_match_standing(
-                                    hole_results
-                                )
-                                standing_str = standing["status"]
-                                leading_team = standing["leading_team"]
-                                current_hole = standing["holes_played"]
+                        standing_str, leading_team, current_hole = await self._compute_in_progress_standing(
+                            match, round_entity
+                        )
 
                     team_a_players = [
                         LeaderboardPlayerDTO(
@@ -151,6 +132,26 @@ class GetLeaderboardUseCase:
                 team_b_points=total_b_points,
                 matches=matches_dto,
             )
+
+    async def _resolve_final_result(self, match, round_entity) -> dict:
+        """Determines the final result for a finished match."""
+        if match.is_decided and match.decided_result:
+            return match.decided_result
+        if round_entity.match_format is not None:
+            return await self._compute_decided_result(
+                match, round_entity.match_format
+            ) or match.result
+        return match.result
+
+    async def _compute_in_progress_standing(self, match, round_entity):
+        """Computes standing for an in-progress match."""
+        hole_scores = await self._uow.hole_scores.find_by_match(match.id)
+        if hole_scores and round_entity.match_format:
+            hole_results = self._compute_hole_results(hole_scores, round_entity.match_format)
+            if hole_results:
+                standing = self._scoring_service.calculate_match_standing(hole_results)
+                return standing["status"], standing["leading_team"], standing["holes_played"]
+        return None, None, None
 
     def _compute_hole_results(self, hole_scores, match_format):
         """Computa resultados por hoyo."""

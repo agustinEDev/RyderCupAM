@@ -833,7 +833,7 @@ PENDING → ACCEPTED
 | `/competitions/matches/{id}/scores/holes/{n}` | POST | Player | 10/min | Submit hole score |
 | `/competitions/matches/{id}/scorecard/submit` | POST | Player | 10/min | Submit scorecard |
 | `/competitions/{id}/leaderboard` | GET | Yes | 20/min | Competition leaderboard |
-| `/competitions/matches/{id}/status` | PUT | Player/Creator | 10/min | Concede match (extended) |
+| `/competitions/matches/{id}/concede` | PUT | Player/Creator | 10/min | Concede match |
 
 ### Get Scoring View
 

@@ -9,6 +9,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    RoundNotFoundError,
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
 )
@@ -82,6 +83,8 @@ class SubmitScorecardUseCase:
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
             round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            if not round_entity:
+                raise RoundNotFoundError(f"Round not found for match {match_id_str}")
             match_format = round_entity.match_format
             hole_results = self._compute_hole_results(all_scores, match_format)
 
@@ -140,8 +143,8 @@ class SubmitScorecardUseCase:
             if not has_validated:
                 continue
 
-            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A"]
-            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B"]
+            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None]
+            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None]
 
             if team_a_nets and team_b_nets:
                 winner = self._scoring_service.calculate_hole_winner(
