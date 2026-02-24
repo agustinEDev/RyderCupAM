@@ -110,7 +110,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 2026 Q1  │ v1.11.0 → v1.13.1  Password Reset, CI/CD, Security Hardening
          │ v2.0.0 → v2.0.8    RBAC, Golf Courses, Scheduling, Support
          │ v2.0.9 → v2.0.12   Sprint 3: Google OAuth + Invitations + Emails ✅
-2026 Q1  │ Sprint 4             Live Scoring + Leaderboard (5 endpoints, 238 tests) ✅
+2026 Q1  │ v2.0.13              Sprint 4: Live Scoring + Leaderboard (5 endpoints, 238 tests) ✅
 2026 Q2  │ v2.1.0              Compliance (GDPR, Audit, Avatars)
          │ v2.2.0              AI & RAG Module
 2026 Q3  │ v2.1.1 - v2.1.2    WebSocket, Stats, Export PDF
@@ -123,6 +123,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 | Version | Fecha | Highlights |
 |---------|-------|------------|
+| **v2.0.13** | Feb 24, 2026 | Sprint 4: Live Scoring + Leaderboard (5 scoring endpoints, 238 tests) |
 | **v2.0.12** | Feb 19, 2026 | Invitations Module + Bilingual Emails (5 endpoints, 194 tests) |
 | **v2.0.11** | Feb 17, 2026 | Hotfix: naive datetime in UserOAuthAccount |
 | **v2.0.10** | Feb 17, 2026 | auth_providers + has_password in UserResponseDTO |

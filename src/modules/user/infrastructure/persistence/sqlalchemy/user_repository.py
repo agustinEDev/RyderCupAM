@@ -77,7 +77,10 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         return None
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
-        """Searches users by partial name match using ILIKE."""
+        """Searches users by partial name match using ILIKE. Requires at least 2 characters."""
+        query = query.strip()
+        if len(query) < self.MIN_NAME_PARTS:
+            return []
         statement = (
             select(User)
             .filter(

@@ -395,7 +395,7 @@ class TestSubmitScorecard:
         # Submit matching scores for all 18 holes
         for hole in range(1, 19):
             set_auth_cookies(client, ctx["player_a"]["cookies"])
-            await client.post(
+            resp_a = await client.post(
                 f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/{hole}",
                 json={
                     "own_score": 4,
@@ -403,8 +403,9 @@ class TestSubmitScorecard:
                     "marked_score": 4,
                 },
             )
+            assert resp_a.status_code == 200, f"Player A hole {hole}: {resp_a.text}"
             set_auth_cookies(client, ctx["player_b"]["cookies"])
-            await client.post(
+            resp_b = await client.post(
                 f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/{hole}",
                 json={
                     "own_score": 4,
@@ -412,6 +413,7 @@ class TestSubmitScorecard:
                     "marked_score": 4,
                 },
             )
+            assert resp_b.status_code == 200, f"Player B hole {hole}: {resp_b.text}"
 
         # Player A submits scorecard
         set_auth_cookies(client, ctx["player_a"]["cookies"])
@@ -461,7 +463,7 @@ class TestSubmitScorecard:
         # Submit matching scores for all 18 holes
         for hole in range(1, 19):
             set_auth_cookies(client, ctx["player_a"]["cookies"])
-            await client.post(
+            resp_a = await client.post(
                 f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/{hole}",
                 json={
                     "own_score": 4,
@@ -469,8 +471,9 @@ class TestSubmitScorecard:
                     "marked_score": 5,
                 },
             )
+            assert resp_a.status_code == 200, f"Player A hole {hole}: {resp_a.text}"
             set_auth_cookies(client, ctx["player_b"]["cookies"])
-            await client.post(
+            resp_b = await client.post(
                 f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/{hole}",
                 json={
                     "own_score": 5,
@@ -478,6 +481,7 @@ class TestSubmitScorecard:
                     "marked_score": 4,
                 },
             )
+            assert resp_b.status_code == 200, f"Player B hole {hole}: {resp_b.text}"
 
         # Player A submits
         set_auth_cookies(client, ctx["player_a"]["cookies"])
