@@ -26,7 +26,7 @@ from tests.conftest import (
 # ======================================================================================
 
 
-async def setup_match_in_progress(client: AsyncClient):
+async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     """
     Setup completo: crea competicion SCRATCH con 2 jugadores, 1 ronda SINGLES,
     genera partidos, inicia competicion y match. Retorna IDs necesarios.
@@ -81,34 +81,32 @@ async def setup_match_in_progress(client: AsyncClient):
 
     # 6. Inscribir jugadores
     set_auth_cookies(client, player_a["cookies"])
-    await client.post(f"/api/v1/competitions/{comp_id}/enrollments")
+    resp_a = await client.post(f"/api/v1/competitions/{comp_id}/enrollments")
+    assert resp_a.status_code in (200, 201), f"Failed to enroll player_a: {resp_a.text}"
     set_auth_cookies(client, player_b["cookies"])
-    await client.post(f"/api/v1/competitions/{comp_id}/enrollments")
+    resp_b = await client.post(f"/api/v1/competitions/{comp_id}/enrollments")
+    assert resp_b.status_code in (200, 201), f"Failed to enroll player_b: {resp_b.text}"
 
     # 7. Aprobar inscripciones
     set_auth_cookies(client, creator["cookies"])
     enroll_resp = await client.get(f"/api/v1/competitions/{comp_id}/enrollments")
+    assert enroll_resp.status_code == 200, f"Failed to get enrollments: {enroll_resp.text}"
     enrollments = enroll_resp.json()
     for e in enrollments:
         if e["status"] == "REQUESTED":
             await client.post(f"/api/v1/enrollments/{e['id']}/approve")
 
-    # 8. Cerrar inscripciones
+    # 8. Retirar inscripción del creator (auto-enrolled) para mantener solo 2 jugadores
+    set_auth_cookies(client, creator["cookies"])
+    enroll_resp2 = await client.get(f"/api/v1/competitions/{comp_id}/enrollments")
+    for e in enroll_resp2.json():
+        if e["user_id"] == creator["user"]["id"] and e["status"] == "APPROVED":
+            await client.post(f"/api/v1/enrollments/{e['id']}/withdraw")
+
+    # 9. Cerrar inscripciones
     await client.post(f"/api/v1/competitions/{comp_id}/close-enrollments")
 
-    # 9. Asignar equipos manualmente
-    set_auth_cookies(client, creator["cookies"])
-    resp = await client.post(
-        f"/api/v1/competitions/{comp_id}/teams",
-        json={
-            "mode": "MANUAL",
-            "team_a_player_ids": [player_a["user"]["id"]],
-            "team_b_player_ids": [player_b["user"]["id"]],
-        },
-    )
-    assert resp.status_code == 201, f"Failed to assign teams: {resp.text}"
-
-    # 10. Crear ronda SINGLES
+    # 10. Crear ronda SINGLES (ANTES de asignar equipos para que se transicione a PENDING_MATCHES)
     set_auth_cookies(client, creator["cookies"])
     round_resp = await client.post(
         f"/api/v1/competitions/{comp_id}/rounds",
@@ -122,7 +120,19 @@ async def setup_match_in_progress(client: AsyncClient):
     assert round_resp.status_code == 201, f"Failed to create round: {round_resp.text}"
     round_id = round_resp.json()["id"]
 
-    # 11. Generar partidos
+    # 11. Asignar equipos manualmente
+    set_auth_cookies(client, creator["cookies"])
+    resp = await client.post(
+        f"/api/v1/competitions/{comp_id}/teams",
+        json={
+            "mode": "MANUAL",
+            "team_a_player_ids": [player_a["user"]["id"]],
+            "team_b_player_ids": [player_b["user"]["id"]],
+        },
+    )
+    assert resp.status_code == 201, f"Failed to assign teams: {resp.text}"
+
+    # 13. Generar partidos
     set_auth_cookies(client, creator["cookies"])
     gen_resp = await client.post(
         f"/api/v1/competitions/rounds/{round_id}/matches/generate",
@@ -130,19 +140,19 @@ async def setup_match_in_progress(client: AsyncClient):
     )
     assert gen_resp.status_code == 201, f"Failed to generate matches: {gen_resp.text}"
 
-    # 12. Obtener match_id del schedule
+    # 14. Obtener match_id del schedule
     set_auth_cookies(client, creator["cookies"])
     sched_resp = await client.get(f"/api/v1/competitions/{comp_id}/schedule")
     assert sched_resp.status_code == 200
     schedule = sched_resp.json()
-    match_id = schedule["days"][0]["rounds"][0]["matches"][0]["match_id"]
+    match_id = schedule["days"][0]["rounds"][0]["matches"][0]["id"]
 
-    # 13. Iniciar competicion
+    # 15. Iniciar competicion
     set_auth_cookies(client, creator["cookies"])
     start_resp = await client.post(f"/api/v1/competitions/{comp_id}/start")
     assert start_resp.status_code == 200, f"Failed to start competition: {start_resp.text}"
 
-    # 14. Iniciar partido (pre-crea HoleScores)
+    # 16. Iniciar partido (pre-crea HoleScores)
     set_auth_cookies(client, creator["cookies"])
     status_resp = await client.put(
         f"/api/v1/competitions/matches/{match_id}/status",
@@ -285,9 +295,9 @@ class TestSubmitHoleScore:
         data = response.json()
         hole_1 = next(s for s in data["scores"] if s["hole_number"] == 1)
 
-        # Both should be MATCH
+        # Both should be match (lowercase from DTO serialization)
         for ps in hole_1["player_scores"]:
-            assert ps["validation_status"] == "MATCH"
+            assert ps["validation_status"] == "match"
 
     @pytest.mark.asyncio
     async def test_cross_validation_produces_mismatch(self, client: AsyncClient):
@@ -322,9 +332,9 @@ class TestSubmitHoleScore:
         data = response.json()
         hole_1 = next(s for s in data["scores"] if s["hole_number"] == 1)
 
-        # Both should be MISMATCH (own != marker)
+        # Both should be mismatch (lowercase from DTO serialization)
         for ps in hole_1["player_scores"]:
-            assert ps["validation_status"] == "MISMATCH"
+            assert ps["validation_status"] == "mismatch"
 
     @pytest.mark.asyncio
     async def test_submit_hole_score_non_player_returns_403(self, client: AsyncClient):
