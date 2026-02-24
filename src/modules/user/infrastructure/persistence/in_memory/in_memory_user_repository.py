@@ -56,6 +56,18 @@ class InMemoryUserRepository(UserRepositoryInterface):
                 return user
         return None
 
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """Searches users by partial name match."""
+        query_lower = query.lower().strip()
+        results = []
+        for user in self._users.values():
+            full_name = f"{user.first_name} {user.last_name}".lower()
+            if query_lower in full_name or query_lower in user.first_name.lower() or query_lower in user.last_name.lower():
+                results.append(user)
+                if len(results) >= limit:
+                    break
+        return results
+
     async def exists_by_email(self, email: Email) -> bool:
         return any(user.email == email for user in self._users.values())
 

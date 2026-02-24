@@ -175,6 +175,9 @@ class TestUserRepositoryInterface:
             async def find_by_full_name(self, full_name: str):
                 return None
 
+            async def search_by_partial_name(self, query: str, limit: int = 10):
+                return []
+
             async def exists_by_email(self, email: Email) -> bool:
                 return False
 

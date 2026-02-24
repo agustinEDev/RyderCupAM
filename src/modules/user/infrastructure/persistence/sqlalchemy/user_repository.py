@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user import User
@@ -75,6 +75,22 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
                 return user
 
         return None
+
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """Searches users by partial name match using ILIKE."""
+        statement = (
+            select(User)
+            .filter(
+                or_(
+                    func.lower(User.first_name).contains(query.lower()),
+                    func.lower(User.last_name).contains(query.lower()),
+                    func.lower(User.first_name + " " + User.last_name).contains(query.lower()),
+                )
+            )
+            .limit(limit)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
 
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""

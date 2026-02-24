@@ -236,6 +236,7 @@ from src.modules.user.application.use_cases.reset_password_use_case import (
 from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
+from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
@@ -422,6 +423,13 @@ def get_find_user_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return FindUserUseCase(uow)
+
+
+def get_search_users_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SearchUsersUseCase:
+    """Proveedor del caso de uso SearchUsersUseCase."""
+    return SearchUsersUseCase(uow=uow)
 
 
 def get_update_handicap_use_case(

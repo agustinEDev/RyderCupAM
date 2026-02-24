@@ -104,6 +104,20 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """
+        Searches users whose first_name or last_name partially matches the query (case-insensitive).
+
+        Args:
+            query (str): Partial name to search for (min 2 characters)
+            limit (int): Maximum number of results to return (default: 10)
+
+        Returns:
+            list[User]: List of matching users
+        """
+        pass
+
+    @abstractmethod
     async def update(self, user: User) -> None:
         """
         Actualiza un usuario existente en el repositorio.
