@@ -34,13 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 **Application Layer**
 
-- **~15 DTOs** in `scoring_dto.py`: `SubmitHoleScoreBodyDTO`, `ScoringViewResponseDTO`, `SubmitScorecardResponseDTO`, `LeaderboardResponseDTO` + sub-DTOs
+- **~16 DTOs** in `scoring_dto.py`: `SubmitHoleScoreBodyDTO`, `ConcedeMatchBodyDTO`, `ScoringViewResponseDTO`, `SubmitScorecardResponseDTO`, `LeaderboardResponseDTO` + sub-DTOs
 - **5 Use Cases**:
   - `GetScoringViewUseCase`: Unified scoring view (scores, standing, marker assignments, decided status)
-  - `SubmitHoleScoreUseCase`: Register own_score + marker_score with Foursomes team expansion, auto-recalculate validation and standing
+  - `SubmitHoleScoreUseCase`: Register own_score + marker_score with Foursomes team expansion, auto-recalculate validation and standing, granular scorecard locking
   - `SubmitScorecardUseCase`: Validate all holes MATCH, submit scorecard, auto-complete match/round
   - `GetLeaderboardUseCase`: Team points, match standings, player names resolved via user repo
   - `ConcedeMatchUseCase`: Players concede own team, creator can concede any team
+- **SearchUsersUseCase**: Autocomplete search by partial name (max 10 results)
 - **5 New Exceptions**: `NotMatchPlayerError`, `ScorecardNotReadyError`, `ScorecardAlreadySubmittedError`, `MatchNotScoringError`, `InvalidHoleNumberError`
 
 **Infrastructure Layer**
@@ -50,15 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **SQLAlchemy mapper**: Imperative mapping for HoleScore + extended Match mapping
 - **HoleScoreRepository**: SQLAlchemy implementation with private attr queries
 - **CompetitionUnitOfWork**: Extended with `hole_scores` repository property
-- **4 Scoring endpoints** in `scoring_routes.py`:
+- **5 Scoring endpoints** in `scoring_routes.py`:
   - `GET /matches/{match_id}/scoring-view`
   - `POST /matches/{match_id}/scores/holes/{hole_number}`
   - `POST /matches/{match_id}/scorecard/submit`
   - `GET /competitions/{competition_id}/leaderboard`
-- **Match status endpoint extended**: `PUT /matches/{match_id}/status` accepts `action: "CONCEDE"` with `conceding_team` and `reason`
+  - `PUT /matches/{match_id}/concede` — Dedicated concede endpoint with Pydantic `ConcedeMatchBodyDTO`
+- **1 User endpoint** in `user_routes.py`:
+  - `GET /users/search-autocomplete` — Partial name search with max 10 results
 - **Match generation integration**: Auto-generates marker_assignments via ScoringService
 - **Match start integration**: Pre-creates 18 HoleScore records per player with precalculated `strokes_received`
-- **4 New DI providers** in `dependencies.py`
+- **6 New DI providers** in `dependencies.py`
 
 ### Changed
 
@@ -66,11 +69,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MatchStatus enum**: Added CONCEDED state
 - **CompetitionUnitOfWorkInterface**: Added `hole_scores` property
 - **GenerateMatchesUseCase**: Now generates marker_assignments via ScoringService
-- **UpdateMatchStatusUseCase**: Pre-creates HoleScores on START, handles CONCEDE action
+- **UpdateMatchStatusUseCase**: Pre-creates HoleScores on START with explicit team loops (no fallback)
+- **UserRepositoryInterface**: Added `search_by_partial_name()` method for autocomplete
+
+### Fixed
+
+- **Scorecard locking (granular, silent skip)**: After submitting scorecard, own_score is silently ignored (marker_score still editable); after marked player submits, marker_score is silently ignored (own_score still editable)
+- **Invitation domain events**: Defensive `add_domain_event()` / `get_domain_events()` / `clear_domain_events()` — prevents `AttributeError` when entity is loaded from DB (SQLAlchemy `__new__` bypasses `__init__`)
+- **Competition property names**: Use `team_1_name`/`team_2_name` instead of `team_a_name`/`team_b_name` in scoring use cases
+- **Leaderboard DetachedInstanceError**: DTO construction moved inside `async with self._uow:` block
+- **Leaderboard duplicate DB calls**: Cached matches per round to avoid calling `find_by_round()` twice
+- **Leaderboard match_format None check**: Guard against missing `MatchFormat` before entering scoring path
+- **Scoring view holes ordering**: Sort `golf_course.holes` by `h.number` before creating DTOs
+- **Net score None filter**: Filter out `None` values from `team_a_nets`/`team_b_nets` in all 3 scoring use cases
+- **Match decided validation**: `_check_decided` now uses `ValidationStatus.MATCH` (not `own_submitted and marker_submitted`) to avoid counting mismatched holes
+- **Marked player validation**: `SubmitHoleScoreUseCase` validates `marked_player_id` is a match participant
+- **Round null check**: `SubmitHoleScoreUseCase` checks `round_entity` exists before accessing `match_format`
+- **CORS/CSRF middleware ordering**: Swapped middleware registration order so CORS headers appear on CSRF rejection responses
+- **Golf course holes deletion**: Fixed approval workflow losing holes/tees by checking collection changes
+- **deploy-db.sh**: Added 60s timeout to unbounded `until` loop for pod creation
 
 ### Testing
 
-- **1,871 unit tests passing** (100%) — +222 tests from Sprint 4
+- **1,873 unit tests passing** (100%) — +224 tests from Sprint 4
 - **252 integration tests** — +16 scoring E2E tests
 - New test files: `test_hole_score.py`, `test_scoring_service.py`, `test_match_scoring.py`, `test_scoring_events.py`, `test_scoring_dto.py`, `test_scoring_use_cases.py`, `test_scoring_mappers.py`, `test_scoring_endpoints.py`
 

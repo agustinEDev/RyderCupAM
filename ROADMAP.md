@@ -1,8 +1,8 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Version:** 2.0.12 | **Tests:** 1,871 unit + 252 integration (1 skipped) | **Endpoints:** 79 | **OWASP:** 9.4/10
+> **Version:** 2.0.12 | **Tests:** 1,873 unit + 252 integration (1 skipped) | **Endpoints:** 80 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Feb 20, 2026
+> **Last Updated:** Feb 24, 2026
 
 ---
 
@@ -15,7 +15,7 @@ GET  /api/v1/competitions/matches/{id}/scoring-view         # Vista unificada de
 POST /api/v1/competitions/matches/{id}/scores/holes/{n}     # Registrar score hoyo a hoyo
 POST /api/v1/competitions/matches/{id}/scorecard/submit     # Entregar tarjeta
 GET  /api/v1/competitions/{id}/leaderboard                  # Leaderboard completo
-PUT  /api/v1/competitions/matches/{id}/status               # Extendido: action CONCEDE
+PUT  /api/v1/competitions/matches/{id}/concede               # Conceder partido
 ```
 
 - **Validación dual**: own_score (jugador) + marker_score (marcador) → PENDING/MATCH/MISMATCH
@@ -25,6 +25,8 @@ PUT  /api/v1/competitions/matches/{id}/status               # Extendido: action 
 - **Match Play standing**: N up con M remaining, early termination (is_decided)
 - **Concesión**: jugadores conceden su propio equipo, creator puede conceder cualquier equipo
 - **Scorecard submit**: requiere todos los hoyos en MATCH, auto-completa match/round
+- **Scorecard locking**: tras entregar tarjeta, own_score se ignora silenciosamente; tras entregar tarjeta del marcado, marker_score se ignora
+- **User search autocomplete**: `GET /users/search-autocomplete` — búsqueda parcial por nombre (max 10 resultados)
 - **Leaderboard**: suma Ryder Cup points por equipo, resuelve nombres con first_name + last_name
 - **ScoringService** (dominio puro): marker assignments, hole winner, standing, decided result, ryder cup points
 - **HoleScore entity**: own_score, marker_score, own_submitted, marker_submitted, validation_status, net_score

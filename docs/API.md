@@ -3,15 +3,15 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 79 active
+**Total Endpoints**: 80 active
 **Version**: Sprint 4 (Live Scoring + Leaderboard)
-**Last Updated**: 20 February 2026
+**Last Updated**: 24 February 2026
 
 ---
 
 ## 📋 Quick Reference
 
-```
+```text
 Authentication (11 endpoints)
 ├── POST /api/v1/auth/register           # User registration
 ├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, lockout after 10 attempts)
@@ -30,7 +30,8 @@ Google OAuth (3 endpoints) ⭐ Sprint 3
 ├── POST   /api/v1/auth/google/link      # Link Google account to existing user (auth + CSRF)
 └── DELETE /api/v1/auth/google/unlink    # Unlink Google account (auth + CSRF)
 
-User Management (4 endpoints)
+User Management (5 endpoints)
+├── GET   /api/v1/users/search-autocomplete # Autocomplete search by partial name ⭐ Sprint 4
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
 ├── PATCH /api/v1/users/security         # Update security (email/password)
@@ -118,7 +119,7 @@ Scoring & Leaderboard (5 endpoints) ⭐ Sprint 4
 ├── POST /api/v1/competitions/matches/{id}/scores/holes/{n}      # Submit hole score
 ├── POST /api/v1/competitions/matches/{id}/scorecard/submit      # Submit scorecard
 ├── GET  /api/v1/competitions/{id}/leaderboard                   # Competition leaderboard
-└── PUT  /api/v1/competitions/matches/{id}/status                # Extended: CONCEDE action
+└── PUT  /api/v1/competitions/matches/{id}/concede               # Concede match
 
 Support (1 endpoint) ⭐ v2.0.8
 └── POST /api/v1/support/contact         # Submit contact form (creates GitHub Issue)
@@ -281,11 +282,30 @@ Returned in all endpoints that include user data (login, current-user, register,
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
+| `/users/search-autocomplete` | GET | Yes | Autocomplete search by partial name ⭐ Sprint 4 |
 | `/users/search` | GET | Yes | Search users by email/name |
 | `/users/profile` | PATCH | Yes | Update profile (name, surname, country) |
 | `/users/security` | PATCH | Yes | Change email or password |
 
-### Query Parameters
+### Search Autocomplete ⭐ Sprint 4
+
+**GET /api/v1/users/search-autocomplete** (Authenticated)
+
+**Query Parameters:**
+- `query` (string, required, 2-100 chars) - Partial name to search for
+
+**Response (200 OK):**
+- `users` (array, max 10 results)
+  - `user_id` (string, UUID)
+  - `email` (string)
+  - `full_name` (string) - "first_name last_name"
+
+**Business Rules:**
+- Case-insensitive partial match on first_name or last_name
+- Returns max 10 results
+- Only authenticated users can search
+
+### Search by Email/Name
 
 **GET /users/search:**
 - `query` (string, optional) - Partial search in email, first_name, last_name
@@ -493,7 +513,7 @@ Returns a `UserRolesResponseDTO` object detailing the user's roles.
 
 ### Status and Transitions
 
-```
+```text
 DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
   ↓        ↓         ↓           ↓
   └────────┴─────────┴───────────┴─→ CANCELLED
@@ -541,12 +561,12 @@ DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
 | `/competitions/{id}/teams` | POST | Creator | 10/min | Assign teams (snake draft or manual) |
 
 ### Round States
-```
+```text
 PENDING_TEAMS → PENDING_MATCHES → SCHEDULED → IN_PROGRESS → COMPLETED
 ```
 
 ### Match States
-```
+```text
 SCHEDULED → IN_PROGRESS → COMPLETED
                         → WALKOVER
                         → CONCEDED  ⭐ Sprint 4
@@ -591,7 +611,7 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 
 ### Enrollment States
 
-```
+```text
 REQUESTED → APPROVED → WITHDRAWN
     ↓           ↓
 REJECTED    CANCELLED
@@ -715,7 +735,7 @@ REJECTED    CANCELLED
 
 ### Approval Workflow
 
-```
+```text
 PENDING_APPROVAL → APPROVED
                  ↓
               REJECTED
@@ -797,7 +817,7 @@ PENDING_APPROVAL → APPROVED
 
 ### Invitation States
 
-```
+```text
 PENDING → ACCEPTED
         → DECLINED
         → EXPIRED (automatic after 7 days)
@@ -853,6 +873,9 @@ Returns unified scoring data: hole-by-hole scores, validation statuses, match st
 - **Foursomes**: Any team player can submit (last write wins), affects both team members
 - **Dual validation**: own_score → own_submitted, marked_score → marker_submitted
 - **Auto-recalculation**: validation_status, net_score, standing, is_decided
+- **Scorecard locking** (granular, silently skipped — no error):
+  - If scorer submitted scorecard → `own_score` ignored, `marked_score` still processed
+  - If marked player submitted scorecard → `marked_score` ignored, `own_score` still processed
 
 ### Submit Scorecard
 
@@ -890,10 +913,9 @@ Returns unified scoring data: hole-by-hole scores, validation statuses, match st
 
 ### Concede Match
 
-**PUT /api/v1/competitions/matches/{match_id}/status** (Extended with CONCEDE action)
+**PUT /api/v1/competitions/matches/{match_id}/concede** (Match player or Creator)
 
 **Request:**
-- `action` (string, required: "CONCEDE")
 - `conceding_team` (string, required: "A" or "B")
 - `reason` (string, optional)
 
@@ -908,7 +930,7 @@ Returns unified scoring data: hole-by-hole scores, validation statuses, match st
 
 ### Validation Status Flow
 
-```
+```text
 PENDING → MATCH    (own_score == marker_score, including null==null)
         → MISMATCH (own_score != marker_score, including null vs number)
 ```
@@ -1066,5 +1088,5 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 ---
 
-**Last Updated:** 20 February 2026
-**Version:** Sprint 4 (Live Scoring + Leaderboard — 79 endpoints)
+**Last Updated:** 24 February 2026
+**Version:** Sprint 4 (Live Scoring + Leaderboard — 80 endpoints)

@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
 > **Version:** Sprint 4 (Live Scoring + Leaderboard)
-> **Last Updated:** February 20, 2026
+> **Last Updated:** February 24, 2026
 > **Database:** PostgreSQL 15+
 
 ---

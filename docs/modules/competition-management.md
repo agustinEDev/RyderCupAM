@@ -33,7 +33,7 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 
 ### Scoring & Leaderboard (5 use cases) ⭐ Sprint 4
 18. **GetScoringViewUseCase** - Unified scoring view (scores, standing, marker assignments)
-19. **SubmitHoleScoreUseCase** - Register own_score + marker_score with auto-validation
+19. **SubmitHoleScoreUseCase** - Register own_score + marker_score with auto-validation and granular scorecard locking
 20. **SubmitScorecardUseCase** - Deliver scorecard (all holes must be MATCH), auto-complete match/round
 21. **GetLeaderboardUseCase** - Leaderboard with Ryder Cup points per team
 22. **ConcedeMatchUseCase** - Concede match (player own team / creator any team)
@@ -163,6 +163,11 @@ Module responsible for managing Ryder Cup format tournaments, including enrollme
 - `set_marker_score(score)` — validates 1-9 or None, marks marker_submitted = True
 - `recalculate_validation()` — PENDING/MATCH/MISMATCH based on submitted flags and score equality
 - `calculate_net_score()` — net = own_score - strokes_received (min 0) when MATCH
+
+**Scorecard Locking (granular, silent skip):**
+- If scorer submitted scorecard → `own_score` update silently ignored, `marked_score` still editable
+- If marked player submitted scorecard → `marked_score` update silently ignored, `own_score` still editable
+- Both locks can be active simultaneously (all updates silently ignored)
 
 ### Entity: TeamAssignment ⭐ Sprint 2 Block 4
 
@@ -455,7 +460,7 @@ CREATE TABLE country_adjacencies (
 - `POST /api/v1/competitions/matches/{id}/scores/holes/{n}` - Submit hole score
 - `POST /api/v1/competitions/matches/{id}/scorecard/submit` - Submit scorecard
 - `GET /api/v1/competitions/{id}/leaderboard` - Competition leaderboard
-- `PUT /api/v1/competitions/matches/{id}/status` - Extended: CONCEDE action
+- `PUT /api/v1/competitions/matches/{id}/concede` - Concede match
 
 ### Country Management (2 endpoints - Shared)
 - `GET /api/v1/countries` - List active countries
