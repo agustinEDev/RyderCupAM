@@ -10,7 +10,6 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
-    ScorecardAlreadySubmittedError,
 )
 from src.modules.competition.application.use_cases.submit_hole_score_use_case import (
     SubmitHoleScoreUseCase,
@@ -109,17 +108,97 @@ class TestSubmitHoleScoreValidation:
             await uc.execute(str(match.id), 1, body, UserId.generate())
 
     @pytest.mark.asyncio
-    async def test_scorecard_already_submitted(self, uow, user_repo, scoring_service):
+    async def test_scorecard_submitted_skips_own_score_allows_marker(self, uow, user_repo, scoring_service):
+        """Tras entregar tarjeta, own_score se ignora silenciosamente y marker_score se procesa."""
         a, b = _make_player(), _make_player()
         match, mock_round = _setup_match(uow, [a], [b])
-        match.submit_scorecard(a.user_id)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
+        # Pre-create hole scores con own_score existente
+        hs_a = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
+        hs_b = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0)
+        hs_a.set_own_score(4)
+        await uow.hole_scores.add(hs_a)
+        await uow.hole_scores.add(hs_b)
+
+        # Entregar tarjeta de A
+        match.submit_scorecard(a.user_id)
+        await uow.matches.update(match)
+
+        # Mock competition for scoring view
+        mock_comp = MagicMock()
+        mock_comp.id = mock_round.competition_id
+        mock_comp.team_1_name = "Team A"
+        mock_comp.team_2_name = "Team B"
+        uow._competitions._competitions[mock_comp.id] = mock_comp
+
+        # Set up marker assignments
+        from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
+        match._marker_assignments = (
+            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+        )
+        await uow.matches.update(match)
+
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        # Frontend envia own_score=5 pero debe ignorarse, marker_score=4 debe procesarse
         body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=4)
-        with pytest.raises(ScorecardAlreadySubmittedError):
-            await uc.execute(str(match.id), 1, body, a.user_id)
+        result = await uc.execute(str(match.id), 1, body, a.user_id)
+
+        assert result.match_id == str(match.id)
+        # own_score de A no cambió (sigue en 4, no se actualizó a 5)
+        updated_a = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert updated_a.own_score == 4
+        # marker_score de B si se actualizó
+        updated_b = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert updated_b.marker_score == 4
+
+    @pytest.mark.asyncio
+    async def test_marked_player_scorecard_submitted_skips_marker_allows_own(self, uow, user_repo, scoring_service):
+        """Si el jugador que marcas ya entregó tarjeta, marker_score se ignora y own_score se procesa."""
+        a, b = _make_player(), _make_player()
+        match, mock_round = _setup_match(uow, [a], [b])
+        await uow.matches.add(match)
+        uow._rounds._rounds[mock_round.id] = mock_round
+
+        # Pre-create hole scores con marker_score existente en B
+        hs_a = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
+        hs_b = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0)
+        hs_b.set_marker_score(3)
+        await uow.hole_scores.add(hs_a)
+        await uow.hole_scores.add(hs_b)
+
+        # B entrega tarjeta
+        match.submit_scorecard(b.user_id)
+        await uow.matches.update(match)
+
+        # Mock competition for scoring view
+        mock_comp = MagicMock()
+        mock_comp.id = mock_round.competition_id
+        mock_comp.team_1_name = "Team A"
+        mock_comp.team_2_name = "Team B"
+        uow._competitions._competitions[mock_comp.id] = mock_comp
+
+        # Set up marker assignments
+        from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
+        match._marker_assignments = (
+            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+        )
+        await uow.matches.update(match)
+
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id), marked_score=7)
+        result = await uc.execute(str(match.id), 1, body, a.user_id)
+
+        assert result.match_id == str(match.id)
+        # own_score de A si se actualizó
+        updated_a = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert updated_a.own_score == 5
+        # marker_score de B no cambió (sigue en 3, no se actualizó a 7)
+        updated_b = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert updated_b.marker_score == 3
 
     @pytest.mark.asyncio
     async def test_invalid_hole_number(self, uow, user_repo, scoring_service):

@@ -79,16 +79,21 @@ class SubmitScorecardUseCase:
             result_data = {"winner": None, "score": None}
             points = {"team_a": 0.0, "team_b": 0.0}
 
+            # Load all match scores and round for hole results calculation
+            all_scores = await self._uow.hole_scores.find_by_match(match_id)
+            round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            match_format = round_entity.match_format
+            hole_results = self._compute_hole_results(all_scores, match_format)
+
             # Check if all scorecards submitted
             if match.all_scorecards_submitted():
                 match_complete = True
-                # Calculate final result
-                all_scores = await self._uow.hole_scores.find_by_match(match_id)
-                round_entity = await self._uow.rounds.find_by_id(match.round_id)
-                match_format = round_entity.match_format
-
-                hole_results = self._compute_hole_results(all_scores, match_format)
-                result_data = self._scoring_service.format_decided_result(hole_results)
+                # Preserve decided result (e.g. "5&4") instead of recalculating
+                # from all 18 holes which would give "5UP" (holes_remaining=0)
+                if match.is_decided and match.decided_result:
+                    result_data = match.decided_result
+                else:
+                    result_data = self._scoring_service.format_decided_result(hole_results)
                 match.complete(result_data)
                 points = self._scoring_service.calculate_ryder_cup_points(
                     result_data, match.status.value
@@ -103,8 +108,9 @@ class SubmitScorecardUseCase:
 
             await self._uow.matches.update(match)
 
-        # Calculate player stats
-        stats = self._calculate_player_stats(player_scores, match, user_id)
+        # Calculate player stats using hole results
+        player_team = match.get_player_team(user_id) or "A"
+        stats = self._calculate_player_stats(player_scores, player_team, hole_results)
 
         return SubmitScorecardResponseDTO(
             match_id=str(match.id),
@@ -145,7 +151,7 @@ class SubmitScorecardUseCase:
 
         return hole_results
 
-    def _calculate_player_stats(self, player_scores, match, user_id):
+    def _calculate_player_stats(self, player_scores, player_team, hole_results):
         """Calcula estadisticas del jugador."""
         gross_total = 0
         net_total = 0
@@ -158,10 +164,17 @@ class SubmitScorecardUseCase:
             if hs.net_score is not None:
                 net_total += hs.net_score
 
-        # Count hole results (simplified: need full match scores for accurate count)
+        # Count hole results from the player's team perspective
         holes_won = 0
         holes_lost = 0
         holes_halved = 0
+        for result in hole_results:
+            if result == "HALVED":
+                holes_halved += 1
+            elif result == player_team:
+                holes_won += 1
+            else:
+                holes_lost += 1
 
         return ScorecardStatsDTO(
             player_gross_total=gross_total if has_gross else None,

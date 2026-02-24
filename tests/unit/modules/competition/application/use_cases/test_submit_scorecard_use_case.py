@@ -109,6 +109,12 @@ class TestSubmitScorecardHappyPath:
         """Submitting first scorecard doesn't complete match."""
         a, b = _make_player(), _make_player()
         round_id = RoundId.generate()
+        mock_round = MagicMock()
+        mock_round.id = round_id
+        mock_round.match_format = MatchFormat.SINGLES
+        mock_round.status = RoundStatus.IN_PROGRESS
+        uow._rounds._rounds[mock_round.id] = mock_round
+
         match = Match.create(round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b])
         match.start()
         await uow.matches.add(match)
@@ -153,3 +159,45 @@ class TestSubmitScorecardHappyPath:
         uc = SubmitScorecardUseCase(uow, scoring_service)
         result = await uc.execute(str(match.id), b.user_id)
         assert result.match_complete is True
+
+    @pytest.mark.asyncio
+    async def test_decided_match_preserves_result_format(self, uow, scoring_service):
+        """When match was decided early (e.g. 5&4), completing preserves that format instead of recalculating to 5UP."""
+        a, b = _make_player(), _make_player()
+        round_id = RoundId.generate()
+        mock_round = MagicMock()
+        mock_round.id = round_id
+        mock_round.match_format = MatchFormat.SINGLES
+        mock_round.status = RoundStatus.IN_PROGRESS
+        mock_round.competition_id = MagicMock()
+        uow._rounds._rounds[mock_round.id] = mock_round
+
+        match = Match.create(round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b])
+        match.start()
+
+        # Simulate: A wins all 18 holes (score 4 vs 5) but match decided at hole 14
+        for hole in range(1, 19):
+            hs_a = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=a.user_id, team="A", strokes_received=0)
+            hs_a.set_own_score(4)
+            hs_a.set_marker_score(4)
+            hs_a.recalculate_validation()
+            await uow.hole_scores.add(hs_a)
+
+            hs_b = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=b.user_id, team="B", strokes_received=0)
+            hs_b.set_own_score(5)
+            hs_b.set_marker_score(5)
+            hs_b.recalculate_validation()
+            await uow.hole_scores.add(hs_b)
+
+        # Mark match as decided at hole 14 with correct "5&4" format
+        match.mark_decided({"winner": "A", "score": "5&4"})
+        match.submit_scorecard(a.user_id)
+        await uow.matches.add(match)
+
+        uc = SubmitScorecardUseCase(uow, scoring_service)
+        result = await uc.execute(str(match.id), b.user_id)
+
+        assert result.match_complete is True
+        # Should preserve "5&4" not recalculate to "18UP" from all 18 holes
+        assert result.result.score == "5&4"
+        assert result.result.winner == "A"
