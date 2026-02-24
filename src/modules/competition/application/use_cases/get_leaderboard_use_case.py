@@ -49,11 +49,13 @@ class GetLeaderboardUseCase:
             total_b_points = 0.0
             matches_dto = []
 
-            # Collect all user IDs for name resolution
+            # Collect all user IDs and cache matches per round
             all_user_ids: set[UserId] = set()
+            matches_by_round: dict = {}
 
             for round_entity in rounds:
                 matches = await self._uow.matches.find_by_round(round_entity.id)
+                matches_by_round[round_entity.id] = matches
 
                 for match in matches:
                     for p in (*match.team_a_players, *match.team_b_players):
@@ -63,7 +65,7 @@ class GetLeaderboardUseCase:
             user_names = await self._resolve_user_names(list(all_user_ids))
 
             for round_entity in rounds:
-                matches = await self._uow.matches.find_by_round(round_entity.id)
+                matches = matches_by_round[round_entity.id]
 
                 for match in matches:
                     standing_str = None
@@ -77,14 +79,24 @@ class GetLeaderboardUseCase:
                         )
                         total_a_points += points["team_a"]
                         total_b_points += points["team_b"]
+
+                        # Use decided_result for correct "5&4" format
+                        if match.is_decided and match.decided_result:
+                            final_result = match.decided_result
+                        else:
+                            # Recompute from hole scores to find actual decision point
+                            final_result = await self._compute_decided_result(
+                                match, round_entity.match_format
+                            ) or match.result
+
                         result_dto = DecidedResultDTO(
-                            winner=match.result.get("winner", ""),
-                            score=match.result.get("score", ""),
+                            winner=final_result.get("winner", ""),
+                            score=final_result.get("score", ""),
                         )
                     elif match.status.can_record_scores():
                         # In progress: compute standing from hole scores
                         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
-                        if hole_scores:
+                        if hole_scores and round_entity.match_format:
                             match_format = round_entity.match_format
                             hole_results = self._compute_hole_results(
                                 hole_scores, match_format
@@ -130,15 +142,15 @@ class GetLeaderboardUseCase:
             team_a_name = competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
             team_b_name = competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
 
-        return LeaderboardResponseDTO(
-            competition_id=str(competition.id),
-            competition_name=competition.name.value if hasattr(competition.name, "value") else str(competition.name),
-            team_a_name=team_a_name,
-            team_b_name=team_b_name,
-            team_a_points=total_a_points,
-            team_b_points=total_b_points,
-            matches=matches_dto,
-        )
+            return LeaderboardResponseDTO(
+                competition_id=str(competition.id),
+                competition_name=competition.name.value if hasattr(competition.name, "value") else str(competition.name),
+                team_a_name=team_a_name,
+                team_b_name=team_b_name,
+                team_a_points=total_a_points,
+                team_b_points=total_b_points,
+                matches=matches_dto,
+            )
 
     def _compute_hole_results(self, hole_scores, match_format):
         """Computa resultados por hoyo."""
@@ -155,8 +167,8 @@ class GetLeaderboardUseCase:
             if not has_validated:
                 continue
 
-            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A"]
-            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B"]
+            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None]
+            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None]
 
             if team_a_nets and team_b_nets:
                 winner = self._scoring_service.calculate_hole_winner(
@@ -165,6 +177,25 @@ class GetLeaderboardUseCase:
                 hole_results.append(winner)
 
         return hole_results
+
+    async def _compute_decided_result(self, match, match_format) -> dict | None:
+        """Recompute result from hole scores, finding the actual decision point."""
+        hole_scores = await self._uow.hole_scores.find_by_match(match.id)
+        if not hole_scores:
+            return None
+
+        hole_results = self._compute_hole_results(hole_scores, match_format)
+        if not hole_results:
+            return None
+
+        # Walk through hole results to find when match was first decided
+        for i in range(1, len(hole_results) + 1):
+            standing = self._scoring_service.calculate_match_standing(hole_results[:i])
+            if self._scoring_service.is_match_decided(standing):
+                return self._scoring_service.format_decided_result(hole_results[:i])
+
+        # Not decided early: use all hole results (e.g., "1UP" after 18 holes)
+        return self._scoring_service.format_decided_result(hole_results)
 
     async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
         """Resuelve user_id → 'first_name last_name'."""

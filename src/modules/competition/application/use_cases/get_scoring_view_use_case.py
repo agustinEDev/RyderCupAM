@@ -75,7 +75,7 @@ class GetScoringViewUseCase:
                             par=h.par,
                             stroke_index=h.stroke_index,
                         )
-                        for h in golf_course.holes
+                        for h in sorted(golf_course.holes, key=lambda h: h.number)
                     ]
 
             round_info = RoundInfoDTO(
@@ -186,10 +186,11 @@ class GetScoringViewUseCase:
                     strokes_received_this_hole=hs.strokes_received,
                 )
             )
-            if hs.team == "A":
-                team_a_nets.append(hs.net_score)
-            else:
-                team_b_nets.append(hs.net_score)
+            if hs.net_score is not None:
+                if hs.team == "A":
+                    team_a_nets.append(hs.net_score)
+                else:
+                    team_b_nets.append(hs.net_score)
 
         return player_scores, team_a_nets, team_b_nets
 

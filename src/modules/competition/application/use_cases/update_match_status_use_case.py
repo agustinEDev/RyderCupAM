@@ -105,20 +105,19 @@ class UpdateMatchStatusUseCase:
             raise InvalidActionError(str(e)) from e
 
         # Pre-create 18 HoleScores per player (empty, ready for scoring)
-        all_players = [*match.team_a_players, *match.team_b_players]
         hole_scores = []
-        for player in all_players:
-            team = match.get_player_team(player.user_id) or "A"
-            for hole_num in range(1, 19):
-                strokes_received = 1 if player.receives_stroke_on_hole(hole_num) else 0
-                hs = HoleScore.create(
-                    match_id=match.id,
-                    hole_number=hole_num,
-                    player_user_id=player.user_id,
-                    team=team,
-                    strokes_received=strokes_received,
-                )
-                hole_scores.append(hs)
+        for team, players in [("A", match.team_a_players), ("B", match.team_b_players)]:
+            for player in players:
+                for hole_num in range(1, 19):
+                    strokes_received = 1 if player.receives_stroke_on_hole(hole_num) else 0
+                    hs = HoleScore.create(
+                        match_id=match.id,
+                        hole_number=hole_num,
+                        player_user_id=player.user_id,
+                        team=team,
+                        strokes_received=strokes_received,
+                    )
+                    hole_scores.append(hs)
         await self._uow.hole_scores.add_many(hole_scores)
 
         if round_entity.status == RoundStatus.SCHEDULED:
