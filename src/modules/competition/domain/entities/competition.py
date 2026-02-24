@@ -393,7 +393,7 @@ class Competition:
         Raises:
             CompetitionStateError: Si la transición no es válida
         """
-        if not self._status.can_transition_to(CompetitionStatus.CLOSED):
+        if self._status != CompetitionStatus.IN_PROGRESS:
             raise CompetitionStateError(
                 f"No se puede revertir a CLOSED desde estado {self._status.value}"
             )
@@ -416,7 +416,7 @@ class Competition:
         Raises:
             CompetitionStateError: Si la transición no es válida
         """
-        if not self._status.can_transition_to(CompetitionStatus.ACTIVE):
+        if self._status != CompetitionStatus.CLOSED:
             raise CompetitionStateError(
                 f"No se pueden reabrir inscripciones desde estado {self._status.value}"
             )

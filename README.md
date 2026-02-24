@@ -4,13 +4,13 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.8-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.14-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
 
-[![Tests](https://img.shields.io/badge/tests-1598%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
+[![Tests](https://img.shields.io/badge/tests-2158%20passing-00C853?style=for-the-badge&logo=pytest&logoColor=white)](.)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-success?style=for-the-badge&logo=codecov)](.)
 [![OWASP](https://img.shields.io/badge/OWASP-9.4%2F10-4CAF50?style=for-the-badge&logo=owasp)](https://owasp.org/www-project-top-ten/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.)
@@ -29,17 +29,18 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **66 REST API endpoints** fully documented (Swagger UI)
-- ✅ **1,598 tests** passing (100% success rate, ~90s execution)
+- ✅ **82 REST API endpoints** fully documented (Swagger UI)
+- ✅ **2,158 tests** passing (100% success rate, ~90s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
 - ✅ **RBAC Foundation** - Simplified, three-tier role system (v2.0.0)
+- ✅ **Google OAuth** - Login, link and unlink Google accounts (Sprint 3)
+- ✅ **Invitations** - Email invitations with secure tokens and bilingual emails (Sprint 3)
+- ✅ **Live Scoring** - Hole-by-hole scoring with dual validation and leaderboard (Sprint 4)
 - ✅ **Rounds, Matches & Teams** - Full tournament scheduling with WHS handicap calculation (Sprint 2)
 - ✅ **Competition ↔ GolfCourse M2M** - Multi-course tournaments with ordering (v2.0.2)
-- ✅ **Support Contact Form** - Public endpoint that creates GitHub Issues (v2.0.8)
 - ✅ **10 CI/CD jobs** - GitHub Actions pipeline (~3min)
 - ✅ **Device Fingerprinting** - Advanced session management with auto-registration
-- ✅ **Email Verification** - Bilingual templates (ES/EN) via Mailgun
 - ✅ **166 Countries** - Full country database with 614 border relationships
 
 ---
@@ -176,13 +177,16 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### Competition Module
 - ✅ CRUD operations for tournaments
-- ✅ State machine (6 states): DRAFT → ACTIVE → IN_PROGRESS → COMPLETED
+- ✅ State machine (6 states): DRAFT → ACTIVE ↔ CLOSED ↔ IN_PROGRESS → COMPLETED
 - ✅ Enrollment system (invitations + approvals)
 - ✅ Custom handicap override per competition
 - ✅ 166 countries with multilanguage support
 - ✅ **Competition ↔ GolfCourse M2M** (v2.0.2) - Multi-course tournaments with ordering
 - ✅ **Rounds & Matches** (Sprint 2) - Session-based scheduling, match generation, WHS handicap calculation
-- ✅ 35 endpoints (10 competition + 8 enrollment + 2 countries + 4 golf courses + 11 rounds/matches)
+- ✅ **Invitations** (Sprint 3) - Email invitations with secure tokens, bilingual emails, auto-enrollment
+- ✅ **Live Scoring** (Sprint 4) - Hole-by-hole scoring, dual validation, leaderboard, match concession
+- ✅ **Backward transitions** (v2.0.14) - Revert IN_PROGRESS→CLOSED, reopen CLOSED→ACTIVE
+- ✅ 45 endpoints (12 competition + 8 enrollment + 4 golf courses + 11 rounds/matches + 5 invitations + 5 scoring)
 
 ### Support Module (v2.0.8)
 - ✅ **Contact Form** - Public endpoint for support requests (no authentication required)
@@ -209,48 +213,31 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### What's New
 
-**v2.0.8 (Feb 9, 2026)**
-- ✅ **Support Module**: Contact form endpoint (`POST /api/v1/support/contact`) — creates GitHub Issues via REST API
-- ✅ **GitHub Issues Integration**: Sanitized inputs, category-to-label mapping (bug, enhancement, question, other)
-- ✅ **Rate Limited**: 3 requests/hour per IP, no authentication required, CSRF exempt
-- ✅ **K8s restart script**: `restart-cluster.sh` — reloads ConfigMaps/Secrets without rebuilding images
-- ✅ **+25 tests** (1,598 total)
+**v2.0.14 (Feb 24, 2026)**
+- ✅ **Backward State Transitions**: Revert IN_PROGRESS→CLOSED, reopen CLOSED→ACTIVE
+- ✅ **2 new endpoints**, 29 new tests (2,158 total)
 
-**v2.0.7 (Feb 8, 2026)**
-- ✅ **CIDR Support for TRUSTED_PROXIES**: Subnet matching (e.g., `10.0.0.0/8`) for cloud infrastructure
-- ✅ **SBOM Fix**: Corrected GitHub API payload format for dependency snapshot submission
-- ✅ **GPG Web-Flow Fix**: CI/CD pipeline now handles GitHub squash merge commits correctly
-- ✅ **CodeQL Security Fix**: Redacted sensitive proxy values from security logs
+**v2.0.13 (Feb 24, 2026) — Sprint 4: Live Scoring**
+- ✅ **Live Scoring**: Hole-by-hole scoring with dual validation (own_score + marker_score)
+- ✅ **Leaderboard**: Team points, match standings, player names
+- ✅ **Scorecard submission**: Validates all holes MATCH, auto-completes match/round
+- ✅ **Match concession**: Players concede own team, creator any team
+- ✅ **User search autocomplete**: Partial name search (max 10 results)
+- ✅ **6 new endpoints**, 238 new tests
 
-**v2.0.6 (Feb 7, 2026)**
-- ✅ **TeeCategory Refactoring**: 5 neutral categories + separate Gender field (MALE/FEMALE)
-- ✅ **Enrollment tee_category API**: Request and direct enrollment endpoints support tee_category
-- ✅ **GenderDecorator Fix**: SQLAlchemy TypeDecorator for Gender enum (was raw string)
-- ✅ **Deploy Scripts**: Kind cluster deployment automation (deploy-cluster, deploy-api, deploy-front, deploy-db)
-- ✅ **+24 tests** (1,306 total)
+**v2.0.12 (Feb 19, 2026) — Sprint 3: Invitations**
+- ✅ **Invitation System**: Invite by user ID or email, accept/decline, auto-enrollment
+- ✅ **Bilingual Emails**: ES/EN invitation emails via Mailgun
+- ✅ **5 new endpoints**, 194 new tests
 
-**v2.0.5 (Sprint 2 Complete - Feb 6, 2026)**
-- ✅ **Rounds & Matches System**: Full session-based scheduling (MORNING/AFTERNOON/EVENING), match generation, team assignment
-- ✅ **Playing Handicap Calculator**: WHS formula with format-specific allowances (Singles, Fourball, Foursomes)
-- ✅ **Snake Draft Service**: Balanced automatic team assignment (A,B,B,A serpentine pattern)
-- ✅ **11 new API endpoints**: CRUD rounds, match management, team assignment, match generation
-- ✅ **+80 tests** (554 total competition module tests)
+**v2.0.9 (Feb 16, 2026) — Sprint 3: Google OAuth**
+- ✅ **Google OAuth**: Login/register with Google, link/unlink accounts
+- ✅ **3 new endpoints**
 
-**v2.0.2 (Feb 1, 2026)**
-- ✅ **Competition ↔ GolfCourse M2M**: Multi-course tournaments with add/remove/reorder operations
-- ✅ **Mixed UUID Types Support**: CHAR(36) and UUID(as_uuid=True) compatibility in associations
-
-**v2.0.1 (Jan 30, 2026)**
-- ✅ **Golf Course Module**: Creator requests, Admin approval workflow, Clone-based updates
-- ✅ **WHS Validation**: 2-10 tees (5 categories × gender), 18 holes, stroke indices, par totals
-
-**v2.0.0 (Jan 27, 2026)**
-- ✅ **RBAC Foundation**: Simplified, table-less role system (ADMIN, CREATOR, PLAYER)
-
-### Coming Soon (Competition Module Evolution)
-- 🔄 **Invitation System** - Email invitations with secure tokens (Sprint 3)
-- 🔄 **Live Scoring** - Hole-by-hole annotation with dual validation (Sprint 4)
-- 🔄 **Real-time Leaderboards** - Public leaderboard with Redis cache (Sprint 5)
+### Coming Soon
+- 🔄 **GDPR Compliance** - Data export, right to be forgotten (v2.1.0)
+- 🔄 **WebSocket Leaderboards** - Real-time updates (v2.1.1)
+- 🔄 **AI & RAG Module** - Golf rules chatbot (v2.2.0)
 
 ---
 
@@ -309,18 +296,13 @@ pytest --cov=src --cov-report=html
 pytest tests/ -n auto
 ```
 
-### Test Statistics (v2.0.8)
+### Test Statistics (v2.0.14)
 
 | Category | Tests | Status | Coverage |
 |----------|-------|--------|----------|
-| **Total** | **1,598** | ✅ 100% passing | 90%+ |
-| User Module | 501 | ✅ 100% | 92% |
-| Competition Module | 559 | ✅ 100% | 91% |
-| Golf Course Module | 38 | ✅ 100% | 93% |
-| Support Module | 25 | ✅ 100% | 95% |
-| Shared | 208 | ✅ 100% | 88% |
-| Security Suite | 45 | ✅ 100% | 95% |
-| Integration | 222 | ✅ 100% | - |
+| **Total** | **2,158** | ✅ 100% passing | 90%+ |
+| Unit tests | 1,902 | ✅ 100% | 90%+ |
+| Integration tests | 256 | ✅ 100% (1 skipped) | - |
 
 **Execution Time**: ~90 seconds (with pytest-xdist parallelization)
 
@@ -395,7 +377,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (71 total)
+### Available Endpoints (82 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>
@@ -414,12 +396,21 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 </details>
 
 <details>
-<summary><b>User Management (4 endpoints)</b></summary>
+<summary><b>Google OAuth (3 endpoints)</b></summary>
 
-- `GET /api/v1/users/search`
-- `PATCH /api/v1/users/profile`
-- `PATCH /api/v1/users/security`
-- `GET /api/v1/users/me/roles/{competition_id}` (v2.0.0)
+- `POST /api/v1/auth/google` - Login/register with Google
+- `POST /api/v1/auth/google/link` - Link Google account
+- `DELETE /api/v1/auth/google/unlink` - Unlink Google account
+</details>
+
+<details>
+<summary><b>User Management (5 endpoints)</b></summary>
+
+- `GET /api/v1/users/search-autocomplete` - Autocomplete by partial name
+- `GET /api/v1/users/search` - Search by email/name
+- `PATCH /api/v1/users/profile` - Update profile
+- `PATCH /api/v1/users/security` - Update security
+- `GET /api/v1/users/me/roles/{competition_id}` - Check roles
 </details>
 
 <details>
@@ -438,18 +429,29 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 </details>
 
 <details>
-<summary><b>Competition Management (10 endpoints)</b></summary>
+<summary><b>Competition Management (12 endpoints)</b></summary>
 
-- `POST /api/v1/competitions`
-- `GET /api/v1/competitions`
-- `GET /api/v1/competitions/{id}`
-- `PUT /api/v1/competitions/{id}`
-- `DELETE /api/v1/competitions/{id}`
-- `POST /api/v1/competitions/{id}/activate`
-- `POST /api/v1/competitions/{id}/close-enrollments`
-- `POST /api/v1/competitions/{id}/start`
-- `POST /api/v1/competitions/{id}/complete`
-- `POST /api/v1/competitions/{id}/cancel`
+- `POST /api/v1/competitions` - Create competition
+- `GET /api/v1/competitions` - List competitions
+- `GET /api/v1/competitions/{id}` - Get details
+- `PUT /api/v1/competitions/{id}` - Update (DRAFT only)
+- `DELETE /api/v1/competitions/{id}` - Delete (DRAFT only)
+- `POST /api/v1/competitions/{id}/activate` - DRAFT → ACTIVE
+- `POST /api/v1/competitions/{id}/close-enrollments` - ACTIVE → CLOSED
+- `POST /api/v1/competitions/{id}/start` - CLOSED → IN_PROGRESS
+- `POST /api/v1/competitions/{id}/complete` - IN_PROGRESS → COMPLETED
+- `PUT /api/v1/competitions/{id}/revert-status` - IN_PROGRESS → CLOSED
+- `POST /api/v1/competitions/{id}/reopen-enrollments` - CLOSED → ACTIVE
+- `POST /api/v1/competitions/{id}/cancel` - Any → CANCELLED
+</details>
+
+<details>
+<summary><b>Competition-GolfCourse (4 endpoints)</b></summary>
+
+- `POST /api/v1/competitions/{id}/golf-courses` - Add golf course
+- `DELETE /api/v1/competitions/{id}/golf-courses/{gc_id}` - Remove golf course
+- `PUT /api/v1/competitions/{id}/golf-courses/reorder` - Reorder courses
+- `GET /api/v1/competitions/{id}/golf-courses` - List courses
 </details>
 
 <details>
@@ -466,44 +468,64 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 </details>
 
 <details>
-<summary><b>Golf Course Management (10 endpoints)</b></summary>
-
-- `POST /api/v1/golf-courses/request` - Creator requests new course
-- `POST /api/v1/golf-courses/admin` - Admin creates course directly (approved)
-- `GET /api/v1/golf-courses/{id}` - Get course details (tees + holes)
-- `GET /api/v1/golf-courses?approval_status=APPROVED` - List filtered courses
-- `GET /api/v1/golf-courses/admin/pending` - Admin view pending approvals
-- `PUT /api/v1/golf-courses/admin/{id}/approve` - Admin approves course
-- `PUT /api/v1/golf-courses/admin/{id}/reject` - Admin rejects course
-- `PUT /api/v1/golf-courses/{id}` - Creator submits update (clone-based)
-- `PUT /api/v1/golf-courses/admin/updates/{id}/approve` - Admin approves update
-- `PUT /api/v1/golf-courses/admin/updates/{id}/reject` - Admin rejects update
-</details>
-
-<details>
 <summary><b>Rounds & Schedule (4 endpoints)</b></summary>
 
 - `POST /api/v1/competitions/{id}/rounds` - Create round
 - `PUT /api/v1/competitions/rounds/{id}` - Update round
 - `DELETE /api/v1/competitions/rounds/{id}` - Delete round
-- `GET /api/v1/competitions/{id}/schedule` - Get competition schedule
+- `GET /api/v1/competitions/{id}/schedule` - Get schedule
 </details>
 
 <details>
 <summary><b>Match Management (4 endpoints)</b></summary>
 
-- `GET /api/v1/competitions/matches/{id}` - Get match detail
-- `PUT /api/v1/competitions/matches/{id}/status` - Update match status
+- `GET /api/v1/competitions/matches/{id}` - Match detail
+- `PUT /api/v1/competitions/matches/{id}/status` - Update status
 - `POST /api/v1/competitions/matches/{id}/walkover` - Declare walkover
-- `PUT /api/v1/competitions/matches/{id}/players` - Reassign match players
+- `PUT /api/v1/competitions/matches/{id}/players` - Reassign players
 </details>
 
 <details>
 <summary><b>Teams & Generation (3 endpoints)</b></summary>
 
-- `POST /api/v1/competitions/{id}/teams` - Assign teams (automatic/manual)
+- `POST /api/v1/competitions/{id}/teams` - Assign teams
 - `POST /api/v1/competitions/rounds/{id}/matches/generate` - Generate matches
 - `POST /api/v1/competitions/{id}/schedule/configure` - Configure schedule
+</details>
+
+<details>
+<summary><b>Invitation Management (5 endpoints)</b></summary>
+
+- `POST /api/v1/competitions/{id}/invitations` - Invite by user ID
+- `POST /api/v1/competitions/{id}/invitations/by-email` - Invite by email
+- `GET /api/v1/invitations/me` - My pending invitations
+- `POST /api/v1/invitations/{id}/respond` - Accept/decline
+- `GET /api/v1/competitions/{id}/invitations` - Creator view
+</details>
+
+<details>
+<summary><b>Scoring & Leaderboard (5 endpoints)</b></summary>
+
+- `GET /api/v1/competitions/matches/{id}/scoring-view` - Scoring view
+- `POST /api/v1/competitions/matches/{id}/scores/holes/{n}` - Submit hole score
+- `POST /api/v1/competitions/matches/{id}/scorecard/submit` - Submit scorecard
+- `GET /api/v1/competitions/{id}/leaderboard` - Leaderboard
+- `PUT /api/v1/competitions/matches/{id}/concede` - Concede match
+</details>
+
+<details>
+<summary><b>Golf Course Management (10 endpoints)</b></summary>
+
+- `POST /api/v1/golf-courses/request` - Request new course
+- `POST /api/v1/golf-courses/admin` - Admin creates course
+- `GET /api/v1/golf-courses/{id}` - Get course details
+- `GET /api/v1/golf-courses` - List courses
+- `GET /api/v1/golf-courses/admin/pending` - Pending approvals
+- `PUT /api/v1/golf-courses/admin/{id}/approve` - Approve course
+- `PUT /api/v1/golf-courses/admin/{id}/reject` - Reject course
+- `PUT /api/v1/golf-courses/{id}` - Submit update
+- `PUT /api/v1/golf-courses/admin/updates/{id}/approve` - Approve update
+- `PUT /api/v1/golf-courses/admin/updates/{id}/reject` - Reject update
 </details>
 
 <details>
@@ -603,21 +625,20 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.8 (Production)
+### Current Version: v2.0.14 (Production)
 
-**Latest Features** (v2.0.8 - Feb 9, 2026):
-- **Support Module**: Contact form → GitHub Issues integration (1 endpoint, 25 tests)
-- **K8s restart script**: Reload ConfigMaps/Secrets without rebuilding images
-- **Total: 66 endpoints, 1,598 tests passing**
-
-### Coming Next: Sprint 3-5 - Invitations, Scoring & Leaderboards
+**Latest Features** (v2.0.14 - Feb 24, 2026):
+- **Backward State Transitions**: Revert competition state to fix schedule issues or reopen enrollments
+- **Live Scoring** (Sprint 4): 5 scoring endpoints, dual validation, leaderboard
+- **Invitations** (Sprint 3): 5 endpoints, bilingual emails, auto-enrollment
+- **Google OAuth** (Sprint 3): Login, link, unlink Google accounts
+- **Total: 82 endpoints, 2,158 tests passing**
 
 **Sprint Breakdown**:
-1. ✅ **Sprint 1** (Jan 27 - Jan 31): Golf Courses - 10 endpoints (COMPLETED)
-2. ✅ **Sprint 2** (Feb 3 - Feb 6): Competition-GolfCourse + Rounds + Matches - 15 endpoints (COMPLETED)
-3. **Sprint 3** (Feb 2026): Invitations - 5 endpoints
-4. **Sprint 4** (Mar 2026): Scoring System - 4 endpoints
-5. **Sprint 5** (Mar 2026): Leaderboards - 2 endpoints
+1. ✅ **Sprint 1** (Jan 27 - Jan 31): Golf Courses - 10 endpoints
+2. ✅ **Sprint 2** (Feb 3 - Feb 6): Rounds + Matches + Teams - 15 endpoints
+3. ✅ **Sprint 3** (Feb 16 - Feb 19): Google OAuth + Invitations - 8 endpoints
+4. ✅ **Sprint 4** (Feb 20 - Feb 24): Live Scoring + Leaderboard + Backward Transitions - 8 endpoints
 
 See [ROADMAP.md](ROADMAP.md) for complete version planning.
 

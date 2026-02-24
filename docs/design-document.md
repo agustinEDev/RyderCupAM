@@ -1,6 +1,6 @@
 # Design Document - Ryder Cup Manager
 
-**Sprint 3 Block 1** · 16 February 2026 · Google OAuth
+**Sprint 4** · 24 February 2026 · Live Scoring, Leaderboard, Backward State Transitions
 
 ---
 
@@ -476,9 +476,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 2,125 (100% passing) |
-| Unit tests | 1,873 tests |
-| Integration tests | 252 tests |
+| Total tests | 2,158 (100% passing, 1 skipped) |
+| Unit tests | 1,902 tests |
+| Integration tests | 256 tests |
 | Coverage | >90% |
 | Email Verification | 100% (24 tests) |
 | Competition Module | 97.6% (174 tests) |
@@ -528,15 +528,16 @@ API → UseCase → HandicapService.search(name) → RFEG
 - `UpdateMultipleHandicapsUseCase` - Batch update with statistics
 - `FindUserUseCase` (10 tests) - Search by email or name
 
-### API Endpoints Active (80)
+### API Endpoints Active (82)
 - `/api/v1/auth/register`, `/login`, `/logout`, `/verify-email`
 - `/api/v1/users/profile`, `/security`, `/search`
 - `/api/v1/handicaps/update`, `/update-manual`, `/update-multiple`
 
-**Competitions (10)**:
+**Competitions (12)**:
 - `/api/v1/competitions` (GET, POST)
 - `/api/v1/competitions/{id}` (GET, PUT, DELETE)
 - `/api/v1/competitions/{id}/activate`, `/close-enrollments`, `/start`, `/complete`, `/cancel`
+- `/api/v1/competitions/{id}/revert-status`, `/reopen-enrollments`
 
 **Enrollments (8)**:
 - `/api/v1/competitions/{id}/enrollments` (GET, POST)

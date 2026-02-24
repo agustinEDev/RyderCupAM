@@ -529,16 +529,19 @@ class TestCompetitionStateTransitions:
         comp = await create_competition(client, user["cookies"])
 
         # Avanzar a IN_PROGRESS
-        await client.post(
+        r1 = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
         )
-        await client.post(
+        assert r1.status_code == 200
+        r2 = await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=user["cookies"],
         )
-        await client.post(
+        assert r2.status_code == 200
+        r3 = await client.post(
             f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
         )
+        assert r3.status_code == 200
 
         # Revertir a CLOSED
         response = await client.put(
@@ -559,13 +562,15 @@ class TestCompetitionStateTransitions:
         comp = await create_competition(client, user["cookies"])
 
         # Avanzar a CLOSED
-        await client.post(
+        r1 = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
         )
-        await client.post(
+        assert r1.status_code == 200
+        r2 = await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=user["cookies"],
         )
+        assert r2.status_code == 200
 
         # Reabrir inscripciones
         response = await client.post(

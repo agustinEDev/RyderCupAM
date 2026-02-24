@@ -35,6 +35,7 @@ class TestUserRepositoryInterface:
         required_methods = {
             "save",
             "find_by_id",
+            "find_by_ids",
             "find_by_email",
             "exists_by_email",
             "update",
@@ -142,6 +143,7 @@ class TestUserRepositoryInterface:
         methods_to_check = [
             "save",
             "find_by_id",
+            "find_by_ids",
             "find_by_email",
             "exists_by_email",
             "update",
@@ -169,6 +171,9 @@ class TestUserRepositoryInterface:
             async def find_by_id(self, user_id: UserId):
                 # Mock implementation - returns None for test
                 pass
+
+            async def find_by_ids(self, user_ids: list[UserId]):
+                return []
 
             async def find_by_email(self, email: Email):
                 # Mock implementation - returns None for test

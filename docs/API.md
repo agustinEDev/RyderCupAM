@@ -3,7 +3,7 @@
 **Base URL**: `http://localhost:8000`
 **Swagger UI**: `/docs` (auto-generated with interactive examples)
 **ReDoc**: `/redoc` (alternative documentation)
-**Total Endpoints**: 80 active
+**Total Endpoints**: 82 active
 **Version**: Sprint 4 (Live Scoring + Leaderboard)
 **Last Updated**: 24 February 2026
 
@@ -46,7 +46,7 @@ Handicap Management (3 endpoints)
 ├── POST /api/v1/handicaps/update-multiple # Batch handicap updates
 └── POST /api/v1/handicaps/update-manual # Manual handicap update
 
-Competition Management (10 endpoints)
+Competition Management (12 endpoints)
 ├── POST /api/v1/competitions            # Create competition
 ├── GET  /api/v1/competitions            # List competitions with filters
 ├── GET  /api/v1/competitions/{id}       # Get competition details
@@ -538,9 +538,13 @@ Use when the creator needs to add or remove players after closing enrollments. R
 ### Status and Transitions
 
 ```text
-DRAFT → ACTIVE → CLOSED → IN_PROGRESS → COMPLETED
+DRAFT → ACTIVE ↔ CLOSED ↔ IN_PROGRESS → COMPLETED
   ↓        ↓         ↓           ↓
   └────────┴─────────┴───────────┴─→ CANCELLED
+
+Backward transitions:
+  IN_PROGRESS → CLOSED  (revert-status: fix schedule issues)
+  CLOSED → ACTIVE       (reopen-enrollments: add/remove players)
 ```
 
 **Rules:**

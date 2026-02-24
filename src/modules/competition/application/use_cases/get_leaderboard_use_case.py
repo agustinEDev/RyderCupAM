@@ -199,12 +199,12 @@ class GetLeaderboardUseCase:
         return self._scoring_service.format_decided_result(hole_results)
 
     async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
-        """Resuelve user_id → 'first_name last_name'."""
-        names = {}
+        """Resuelve user_id → 'first_name last_name' en una sola consulta."""
+        if not user_ids:
+            return {}
+        users = await self._user_repo.find_by_ids(user_ids)
+        names = {user.id: f"{user.first_name} {user.last_name}" for user in users}
         for uid in user_ids:
-            user = await self._user_repo.find_by_id(uid)
-            if user:
-                names[uid] = f"{user.first_name} {user.last_name}"
-            else:
+            if uid not in names:
                 names[uid] = ""
         return names
