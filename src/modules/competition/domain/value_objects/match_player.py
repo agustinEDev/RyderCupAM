@@ -44,7 +44,7 @@ class MatchPlayer:
     playing_handicap: int
     tee_category: TeeCategory
     tee_gender: Gender | None  # Gender del tee usado (MALE/FEMALE/None)
-    strokes_received: tuple[int, ...]  # Hoyos donde recibe golpe (inmutable)
+    strokes_received: tuple[int, ...]  # Hoyos donde recibe golpe (puede tener duplicados si PH > 18)
 
     def __post_init__(self):
         """Validaciones después de inicialización."""
@@ -55,10 +55,6 @@ class MatchPlayer:
         for hole in self.strokes_received:
             if not 1 <= hole <= MAX_HOLES:
                 raise ValueError(f"Invalid hole number in strokes_received: {hole}")
-
-        # Validar que no hay hoyos duplicados
-        if len(self.strokes_received) != len(set(self.strokes_received)):
-            raise ValueError("Duplicate hole numbers in strokes_received")
 
     @classmethod
     def create(
@@ -101,6 +97,21 @@ class MatchPlayer:
             True si recibe golpe en ese hoyo
         """
         return hole_number in self.strokes_received
+
+    def strokes_on_hole(self, hole_number: int) -> int:
+        """
+        Retorna el número de golpes que el jugador recibe en un hoyo específico.
+
+        Para PH <= 18: retorna 0 o 1.
+        Para PH > 18: puede retornar 2 o más (wrap-around por stroke index).
+
+        Args:
+            hole_number: Número de hoyo (1-18)
+
+        Returns:
+            Cantidad de strokes recibidos en ese hoyo (0, 1, 2, ...)
+        """
+        return self.strokes_received.count(hole_number)
 
     def __repr__(self) -> str:
         return (

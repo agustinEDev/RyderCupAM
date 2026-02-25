@@ -121,6 +121,13 @@ class CreateRoundUseCase:
                 allowance_percentage=request.allowance_percentage,
             )
 
+            # 8. Si ya hay equipos asignados, transicionar a PENDING_MATCHES
+            existing_assignment = await self._uow.team_assignments.find_by_competition(
+                competition_id
+            )
+            if existing_assignment:
+                round_entity.mark_teams_assigned()
+
             await self._uow.rounds.add(round_entity)
 
         return CreateRoundResponseDTO(

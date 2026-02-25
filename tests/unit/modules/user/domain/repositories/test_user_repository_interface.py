@@ -35,6 +35,7 @@ class TestUserRepositoryInterface:
         required_methods = {
             "save",
             "find_by_id",
+            "find_by_ids",
             "find_by_email",
             "exists_by_email",
             "update",
@@ -43,6 +44,7 @@ class TestUserRepositoryInterface:
             "count_all",
             "find_by_verification_token",
             "find_by_password_reset_token",
+            "search_by_partial_name",
         }
 
         interface_methods = {
@@ -141,6 +143,7 @@ class TestUserRepositoryInterface:
         methods_to_check = [
             "save",
             "find_by_id",
+            "find_by_ids",
             "find_by_email",
             "exists_by_email",
             "update",
@@ -149,6 +152,7 @@ class TestUserRepositoryInterface:
             "count_all",
             "find_by_verification_token",
             "find_by_password_reset_token",
+            "search_by_partial_name",
         ]
 
         for method_name in methods_to_check:
@@ -168,12 +172,18 @@ class TestUserRepositoryInterface:
                 # Mock implementation - returns None for test
                 pass
 
+            async def find_by_ids(self, user_ids: list[UserId]):
+                return []
+
             async def find_by_email(self, email: Email):
                 # Mock implementation - returns None for test
                 pass
 
             async def find_by_full_name(self, full_name: str):
                 return None
+
+            async def search_by_partial_name(self, query: str, limit: int = 10):
+                return []
 
             async def exists_by_email(self, email: Email) -> bool:
                 return False

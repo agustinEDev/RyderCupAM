@@ -6,10 +6,14 @@ Representa un partido individual dentro de una sesión de competición.
 
 from datetime import UTC, datetime
 
+from src.modules.competition.domain.value_objects.marker_assignment import (
+    MarkerAssignment,
+)
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class Match:
@@ -44,6 +48,10 @@ class Match:
         result: dict | None,
         created_at: datetime,
         updated_at: datetime,
+        marker_assignments: tuple[MarkerAssignment, ...] = (),
+        scorecard_submitted_by: tuple[UserId, ...] = (),
+        is_decided: bool = False,
+        decided_result: dict | None = None,
     ):
         """Constructor privado (usar factory methods)."""
         self._id = id
@@ -57,6 +65,10 @@ class Match:
         self._result = result
         self._created_at = created_at
         self._updated_at = updated_at
+        self._marker_assignments = marker_assignments
+        self._scorecard_submitted_by = scorecard_submitted_by
+        self._is_decided = is_decided
+        self._decided_result = decided_result
 
     @classmethod
     def create(
@@ -138,6 +150,10 @@ class Match:
         result: dict | None,
         created_at: datetime,
         updated_at: datetime,
+        marker_assignments: list[MarkerAssignment] | None = None,
+        scorecard_submitted_by: list[UserId] | None = None,
+        is_decided: bool = False,
+        decided_result: dict | None = None,
     ) -> "Match":
         """Reconstruye desde BD (sin validaciones)."""
         return cls(
@@ -152,6 +168,10 @@ class Match:
             result=result,
             created_at=created_at,
             updated_at=updated_at,
+            marker_assignments=tuple(marker_assignments or []),
+            scorecard_submitted_by=tuple(scorecard_submitted_by or []),
+            is_decided=is_decided,
+            decided_result=decided_result,
         )
 
     # ==================== Business Methods ====================
@@ -210,6 +230,69 @@ class Match:
         self._status = MatchStatus.WALKOVER
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def concede(self, conceding_team: str, reason: str | None = None) -> None:
+        """
+        Concede el partido a favor del equipo contrario.
+        Transicion: IN_PROGRESS → CONCEDED
+
+        Args:
+            conceding_team: Equipo que concede ("A" o "B")
+            reason: Razon de la concesion (opcional)
+        """
+        if not self._status.can_concede():
+            raise ValueError(
+                f"Cannot concede match from status {self._status}. Expected IN_PROGRESS"
+            )
+
+        if conceding_team not in ("A", "B"):
+            raise ValueError(f"conceding_team must be 'A' or 'B', got '{conceding_team}'")
+
+        winning_team = "B" if conceding_team == "A" else "A"
+        self._result = {
+            "winner": winning_team,
+            "score": "CONCEDED",
+            "reason": reason,
+        }
+        self._status = MatchStatus.CONCEDED
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def set_marker_assignments(self, assignments: list[MarkerAssignment]) -> None:
+        """
+        Establece las asignaciones de marcadores.
+        Solo permitido en estado SCHEDULED.
+        """
+        if self._status != MatchStatus.SCHEDULED:
+            raise ValueError(
+                f"Cannot set marker assignments in status {self._status}. Expected SCHEDULED"
+            )
+        self._marker_assignments = tuple(assignments)
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def submit_scorecard(self, user_id: UserId) -> None:
+        """
+        Registra que un jugador ha entregado su tarjeta.
+
+        Args:
+            user_id: ID del jugador que entrega
+
+        Raises:
+            ValueError: Si no es jugador del partido o ya entrego
+        """
+        if self.find_player(user_id) is None:
+            raise ValueError(f"User {user_id} is not a player in this match")
+
+        if self.has_submitted_scorecard(user_id):
+            raise ValueError(f"User {user_id} has already submitted their scorecard")
+
+        self._scorecard_submitted_by = (*self._scorecard_submitted_by, user_id)
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def mark_decided(self, result: dict) -> None:
+        """Marca el partido como matematicamente decidido."""
+        self._is_decided = True
+        self._decided_result = result
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     # ==================== Query Methods ====================
 
     def is_finished(self) -> bool:
@@ -231,6 +314,36 @@ class Match:
     def team_b_total_handicap(self) -> int:
         """Retorna el handicap combinado del Equipo B."""
         return sum(p.playing_handicap for p in self._team_b_players)
+
+    def has_submitted_scorecard(self, user_id: UserId) -> bool:
+        """Retorna True si el jugador ya entrego su tarjeta."""
+        return user_id in self._scorecard_submitted_by
+
+    def all_scorecards_submitted(self) -> bool:
+        """Retorna True si todos los jugadores han entregado su tarjeta."""
+        all_player_ids = self.get_all_player_ids()
+        return all(uid in self._scorecard_submitted_by for uid in all_player_ids)
+
+    def get_player_team(self, user_id: UserId) -> str | None:
+        """Retorna el equipo del jugador ("A"/"B") o None si no es jugador."""
+        for p in self._team_a_players:
+            if p.user_id == user_id:
+                return "A"
+        for p in self._team_b_players:
+            if p.user_id == user_id:
+                return "B"
+        return None
+
+    def find_player(self, user_id: UserId) -> MatchPlayer | None:
+        """Busca un jugador por su user_id."""
+        for p in (*self._team_a_players, *self._team_b_players):
+            if p.user_id == user_id:
+                return p
+        return None
+
+    def get_all_player_ids(self) -> list[UserId]:
+        """Retorna los IDs de todos los jugadores del partido."""
+        return [p.user_id for p in (*self._team_a_players, *self._team_b_players)]
 
     # ==================== Properties ====================
 
@@ -277,6 +390,22 @@ class Match:
     @property
     def updated_at(self) -> datetime:
         return self._updated_at
+
+    @property
+    def marker_assignments(self) -> tuple[MarkerAssignment, ...]:
+        return self._marker_assignments
+
+    @property
+    def scorecard_submitted_by(self) -> tuple[UserId, ...]:
+        return self._scorecard_submitted_by
+
+    @property
+    def is_decided(self) -> bool:
+        return self._is_decided
+
+    @property
+    def decided_result(self) -> dict | None:
+        return self._decided_result
 
     # ==================== Equality ====================
 

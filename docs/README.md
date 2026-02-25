@@ -228,5 +228,5 @@ Si encuentras errores o quieres mejorar la documentación:
 
 ---
 
-**Last Updated:** 9 February 2026
-**Version:** v2.0.8 (Sprint 2 Complete + Support Module)
+**Last Updated:** 24 February 2026
+**Version:** v2.0.12 (Sprint 4 — Live Scoring + Leaderboard)
