@@ -87,9 +87,14 @@ class TestHoleScoreCreate:
         hs = _create_hole_score(match_id, player_id, strokes=1)
         assert hs.strokes_received == 1
 
+    def test_create_strokes_2(self, match_id, player_id):
+        """PH > 18: un hoyo puede recibir 2+ strokes."""
+        hs = _create_hole_score(match_id, player_id, strokes=2)
+        assert hs.strokes_received == 2
+
     def test_create_invalid_strokes_raises(self, match_id, player_id):
         with pytest.raises(ValueError, match="strokes_received must be"):
-            _create_hole_score(match_id, player_id, strokes=2)
+            _create_hole_score(match_id, player_id, strokes=-1)
 
 
 class TestHoleScoreSetOwnScore:

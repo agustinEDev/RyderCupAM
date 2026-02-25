@@ -199,6 +199,27 @@ class ScoringService:
             return None
         return min(valid)
 
+    @staticmethod
+    def find_best_ball_player(
+        player_net_scores: list[tuple[str, int | None]],
+    ) -> str | None:
+        """
+        Encuentra el jugador con la mejor bola (menor net score) en un equipo.
+
+        Args:
+            player_net_scores: Lista de (user_id, net_score) del equipo
+
+        Returns:
+            user_id del jugador con mejor net score, o None si no hay scores
+        """
+        best_uid = None
+        best_score = None
+        for uid, net in player_net_scores:
+            if net is not None and (best_score is None or net < best_score):
+                best_score = net
+                best_uid = uid
+        return best_uid
+
     def calculate_match_standing(
         self,
         hole_results: list[str],

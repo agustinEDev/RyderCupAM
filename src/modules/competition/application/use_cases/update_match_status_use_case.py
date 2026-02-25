@@ -109,7 +109,7 @@ class UpdateMatchStatusUseCase:
         for team, players in [("A", match.team_a_players), ("B", match.team_b_players)]:
             for player in players:
                 for hole_num in range(1, 19):
-                    strokes_received = 1 if player.receives_stroke_on_hole(hole_num) else 0
+                    strokes_received = player.strokes_on_hole(hole_num)
                     hs = HoleScore.create(
                         match_id=match.id,
                         hole_number=hole_num,

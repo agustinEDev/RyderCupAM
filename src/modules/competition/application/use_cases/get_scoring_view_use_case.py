@@ -156,10 +156,15 @@ class GetScoringViewUseCase:
 
         for hole_num in sorted(scores_by_hole.keys()):
             hole_hs_list = scores_by_hole[hole_num]
-            player_scores, team_a_nets, team_b_nets = self._build_hole_player_scores(hole_hs_list)
+            (
+                player_scores, team_a_nets, team_b_nets,
+                team_a_player_nets, team_b_player_nets,
+            ) = self._build_hole_player_scores(hole_hs_list)
 
             hole_result = self._compute_hole_result(
-                hole_hs_list, team_a_nets, team_b_nets, match_format, hole_results_list
+                hole_hs_list, team_a_nets, team_b_nets,
+                team_a_player_nets, team_b_player_nets,
+                match_format, hole_results_list,
             )
 
             scores_dto.append(
@@ -173,8 +178,10 @@ class GetScoringViewUseCase:
         return scores_dto, hole_results_list
 
     def _build_hole_player_scores(self, hole_hs_list):
-        """Construye player scores y clasifica nets por equipo."""
+        """Construye player scores y clasifica nets por equipo (con user_ids para best-ball)."""
         player_scores = []
+        team_a_player_nets: list[tuple[str, int | None]] = []
+        team_b_player_nets: list[tuple[str, int | None]] = []
         team_a_nets = []
         team_b_nets = []
 
@@ -189,15 +196,23 @@ class GetScoringViewUseCase:
                     strokes_received_this_hole=hs.strokes_received,
                 )
             )
-            if hs.net_score is not None:
-                if hs.team == "A":
+            uid_str = str(hs.player_user_id)
+            if hs.team == "A":
+                team_a_player_nets.append((uid_str, hs.net_score))
+                if hs.net_score is not None:
                     team_a_nets.append(hs.net_score)
-                else:
+            else:
+                team_b_player_nets.append((uid_str, hs.net_score))
+                if hs.net_score is not None:
                     team_b_nets.append(hs.net_score)
 
-        return player_scores, team_a_nets, team_b_nets
+        return player_scores, team_a_nets, team_b_nets, team_a_player_nets, team_b_player_nets
 
-    def _compute_hole_result(self, hole_hs_list, team_a_nets, team_b_nets, match_format, hole_results_list):
+    def _compute_hole_result(
+        self, hole_hs_list, team_a_nets, team_b_nets,
+        team_a_player_nets, team_b_player_nets,
+        match_format, hole_results_list,
+    ):
         """Calcula el resultado de un hoyo si hay scores validados."""
         has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs_list)
         if not has_validated or not team_a_nets or not team_b_nets:
@@ -206,10 +221,16 @@ class GetScoringViewUseCase:
         winner = self._scoring_service.calculate_hole_winner(team_a_nets, team_b_nets, match_format)
         hole_results_list.append(winner)
         standing = self._scoring_service.calculate_match_standing(hole_results_list)
+
+        best_a = self._scoring_service.find_best_ball_player(team_a_player_nets)
+        best_b = self._scoring_service.find_best_ball_player(team_b_player_nets)
+
         return HoleResultDTO(
             winner=winner,
             standing=standing["status"],
             standing_team=standing["leading_team"],
+            best_ball_player_a=best_a,
+            best_ball_player_b=best_b,
         )
 
     async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:

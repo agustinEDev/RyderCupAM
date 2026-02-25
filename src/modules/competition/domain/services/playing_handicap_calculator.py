@@ -160,10 +160,13 @@ class PlayingHandicapCalculator:
         custom_allowance: int | None = None,
     ) -> tuple[int, int]:
         """
-        Calcula los Playing Handicaps para un equipo en FOURBALL.
+        Calcula los Playing Handicaps para un equipo en FOURBALL (método legacy individual).
 
         En FOURBALL (mejor bola), cada jugador usa su propio
         Playing Handicap. El allowance por defecto es 90%.
+
+        NOTA: Para match play fourball, usar calculate_fourball_differential()
+        que aplica el método WHS de diferencias respecto al menor handicap.
 
         Args:
             player1_hi: Handicap Index del jugador 1
@@ -181,6 +184,116 @@ class PlayingHandicapCalculator:
         player2_ph = self.calculate(player2_hi, player2_tee, allowance)
 
         return player1_ph, player2_ph
+
+    def calculate_course_handicap(
+        self,
+        handicap_index: Decimal,
+        tee_rating: TeeRating,
+    ) -> int:
+        """
+        Calcula el Course Handicap (sin allowance), redondeado al entero más cercano.
+
+        CH = HI x (SR / 113) + (CR - Par)
+
+        Args:
+            handicap_index: Handicap Index del jugador
+            tee_rating: Ratings del tee
+
+        Returns:
+            Course Handicap redondeado (>= 0)
+        """
+        raw = self._calculate_course_handicap(handicap_index, tee_rating)
+        return max(0, int(raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
+
+    @staticmethod
+    def calculate_fourball_differential(
+        player_course_handicaps: list[tuple[str, int]],
+        allowance_percentage: int,
+    ) -> dict[str, int]:
+        """
+        Método diferencial WHS para Fourball (Match Play).
+
+        En lugar de aplicar el porcentaje de allowance a cada handicap individual,
+        se aplica a la DIFERENCIA respecto al jugador con menor course handicap.
+        El jugador de menor CH juega off scratch (0 strokes).
+
+        Fórmula:
+        1. Encontrar el menor course handicap entre los 4 jugadores
+        2. Para cada jugador: diferencia = CH - menor_CH
+        3. Playing Handicap = diferencia x allowance_percentage / 100
+
+        Args:
+            player_course_handicaps: Lista de (user_id, course_handicap) para los 4 jugadores
+            allowance_percentage: Porcentaje de allowance de la ronda (50-100)
+
+        Returns:
+            dict de user_id → playing_handicap diferencial
+        """
+        if not player_course_handicaps:
+            return {}
+
+        lowest_ch = min(ch for _, ch in player_course_handicaps)
+        allowance = Decimal(str(allowance_percentage)) / Decimal("100")
+
+        result: dict[str, int] = {}
+        for user_id, ch in player_course_handicaps:
+            diff = ch - lowest_ch
+            ph = int(
+                (Decimal(str(diff)) * allowance).quantize(
+                    Decimal("1"), rounding=ROUND_HALF_UP
+                )
+            )
+            result[user_id] = ph
+        return result
+
+    @staticmethod
+    def calculate_foursomes_differential(
+        team_a_course_handicaps: list[int],
+        team_b_course_handicaps: list[int],
+        allowance_percentage: int,
+    ) -> tuple[int, int]:
+        """
+        Método diferencial WHS para Foursomes (Golpe Alterno).
+
+        En FOURSOMES, los strokes se calculan a nivel de EQUIPO (no individual):
+        1. Promediar los Course Handicaps de cada equipo
+        2. Calcular diferencia entre promedios
+        3. Aplicar allowance_percentage a la diferencia
+        4. El equipo con mayor promedio CH recibe los strokes; el otro recibe 0
+
+        Ambos jugadores del equipo reciben los mismos strokes porque
+        comparten una bola (golpe alterno).
+
+        Args:
+            team_a_course_handicaps: CHs de los jugadores del equipo A
+            team_b_course_handicaps: CHs de los jugadores del equipo B
+            allowance_percentage: Porcentaje de allowance de la ronda (50-100)
+
+        Returns:
+            (team_a_ph, team_b_ph) — Playing Handicap por equipo.
+            Solo un equipo recibe strokes (el de mayor CH promedio).
+        """
+        if not team_a_course_handicaps or not team_b_course_handicaps:
+            return 0, 0
+
+        team_a_avg = Decimal(str(sum(team_a_course_handicaps))) / Decimal(
+            str(len(team_a_course_handicaps))
+        )
+        team_b_avg = Decimal(str(sum(team_b_course_handicaps))) / Decimal(
+            str(len(team_b_course_handicaps))
+        )
+
+        difference = abs(team_a_avg - team_b_avg)
+        allowance = Decimal(str(allowance_percentage)) / Decimal("100")
+        strokes = int(
+            (difference * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        )
+
+        if team_a_avg > team_b_avg:
+            return strokes, 0
+        if team_b_avg > team_a_avg:
+            return 0, strokes
+        return 0, 0
 
     def calculate_for_foursomes(
         self,
@@ -251,7 +364,14 @@ class PlayingHandicapCalculator:
         Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index.
 
         Distribuye strokes siguiendo el orden de stroke index de los hoyos.
-        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around).
+        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around),
+        generando entradas duplicadas para hoyos que reciben más de un golpe.
+
+        Ejemplo: PH=29 con 18 hoyos → los primeros 11 hoyos por SI aparecen
+        2 veces (2 strokes), los últimos 7 aparecen 1 vez (1 stroke).
+
+        Use strokes_on_hole(hole_number, strokes_received) para obtener
+        el conteo de strokes en un hoyo específico.
 
         Args:
             playing_handicap: Playing Handicap calculado del jugador
@@ -259,11 +379,11 @@ class PlayingHandicapCalculator:
 
         Returns:
             Lista de números de hoyo donde el jugador recibe golpe
+            (puede contener duplicados si PH > 18)
         """
         if not holes_by_stroke_index or playing_handicap <= 0:
             return []
 
-        max_holes = len(holes_by_stroke_index)
         result: list[int] = []
         remaining = playing_handicap
         while remaining > 0:
@@ -271,17 +391,7 @@ class PlayingHandicapCalculator:
             result.extend(holes_by_stroke_index[:take])
             remaining -= take
 
-        # Deduplicate: si hay wrap-around, limitar a MAX_HOLES unique entries
-        seen: set[int] = set()
-        unique: list[int] = []
-        for h in result:
-            if h not in seen:
-                seen.add(h)
-                unique.append(h)
-            if len(unique) >= max_holes:
-                break
-
-        return unique
+        return result
 
     def _calculate_course_handicap(
         self,

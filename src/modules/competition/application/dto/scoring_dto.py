@@ -67,6 +67,8 @@ class HoleResultDTO(BaseModel):
     winner: str | None = None
     standing: str | None = None
     standing_team: str | None = None
+    best_ball_player_a: str | None = None
+    best_ball_player_b: str | None = None
 
 
 class HoleScoreEntryDTO(BaseModel):

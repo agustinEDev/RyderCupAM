@@ -34,7 +34,7 @@ class HoleScore:
     - hole_number debe estar entre 1 y 18
     - team debe ser "A" o "B"
     - Scores deben estar entre 1-9 o None (picked up)
-    - strokes_received debe ser 0 o 1
+    - strokes_received debe ser >= 0 (normalmente 0-2, puede ser > 1 si PH > 18)
     """
 
     def __init__(
@@ -87,7 +87,7 @@ class HoleScore:
             hole_number: Numero de hoyo (1-18)
             player_user_id: ID del jugador
             team: Equipo ("A" o "B")
-            strokes_received: Golpes que recibe en este hoyo (0 o 1)
+            strokes_received: Golpes que recibe en este hoyo (>= 0, normalmente 0-2)
 
         Raises:
             ValueError: Si hole_number, team o strokes_received son invalidos
@@ -98,8 +98,8 @@ class HoleScore:
         if team not in ("A", "B"):
             raise ValueError(f"team must be 'A' or 'B', got '{team}'")
 
-        if strokes_received not in (0, 1):
-            raise ValueError(f"strokes_received must be 0 or 1, got {strokes_received}")
+        if strokes_received < 0:
+            raise ValueError(f"strokes_received must be >= 0, got {strokes_received}")
 
         now = datetime.now()
         return cls(
