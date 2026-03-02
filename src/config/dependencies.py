@@ -32,6 +32,9 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.concede_match_use_case import (
+    ConcedeMatchUseCase,
+)
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
     ConfigureScheduleUseCase,
 )
@@ -59,11 +62,17 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
+    GetLeaderboardUseCase,
+)
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
 )
 from src.modules.competition.application.use_cases.get_schedule_use_case import (
     GetScheduleUseCase,
+)
+from src.modules.competition.application.use_cases.get_scoring_view_use_case import (
+    GetScoringViewUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -86,6 +95,9 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
+    ReopenEnrollmentsUseCase,
+)
 from src.modules.competition.application.use_cases.reorder_golf_courses_use_case import (
     ReorderGolfCoursesUseCase,
 )
@@ -94,6 +106,9 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
+)
+from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
+    RevertCompetitionStatusUseCase,
 )
 from src.modules.competition.application.use_cases.send_invitation_by_email_use_case import (
     SendInvitationByEmailUseCase,
@@ -106,6 +121,12 @@ from src.modules.competition.application.use_cases.set_custom_handicap_use_case 
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.submit_hole_score_use_case import (
+    SubmitHoleScoreUseCase,
+)
+from src.modules.competition.application.use_cases.submit_scorecard_use_case import (
+    SubmitScorecardUseCase,
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
@@ -128,6 +149,7 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
 from src.modules.competition.domain.services.schedule_format_service import (
     ScheduleFormatService,
 )
+from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.services.snake_draft_service import (
     SnakeDraftService,
 )
@@ -220,6 +242,7 @@ from src.modules.user.application.use_cases.reset_password_use_case import (
 from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
+from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
@@ -406,6 +429,13 @@ def get_find_user_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return FindUserUseCase(uow)
+
+
+def get_search_users_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SearchUsersUseCase:
+    """Proveedor del caso de uso SearchUsersUseCase."""
+    return SearchUsersUseCase(uow=uow)
 
 
 def get_update_handicap_use_case(
@@ -978,6 +1008,34 @@ def get_cancel_competition_use_case(
     return CancelCompetitionUseCase(uow)
 
 
+def get_revert_competition_status_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RevertCompetitionStatusUseCase:
+    """
+    Proveedor del caso de uso RevertCompetitionStatusUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `RevertCompetitionStatusUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return RevertCompetitionStatusUseCase(uow)
+
+
+def get_reopen_enrollments_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ReopenEnrollmentsUseCase:
+    """
+    Proveedor del caso de uso ReopenEnrollmentsUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `ReopenEnrollmentsUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return ReopenEnrollmentsUseCase(uow)
+
+
 def get_add_golf_course_to_competition_use_case(
     competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
@@ -1149,10 +1207,16 @@ def get_assign_teams_use_case(
     )
 
 
+def get_scoring_service() -> ScoringService:
+    """Proveedor del servicio de dominio ScoringService."""
+    return ScoringService()
+
+
 def get_generate_matches_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
     return GenerateMatchesUseCase(
@@ -1160,6 +1224,7 @@ def get_generate_matches_use_case(
         golf_course_repository=gc_uow.golf_courses,
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
+        scoring_service=scoring_service,
     )
 
 
@@ -1227,6 +1292,56 @@ def get_list_competition_invitations_use_case(
 ) -> ListCompetitionInvitationsUseCase:
     """Proveedor del caso de uso ListCompetitionInvitationsUseCase."""
     return ListCompetitionInvitationsUseCase(uow, user_uow)
+
+
+# ======================================================================================
+# SCORING USE CASE PROVIDERS (Sprint 4 - Live Scoring)
+# ======================================================================================
+
+
+def get_get_scoring_view_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> GetScoringViewUseCase:
+    """Proveedor del caso de uso GetScoringViewUseCase (cross-module: Competition + GolfCourse + User)."""
+    return GetScoringViewUseCase(uow, user_uow.users, scoring_service, gc_uow.golf_courses)
+
+
+def get_submit_hole_score_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> SubmitHoleScoreUseCase:
+    """Proveedor del caso de uso SubmitHoleScoreUseCase (cross-module: Competition + GolfCourse + User)."""
+    return SubmitHoleScoreUseCase(uow, user_uow.users, scoring_service, gc_uow.golf_courses)
+
+
+def get_submit_scorecard_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> SubmitScorecardUseCase:
+    """Proveedor del caso de uso SubmitScorecardUseCase."""
+    return SubmitScorecardUseCase(uow, scoring_service)
+
+
+def get_get_leaderboard_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> GetLeaderboardUseCase:
+    """Proveedor del caso de uso GetLeaderboardUseCase."""
+    return GetLeaderboardUseCase(uow, user_uow.users, scoring_service)
+
+
+def get_concede_match_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> ConcedeMatchUseCase:
+    """Proveedor del caso de uso ConcedeMatchUseCase."""
+    return ConcedeMatchUseCase(uow, scoring_service)
 
 
 # ============================================================================

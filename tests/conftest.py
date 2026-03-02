@@ -493,7 +493,7 @@ async def create_authenticated_user(
     Returns:
         Dict con 'cookies', 'token' (legacy), 'user'
     """
-    # Registrar usuario
+    # Registrar usuario (con client ID único para evitar rate limit 3/hour)
     user_data = {
         "email": email,
         "password": password,
@@ -501,12 +501,18 @@ async def create_authenticated_user(
         "last_name": last_name,
     }
 
-    register_response = await client.post("/api/v1/auth/register", json=user_data)
+    register_response = await client.post(
+        "/api/v1/auth/register",
+        json=user_data,
+        headers={"X-Test-Client-ID": f"register-{uuid.uuid4()}"},
+    )
     assert register_response.status_code == 201
 
-    # Login
+    # Login (con client ID único para evitar rate limit 5/minute)
     login_response = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+        headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
     )
     assert login_response.status_code == 200
 
@@ -938,7 +944,9 @@ async def create_admin_user(
 
     # 3. Re-autenticar para obtener nuevo token JWT con is_admin=True
     login_response = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+        headers={"X-Test-Client-ID": f"admin-login-{uuid.uuid4()}"},
     )
     assert login_response.status_code == 200
 

@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user import User
@@ -26,6 +26,14 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     async def find_by_id(self, user_id: UserId) -> User | None:
         """Busca un usuario por su ID."""
         return await self._session.get(User, user_id)
+
+    async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
+        """Busca múltiples usuarios por sus IDs en una sola consulta."""
+        if not user_ids:
+            return []
+        statement = select(User).where(User.id.in_([str(uid) for uid in user_ids]))
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
 
     async def find_by_email(self, email: Email) -> User | None:
         """Busca un usuario por su email."""
@@ -75,6 +83,28 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
                 return user
 
         return None
+
+    MIN_SEARCH_LENGTH = 2
+
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """Searches users by partial name match using ILIKE. Requires at least 2 characters."""
+        query = query.strip()
+        if len(query) < self.MIN_SEARCH_LENGTH:
+            return []
+        q = query.lower()
+        statement = (
+            select(User)
+            .filter(
+                or_(
+                    func.lower(User.first_name).contains(q, autoescape=True),
+                    func.lower(User.last_name).contains(q, autoescape=True),
+                    func.lower(User.first_name + " " + User.last_name).contains(q, autoescape=True),
+                )
+            )
+            .limit(limit)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
 
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""

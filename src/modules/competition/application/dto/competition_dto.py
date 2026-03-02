@@ -495,6 +495,62 @@ class StartCompetitionResponseDTO(BaseModel):
 
 
 # --------------------------------------------------------------------------------------
+# Revert Competition Status (IN_PROGRESS → CLOSED)
+# --------------------------------------------------------------------------------------
+
+
+class RevertCompetitionStatusRequestDTO(BaseModel):
+    """
+    DTO de entrada para revertir una competición a CLOSED.
+    Transición: IN_PROGRESS → CLOSED (permite corregir el schedule).
+
+    Solo el creador puede revertir la competición.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+
+
+class RevertCompetitionStatusResponseDTO(BaseModel):
+    """
+    DTO de salida para reversión de competición.
+    """
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    status: str = Field(..., description="Nuevo estado (CLOSED).")
+    reverted_at: datetime = Field(..., description="Fecha y hora de reversión.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Reopen Enrollments (CLOSED → ACTIVE)
+# --------------------------------------------------------------------------------------
+
+
+class ReopenEnrollmentsRequestDTO(BaseModel):
+    """
+    DTO de entrada para reabrir inscripciones de una competición.
+    Transición: CLOSED → ACTIVE (reabre inscripciones).
+
+    Solo el creador puede reabrir inscripciones.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+
+
+class ReopenEnrollmentsResponseDTO(BaseModel):
+    """
+    DTO de salida para reapertura de inscripciones.
+    """
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    status: str = Field(..., description="Nuevo estado (ACTIVE).")
+    reopened_at: datetime = Field(..., description="Fecha y hora de reapertura.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
 # Complete Competition (IN_PROGRESS → COMPLETED)
 # --------------------------------------------------------------------------------------
 

@@ -36,6 +36,7 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     enrollment_routes,
     invitation_routes,
     round_match_routes,
+    scoring_routes,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
@@ -191,20 +192,19 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ================================
-# CORS MIDDLEWARE (v1.8.0)
-# ================================
-# Aplicar middleware CORS con configuración centralizada
-# IMPORTANTE: Debe ir DESPUÉS de security headers para que CORS
-# se aplique ANTES (orden inverso de ejecución)
-app.add_middleware(CORSMiddleware, **get_cors_config())
-
-# ================================
 # CSRF PROTECTION MIDDLEWARE (v1.13.0)
 # ================================
 # Valida CSRF tokens en requests no seguros (POST, PUT, PATCH, DELETE)
 # Exime GET, HEAD, OPTIONS, rutas públicas (/health, /docs)
-# IMPORTANTE: Debe ir ANTES de que los endpoints procesen los requests
+# Se registra ANTES de CORS para que CORS envuelva CSRF en ejecución
 app.add_middleware(CSRFMiddleware)
+
+# ================================
+# CORS MIDDLEWARE (v1.8.0)
+# ================================
+# Registrado DESPUÉS de CSRF → se ejecuta PRIMERO (orden inverso)
+# Así cualquier respuesta (incluidos 403 de CSRF) lleva headers CORS
+app.add_middleware(CORSMiddleware, **get_cors_config())
 
 # Sentry User Context Middleware (captura usuario de JWT para eventos)
 app.add_middleware(SentryUserContextMiddleware)
@@ -301,6 +301,11 @@ app.include_router(
 
 app.include_router(
     round_match_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    scoring_routes.router,
     prefix="/api/v1/competitions",
 )
 

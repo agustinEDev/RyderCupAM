@@ -1,7 +1,7 @@
 # 🗄️ Database Entity Relationship Diagram (ERD)
 
-> **Version:** Sprint 3 Block 1 (Current) + v2.1.0 Planning
-> **Last Updated:** February 16, 2026
+> **Version:** Sprint 4 (Live Scoring + Leaderboard)
+> **Last Updated:** February 24, 2026
 > **Database:** PostgreSQL 15+
 
 ---
@@ -194,10 +194,14 @@ erDiagram
         INT match_number "Order within round"
         JSONB team_a_players "list[MatchPlayer] with playing_handicap, tee_category, tee_gender"
         JSONB team_b_players "list[MatchPlayer] with playing_handicap, tee_category, tee_gender"
-        VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | WALKOVER"
+        VARCHAR(20) status "SCHEDULED | IN_PROGRESS | COMPLETED | WALKOVER | CONCEDED"
         INT handicap_strokes_given "Calculated strokes"
         VARCHAR(1) strokes_given_to_team "A or B or empty"
         JSONB result "nullable match result"
+        JSONB marker_assignments "Sprint 4 - list[MarkerAssignment]"
+        JSONB scorecard_submitted_by "Sprint 4 - list[UserId]"
+        BOOLEAN is_decided "Sprint 4 - early termination flag"
+        JSONB decided_result "Sprint 4 - {winner, score}"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -212,7 +216,7 @@ erDiagram
     }
 
     %% ========================================
-    %% INVITATIONS (v2.1.0 - NEW)
+    %% INVITATIONS (v2.0.12 - IMPLEMENTED)
     %% ========================================
 
     invitations {
@@ -221,8 +225,8 @@ erDiagram
         UUID inviter_id FK "Creator who invites"
         VARCHAR(255) invitee_email
         UUID invitee_user_id FK "nullable if not registered"
-        VARCHAR(20) status "PENDING | ACCEPTED | REJECTED | EXPIRED"
-        VARCHAR(255) token UK "256-bit secure token"
+        VARCHAR(20) status "PENDING | ACCEPTED | DECLINED | EXPIRED"
+        VARCHAR(64) token_hash UK "SHA256 of 256-bit token"
         TEXT personal_message "nullable"
         TIMESTAMP expires_at "7 days"
         TIMESTAMP responded_at "nullable"
@@ -231,20 +235,22 @@ erDiagram
     }
 
     %% ========================================
-    %% LIVE SCORING (v2.1.0 - NEW)
+    %% LIVE SCORING (Sprint 4 - IMPLEMENTED)
     %% ========================================
 
     hole_scores {
-        UUID id PK
-        UUID match_id FK
+        CHAR(36) id PK "UUID as CHAR(36)"
+        CHAR(36) match_id FK
         INT hole_number "1-18"
-        UUID player_id FK
-        INT gross_score "Gross strokes"
-        INT net_score "Calculated net strokes"
-        INT strokes_received "Strokes received by handicap"
-        VARCHAR(20) status "DRAFT | SUBMITTED | VALIDATED | DISPUTED"
-        TIMESTAMP submitted_at "nullable"
-        TIMESTAMP validated_at "nullable"
+        CHAR(36) player_user_id FK "Player who owns this score"
+        VARCHAR(1) team "A or B"
+        INT own_score "nullable - 1-9 or null (picked up)"
+        BOOLEAN own_submitted "default false"
+        INT marker_score "nullable - score entered by marker"
+        BOOLEAN marker_submitted "default false"
+        INT strokes_received "default 0 - precalculated from MatchPlayer"
+        INT net_score "nullable - own_score - strokes_received when MATCH"
+        VARCHAR(20) validation_status "PENDING | MATCH | MISMATCH"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -293,7 +299,7 @@ erDiagram
 
 ---
 
-## 📋 Current Tables (Sprint 3 Block 1)
+## 📋 Current Tables (Sprint 4)
 
 | Table | Typical Records | Module | Version |
 |-------|-------------------|--------|---------|
@@ -310,24 +316,13 @@ erDiagram
 | `rounds` | 30-3,000 (3-10 per tournament) | Competition | Sprint 2 |
 | `matches` | 100-30,000 (10-30 per round) | Competition | Sprint 2 |
 | `team_assignments` | 10-1,000 (1 per competition) | Competition | Sprint 2 |
+| `invitations` | 500-100,000 | Competition | v2.0.12 |
 | `golf_courses` | 100-5,000 | Golf Courses | v2.0.1 |
 | `tees` | 300-25,000 (3-5 per course) | Golf Courses | v2.0.1 |
 | `holes` | 1,800-90,000 (18 per course) | Golf Courses | v2.0.1 |
+| `hole_scores` | 5,000-5,000,000 (36 per singles match, 72 fourball) | Competition | Sprint 4 |
 
-**Total current tables:** 16
-
----
-
-## 🆕 Planned Tables (v2.1.0 - Future)
-
-| Table | Typical Records | Module | Sprint |
-|-------|-------------------|--------|--------|
-| `invitations` | 500-100,000 | Competition | Sprint 3 |
-| `hole_scores` | 5,000-5,000,000 (72 per singles match, 144 fourball) | Scoring | Sprint 4 |
-
-**Total planned tables:** 2
-
-**Total tables after v2.1.0 completion:** 18 tables
+**Total current tables:** 18
 
 ---
 
@@ -406,11 +401,9 @@ CREATE INDEX idx_invitations_user ON invitations(invitee_user_id);
 CREATE INDEX idx_invitations_status ON invitations(status);
 CREATE INDEX idx_invitations_token ON invitations(token);
 
--- hole_scores
-CREATE INDEX idx_hole_scores_match ON hole_scores(match_id);
-CREATE INDEX idx_hole_scores_player ON hole_scores(player_id);
-CREATE INDEX idx_hole_scores_status ON hole_scores(status);
-CREATE UNIQUE INDEX idx_hole_scores_match_hole_player ON hole_scores(match_id, hole_number, player_id);
+-- hole_scores (Sprint 4)
+CREATE INDEX ix_hole_scores_match ON hole_scores(match_id);
+CREATE UNIQUE INDEX uq_hole_score ON hole_scores(match_id, hole_number, player_user_id);
 ```
 
 ---

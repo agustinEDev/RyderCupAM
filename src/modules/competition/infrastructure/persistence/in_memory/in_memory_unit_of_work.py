@@ -9,6 +9,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.hole_score_repository_interface import (
+    HoleScoreRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.invitation_repository_interface import (
     InvitationRepositoryInterface,
 )
@@ -30,6 +33,7 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 
 from .in_memory_competition_repository import InMemoryCompetitionRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
+from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
 from .in_memory_match_repository import InMemoryMatchRepository
 from .in_memory_round_repository import InMemoryRoundRepository
@@ -47,6 +51,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._matches = InMemoryMatchRepository()
         self._team_assignments = InMemoryTeamAssignmentRepository()
         self._invitations = InMemoryInvitationRepository()
+        self._hole_scores = InMemoryHoleScoreRepository()
         self.committed = False
 
     @property
@@ -76,6 +81,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def invitations(self) -> InvitationRepositoryInterface:
         return self._invitations
+
+    @property
+    def hole_scores(self) -> HoleScoreRepositoryInterface:
+        return self._hole_scores
 
     async def __aenter__(self):
         self.committed = False

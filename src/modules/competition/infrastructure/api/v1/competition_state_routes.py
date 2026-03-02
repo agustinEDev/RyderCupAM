@@ -11,6 +11,8 @@ from src.config.dependencies import (
     get_competition_uow,
     get_complete_competition_use_case,
     get_current_user,
+    get_reopen_enrollments_use_case,
+    get_revert_competition_status_use_case,
     get_start_competition_use_case,
     get_uow,
 )
@@ -21,6 +23,8 @@ from src.modules.competition.application.dto.competition_dto import (
     CloseEnrollmentsRequestDTO,
     CompetitionResponseDTO,
     CompleteCompetitionRequestDTO,
+    ReopenEnrollmentsRequestDTO,
+    RevertCompetitionStatusRequestDTO,
     StartCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -48,6 +52,12 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
+    ReopenEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
+    RevertCompetitionStatusUseCase,
+)
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     CompetitionNotFoundError as StartNotFoundError,
     NotCompetitionCreatorError as StartNotCreatorError,
@@ -69,6 +79,10 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Aliases for shared exceptions
 CompleteNotFoundError = CompetitionNotFoundError
 CompleteNotCreatorError = NotCompetitionCreatorError
+RevertNotFoundError = CompetitionNotFoundError
+RevertNotCreatorError = NotCompetitionCreatorError
+ReopenNotFoundError = CompetitionNotFoundError
+ReopenNotCreatorError = NotCompetitionCreatorError
 
 router = APIRouter()
 
@@ -237,6 +251,88 @@ async def complete_competition(
     except CompleteNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CompleteNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CompetitionStateError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put(
+    "/{competition_id}/revert-status",
+    response_model=CompetitionResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Revertir competición a CLOSED (IN_PROGRESS → CLOSED)",
+    description="Revierte una competición para corregir el schedule. Solo el creador.",
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def revert_competition_status(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: RevertCompetitionStatusUseCase = Depends(get_revert_competition_status_use_case),
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+):
+    """Transición de estado: IN_PROGRESS → CLOSED."""
+    try:
+        current_user_id = UserId(str(current_user.id))
+
+        request_dto = RevertCompetitionStatusRequestDTO(competition_id=competition_id)
+        await use_case.execute(request_dto, current_user_id)
+
+        competition_vo_id = CompetitionId(competition_id)
+        async with uow, user_uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+            dto = await CompetitionDTOMapper.to_response_dto(
+                competition, current_user_id, uow, user_uow
+            )
+
+        return dto
+
+    except RevertNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RevertNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CompetitionStateError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post(
+    "/{competition_id}/reopen-enrollments",
+    response_model=CompetitionResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Reabrir inscripciones (CLOSED → ACTIVE)",
+    description="Reabre inscripciones para añadir o modificar jugadores. Solo el creador.",
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def reopen_enrollments(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ReopenEnrollmentsUseCase = Depends(get_reopen_enrollments_use_case),
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+):
+    """Transición de estado: CLOSED → ACTIVE."""
+    try:
+        current_user_id = UserId(str(current_user.id))
+
+        request_dto = ReopenEnrollmentsRequestDTO(competition_id=competition_id)
+        await use_case.execute(request_dto, current_user_id)
+
+        competition_vo_id = CompetitionId(competition_id)
+        async with uow, user_uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+            dto = await CompetitionDTOMapper.to_response_dto(
+                competition, current_user_id, uow, user_uow
+            )
+
+        return dto
+
+    except ReopenNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ReopenNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

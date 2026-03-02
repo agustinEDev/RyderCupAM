@@ -20,6 +20,9 @@ class InMemoryUserRepository(UserRepositoryInterface):
     async def find_by_id(self, user_id: UserId) -> User | None:
         return self._users.get(user_id)
 
+    async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
+        return [self._users[uid] for uid in user_ids if uid in self._users]
+
     async def find_by_email(self, email: Email) -> User | None:
         for user in self._users.values():
             if user.email == email:
@@ -55,6 +58,22 @@ class InMemoryUserRepository(UserRepositoryInterface):
             if user_full_name == full_name_lower:
                 return user
         return None
+
+    MIN_SEARCH_LENGTH = 2
+
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """Searches users by partial name match. Requires at least 2 characters."""
+        query_lower = query.lower().strip()
+        if len(query_lower) < self.MIN_SEARCH_LENGTH:
+            return []
+        results = []
+        for user in self._users.values():
+            full_name = f"{user.first_name} {user.last_name}".lower()
+            if query_lower in full_name or query_lower in user.first_name.lower() or query_lower in user.last_name.lower():
+                results.append(user)
+                if len(results) >= limit:
+                    break
+        return results
 
     async def exists_by_email(self, email: Email) -> bool:
         return any(user.email == email for user in self._users.values())

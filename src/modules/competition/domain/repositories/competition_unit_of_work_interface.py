@@ -14,6 +14,7 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .competition_repository_interface import CompetitionRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
+from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
 from .round_repository_interface import RoundRepositoryInterface
@@ -68,4 +69,10 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def invitations(self) -> InvitationRepositoryInterface:
         """Acceso al repositorio de invitaciones."""
+        pass
+
+    @property
+    @abstractmethod
+    def hole_scores(self) -> HoleScoreRepositoryInterface:
+        """Acceso al repositorio de hole scores."""
         pass
