@@ -64,16 +64,18 @@ class TestMatchPlayerCreate:
                 strokes_received=[1, 2, 3, 19],  # 19 es inválido
             )
 
-    def test_create_with_duplicate_holes_raises(self):
-        """Error si hay hoyos duplicados."""
-        with pytest.raises(ValueError, match="Duplicate hole numbers"):
-            MatchPlayer.create(
-                user_id=UserId.generate(),
-                playing_handicap=5,
-                tee_category=TeeCategory.AMATEUR,
-                tee_gender=Gender.MALE,
-                strokes_received=[1, 2, 3, 3, 5],  # 3 duplicado
-            )
+    def test_create_with_duplicate_holes_allowed(self):
+        """PH > 18: duplicados permitidos (wrap-around por stroke index)."""
+        player = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=23,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+            strokes_received=[1, 2, 3, 3, 5],  # 3 aparece 2 veces (2 strokes en hoyo 3)
+        )
+        assert player.strokes_on_hole(3) == 2
+        assert player.strokes_on_hole(1) == 1
+        assert player.strokes_on_hole(4) == 0
 
 
 class TestMatchPlayerImmutability:

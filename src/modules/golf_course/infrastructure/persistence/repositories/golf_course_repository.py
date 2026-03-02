@@ -2,7 +2,7 @@
 GolfCourseRepository - Implementación SQLAlchemy del repositorio de campos de golf.
 """
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -46,23 +46,29 @@ class GolfCourseRepository(IGolfCourseRepository):
             # WORKAROUND para bug de SQLAlchemy con cascade="all, delete-orphan"
             # y unique constraints: hacer DELETE explícito ANTES de los INSERTs
             # para evitar violaciones de UNIQUE(golf_course_id, hole_number/tee_category)
+            # IMPORTANTE: Solo borrar colecciones si realmente cambiaron.
+            # Raw SQL DELETE desincroniza la session identity map, causando que
+            # los hijos se pierdan en updates de solo atributos escalares (ej: approve).
+            insp = inspect(golf_course)
+            holes_changed = insp.attrs._holes.history.has_changes()
+            tees_changed = insp.attrs._tees.history.has_changes()
 
-            # DELETE explícito de holes existentes
-            await self._session.execute(
-                delete(golf_course_holes_table).where(
-                    golf_course_holes_table.c.golf_course_id == golf_course._id
+            if holes_changed:
+                await self._session.execute(
+                    delete(golf_course_holes_table).where(
+                        golf_course_holes_table.c.golf_course_id == golf_course._id
+                    )
                 )
-            )
 
-            # DELETE explícito de tees existentes
-            await self._session.execute(
-                delete(golf_course_tees_table).where(
-                    golf_course_tees_table.c.golf_course_id == golf_course._id
+            if tees_changed:
+                await self._session.execute(
+                    delete(golf_course_tees_table).where(
+                        golf_course_tees_table.c.golf_course_id == golf_course._id
+                    )
                 )
-            )
 
-            # Flush para ejecutar los DELETEs antes de procesar el aggregate
-            await self._session.flush()
+            if holes_changed or tees_changed:
+                await self._session.flush()
 
         # Ahora sí, agregar/actualizar el aggregate
         self._session.add(golf_course)

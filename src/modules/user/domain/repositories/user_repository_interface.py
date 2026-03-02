@@ -56,6 +56,19 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
+        """
+        Busca múltiples usuarios por sus IDs en una sola consulta.
+
+        Args:
+            user_ids (list[UserId]): Lista de identificadores únicos
+
+        Returns:
+            list[User]: Lista de usuarios encontrados (puede ser menor que user_ids si algunos no existen)
+        """
+        pass
+
+    @abstractmethod
     async def find_by_email(self, email: Email) -> User | None:
         """
         Busca un usuario por su dirección de email.
@@ -100,6 +113,20 @@ class UserRepositoryInterface(ABC):
 
         Raises:
             RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
+    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+        """
+        Searches users whose first_name or last_name partially matches the query (case-insensitive).
+
+        Args:
+            query (str): Partial name to search for (min 2 characters)
+            limit (int): Maximum number of results to return (default: 10)
+
+        Returns:
+            list[User]: List of matching users
         """
         pass
 

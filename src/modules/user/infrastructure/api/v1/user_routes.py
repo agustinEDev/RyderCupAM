@@ -6,6 +6,7 @@ from src.config.dependencies import (
     get_competition_uow,
     get_current_user,
     get_find_user_use_case,
+    get_search_users_use_case,
     get_update_profile_use_case,
     get_update_security_use_case,
 )
@@ -17,6 +18,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
     FindUserResponseDTO,
+    SearchUsersResponseDTO,
     UpdateProfileRequestDTO,
     UpdateProfileResponseDTO,
     UpdateSecurityRequestDTO,
@@ -25,6 +27,7 @@ from src.modules.user.application.dto.user_dto import (
     UserRolesResponseDTO,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
 from src.modules.user.application.use_cases.update_profile_use_case import (
     UpdateProfileUseCase,
 )
@@ -57,6 +60,26 @@ router = APIRouter()
 # src/shared/infrastructure/http/http_context_validator.py
 # Ahora se usa get_trusted_client_ip() para prevenir IP spoofing
 # ============================================================================
+
+
+@router.get(
+    "/search-autocomplete",
+    response_model=SearchUsersResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Autocompletar busqueda de usuarios",
+    description="Busca usuarios por nombre parcial para autocompletado.",
+    tags=["Users"],
+)
+async def search_users_autocomplete(
+    query: str = Query(..., min_length=2, max_length=100, description="Texto de busqueda parcial"),
+    use_case: SearchUsersUseCase = Depends(get_search_users_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+):
+    """
+    Endpoint de autocompletado para buscar usuarios por nombre parcial.
+    Devuelve hasta 10 resultados que coincidan parcialmente con el nombre o apellido.
+    """
+    return await use_case.execute(query)
 
 
 @router.get(

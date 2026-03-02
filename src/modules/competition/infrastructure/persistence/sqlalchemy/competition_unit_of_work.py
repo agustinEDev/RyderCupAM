@@ -2,7 +2,7 @@
 SQLAlchemy Unit of Work - Competition Module Infrastructure Layer.
 
 Implementacion asincrona del Unit of Work para el modulo de competiciones.
-Coordina transacciones entre 6 repositorios.
+Coordina transacciones entre 8 repositorios.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.hole_score_repository_interface import (
+    HoleScoreRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.invitation_repository_interface import (
     InvitationRepositoryInterface,
@@ -32,6 +35,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_r
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
     SQLAlchemyEnrollmentRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
+    SQLAlchemyHoleScoreRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_repository import (
     SQLAlchemyInvitationRepository,
@@ -69,6 +75,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._matches = SQLAlchemyMatchRepository(session)
         self._team_assignments = SQLAlchemyTeamAssignmentRepository(session)
         self._invitations = SQLAlchemyInvitationRepository(session)
+        self._hole_scores = SQLAlchemyHoleScoreRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -97,6 +104,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def invitations(self) -> InvitationRepositoryInterface:
         return self._invitations
+
+    @property
+    def hole_scores(self) -> HoleScoreRepositoryInterface:
+        return self._hole_scores
 
     async def __aenter__(self):
         return self

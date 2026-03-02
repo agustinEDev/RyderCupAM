@@ -27,7 +27,8 @@ import logging
 
 import sentry_sdk
 from fastapi import Request
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config.settings import settings
@@ -82,7 +83,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             return payload
-        except JWTError as e:
+        except InvalidTokenError as e:
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
             return None
 

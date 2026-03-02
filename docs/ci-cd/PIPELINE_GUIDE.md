@@ -1,7 +1,7 @@
 # CI/CD Pipeline Guide
 
-**Version**: v2.0.0 (12 jobs)
-**Last Updated**: January 29, 2026
+**Version**: v2.0.14 (12 jobs)
+**Last Updated**: February 24, 2026
 
 ---
 
@@ -18,8 +18,8 @@ Automated pipeline that runs on **every push** and **pull request**.
 | Job | What It Does | Time | When Fails |
 | --- | --- | --- | --- |
 | 🔧 **Preparation** | Setup Python + cache dependencies | ~30s | Check `requirements.txt` |
-| 🧪 **Unit Tests** | 879 tests (Python 3.11/3.12) | ~45s | Run locally: `pytest tests/unit/` |
-| 🗄️ **Integration Tests** | 72 tests + PostgreSQL | ~60s | Check migrations: `alembic upgrade head` |
+| 🧪 **Unit Tests** | 1,902 tests (Python 3.11/3.12) | ~45s | Run locally: `pytest tests/unit/` |
+| 🗄️ **Integration Tests** | 256 tests + PostgreSQL | ~60s | Check migrations: `alembic upgrade head` |
 | 🔐 **Security Tests** | 45+ tests (CSRF, XSS, SQLi) | ~50s | Fix security vulnerability |
 | 🔒 **Security Checks** | Bandit, Safety, pip-audit, Gitleaks | ~40s | Update vulnerable dependency |
 | 📝 **Linting** | Ruff code quality | ~20s | Run: `ruff format src/ tests/` |
