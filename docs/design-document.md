@@ -476,9 +476,9 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 2,158 (100% passing, 1 skipped) |
-| Unit tests | 1,902 tests |
-| Integration tests | 256 tests |
+| Total tests | 2,204 (100% passing, 1 skipped) |
+| Unit tests | 1,903 tests |
+| Integration tests | 301 tests |
 | Coverage | >90% |
 | Email Verification | 100% (24 tests) |
 | Competition Module | 97.6% (174 tests) |
