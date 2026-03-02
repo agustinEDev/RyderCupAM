@@ -54,10 +54,10 @@ greenlet==3.0.3
 # Implementa el algoritmo bcrypt, un estándar para el almacenamiento seguro de claves
 bcrypt==4.2.0
 
-# python-jose - Librería para crear y verificar tokens JWT (JSON Web Tokens)
-# Incluye soporte para varios algoritmos de firma (HS256, RS256, etc.)
-# Actualizado a 3.4.0+ para resolver vulnerabilidad de seguridad CVE-2024-XXXXX
-python-jose[cryptography]==3.4.0
+# PyJWT - Librería para crear y verificar tokens JWT (JSON Web Tokens)
+# Alternativa activamente mantenida a python-jose, elimina dependencias vulnerables
+# (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
+PyJWT==2.10.1
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
@@ -120,13 +120,6 @@ zipp==3.19.1
 # Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
 marshmallow==3.26.2
 
-# ecdsa - Elliptic Curve Digital Signature Algorithm (dependencia transitiva de python-jose)
-# CVE-2024-23342: Minerva timing attack on P-256 curve (CVSS 7.4 HIGH)
-# STATUS: No fix available - project considers side-channel attacks out of scope
-# IMPACT: LOW - We use HS256 (HMAC), NOT ES256/ES384/ES512 (ECDSA)
-# ACTION: No action required unless we switch to EC algorithms (ES256/ES384/ES512)
-# REFERENCES: https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp
-ecdsa==0.19.1
 
 
 # ================================

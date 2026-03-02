@@ -8,7 +8,8 @@ Implementa autenticación basada en tokens con algoritmo HS256.
 import uuid
 from datetime import datetime, timedelta
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from src.config.settings import settings
 from src.modules.user.application.ports.token_service_interface import ITokenService
@@ -19,7 +20,7 @@ class JWTTokenService(ITokenService):
     Implementación de ITokenService usando JWT (JSON Web Tokens).
 
     Esta es una implementación concreta del puerto ITokenService usando
-    la librería python-jose con algoritmo HS256.
+    la librería PyJWT con algoritmo HS256.
 
     Puede ser reemplazada por otras implementaciones (OAuth2, Paseto, etc.)
     sin afectar a la capa de aplicación.
@@ -115,7 +116,7 @@ class JWTTokenService(ITokenService):
                 return None
 
             return payload
-        except JWTError:
+        except InvalidTokenError:
             return None
 
     def verify_refresh_token(self, token: str) -> dict | None:
@@ -143,7 +144,7 @@ class JWTTokenService(ITokenService):
                 return None
 
             return payload
-        except JWTError:
+        except InvalidTokenError:
             return None
 
 
