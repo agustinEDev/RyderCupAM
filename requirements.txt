@@ -57,7 +57,9 @@ bcrypt==4.2.0
 # PyJWT - Librería para crear y verificar tokens JWT (JSON Web Tokens)
 # Alternativa activamente mantenida a python-jose, elimina dependencias vulnerables
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
-PyJWT==2.10.1
+# Actualizado a 2.12.0 para resolver:
+# - CVE HIGH: Improper Verification of Cryptographic Signature (CVSS 8.7)
+PyJWT==2.12.0
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
@@ -103,7 +105,11 @@ filelock==3.20.3
 # - CVE-2025-61920 (DoS via large base64 tokens)
 # - CVE-2025-62706 (DoS via zip bomb decompression)
 # - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
-authlib==1.6.6
+# Actualizado a 1.6.9 para resolver nuevas alertas Snyk:
+# - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
+# - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
+# - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
+authlib==1.6.9
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:
@@ -136,7 +142,9 @@ httpx==0.27.0
 
 # requests - Cliente HTTP síncrono estándar de Python
 # Utilizado para integración con servicios externos (Mailgun, RFEG)
-requests==2.32.4
+# Actualizado a 2.33.0 para resolver:
+# - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
+requests==2.33.0
 
 # pytest - Framework de testing moderno y potente
 # Más simple que unittest, mejor output de errores, fixtures potentes
