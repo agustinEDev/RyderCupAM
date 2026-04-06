@@ -25,9 +25,9 @@ OWASP Coverage:
 
 import logging
 
+import jwt
 import sentry_sdk
 from fastapi import Request
-import jwt
 from jwt.exceptions import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 
