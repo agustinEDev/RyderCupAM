@@ -203,7 +203,11 @@ class GetLeaderboardUseCase:
         if not user_ids:
             return {}
         users = await self._user_repo.find_by_ids(user_ids)
-        names = {user.id: f"{user.first_name} {user.last_name}" for user in users}
+        names: dict[UserId, str] = {
+            user.id: f"{user.first_name} {user.last_name}"
+            for user in users
+            if user.id is not None
+        }
         for uid in user_ids:
             if uid not in names:
                 names[uid] = ""
