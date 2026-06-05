@@ -24,7 +24,7 @@ ruff>=0.6.0
 # Mypy - Verificador estático de tipos para Python
 # Analiza el código usando type hints para detectar errores antes de runtime
 # Esencial para proyectos grandes con arquitectura clean
-mypy>=1.11.0
+mypy>=1.11.0,<2.0.0
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
 sqlalchemy[mypy]>=2.0.31
