@@ -17,7 +17,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105 - not a password, it's the Google OAuth endpoint URL
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 HTTP_OK = 200
 
