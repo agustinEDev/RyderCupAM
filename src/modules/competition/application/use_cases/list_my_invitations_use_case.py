@@ -55,12 +55,18 @@ class ListMyInvitationsUseCase:
             invitations_by_email = []
             if user_email:
                 invitations_by_email = await self._uow.invitations.find_by_invitee_email(
-                    user_email, status=status_vo, limit=limit + offset + _DEDUP_OVERFETCH_BUFFER, offset=0
+                    user_email,
+                    status=status_vo,
+                    limit=limit + offset + _DEDUP_OVERFETCH_BUFFER,
+                    offset=0,
                 )
 
             # Buscar por user_id (cubre invitaciones donde el user_id fue resuelto)
             invitations_by_user_id = await self._uow.invitations.find_by_invitee_user_id(
-                user_id_vo, status=status_vo, limit=limit + offset + _DEDUP_OVERFETCH_BUFFER, offset=0
+                user_id_vo,
+                status=status_vo,
+                limit=limit + offset + _DEDUP_OVERFETCH_BUFFER,
+                offset=0,
             )
 
             # Merge y deduplicar por ID
@@ -86,9 +92,7 @@ class ListMyInvitationsUseCase:
             for inv in paginated:
                 comp_id_str = str(inv.competition_id.value)
                 if comp_id_str not in competition_names:
-                    competition = await self._uow.competitions.find_by_id(
-                        inv.competition_id
-                    )
+                    competition = await self._uow.competitions.find_by_id(inv.competition_id)
                     competition_names[comp_id_str] = (
                         str(competition.name) if competition else "Unknown"
                     )
@@ -106,13 +110,9 @@ class ListMyInvitationsUseCase:
 
                 invitee_name = None
                 if inv.invitee_user_id:
-                    invitee_user = await self._user_uow.users.find_by_id(
-                        inv.invitee_user_id
-                    )
+                    invitee_user = await self._user_uow.users.find_by_id(inv.invitee_user_id)
                     if invitee_user:
-                        invitee_name = (
-                            f"{invitee_user.first_name} {invitee_user.last_name}"
-                        )
+                        invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
 
                 invitation_dtos.append(
                     InvitationResponseDTO(
@@ -125,9 +125,7 @@ class ListMyInvitationsUseCase:
                         inviter_name=inviter_name,
                         invitee_email=inv.invitee_email,
                         invitee_user_id=(
-                            inv.invitee_user_id.value
-                            if inv.invitee_user_id
-                            else None
+                            inv.invitee_user_id.value if inv.invitee_user_id else None
                         ),
                         invitee_name=invitee_name,
                         status=inv.status.value,

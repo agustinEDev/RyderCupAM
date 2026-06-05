@@ -44,7 +44,9 @@ class MatchPlayer:
     playing_handicap: int
     tee_category: TeeCategory
     tee_gender: Gender | None  # Gender del tee usado (MALE/FEMALE/None)
-    strokes_received: tuple[int, ...]  # Hoyos donde recibe golpe (puede tener duplicados si PH > 18)
+    strokes_received: tuple[
+        int, ...
+    ]  # Hoyos donde recibe golpe (puede tener duplicados si PH > 18)
 
     def __post_init__(self):
         """Validaciones después de inicialización."""

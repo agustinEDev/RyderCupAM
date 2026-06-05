@@ -584,8 +584,7 @@ The Ryder Cup Friends Team
         register_link = f"{settings.FRONTEND_URL}/register"
 
         subject = (
-            f"Te han invitado a {safe_competition} "
-            f"| You've been invited to {safe_competition}"
+            f"Te han invitado a {safe_competition} | You've been invited to {safe_competition}"
         )
 
         # Texto para no registrados
@@ -594,12 +593,8 @@ The Ryder Cup Friends Team
         unregistered_html_es = ""
         unregistered_html_en = ""
         if not safe_invitee:
-            unregistered_es = (
-                f"\nAun no tienes cuenta? Registrate aqui: {register_link}\n"
-            )
-            unregistered_en = (
-                f"\nDon't have an account yet? Register here: {register_link}\n"
-            )
+            unregistered_es = f"\nAun no tienes cuenta? Registrate aqui: {register_link}\n"
+            unregistered_en = f"\nDon't have an account yet? Register here: {register_link}\n"
             unregistered_html_es = f"""
             <p>Si aun no tienes cuenta, registrate primero:</p>
             <center>

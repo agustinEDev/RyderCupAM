@@ -73,9 +73,7 @@ class ReopenEnrollmentsUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede reabrir inscripciones"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede reabrir inscripciones")
 
             # 3. Reabrir inscripciones (la entidad valida la transición)
             competition.reopen_enrollments()

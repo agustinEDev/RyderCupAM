@@ -200,9 +200,7 @@ class TestGetCurrentUserHasPassword:
         assert result is not None
         assert result.has_password is False
 
-    async def test_has_password_true_for_linked_user(
-        self, use_case, user_with_google_linked
-    ):
+    async def test_has_password_true_for_linked_user(self, use_case, user_with_google_linked):
         """
         Test: has_password es True para usuario con password y Google vinculado.
         Given: Usuario con password que también tiene Google vinculado

@@ -71,10 +71,8 @@ class GoogleLoginUseCase:
         """
         async with self._uow:
             # Buscar OAuth account existente
-            oauth_account = (
-                await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
-                    OAuthProvider.GOOGLE, google_info.google_user_id
-                )
+            oauth_account = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_info.google_user_id
             )
 
             if oauth_account:
@@ -92,9 +90,7 @@ class GoogleLoginUseCase:
 
             return await self._auto_register_new_user(google_info), True
 
-    async def _auto_link_existing_user(
-        self, user: User, google_info: GoogleUserInfo
-    ) -> User:
+    async def _auto_link_existing_user(self, user: User, google_info: GoogleUserInfo) -> User:
         """
         Auto-link Google account to existing user found by email.
         Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
@@ -181,10 +177,12 @@ class GoogleLoginUseCase:
         # 3. Check lockout
         if user.is_locked():
             security_logger.log_login_attempt(
-                user_id=str(user.id.value), email=google_info.email,
+                user_id=str(user.id.value),
+                email=google_info.email,
                 success=False,
                 failure_reason=f"Account locked until {user.locked_until.isoformat()}",
-                ip_address=ip_address, user_agent=user_agent,
+                ip_address=ip_address,
+                user_agent=user_agent,
             )
             raise AccountLockedException(
                 locked_until=user.locked_until,
@@ -194,12 +192,16 @@ class GoogleLoginUseCase:
         # 4. Login flow
         user.reset_failed_attempts()
         user.record_login(
-            logged_in_at=datetime.now(), ip_address=ip_address,
-            user_agent=user_agent, login_method="google",
+            logged_in_at=datetime.now(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            login_method="google",
         )
 
         access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
-        refresh_token_jwt = self._token_service.create_refresh_token(data={"sub": str(user.id.value)})
+        refresh_token_jwt = self._token_service.create_refresh_token(
+            data={"sub": str(user.id.value)}
+        )
 
         device_id, device_id_str, should_set_device_cookie = await self._register_device(
             request, str(user.id.value)
@@ -214,9 +216,12 @@ class GoogleLoginUseCase:
             await self._uow.refresh_tokens.save(refresh_token_entity)
 
         security_logger.log_login_attempt(
-            user_id=str(user.id.value), email=google_info.email,
-            success=True, failure_reason=None,
-            ip_address=ip_address, user_agent=user_agent,
+            user_id=str(user.id.value),
+            email=google_info.email,
+            success=True,
+            failure_reason=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
 
         return GoogleLoginResponseDTO(

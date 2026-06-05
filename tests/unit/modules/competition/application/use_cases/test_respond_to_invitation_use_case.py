@@ -52,7 +52,9 @@ class TestRespondToInvitationUseCase:
     def user_uow(self):
         return UserInMemoryUoW()
 
-    async def _create_user(self, user_uow, email="user@test.com", first_name="Test", last_name="User"):
+    async def _create_user(
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+    ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
@@ -83,7 +85,9 @@ class TestRespondToInvitationUseCase:
 
         return created
 
-    async def _create_pending_invitation(self, comp_uow, competition_id, inviter_id, invitee_user_id, invitee_email):
+    async def _create_pending_invitation(
+        self, comp_uow, competition_id, inviter_id, invitee_user_id, invitee_email
+    ):
         """Helper: crea una invitacion PENDING en el repo."""
         invitation = Invitation.create(
             id=InvitationId.generate(),
@@ -99,8 +103,12 @@ class TestRespondToInvitationUseCase:
 
     async def test_accept_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: aceptar invitacion crea enrollment."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
-        invitee = await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         invitation = await self._create_pending_invitation(

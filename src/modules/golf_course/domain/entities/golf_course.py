@@ -376,8 +376,13 @@ class GolfCourse:
 
         # Admin o PENDING_APPROVAL → actualización in-place
         if is_admin or self._approval_status == ApprovalStatus.PENDING_APPROVAL:
-            self.update(name=name, country_code=country_code, course_type=course_type,
-                        tees=tees, holes=holes)
+            self.update(
+                name=name,
+                country_code=country_code,
+                course_type=course_type,
+                tees=tees,
+                holes=holes,
+            )
             return None
 
         # Creator + APPROVED → crear clone como update proposal

@@ -12,7 +12,9 @@ from src.modules.user.domain.value_objects.user_id import UserId
 pytestmark = pytest.mark.asyncio
 
 
-def _make_hole_score(match_id=None, hole_number=1, player_user_id=None, team="A", strokes_received=0):
+def _make_hole_score(
+    match_id=None, hole_number=1, player_user_id=None, team="A", strokes_received=0
+):
     """Helper para crear HoleScores."""
     return HoleScore.create(
         match_id=match_id or MatchId.generate(),
@@ -92,9 +94,15 @@ class TestInMemoryHoleScoreRepositoryFind:
         match_id = MatchId.generate()
         player = UserId.generate()
         for h in range(1, 19):
-            await repo.add(_make_hole_score(match_id=match_id, hole_number=h, player_user_id=player))
+            await repo.add(
+                _make_hole_score(match_id=match_id, hole_number=h, player_user_id=player)
+            )
         # Add another player's score
-        await repo.add(_make_hole_score(match_id=match_id, hole_number=1, player_user_id=UserId.generate(), team="B"))
+        await repo.add(
+            _make_hole_score(
+                match_id=match_id, hole_number=1, player_user_id=UserId.generate(), team="B"
+            )
+        )
 
         found = await repo.find_by_match_and_player(match_id, player)
         assert len(found) == 18

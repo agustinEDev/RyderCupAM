@@ -103,22 +103,37 @@ class ReassignMatchPlayersUseCase:
                 UserId(uid)
                 for uid in list(request.team_a_player_ids) + list(request.team_b_player_ids)
             ]
-            tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map = (
-                await self._build_handicap_data(round_entity, is_scratch, all_player_ids)
-            )
+            (
+                tee_ratings,
+                holes_by_stroke_index,
+                user_handicap_map,
+                user_gender_map,
+            ) = await self._build_handicap_data(round_entity, is_scratch, all_player_ids)
 
             # 7. Construir nuevos MatchPlayers
             team_a_players = [
                 self._build_match_player(
-                    uid, enrollment_map, tee_ratings, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    allowance,
+                    is_scratch,
+                    user_handicap_map,
+                    holes_by_stroke_index,
+                    user_gender_map,
                 )
                 for uid in request.team_a_player_ids
             ]
             team_b_players = [
                 self._build_match_player(
-                    uid, enrollment_map, tee_ratings, allowance,
-                    is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    allowance,
+                    is_scratch,
+                    user_handicap_map,
+                    holes_by_stroke_index,
+                    user_gender_map,
                 )
                 for uid in request.team_b_player_ids
             ]
@@ -181,19 +196,22 @@ class ReassignMatchPlayersUseCase:
         return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
 
     def _build_match_player(
-        self, uid_value, enrollment_map, tee_ratings, allowance,
-        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
+        self,
+        uid_value,
+        enrollment_map,
+        tee_ratings,
+        allowance,
+        is_scratch,
+        user_handicap_map,
+        holes_by_stroke_index,
+        user_gender_map,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         uid = UserId(uid_value)
         enrollment = enrollment_map.get(str(uid_value))
         if not enrollment:
-            raise PlayerNotEnrolledError(
-                f"El jugador {uid_value} no tiene inscripción aprobada"
-            )
-        tee_category = (
-            enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
-        )
+            raise PlayerNotEnrolledError(f"El jugador {uid_value} no tiene inscripción aprobada")
+        tee_category = enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
         user_gender = user_gender_map.get(str(uid_value))
 
         # Auto-resolve tee: (category, user_gender) → (category, None)
@@ -283,4 +301,3 @@ class ReassignMatchPlayersUseCase:
         for uid in request.team_b_player_ids:
             if str(uid) not in team_b_set:
                 raise PlayerNotInTeamError(f"El jugador {uid} no pertenece al equipo B")
-

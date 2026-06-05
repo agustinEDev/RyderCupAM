@@ -101,6 +101,4 @@ class GoogleOAuthService(IGoogleOAuthService):
             raise
         except (httpx.RequestError, httpx.TimeoutException) as exc:
             logger.warning(f"Google OAuth network error: {exc}")
-            raise ValueError(
-                f"Failed to communicate with Google OAuth service: {exc}"
-            ) from exc
+            raise ValueError(f"Failed to communicate with Google OAuth service: {exc}") from exc

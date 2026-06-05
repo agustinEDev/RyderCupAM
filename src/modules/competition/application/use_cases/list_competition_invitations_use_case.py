@@ -50,9 +50,7 @@ class ListCompetitionInvitationsUseCase:
             # 1. Buscar competition
             competition = await self._uow.competitions.find_by_id(competition_id_vo)
             if not competition:
-                raise CompetitionNotFoundError(
-                    f"Competition not found: {competition_id}"
-                )
+                raise CompetitionNotFoundError(f"Competition not found: {competition_id}")
 
             # 2. Verificar creator/admin
             if not is_admin and not competition.is_creator(creator_id):
@@ -104,13 +102,9 @@ class ListCompetitionInvitationsUseCase:
 
                 invitee_name = None
                 if inv.invitee_user_id:
-                    invitee_user = await self._user_uow.users.find_by_id(
-                        inv.invitee_user_id
-                    )
+                    invitee_user = await self._user_uow.users.find_by_id(inv.invitee_user_id)
                     if invitee_user:
-                        invitee_name = (
-                            f"{invitee_user.first_name} {invitee_user.last_name}"
-                        )
+                        invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
 
                 invitation_dtos.append(
                     InvitationResponseDTO(

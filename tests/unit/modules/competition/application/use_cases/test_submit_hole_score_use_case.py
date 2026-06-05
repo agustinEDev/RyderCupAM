@@ -38,7 +38,14 @@ def _make_player(user_id=None, handicap=10, strokes=()):
     )
 
 
-def _setup_match(uow, team_a, team_b, status=MatchStatus.IN_PROGRESS, match_format=MatchFormat.SINGLES, marker_assignments=None):
+def _setup_match(
+    uow,
+    team_a,
+    team_b,
+    status=MatchStatus.IN_PROGRESS,
+    match_format=MatchFormat.SINGLES,
+    marker_assignments=None,
+):
     """Creates a match and round in the UoW."""
     round_id = RoundId.generate()
 
@@ -90,7 +97,9 @@ class TestSubmitHoleScoreValidation:
     @pytest.mark.asyncio
     async def test_match_not_found(self, uow, user_repo, scoring_service):
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
-        body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(UserId.generate()), marked_score=4)
+        body = SubmitHoleScoreBodyDTO(
+            own_score=5, marked_player_id=str(UserId.generate()), marked_score=4
+        )
         with pytest.raises(MatchNotFoundError):
             await uc.execute(str(UserId.generate()), 1, body, UserId.generate())
 
@@ -117,20 +126,30 @@ class TestSubmitHoleScoreValidation:
             await uc.execute(str(match.id), 1, body, UserId.generate())
 
     @pytest.mark.asyncio
-    async def test_scorecard_submitted_skips_own_score_allows_marker(self, uow, user_repo, scoring_service):
+    async def test_scorecard_submitted_skips_own_score_allows_marker(
+        self, uow, user_repo, scoring_service
+    ):
         """Tras entregar tarjeta, own_score se ignora silenciosamente y marker_score se procesa."""
         a, b = _make_player(), _make_player()
         assignments = [
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+            MarkerAssignment(
+                scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id
+            ),
         ]
         match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
         # Pre-create hole scores con own_score existente
-        hs_a = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
-        hs_b = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0)
+        hs_a = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0
+        )
+        hs_b = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0
+        )
         hs_a.set_own_score(4)
         await uow.hole_scores.add(hs_a)
         await uow.hole_scores.add(hs_b)
@@ -160,20 +179,30 @@ class TestSubmitHoleScoreValidation:
         assert updated_b.marker_score == 4
 
     @pytest.mark.asyncio
-    async def test_marked_player_scorecard_submitted_skips_marker_allows_own(self, uow, user_repo, scoring_service):
+    async def test_marked_player_scorecard_submitted_skips_marker_allows_own(
+        self, uow, user_repo, scoring_service
+    ):
         """Si el jugador que marcas ya entregó tarjeta, marker_score se ignora y own_score se procesa."""
         a, b = _make_player(), _make_player()
         assignments = [
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+            MarkerAssignment(
+                scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id
+            ),
         ]
         match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
         # Pre-create hole scores con marker_score existente en B
-        hs_a = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
-        hs_b = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0)
+        hs_a = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0
+        )
+        hs_b = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0
+        )
         hs_b.set_marker_score(3)
         await uow.hole_scores.add(hs_a)
         await uow.hole_scores.add(hs_b)
@@ -219,16 +248,24 @@ class TestSubmitHoleScoreHappyPath:
     async def test_updates_own_and_marker_scores(self, uow, user_repo, scoring_service):
         a, b = _make_player(), _make_player()
         assignments = [
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+            MarkerAssignment(
+                scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id
+            ),
         ]
         match, mock_round = _setup_match(uow, [a], [b], marker_assignments=assignments)
         await uow.matches.add(match)
         uow._rounds._rounds[mock_round.id] = mock_round
 
         # Pre-create hole scores
-        hs_a = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
-        hs_b = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0)
+        hs_a = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0
+        )
+        hs_b = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=b.user_id, team="B", strokes_received=0
+        )
         await uow.hole_scores.add(hs_a)
         await uow.hole_scores.add(hs_b)
 

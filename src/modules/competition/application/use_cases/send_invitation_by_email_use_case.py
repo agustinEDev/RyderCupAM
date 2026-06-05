@@ -58,9 +58,7 @@ class SendInvitationByEmailUseCase:
         self._user_uow = user_uow
         self._email_service = email_service
 
-    async def execute(
-        self, request: SendInvitationByEmailRequestDTO
-    ) -> InvitationResponseDTO:
+    async def execute(self, request: SendInvitationByEmailRequestDTO) -> InvitationResponseDTO:
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             inviter_id = UserId(request.inviter_id)
@@ -68,9 +66,7 @@ class SendInvitationByEmailUseCase:
             # 1. Buscar competition
             competition = await self._uow.competitions.find_by_id(competition_id)
             if not competition:
-                raise CompetitionNotFoundError(
-                    f"Competition not found: {request.competition_id}"
-                )
+                raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 
             # 2. Verificar creator/admin
             if not competition.is_creator(inviter_id):
@@ -106,16 +102,12 @@ class SendInvitationByEmailUseCase:
 
                     # 5a. No self-invitation
                     if inviter_id == invitee_user_id:
-                        raise SelfInvitationViolation(
-                            "Cannot invite yourself to a competition."
-                        )
+                        raise SelfInvitationViolation("Cannot invite yourself to a competition.")
 
             # 5b. Verificar no enrollment activo (ya dentro del UoW de competition)
             if invitee_user_id:
-                existing_enrollment = (
-                    await self._uow.enrollments.find_by_user_and_competition(
-                        invitee_user_id, competition_id
-                    )
+                existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
+                    invitee_user_id, competition_id
                 )
                 if existing_enrollment and existing_enrollment.is_approved():
                     raise AlreadyEnrolledInvitationViolation(
@@ -124,10 +116,8 @@ class SendInvitationByEmailUseCase:
                     )
 
             # 6. Verificar no invitation PENDING duplicada
-            existing_invitation = (
-                await self._uow.invitations.find_pending_by_email_and_competition(
-                    request.invitee_email.strip().lower(), competition_id
-                )
+            existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(
+                request.invitee_email.strip().lower(), competition_id
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
@@ -152,9 +142,7 @@ class SendInvitationByEmailUseCase:
         async with self._user_uow:
             inviter_user = await self._user_uow.users.find_by_id(inviter_id)
             inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}"
-                if inviter_user
-                else "Unknown"
+                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
             )
 
         # 10. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)

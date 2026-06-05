@@ -67,9 +67,7 @@ class ReorderGolfCoursesUseCase:
 
             # 3. Convertir UUIDs a tuplas (GolfCourseId, display_order)
             golf_course_ids = [GolfCourseId(uuid) for uuid in request.golf_course_ids]
-            new_order = [
-                (gc_id, idx + 1) for idx, gc_id in enumerate(golf_course_ids)
-            ]
+            new_order = [(gc_id, idx + 1) for idx, gc_id in enumerate(golf_course_ids)]
 
             # 4. Validar via dominio (estado DRAFT + IDs match)
             try:

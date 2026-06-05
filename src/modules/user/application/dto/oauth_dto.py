@@ -17,7 +17,9 @@ class GoogleLoginRequestDTO(BaseModel):
     )
     # Campos inyectados por la ruta (no vienen del body)
     ip_address: str | None = Field(None, description="IP del cliente (inyectada por la ruta)")
-    user_agent: str | None = Field(None, description="User-Agent del cliente (inyectado por la ruta)")
+    user_agent: str | None = Field(
+        None, description="User-Agent del cliente (inyectado por la ruta)"
+    )
     device_id_from_cookie: str | None = Field(
         None, description="Device ID desde cookie httpOnly (inyectado por la ruta)"
     )
