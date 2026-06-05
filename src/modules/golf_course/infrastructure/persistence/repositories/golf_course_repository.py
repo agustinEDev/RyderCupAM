@@ -50,8 +50,12 @@ class GolfCourseRepository(IGolfCourseRepository):
             # Raw SQL DELETE desincroniza la session identity map, causando que
             # los hijos se pierdan en updates de solo atributos escalares (ej: approve).
             insp = inspect(golf_course)
-            holes_changed = insp.attrs._holes.history.has_changes()
-            tees_changed = insp.attrs._tees.history.has_changes()
+            if insp is None:
+                holes_changed = False
+                tees_changed = False
+            else:
+                holes_changed = insp.attrs._holes.history.has_changes()
+                tees_changed = insp.attrs._tees.history.has_changes()
 
             if holes_changed:
                 await self._session.execute(

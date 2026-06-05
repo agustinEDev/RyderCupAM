@@ -31,7 +31,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Busca múltiples usuarios por sus IDs en una sola consulta."""
         if not user_ids:
             return []
-        statement = select(User).where(User.id.in_([str(uid) for uid in user_ids]))
+        statement = select(User).where(User.id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
