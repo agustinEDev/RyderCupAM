@@ -39,17 +39,17 @@ class TestSubmitHoleScoreBodyDTO:
         with pytest.raises(ValidationError):
             SubmitHoleScoreBodyDTO(own_score=0, marked_player_id="abc", marked_score=5)
 
-    def test_score_above_9_raises(self):
+    def test_score_above_max_raises(self):
         with pytest.raises(ValidationError):
-            SubmitHoleScoreBodyDTO(own_score=10, marked_player_id="abc", marked_score=5)
+            SubmitHoleScoreBodyDTO(own_score=16, marked_player_id="abc", marked_score=5)
 
     def test_min_score(self):
         dto = SubmitHoleScoreBodyDTO(own_score=1, marked_player_id="abc", marked_score=1)
         assert dto.own_score == 1
 
     def test_max_score(self):
-        dto = SubmitHoleScoreBodyDTO(own_score=9, marked_player_id="abc", marked_score=9)
-        assert dto.own_score == 9
+        dto = SubmitHoleScoreBodyDTO(own_score=15, marked_player_id="abc", marked_score=15)
+        assert dto.own_score == 15
 
 
 class TestScoringViewResponseDTO:

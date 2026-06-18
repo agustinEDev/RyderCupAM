@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+**Scoring — Match Play Calculation (SINGLES)**
+
+- **SINGLES differential handicap**: `GenerateMatchesUseCase._build_singles_match_players()` now applies the WHS differential approach for Match Play, identical to FOURBALL and FOURSOMES. Only the higher-PH player receives strokes (the difference between both PHs), allocated on the hardest holes (lowest SI first). Previously both players received their individual PHs, causing strokes to cancel out on shared holes and fall on the wrong (less important) holes.
+- Individual Playing Handicap values are preserved in `MatchPlayer.playing_handicap` for scorecard display; only `strokes_received` reflects the differential.
+
+**Leaderboard — Points showing 0 for completed matches**
+
+- `GetLeaderboardUseCase`: Added defensive fallback — when a completed match has `winner=None` (invalid stored result), the use case now recomputes the result from hole scores via `_compute_decided_result()`. Prevents 0-point totals caused by manual match completion with an empty/invalid result.
+- `UpdateMatchStatusUseCase._handle_complete()`: Now validates that `result.winner` is `"A"`, `"B"`, or `"HALVED"` before persisting. Raises `InvalidActionError` for any other value, preventing corrupt results from being stored.
+
+### Changed
+
+- `HoleScore.MAX_SCORE`: Raised from 9 to 15 to support scores above 9 (accessible via the "Other..." option in the frontend number pad).
+- `SubmitHoleScoreBodyDTO`: Updated `own_score` and `marked_score` field validation from `le=9` to `le=15`.
+
 ### Added
 
 **Backward Competition State Transitions**

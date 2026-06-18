@@ -128,10 +128,17 @@ class TestHoleScoreSetOwnScore:
         with pytest.raises(ValueError, match="Score must be between"):
             hs.set_own_score(0)
 
-    def test_set_own_score_10_raises(self, match_id, player_id):
+    def test_set_own_score_above_max_raises(self, match_id, player_id):
         hs = _create_hole_score(match_id, player_id)
         with pytest.raises(ValueError, match="Score must be between"):
-            hs.set_own_score(10)
+            hs.set_own_score(16)
+
+    def test_set_own_score_max_accepted(self, match_id, player_id):
+        """Boundary: score of 15 (MAX_SCORE) must be accepted."""
+        hs = _create_hole_score(match_id, player_id)
+        hs.set_own_score(15)
+        assert hs.own_score == 15
+        assert hs.own_submitted is True
 
     def test_set_own_score_overwrites(self, match_id, player_id):
         """Puede sobrescribir score existente."""
@@ -161,10 +168,17 @@ class TestHoleScoreSetMarkerScore:
         with pytest.raises(ValueError, match="Score must be between"):
             hs.set_marker_score(0)
 
-    def test_set_marker_score_10_raises(self, match_id, player_id):
+    def test_set_marker_score_above_max_raises(self, match_id, player_id):
         hs = _create_hole_score(match_id, player_id)
         with pytest.raises(ValueError, match="Score must be between"):
-            hs.set_marker_score(10)
+            hs.set_marker_score(16)
+
+    def test_set_marker_score_max_accepted(self, match_id, player_id):
+        """Boundary: marker score of 15 (MAX_SCORE) must be accepted."""
+        hs = _create_hole_score(match_id, player_id)
+        hs.set_marker_score(15)
+        assert hs.marker_score == 15
+        assert hs.marker_submitted is True
 
 
 class TestHoleScoreValidation:
