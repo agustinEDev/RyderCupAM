@@ -15,7 +15,7 @@ from src.modules.competition.domain.value_objects.validation_status import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 MIN_SCORE = 1
-MAX_SCORE = 9
+MAX_SCORE = 15
 MIN_HOLE = 1
 MAX_HOLE = 18
 

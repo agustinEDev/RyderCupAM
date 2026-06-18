@@ -293,21 +293,14 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index, user_gender_map,
                 )
             else:
-                # SINGLES: allowance individual por jugador
-                team_a_match_players = [
-                    self._build_match_player(
-                        uid, enrollment_map, tee_ratings, calculator, allowance,
-                        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
-                    )
-                    for uid in a_players_ids
-                ]
-                team_b_match_players = [
-                    self._build_match_player(
-                        uid, enrollment_map, tee_ratings, calculator, allowance,
-                        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
-                    )
-                    for uid in b_players_ids
-                ]
+                # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
+                a_player, b_player = self._build_singles_match_players(
+                    a_players_ids[0], b_players_ids[0], enrollment_map, tee_ratings,
+                    calculator, allowance, is_scratch, user_handicap_map,
+                    holes_by_stroke_index, user_gender_map,
+                )
+                team_a_match_players = [a_player]
+                team_b_match_players = [b_player]
 
             match = Match.create(
                 round_id=round_entity.id,
@@ -367,21 +360,14 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index, user_gender_map,
                 )
             else:
-                # SINGLES: allowance individual por jugador
-                team_a_match_players = [
-                    self._build_match_player(
-                        uid, enrollment_map, tee_ratings, calculator, allowance,
-                        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
-                    )
-                    for uid in a_ids
-                ]
-                team_b_match_players = [
-                    self._build_match_player(
-                        uid, enrollment_map, tee_ratings, calculator, allowance,
-                        is_scratch, user_handicap_map, holes_by_stroke_index, user_gender_map,
-                    )
-                    for uid in b_ids
-                ]
+                # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
+                a_player, b_player = self._build_singles_match_players(
+                    a_ids[0], b_ids[0], enrollment_map, tee_ratings,
+                    calculator, allowance, is_scratch, user_handicap_map,
+                    holes_by_stroke_index, user_gender_map,
+                )
+                team_a_match_players = [a_player]
+                team_b_match_players = [b_player]
 
             match = Match.create(
                 round_id=round_entity.id,
@@ -565,6 +551,85 @@ class GenerateMatchesUseCase:
         team_a_players = [build_player(uid) for uid in team_a_ids]
         team_b_players = [build_player(uid) for uid in team_b_ids]
         return team_a_players, team_b_players
+
+    def _build_singles_match_players(
+        self,
+        a_player_id,
+        b_player_id,
+        enrollment_map,
+        tee_ratings,
+        calculator,
+        allowance,
+        is_scratch,
+        user_handicap_map,
+        holes_by_stroke_index,
+        user_gender_map,
+    ) -> tuple["MatchPlayer", "MatchPlayer"]:
+        """
+        Construye MatchPlayers para SINGLES usando el método diferencial WHS.
+
+        WHS Match Play: solo el jugador con mayor Playing Handicap recibe golpes.
+        Los golpes recibidos = (PH_alto - PH_bajo) en los hoyos más difíciles (menor SI).
+        El jugador con menor PH juega off scratch (0 golpes recibidos).
+        El PH individual de cada jugador se conserva en playing_handicap para display.
+
+        Returns:
+            (match_player_a, match_player_b)
+        """
+        tee_cat_a, tee_gen_a, tee_rating_a, hi_a = self._resolve_player_data(
+            a_player_id, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+        )
+        tee_cat_b, tee_gen_b, tee_rating_b, hi_b = self._resolve_player_data(
+            b_player_id, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+        )
+
+        if is_scratch:
+            return (
+                MatchPlayer.create(
+                    user_id=a_player_id, playing_handicap=0, tee_category=tee_cat_a,
+                    strokes_received=[], tee_gender=tee_gen_a,
+                ),
+                MatchPlayer.create(
+                    user_id=b_player_id, playing_handicap=0, tee_category=tee_cat_b,
+                    strokes_received=[], tee_gender=tee_gen_b,
+                ),
+            )
+
+        if not tee_rating_a:
+            raise TeeCategoryNotFoundError(
+                f"No se encontró tee rating para categoría '{tee_cat_a.value}' "
+                f"(gender: {tee_gen_a}) en el campo de golf"
+            )
+        if not tee_rating_b:
+            raise TeeCategoryNotFoundError(
+                f"No se encontró tee rating para categoría '{tee_cat_b.value}' "
+                f"(gender: {tee_gen_b}) en el campo de golf"
+            )
+
+        ph_a = calculator.calculate(hi_a, tee_rating_a, allowance)
+        ph_b = calculator.calculate(hi_b, tee_rating_b, allowance)
+
+        diff = ph_a - ph_b
+        if diff > 0:
+            strokes_a = calculator.compute_strokes_received(diff, holes_by_stroke_index)
+            strokes_b: list[int] = []
+        elif diff < 0:
+            strokes_a = []
+            strokes_b = calculator.compute_strokes_received(-diff, holes_by_stroke_index)
+        else:
+            strokes_a = []
+            strokes_b = []
+
+        return (
+            MatchPlayer.create(
+                user_id=a_player_id, playing_handicap=ph_a, tee_category=tee_cat_a,
+                strokes_received=strokes_a, tee_gender=tee_gen_a,
+            ),
+            MatchPlayer.create(
+                user_id=b_player_id, playing_handicap=ph_b, tee_category=tee_cat_b,
+                strokes_received=strokes_b, tee_gender=tee_gen_b,
+            ),
+        )
 
     def _build_foursomes_match_players(
         self,

@@ -74,8 +74,17 @@ class GetLeaderboardUseCase:
                     result_dto = None
 
                     if match.is_finished() and match.result:
+                        stored_winner = match.result.get("winner")
+                        if stored_winner in ("A", "B", "HALVED"):
+                            score_result = match.result
+                        else:
+                            # Fallback: recalculate from hole scores when winner is invalid
+                            score_result = await self._compute_decided_result(
+                                match, round_entity.match_format
+                            ) or {"winner": "HALVED", "score": "AS"}
+
                         points = self._scoring_service.calculate_ryder_cup_points(
-                            match.result, match.status.value
+                            score_result, match.status.value
                         )
                         total_a_points += points["team_a"]
                         total_b_points += points["team_b"]
