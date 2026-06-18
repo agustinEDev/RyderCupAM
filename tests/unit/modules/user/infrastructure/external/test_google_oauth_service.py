@@ -81,9 +81,7 @@ class TestGoogleOAuthService:
         assert result.picture_url == "https://lh3.googleusercontent.com/photo.jpg"
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
-    async def test_exchange_code_fails_on_token_error(
-        self, mock_client_class, service
-    ):
+    async def test_exchange_code_fails_on_token_error(self, mock_client_class, service):
         """Debe lanzar ValueError cuando el token exchange falla."""
         mock_client = AsyncMock()
         error_response = MagicMock()
@@ -98,9 +96,7 @@ class TestGoogleOAuthService:
             await service.exchange_code_for_user_info("bad-code")
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
-    async def test_exchange_code_fails_on_missing_access_token(
-        self, mock_client_class, service
-    ):
+    async def test_exchange_code_fails_on_missing_access_token(self, mock_client_class, service):
         """Debe lanzar ValueError cuando Google no retorna access_token."""
         mock_client = AsyncMock()
         token_response = MagicMock()

@@ -34,9 +34,7 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def find_by_match_and_hole(
-        self, match_id: MatchId, hole_number: int
-    ) -> list[HoleScore]:
+    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         statement = select(HoleScore).where(
             HoleScore._match_id == match_id,
             HoleScore._hole_number == hole_number,

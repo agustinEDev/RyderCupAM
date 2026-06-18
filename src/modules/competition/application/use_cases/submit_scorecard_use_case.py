@@ -59,9 +59,7 @@ class SubmitScorecardUseCase:
                 raise ScorecardAlreadySubmittedError("Ya entregaste tu tarjeta")
 
             # Validate all played holes have MATCH status
-            player_scores = await self._uow.hole_scores.find_by_match_and_player(
-                match_id, user_id
-            )
+            player_scores = await self._uow.hole_scores.find_by_match_and_player(match_id, user_id)
             unvalidated = [
                 hs
                 for hs in player_scores
@@ -137,14 +135,16 @@ class SubmitScorecardUseCase:
         hole_results = []
         for hole_num in sorted(scores_by_hole.keys()):
             hole_hs = scores_by_hole[hole_num]
-            has_validated = any(
-                hs.validation_status == ValidationStatus.MATCH for hs in hole_hs
-            )
+            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
             if not has_validated:
                 continue
 
-            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None]
-            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None]
+            team_a_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
+            ]
+            team_b_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
+            ]
 
             if team_a_nets and team_b_nets:
                 winner = self._scoring_service.calculate_hole_winner(

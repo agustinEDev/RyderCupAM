@@ -99,7 +99,11 @@ class TestInvitationStatusSemantics:
 
     def test_all_terminal_states_have_no_transitions(self):
         """Todos los estados terminales tienen 0 transiciones validas."""
-        terminal_states = [InvitationStatus.ACCEPTED, InvitationStatus.DECLINED, InvitationStatus.EXPIRED]
+        terminal_states = [
+            InvitationStatus.ACCEPTED,
+            InvitationStatus.DECLINED,
+            InvitationStatus.EXPIRED,
+        ]
         for state in terminal_states:
             for target in InvitationStatus:
                 assert not state.can_transition_to(target)

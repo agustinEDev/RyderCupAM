@@ -149,7 +149,9 @@ class TestInMemoryInvitationRepositoryFindByEmail:
         await repo.add(pending)
         await repo.add(accepted)
 
-        results = await repo.find_by_invitee_email("test@example.com", status=InvitationStatus.PENDING)
+        results = await repo.find_by_invitee_email(
+            "test@example.com", status=InvitationStatus.PENDING
+        )
         assert len(results) == 1
 
 
@@ -216,7 +218,9 @@ class TestInMemoryInvitationRepositoryFindPending:
         inv = _make_invitation(invitee_email="test@test.com", competition_id=comp_id)
         await repo.add(inv)
 
-        result = await repo.find_pending_by_email_and_competition("test@test.com", CompetitionId(uuid4()))
+        result = await repo.find_pending_by_email_and_competition(
+            "test@test.com", CompetitionId(uuid4())
+        )
         assert result is None
 
 

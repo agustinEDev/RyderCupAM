@@ -29,9 +29,7 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
     async def find_by_match(self, match_id: MatchId) -> list[HoleScore]:
         return [hs for hs in self._scores.values() if hs.match_id == match_id]
 
-    async def find_by_match_and_hole(
-        self, match_id: MatchId, hole_number: int
-    ) -> list[HoleScore]:
+    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         return [
             hs
             for hs in self._scores.values()
@@ -60,9 +58,7 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
         ]
 
     async def delete_by_match(self, match_id: MatchId) -> int:
-        to_delete = [
-            hs_id for hs_id, hs in self._scores.items() if hs.match_id == match_id
-        ]
+        to_delete = [hs_id for hs_id, hs in self._scores.items() if hs.match_id == match_id]
         for hs_id in to_delete:
             del self._scores[hs_id]
         return len(to_delete)

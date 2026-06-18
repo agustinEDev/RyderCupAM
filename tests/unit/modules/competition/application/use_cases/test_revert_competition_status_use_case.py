@@ -50,9 +50,7 @@ class TestRevertCompetitionStatusUseCase:
         """Fixture que proporciona un ID de otro usuario (no creador)."""
         return UserId(uuid4())
 
-    async def _create_in_progress_competition(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def _create_in_progress_competition(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Helper: crea una competición en estado IN_PROGRESS."""
         create_use_case = CreateCompetitionUseCase(uow)
         create_request = CreateCompetitionRequestDTO(
@@ -199,8 +197,6 @@ class TestRevertCompetitionStatusUseCase:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             events = competition.get_domain_events()
 
-            reverted_events = [
-                e for e in events if isinstance(e, CompetitionRevertedToClosedEvent)
-            ]
+            reverted_events = [e for e in events if isinstance(e, CompetitionRevertedToClosedEvent)]
             assert len(reverted_events) == 1
             assert reverted_events[0].competition_id == str(created.id)

@@ -73,9 +73,7 @@ class RevertCompetitionStatusUseCase:
 
             # 2. Verificar que el usuario sea el creador
             if not competition.is_creator(user_id):
-                raise NotCompetitionCreatorError(
-                    "Solo el creador puede revertir la competición"
-                )
+                raise NotCompetitionCreatorError("Solo el creador puede revertir la competición")
 
             # 3. Revertir la competición (la entidad valida la transición)
             competition.revert_to_closed()

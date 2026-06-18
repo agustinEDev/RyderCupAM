@@ -43,7 +43,9 @@ class TestListCompetitionInvitationsUseCase:
     def user_uow(self):
         return UserInMemoryUoW()
 
-    async def _create_user(self, user_uow, email="user@test.com", first_name="Test", last_name="User"):
+    async def _create_user(
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+    ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
@@ -74,7 +76,9 @@ class TestListCompetitionInvitationsUseCase:
 
         return created
 
-    async def _add_invitation(self, comp_uow, competition_id, inviter_id, invitee_email, invitee_user_id=None):
+    async def _add_invitation(
+        self, comp_uow, competition_id, inviter_id, invitee_email, invitee_user_id=None
+    ):
         invitation = Invitation.create(
             id=InvitationId.generate(),
             competition_id=CompetitionId(competition_id),
@@ -103,7 +107,9 @@ class TestListCompetitionInvitationsUseCase:
 
     async def test_list_invitations_as_creator(self, comp_uow, user_uow):
         """Creator puede listar invitaciones de su competicion."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         await self._add_invitation(comp_uow, created.id, creator.id, "player1@test.com")
@@ -208,7 +214,9 @@ class TestListCompetitionInvitationsUseCase:
 
     async def test_invitations_enriched_with_names(self, comp_uow, user_uow):
         """Las invitaciones incluyen inviter_name y competition_name."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="John", last_name="Doe")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="John", last_name="Doe"
+        )
         created = await self._create_active_competition(comp_uow, creator.id, name="Champions Cup")
 
         await self._add_invitation(comp_uow, created.id, creator.id, "player@test.com")

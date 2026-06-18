@@ -7,7 +7,9 @@
 # ==========================================
 
 # 1. Imagen base: Python ligera
-FROM python:3.11-slim
+# Actualizado a 3.12-slim para resolver CVE-2026-42496 (CRITICAL) y CVE-2026-42497, CVE-2026-9538 (HIGH)
+# en paquetes del OS base de la imagen debian 3.11-slim
+FROM python:3.12-slim
 
 # 2. Instalar dependencias del sistema
 # netcat-openbsd: Para verificar conexión con PostgreSQL (opcional en producción)

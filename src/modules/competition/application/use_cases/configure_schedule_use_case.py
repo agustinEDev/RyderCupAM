@@ -148,4 +148,3 @@ class ConfigureScheduleUseCase:
             rounds_created=rounds_created,
             message=f"Schedule generado con {rounds_created} rondas.",
         )
-

@@ -31,6 +31,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Fixtures helpers
 # ==========================================================================
 
+
 def _make_invitation(**overrides):
     """Helper para crear invitaciones con valores por defecto."""
     defaults = {
@@ -64,6 +65,7 @@ def _make_expired_invitation(**overrides):
 # ==========================================================================
 # Creation Tests
 # ==========================================================================
+
 
 class TestInvitationCreate:
     """Tests para el factory method create."""
@@ -153,6 +155,7 @@ class TestInvitationCreateValidation:
 # Reconstruct Tests
 # ==========================================================================
 
+
 class TestInvitationReconstruct:
     """Tests para el factory method reconstruct."""
 
@@ -200,6 +203,7 @@ class TestInvitationReconstruct:
 # Properties Tests
 # ==========================================================================
 
+
 class TestInvitationProperties:
     """Tests para las properties de lectura."""
 
@@ -226,6 +230,7 @@ class TestInvitationProperties:
 # ==========================================================================
 # Query Methods Tests
 # ==========================================================================
+
 
 class TestInvitationQueries:
     """Tests para metodos de consulta."""
@@ -286,6 +291,7 @@ class TestInvitationQueries:
 # ==========================================================================
 # Command Methods Tests
 # ==========================================================================
+
 
 class TestInvitationAccept:
     """Tests para el metodo accept()."""
@@ -433,6 +439,7 @@ class TestInvitationCheckExpiration:
 # Domain Events Tests
 # ==========================================================================
 
+
 class TestInvitationDomainEvents:
     """Tests para el manejo de domain events."""
 
@@ -453,6 +460,7 @@ class TestInvitationDomainEvents:
 # ==========================================================================
 # Special Methods Tests
 # ==========================================================================
+
 
 class TestInvitationSpecialMethods:
     """Tests para __str__, __eq__, __hash__."""

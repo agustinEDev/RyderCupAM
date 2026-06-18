@@ -5,6 +5,7 @@ Valida que el endpoint retorna correctamente los roles del usuario actual
 en una competición específica (admin, creator, player).
 """
 
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -66,8 +67,8 @@ async def test_get_my_roles_returns_is_admin_true_for_admin_user(client: AsyncCl
 
     competition_data = {
         "name": "Test Competition",
-        "start_date": "2026-06-01",
-        "end_date": "2026-06-03",
+        "start_date": (date.today() + timedelta(days=30)).isoformat(),
+        "end_date": (date.today() + timedelta(days=32)).isoformat(),
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
@@ -118,8 +119,8 @@ async def test_get_my_roles_returns_is_creator_true_for_creator(client: AsyncCli
     # Crear competición
     competition_data = {
         "name": "Creator Competition",
-        "start_date": "2026-06-01",
-        "end_date": "2026-06-03",
+        "start_date": (date.today() + timedelta(days=30)).isoformat(),
+        "end_date": (date.today() + timedelta(days=32)).isoformat(),
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
@@ -169,8 +170,8 @@ async def test_get_my_roles_returns_is_player_true_for_enrolled_user(client: Asy
 
     competition_data = {
         "name": "Player Competition",
-        "start_date": "2026-06-01",
-        "end_date": "2026-06-03",
+        "start_date": (date.today() + timedelta(days=30)).isoformat(),
+        "end_date": (date.today() + timedelta(days=32)).isoformat(),
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
@@ -249,8 +250,8 @@ async def test_get_my_roles_all_false_for_unrelated_user(client: AsyncClient):
 
     competition_data = {
         "name": "Test Competition",
-        "start_date": "2026-06-01",
-        "end_date": "2026-06-03",
+        "start_date": (date.today() + timedelta(days=30)).isoformat(),
+        "end_date": (date.today() + timedelta(days=32)).isoformat(),
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",
@@ -309,8 +310,8 @@ async def test_get_my_roles_creator_can_also_be_player(client: AsyncClient):
 
     competition_data = {
         "name": "Creator as Player",
-        "start_date": "2026-06-01",
-        "end_date": "2026-06-03",
+        "start_date": (date.today() + timedelta(days=30)).isoformat(),
+        "end_date": (date.today() + timedelta(days=32)).isoformat(),
         "main_country": "ES",
         "team_1_name": "Europe",
         "team_2_name": "USA",

@@ -239,9 +239,7 @@ class PlayingHandicapCalculator:
         for user_id, ch in player_course_handicaps:
             diff = ch - lowest_ch
             ph = int(
-                (Decimal(str(diff)) * allowance).quantize(
-                    Decimal("1"), rounding=ROUND_HALF_UP
-                )
+                (Decimal(str(diff)) * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
             )
             result[user_id] = ph
         return result
@@ -285,9 +283,7 @@ class PlayingHandicapCalculator:
 
         difference = abs(team_a_avg - team_b_avg)
         allowance = Decimal(str(allowance_percentage)) / Decimal("100")
-        strokes = int(
-            (difference * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        )
+        strokes = int((difference * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
         if team_a_avg > team_b_avg:
             return strokes, 0

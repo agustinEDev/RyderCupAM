@@ -78,9 +78,7 @@ async def oauth_only_user(uow):
 class TestUnlinkGoogleAccountUseCase:
     """Tests para desvincular cuenta Google."""
 
-    async def test_unlink_google_account_successfully(
-        self, use_case, uow, user_with_password
-    ):
+    async def test_unlink_google_account_successfully(self, use_case, uow, user_with_password):
         """Debe desvincular Google cuando el usuario tiene password."""
         response = await use_case.execute(str(user_with_password.id.value))
 
@@ -107,9 +105,7 @@ class TestUnlinkGoogleAccountUseCase:
         with pytest.raises(ValueError, match="No Google account linked"):
             await use_case.execute(str(user.id.value))
 
-    async def test_unlink_fails_when_oauth_only_user(
-        self, use_case, oauth_only_user
-    ):
+    async def test_unlink_fails_when_oauth_only_user(self, use_case, oauth_only_user):
         """Debe fallar si el usuario no tiene password (único método auth)."""
         with pytest.raises(ValueError, match="only authentication method"):
             await use_case.execute(str(oauth_only_user.id.value))
@@ -132,9 +128,7 @@ class TestUnlinkGoogleAccountUseCase:
         with pytest.raises(ValueError, match="User not found"):
             await use_case.execute(str(fake_id.value))
 
-    async def test_unlink_emits_domain_event(
-        self, use_case, user_with_password
-    ):
+    async def test_unlink_emits_domain_event(self, use_case, user_with_password):
         """Debe emitir GoogleAccountUnlinkedEvent en el usuario."""
         await use_case.execute(str(user_with_password.id.value))
 

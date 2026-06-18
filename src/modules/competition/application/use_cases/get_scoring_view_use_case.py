@@ -93,9 +93,15 @@ class GetScoringViewUseCase:
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
             standing = self._scoring_service.calculate_match_standing(hole_results_list)
-            decided_result = DecidedResultDTO(**match.decided_result) if match.decided_result else None
-            team_a_name = competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
-            team_b_name = competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
+            decided_result = (
+                DecidedResultDTO(**match.decided_result) if match.decided_result else None
+            )
+            team_a_name = (
+                competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
+            )
+            team_b_name = (
+                competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
+            )
 
             return ScoringViewResponseDTO(
                 match_id=str(match.id),
@@ -157,14 +163,21 @@ class GetScoringViewUseCase:
         for hole_num in sorted(scores_by_hole.keys()):
             hole_hs_list = scores_by_hole[hole_num]
             (
-                player_scores, team_a_nets, team_b_nets,
-                team_a_player_nets, team_b_player_nets,
+                player_scores,
+                team_a_nets,
+                team_b_nets,
+                team_a_player_nets,
+                team_b_player_nets,
             ) = self._build_hole_player_scores(hole_hs_list)
 
             hole_result = self._compute_hole_result(
-                hole_hs_list, team_a_nets, team_b_nets,
-                team_a_player_nets, team_b_player_nets,
-                match_format, hole_results_list,
+                hole_hs_list,
+                team_a_nets,
+                team_b_nets,
+                team_a_player_nets,
+                team_b_player_nets,
+                match_format,
+                hole_results_list,
             )
 
             scores_dto.append(
@@ -209,9 +222,14 @@ class GetScoringViewUseCase:
         return player_scores, team_a_nets, team_b_nets, team_a_player_nets, team_b_player_nets
 
     def _compute_hole_result(
-        self, hole_hs_list, team_a_nets, team_b_nets,
-        team_a_player_nets, team_b_player_nets,
-        match_format, hole_results_list,
+        self,
+        hole_hs_list,
+        team_a_nets,
+        team_b_nets,
+        team_a_player_nets,
+        team_b_player_nets,
+        match_format,
+        hole_results_list,
     ):
         """Calcula el resultado de un hoyo si hay scores validados."""
         has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs_list)

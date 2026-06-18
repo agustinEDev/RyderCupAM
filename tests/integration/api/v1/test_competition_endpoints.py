@@ -538,9 +538,7 @@ class TestCompetitionStateTransitions:
             cookies=user["cookies"],
         )
         assert r2.status_code == 200
-        r3 = await client.post(
-            f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
-        )
+        r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
         assert r3.status_code == 200
 
         # Revertir a CLOSED
@@ -608,9 +606,7 @@ class TestCompetitionStateTransitions:
         comp = await create_competition(client, user["cookies"])
 
         # Activar competición — no se puede reabrir desde ACTIVE
-        await client.post(
-            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
-        )
+        await client.post(f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/reopen-enrollments",
