@@ -84,8 +84,12 @@ class TestMarkerAssignmentEquality:
         scorer = UserId.generate()
         marks = UserId.generate()
         marked_by = UserId.generate()
-        a1 = MarkerAssignment(scorer_user_id=scorer, marks_user_id=marks, marked_by_user_id=marked_by)
-        a2 = MarkerAssignment(scorer_user_id=scorer, marks_user_id=marks, marked_by_user_id=marked_by)
+        a1 = MarkerAssignment(
+            scorer_user_id=scorer, marks_user_id=marks, marked_by_user_id=marked_by
+        )
+        a2 = MarkerAssignment(
+            scorer_user_id=scorer, marks_user_id=marks, marked_by_user_id=marked_by
+        )
         assert a1 == a2
 
     def test_different_assignments(self):

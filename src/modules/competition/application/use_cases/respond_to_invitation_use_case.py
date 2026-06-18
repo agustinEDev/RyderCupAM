@@ -37,9 +37,7 @@ class RespondToInvitationUseCase:
         self._uow = uow
         self._user_uow = user_uow
 
-    async def execute(
-        self, request: RespondInvitationRequestDTO
-    ) -> RespondInvitationResponseDTO:
+    async def execute(self, request: RespondInvitationRequestDTO) -> RespondInvitationResponseDTO:
         invitation_id = InvitationId(request.invitation_id)
         current_user_id = UserId(request.user_id)
         action = request.action.upper()
@@ -51,9 +49,7 @@ class RespondToInvitationUseCase:
         async with self._user_uow:
             current_user = await self._user_uow.users.find_by_id(current_user_id)
             if not current_user:
-                raise NotInviteeError(
-                    "Authenticated user not found. Cannot respond to invitation."
-                )
+                raise NotInviteeError("Authenticated user not found. Cannot respond to invitation.")
             current_user_email = str(current_user.email)
 
         # Fase 1: Verificar expiracion y persistir si cambio
@@ -61,9 +57,7 @@ class RespondToInvitationUseCase:
         async with self._uow:
             invitation = await self._uow.invitations.find_by_id(invitation_id)
             if not invitation:
-                raise InvitationNotFoundError(
-                    f"Invitation not found: {request.invitation_id}"
-                )
+                raise InvitationNotFoundError(f"Invitation not found: {request.invitation_id}")
 
             invitation.check_expiration()
 
@@ -87,9 +81,7 @@ class RespondToInvitationUseCase:
             # Re-fetch para tener la entidad en la sesion actual
             invitation = await self._uow.invitations.find_by_id(invitation_id)
             if not invitation or not invitation.is_pending():
-                raise InvalidInvitationStatusViolation(
-                    "Invitation is no longer pending."
-                )
+                raise InvalidInvitationStatusViolation("Invitation is no longer pending.")
 
             # Verificar current_user es invitee
             is_invitee = invitation.is_for_user(current_user_id) or (
@@ -107,17 +99,13 @@ class RespondToInvitationUseCase:
                 await self._handle_decline(invitation)
 
         # Construir respuesta enriquecida
-        return await self._build_response(
-            invitation, enrollment_id, competition_name
-        )
+        return await self._build_response(invitation, enrollment_id, competition_name)
 
     async def _handle_accept(self, invitation, current_user_id: UserId):
         """Procesa la aceptacion de una invitacion. Retorna (enrollment_id, competition_name)."""
         competition = await self._uow.competitions.find_by_id(invitation.competition_id)
         if not competition:
-            raise CompetitionNotFoundError(
-                f"Competition not found: {invitation.competition_id}"
-            )
+            raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 
         CompetitionPolicy.can_accept_invitation(competition.status)
 
@@ -161,25 +149,19 @@ class RespondToInvitationUseCase:
         async with self._user_uow:
             inviter_user = await self._user_uow.users.find_by_id(invitation.inviter_id)
             inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}"
-                if inviter_user
-                else "Unknown"
+                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
             )
 
             invitee_name = None
             if invitation.invitee_user_id:
-                invitee_user = await self._user_uow.users.find_by_id(
-                    invitation.invitee_user_id
-                )
+                invitee_user = await self._user_uow.users.find_by_id(invitation.invitee_user_id)
                 if invitee_user:
                     invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
 
         # Solo buscar competition si no fue pasado (path DECLINE)
         if not competition_name:
             async with self._uow:
-                competition = await self._uow.competitions.find_by_id(
-                    invitation.competition_id
-                )
+                competition = await self._uow.competitions.find_by_id(invitation.competition_id)
                 competition_name = str(competition.name) if competition else "Unknown"
 
         return RespondInvitationResponseDTO(

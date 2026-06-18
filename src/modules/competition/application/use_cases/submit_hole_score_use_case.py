@@ -80,9 +80,13 @@ class SubmitHoleScoreUseCase:
             match_format = round_entity.match_format
 
             if not own_score_locked:
-                await self._update_own_scores(match, match_id, hole_number, body, user_id, match_format)
+                await self._update_own_scores(
+                    match, match_id, hole_number, body, user_id, match_format
+                )
             if not marker_score_locked:
-                await self._update_marker_scores(match, match_id, hole_number, body, marked_player_uid, match_format)
+                await self._update_marker_scores(
+                    match, match_id, hole_number, body, marked_player_uid, match_format
+                )
             await self._check_decided(match, match_id, match_format)
 
         # Return full scoring view
@@ -90,7 +94,9 @@ class SubmitHoleScoreUseCase:
             GetScoringViewUseCase,
         )
 
-        view_uc = GetScoringViewUseCase(self._uow, self._user_repo, self._scoring_service, self._gc_repo)
+        view_uc = GetScoringViewUseCase(
+            self._uow, self._user_repo, self._scoring_service, self._gc_repo
+        )
         return await view_uc.execute(match_id_str)
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
@@ -105,7 +111,9 @@ class SubmitHoleScoreUseCase:
                 hs.recalculate_validation()
                 await self._uow.hole_scores.update(hs)
 
-    async def _update_marker_scores(self, match, match_id, hole_number, body, marked_player_id, match_format):
+    async def _update_marker_scores(
+        self, match, match_id, hole_number, body, marked_player_id, match_format
+    ):
         """Actualiza marker_score para los jugadores marcados afectados."""
         affected_marked_ids = self._scoring_service.get_affected_marked_player_ids(
             match.team_a_players, match.team_b_players, marked_player_id, match_format
@@ -140,8 +148,12 @@ class SubmitHoleScoreUseCase:
             if not has_validated:
                 continue
 
-            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None]
-            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None]
+            team_a_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
+            ]
+            team_b_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
+            ]
 
             if team_a_nets and team_b_nets:
                 winner = self._scoring_service.calculate_hole_winner(

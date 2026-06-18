@@ -93,7 +93,9 @@ class HoleScore:
             ValueError: Si hole_number, team o strokes_received son invalidos
         """
         if not MIN_HOLE <= hole_number <= MAX_HOLE:
-            raise ValueError(f"hole_number must be between {MIN_HOLE} and {MAX_HOLE}, got {hole_number}")
+            raise ValueError(
+                f"hole_number must be between {MIN_HOLE} and {MAX_HOLE}, got {hole_number}"
+            )
 
         if team not in ("A", "B"):
             raise ValueError(f"team must be 'A' or 'B', got '{team}'")

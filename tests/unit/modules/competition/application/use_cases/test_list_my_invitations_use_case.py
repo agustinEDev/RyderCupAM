@@ -38,7 +38,9 @@ class TestListMyInvitationsUseCase:
     def user_uow(self):
         return UserInMemoryUoW()
 
-    async def _create_user(self, user_uow, email="user@test.com", first_name="Test", last_name="User"):
+    async def _create_user(
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+    ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
@@ -69,7 +71,9 @@ class TestListMyInvitationsUseCase:
 
         return created
 
-    async def _add_invitation(self, comp_uow, competition_id, inviter_id, invitee_email, invitee_user_id=None):
+    async def _add_invitation(
+        self, comp_uow, competition_id, inviter_id, invitee_email, invitee_user_id=None
+    ):
         invitation = Invitation.create(
             id=InvitationId.generate(),
             competition_id=CompetitionId(competition_id),
@@ -96,13 +100,15 @@ class TestListMyInvitationsUseCase:
 
     async def test_list_invitations_by_email(self, comp_uow, user_uow):
         """Lista invitaciones encontradas por email del invitee."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
-        invitee = await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
-        await self._add_invitation(
-            comp_uow, created.id, creator.id, "invitee@test.com", invitee.id
-        )
+        await self._add_invitation(comp_uow, created.id, creator.id, "invitee@test.com", invitee.id)
 
         uc = ListMyInvitationsUseCase(comp_uow, user_uow)
         result = await uc.execute(user_id=str(invitee.id.value))
@@ -133,9 +139,7 @@ class TestListMyInvitationsUseCase:
         invitee = await self._create_user(user_uow, email="invitee@test.com")
         created = await self._create_active_competition(comp_uow, creator.id)
 
-        await self._add_invitation(
-            comp_uow, created.id, creator.id, "invitee@test.com", invitee.id
-        )
+        await self._add_invitation(comp_uow, created.id, creator.id, "invitee@test.com", invitee.id)
 
         uc = ListMyInvitationsUseCase(comp_uow, user_uow)
         # Filtrar por PENDING
@@ -153,7 +157,9 @@ class TestListMyInvitationsUseCase:
 
         for i in range(5):
             comp = await self._create_active_competition(comp_uow, creator.id, name=f"Cup {i}")
-            await self._add_invitation(comp_uow, comp.id, creator.id, "invitee@test.com", invitee.id)
+            await self._add_invitation(
+                comp_uow, comp.id, creator.id, "invitee@test.com", invitee.id
+            )
 
         uc = ListMyInvitationsUseCase(comp_uow, user_uow)
         # Page 1, limit 2
@@ -170,9 +176,7 @@ class TestListMyInvitationsUseCase:
         created = await self._create_active_competition(comp_uow, creator.id)
 
         # Invitacion con email Y user_id (encontrada por ambas busquedas)
-        await self._add_invitation(
-            comp_uow, created.id, creator.id, "invitee@test.com", invitee.id
-        )
+        await self._add_invitation(comp_uow, created.id, creator.id, "invitee@test.com", invitee.id)
 
         uc = ListMyInvitationsUseCase(comp_uow, user_uow)
         result = await uc.execute(user_id=str(invitee.id.value))

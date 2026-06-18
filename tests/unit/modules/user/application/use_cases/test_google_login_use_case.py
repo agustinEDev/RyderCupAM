@@ -154,7 +154,12 @@ class TestGoogleLoginUseCaseAutoRegister:
         assert oauth.provider_email == "oauth@example.com"
 
     async def test_auto_register_device_registration(
-        self, use_case, google_oauth_service, google_user_info, login_request, register_device_use_case
+        self,
+        use_case,
+        google_oauth_service,
+        google_user_info,
+        login_request,
+        register_device_use_case,
     ):
         """Debe registrar dispositivo y retornar device_id."""
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info

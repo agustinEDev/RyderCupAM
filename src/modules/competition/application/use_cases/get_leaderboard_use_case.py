@@ -39,9 +39,7 @@ class GetLeaderboardUseCase:
             comp_id = CompetitionId(competition_id_str)
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
-                raise CompetitionNotFoundError(
-                    f"No existe competicion con ID {competition_id_str}"
-                )
+                raise CompetitionNotFoundError(f"No existe competicion con ID {competition_id_str}")
 
             rounds = await self._uow.rounds.find_by_competition(comp_id)
 
@@ -86,9 +84,11 @@ class GetLeaderboardUseCase:
                             score=final_result.get("score", ""),
                         )
                     elif match.status.can_record_scores():
-                        standing_str, leading_team, current_hole = await self._compute_in_progress_standing(
-                            match, round_entity
-                        )
+                        (
+                            standing_str,
+                            leading_team,
+                            current_hole,
+                        ) = await self._compute_in_progress_standing(match, round_entity)
 
                     team_a_players = [
                         LeaderboardPlayerDTO(
@@ -109,7 +109,9 @@ class GetLeaderboardUseCase:
                         LeaderboardMatchDTO(
                             match_id=str(match.id),
                             match_number=match.match_number,
-                            match_format=round_entity.match_format.value if round_entity.match_format else "",
+                            match_format=round_entity.match_format.value
+                            if round_entity.match_format
+                            else "",
                             status=match.status.value,
                             current_hole=current_hole,
                             standing=standing_str,
@@ -125,7 +127,9 @@ class GetLeaderboardUseCase:
 
             return LeaderboardResponseDTO(
                 competition_id=str(competition.id),
-                competition_name=competition.name.value if hasattr(competition.name, "value") else str(competition.name),
+                competition_name=competition.name.value
+                if hasattr(competition.name, "value")
+                else str(competition.name),
                 team_a_name=team_a_name,
                 team_b_name=team_b_name,
                 team_a_points=total_a_points,
@@ -138,9 +142,9 @@ class GetLeaderboardUseCase:
         if match.is_decided and match.decided_result:
             return match.decided_result
         if round_entity.match_format is not None:
-            return await self._compute_decided_result(
-                match, round_entity.match_format
-            ) or match.result
+            return (
+                await self._compute_decided_result(match, round_entity.match_format) or match.result
+            )
         return match.result
 
     async def _compute_in_progress_standing(self, match, round_entity):
@@ -162,14 +166,16 @@ class GetLeaderboardUseCase:
         hole_results = []
         for hole_num in sorted(scores_by_hole.keys()):
             hole_hs = scores_by_hole[hole_num]
-            has_validated = any(
-                hs.validation_status == ValidationStatus.MATCH for hs in hole_hs
-            )
+            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
             if not has_validated:
                 continue
 
-            team_a_nets = [hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None]
-            team_b_nets = [hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None]
+            team_a_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
+            ]
+            team_b_nets = [
+                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
+            ]
 
             if team_a_nets and team_b_nets:
                 winner = self._scoring_service.calculate_hole_winner(
@@ -203,7 +209,9 @@ class GetLeaderboardUseCase:
         if not user_ids:
             return {}
         users = await self._user_repo.find_by_ids(user_ids)
-        names = {user.id: f"{user.first_name} {user.last_name}" for user in users}
+        names: dict[UserId, str] = {
+            user.id: f"{user.first_name} {user.last_name}" for user in users if user.id is not None
+        }
         for uid in user_ids:
             if uid not in names:
                 names[uid] = ""

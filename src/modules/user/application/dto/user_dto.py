@@ -132,6 +132,7 @@ class FindUserResponseDTO(BaseModel):
 
 class SearchUsersItemDTO(BaseModel):
     """Single user result in search autocomplete."""
+
     user_id: UUID = Field(..., description="ID del usuario.")
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
@@ -141,7 +142,10 @@ class SearchUsersItemDTO(BaseModel):
 
 class SearchUsersResponseDTO(BaseModel):
     """Response for user search autocomplete."""
-    users: list[SearchUsersItemDTO] = Field(default_factory=list, description="Lista de usuarios encontrados.")
+
+    users: list[SearchUsersItemDTO] = Field(
+        default_factory=list, description="Lista de usuarios encontrados."
+    )
 
 
 # ======================================================================================

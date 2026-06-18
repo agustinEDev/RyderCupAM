@@ -70,7 +70,9 @@ class TestConcedeMatchValidation:
     @pytest.mark.asyncio
     async def test_match_not_in_progress(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
-        match = Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         await uow.matches.add(match)
         uc = ConcedeMatchUseCase(uow, scoring_service)
         with pytest.raises(MatchNotScoringError):

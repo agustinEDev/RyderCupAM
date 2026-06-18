@@ -312,26 +312,32 @@ async def list_competitions(
         async with uow, user_uow:
             if my_competitions is True:
                 competitions = await _get_user_competitions(
-                    uow, use_case, current_user_id, status_filter,
-                    search_name, search_creator,
+                    uow,
+                    use_case,
+                    current_user_id,
+                    status_filter,
+                    search_name,
+                    search_creator,
                 )
             elif my_competitions is False:
                 competitions = await _get_all_competitions(
-                    use_case, status_filter, sanitized_creator_id,
-                    search_name, search_creator,
+                    use_case,
+                    status_filter,
+                    sanitized_creator_id,
+                    search_name,
+                    search_creator,
                 )
-                competitions = await _exclude_user_competitions(
-                    competitions, current_user_id, uow
-                )
+                competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
             else:
                 competitions = await _get_all_competitions(
-                    use_case, status_filter, sanitized_creator_id,
-                    search_name, search_creator,
+                    use_case,
+                    status_filter,
+                    sanitized_creator_id,
+                    search_name,
+                    search_creator,
                 )
 
-            result = await _map_competitions_to_dtos(
-                competitions, current_user_id, uow, user_uow
-            )
+            result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
 
         return result
     except ValueError as e:

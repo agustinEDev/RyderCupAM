@@ -75,6 +75,7 @@ def _validate_status_filter(status_filter: str | None) -> str | None:
             detail=f"Invalid status filter: '{status_filter}'. Valid values: {valid}",
         ) from None
 
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -121,9 +122,7 @@ async def send_invitation_by_user_id(
     competition_id: UUID,
     body: SendInvitationByUserIdBody,
     current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: SendInvitationByUserIdUseCase = Depends(
-        get_send_invitation_by_user_id_use_case
-    ),
+    use_case: SendInvitationByUserIdUseCase = Depends(get_send_invitation_by_user_id_use_case),
 ):
     try:
         request_dto = SendInvitationByUserIdRequestDTO(
@@ -147,13 +146,9 @@ async def send_invitation_by_user_id(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
     except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 @router.post(
@@ -166,9 +161,7 @@ async def send_invitation_by_email(
     competition_id: UUID,
     body: SendInvitationByEmailBody,
     current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: SendInvitationByEmailUseCase = Depends(
-        get_send_invitation_by_email_use_case
-    ),
+    use_case: SendInvitationByEmailUseCase = Depends(get_send_invitation_by_email_use_case),
 ):
     try:
         request_dto = SendInvitationByEmailRequestDTO(
@@ -190,13 +183,9 @@ async def send_invitation_by_email(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
     except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 @router.get(
@@ -250,13 +239,9 @@ async def respond_to_invitation(
     except InvitationExpiredViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationCompetitionStatusViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
