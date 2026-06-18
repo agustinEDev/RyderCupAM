@@ -280,7 +280,23 @@ class GenerateMatchesUseCase:
             a_players_ids = team_a_ids[start:end]
             b_players_ids = team_b_ids[start:end]
 
-            if match_format == MatchFormat.FOURBALL:
+            if match_format == MatchFormat.SINGLES:
+                # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
+                a_player, b_player = self._build_singles_match_players(
+                    a_players_ids[0],
+                    b_players_ids[0],
+                    enrollment_map,
+                    tee_ratings,
+                    calculator,
+                    allowance,
+                    is_scratch,
+                    user_handicap_map,
+                    holes_by_stroke_index,
+                    user_gender_map,
+                )
+                team_a_match_players = [a_player]
+                team_b_match_players = [b_player]
+            elif match_format == MatchFormat.FOURBALL:
                 team_a_match_players, team_b_match_players = self._build_fourball_match_players(
                     a_players_ids,
                     b_players_ids,
@@ -307,22 +323,7 @@ class GenerateMatchesUseCase:
                     user_gender_map,
                 )
             else:
-                # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
-                a_player, b_player = self._build_singles_match_players(
-                    a_players_ids[0],
-                    b_players_ids[0],
-                    enrollment_map,
-                    tee_ratings,
-                    calculator,
-                    allowance,
-                    is_scratch,
-                    user_handicap_map,
-                    holes_by_stroke_index,
-                    user_gender_map,
-                )
-                team_a_match_players = [a_player]
-                team_b_match_players = [b_player]
-
+                raise ValueError(f"Formato de partido no soportado: {match_format.value}")
             match = Match.create(
                 round_id=round_entity.id,
                 match_number=i + 1,
@@ -394,7 +395,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                 )
-            else:
+            elif match_format == MatchFormat.SINGLES:
                 # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
                 a_player, b_player = self._build_singles_match_players(
                     a_ids[0],
@@ -410,6 +411,8 @@ class GenerateMatchesUseCase:
                 )
                 team_a_match_players = [a_player]
                 team_b_match_players = [b_player]
+            else:
+                raise ValueError(f"Formato de partido no soportado: {match_format.value}")
 
             match = Match.create(
                 round_id=round_entity.id,

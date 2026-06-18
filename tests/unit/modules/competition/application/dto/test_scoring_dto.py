@@ -48,8 +48,8 @@ class TestSubmitHoleScoreBodyDTO:
         assert dto.own_score == 1
 
     def test_max_score(self):
-        dto = SubmitHoleScoreBodyDTO(own_score=9, marked_player_id="abc", marked_score=9)
-        assert dto.own_score == 9
+        dto = SubmitHoleScoreBodyDTO(own_score=15, marked_player_id="abc", marked_score=15)
+        assert dto.own_score == 15
 
 
 class TestScoringViewResponseDTO:

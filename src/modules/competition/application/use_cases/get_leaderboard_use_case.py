@@ -72,11 +72,13 @@ class GetLeaderboardUseCase:
                     result_dto = None
 
                     if match.is_finished() and match.result:
-                        stored_winner = match.result.get("winner")
-                        if stored_winner in ("A", "B", "HALVED"):
-                            score_result = match.result
-                        else:
-                            # Fallback: recalculate from hole scores when winner is invalid
+                        score_result = None
+                        if isinstance(match.result, dict) and match.result:
+                            stored_winner = match.result.get("winner")
+                            if stored_winner in ("A", "B", "HALVED"):
+                                score_result = match.result
+
+                        if not score_result:
                             score_result = await self._compute_decided_result(
                                 match, round_entity.match_format
                             ) or {"winner": "HALVED", "score": "AS"}
