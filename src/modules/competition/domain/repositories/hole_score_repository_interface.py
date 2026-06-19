@@ -32,9 +32,7 @@ class HoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_match_and_hole(
-        self, match_id: MatchId, hole_number: int
-    ) -> list[HoleScore]:
+    async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         """Busca los hole scores de un hoyo especifico de un partido."""
         pass
 

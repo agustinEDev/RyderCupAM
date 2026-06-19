@@ -58,9 +58,7 @@ class SendInvitationByUserIdUseCase:
         self._user_uow = user_uow
         self._email_service = email_service
 
-    async def execute(
-        self, request: SendInvitationByUserIdRequestDTO
-    ) -> InvitationResponseDTO:
+    async def execute(self, request: SendInvitationByUserIdRequestDTO) -> InvitationResponseDTO:
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             inviter_id = UserId(request.inviter_id)
@@ -69,9 +67,7 @@ class SendInvitationByUserIdUseCase:
             # 1. Buscar competition
             competition = await self._uow.competitions.find_by_id(competition_id)
             if not competition:
-                raise CompetitionNotFoundError(
-                    f"Competition not found: {request.competition_id}"
-                )
+                raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 
             # 2. Verificar creator/admin
             if not competition.is_creator(inviter_id):
@@ -95,9 +91,7 @@ class SendInvitationByUserIdUseCase:
             async with self._user_uow:
                 invitee_user = await self._user_uow.users.find_by_id(invitee_user_id)
                 if not invitee_user:
-                    raise InviteeNotFoundError(
-                        f"User not found: {request.invitee_user_id}"
-                    )
+                    raise InviteeNotFoundError(f"User not found: {request.invitee_user_id}")
                 invitee_email = str(invitee_user.email)
                 invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
 
@@ -116,10 +110,8 @@ class SendInvitationByUserIdUseCase:
                 )
 
             # 7. Verificar no invitation PENDING duplicada
-            existing_invitation = (
-                await self._uow.invitations.find_pending_by_email_and_competition(
-                    invitee_email, competition_id
-                )
+            existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(
+                invitee_email, competition_id
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
@@ -145,9 +137,7 @@ class SendInvitationByUserIdUseCase:
         async with self._user_uow:
             inviter_user = await self._user_uow.users.find_by_id(inviter_id)
             inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}"
-                if inviter_user
-                else "Unknown"
+                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
             )
 
         # 11. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
@@ -175,7 +165,9 @@ class SendInvitationByUserIdUseCase:
             inviter_id=invitation.inviter_id.value,
             inviter_name=inviter_name,
             invitee_email=invitation.invitee_email,
-            invitee_user_id=invitation.invitee_user_id.value if invitation.invitee_user_id else None,
+            invitee_user_id=invitation.invitee_user_id.value
+            if invitation.invitee_user_id
+            else None,
             invitee_name=invitee_name,
             status=invitation.status.value,
             personal_message=invitation.personal_message,

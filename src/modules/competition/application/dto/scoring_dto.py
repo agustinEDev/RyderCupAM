@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field
 class SubmitHoleScoreBodyDTO(BaseModel):
     """Body del request para registrar score de un hoyo."""
 
-    own_score: int | None = Field(None, ge=1, le=9)
+    own_score: int | None = Field(None, ge=1, le=15)
     marked_player_id: str
-    marked_score: int | None = Field(None, ge=1, le=9)
+    marked_score: int | None = Field(None, ge=1, le=15)
 
 
 class RoundInfoDTO(BaseModel):

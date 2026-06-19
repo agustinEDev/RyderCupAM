@@ -29,9 +29,7 @@ class TestCompetitionStatusForwardTransitions:
         assert CompetitionStatus.DRAFT.can_transition_to(CompetitionStatus.CANCELLED) is True
         assert CompetitionStatus.ACTIVE.can_transition_to(CompetitionStatus.CANCELLED) is True
         assert CompetitionStatus.CLOSED.can_transition_to(CompetitionStatus.CANCELLED) is True
-        assert (
-            CompetitionStatus.IN_PROGRESS.can_transition_to(CompetitionStatus.CANCELLED) is True
-        )
+        assert CompetitionStatus.IN_PROGRESS.can_transition_to(CompetitionStatus.CANCELLED) is True
 
 
 class TestCompetitionStatusBackwardTransitions:

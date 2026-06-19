@@ -44,9 +44,7 @@ async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     player_b = await create_authenticated_user(
         client, "sc_player_b@test.com", "P@ssw0rd123!", "PlayerB", "TeamB"
     )
-    admin = await create_admin_user(
-        client, "sc_admin@test.com", "P@ssw0rd123!", "Admin", "Scoring"
-    )
+    admin = await create_admin_user(client, "sc_admin@test.com", "P@ssw0rd123!", "Admin", "Scoring")
 
     # 2. Crear competicion SCRATCH
     start = date.today() + timedelta(days=30)
@@ -95,7 +93,9 @@ async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     for e in enrollments:
         if e["status"] == "REQUESTED":
             approve_resp = await client.post(f"/api/v1/enrollments/{e['id']}/approve")
-            assert approve_resp.status_code == 200, f"Failed to approve enrollment {e['id']}: {approve_resp.text}"
+            assert approve_resp.status_code == 200, (
+                f"Failed to approve enrollment {e['id']}: {approve_resp.text}"
+            )
 
     # 8. Retirar inscripción del creator (auto-enrolled) para mantener solo 2 jugadores
     set_auth_cookies(client, creator["cookies"])
@@ -103,7 +103,9 @@ async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     for e in enroll_resp2.json():
         if e["user_id"] == creator["user"]["id"] and e["status"] == "APPROVED":
             withdraw_resp = await client.post(f"/api/v1/enrollments/{e['id']}/withdraw")
-            assert withdraw_resp.status_code == 200, f"Failed to withdraw enrollment {e['id']}: {withdraw_resp.text}"
+            assert withdraw_resp.status_code == 200, (
+                f"Failed to withdraw enrollment {e['id']}: {withdraw_resp.text}"
+            )
 
     # 9. Cerrar inscripciones
     close_resp = await client.post(f"/api/v1/competitions/{comp_id}/close-enrollments")
@@ -188,9 +190,7 @@ class TestGetScoringView:
         ctx = await setup_match_in_progress(client)
 
         set_auth_cookies(client, ctx["player_a"]["cookies"])
-        response = await client.get(
-            f"/api/v1/competitions/matches/{ctx['match_id']}/scoring-view"
-        )
+        response = await client.get(f"/api/v1/competitions/matches/{ctx['match_id']}/scoring-view")
 
         assert response.status_code == 200
         data = response.json()
@@ -215,9 +215,7 @@ class TestGetScoringView:
         fake_id = "00000000-0000-0000-0000-000000000000"
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            f"/api/v1/competitions/matches/{fake_id}/scoring-view"
-        )
+        response = await client.get(f"/api/v1/competitions/matches/{fake_id}/scoring-view")
 
         assert response.status_code == 404
 
@@ -254,15 +252,11 @@ class TestSubmitHoleScore:
 
         # Find player A's score for hole 1
         hole_1 = next(s for s in data["scores"] if s["hole_number"] == 1)
-        a_score = next(
-            ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id
-        )
+        a_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id)
         assert a_score["own_score"] == 4
 
         # Player B should have marker_score set by A
-        b_score = next(
-            ps for ps in hole_1["player_scores"] if ps["user_id"] == player_b_id
-        )
+        b_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_b_id)
         assert b_score["marker_score"] == 5
 
     @pytest.mark.asyncio
@@ -428,9 +422,7 @@ class TestSubmitScorecard:
         assert data["match_complete"] is False  # Only 1 of 2 submitted
 
     @pytest.mark.asyncio
-    async def test_submit_scorecard_unvalidated_holes_returns_400(
-        self, client: AsyncClient
-    ):
+    async def test_submit_scorecard_unvalidated_holes_returns_400(self, client: AsyncClient):
         """Entregar tarjeta con hoyos sin validar retorna 400."""
         ctx = await setup_match_in_progress(client)
         player_b_id = ctx["player_b"]["user"]["id"]
@@ -529,9 +521,7 @@ class TestGetLeaderboard:
         ctx = await setup_match_in_progress(client)
 
         set_auth_cookies(client, ctx["player_a"]["cookies"])
-        response = await client.get(
-            f"/api/v1/competitions/{ctx['competition_id']}/leaderboard"
-        )
+        response = await client.get(f"/api/v1/competitions/{ctx['competition_id']}/leaderboard")
 
         assert response.status_code == 200
         data = response.json()
@@ -555,9 +545,7 @@ class TestGetLeaderboard:
         fake_id = "00000000-0000-0000-0000-000000000000"
 
         set_auth_cookies(client, user["cookies"])
-        response = await client.get(
-            f"/api/v1/competitions/{fake_id}/leaderboard"
-        )
+        response = await client.get(f"/api/v1/competitions/{fake_id}/leaderboard")
 
         assert response.status_code == 404
 

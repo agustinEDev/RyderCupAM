@@ -129,6 +129,11 @@ class UpdateMatchStatusUseCase:
         """Ejecuta COMPLETE: match.complete() + auto-complete round."""
         if request.result is None:
             raise InvalidActionError("Se requiere 'result' para completar un partido")
+        winner = request.result.get("winner") if isinstance(request.result, dict) else None
+        if winner not in ("A", "B", "HALVED"):
+            raise InvalidActionError(
+                "El resultado debe incluir 'winner' con valor 'A', 'B' o 'HALVED'"
+            )
         try:
             match.complete(request.result)
         except ValueError as e:

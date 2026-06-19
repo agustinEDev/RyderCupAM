@@ -55,7 +55,9 @@ class TestSendInvitationByEmailUseCase:
     def user_uow(self):
         return UserInMemoryUoW()
 
-    async def _create_user(self, user_uow, email="user@test.com", first_name="Test", last_name="User"):
+    async def _create_user(
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+    ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
@@ -88,8 +90,12 @@ class TestSendInvitationByEmailUseCase:
 
     async def test_should_send_invitation_to_registered_user(self, comp_uow, user_uow):
         """Happy path: enviar invitacion a un email de usuario registrado."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
-        invitee = await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
@@ -250,8 +256,12 @@ class TestSendInvitationByEmailUseCase:
 
     async def test_should_call_email_service_for_registered_user(self, comp_uow, user_uow):
         """Email service se llama con invitee_name para usuario registrado."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
-        await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
+        await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         mock_email = AsyncMock()
@@ -277,7 +287,9 @@ class TestSendInvitationByEmailUseCase:
 
     async def test_should_call_email_service_for_unregistered_user(self, comp_uow, user_uow):
         """Email service se llama con invitee_name=None para email no registrado."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="Boss")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="Boss"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         mock_email = AsyncMock()

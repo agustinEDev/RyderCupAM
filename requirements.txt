@@ -4,8 +4,15 @@
 
 # FastAPI - Framework web moderno para crear APIs REST
 # Características: validación automática, documentación auto-generada, type hints
-# Actualizado a 0.125.0 para resolver CVE-2024-47874 y CVE-2025-54121 en starlette
-fastapi==0.125.0
+# Actualizado a 0.136.3 (compatible con starlette 1.x)
+fastapi==0.136.3
+
+# starlette - ASGI framework (dependencia transitiva de fastapi)
+# Pinado explícitamente a 1.3.1 para resolver:
+# - PYSEC-2026-161 (Host header validation, fixed in 1.0.1)
+# - CVE-2026-54282 (fixed in 1.3.1)
+# - CVE-2026-54283 (fixed in 1.3.1)
+starlette==1.3.1
 
 # Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
 # [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
@@ -17,8 +24,8 @@ uvicorn[standard]==0.30.0
 # ================================
 
 # python-dotenv - Utilidad para cargar variables de entorno desde un fichero .env
-# Útil para gestionar la configuración en desarrollo local sin Docker
-python-dotenv==1.0.1
+# Actualizado a 1.2.2 para resolver CVE-2026-28684 (Symlink Attack)
+python-dotenv==1.2.2
 
 
 # ================================
@@ -57,9 +64,9 @@ bcrypt==4.2.0
 # PyJWT - Librería para crear y verificar tokens JWT (JSON Web Tokens)
 # Alternativa activamente mantenida a python-jose, elimina dependencias vulnerables
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
-# Actualizado a 2.12.0 para resolver:
-# - CVE HIGH: Improper Verification of Cryptographic Signature (CVSS 8.7)
-PyJWT==2.12.0
+# Actualizado a 2.13.0 para resolver:
+# - PYSEC-2026-175, -176, -177, -178, -179 (Improper Verification of Cryptographic Signature)
+PyJWT==2.13.0
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
@@ -91,10 +98,9 @@ safety==3.7.0
 pip-audit==2.10.0
 
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
-# Fijada explícitamente para resolver:
-# - CVE-2025-66418 y CVE-2025-66471 (decompression bomb y unlimited decompression chain)
-# - CVE-2026-21441 (Security vulnerability - fixed in 2.6.3)
-urllib3==2.6.3
+# Actualizado a 2.7.0 para resolver:
+# - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
+urllib3==2.7.0
 
 # filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
 # Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition) y CVE-2026-22701
@@ -105,11 +111,20 @@ filelock==3.20.3
 # - CVE-2025-61920 (DoS via large base64 tokens)
 # - CVE-2025-62706 (DoS via zip bomb decompression)
 # - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
-# Actualizado a 1.6.9 para resolver nuevas alertas Snyk:
 # - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
 # - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
 # - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
-authlib==1.6.9
+# - PYSEC-2026-25 (Improper Verification of Cryptographic Signature - fixed in 1.6.11)
+# - PYSEC-2026-188 (fixed in 1.6.12)
+authlib==1.6.12
+
+# cryptography - Primitivas criptográficas de bajo nivel (dependencia transitiva)
+# Actualizado a 48.0.1 para resolver:
+# - CVE-2026-26007 (fixed in 46.0.5)
+# - PYSEC-2026-35 (fixed in 46.0.6)
+# - PYSEC-2026-36 (fixed in 46.0.7)
+# - CVE-2026-34180 (Out-of-bounds Read, CVSS 8.7 HIGH, fixed in 48.0.1)
+cryptography==48.0.1
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:
@@ -126,6 +141,22 @@ zipp==3.19.1
 # Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
 marshmallow==3.26.2
 
+# idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
+# Fijada explícitamente para resolver CVE-2026-45409
+idna==3.15
+
+# mako - Template library (dependencia transitiva de alembic)
+# Fijada explícitamente para resolver CVE-2026-44307
+mako==1.3.12
+
+# nltk - Natural Language Toolkit (dependencia transitiva de safety)
+# Fijada explícitamente para resolver:
+# - PYSEC-2026-96, -97, -98, -99, CVE-2026-33230, CVE-2026-33231, GHSA-rf74-v2fm-23pw
+nltk==3.9.4
+
+# pygments - Syntax highlighter (dependencia transitiva de varios dev tools)
+# Fijada explícitamente para resolver CVE-2026-4539
+pygments==2.20.0
 
 
 # ================================
@@ -148,7 +179,8 @@ requests==2.33.0
 
 # pytest - Framework de testing moderno y potente
 # Más simple que unittest, mejor output de errores, fixtures potentes
-pytest==8.3.0
+# Actualizado a 9.0.3 para resolver CVE-2025-71176 (arbitrary code execution via deserialization)
+pytest==9.0.3
 
 # pytest-json-report - Plugin para pytest que genera reportes en formato JSON
 # Esencial para el análisis programático de los resultados de los tests
@@ -160,5 +192,6 @@ pytest-xdist==3.8.0
 
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
-pytest-asyncio==0.24.0
+# Actualizado a 1.4.0: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
+pytest-asyncio==1.4.0
 pytest-cov

@@ -15,7 +15,7 @@ from src.modules.competition.domain.value_objects.validation_status import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 MIN_SCORE = 1
-MAX_SCORE = 9
+MAX_SCORE = 15
 MIN_HOLE = 1
 MAX_HOLE = 18
 
@@ -33,7 +33,7 @@ class HoleScore:
     Invariantes:
     - hole_number debe estar entre 1 y 18
     - team debe ser "A" o "B"
-    - Scores deben estar entre 1-9 o None (picked up)
+    - Scores deben estar entre 1 y 15 o None (picked up)
     - strokes_received debe ser >= 0 (normalmente 0-2, puede ser > 1 si PH > 18)
     """
 
@@ -93,7 +93,9 @@ class HoleScore:
             ValueError: Si hole_number, team o strokes_received son invalidos
         """
         if not MIN_HOLE <= hole_number <= MAX_HOLE:
-            raise ValueError(f"hole_number must be between {MIN_HOLE} and {MAX_HOLE}, got {hole_number}")
+            raise ValueError(
+                f"hole_number must be between {MIN_HOLE} and {MAX_HOLE}, got {hole_number}"
+            )
 
         if team not in ("A", "B"):
             raise ValueError(f"team must be 'A' or 'B', got '{team}'")

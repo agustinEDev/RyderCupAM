@@ -371,9 +371,7 @@ class Competition:
             )
 
         if not self._status.can_transition_to(CompetitionStatus.CANCELLED):
-            raise CompetitionStateError(
-                f"No se puede cancelar desde estado {self._status.value}"
-            )
+            raise CompetitionStateError(f"No se puede cancelar desde estado {self._status.value}")
 
         self._status = CompetitionStatus.CANCELLED
         self._updated_at = datetime.now()
@@ -401,9 +399,7 @@ class Competition:
         self._status = CompetitionStatus.CLOSED
         self._updated_at = datetime.now()
 
-        event = CompetitionRevertedToClosedEvent(
-            competition_id=str(self._id), name=str(self._name)
-        )
+        event = CompetitionRevertedToClosedEvent(competition_id=str(self._id), name=str(self._name))
         self._add_domain_event(event)
 
     def reopen_enrollments(self) -> None:
@@ -546,9 +542,7 @@ class Competition:
             )
 
         if self.has_golf_course(golf_course_id):
-            raise ValueError(
-                f"El campo de golf {golf_course_id} ya está añadido a la competición"
-            )
+            raise ValueError(f"El campo de golf {golf_course_id} ya está añadido a la competición")
 
         next_order = len(self._golf_courses) + 1
 

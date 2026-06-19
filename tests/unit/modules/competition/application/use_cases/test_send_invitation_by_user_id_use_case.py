@@ -57,7 +57,9 @@ class TestSendInvitationByUserIdUseCase:
     def user_uow(self):
         return UserInMemoryUoW()
 
-    async def _create_user(self, user_uow, email="user@test.com", first_name="Test", last_name="User"):
+    async def _create_user(
+        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+    ):
         """Helper: crea un usuario en user_uow."""
         user = User.create(
             first_name=first_name,
@@ -92,8 +94,12 @@ class TestSendInvitationByUserIdUseCase:
 
     async def test_should_send_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: enviar invitacion a un usuario registrado."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="User")
-        invitee = await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="User"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
@@ -295,8 +301,12 @@ class TestSendInvitationByUserIdUseCase:
 
     async def test_should_call_email_service_on_success(self, comp_uow, user_uow):
         """Email service se llama con parametros correctos al enviar invitacion."""
-        creator = await self._create_user(user_uow, email="creator@test.com", first_name="Creator", last_name="User")
-        invitee = await self._create_user(user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player")
+        creator = await self._create_user(
+            user_uow, email="creator@test.com", first_name="Creator", last_name="User"
+        )
+        invitee = await self._create_user(
+            user_uow, email="invitee@test.com", first_name="Invitee", last_name="Player"
+        )
         created = await self._create_active_competition(comp_uow, creator.id)
 
         mock_email = AsyncMock()

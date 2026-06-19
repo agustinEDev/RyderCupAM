@@ -104,37 +104,49 @@ class TestFoursomesMarkerAssignments:
 class TestAffectedPlayerIds:
     def test_singles_returns_only_scorer(self, service):
         scorer = _make_player()
-        result = service.get_affected_player_ids((scorer,), (_make_player(),), scorer.user_id, MatchFormat.SINGLES)
+        result = service.get_affected_player_ids(
+            (scorer,), (_make_player(),), scorer.user_id, MatchFormat.SINGLES
+        )
         assert result == [scorer.user_id]
 
     def test_fourball_returns_only_scorer(self, service):
         a1, a2 = _make_player(), _make_player()
-        result = service.get_affected_player_ids((a1, a2), (_make_player(), _make_player()), a1.user_id, MatchFormat.FOURBALL)
+        result = service.get_affected_player_ids(
+            (a1, a2), (_make_player(), _make_player()), a1.user_id, MatchFormat.FOURBALL
+        )
         assert result == [a1.user_id]
 
     def test_foursomes_returns_both_teammates(self, service):
         a1, a2 = _make_player(), _make_player()
         b1, b2 = _make_player(), _make_player()
-        result = service.get_affected_player_ids((a1, a2), (b1, b2), a1.user_id, MatchFormat.FOURSOMES)
+        result = service.get_affected_player_ids(
+            (a1, a2), (b1, b2), a1.user_id, MatchFormat.FOURSOMES
+        )
         assert set(result) == {a1.user_id, a2.user_id}
 
     def test_foursomes_returns_team_b_when_scorer_is_b(self, service):
         a1, a2 = _make_player(), _make_player()
         b1, b2 = _make_player(), _make_player()
-        result = service.get_affected_player_ids((a1, a2), (b1, b2), b2.user_id, MatchFormat.FOURSOMES)
+        result = service.get_affected_player_ids(
+            (a1, a2), (b1, b2), b2.user_id, MatchFormat.FOURSOMES
+        )
         assert set(result) == {b1.user_id, b2.user_id}
 
 
 class TestAffectedMarkedPlayerIds:
     def test_singles_returns_only_marked(self, service):
         marked = _make_player()
-        result = service.get_affected_marked_player_ids((_make_player(),), (marked,), marked.user_id, MatchFormat.SINGLES)
+        result = service.get_affected_marked_player_ids(
+            (_make_player(),), (marked,), marked.user_id, MatchFormat.SINGLES
+        )
         assert result == [marked.user_id]
 
     def test_foursomes_returns_both_marked_teammates(self, service):
         a1, a2 = _make_player(), _make_player()
         b1, b2 = _make_player(), _make_player()
-        result = service.get_affected_marked_player_ids((a1, a2), (b1, b2), b1.user_id, MatchFormat.FOURSOMES)
+        result = service.get_affected_marked_player_ids(
+            (a1, a2), (b1, b2), b1.user_id, MatchFormat.FOURSOMES
+        )
         assert set(result) == {b1.user_id, b2.user_id}
 
 
@@ -278,7 +290,9 @@ class TestCalculateRyderCupPoints:
         assert points == {"team_a": 0.0, "team_b": 1.0}
 
     def test_halved(self, service):
-        points = service.calculate_ryder_cup_points({"winner": "HALVED", "score": "AS"}, "COMPLETED")
+        points = service.calculate_ryder_cup_points(
+            {"winner": "HALVED", "score": "AS"}, "COMPLETED"
+        )
         assert points == {"team_a": 0.5, "team_b": 0.5}
 
     def test_no_result(self, service):
@@ -286,7 +300,9 @@ class TestCalculateRyderCupPoints:
         assert points == {"team_a": 0.0, "team_b": 0.0}
 
     def test_conceded_b_wins(self, service):
-        points = service.calculate_ryder_cup_points({"winner": "B", "score": "CONCEDED"}, "CONCEDED")
+        points = service.calculate_ryder_cup_points(
+            {"winner": "B", "score": "CONCEDED"}, "CONCEDED"
+        )
         assert points == {"team_a": 0.0, "team_b": 1.0}
 
     def test_walkover_a_wins(self, service):

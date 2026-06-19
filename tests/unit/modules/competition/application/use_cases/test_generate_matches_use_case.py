@@ -695,11 +695,12 @@ class TestGenerateMatchesUseCase:
         user_repo: AsyncMock,
     ):
         """
-        Verifica que en modo HANDICAP se calculan playing_handicap y strokes_received.
+        Verifica que en modo HANDICAP se calculan playing_handicap usando metodo diferencial WHS.
 
-        Given: Competicion HANDICAP con campo de golf (AMATEUR tee) y jugadores con handicap
-        When: Se generan partidos automaticamente
-        Then: Todos los jugadores tienen playing_handicap > 0 y strokes_received no vacio
+        Given: Competicion HANDICAP, jugadores con mismo handicap (HI=15)
+        When: Se generan partidos SINGLES automaticamente
+        Then: Ambos jugadores tienen playing_handicap > 0 (PH individual para display),
+              pero ninguno recibe golpes (diferencial = 0 cuando PHs son iguales).
         """
         # Arrange
         competition = await self._create_handicap_competition(uow, creator_id)
@@ -714,7 +715,7 @@ class TestGenerateMatchesUseCase:
         mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
-        # Mock user_repo para devolver usuarios con handicap
+        # Todos los jugadores con el mismo handicap → diferencial = 0
         async def mock_find_user(uid):
             return self._build_mock_user(uid, 15.0)
 
@@ -735,16 +736,173 @@ class TestGenerateMatchesUseCase:
         matches = await uow.matches.find_by_round(round_entity.id)
         assert len(matches) == 2
         for m in matches:
-            for p in m.team_a_players:
+            # PH individual se conserva para display aunque diferencial sea 0
+            for p in (*m.team_a_players, *m.team_b_players):
                 assert p.playing_handicap > 0, (
                     "HANDICAP mode should produce non-zero playing_handicap"
                 )
-                assert len(p.strokes_received) > 0, "HANDICAP mode should produce strokes_received"
-            for p in m.team_b_players:
-                assert p.playing_handicap > 0, (
-                    "HANDICAP mode should produce non-zero playing_handicap"
-                )
-                assert len(p.strokes_received) > 0, "HANDICAP mode should produce strokes_received"
+            # Igual PH → diferencial = 0 → nadie recibe golpes (WHS match play correcto)
+            total_strokes = sum(
+                len(p.strokes_received) for p in (*m.team_a_players, *m.team_b_players)
+            )
+            assert total_strokes == 0, (
+                "Equal PHs → differential = 0 → no strokes for either player"
+            )
+
+    async def test_singles_differential_strokes_only_higher_ph_receives(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica el método diferencial WHS para SINGLES match play.
+
+        Given: Jugador A con HI=18 (PH alto) vs jugador B con HI=9 (PH bajo),
+               campo par 72, slope 113, course_rating 72.0 (CH = HI), allowance 100%
+        When: Se genera el partido SINGLES
+        Then: Solo el jugador con mayor PH recibe golpes (la diferencia).
+              El jugador con menor PH no recibe ningún golpe.
+              El numero de golpes del jugador A = PH_A - PH_B
+        """
+        # Arrange
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        team_a_ids, team_b_ids = await self._create_teams_and_enrollments_with_tees(
+            uow, competition, 1, 1, TeeCategory.AMATEUR
+        )
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        # A tiene HI=18, B tiene HI=9 → diferencial = 9 golpes para A
+        handicap_by_uid = {
+            str(team_a_ids[0].value): 18.0,
+            str(team_b_ids[0].value): 9.0,
+        }
+
+        async def mock_find_user(uid):
+            hc = handicap_by_uid.get(str(uid.value), 0.0)
+            return self._build_mock_user(uid, hc, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        # Act
+        response = await use_case.execute(request, creator_id)
+
+        # Assert
+        assert response.matches_generated == 1
+        matches = await uow.matches.find_by_round(round_entity.id)
+        assert len(matches) == 1
+        m = matches[0]
+
+        player_a = m.team_a_players[0]
+        player_b = m.team_b_players[0]
+
+        # PH individuales se conservan para display
+        assert player_a.playing_handicap > player_b.playing_handicap
+
+        # Solo el jugador con mayor PH recibe golpes (el diferencial)
+        diff = player_a.playing_handicap - player_b.playing_handicap
+        assert len(player_a.strokes_received) == diff, (
+            "Higher-PH player should receive exactly (PH_A - PH_B) strokes"
+        )
+        assert len(player_b.strokes_received) == 0, (
+            "Lower-PH player must receive 0 strokes in WHS match play"
+        )
+
+        # Los golpes caen en los hoyos con menor stroke index (más difíciles)
+        # El campo de mock tiene SI 1..18, por lo que los primeros `diff` hoyos reciben golpe
+        expected_holes = list(range(1, diff + 1))
+        assert sorted(player_a.strokes_received) == expected_holes, (
+            "Strokes must fall on the hardest holes (lowest SI first)"
+        )
+
+    async def test_singles_differential_strokes_only_higher_ph_receives_reversed(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica el método diferencial WHS para SINGLES con los handicaps invertidos.
+
+        Given: Jugador A con HI=9 (PH bajo) vs jugador B con HI=18 (PH alto),
+               campo par 72, slope 113, course_rating 72.0 (CH = HI), allowance 100%
+        When: Se genera el partido SINGLES
+        Then: Solo el jugador con mayor PH (B) recibe golpes (la diferencia).
+              El jugador con menor PH (A) no recibe ningún golpe.
+              El numero de golpes del jugador B = PH_B - PH_A
+        """
+        # Arrange
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        team_a_ids, team_b_ids = await self._create_teams_and_enrollments_with_tees(
+            uow, competition, 1, 1, TeeCategory.AMATEUR
+        )
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        # A tiene HI=9, B tiene HI=18 → diferencial = 9 golpes para B
+        handicap_by_uid = {
+            str(team_a_ids[0].value): 9.0,
+            str(team_b_ids[0].value): 18.0,
+        }
+
+        async def mock_find_user(uid):
+            hc = handicap_by_uid.get(str(uid.value), 0.0)
+            return self._build_mock_user(uid, hc, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        # Act
+        response = await use_case.execute(request, creator_id)
+
+        # Assert
+        assert response.matches_generated == 1
+        matches = await uow.matches.find_by_round(round_entity.id)
+        assert len(matches) == 1
+        m = matches[0]
+
+        player_a = m.team_a_players[0]
+        player_b = m.team_b_players[0]
+
+        # PH individuales: B tiene mayor PH
+        assert player_b.playing_handicap > player_a.playing_handicap
+
+        # Solo el jugador con mayor PH (B) recibe golpes (el diferencial)
+        diff = player_b.playing_handicap - player_a.playing_handicap
+        assert len(player_b.strokes_received) == diff, (
+            "Higher-PH player (B) should receive exactly (PH_B - PH_A) strokes"
+        )
+        assert len(player_a.strokes_received) == 0, (
+            "Lower-PH player (A) must receive 0 strokes in WHS match play"
+        )
+
+        # Los golpes caen en los hoyos con menor stroke index (más difíciles)
+        expected_holes = list(range(1, diff + 1))
+        assert sorted(player_b.strokes_received) == expected_holes, (
+            "Strokes must fall on the hardest holes (lowest SI first)"
+        )
 
     async def test_should_use_custom_handicap_over_user_handicap(
         self,

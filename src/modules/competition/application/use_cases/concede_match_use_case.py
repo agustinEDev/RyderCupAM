@@ -63,9 +63,7 @@ class ConcedeMatchUseCase:
                 )
 
             if player_team is not None and not is_creator and player_team != conceding_team:
-                raise NotMatchPlayerError(
-                    "Solo puedes conceder tu propio equipo"
-                )
+                raise NotMatchPlayerError("Solo puedes conceder tu propio equipo")
 
             match.concede(conceding_team, reason)
             await self._uow.matches.update(match)

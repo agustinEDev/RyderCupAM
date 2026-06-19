@@ -77,10 +77,18 @@ class ScoringService:
         a1, a2 = team_a[0], team_a[1]
         b1, b2 = team_b[0], team_b[1]
         return [
-            MarkerAssignment(scorer_user_id=a1.user_id, marks_user_id=b1.user_id, marked_by_user_id=b2.user_id),
-            MarkerAssignment(scorer_user_id=a2.user_id, marks_user_id=b2.user_id, marked_by_user_id=b1.user_id),
-            MarkerAssignment(scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a1.user_id),
-            MarkerAssignment(scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id),
+            MarkerAssignment(
+                scorer_user_id=a1.user_id, marks_user_id=b1.user_id, marked_by_user_id=b2.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=a2.user_id, marks_user_id=b2.user_id, marked_by_user_id=b1.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a1.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id
+            ),
         ]
 
     def _foursomes_assignments(
@@ -92,10 +100,18 @@ class ScoringService:
         a1, a2 = team_a[0], team_a[1]
         b1, b2 = team_b[0], team_b[1]
         return [
-            MarkerAssignment(scorer_user_id=a1.user_id, marks_user_id=b1.user_id, marked_by_user_id=b2.user_id),
-            MarkerAssignment(scorer_user_id=a2.user_id, marks_user_id=b2.user_id, marked_by_user_id=b1.user_id),
-            MarkerAssignment(scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a1.user_id),
-            MarkerAssignment(scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id),
+            MarkerAssignment(
+                scorer_user_id=a1.user_id, marks_user_id=b1.user_id, marked_by_user_id=b2.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=a2.user_id, marks_user_id=b2.user_id, marked_by_user_id=b1.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a1.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id
+            ),
         ]
 
     def get_affected_player_ids(

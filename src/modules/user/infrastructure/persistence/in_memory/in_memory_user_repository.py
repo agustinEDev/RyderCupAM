@@ -69,7 +69,11 @@ class InMemoryUserRepository(UserRepositoryInterface):
         results = []
         for user in self._users.values():
             full_name = f"{user.first_name} {user.last_name}".lower()
-            if query_lower in full_name or query_lower in user.first_name.lower() or query_lower in user.last_name.lower():
+            if (
+                query_lower in full_name
+                or query_lower in user.first_name.lower()
+                or query_lower in user.last_name.lower()
+            ):
                 results.append(user)
                 if len(results) >= limit:
                     break

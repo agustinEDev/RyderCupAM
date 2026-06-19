@@ -38,8 +38,7 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         results = [
             inv
             for inv in self._invitations.values()
-            if inv.competition_id == competition_id
-            and (status is None or inv.status == status)
+            if inv.competition_id == competition_id and (status is None or inv.status == status)
         ]
         # Sort by created_at desc
         results.sort(key=lambda x: x.created_at, reverse=True)
@@ -56,8 +55,7 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         results = [
             inv
             for inv in self._invitations.values()
-            if inv.invitee_email == normalized_email
-            and (status is None or inv.status == status)
+            if inv.invitee_email == normalized_email and (status is None or inv.status == status)
         ]
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
@@ -72,8 +70,7 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         results = [
             inv
             for inv in self._invitations.values()
-            if inv.invitee_user_id == user_id
-            and (status is None or inv.status == status)
+            if inv.invitee_user_id == user_id and (status is None or inv.status == status)
         ]
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
@@ -115,6 +112,8 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         for inv in self._invitations.values():
             if status and inv.status != status:
                 continue
-            if (email and inv.invitee_email == email.strip().lower()) or (user_id and inv.invitee_user_id == user_id):
+            if (email and inv.invitee_email == email.strip().lower()) or (
+                user_id and inv.invitee_user_id == user_id
+            ):
                 count += 1
         return count

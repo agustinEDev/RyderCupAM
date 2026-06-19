@@ -57,7 +57,9 @@ class TestSubmitScorecardValidation:
     @pytest.mark.asyncio
     async def test_match_not_in_progress(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
-        match = Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         await uow.matches.add(match)
         uc = SubmitScorecardUseCase(uow, scoring_service)
         with pytest.raises(MatchNotScoringError):
@@ -66,7 +68,9 @@ class TestSubmitScorecardValidation:
     @pytest.mark.asyncio
     async def test_not_match_player(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
-        match = Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
         await uow.matches.add(match)
         uc = SubmitScorecardUseCase(uow, scoring_service)
@@ -76,7 +80,9 @@ class TestSubmitScorecardValidation:
     @pytest.mark.asyncio
     async def test_scorecard_already_submitted(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
-        match = Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
         match.submit_scorecard(a.user_id)
         await uow.matches.add(match)
@@ -87,12 +93,16 @@ class TestSubmitScorecardValidation:
     @pytest.mark.asyncio
     async def test_unvalidated_holes_raise(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
-        match = Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
         await uow.matches.add(match)
 
         # Create HoleScore with own_submitted but MISMATCH
-        hs = HoleScore.create(match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0)
+        hs = HoleScore.create(
+            match_id=match.id, hole_number=1, player_user_id=a.user_id, team="A", strokes_received=0
+        )
         hs.set_own_score(5)
         hs.set_marker_score(4)
         hs.recalculate_validation()
@@ -115,7 +125,9 @@ class TestSubmitScorecardHappyPath:
         mock_round.status = RoundStatus.IN_PROGRESS
         uow._rounds._rounds[mock_round.id] = mock_round
 
-        match = Match.create(round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
         await uow.matches.add(match)
 
@@ -136,18 +148,32 @@ class TestSubmitScorecardHappyPath:
         mock_round.competition_id = MagicMock()
         uow._rounds._rounds[mock_round.id] = mock_round
 
-        match = Match.create(round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
 
         # Create validated hole scores (18 holes each)
         for hole in range(1, 19):
-            hs_a = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=a.user_id, team="A", strokes_received=0)
+            hs_a = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=a.user_id,
+                team="A",
+                strokes_received=0,
+            )
             hs_a.set_own_score(4)
             hs_a.set_marker_score(4)
             hs_a.recalculate_validation()
             await uow.hole_scores.add(hs_a)
 
-            hs_b = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=b.user_id, team="B", strokes_received=0)
+            hs_b = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=b.user_id,
+                team="B",
+                strokes_received=0,
+            )
             hs_b.set_own_score(5)
             hs_b.set_marker_score(5)
             hs_b.recalculate_validation()
@@ -172,18 +198,32 @@ class TestSubmitScorecardHappyPath:
         mock_round.competition_id = MagicMock()
         uow._rounds._rounds[mock_round.id] = mock_round
 
-        match = Match.create(round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b])
+        match = Match.create(
+            round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b]
+        )
         match.start()
 
         # Simulate: A wins all 18 holes (score 4 vs 5) but match decided at hole 14
         for hole in range(1, 19):
-            hs_a = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=a.user_id, team="A", strokes_received=0)
+            hs_a = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=a.user_id,
+                team="A",
+                strokes_received=0,
+            )
             hs_a.set_own_score(4)
             hs_a.set_marker_score(4)
             hs_a.recalculate_validation()
             await uow.hole_scores.add(hs_a)
 
-            hs_b = HoleScore.create(match_id=match.id, hole_number=hole, player_user_id=b.user_id, team="B", strokes_received=0)
+            hs_b = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=b.user_id,
+                team="B",
+                strokes_received=0,
+            )
             hs_b.set_own_score(5)
             hs_b.set_marker_score(5)
             hs_b.recalculate_validation()

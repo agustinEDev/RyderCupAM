@@ -79,8 +79,12 @@ class TestMatchSetMarkerAssignments:
         b = _make_player()
         match = _create_match(team_a=[a], team_b=[b])
         assignments = [
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
-            MarkerAssignment(scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id),
+            MarkerAssignment(
+                scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id
+            ),
         ]
         match.set_marker_assignments(assignments)
         assert len(match.marker_assignments) == 2
@@ -177,11 +181,15 @@ class TestMatchScoringReconstruct:
         a = _make_player()
         b = _make_player()
         assignments = [
-            MarkerAssignment(scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id),
+            MarkerAssignment(
+                scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+            ),
         ]
         now = datetime.now()
         match = Match.reconstruct(
-            id=Match.create(round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]).id,
+            id=Match.create(
+                round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+            ).id,
             round_id=RoundId.generate(),
             match_number=1,
             team_a_players=[a],

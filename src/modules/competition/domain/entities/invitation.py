@@ -234,7 +234,9 @@ class Invitation:
         event = InvitationAcceptedEvent(
             invitation_id=str(self._id),
             competition_id=str(self._competition_id),
-            invitee_user_id=str(self._invitee_user_id) if self._invitee_user_id is not None else None,
+            invitee_user_id=str(self._invitee_user_id)
+            if self._invitee_user_id is not None
+            else None,
         )
         self.add_domain_event(event)
 
@@ -257,7 +259,9 @@ class Invitation:
         event = InvitationDeclinedEvent(
             invitation_id=str(self._id),
             competition_id=str(self._competition_id),
-            invitee_user_id=str(self._invitee_user_id) if self._invitee_user_id is not None else None,
+            invitee_user_id=str(self._invitee_user_id)
+            if self._invitee_user_id is not None
+            else None,
         )
         self.add_domain_event(event)
 

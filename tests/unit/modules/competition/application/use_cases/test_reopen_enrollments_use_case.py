@@ -50,9 +50,7 @@ class TestReopenEnrollmentsUseCase:
         """Fixture que proporciona un ID de otro usuario (no creador)."""
         return UserId(uuid4())
 
-    async def _create_closed_competition(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def _create_closed_competition(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Helper: crea una competición en estado CLOSED."""
         create_use_case = CreateCompetitionUseCase(uow)
         create_request = CreateCompetitionRequestDTO(

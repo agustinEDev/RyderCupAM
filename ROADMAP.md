@@ -1,8 +1,18 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Versión:** 2.0.14 | **Tests:** 1,902 unit + 256 integration (1 skipped) | **Endpoints:** 82 | **OWASP:** 9.4/10
+> **Versión:** 2.0.15 | **Tests:** 1,022 unit (branch) | **Endpoints:** 82 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Feb 24, 2026
+> **Last Updated:** Jun 18, 2026
+
+---
+
+## En progreso: Bugfixes Scoring (branch `bugfix/scoring-matchplay-calculation`)
+
+### Correcciones producción ✅
+
+- **SINGLES WHS differential**: `_build_singles_match_players()` calcula strokes recibidos como diferencia de PHs. Solo el jugador con PH mayor recibe golpes (= PH_alto − PH_bajo) en los hoyos más difíciles (menor SI primero). PH individual preservado para visualización.
+- **Leaderboard 0 puntos**: `GetLeaderboardUseCase` valida el campo `winner` almacenado; si es nulo o inválido, recalcula el resultado desde los scores. `UpdateMatchStatusUseCase` exige `winner ∈ {A, B, HALVED}` al completar un partido.
+- **MAX_SCORE 9 → 15**: `HoleScore.set_own_score()`, `set_marker_score()` y `SubmitHoleScoreBodyDTO` aceptan hasta 15 golpes (panel numérico frontend permite entrada manual).
 
 ---
 
