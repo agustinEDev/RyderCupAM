@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [2.0.16] - 2026-06-19
+
 ### Fixed
 
 **Scoring — Match Play Calculation (SINGLES)**

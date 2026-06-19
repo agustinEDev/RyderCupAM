@@ -107,17 +107,24 @@ urllib3==2.7.0
 filelock==3.20.3
 
 # authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
-# Actualizado a 1.6.12 para resolver:
+# Fijada explícitamente para resolver:
+# - CVE-2025-61920 (DoS via large base64 tokens)
+# - CVE-2025-62706 (DoS via zip bomb decompression)
+# - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
+# - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
+# - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
+# - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
 # - PYSEC-2026-25 (Improper Verification of Cryptographic Signature - fixed in 1.6.11)
 # - PYSEC-2026-188 (fixed in 1.6.12)
 authlib==1.6.12
 
 # cryptography - Primitivas criptográficas de bajo nivel (dependencia transitiva)
-# Actualizado a 46.0.7 para resolver:
+# Actualizado a 48.0.1 para resolver:
 # - CVE-2026-26007 (fixed in 46.0.5)
 # - PYSEC-2026-35 (fixed in 46.0.6)
 # - PYSEC-2026-36 (fixed in 46.0.7)
-cryptography==46.0.7
+# - CVE-2026-34180 (Out-of-bounds Read, CVSS 8.7 HIGH, fixed in 48.0.1)
+cryptography==48.0.1
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:
