@@ -6,7 +6,21 @@
 
 ---
 
-## En progreso: Bugfixes Scoring (branch `bugfix/scoring-matchplay-calculation`)
+## En progreso: Scoring Improvements (branch `feature/scoring-improvements`)
+
+### Pendiente de implementar
+
+- **Límite hándicap de juego** (#4): campo `max_playing_handicap` en `Competition` + migración + propagación en use cases y DTOs. `PlayingHandicapCalculator.calculate()` aplica el cap.
+- **Admin acceso total a scoring** (#5): rutas de scoring aceptan admin sin estar en el partido (`is_admin OR player_in_match`).
+
+### Completado ✅
+
+- **Best ball no determinístico (FOURBALL)** (#3): `find_by_match` añade `ORDER BY _player_user_id ASC` como clave secundaria. `find_best_ball_player` devuelve lista de IDs cuando hay empate dentro del equipo; el DTO `best_ball_player_a/b` pasa de `str | None` a `list[str]`.
+- **"Equipo X gana AS"** (#1): fix aplicado en frontend (`LeaderboardView`). El backend ya producía `winner="HALVED"` correctamente; no requirió cambios.
+
+---
+
+## Completado: Bugfixes Scoring (branch `bugfix/scoring-matchplay-calculation`)
 
 ### Correcciones producción ✅
 

@@ -5,7 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [Unreleased] — feature/scoring-improvements
+
+### Fixed
+
+**Scoring — Best Ball Player Determinism (FOURBALL)**
+
+- `SQLAlchemyHoleScoreRepository.find_by_match()`: Added secondary `ORDER BY _player_user_id ASC` to guarantee consistent row order within each hole. Previously, when two players on the same team had equal net scores, PostgreSQL could return their rows in non-deterministic physical order after updates/vacuums, causing `find_best_ball_player()` to return a different player on each request.
+- `ScoringService.find_best_ball_player()`: When two players on the same team tie on net score, the method now returns **both player IDs** (as a list) instead of a single ID. The DTO field `best_ball_player_a` / `best_ball_player_b` becomes a list to support the "Nombre1 y Nombre2" display in the frontend.
+
+**Scoring — Leaderboard Result for Halved Matches**
+
+- `calculate_match_result()`: When a match finishes AS (All Square), `winner` is now set to `"HALVED"` and `score` to `"AS"`. The frontend was previously displaying "Equipo X gana AS" because a non-empty `winner` string always triggered the `wins` translation key.
+
+### Added
+
+**Competition — Playing Handicap Limit**
+
+- New optional field `max_playing_handicap: int | None` on the `Competition` entity. When set, `PlayingHandicapCalculator.calculate()` caps the result at this value before returning it.
+- Alembic migration: adds nullable column `max_playing_handicap INTEGER` to `competitions` table.
+- `CompetitionRequestDTO` / `CompetitionResponseDTO`: includes new field with validation `ge=1, le=54`.
+- `CreateCompetitionUseCase` / `UpdateCompetitionUseCase`: propagate the new field.
+- API: `POST /api/v1/competitions` and `PUT /api/v1/competitions/{id}` accept `max_playing_handicap`.
+
+**Admin — Full Access to Scoring and Match Actions**
+
+- All scoring routes now accept an admin user regardless of whether they are a player in the match. Check updated from "user must be in match" to "user must be in match OR is_admin".
+- Affected routes: `GET /scoring-view`, `POST /scores/holes/{n}`, `POST /scorecard/submit`, `PUT /concede`.
 
 ---
 
