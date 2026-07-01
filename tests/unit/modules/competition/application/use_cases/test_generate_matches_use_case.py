@@ -1079,3 +1079,123 @@ class TestGenerateMatchesUseCase:
         # Act & Assert
         with pytest.raises(ValueError, match="campo de golf"):
             await use_case.execute(request, creator_id)
+
+    async def test_max_playing_handicap_is_applied_in_singles(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica que max_playing_handicap se aplica al generar partidos SINGLES.
+
+        Given: Competicion HANDICAP con max_playing_handicap=5, jugadores HI=36
+        When: Se generan partidos SINGLES
+        Then: playing_handicap de todos los jugadores <= 5
+        """
+        # Arrange: competition con max_playing_handicap=5
+        competition = Competition.create(
+            id=CompetitionId(uuid4()),
+            creator_id=creator_id,
+            name=CompetitionName("Cap Competition"),
+            dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
+            location=Location(main_country=CountryCode("ES")),
+            play_mode=PlayMode.HANDICAP,
+            max_players=24,
+            team_assignment=TeamAssignment.MANUAL,
+            team_1_name="Team A",
+            team_2_name="Team B",
+            max_playing_handicap=5,
+        )
+        competition.activate()
+        competition.close_enrollments()
+        async with uow:
+            await uow.competitions.add(competition)
+
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        # HI=36 → PH sin cap sería ~36, con cap=5 debe quedar en 5
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 36.0, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        # Act
+        await use_case.execute(request, creator_id)
+
+        # Assert: playing_handicap individual no supera el cap
+        matches = await uow.matches.find_by_round(round_entity.id)
+        assert len(matches) == 1
+        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+            assert p.playing_handicap <= 5
+
+    async def test_max_playing_handicap_is_applied_in_fourball(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica que max_playing_handicap se aplica al generar partidos FOURBALL.
+
+        Given: Competicion HANDICAP con max_playing_handicap=3, jugadores HI=36
+        When: Se generan partidos FOURBALL
+        Then: playing_handicap de todos los jugadores <= 3
+        """
+        competition = Competition.create(
+            id=CompetitionId(uuid4()),
+            creator_id=creator_id,
+            name=CompetitionName("Cap Fourball"),
+            dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
+            location=Location(main_country=CountryCode("ES")),
+            play_mode=PlayMode.HANDICAP,
+            max_players=24,
+            team_assignment=TeamAssignment.MANUAL,
+            team_1_name="Team A",
+            team_2_name="Team B",
+            max_playing_handicap=3,
+        )
+        competition.activate()
+        competition.close_enrollments()
+        async with uow:
+            await uow.competitions.add(competition)
+
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.FOURBALL
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 2, 2)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 36.0, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        matches = await uow.matches.find_by_round(round_entity.id)
+        assert len(matches) == 1
+        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+            assert p.playing_handicap <= 3
