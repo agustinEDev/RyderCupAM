@@ -1,5 +1,7 @@
 """DTOs para el modulo de scoring."""
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +11,10 @@ class SubmitHoleScoreBodyDTO(BaseModel):
     own_score: int | None = Field(None, ge=1, le=15)
     marked_player_id: str
     marked_score: int | None = Field(None, ge=1, le=15)
+    acting_as: UUID | None = Field(
+        None,
+        description="Solo admin: ID del jugador al que se representa para registrar su score.",
+    )
 
 
 class RoundInfoDTO(BaseModel):
