@@ -166,6 +166,8 @@ class GenerateMatchesUseCase:
             team_a_ids = list(team_assignment.team_a_player_ids)
             team_b_ids = list(team_assignment.team_b_player_ids)
 
+            max_playing_handicap = competition.max_playing_handicap
+
             if request.manual_pairings:
                 matches_created = await self._generate_manual(
                     request,
@@ -178,6 +180,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
             else:
                 matches_created = await self._generate_auto(
@@ -193,6 +196,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
 
             # 13. Transicionar ronda
@@ -260,6 +264,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ):
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
@@ -293,6 +298,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
                 team_a_match_players = [a_player]
                 team_b_match_players = [b_player]
@@ -308,6 +314,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
             elif match_format == MatchFormat.FOURSOMES:
                 team_a_match_players, team_b_match_players = self._build_foursomes_match_players(
@@ -321,6 +328,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
             else:
                 raise ValueError(f"Formato de partido no soportado: {match_format.value}")
@@ -352,6 +360,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ):
         """Genera partidos según emparejamientos manuales."""
         # Validar que todos los jugadores estén inscritos (APPROVED)
@@ -381,6 +390,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
             elif match_format == MatchFormat.FOURSOMES:
                 team_a_match_players, team_b_match_players = self._build_foursomes_match_players(
@@ -394,6 +404,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
             elif match_format == MatchFormat.SINGLES:
                 # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
@@ -408,6 +419,7 @@ class GenerateMatchesUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    max_playing_handicap,
                 )
                 team_a_match_players = [a_player]
                 team_b_match_players = [b_player]
@@ -482,6 +494,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         tee_category, tee_gender, tee_rating, handicap_index = self._resolve_player_data(
@@ -503,7 +516,7 @@ class GenerateMatchesUseCase:
                 f"(gender: {tee_gender}) en el campo de golf"
             )
 
-        playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance)
+        playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance, max_playing_handicap)
         strokes_received = calculator.compute_strokes_received(
             playing_handicap, holes_by_stroke_index
         )
@@ -528,6 +541,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURBALL usando el método diferencial WHS.
@@ -592,6 +606,10 @@ class GenerateMatchesUseCase:
         # 2. Método diferencial: aplica allowance% a diferencias respecto al menor CH
         differential_phs = calculator.calculate_fourball_differential(course_handicaps, allowance)
 
+        # Aplicar cap de max_playing_handicap si está definido
+        if max_playing_handicap is not None:
+            differential_phs = {k: min(v, max_playing_handicap) for k, v in differential_phs.items()}
+
         # 3. Construir MatchPlayers con PH diferencial
         def build_player(uid):
             uid_str = str(uid.value)
@@ -622,6 +640,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> tuple["MatchPlayer", "MatchPlayer"]:
         """
         Construye MatchPlayers para SINGLES usando el método diferencial WHS.
@@ -664,8 +683,8 @@ class GenerateMatchesUseCase:
                 f"(gender: {tee_gen_b}) en el campo de golf"
             )
 
-        ph_a = calculator.calculate(hi_a, tee_rating_a, allowance)
-        ph_b = calculator.calculate(hi_b, tee_rating_b, allowance)
+        ph_a = calculator.calculate(hi_a, tee_rating_a, allowance, max_playing_handicap)
+        ph_b = calculator.calculate(hi_b, tee_rating_b, allowance, max_playing_handicap)
 
         diff = ph_a - ph_b
         if diff > 0:
@@ -701,6 +720,7 @@ class GenerateMatchesUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURSOMES usando el método diferencial WHS.
@@ -773,6 +793,11 @@ class GenerateMatchesUseCase:
         team_a_ph, team_b_ph = calculator.calculate_foursomes_differential(
             team_a_chs, team_b_chs, allowance
         )
+
+        # Aplicar cap de max_playing_handicap si está definido
+        if max_playing_handicap is not None:
+            team_a_ph = min(team_a_ph, max_playing_handicap)
+            team_b_ph = min(team_b_ph, max_playing_handicap)
 
         # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola)
         team_a_strokes = calculator.compute_strokes_received(team_a_ph, holes_by_stroke_index)

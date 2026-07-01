@@ -693,6 +693,7 @@ competitions_table = Table(
     Column("max_players", Integer, nullable=False, default=24),
     Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
+    Column("max_playing_handicap", Integer, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -938,6 +939,7 @@ def start_competition_mappers():
                 "_team_2_name": competitions_table.c.team_2_name,
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
+                "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs

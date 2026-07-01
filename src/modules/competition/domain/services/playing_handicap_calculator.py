@@ -85,6 +85,7 @@ class PlayingHandicapCalculator:
         handicap_index: Decimal,
         tee_rating: TeeRating,
         allowance_percentage: int,
+        max_playing_handicap: int | None = None,
     ) -> int:
         """
         Calcula el Playing Handicap (Handicap de Juego).
@@ -114,7 +115,10 @@ class PlayingHandicapCalculator:
         playing_handicap = int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
         # Playing Handicap no puede ser negativo
-        return max(0, playing_handicap)
+        result = max(0, playing_handicap)
+        if max_playing_handicap is not None:
+            result = min(result, max_playing_handicap)
+        return result
 
     def calculate_for_singles(
         self,

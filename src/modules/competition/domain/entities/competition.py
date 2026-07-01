@@ -101,10 +101,13 @@ class Competition:
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
+        max_playing_handicap: int | None = None,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
         self._validate_max_players(max_players)
+        if max_playing_handicap is not None:
+            self._validate_max_playing_handicap(max_playing_handicap)
 
         # Asignación de atributos privados (encapsulación)
         self._id = id
@@ -117,6 +120,7 @@ class Competition:
         self._play_mode = play_mode
         self._max_players = max_players
         self._team_assignment = team_assignment
+        self._max_playing_handicap = max_playing_handicap
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -136,6 +140,7 @@ class Competition:
         play_mode: PlayMode,
         max_players: int = 24,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
+        max_playing_handicap: int | None = None,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -153,6 +158,7 @@ class Competition:
             play_mode=play_mode,
             max_players=max_players,
             team_assignment=team_assignment,
+            max_playing_handicap=max_playing_handicap,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -183,6 +189,12 @@ class Competition:
         """Valida que max_players esté en rango válido."""
         if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
             raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
+
+    @staticmethod
+    def _validate_max_playing_handicap(max_playing_handicap: int) -> None:
+        """Valida que max_playing_handicap esté en rango válido (WHS: 0–54)."""
+        if not 1 <= max_playing_handicap <= 54:
+            raise ValueError("max_playing_handicap debe estar entre 1 y 54")
 
     # ===========================================
     # PROPERTIES (Encapsulación — solo lectura)
@@ -227,6 +239,10 @@ class Competition:
     @property
     def team_assignment(self) -> TeamAssignment:
         return self._team_assignment
+
+    @property
+    def max_playing_handicap(self) -> int | None:
+        return self._max_playing_handicap
 
     @property
     def status(self) -> CompetitionStatus:
@@ -439,6 +455,7 @@ class Competition:
         play_mode: PlayMode | None = None,
         max_players: int | None = None,
         team_assignment: TeamAssignment | None = None,
+        max_playing_handicap: int | None = None,
     ) -> None:
         """
         Actualiza la información del torneo. Solo permitido en estado DRAFT.
@@ -471,6 +488,10 @@ class Competition:
 
         if team_assignment is not None:
             self._team_assignment = team_assignment
+
+        if max_playing_handicap is not None:
+            self._validate_max_playing_handicap(max_playing_handicap)
+            self._max_playing_handicap = max_playing_handicap
 
         # Validar y actualizar nombres de equipos
         updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name

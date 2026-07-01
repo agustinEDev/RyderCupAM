@@ -123,6 +123,7 @@ class CompetitionDTOMapper:
                 if hasattr(competition.team_assignment, "value")
                 else competition.team_assignment
             ),
+            max_playing_handicap=competition.max_playing_handicap,
             # Teams
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,

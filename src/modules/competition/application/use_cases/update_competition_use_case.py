@@ -135,6 +135,7 @@ class UpdateCompetitionUseCase:
                 team_assignment=team_assignment,
                 team_1_name=request.team_1_name,
                 team_2_name=request.team_2_name,
+                max_playing_handicap=request.max_playing_handicap,
             )
 
             # 6. Persistir cambios
