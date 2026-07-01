@@ -10,8 +10,14 @@
 
 ### Pendiente de implementar
 
-- **Límite hándicap de juego** (#4): campo `max_playing_handicap` en `Competition` + migración + propagación en use cases y DTOs. `PlayingHandicapCalculator.calculate()` aplica el cap.
+#### Scoring fixes
+- **Límite hándicap de juego** (#4): campo `max_playing_handicap` en `Competition` + migración + propagación en use cases y DTOs. `PlayingHandicapCalculator.calculate()` aplica el cap; si el hándicap de juego calculado supera el límite, se usa el valor limitado.
 - **Admin acceso total a scoring** (#5): rutas de scoring aceptan admin sin estar en el partido (`is_admin OR player_in_match`).
+
+#### Módulo Gestión de Hándicaps
+- **Actualizar hándicap RFEG al inscribir jugador** (H1): al aprobar la inscripción de un jugador (`EnrollmentApprovedEvent`), si `country_code == 'ES'`, lanzar consulta asíncrona a RFEG y actualizar `user.handicap + handicap_updated_at`.
+- **Actualizar hándicap RFEG en login** (H2): al autenticarse un usuario con `country_code == 'ES'`, consultar RFEG en background. Si no se localiza o la nacionalidad es distinta de ES, generar un item de tipo `HANDICAP_REQUIRED` (tabla `attention_items` o equivalente) para revisión manual por el propio usuario.
+- **Hándicap personalizado por competición** (H3): extender el campo `custom_handicap` existente en `Enrollment` con flag `custom_handicap_set_by_creator`. Nuevo endpoint `PUT /api/v1/competitions/{id}/enrollments/{enrollment_id}/handicap` accesible solo por creator/admin. `PlayingHandicapCalculator` usa `custom_handicap` cuando está definido.
 
 ### Completado ✅
 
