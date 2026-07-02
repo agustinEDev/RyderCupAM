@@ -197,7 +197,7 @@ async def create_round(
             handicap_mode=body.handicap_mode,
             allowance_percentage=body.allowance_percentage,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except CreateRoundNotFoundError as e:
         raise HTTPException(
@@ -262,7 +262,7 @@ async def update_round(
             allowance_percentage=body.allowance_percentage,
             clear_allowance=body.clear_allowance,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except UpdateRoundNotFoundError as e:
         raise HTTPException(
@@ -317,7 +317,7 @@ async def delete_round(
     try:
         current_user_id = UserId(current_user.id)
         request_dto = DeleteRoundRequestDTO(round_id=round_id)
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except DeleteRoundNotFoundError as e:
         raise HTTPException(
@@ -444,7 +444,7 @@ async def update_match_status(
             action=body.action,
             result=body.result,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except (
         StatusMatchNotFoundError,
@@ -506,7 +506,7 @@ async def declare_walkover(
             winning_team=body.winning_team,
             reason=body.reason,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except WalkoverMatchNotFoundError as e:
         raise HTTPException(
@@ -564,7 +564,7 @@ async def reassign_match_players(
             team_a_player_ids=body.team_a_player_ids,
             team_b_player_ids=body.team_b_player_ids,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except ReassignMatchNotFoundError as e:
         raise HTTPException(
@@ -637,7 +637,7 @@ async def assign_teams(
             team_a_player_ids=body.team_a_player_ids,
             team_b_player_ids=body.team_b_player_ids,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except AssignTeamsNotFoundError as e:
         raise HTTPException(
@@ -696,7 +696,7 @@ async def generate_matches(
             round_id=round_id,
             manual_pairings=body.manual_pairings,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except GenMatchesRoundNotFoundError as e:
         raise HTTPException(
@@ -758,7 +758,7 @@ async def configure_schedule(
             total_sessions=body.total_sessions,
             sessions_per_day=body.sessions_per_day,
         )
-        return await use_case.execute(request_dto, current_user_id)
+        return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
     except ConfigSchedNotFoundError as e:
         raise HTTPException(

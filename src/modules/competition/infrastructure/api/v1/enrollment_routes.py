@@ -255,7 +255,7 @@ async def direct_enroll_player(
             tee_category=request.tee_category,
         )
         creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id)
+        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
     except DirectCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -331,7 +331,7 @@ async def approve_enrollment(
     try:
         request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="APPROVE")
         creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id)
+        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
     except HandleEnrollmentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -362,7 +362,7 @@ async def reject_enrollment(
     try:
         request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="REJECT")
         creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id)
+        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
     except HandleEnrollmentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -460,7 +460,7 @@ async def set_custom_handicap(
             enrollment_id=enrollment_id, custom_handicap=request.custom_handicap
         )
         creator_id = UserId(str(current_user.id))
-        return await use_case.execute(request_dto, creator_id)
+        return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
     except HandicapEnrollmentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

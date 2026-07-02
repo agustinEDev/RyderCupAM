@@ -52,7 +52,7 @@ class ConfigureScheduleUseCase:
         self._format_service = schedule_format_service or ScheduleFormatService()
 
     async def execute(
-        self, request: ConfigureScheduleRequestDTO, user_id: UserId
+        self, request: ConfigureScheduleRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ConfigureScheduleResponseDTO:
         async with self._uow:
             # 1. Buscar la competición
@@ -65,7 +65,7 @@ class ConfigureScheduleUseCase:
                 )
 
             # 2. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede configurar el schedule")
 
             # 3. Verificar estado CLOSED

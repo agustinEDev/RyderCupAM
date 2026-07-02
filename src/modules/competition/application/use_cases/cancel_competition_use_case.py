@@ -56,7 +56,7 @@ class CancelCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: CancelCompetitionRequestDTO, user_id: UserId
+        self, request: CancelCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> CancelCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de cancelación de competición.
@@ -84,7 +84,7 @@ class CancelCompetitionUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede cancelar la competición")
 
             # 3. Cancelar la competición (la entidad valida la transición)

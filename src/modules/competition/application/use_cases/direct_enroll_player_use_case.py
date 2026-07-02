@@ -72,7 +72,7 @@ class DirectEnrollPlayerUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: DirectEnrollPlayerRequestDTO, creator_id: UserId
+        self, request: DirectEnrollPlayerRequestDTO, creator_id: UserId, is_admin: bool = False
     ) -> DirectEnrollPlayerResponseDTO:
         """
         Ejecuta el caso de uso de inscripcion directa.
@@ -102,7 +102,7 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 2. Verificar que es el creador
-            if competition.creator_id != creator_id:
+            if not is_admin and competition.creator_id != creator_id:
                 raise NotCreatorError(
                     "Solo el creador de la competicion puede inscribir jugadores directamente"
                 )

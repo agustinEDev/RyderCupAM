@@ -64,6 +64,7 @@ class UpdateCompetitionUseCase:
         competition_id: CompetitionId,
         request: UpdateCompetitionRequestDTO,
         user_id: UserId,
+        is_admin: bool = False,
     ) -> UpdateCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de actualización de competición.
@@ -90,7 +91,7 @@ class UpdateCompetitionUseCase:
                 )
 
             # 2. Validar que el usuario es el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar la competición")
 
             # 3. Validar que está en estado DRAFT (se puede modificar)

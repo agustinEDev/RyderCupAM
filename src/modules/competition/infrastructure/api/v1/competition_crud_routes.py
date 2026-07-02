@@ -405,7 +405,7 @@ async def update_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        await use_case.execute(competition_vo_id, competition_data, current_user_id)
+        await use_case.execute(competition_vo_id, competition_data, current_user_id, is_admin=current_user.is_admin)
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
@@ -450,7 +450,7 @@ async def delete_competition(
 
         request_dto = DeleteCompetitionRequestDTO(competition_id=competition_id)
 
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         return
 

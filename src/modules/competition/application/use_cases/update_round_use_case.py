@@ -50,7 +50,7 @@ class UpdateRoundUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: UpdateRoundRequestDTO, user_id: UserId
+        self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateRoundResponseDTO:
         async with self._uow:
             # 1. Buscar la ronda
@@ -67,7 +67,7 @@ class UpdateRoundUseCase:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
 
             # 4. Verificar competición CLOSED

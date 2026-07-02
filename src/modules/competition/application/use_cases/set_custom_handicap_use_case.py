@@ -56,7 +56,7 @@ class SetCustomHandicapUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: SetCustomHandicapRequestDTO, creator_id: UserId
+        self, request: SetCustomHandicapRequestDTO, creator_id: UserId, is_admin: bool = False
     ) -> SetCustomHandicapResponseDTO:
         """
         Ejecuta el caso de uso de establecer handicap personalizado.
@@ -90,7 +90,7 @@ class SetCustomHandicapUseCase:
                 )
 
             # 3. Verificar que es el creador
-            if competition.creator_id != creator_id:
+            if not is_admin and competition.creator_id != creator_id:
                 raise NotCreatorError(
                     "Solo el creador de la competicion puede establecer handicaps personalizados"
                 )

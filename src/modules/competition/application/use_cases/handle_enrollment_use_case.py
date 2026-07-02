@@ -62,7 +62,7 @@ class HandleEnrollmentUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: HandleEnrollmentRequestDTO, creator_id: UserId
+        self, request: HandleEnrollmentRequestDTO, creator_id: UserId, is_admin: bool = False
     ) -> HandleEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de manejo de inscripción.
@@ -99,7 +99,7 @@ class HandleEnrollmentUseCase:
                 )
 
             # 3. Verificar que es el creador
-            if competition.creator_id != creator_id:
+            if not is_admin and competition.creator_id != creator_id:
                 raise NotCreatorError(
                     "Solo el creador de la competición puede aprobar o rechazar inscripciones"
                 )

@@ -85,7 +85,7 @@ class GenerateMatchesUseCase:
         self._scoring_service = scoring_service or ScoringService()
 
     async def execute(
-        self, request: GenerateMatchesRequestDTO, user_id: UserId
+        self, request: GenerateMatchesRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> GenerateMatchesResponseDTO:
         async with self._uow:
             # 1. Buscar la ronda
@@ -101,7 +101,7 @@ class GenerateMatchesUseCase:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede generar partidos")
 
             # 4. Verificar competición CLOSED

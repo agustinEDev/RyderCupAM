@@ -315,7 +315,8 @@ async def concede_match(
     try:
         current_user_id = UserId(current_user.id)
         return await use_case.execute(
-            str(match_id), current_user_id, body.conceding_team, body.reason
+            str(match_id), current_user_id, body.conceding_team, body.reason,
+            is_admin=current_user.is_admin,
         )
 
     except MatchNotFoundError as e:

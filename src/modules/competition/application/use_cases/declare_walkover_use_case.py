@@ -41,7 +41,7 @@ class DeclareWalkoverUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: DeclareWalkoverRequestDTO, user_id: UserId
+        self, request: DeclareWalkoverRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> DeclareWalkoverResponseDTO:
         async with self._uow:
             # 1. Buscar el partido
@@ -61,7 +61,7 @@ class DeclareWalkoverUseCase:
                 raise MatchNotFoundError("La competicion asociada no existe")
 
             # 3. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede declarar walkover")
 
             # 4. Verificar competicion IN_PROGRESS

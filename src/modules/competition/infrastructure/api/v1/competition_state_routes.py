@@ -114,7 +114,7 @@ async def activate_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = ActivateCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -155,7 +155,7 @@ async def close_enrollments(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CloseEnrollmentsRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -196,7 +196,7 @@ async def start_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = StartCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -237,7 +237,7 @@ async def complete_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CompleteCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -278,7 +278,7 @@ async def revert_competition_status(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = RevertCompetitionStatusRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -319,7 +319,7 @@ async def reopen_enrollments(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = ReopenEnrollmentsRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
@@ -360,7 +360,7 @@ async def cancel_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CancelCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
