@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+**Login — Handicap Refresh Not Prompted for Non-Spanish Users (HM-2)**
+
+- `LoginUserUseCase`: `needs_handicap` was only ever computed inside the `country_code == "ES"` branch, so non-Spanish users (or users without a `country_code`) never got prompted to enter their handicap, even though the frontend `HandicapRequestModal` already had a "manual" tab built for exactly that case.
+- New behavior: on every login, if the handicap wasn't already refreshed **today** (`handicap_updated_at.date() != today`), Spanish users get an automatic, silent RFEG lookup; everyone else (non-ES, no country, or failed/empty RFEG result) gets `needs_handicap=True` so the frontend shows the modal.
+- Extracted the refresh logic into `LoginUserUseCase._refresh_handicap()` to keep `execute()` within complexity limits.
+- 2 existing tests updated (`test_non_es_user_no_rfeg_call_needs_handicap_true`, `test_no_country_user_needs_handicap_true`) to assert the corrected behavior; 2 new tests added for the daily-refresh gate.
+
 **Scoring — Best Ball Player Determinism (FOURBALL)**
 
 - `SQLAlchemyHoleScoreRepository.find_by_match()`: Added secondary `ORDER BY _player_user_id ASC` to guarantee consistent row order within each hole. Previously, when two players on the same team had equal net scores, PostgreSQL could return their rows in non-deterministic physical order after updates/vacuums, causing `find_best_ball_player()` to return a different player on each request.

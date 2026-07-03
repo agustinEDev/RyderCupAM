@@ -4,6 +4,7 @@ Tests para LoginUserUseCase
 Tests unitarios para el caso de uso de login de usuario.
 """
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -261,10 +262,10 @@ class TestLoginUserUseCaseHandicapRFEG:
         assert response.needs_handicap is False
         handicap_svc.search_handicap.assert_not_awaited()
 
-    async def test_non_es_user_no_rfeg_call_needs_handicap_false(
+    async def test_non_es_user_no_rfeg_call_needs_handicap_true(
         self, token_service, register_device_use_case
     ):
-        """Usuario no-ES → no llama RFEG, needs_handicap=False."""
+        """Usuario no-ES → no llama RFEG (no aplica), pero se solicita con modal."""
         uow = InMemoryUnitOfWork()
         user = User.create(
             first_name="Pierre",
@@ -285,13 +286,13 @@ class TestLoginUserUseCaseHandicapRFEG:
         )
 
         assert response is not None
-        assert response.needs_handicap is False
+        assert response.needs_handicap is True
         handicap_svc.search_handicap.assert_not_awaited()
 
-    async def test_no_country_user_needs_handicap_false(
+    async def test_no_country_user_needs_handicap_true(
         self, token_service, register_device_use_case
     ):
-        """Usuario sin country_code → needs_handicap=False."""
+        """Usuario sin country_code → RFEG no aplica, pero se solicita con modal."""
         uow = InMemoryUnitOfWork()
         user = User.create(
             first_name="Anonymous",
@@ -311,13 +312,13 @@ class TestLoginUserUseCaseHandicapRFEG:
         )
 
         assert response is not None
-        assert response.needs_handicap is False
+        assert response.needs_handicap is True
         handicap_svc.search_handicap.assert_not_awaited()
 
     async def test_existing_tests_unaffected_no_handicap_service(
         self, token_service, register_device_use_case
     ):
-        """Sin handicap_service (tests existentes) → needs_handicap=False para usuarios no-ES."""
+        """Sin handicap_service inyectado → needs_handicap=True para usuario no-ES sin hándicap (se pide manual)."""
         uow = InMemoryUnitOfWork()
         user = User.create(
             first_name="John",
@@ -336,4 +337,62 @@ class TestLoginUserUseCaseHandicapRFEG:
         )
 
         assert response is not None
+        assert response.needs_handicap is True
+
+    async def test_non_es_user_handicap_updated_today_no_prompt(
+        self, token_service, register_device_use_case
+    ):
+        """Usuario no-ES con hándicap ya actualizado hoy → no se solicita de nuevo."""
+        uow = InMemoryUnitOfWork()
+        user = User.create(
+            first_name="Pierre",
+            last_name="Dupont",
+            email_str="fr2@example.com",
+            plain_password="V@l1dP@ss123!",
+            country_code_str="FR",
+        )
+        user.update_handicap(20.0)
+        async with uow:
+            await uow.users.save(user)
+            await uow.commit()
+
+        handicap_svc = self._make_handicap_service(return_value=10.0)
+        use_case = self._make_use_case(uow, token_service, register_device_use_case, handicap_svc)
+
+        response = await use_case.execute(
+            LoginRequestDTO(email="fr2@example.com", password="V@l1dP@ss123!")
+        )
+
+        assert response is not None
         assert response.needs_handicap is False
+        handicap_svc.search_handicap.assert_not_awaited()
+
+    async def test_es_user_handicap_updated_yesterday_refetches_rfeg(
+        self, token_service, register_device_use_case
+    ):
+        """ES con hándicap desactualizado (no es de hoy) → reintenta RFEG automáticamente."""
+        uow = InMemoryUnitOfWork()
+        user = User.create(
+            first_name="Juan",
+            last_name="Garcia",
+            email_str="es3@example.com",
+            plain_password="V@l1dP@ss123!",
+            country_code_str="ES",
+        )
+        user.update_handicap(12.5)
+        user.handicap_updated_at = user.handicap_updated_at - timedelta(days=1)
+        async with uow:
+            await uow.users.save(user)
+            await uow.commit()
+
+        handicap_svc = self._make_handicap_service(return_value=15.0)
+        use_case = self._make_use_case(uow, token_service, register_device_use_case, handicap_svc)
+
+        response = await use_case.execute(
+            LoginRequestDTO(email="es3@example.com", password="V@l1dP@ss123!")
+        )
+
+        assert response is not None
+        assert response.needs_handicap is False
+        assert response.user.handicap == 15.0
+        handicap_svc.search_handicap.assert_awaited_once_with("Juan Garcia")

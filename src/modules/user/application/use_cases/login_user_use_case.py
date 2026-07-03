@@ -22,6 +22,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -240,25 +241,8 @@ class LoginUserUseCase:
         # Generar token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token()
 
-        # HM-2a: Fetch RFEG en login para usuarios españoles sin hándicap
-        needs_handicap = False
-        country_code_value = user.country_code.value if user.country_code else None
-        if country_code_value == "ES" and user.handicap is None:
-            if self._handicap_service is not None:
-                try:
-                    handicap_value = await self._handicap_service.search_handicap(
-                        user.get_full_name()
-                    )
-                    if handicap_value is not None:
-                        user.update_handicap(handicap_value)
-                        async with self._uow:
-                            await self._uow.users.save(user)
-                    else:
-                        needs_handicap = True
-                except Exception:  # noqa: BLE001
-                    needs_handicap = True
-            else:
-                needs_handicap = True
+        # HM-2a: Refresco de hándicap en login (best-effort, 1 vez al día).
+        needs_handicap = await self._refresh_handicap(user, login_time)
 
         # Crear respuesta con tokens y datos de usuario
         user_dto = UserResponseDTO.model_validate(user)
@@ -276,3 +260,41 @@ class LoginUserUseCase:
             # HM-2a: Indica si el FE debe mostrar HandicapRequestModal
             needs_handicap=needs_handicap,
         )
+
+    async def _refresh_handicap(self, user: User, login_time: datetime) -> bool:
+        """
+        Refresca el hándicap del usuario en login (best-effort, 1 vez al día).
+
+        ES: intenta fetch automático y silencioso vía RFEG.
+        No-ES, o RFEG sin resultado/con error: no se actualiza, hay que pedirlo al usuario.
+
+        Args:
+            user: Usuario autenticado.
+            login_time: Instante del login, usado para el gate "una vez al día".
+
+        Returns:
+            True si el FE debe mostrar el HandicapRequestModal.
+        """
+        handicap_updated_today = (
+            user.handicap_updated_at is not None
+            and user.handicap_updated_at.date() == login_time.date()
+        )
+        if handicap_updated_today:
+            return False
+
+        country_code_value = user.country_code.value if user.country_code else None
+        if country_code_value != "ES" or self._handicap_service is None:
+            return True
+
+        try:
+            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
+        except Exception:
+            return True
+
+        if handicap_value is None:
+            return True
+
+        user.update_handicap(handicap_value)
+        async with self._uow:
+            await self._uow.users.save(user)
+        return False
