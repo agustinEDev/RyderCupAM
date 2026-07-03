@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -168,8 +168,10 @@ class User:
             self.handicap = None
 
         # Actualizar timestamps
+        # handicap_updated_at se guarda en UTC (columna timezone-aware) para que el
+        # frontend pueda convertirlo correctamente a la hora local del usuario.
         now = datetime.now()
-        self.handicap_updated_at = now
+        self.handicap_updated_at = datetime.now(UTC)
         self.updated_at = now
 
         # Emitir evento solo si cambió

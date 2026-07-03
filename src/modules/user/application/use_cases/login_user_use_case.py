@@ -8,7 +8,7 @@ Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minut
 CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
@@ -180,7 +180,9 @@ class LoginUserUseCase:
         user.reset_failed_attempts()
 
         # Registrar evento de login exitoso (Clean Architecture)
-        login_time = datetime.now()
+        # UTC-aware: handicap_updated_at ahora es timezone-aware, y la comparación
+        # de fechas en _refresh_handicap() necesita el mismo huso horario.
+        login_time = datetime.now(UTC)
         user.record_login(
             logged_in_at=login_time,
             # ip_address y user_agent se pueden agregar cuando el controlador los pase
