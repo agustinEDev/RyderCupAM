@@ -90,7 +90,7 @@ class AddGolfCourseToCompetitionUseCase:
         self._golf_course_repo = golf_course_repository
 
     async def execute(
-        self, request: AddGolfCourseRequestDTO, user_id: UserId
+        self, request: AddGolfCourseRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> AddGolfCourseResponseDTO:
         """
         Ejecuta el caso de uso de añadir campo de golf a competición.
@@ -121,8 +121,8 @@ class AddGolfCourseToCompetitionUseCase:
                     f"No existe competición con ID {request.competition_id}"
                 )
 
-            # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            # 2. Verificar que el usuario sea el creador (o admin)
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError(
                     "Solo el creador puede añadir campos de golf a la competición"
                 )
