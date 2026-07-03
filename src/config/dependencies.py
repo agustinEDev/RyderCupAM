@@ -510,6 +510,7 @@ def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -518,10 +519,11 @@ def get_login_user_use_case(
     1. Depende de `get_uow` para obtener una Unit of Work.
     2. Depende de `get_token_service` para generación de tokens JWT.
     3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
-    4. Crea una instancia de `LoginUserUseCase` con esas dependencias.
-    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    4. Depende de `get_handicap_service` para fetch RFEG en login (HM-2a).
+    5. Crea una instancia de `LoginUserUseCase` con esas dependencias.
+    6. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LoginUserUseCase(uow, token_service, register_device_use_case)
+    return LoginUserUseCase(uow, token_service, register_device_use_case, handicap_service)
 
 
 def get_logout_user_use_case(

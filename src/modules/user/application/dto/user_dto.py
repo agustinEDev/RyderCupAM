@@ -286,6 +286,11 @@ class LoginResponseDTO(BaseModel):
         default=False,
         description="True si el caller debe setear la cookie device_id (v2.0.4). False si la cookie ya existe.",
     )
+    # HM-2: Handicap request flow
+    needs_handicap: bool = Field(
+        default=False,
+        description="True si el usuario es español (ES) y no tiene hándicap registrado. El FE debe mostrar HandicapRequestModal.",
+    )
 
 
 # ======================================================================================
