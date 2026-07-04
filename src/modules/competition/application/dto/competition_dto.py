@@ -115,7 +115,7 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     # Límite de hándicap de juego
     max_playing_handicap: int | None = Field(
-        None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1–54)."
+        None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
@@ -217,7 +217,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)
     team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
     max_playing_handicap: int | None = Field(
-        None, description="Límite máximo de hándicap de juego (WHS: 1–54)."
+        None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
 
     # Campos calculados
@@ -270,7 +270,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
     max_players: int | None = Field(None, ge=2, le=100, description="Nuevo máximo de jugadores.")
     team_assignment: str | None = Field(None, description="Nueva asignación de equipos.")
     max_playing_handicap: int | None = Field(
-        None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1–54)."
+        None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
     )
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
@@ -368,7 +368,7 @@ class CompetitionResponseDTO(BaseModel):
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)
     team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
     max_playing_handicap: int | None = Field(
-        None, description="Límite máximo de hándicap de juego (WHS: 1–54)."
+        None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
 
     # Campos calculados (NUEVO - requeridos por frontend)
@@ -381,7 +381,10 @@ class CompetitionResponseDTO(BaseModel):
     )
     pending_enrollments_count: int = Field(
         default=0,
-        description="Número de solicitudes con enrollment status PENDING (solo visible para el creador).",
+        description=(
+            "Número de solicitudes con enrollment status PENDING "
+            "(solo visible para el creador o un admin)."
+        ),
     )
     user_enrollment_status: str | None = Field(
         None,

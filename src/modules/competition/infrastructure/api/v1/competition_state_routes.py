@@ -120,7 +120,7 @@ async def activate_competition(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -161,7 +161,7 @@ async def close_enrollments(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -202,7 +202,7 @@ async def start_competition(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -243,7 +243,7 @@ async def complete_competition(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -284,7 +284,7 @@ async def revert_competition_status(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -325,7 +325,7 @@ async def reopen_enrollments(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -366,7 +366,7 @@ async def cancel_competition(
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto

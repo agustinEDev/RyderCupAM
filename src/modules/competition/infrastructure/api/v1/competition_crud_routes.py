@@ -170,7 +170,7 @@ async def _get_user_competitions(
     return created_competitions + enrolled_competitions
 
 
-async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow):
+async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow, is_admin=False):
     """Convierte entidades Competition a DTOs.
 
     Assumes caller manages the uow/user_uow transaction context.
@@ -178,7 +178,7 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
     result = []
     for competition in competitions:
         dto = await CompetitionDTOMapper.to_response_dto(
-            competition, current_user_id, uow, user_uow
+            competition, current_user_id, uow, user_uow, is_admin=is_admin
         )
         result.append(dto)
     return result
@@ -337,7 +337,9 @@ async def list_competitions(
                     search_creator,
                 )
 
-            result = await _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow)
+            result = await _map_competitions_to_dtos(
+                competitions, current_user_id, uow, user_uow, is_admin=current_user.is_admin
+            )
 
         return result
     except ValueError as e:
@@ -373,7 +375,7 @@ async def get_competition(
                 )
 
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -417,7 +419,7 @@ async def update_competition(
                 )
 
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
