@@ -10,6 +10,7 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    create_admin_user,
     create_authenticated_user,
     create_competition,
     set_auth_cookies,
@@ -133,6 +134,31 @@ class TestDirectEnrollPlayer:
         )
 
         assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_direct_enroll_by_admin_not_creator_succeeds(self, client: AsyncClient):
+        """Admin (no creador) puede inscribir directamente y retorna 201."""
+        creator = await create_authenticated_user(
+            client, "creator5b@test.com", "P@ssw0rd123!", "Creator", "FiveB"
+        )
+        admin = await create_admin_user(
+            client, "admin5b@test.com", "AdminPass123!", "Admin", "FiveB"
+        )
+        player = await create_authenticated_user(
+            client, "player5b@test.com", "P@ssw0rd123!", "Player", "FiveB"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=admin["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "APPROVED"
 
 
 class TestListEnrollments:
@@ -348,6 +374,38 @@ class TestSetCustomHandicap:
 
         assert response.status_code == 200
         assert float(response.json()["custom_handicap"]) == pytest.approx(15.5)
+
+    @pytest.mark.asyncio
+    async def test_set_custom_handicap_by_admin_not_creator_succeeds(self, client: AsyncClient):
+        """Admin (no creador) puede establecer handicap personalizado."""
+        creator = await create_authenticated_user(
+            client, "creator13b@test.com", "P@ssw0rd123!", "Creator", "ThirteenB"
+        )
+        admin = await create_admin_user(
+            client, "admin13b@test.com", "AdminPass123!", "Admin", "ThirteenB"
+        )
+        player = await create_authenticated_user(
+            client, "player13b@test.com", "P@ssw0rd123!", "Player", "ThirteenB"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            json={"enrollment_id": enrollment_id, "custom_handicap": 12.0},
+            cookies=admin["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert float(response.json()["custom_handicap"]) == pytest.approx(12.0)
 
 
 class TestEnrollmentEdgeCases:

@@ -49,6 +49,10 @@ class TestHandleEnrollmentUseCase:
     def other_user_id(self) -> UserId:
         return UserId(uuid4())
 
+    @pytest.fixture
+    def admin_user_id(self) -> UserId:
+        return UserId(uuid4())
+
     async def _create_active_competition(
         self, uow: InMemoryUnitOfWork, creator_id: UserId, max_players: int = 24
     ):
@@ -164,6 +168,31 @@ class TestHandleEnrollmentUseCase:
 
         with pytest.raises(NotCreatorError):
             await use_case.execute(request, other_user_id)
+
+    async def test_should_succeed_when_admin_not_creator(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        other_user_id: UserId,
+        admin_user_id: UserId,
+    ):
+        """
+        Given: Un enrollment válido en una competición ajena
+        When: Un admin (no creador) lo aprueba con is_admin=True
+        Then: El enrollment pasa a APPROVED sin lanzar NotCreatorError
+        """
+        created = await self._create_active_competition(uow, creator_id)
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
+
+        use_case = HandleEnrollmentUseCase(uow)
+        request = HandleEnrollmentRequestDTO(
+            enrollment_id=enrollment.id.value,
+            action="APPROVE",
+        )
+
+        response = await use_case.execute(request, admin_user_id, is_admin=True)
+
+        assert response.status == "APPROVED"
 
     async def test_should_raise_validation_error_for_invalid_action(
         self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId

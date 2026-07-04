@@ -200,6 +200,40 @@ class TestCreateRoundUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request, other_user_id)
 
+    async def test_should_succeed_when_admin_not_creator(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        other_user_id: UserId,
+    ):
+        """
+        Verifica que un admin puede crear rondas aunque no sea el creador.
+
+        Given: Una competicion CLOSED creada por un usuario
+        When: Un admin (no creador) crea una ronda con is_admin=True
+        Then: La ronda se crea correctamente sin lanzar NotCompetitionCreatorError
+        """
+        # Arrange
+        competition = await self._create_closed_competition_with_course(
+            uow, creator_id, golf_course_id
+        )
+        use_case = CreateRoundUseCase(uow=uow)
+        request = CreateRoundRequestDTO(
+            competition_id=competition.id.value,
+            golf_course_id=golf_course_id.value,
+            round_date=date(2026, 6, 1),
+            session_type="MORNING",
+            match_format="SINGLES",
+        )
+
+        # Act
+        response = await use_case.execute(request, other_user_id, is_admin=True)
+
+        # Assert
+        assert response.id is not None
+        assert response.status == "PENDING_TEAMS"
+
     async def test_should_fail_when_not_closed(
         self,
         uow: InMemoryUnitOfWork,
