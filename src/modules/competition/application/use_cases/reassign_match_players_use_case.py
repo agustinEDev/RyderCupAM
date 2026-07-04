@@ -121,6 +121,7 @@ class ReassignMatchPlayersUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    competition.max_playing_handicap,
                 )
                 for uid in request.team_a_player_ids
             ]
@@ -134,6 +135,7 @@ class ReassignMatchPlayersUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    competition.max_playing_handicap,
                 )
                 for uid in request.team_b_player_ids
             ]
@@ -205,6 +207,7 @@ class ReassignMatchPlayersUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         uid = UserId(uid_value)
@@ -246,7 +249,9 @@ class ReassignMatchPlayersUseCase:
                 f"Verifique que el campo tiene un tee configurado para "
                 f"categoría={tee_category.value}, género={tee_gender}"
             )
-        playing_handicap = self._calculator.calculate(handicap_index, tee_rating, allowance)
+        playing_handicap = self._calculator.calculate(
+            handicap_index, tee_rating, allowance, max_playing_handicap
+        )
         strokes_received = self._calculator.compute_strokes_received(
             playing_handicap, holes_by_stroke_index
         )
