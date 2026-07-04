@@ -8,6 +8,7 @@ Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minut
 CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
+import logging
 from datetime import UTC, datetime
 
 from src.config.csrf_config import generate_csrf_token
@@ -31,6 +32,8 @@ from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
 
 
 class LoginUserUseCase:
@@ -291,12 +294,25 @@ class LoginUserUseCase:
         try:
             handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
         except Exception:
+            logger.warning(
+                "RFEG lookup failed for %s during login handicap refresh",
+                user.get_full_name(),
+                exc_info=True,
+            )
             return True
 
         if handicap_value is None:
             return True
 
-        user.update_handicap(handicap_value)
-        async with self._uow:
-            await self._uow.users.save(user)
+        try:
+            user.update_handicap(handicap_value)
+            async with self._uow:
+                await self._uow.users.save(user)
+        except Exception:
+            logger.error(
+                "Failed to persist RFEG handicap for %s during login",
+                user.get_full_name(),
+                exc_info=True,
+            )
+            return True
         return False

@@ -289,7 +289,12 @@ class LoginResponseDTO(BaseModel):
     # HM-2: Handicap request flow
     needs_handicap: bool = Field(
         default=False,
-        description="True si el usuario es español (ES) y no tiene hándicap registrado. El FE debe mostrar HandicapRequestModal.",
+        description=(
+            "True si el hándicap del usuario no se ha actualizado hoy y no pudo "
+            "refrescarse automáticamente: usuarios no españoles, sin país registrado, "
+            "o españoles cuya búsqueda RFEG falló o no devolvió resultado. "
+            "El FE debe mostrar HandicapRequestModal."
+        ),
     )
 
 
