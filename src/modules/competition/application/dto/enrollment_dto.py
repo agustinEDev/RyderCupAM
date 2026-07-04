@@ -234,6 +234,9 @@ class SetCustomHandicapResponseDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del usuario.")
+    status: str = Field(..., description="Estado de la inscripción.")
     custom_handicap: Decimal = Field(..., description="Nuevo hándicap personalizado.")
     updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
 

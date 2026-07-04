@@ -110,6 +110,9 @@ class SetCustomHandicapUseCase:
         # 8. Retornar DTO
         return SetCustomHandicapResponseDTO(
             id=enrollment.id.value,
+            competition_id=enrollment.competition_id.value,
+            user_id=enrollment.user_id.value,
+            status=enrollment.status.value,
             custom_handicap=enrollment.custom_handicap,
             updated_at=enrollment.updated_at,
         )
