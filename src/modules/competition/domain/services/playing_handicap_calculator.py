@@ -97,9 +97,11 @@ class PlayingHandicapCalculator:
             handicap_index: Handicap Index del jugador (ej: 12.4)
             tee_rating: Ratings del tee (CR, SR, Par)
             allowance_percentage: Porcentaje de allowance (50-100)
+            max_playing_handicap: Límite superior opcional (cap WHS de la competición)
 
         Returns:
-            Playing Handicap redondeado al entero más cercano (>=0)
+            Playing Handicap redondeado al entero más cercano (>=0), acotado a
+            max_playing_handicap si se proporciona
         """
         # Paso 1: Calcular Course Handicap
         # CH = HI x (SR / 113) + (CR - Par)

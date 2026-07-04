@@ -39,6 +39,8 @@ from ..value_objects.team_assignment import TeamAssignment
 # Constantes de validación
 MIN_PLAYERS = 2
 MAX_PLAYERS = 100
+MIN_PLAYING_HANDICAP = 1
+MAX_PLAYING_HANDICAP = 54
 
 
 class CompetitionStateError(Exception):
@@ -192,9 +194,12 @@ class Competition:
 
     @staticmethod
     def _validate_max_playing_handicap(max_playing_handicap: int) -> None:
-        """Valida que max_playing_handicap esté en rango válido (WHS: 0–54)."""
-        if not 1 <= max_playing_handicap <= 54:
-            raise ValueError("max_playing_handicap debe estar entre 1 y 54")
+        """Valida que max_playing_handicap esté en rango válido (WHS: 1-54)."""
+        if not MIN_PLAYING_HANDICAP <= max_playing_handicap <= MAX_PLAYING_HANDICAP:
+            raise ValueError(
+                f"max_playing_handicap debe estar entre "
+                f"{MIN_PLAYING_HANDICAP} y {MAX_PLAYING_HANDICAP}"
+            )
 
     # ===========================================
     # PROPERTIES (Encapsulación — solo lectura)

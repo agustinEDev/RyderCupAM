@@ -125,7 +125,7 @@ async def submit_hole_score(
     Retorna la vista completa de scoring actualizada.
 
     **Restricciones:**
-    - Solo jugadores del partido pueden registrar scores
+    - Solo jugadores del partido pueden registrar scores (o admin con acting_as)
     - El partido debe estar IN_PROGRESS
     - Hoyo debe estar entre 1-18
     - Los campos bloqueados tras la entrega se omiten silenciosamente
@@ -301,6 +301,7 @@ async def concede_match(
     **Auth:**
     - Jugadores del partido: solo pueden conceder SU propio equipo
     - Creator de la competicion: puede conceder cualquier equipo
+    - Admin: puede conceder cualquier equipo
 
     **Body:**
     - conceding_team: "A" o "B"
@@ -309,7 +310,7 @@ async def concede_match(
     **Returns:**
     - 200: Partido concedido
     - 409: Partido no en estado de scoring
-    - 403: No es jugador ni creador
+    - 403: No es jugador, creador ni admin
     - 404: Partido no encontrado
     """
     try:

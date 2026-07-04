@@ -175,7 +175,7 @@ async def create_round(
     Crea una nueva ronda/sesión de competición.
 
     **Restricciones:**
-    - Solo el creador puede crear rondas
+    - El creador o admin puede crear rondas
     - La competición debe estar en estado CLOSED
     - El campo de golf debe estar asociado a la competición
     - No puede haber sesión duplicada (misma fecha + tipo de sesión)
@@ -183,7 +183,7 @@ async def create_round(
     **Returns:**
     - 201: Ronda creada exitosamente
     - 400: Estado inválido, sesión duplicada, fecha fuera de rango, o campo no asociado
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
     try:
@@ -240,14 +240,14 @@ async def update_round(
     Actualiza una ronda existente (campos opcionales).
 
     **Restricciones:**
-    - Solo el creador puede modificar rondas
+    - El creador o admin puede modificar rondas
     - La ronda debe estar en estado modificable (PENDING_TEAMS o PENDING_MATCHES)
     - La competición debe estar en estado CLOSED
 
     **Returns:**
     - 200: Ronda actualizada
     - 400: Estado no modificable, sesión duplicada, o campo no asociado
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Ronda no encontrada
     """
     try:
@@ -304,14 +304,14 @@ async def delete_round(
     Elimina una ronda y sus partidos asociados.
 
     **Restricciones:**
-    - Solo el creador puede eliminar rondas
+    - El creador o admin puede eliminar rondas
     - La ronda debe estar en estado modificable (PENDING_TEAMS o PENDING_MATCHES)
     - La competición debe estar en estado CLOSED
 
     **Returns:**
     - 200: Ronda eliminada
     - 400: Estado no modificable
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Ronda no encontrada
     """
     try:
@@ -427,14 +427,14 @@ async def update_match_status(
     Actualiza el estado de un partido (START o COMPLETE).
 
     **Restricciones:**
-    - Solo el creador puede cambiar estados
+    - El creador o admin puede cambiar estados
     - La competición debe estar IN_PROGRESS
     - Acciones válidas: START (SCHEDULED→IN_PROGRESS), COMPLETE (IN_PROGRESS→COMPLETED)
 
     **Returns:**
     - 200: Estado actualizado
     - 400: Acción inválida o competición no en progreso
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Partido no encontrado
     """
     try:
@@ -489,14 +489,14 @@ async def declare_walkover(
     Declara un walkover (victoria por incomparecencia) en un partido.
 
     **Restricciones:**
-    - Solo el creador puede declarar walkovers
+    - El creador o admin puede declarar walkovers
     - La competición debe estar IN_PROGRESS
     - El partido debe estar en estado válido para walkover
 
     **Returns:**
     - 200: Walkover declarado
     - 400: Walkover inválido o competición no en progreso
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Partido no encontrado
     """
     try:
@@ -547,14 +547,14 @@ async def reassign_match_players(
     Reasigna los jugadores de un partido (recalcula handicaps).
 
     **Restricciones:**
-    - Solo el creador puede reasignar jugadores
+    - El creador o admin puede reasignar jugadores
     - El partido debe estar en estado SCHEDULED
     - Los jugadores deben pertenecer a los equipos asignados
 
     **Returns:**
     - 200: Jugadores reasignados con handicaps recalculados
     - 400: Partido no scheduled o jugadores no válidos
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Partido no encontrado
     """
     try:
@@ -618,7 +618,7 @@ async def assign_teams(
     Asigna equipos para la competición (automático con snake draft o manual).
 
     **Restricciones:**
-    - Solo el creador puede asignar equipos
+    - El creador o admin puede asignar equipos
     - La competición debe estar en estado CLOSED
     - Debe haber suficientes jugadores inscritos (mínimo 2)
     - En modo MANUAL, los equipos deben estar balanceados
@@ -626,7 +626,7 @@ async def assign_teams(
     **Returns:**
     - 201: Equipos asignados
     - 400: Estado inválido, jugadores insuficientes, o equipos desequilibrados
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
     try:
@@ -680,7 +680,7 @@ async def generate_matches(
     Genera partidos para una ronda basándose en los equipos asignados.
 
     **Restricciones:**
-    - Solo el creador puede generar partidos
+    - El creador o admin puede generar partidos
     - La ronda debe estar en estado PENDING_MATCHES
     - Debe existir asignación de equipos
     - La competición debe estar en estado CLOSED
@@ -740,14 +740,14 @@ async def configure_schedule(
     Configura el schedule de la competición (automático o manual).
 
     **Restricciones:**
-    - Solo el creador puede configurar el schedule
+    - El creador o admin puede configurar el schedule
     - La competición debe estar en estado CLOSED
     - Debe tener al menos un campo de golf asociado (modo AUTO)
 
     **Returns:**
     - 200: Schedule configurado
     - 400: Estado inválido o sin campos de golf
-    - 403: Usuario no es el creador
+    - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
     try:

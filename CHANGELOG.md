@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - All scoring routes now accept an admin user regardless of whether they are a player in the match. Check updated from "user must be in match" to "user must be in match OR is_admin".
 - Affected routes: `GET /scoring-view`, `POST /scores/holes/{n}`, `POST /scorecard/submit`, `PUT /concede`.
+- Admin creator-bypass extended to `CreateRoundUseCase`, `DirectEnrollPlayerUseCase`, `HandleEnrollmentUseCase` (approve/reject), `SetCustomHandicapUseCase`, and `SendInvitationByUserIdUseCase`: admins can now perform these actions on any competition without being its creator.
 
 ---
 
