@@ -1,6 +1,6 @@
 """Tests para GenerateMatchesUseCase."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -626,7 +626,12 @@ class TestGenerateMatchesUseCase:
         return golf_course
 
     def _build_mock_user(
-        self, user_id: UserId, handicap_value: float, gender: Gender | None = Gender.MALE
+        self,
+        user_id: UserId,
+        handicap_value: float,
+        gender: Gender | None = Gender.MALE,
+        country_code: str | None = None,
+        handicap_updated_at=None,
     ) -> MagicMock:
         """
         Helper que construye un mock de User con un handicap y genero.
@@ -635,6 +640,8 @@ class TestGenerateMatchesUseCase:
             user_id: ID del usuario.
             handicap_value: Valor del handicap.
             gender: Genero del usuario (default: MALE).
+            country_code: Codigo de pais ISO (default: None -> country_code=None).
+            handicap_updated_at: Fecha de ultima actualizacion del handicap (HM-1a).
 
         Returns:
             Mock de User con handicap y gender configurados.
@@ -643,6 +650,9 @@ class TestGenerateMatchesUseCase:
         user.id = user_id
         user.handicap = Handicap(handicap_value)
         user.gender = gender
+        user.country_code = CountryCode(country_code) if country_code else None
+        user.handicap_updated_at = handicap_updated_at
+        user.get_full_name.return_value = "Test Player"
         return user
 
     async def _create_teams_and_enrollments_with_tees(
@@ -1199,3 +1209,352 @@ class TestGenerateMatchesUseCase:
         assert len(matches) == 1
         for p in (*matches[0].team_a_players, *matches[0].team_b_players):
             assert p.playing_handicap <= 3
+
+    # =========================================================================
+    # HM-1b: PLAYER_HANDICAP SNAPSHOT TESTS
+    # =========================================================================
+
+    async def test_player_handicap_snapshot_is_stored_in_generated_match(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1b: el HI usado para calcular el playing_handicap se guarda como snapshot.
+
+        Given: Jugadores con HI=15.0 (sin RFEG, sin custom_handicap)
+        When: Se generan partidos en modo HANDICAP
+        Then: Cada MatchPlayer.player_handicap == Decimal("15.0")
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 15.0)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        matches = await uow.matches.find_by_round(round_entity.id)
+        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+            assert p.player_handicap == Decimal("15.0")
+
+    # =========================================================================
+    # HM-1a: RFEG AUTO-REFRESH TESTS
+    # =========================================================================
+
+    async def test_rfeg_refresh_updates_handicap_and_flows_into_player_handicap(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: refresca el HI vía RFEG para jugadores ES sin hándicap personalizado.
+
+        Given: Jugador ES sin custom_handicap, RFEG devuelve un HI nuevo (12.3)
+        When: Se generan partidos
+        Then: user.update_handicap() se invoca con el valor de RFEG, se persiste vía
+              save(), y el nuevo valor queda reflejado en player_handicap del partido.
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        mock_user = self._build_mock_user(UserId.generate(), 15.0, country_code="ES")
+        mock_user.update_handicap.side_effect = lambda v: setattr(
+            mock_user, "handicap", Handicap(v)
+        )
+        user_repo.find_by_id = AsyncMock(return_value=mock_user)
+
+        handicap_service = AsyncMock()
+        handicap_service.search_handicap = AsyncMock(return_value=12.3)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+            handicap_service=handicap_service,
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        handicap_service.search_handicap.assert_called_with("Test Player")
+        mock_user.update_handicap.assert_called_with(12.3)
+        assert user_repo.save.await_count >= 1
+
+        matches = await uow.matches.find_by_round(round_entity.id)
+        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+            assert p.player_handicap == Decimal("12.3")
+
+    async def test_rfeg_refresh_skipped_for_player_with_custom_handicap(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: no se refresca vía RFEG si el jugador tiene custom_handicap en su enrollment.
+
+        Given: Jugador ES con custom_handicap definido en su enrollment
+        When: Se generan partidos
+        Then: handicap_service.search_handicap no se invoca para ese jugador
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+
+        player_a = UserId(uuid4())
+        player_b = UserId(uuid4())
+        team_assignment = TeamAssignmentEntity.create(
+            competition_id=competition.id,
+            mode=TeamAssignmentMode.MANUAL,
+            team_a_player_ids=[player_a],
+            team_b_player_ids=[player_b],
+        )
+        async with uow:
+            await uow.team_assignments.add(team_assignment)
+
+        enrollment_a = Enrollment(
+            id=EnrollmentId.generate(),
+            competition_id=competition.id,
+            user_id=player_a,
+            status=EnrollmentStatus.APPROVED,
+            tee_category=TeeCategory.AMATEUR,
+        )
+        enrollment_a.set_custom_handicap(Decimal("10.0"))
+        enrollment_b = Enrollment(
+            id=EnrollmentId.generate(),
+            competition_id=competition.id,
+            user_id=player_b,
+            status=EnrollmentStatus.APPROVED,
+            tee_category=TeeCategory.AMATEUR,
+        )
+        async with uow:
+            await uow.enrollments.add(enrollment_a)
+            await uow.enrollments.add(enrollment_b)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 15.0, country_code="ES")
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        handicap_service = AsyncMock()
+        handicap_service.search_handicap = AsyncMock(return_value=5.0)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+            handicap_service=handicap_service,
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        # Solo player_b (sin custom_handicap) dispara el refresco RFEG
+        handicap_service.search_handicap.assert_called_once_with("Test Player")
+
+    async def test_rfeg_refresh_skipped_for_non_es_player(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: no se refresca vía RFEG si el jugador no es de España.
+
+        Given: Jugador con country_code=FR (no ES), sin custom_handicap
+        When: Se generan partidos
+        Then: handicap_service.search_handicap no se invoca
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 15.0, country_code="FR")
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        handicap_service = AsyncMock()
+        handicap_service.search_handicap = AsyncMock(return_value=5.0)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+            handicap_service=handicap_service,
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        handicap_service.search_handicap.assert_not_called()
+
+    async def test_rfeg_refresh_skipped_if_already_updated_today(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: no se refresca más de una vez al día (mismo gate que login HM-2c).
+
+        Given: Jugador ES cuyo handicap_updated_at ya es de hoy
+        When: Se generan partidos
+        Then: handicap_service.search_handicap no se invoca
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(
+                uid, 15.0, country_code="ES", handicap_updated_at=datetime.now(UTC)
+            )
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        handicap_service = AsyncMock()
+        handicap_service.search_handicap = AsyncMock(return_value=5.0)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+            handicap_service=handicap_service,
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        handicap_service.search_handicap.assert_not_called()
+
+    async def test_rfeg_refresh_error_is_silently_ignored(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: un error del servicio RFEG no debe bloquear la generación de partidos.
+
+        Given: handicap_service.search_handicap lanza una excepción
+        When: Se generan partidos
+        Then: Los partidos se generan igualmente, usando el HI existente del usuario
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 15.0, country_code="ES")
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        handicap_service = AsyncMock()
+        handicap_service.search_handicap = AsyncMock(side_effect=RuntimeError("RFEG down"))
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+            handicap_service=handicap_service,
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        response = await use_case.execute(request, creator_id)
+
+        assert response.matches_generated == 1
+        matches = await uow.matches.find_by_round(round_entity.id)
+        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+            assert p.player_handicap == Decimal("15.0")
+
+    async def test_generate_matches_without_handicap_service_does_not_crash(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        HM-1a: handicap_service es opcional (compat con instanciaciones sin este parámetro).
+
+        Given: GenerateMatchesUseCase construido sin handicap_service (default None)
+        When: Se generan partidos con un jugador ES sin custom_handicap
+        Then: No se lanza ninguna excepción y los partidos se generan normalmente
+        """
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 15.0, country_code="ES")
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        response = await use_case.execute(request, creator_id)
+
+        assert response.matches_generated == 1

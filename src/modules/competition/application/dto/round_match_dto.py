@@ -22,6 +22,11 @@ class MatchPlayerResponseDTO(BaseModel):
     strokes_received: list[int] = Field(
         default_factory=list, description="Hoyos donde recibe golpe."
     )
+    player_handicap: float | None = Field(
+        None,
+        description="HI del jugador en el momento de generar el partido (snapshot, HM-1b). "
+        "None en partidos generados antes de esta feature.",
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

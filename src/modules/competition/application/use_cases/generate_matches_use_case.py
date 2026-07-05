@@ -1,6 +1,8 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
 import asyncio
+import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.modules.competition.application.dto.round_match_dto import (
@@ -32,8 +34,11 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
+from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+
+logger = logging.getLogger(__name__)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -77,12 +82,14 @@ class GenerateMatchesUseCase:
         user_repository: UserRepositoryInterface,
         handicap_calculator: PlayingHandicapCalculator | None = None,
         scoring_service: ScoringService | None = None,
+        handicap_service: HandicapService | None = None,
     ):
         self._uow = uow
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
         self._scoring_service = scoring_service or ScoringService()
+        self._handicap_service = handicap_service
 
     async def execute(
         self, request: GenerateMatchesRequestDTO, user_id: UserId, is_admin: bool = False
@@ -151,6 +158,7 @@ class GenerateMatchesUseCase:
                 golf_course,
                 is_scratch,
                 team_assignment,
+                enrollment_map,
             )
 
             # 11. Eliminar partidos existentes (re-generación)
@@ -209,7 +217,7 @@ class GenerateMatchesUseCase:
             round_status=round_entity.status.value,
         )
 
-    async def _build_handicap_data(self, golf_course, is_scratch, team_assignment):
+    async def _build_handicap_data(self, golf_course, is_scratch, team_assignment, enrollment_map):
         """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
@@ -244,11 +252,58 @@ class GenerateMatchesUseCase:
             )
             for pid, user in zip(all_player_ids, users, strict=True):
                 if user:
+                    enrollment = enrollment_map.get(str(pid.value))
+                    has_custom_handicap = enrollment is not None and enrollment.custom_handicap is not None
+                    if not has_custom_handicap:
+                        await self._maybe_refresh_rfeg_handicap(user)
                     if user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
 
         return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
+
+    async def _maybe_refresh_rfeg_handicap(self, user) -> None:
+        """
+        HM-1a: refresco best-effort del hándicap RFEG antes de generar partidos.
+
+        Solo para jugadores ES sin hándicap personalizado en la inscripción, y como
+        máximo una vez al día (mismo gate que el refresco en login, HM-2a/c). Errores
+        de red o de persistencia se registran y se ignoran: nunca deben bloquear la
+        generación de partidos.
+        """
+        if self._handicap_service is None:
+            return
+
+        country_code_value = user.country_code.value if user.country_code else None
+        if country_code_value != "ES":
+            return
+
+        now = datetime.now(UTC)
+        if user.handicap_updated_at is not None and user.handicap_updated_at.date() == now.date():
+            return
+
+        try:
+            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
+        except Exception:
+            logger.warning(
+                "RFEG lookup failed for %s during match generation",
+                user.get_full_name(),
+                exc_info=True,
+            )
+            return
+
+        if handicap_value is None:
+            return
+
+        try:
+            user.update_handicap(handicap_value)
+            await self._user_repo.save(user)
+        except Exception:
+            logger.error(
+                "Failed to persist RFEG handicap for %s during match generation",
+                user.get_full_name(),
+                exc_info=True,
+            )
 
     async def _generate_auto(
         self,
@@ -508,6 +563,7 @@ class GenerateMatchesUseCase:
                 tee_category=tee_category,
                 strokes_received=[],
                 tee_gender=tee_gender,
+                player_handicap=handicap_index,
             )
 
         if not tee_rating:
@@ -527,6 +583,7 @@ class GenerateMatchesUseCase:
             tee_category=tee_category,
             strokes_received=strokes_received,
             tee_gender=tee_gender,
+            player_handicap=handicap_index,
         )
 
     def _build_fourball_match_players(
@@ -558,7 +615,7 @@ class GenerateMatchesUseCase:
             # En modo SCRATCH, todos juegan off scratch
             team_a_players = []
             for uid in team_a_ids:
-                tee_cat, tee_gen, _, _ = self._resolve_player_data(
+                tee_cat, tee_gen, _, hi = self._resolve_player_data(
                     uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
                 )
                 team_a_players.append(
@@ -568,11 +625,12 @@ class GenerateMatchesUseCase:
                         tee_category=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
+                        player_handicap=hi,
                     )
                 )
             team_b_players = []
             for uid in team_b_ids:
-                tee_cat, tee_gen, _, _ = self._resolve_player_data(
+                tee_cat, tee_gen, _, hi = self._resolve_player_data(
                     uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
                 )
                 team_b_players.append(
@@ -582,6 +640,7 @@ class GenerateMatchesUseCase:
                         tee_category=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
+                        player_handicap=hi,
                     )
                 )
             return team_a_players, team_b_players
@@ -613,7 +672,7 @@ class GenerateMatchesUseCase:
         # 3. Construir MatchPlayers con PH diferencial
         def build_player(uid):
             uid_str = str(uid.value)
-            tee_cat, tee_gen, _, _ = player_data[uid_str]
+            tee_cat, tee_gen, _, hi = player_data[uid_str]
             ph = differential_phs[uid_str]
             strokes = calculator.compute_strokes_received(ph, holes_by_stroke_index)
             return MatchPlayer.create(
@@ -622,6 +681,7 @@ class GenerateMatchesUseCase:
                 tee_category=tee_cat,
                 strokes_received=strokes,
                 tee_gender=tee_gen,
+                player_handicap=hi,
             )
 
         team_a_players = [build_player(uid) for uid in team_a_ids]
@@ -664,11 +724,11 @@ class GenerateMatchesUseCase:
             return (
                 MatchPlayer.create(
                     user_id=a_player_id, playing_handicap=0, tee_category=tee_cat_a,
-                    strokes_received=[], tee_gender=tee_gen_a,
+                    strokes_received=[], tee_gender=tee_gen_a, player_handicap=hi_a,
                 ),
                 MatchPlayer.create(
                     user_id=b_player_id, playing_handicap=0, tee_category=tee_cat_b,
-                    strokes_received=[], tee_gender=tee_gen_b,
+                    strokes_received=[], tee_gender=tee_gen_b, player_handicap=hi_b,
                 ),
             )
 
@@ -700,11 +760,11 @@ class GenerateMatchesUseCase:
         return (
             MatchPlayer.create(
                 user_id=a_player_id, playing_handicap=ph_a, tee_category=tee_cat_a,
-                strokes_received=strokes_a, tee_gender=tee_gen_a,
+                strokes_received=strokes_a, tee_gender=tee_gen_a, player_handicap=hi_a,
             ),
             MatchPlayer.create(
                 user_id=b_player_id, playing_handicap=ph_b, tee_category=tee_cat_b,
-                strokes_received=strokes_b, tee_gender=tee_gen_b,
+                strokes_received=strokes_b, tee_gender=tee_gen_b, player_handicap=hi_b,
             ),
         )
 
@@ -740,7 +800,7 @@ class GenerateMatchesUseCase:
         if is_scratch:
             team_a_players = []
             for uid in team_a_ids:
-                tee_cat, tee_gen, _, _ = self._resolve_player_data(
+                tee_cat, tee_gen, _, hi = self._resolve_player_data(
                     uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
                 )
                 team_a_players.append(
@@ -750,11 +810,12 @@ class GenerateMatchesUseCase:
                         tee_category=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
+                        player_handicap=hi,
                     )
                 )
             team_b_players = []
             for uid in team_b_ids:
-                tee_cat, tee_gen, _, _ = self._resolve_player_data(
+                tee_cat, tee_gen, _, hi = self._resolve_player_data(
                     uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
                 )
                 team_b_players.append(
@@ -764,12 +825,13 @@ class GenerateMatchesUseCase:
                         tee_category=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
+                        player_handicap=hi,
                     )
                 )
             return team_a_players, team_b_players
 
         # 1. Calcular Course Handicaps individuales (100%, sin allowance)
-        player_data: dict[str, tuple[TeeCategory, Gender | None]] = {}
+        player_data: dict[str, tuple[TeeCategory, Gender | None, Decimal]] = {}
         team_a_chs: list[int] = []
         team_b_chs: list[int] = []
 
@@ -782,7 +844,7 @@ class GenerateMatchesUseCase:
                     f"No se encontró tee rating para categoría '{tee_cat.value}' "
                     f"(gender: {tee_gen}) en el campo de golf"
                 )
-            player_data[str(uid.value)] = (tee_cat, tee_gen)
+            player_data[str(uid.value)] = (tee_cat, tee_gen, hi)
             ch = calculator.calculate_course_handicap(hi, tee_rating)
             if uid in team_a_ids:
                 team_a_chs.append(ch)
@@ -805,7 +867,7 @@ class GenerateMatchesUseCase:
 
         team_a_players = []
         for uid in team_a_ids:
-            tee_cat, tee_gen = player_data[str(uid.value)]
+            tee_cat, tee_gen, hi = player_data[str(uid.value)]
             team_a_players.append(
                 MatchPlayer.create(
                     user_id=uid,
@@ -813,12 +875,13 @@ class GenerateMatchesUseCase:
                     tee_category=tee_cat,
                     strokes_received=team_a_strokes,
                     tee_gender=tee_gen,
+                    player_handicap=hi,
                 )
             )
 
         team_b_players = []
         for uid in team_b_ids:
-            tee_cat, tee_gen = player_data[str(uid.value)]
+            tee_cat, tee_gen, hi = player_data[str(uid.value)]
             team_b_players.append(
                 MatchPlayer.create(
                     user_id=uid,
@@ -826,6 +889,7 @@ class GenerateMatchesUseCase:
                     tee_category=tee_cat,
                     strokes_received=team_b_strokes,
                     tee_gender=tee_gen,
+                    player_handicap=hi,
                 )
             )
 

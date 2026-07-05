@@ -7,6 +7,7 @@ Sigue el patron Imperative Mapping establecido en el modulo User.
 
 import uuid
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -375,8 +376,12 @@ class MatchPlayersJsonType(TypeDecorator):
         "playing_handicap": 12,
         "tee_category": "AMATEUR",
         "tee_gender": "MALE",
-        "strokes_received": [1, 3, 5, 7]
+        "strokes_received": [1, 3, 5, 7],
+        "player_handicap": "14.2"
     }
+
+    player_handicap (HM-1b) es opcional: partidos generados antes de esta feature
+    no lo tienen en su JSON y se deserializan con player_handicap=None.
     """
 
     impl = JSONB
@@ -392,6 +397,7 @@ class MatchPlayersJsonType(TypeDecorator):
                 "tee_category": p.tee_category.value,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
+                "player_handicap": str(p.player_handicap) if p.player_handicap is not None else None,
             }
             for p in value
         ]
@@ -401,12 +407,14 @@ class MatchPlayersJsonType(TypeDecorator):
             return None
         players = []
         for p in value:
+            player_handicap = p.get("player_handicap")
             player = MatchPlayer(
                 user_id=UserId(uuid.UUID(p["user_id"])),
                 playing_handicap=p["playing_handicap"],
                 tee_category=TeeCategory(p["tee_category"]),
                 tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 strokes_received=tuple(p["strokes_received"]),
+                player_handicap=Decimal(player_handicap) if player_handicap is not None else None,
             )
             players.append(player)
         return tuple(players)

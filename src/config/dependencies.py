@@ -1219,6 +1219,7 @@ def get_generate_matches_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
     return GenerateMatchesUseCase(
@@ -1227,6 +1228,7 @@ def get_generate_matches_use_case(
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
+        handicap_service=handicap_service,
     )
 
 
