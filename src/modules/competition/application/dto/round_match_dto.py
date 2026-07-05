@@ -30,6 +30,17 @@ class MatchPlayerResponseDTO(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @classmethod
+    def from_domain(cls, p) -> "MatchPlayerResponseDTO":
+        """Construye el DTO a partir de un MatchPlayer de dominio (VO)."""
+        return cls(
+            user_id=p.user_id.value,
+            playing_handicap=p.playing_handicap,
+            tee_category=p.tee_category.value,
+            strokes_received=list(p.strokes_received),
+            player_handicap=float(p.player_handicap) if p.player_handicap is not None else None,
+        )
+
 
 class MatchResponseDTO(BaseModel):
     """DTO de respuesta para un partido."""

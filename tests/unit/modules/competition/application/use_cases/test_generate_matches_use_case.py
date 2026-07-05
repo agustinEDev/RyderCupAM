@@ -1163,9 +1163,13 @@ class TestGenerateMatchesUseCase:
         """
         Verifica que max_playing_handicap se aplica al generar partidos FOURBALL.
 
-        Given: Competicion HANDICAP con max_playing_handicap=3, jugadores HI=36
+        Given: Competicion HANDICAP con max_playing_handicap=3, HI dispares entre los 4
+               jugadores (36 vs 0), de forma que el metodo diferencial WHS produzca un
+               PH > 3 para el jugador de mayor HI antes de aplicar el cap
         When: Se generan partidos FOURBALL
-        Then: playing_handicap de todos los jugadores <= 3
+        Then: playing_handicap de todos los jugadores <= 3, y el jugador de mayor HI
+              queda exactamente en 3 (confirma que el cap realmente actuo, no que el
+              diferencial ya diera <=3 por si solo)
         """
         competition = Competition.create(
             id=CompetitionId(uuid4()),
@@ -1188,13 +1192,17 @@ class TestGenerateMatchesUseCase:
         round_entity = await self._create_round_pending_matches(
             uow, competition, golf_course_id, MatchFormat.FOURBALL
         )
-        await self._create_teams_and_enrollments_with_tees(uow, competition, 2, 2)
+        team_a_ids, _team_b_ids = await self._create_teams_and_enrollments_with_tees(
+            uow, competition, 2, 2
+        )
+        high_hi_uid = team_a_ids[0]
 
         mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
-            return self._build_mock_user(uid, 36.0, Gender.MALE)
+            hi = 36.0 if uid == high_hi_uid else 0.0
+            return self._build_mock_user(uid, hi, Gender.MALE)
 
         user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
 
@@ -1207,8 +1215,12 @@ class TestGenerateMatchesUseCase:
 
         matches = await uow.matches.find_by_round(round_entity.id)
         assert len(matches) == 1
-        for p in (*matches[0].team_a_players, *matches[0].team_b_players):
+        all_players = (*matches[0].team_a_players, *matches[0].team_b_players)
+        for p in all_players:
             assert p.playing_handicap <= 3
+
+        high_hi_player = next(p for p in all_players if p.user_id == high_hi_uid)
+        assert high_hi_player.playing_handicap == 3
 
     # =========================================================================
     # HM-1b: PLAYER_HANDICAP SNAPSHOT TESTS
