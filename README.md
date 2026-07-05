@@ -635,13 +635,13 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.14 (Production)
+### Current Version: v2.0.17 (Production)
 
-**Latest Features** (v2.0.14 - Feb 24, 2026):
-- **Backward State Transitions**: Revert competition state to fix schedule issues or reopen enrollments
-- **Live Scoring** (Sprint 4): 5 scoring endpoints, dual validation, leaderboard
-- **Invitations** (Sprint 3): 5 endpoints, bilingual emails, auto-enrollment
-- **Google OAuth** (Sprint 3): Login, link, unlink Google accounts
+**Latest Features** (v2.0.17 - Jul 6, 2026):
+- **Handicap Revert to RFEG**: Creator/admin can clear a custom handicap, reverting to the official RFEG value
+- **Auto Handicap Refresh on Login**: Daily silent RFEG lookup for Spanish players
+- **Admin Full Access**: Admins bypass creator-only checks across scoring and match management
+- **Playing Handicap Limit**: Optional per-competition cap on calculated playing handicap
 - **Total: 82 endpoints, 2,158 tests passing**
 
 **Sprint Breakdown**:
