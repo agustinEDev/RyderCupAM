@@ -10,7 +10,9 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    EnrollmentNotFoundError,
     HandicapEditNotAllowedError,
+    NotCreatorError,
 )
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -18,18 +20,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class EnrollmentNotFoundError(Exception):
-    """Excepcion lanzada cuando la inscripcion no existe."""
-
-    pass
-
-
-class NotCreatorError(Exception):
-    """Excepcion lanzada cuando el usuario no es el creador de la competicion."""
-
-    pass
 
 
 class SetCustomHandicapUseCase:

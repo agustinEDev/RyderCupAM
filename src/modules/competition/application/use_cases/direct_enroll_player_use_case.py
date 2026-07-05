@@ -11,6 +11,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InvalidTeeCategoryError,
+    NotCreatorError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -23,12 +24,6 @@ from src.modules.competition.domain.value_objects.competition_status import (
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class NotCreatorError(Exception):
-    """Excepcion lanzada cuando el usuario no es el creador de la competicion."""
-
-    pass
 
 
 class CompetitionNotActiveError(Exception):

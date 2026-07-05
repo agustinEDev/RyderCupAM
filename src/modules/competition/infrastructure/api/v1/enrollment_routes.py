@@ -42,34 +42,37 @@ from src.modules.competition.application.dto.enrollment_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as DirectCompetitionNotFoundError,
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
+    CompetitionNotFoundError as HandleCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
+    EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
+    EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
+    EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
+    EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
+    EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     HandicapEditNotAllowedError,
     InvalidTeeCategoryError,
+    NotCreatorError as DirectNotCreatorError,
+    NotCreatorError as HandicapNotCreatorError,
+    NotCreatorError as HandleNotCreatorError,
+    NotCreatorError as RemoveHandicapNotCreatorError,
 )
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
-    EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
     NotOwnerError as CancelNotOwnerError,
 )
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     AlreadyEnrolledError as DirectAlreadyEnrolledError,
     CompetitionNotActiveError as DirectCompetitionNotActiveError,
     DirectEnrollPlayerUseCase,
-    NotCreatorError as DirectNotCreatorError,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
-    CompetitionNotFoundError as HandleCompetitionNotFoundError,
-    EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
     HandleEnrollmentUseCase,
-    NotCreatorError as HandleNotCreatorError,
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
 )
 from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
-    EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
-    NotCreatorError as RemoveHandicapNotCreatorError,
     RemoveCustomHandicapUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
@@ -78,12 +81,9 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
     RequestEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
-    EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
-    NotCreatorError as HandicapNotCreatorError,
     SetCustomHandicapUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
-    EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     NotOwnerError as WithdrawNotOwnerError,
     WithdrawEnrollmentUseCase,
 )
