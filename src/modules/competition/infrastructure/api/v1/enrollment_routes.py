@@ -16,6 +16,7 @@ from src.config.dependencies import (
     get_direct_enroll_player_use_case,
     get_handle_enrollment_use_case,
     get_list_enrollments_use_case,
+    get_remove_custom_handicap_use_case,
     get_request_enrollment_use_case,
     get_set_custom_handicap_use_case,
     get_uow,  # User Unit of Work para obtener datos del usuario
@@ -30,6 +31,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     EnrollmentResponseDTO,
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
+    RemoveCustomHandicapResponseDTO,
     RequestEnrollmentRequestDTO,
     RequestEnrollmentResponseDTO,
     SetCustomHandicapRequestDTO,
@@ -42,6 +44,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
+    HandicapEditNotAllowedError,
     InvalidTeeCategoryError,
 )
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
@@ -63,6 +66,11 @@ from src.modules.competition.application.use_cases.handle_enrollment_use_case im
 )
 from src.modules.competition.application.use_cases.list_enrollments_use_case import (
     ListEnrollmentsUseCase,
+)
+from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
+    EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
+    NotCreatorError as RemoveHandicapNotCreatorError,
+    RemoveCustomHandicapUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError as RequestAlreadyEnrolledError,
@@ -468,5 +476,47 @@ async def set_custom_handicap(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandicapNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except EnrollmentStateError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except HandicapEditNotAllowedError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.delete(
+    "/enrollments/{enrollment_id}/handicap",
+    response_model=RemoveCustomHandicapResponseDTO,
+    summary="Eliminar hándicap personalizado",
+    description=(
+        "El creador elimina el hándicap personalizado de un jugador, que vuelve a usar "
+        "su hándicap oficial."
+    ),
+)
+async def remove_custom_handicap(
+    enrollment_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: RemoveCustomHandicapUseCase = Depends(get_remove_custom_handicap_use_case),
+):
+    """
+    Elimina el hándicap personalizado de un jugador.
+
+    Solo el creador de la competición (o un admin) puede eliminarlo. Solo se permite
+    mientras la competición está en DRAFT, ACTIVE o CLOSED.
+    """
+    try:
+        creator_id = UserId(str(current_user.id))
+        return await use_case.execute(
+            str(enrollment_id), creator_id, is_admin=current_user.is_admin
+        )
+
+    except RemoveHandicapEnrollmentNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except HandicapCompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RemoveHandicapNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except EnrollmentStateError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except HandicapEditNotAllowedError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

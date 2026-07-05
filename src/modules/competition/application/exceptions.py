@@ -101,3 +101,9 @@ class InvalidHoleNumberError(Exception):
     """El numero de hoyo no es valido."""
 
     pass
+
+
+class HandicapEditNotAllowedError(Exception):
+    """El hándicap personalizado no puede modificarse en el estado actual de la competición."""
+
+    pass

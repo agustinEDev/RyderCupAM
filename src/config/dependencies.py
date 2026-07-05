@@ -92,6 +92,9 @@ from src.modules.competition.application.use_cases.list_my_invitations_use_case 
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     ReassignMatchPlayersUseCase,
 )
+from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
+    RemoveCustomHandicapUseCase,
+)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
@@ -1127,6 +1130,13 @@ def get_set_custom_handicap_use_case(
 ) -> SetCustomHandicapUseCase:
     """Proveedor del caso de uso SetCustomHandicapUseCase."""
     return SetCustomHandicapUseCase(uow)
+
+
+def get_remove_custom_handicap_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RemoveCustomHandicapUseCase:
+    """Proveedor del caso de uso RemoveCustomHandicapUseCase."""
+    return RemoveCustomHandicapUseCase(uow)
 
 
 def get_list_enrollments_use_case(

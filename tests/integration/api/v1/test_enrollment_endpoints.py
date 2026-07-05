@@ -408,6 +408,160 @@ class TestSetCustomHandicap:
         assert float(response.json()["custom_handicap"]) == pytest.approx(12.0)
 
 
+class TestRemoveCustomHandicap:
+    """Tests para DELETE /api/v1/enrollments/{id}/handicap"""
+
+    @pytest.mark.asyncio
+    async def test_remove_custom_handicap_success(self, client: AsyncClient):
+        """Creador elimina el handicap personalizado y vuelve a None."""
+        creator = await create_authenticated_user(
+            client, "creator14@test.com", "P@ssw0rd123!", "Creator", "Fourteen"
+        )
+        player = await create_authenticated_user(
+            client, "player14@test.com", "P@ssw0rd123!", "Player", "Fourteen"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            json={"enrollment_id": enrollment_id, "custom_handicap": 15.5},
+            cookies=creator["cookies"],
+        )
+
+        response = await client.delete(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            cookies=creator["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["custom_handicap"] is None
+
+    @pytest.mark.asyncio
+    async def test_remove_custom_handicap_by_admin_not_creator_succeeds(
+        self, client: AsyncClient
+    ):
+        """Admin (no creador) puede eliminar el handicap personalizado."""
+        creator = await create_authenticated_user(
+            client, "creator14b@test.com", "P@ssw0rd123!", "Creator", "FourteenB"
+        )
+        admin = await create_admin_user(
+            client, "admin14b@test.com", "AdminPass123!", "Admin", "FourteenB"
+        )
+        player = await create_authenticated_user(
+            client, "player14b@test.com", "P@ssw0rd123!", "Player", "FourteenB"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            json={"enrollment_id": enrollment_id, "custom_handicap": 12.0},
+            cookies=creator["cookies"],
+        )
+
+        response = await client.delete(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            cookies=admin["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["custom_handicap"] is None
+
+    @pytest.mark.asyncio
+    async def test_remove_custom_handicap_not_creator_returns_403(self, client: AsyncClient):
+        """Un jugador que no es el creador no puede eliminar el handicap."""
+        creator = await create_authenticated_user(
+            client, "creator14c@test.com", "P@ssw0rd123!", "Creator", "FourteenC"
+        )
+        player = await create_authenticated_user(
+            client, "player14c@test.com", "P@ssw0rd123!", "Player", "FourteenC"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.delete(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            cookies=player["cookies"],
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_set_and_remove_custom_handicap_return_400_once_in_progress(
+        self, client: AsyncClient
+    ):
+        """Ni establecer ni eliminar el handicap personalizado funcionan una vez IN_PROGRESS."""
+        creator = await create_authenticated_user(
+            client, "creator14d@test.com", "P@ssw0rd123!", "Creator", "FourteenD"
+        )
+        player = await create_authenticated_user(
+            client, "player14d@test.com", "P@ssw0rd123!", "Player", "FourteenD"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            json={"enrollment_id": enrollment_id, "custom_handicap": 15.5},
+            cookies=creator["cookies"],
+        )
+
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/start",
+            cookies=creator["cookies"],
+        )
+
+        set_response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            json={"enrollment_id": enrollment_id, "custom_handicap": 20.0},
+            cookies=creator["cookies"],
+        )
+        remove_response = await client.delete(
+            f"/api/v1/enrollments/{enrollment_id}/handicap",
+            cookies=creator["cookies"],
+        )
+
+        assert set_response.status_code == 400
+        assert remove_response.status_code == 400
+
+
 class TestEnrollmentEdgeCases:
     """Tests de edge cases para Enrollment"""
 

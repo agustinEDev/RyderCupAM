@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Affected routes: `GET /scoring-view`, `POST /scores/holes/{n}`, `POST /scorecard/submit`, `PUT /concede`.
 - Admin creator-bypass extended to `CreateRoundUseCase`, `DirectEnrollPlayerUseCase`, `HandleEnrollmentUseCase` (approve/reject), `SetCustomHandicapUseCase`, and `SendInvitationByUserIdUseCase`: admins can now perform these actions on any competition without being its creator.
 
+**Enrollment — Revert Custom Handicap to RFEG**
+
+- New endpoint `DELETE /api/v1/enrollments/{enrollment_id}/handicap` + `RemoveCustomHandicapUseCase`: lets the creator (or an admin) clear a player's custom handicap, reverting the enrollment to using their official (RFEG-sourced) handicap.
+- `CompetitionStatus.allows_handicap_edits()`: setting **and** removing a custom handicap are now restricted to competitions in `DRAFT`, `ACTIVE`, or `CLOSED` — once a competition reaches `IN_PROGRESS` (matches already generated and handicaps snapshotted), neither action is allowed. Raises `HandicapEditNotAllowedError` (400) otherwise. Applied to both `SetCustomHandicapUseCase` and the new `RemoveCustomHandicapUseCase`.
+- Frontend: the revert-to-RFEG button only appears inside the handicap edit form, and only for enrollments with a custom handicap belonging to Spanish players (`country_code == "ES"`), since RFEG only covers Spain.
+
 ---
 
 ## [2.0.16] - 2026-06-19
