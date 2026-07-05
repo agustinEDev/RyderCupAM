@@ -33,6 +33,7 @@ class ConcedeMatchUseCase:
         user_id: UserId,
         conceding_team: str,
         reason: str | None = None,
+        is_admin: bool = False,
     ) -> dict:
         async with self._uow:
             match_id = MatchId(match_id_str)
@@ -53,9 +54,9 @@ class ConcedeMatchUseCase:
             if not competition:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
 
-            # Auth: player can only concede own team; creator can concede any
+            # Auth: player can only concede own team; creator and admin can concede any
             player_team = match.get_player_team(user_id)
-            is_creator = competition.is_creator(user_id)
+            is_creator = is_admin or competition.is_creator(user_id)
 
             if player_team is None and not is_creator:
                 raise NotMatchPlayerError(

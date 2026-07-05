@@ -8,25 +8,17 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
 )
-from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    EnrollmentNotFoundError,
+    NotCreatorError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class EnrollmentNotFoundError(Exception):
-    """Excepción lanzada cuando la inscripción no existe."""
-
-    pass
-
-
-class NotCreatorError(Exception):
-    """Excepción lanzada cuando el usuario no es el creador de la competición."""
-
-    pass
 
 
 class InvalidActionError(Exception):
@@ -62,7 +54,7 @@ class HandleEnrollmentUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: HandleEnrollmentRequestDTO, creator_id: UserId
+        self, request: HandleEnrollmentRequestDTO, creator_id: UserId, is_admin: bool = False
     ) -> HandleEnrollmentResponseDTO:
         """
         Ejecuta el caso de uso de manejo de inscripción.
@@ -99,7 +91,7 @@ class HandleEnrollmentUseCase:
                 )
 
             # 3. Verificar que es el creador
-            if competition.creator_id != creator_id:
+            if not is_admin and competition.creator_id != creator_id:
                 raise NotCreatorError(
                     "Solo el creador de la competición puede aprobar o rechazar inscripciones"
                 )

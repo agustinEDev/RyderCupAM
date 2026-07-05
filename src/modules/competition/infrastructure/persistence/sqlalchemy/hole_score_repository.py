@@ -29,7 +29,7 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         statement = (
             select(HoleScore)
             .where(HoleScore._match_id == match_id)
-            .order_by(HoleScore._hole_number.asc())
+            .order_by(HoleScore._hole_number.asc(), HoleScore._player_user_id.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

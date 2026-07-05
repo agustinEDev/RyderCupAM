@@ -56,7 +56,7 @@ class CreateRoundUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: CreateRoundRequestDTO, user_id: UserId
+        self, request: CreateRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> CreateRoundResponseDTO:
         async with self._uow:
             # 1. Buscar la competición
@@ -69,7 +69,7 @@ class CreateRoundUseCase:
                 )
 
             # 2. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede crear rondas")
 
             # 3. Verificar estado CLOSED

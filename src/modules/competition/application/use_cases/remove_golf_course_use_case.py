@@ -58,7 +58,7 @@ class RemoveGolfCourseFromCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: RemoveGolfCourseRequestDTO, user_id: UserId
+        self, request: RemoveGolfCourseRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> RemoveGolfCourseResponseDTO:
         """
         Ejecuta el caso de uso de eliminar campo de golf de competicion.
@@ -87,7 +87,7 @@ class RemoveGolfCourseFromCompetitionUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError(
                     "Solo el creador puede eliminar campos de golf de la competicion"
                 )

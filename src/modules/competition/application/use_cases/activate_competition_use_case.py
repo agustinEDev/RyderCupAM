@@ -50,7 +50,7 @@ class ActivateCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: ActivateCompetitionRequestDTO, user_id: UserId
+        self, request: ActivateCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ActivateCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de activación de competición.
@@ -78,7 +78,7 @@ class ActivateCompetitionUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede activar la competición")
 
             # 3. Activar la competición (la entidad valida la transición)

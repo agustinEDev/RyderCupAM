@@ -38,7 +38,7 @@ class DeleteRoundUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: DeleteRoundRequestDTO, user_id: UserId
+        self, request: DeleteRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> DeleteRoundResponseDTO:
         async with self._uow:
             # 1. Buscar la ronda
@@ -55,7 +55,7 @@ class DeleteRoundUseCase:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
             # 3. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede eliminar rondas")
 
             # 4. Verificar competición CLOSED

@@ -70,7 +70,7 @@ class AssignTeamsUseCase:
         self._draft_service = snake_draft_service or SnakeDraftService()
 
     async def execute(
-        self, request: AssignTeamsRequestDTO, user_id: UserId
+        self, request: AssignTeamsRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> AssignTeamsResponseDTO:
         async with self._uow:
             # 1. Buscar la competición
@@ -83,7 +83,7 @@ class AssignTeamsUseCase:
                 )
 
             # 2. Verificar creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede asignar equipos")
 
             # 3. Verificar estado CLOSED

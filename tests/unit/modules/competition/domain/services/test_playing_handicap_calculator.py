@@ -391,3 +391,95 @@ class TestPlayingHandicapCalculatorRealScenarios:
         # Mujer: 18 × (115/113) + (69.5-72) = 18.31 - 2.5 = 15.81 → 16
         assert ph_man == 13
         assert ph_woman == 16
+
+
+class TestPlayingHandicapCalculatorMaxHandicap:
+    """Tests para el límite máximo de hándicap de juego (max_playing_handicap)."""
+
+    def test_calculate_caps_result_when_above_limit(self):
+        """El resultado queda limitado al cap cuando supera max_playing_handicap."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        # HI=36.0 con slope neutro y 100% → PH = 36
+        # Cap de 18 → resultado debe ser 18
+        result = calculator.calculate(
+            handicap_index=Decimal("36.0"),
+            tee_rating=tee,
+            allowance_percentage=100,
+            max_playing_handicap=18,
+        )
+
+        assert result == 18
+
+    def test_calculate_no_cap_applied_when_below_limit(self):
+        """El resultado no se altera cuando el PH calculado está por debajo del límite."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        result = calculator.calculate(
+            handicap_index=Decimal("10.0"),
+            tee_rating=tee,
+            allowance_percentage=100,
+            max_playing_handicap=18,
+        )
+
+        assert result == 10
+
+    def test_calculate_no_cap_when_none(self):
+        """Sin cap (None), el resultado puede superar cualquier límite."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        result = calculator.calculate(
+            handicap_index=Decimal("54.0"),
+            tee_rating=tee,
+            allowance_percentage=100,
+            max_playing_handicap=None,
+        )
+
+        assert result == 54
+
+    def test_calculate_cap_exactly_at_limit(self):
+        """El resultado es igual al cap cuando el PH calculado coincide exactamente."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        result = calculator.calculate(
+            handicap_index=Decimal("20.0"),
+            tee_rating=tee,
+            allowance_percentage=100,
+            max_playing_handicap=20,
+        )
+
+        assert result == 20
+
+    def test_calculate_cap_applied_with_allowance(self):
+        """El cap se aplica DESPUÉS del allowance, no antes."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        # HI=36.0, 50% allowance → PH = 18, cap=10 → resultado=10
+        result = calculator.calculate(
+            handicap_index=Decimal("36.0"),
+            tee_rating=tee,
+            allowance_percentage=50,
+            max_playing_handicap=10,
+        )
+
+        assert result == 10
+
+    def test_calculate_cap_not_needed_with_allowance(self):
+        """Con allowance bajo, el PH puede quedar ya por debajo del cap."""
+        calculator = PlayingHandicapCalculator()
+        tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        # HI=36.0, 50% allowance → PH = 18, cap=20 → resultado=18 (no se aplica)
+        result = calculator.calculate(
+            handicap_index=Decimal("36.0"),
+            tee_rating=tee,
+            allowance_percentage=50,
+            max_playing_handicap=20,
+        )
+
+        assert result == 18

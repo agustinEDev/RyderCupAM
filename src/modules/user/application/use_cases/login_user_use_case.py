@@ -8,7 +8,8 @@ Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minut
 CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
-from datetime import datetime
+import logging
+from datetime import UTC, datetime
 
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
@@ -22,13 +23,17 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
 
 
 class LoginUserUseCase:
@@ -54,6 +59,7 @@ class LoginUserUseCase:
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
+        handicap_service: HandicapService | None = None,
     ):
         """
         Inicializa el caso de uso.
@@ -62,10 +68,12 @@ class LoginUserUseCase:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens + user_devices)
             token_service: Servicio para generación de tokens de autenticación
             register_device_use_case: Caso de uso para registrar/actualizar dispositivos (v1.13.0)
+            handicap_service: Servicio RFEG para fetch de hándicap en login (HM-2a). Opcional.
         """
         self._uow = uow
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
+        self._handicap_service = handicap_service
 
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
@@ -175,7 +183,9 @@ class LoginUserUseCase:
         user.reset_failed_attempts()
 
         # Registrar evento de login exitoso (Clean Architecture)
-        login_time = datetime.now()
+        # UTC-aware: handicap_updated_at ahora es timezone-aware, y la comparación
+        # de fechas en _refresh_handicap() necesita el mismo huso horario.
+        login_time = datetime.now(UTC)
         user.record_login(
             logged_in_at=login_time,
             # ip_address y user_agent se pueden agregar cuando el controlador los pase
@@ -236,6 +246,9 @@ class LoginUserUseCase:
         # Generar token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token()
 
+        # HM-2a: Refresco de hándicap en login (best-effort, 1 vez al día).
+        needs_handicap = await self._refresh_handicap(user, login_time)
+
         # Crear respuesta con tokens y datos de usuario
         user_dto = UserResponseDTO.model_validate(user)
 
@@ -249,4 +262,57 @@ class LoginUserUseCase:
             # Device Fingerprinting (v2.0.4): Cookie-based identification
             device_id=device_id_str,
             should_set_device_cookie=should_set_device_cookie,
+            # HM-2a: Indica si el FE debe mostrar HandicapRequestModal
+            needs_handicap=needs_handicap,
         )
+
+    async def _refresh_handicap(self, user: User, login_time: datetime) -> bool:
+        """
+        Refresca el hándicap del usuario en login (best-effort, 1 vez al día).
+
+        ES: intenta fetch automático y silencioso vía RFEG.
+        No-ES, o RFEG sin resultado/con error: no se actualiza, hay que pedirlo al usuario.
+
+        Args:
+            user: Usuario autenticado.
+            login_time: Instante del login, usado para el gate "una vez al día".
+
+        Returns:
+            True si el FE debe mostrar el HandicapRequestModal.
+        """
+        handicap_updated_today = (
+            user.handicap_updated_at is not None
+            and user.handicap_updated_at.date() == login_time.date()
+        )
+        if handicap_updated_today:
+            return False
+
+        country_code_value = user.country_code.value if user.country_code else None
+        if country_code_value != "ES" or self._handicap_service is None:
+            return True
+
+        try:
+            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
+        except Exception:
+            logger.warning(
+                "RFEG lookup failed for %s during login handicap refresh",
+                user.get_full_name(),
+                exc_info=True,
+            )
+            return True
+
+        if handicap_value is None:
+            return True
+
+        try:
+            user.update_handicap(handicap_value)
+            async with self._uow:
+                await self._uow.users.save(user)
+        except Exception:
+            logger.error(
+                "Failed to persist RFEG handicap for %s during login",
+                user.get_full_name(),
+                exc_info=True,
+            )
+            return True
+        return False

@@ -44,7 +44,7 @@ class RevertCompetitionStatusUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: RevertCompetitionStatusRequestDTO, user_id: UserId
+        self, request: RevertCompetitionStatusRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> RevertCompetitionStatusResponseDTO:
         """
         Ejecuta el caso de uso de reversión de competición.
@@ -72,7 +72,7 @@ class RevertCompetitionStatusUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede revertir la competición")
 
             # 3. Revertir la competición (la entidad valida la transición)

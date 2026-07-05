@@ -101,3 +101,21 @@ class InvalidHoleNumberError(Exception):
     """El numero de hoyo no es valido."""
 
     pass
+
+
+class HandicapEditNotAllowedError(Exception):
+    """El hándicap personalizado no puede modificarse en el estado actual de la competición."""
+
+    pass
+
+
+class EnrollmentNotFoundError(Exception):
+    """La inscripción no existe."""
+
+    pass
+
+
+class NotCreatorError(Exception):
+    """El usuario no es el creador de la competición."""
+
+    pass

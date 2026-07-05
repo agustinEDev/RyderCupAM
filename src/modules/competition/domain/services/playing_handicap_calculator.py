@@ -85,6 +85,7 @@ class PlayingHandicapCalculator:
         handicap_index: Decimal,
         tee_rating: TeeRating,
         allowance_percentage: int,
+        max_playing_handicap: int | None = None,
     ) -> int:
         """
         Calcula el Playing Handicap (Handicap de Juego).
@@ -96,9 +97,11 @@ class PlayingHandicapCalculator:
             handicap_index: Handicap Index del jugador (ej: 12.4)
             tee_rating: Ratings del tee (CR, SR, Par)
             allowance_percentage: Porcentaje de allowance (50-100)
+            max_playing_handicap: Límite superior opcional (cap WHS de la competición)
 
         Returns:
-            Playing Handicap redondeado al entero más cercano (>=0)
+            Playing Handicap redondeado al entero más cercano (>=0), acotado a
+            max_playing_handicap si se proporciona
         """
         # Paso 1: Calcular Course Handicap
         # CH = HI x (SR / 113) + (CR - Par)
@@ -114,7 +117,10 @@ class PlayingHandicapCalculator:
         playing_handicap = int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
         # Playing Handicap no puede ser negativo
-        return max(0, playing_handicap)
+        result = max(0, playing_handicap)
+        if max_playing_handicap is not None:
+            result = min(result, max_playing_handicap)
+        return result
 
     def calculate_for_singles(
         self,

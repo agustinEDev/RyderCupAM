@@ -234,7 +234,36 @@ class SetCustomHandicapResponseDTO(BaseModel):
     """
 
     id: UUID = Field(..., description="ID de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del usuario.")
+    status: str = Field(..., description="Estado de la inscripción.")
     custom_handicap: Decimal = Field(..., description="Nuevo hándicap personalizado.")
+    updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Eliminar Hándicap Personalizado (revertir al oficial)
+# ======================================================================================
+
+
+class RemoveCustomHandicapResponseDTO(BaseModel):
+    """
+    DTO de salida para eliminar el hándicap personalizado.
+
+    Tras la operación el enrollment vuelve a usar el hándicap oficial del jugador
+    (el de su perfil, actualizado vía RFEG en los flujos ya existentes de login/
+    generación de partidos).
+    """
+
+    id: UUID = Field(..., description="ID de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del usuario.")
+    status: str = Field(..., description="Estado de la inscripción.")
+    custom_handicap: Decimal | None = Field(
+        None, description="Siempre None tras eliminar el hándicap personalizado."
+    )
     updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
 
     model_config = ConfigDict(from_attributes=True)

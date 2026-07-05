@@ -125,6 +125,7 @@ class CreateCompetitionUseCase:
                 play_mode=play_mode,
                 max_players=request.max_players,
                 team_assignment=team_assignment_vo,
+                max_playing_handicap=request.max_playing_handicap,
             )
 
             # 9. Persistir la competición
@@ -167,6 +168,7 @@ class CreateCompetitionUseCase:
             # Config
             max_players=competition.max_players,
             team_assignment=competition.team_assignment.value,
+            max_playing_handicap=competition.max_playing_handicap,
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

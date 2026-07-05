@@ -44,7 +44,7 @@ class ReopenEnrollmentsUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: ReopenEnrollmentsRequestDTO, user_id: UserId
+        self, request: ReopenEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ReopenEnrollmentsResponseDTO:
         """
         Ejecuta el caso de uso de reapertura de inscripciones.
@@ -71,8 +71,8 @@ class ReopenEnrollmentsUseCase:
                     f"No existe competición con ID {request.competition_id}"
                 )
 
-            # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            # 2. Verificar que el usuario sea el creador (o admin)
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede reabrir inscripciones")
 
             # 3. Reabrir inscripciones (la entidad valida la transición)

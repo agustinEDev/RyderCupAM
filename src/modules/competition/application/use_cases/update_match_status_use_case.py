@@ -46,11 +46,11 @@ class UpdateMatchStatusUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: UpdateMatchStatusRequestDTO, user_id: UserId
+        self, request: UpdateMatchStatusRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateMatchStatusResponseDTO:
         async with self._uow:
             # 1-4. Validaciones
-            match, round_entity = await self._validate(request, user_id)
+            match, round_entity = await self._validate(request, user_id, is_admin)
 
             # 5. Ejecutar accion
             if request.action == "START":
@@ -71,7 +71,7 @@ class UpdateMatchStatusUseCase:
             updated_at=match.updated_at,
         )
 
-    async def _validate(self, request, user_id):
+    async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
         match = await self._uow.matches.find_by_id(match_id)
@@ -87,7 +87,7 @@ class UpdateMatchStatusUseCase:
         if not competition:
             raise CompetitionNotFoundError("La competicion asociada no existe")
 
-        if not competition.is_creator(user_id):
+        if not is_admin and not competition.is_creator(user_id):
             raise NotCompetitionCreatorError("Solo el creador puede actualizar partidos")
 
         if not competition.is_in_progress():

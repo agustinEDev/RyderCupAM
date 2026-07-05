@@ -92,6 +92,9 @@ from src.modules.competition.application.use_cases.list_my_invitations_use_case 
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     ReassignMatchPlayersUseCase,
 )
+from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
+    RemoveCustomHandicapUseCase,
+)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
@@ -510,6 +513,7 @@ def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -518,10 +522,11 @@ def get_login_user_use_case(
     1. Depende de `get_uow` para obtener una Unit of Work.
     2. Depende de `get_token_service` para generación de tokens JWT.
     3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
-    4. Crea una instancia de `LoginUserUseCase` con esas dependencias.
-    5. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    4. Depende de `get_handicap_service` para fetch RFEG en login (HM-2a).
+    5. Crea una instancia de `LoginUserUseCase` con esas dependencias.
+    6. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LoginUserUseCase(uow, token_service, register_device_use_case)
+    return LoginUserUseCase(uow, token_service, register_device_use_case, handicap_service)
 
 
 def get_logout_user_use_case(
@@ -1127,6 +1132,13 @@ def get_set_custom_handicap_use_case(
     return SetCustomHandicapUseCase(uow)
 
 
+def get_remove_custom_handicap_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RemoveCustomHandicapUseCase:
+    """Proveedor del caso de uso RemoveCustomHandicapUseCase."""
+    return RemoveCustomHandicapUseCase(uow)
+
+
 def get_list_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
 ) -> ListEnrollmentsUseCase:
@@ -1217,6 +1229,7 @@ def get_generate_matches_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
     return GenerateMatchesUseCase(
@@ -1225,6 +1238,7 @@ def get_generate_matches_use_case(
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
+        handicap_service=handicap_service,
     )
 
 

@@ -35,6 +35,7 @@ class CompetitionDTOMapper:
         current_user_id: UserId,
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface | None = None,
+        is_admin: bool = False,
     ) -> CompetitionResponseDTO:
         """
         Convierte una entidad Competition a CompetitionResponseDTO.
@@ -44,12 +45,19 @@ class CompetitionDTOMapper:
         - enrolled_count: número de enrollments APPROVED
         - location: string formateado con nombres de países
         - creator: información completa del creador (si user_uow es provisto)
+
+        pending_enrollments_count solo se calcula y expone para el creador
+        de la competición o para administradores (is_admin=True).
         """
+        is_creator = competition.creator_id == current_user_id
+
         # Calcular enrolled_count
         enrolled_count = await uow.enrollments.count_approved(competition.id)
 
-        # Calcular pending_enrollments_count (solicitudes pendientes)
-        pending_enrollments_count = await uow.enrollments.count_pending(competition.id)
+        # Calcular pending_enrollments_count (solo visible para creador/admin)
+        pending_enrollments_count = 0
+        if is_creator or is_admin:
+            pending_enrollments_count = await uow.enrollments.count_pending(competition.id)
 
         # Obtener enrollment status del usuario actual (si existe)
         user_enrollment_status = None
@@ -123,11 +131,12 @@ class CompetitionDTOMapper:
                 if hasattr(competition.team_assignment, "value")
                 else competition.team_assignment
             ),
+            max_playing_handicap=competition.max_playing_handicap,
             # Teams
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,
             # Campos calculados
-            is_creator=(competition.creator_id == current_user_id),
+            is_creator=is_creator,
             enrolled_count=enrolled_count,
             pending_enrollments_count=pending_enrollments_count,
             user_enrollment_status=user_enrollment_status,

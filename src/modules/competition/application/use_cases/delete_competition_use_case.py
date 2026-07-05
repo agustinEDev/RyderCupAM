@@ -55,7 +55,7 @@ class DeleteCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: DeleteCompetitionRequestDTO, user_id: UserId
+        self, request: DeleteCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> DeleteCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de eliminacion de competicion.
@@ -83,7 +83,7 @@ class DeleteCompetitionUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede eliminar la competicion")
 
             # 3. Verificar que este en estado DRAFT
