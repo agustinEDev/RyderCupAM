@@ -77,11 +77,11 @@ class ReassignMatchPlayersUseCase:
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
 
     async def execute(
-        self, request: ReassignMatchPlayersRequestDTO, user_id: UserId
+        self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ReassignMatchPlayersResponseDTO:
         async with self._uow:
             # 1-4. Validaciones
-            match, round_entity, competition = await self._validate(request, user_id)
+            match, round_entity, competition = await self._validate(request, user_id, is_admin)
 
             # 5. Verificar que los jugadores pertenecen al equipo correcto
             team_assignment = await self._uow.team_assignments.find_by_competition(
@@ -121,6 +121,7 @@ class ReassignMatchPlayersUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    competition.max_playing_handicap,
                 )
                 for uid in request.team_a_player_ids
             ]
@@ -134,6 +135,7 @@ class ReassignMatchPlayersUseCase:
                     user_handicap_map,
                     holes_by_stroke_index,
                     user_gender_map,
+                    competition.max_playing_handicap,
                 )
                 for uid in request.team_b_player_ids
             ]
@@ -205,6 +207,7 @@ class ReassignMatchPlayersUseCase:
         user_handicap_map,
         holes_by_stroke_index,
         user_gender_map,
+        max_playing_handicap=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         uid = UserId(uid_value)
@@ -246,7 +249,9 @@ class ReassignMatchPlayersUseCase:
                 f"Verifique que el campo tiene un tee configurado para "
                 f"categoría={tee_category.value}, género={tee_gender}"
             )
-        playing_handicap = self._calculator.calculate(handicap_index, tee_rating, allowance)
+        playing_handicap = self._calculator.calculate(
+            handicap_index, tee_rating, allowance, max_playing_handicap
+        )
         strokes_received = self._calculator.compute_strokes_received(
             playing_handicap, holes_by_stroke_index
         )
@@ -258,7 +263,7 @@ class ReassignMatchPlayersUseCase:
             tee_gender=tee_gender,
         )
 
-    async def _validate(self, request, user_id):
+    async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
         match = await self._uow.matches.find_by_id(match_id)
@@ -279,7 +284,7 @@ class ReassignMatchPlayersUseCase:
         if not competition:
             raise MatchNotFoundError("La competicion asociada no existe")
 
-        if not competition.is_creator(user_id):
+        if not is_admin and not competition.is_creator(user_id):
             raise NotCompetitionCreatorError("Solo el creador puede reasignar jugadores")
 
         return match, round_entity, competition

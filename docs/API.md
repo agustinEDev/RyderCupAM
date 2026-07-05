@@ -83,7 +83,7 @@ Teams & Generation (3 endpoints) ⭐ Sprint 2
 ├── POST   /api/v1/competitions/rounds/{id}/matches/generate # Generate matches for round
 └── POST   /api/v1/competitions/{id}/schedule/configure # Configure schedule (auto/manual)
 
-Enrollment Management (8 endpoints)
+Enrollment Management (9 endpoints)
 ├── POST /api/v1/competitions/{id}/enrollments      # Request enrollment
 ├── POST /api/v1/competitions/{id}/enrollments/direct # Direct enroll (creator only)
 ├── GET  /api/v1/competitions/{id}/enrollments      # List enrollments
@@ -91,7 +91,8 @@ Enrollment Management (8 endpoints)
 ├── POST /api/v1/enrollments/{id}/reject            # Reject enrollment
 ├── POST /api/v1/enrollments/{id}/cancel            # Cancel enrollment
 ├── POST /api/v1/enrollments/{id}/withdraw          # Withdraw from competition
-└── PUT  /api/v1/enrollments/{id}/handicap          # Set custom handicap
+├── PUT  /api/v1/enrollments/{id}/handicap          # Set custom handicap
+└── DELETE /api/v1/enrollments/{id}/handicap        # Revert to official RFEG handicap
 
 Country Management (2 endpoints)
 ├── GET  /api/v1/countries               # List all countries
@@ -614,6 +615,7 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 | `/enrollments/{id}/cancel` | POST | Yes | Cancel request/invitation |
 | `/enrollments/{id}/withdraw` | POST | Yes | Withdraw from competition |
 | `/enrollments/{id}/handicap` | PUT | Yes | Set custom handicap |
+| `/enrollments/{id}/handicap` | DELETE | Yes | Revert to official RFEG handicap |
 
 ### Main Fields
 
@@ -629,8 +631,13 @@ SCHEDULED → IN_PROGRESS → COMPLETED
 
 **Set Custom Handicap:**
 - `custom_handicap` (float, required, -10.0 to 54.0)
-- Only creator can set
+- Creator or admin can set
 - Override of user's official handicap
+- Only allowed while competition is in DRAFT, ACTIVE or CLOSED (raises `HandicapEditNotAllowedError` in IN_PROGRESS+)
+
+**Revert Custom Handicap (DELETE):**
+- Creator or admin can clear the enrollment's `custom_handicap`, reverting it to the player's official (RFEG-sourced) handicap
+- Same status gate as Set Custom Handicap (DRAFT/ACTIVE/CLOSED only)
 
 ### Query Parameters (List)
 

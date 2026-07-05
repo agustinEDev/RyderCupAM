@@ -22,8 +22,24 @@ class MatchPlayerResponseDTO(BaseModel):
     strokes_received: list[int] = Field(
         default_factory=list, description="Hoyos donde recibe golpe."
     )
+    player_handicap: float | None = Field(
+        None,
+        description="HI del jugador en el momento de generar el partido (snapshot, HM-1b). "
+        "None en partidos generados antes de esta feature.",
+    )
 
     model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_domain(cls, p) -> "MatchPlayerResponseDTO":
+        """Construye el DTO a partir de un MatchPlayer de dominio (VO)."""
+        return cls(
+            user_id=p.user_id.value,
+            playing_handicap=p.playing_handicap,
+            tee_category=p.tee_category.value,
+            strokes_received=list(p.strokes_received),
+            player_handicap=float(p.player_handicap) if p.player_handicap is not None else None,
+        )
 
 
 class MatchResponseDTO(BaseModel):

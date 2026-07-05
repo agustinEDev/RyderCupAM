@@ -5,6 +5,7 @@ NO es una entidad (no tiene identidad propia), es un Value Object embebido en Ma
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -47,6 +48,7 @@ class MatchPlayer:
     strokes_received: tuple[
         int, ...
     ]  # Hoyos donde recibe golpe (puede tener duplicados si PH > 18)
+    player_handicap: Decimal | None = None  # HM-1b: snapshot del HI usado al generar el partido
 
     def __post_init__(self):
         """Validaciones después de inicialización."""
@@ -66,6 +68,7 @@ class MatchPlayer:
         tee_category: TeeCategory,
         strokes_received: list[int] | tuple[int, ...],
         tee_gender: Gender | None = None,
+        player_handicap: Decimal | None = None,
     ) -> "MatchPlayer":
         """
         Factory method para crear un MatchPlayer.
@@ -76,6 +79,7 @@ class MatchPlayer:
             tee_category: Categoría de tee que usa
             strokes_received: Lista de hoyos donde recibe golpe
             tee_gender: Género del tee (MALE/FEMALE/None)
+            player_handicap: HI del jugador en el momento de generar el partido (snapshot)
 
         Returns:
             Nueva instancia de MatchPlayer
@@ -86,6 +90,7 @@ class MatchPlayer:
             tee_category=tee_category,
             tee_gender=tee_gender,
             strokes_received=tuple(strokes_received),
+            player_handicap=player_handicap,
         )
 
     def receives_stroke_on_hole(self, hole_number: int) -> bool:

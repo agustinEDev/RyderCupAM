@@ -1,6 +1,7 @@
 """Tests para ReassignMatchPlayersUseCase."""
 
 from datetime import date
+from decimal import Decimal
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -29,6 +30,7 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -39,9 +41,13 @@ from src.modules.competition.domain.value_objects.team_assignment_mode import (
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -454,3 +460,148 @@ class TestReassignMatchPlayersUseCase:
         assert response.handicap_strokes_given == 0
         assert response.strokes_given_to_team == ""
         assert response.new_status == "SCHEDULED"
+
+    async def test_should_apply_competition_max_playing_handicap_cap(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica que la reasignacion respeta el cap max_playing_handicap de la competicion.
+
+        Given: Una competicion HANDICAP con max_playing_handicap=10 y un jugador
+               con custom_handicap=30 (muy por encima del cap)
+        When: El creador reasigna ese jugador a un partido
+        Then: El playing_handicap resultante queda acotado a 10, no a 30
+        """
+        # Arrange - Competicion en modo HANDICAP con cap de 10
+        competition = Competition.create(
+            id=CompetitionId(uuid4()),
+            creator_id=creator_id,
+            name=CompetitionName("Capped Handicap Cup"),
+            dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
+            location=Location(main_country=CountryCode("ES")),
+            play_mode=PlayMode.HANDICAP,
+            max_players=24,
+            team_assignment=TeamAssignment.MANUAL,
+            team_1_name="Team A",
+            team_2_name="Team B",
+            max_playing_handicap=10,
+        )
+        competition.activate()
+        competition.close_enrollments()
+
+        async with uow:
+            await uow.competitions.add(competition)
+
+        player1 = UserId(uuid4())
+        player2 = UserId(uuid4())
+        player3 = UserId(uuid4())
+        player4 = UserId(uuid4())
+
+        # Enrollments con custom_handicap muy por encima del cap de la competicion
+        for player_id in [player1, player2, player3, player4]:
+            enrollment = Enrollment.direct_enroll(
+                id=EnrollmentId.generate(),
+                competition_id=competition.id,
+                user_id=player_id,
+                custom_handicap=Decimal("30"),
+                tee_category=TeeCategory.AMATEUR,
+            )
+            async with uow:
+                await uow.enrollments.add(enrollment)
+
+        team_assignment = TeamAssignmentEntity.create(
+            competition_id=competition.id,
+            mode=TeamAssignmentMode.MANUAL,
+            team_a_player_ids=[player1, player2],
+            team_b_player_ids=[player3, player4],
+        )
+        async with uow:
+            await uow.team_assignments.add(team_assignment)
+
+        # Campo de golf con tee neutro (slope 113, course_rating == par total)
+        # para que el Course Handicap resultante sea igual al handicap_index (30)
+        holes = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
+        tees = [
+            Tee(
+                category=TeeCategory.AMATEUR,
+                gender=None,
+                identifier="White",
+                course_rating=72.0,
+                slope_rating=113,
+            ),
+            Tee(
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=None,
+                identifier="Black",
+                course_rating=74.0,
+                slope_rating=125,
+            ),
+        ]
+        golf_course = GolfCourse.create(
+            name="Test Course",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=tees,
+            holes=holes,
+        )
+        gc_repo.find_by_id = AsyncMock(return_value=golf_course)
+
+        round_entity = Round.create(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        round_entity.mark_teams_assigned()
+        round_entity.mark_matches_generated()
+
+        original_player_a = MatchPlayer.create(
+            user_id=player1,
+            playing_handicap=0,
+            tee_category=TeeCategory.AMATEUR,
+            strokes_received=[],
+        )
+        original_player_b = MatchPlayer.create(
+            user_id=player3,
+            playing_handicap=0,
+            tee_category=TeeCategory.AMATEUR,
+            strokes_received=[],
+        )
+        match = Match.create(
+            round_id=round_entity.id,
+            match_number=1,
+            team_a_players=[original_player_a],
+            team_b_players=[original_player_b],
+        )
+
+        async with uow:
+            await uow.rounds.add(round_entity)
+            await uow.matches.add(match)
+
+        use_case = ReassignMatchPlayersUseCase(
+            uow=uow,
+            golf_course_repository=gc_repo,
+            user_repository=user_repo,
+        )
+
+        request = ReassignMatchPlayersRequestDTO(
+            match_id=match.id.value,
+            team_a_player_ids=[player2.value],
+            team_b_player_ids=[player4.value],
+        )
+
+        # Act
+        response = await use_case.execute(request, creator_id)
+
+        # Assert - El playing handicap resultante debe quedar acotado a 10
+        async with uow:
+            new_match = await uow.matches.find_by_id(MatchId(response.match_id))
+        assert new_match.team_a_players[0].playing_handicap == 10
+        assert new_match.team_b_players[0].playing_handicap == 10

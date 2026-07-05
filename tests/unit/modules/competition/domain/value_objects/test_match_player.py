@@ -1,5 +1,7 @@
 """Tests para MatchPlayer value object."""
 
+from decimal import Decimal
+
 import pytest
 
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
@@ -76,6 +78,35 @@ class TestMatchPlayerCreate:
         assert player.strokes_on_hole(3) == 2
         assert player.strokes_on_hole(1) == 1
         assert player.strokes_on_hole(4) == 0
+
+
+class TestMatchPlayerPlayerHandicap:
+    """Tests para el snapshot player_handicap (HM-1b)."""
+
+    def test_defaults_to_none_when_not_provided(self):
+        """Si no se pasa player_handicap, queda en None (compat con partidos previos a HM-1b)."""
+        player = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=12,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+            strokes_received=[1, 2, 3],
+        )
+
+        assert player.player_handicap is None
+
+    def test_stores_snapshot_value(self):
+        """Guarda el HI del jugador en el momento de generar el partido."""
+        player = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=12,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+            strokes_received=[1, 2, 3],
+            player_handicap=Decimal("14.2"),
+        )
+
+        assert player.player_handicap == Decimal("14.2")
 
 
 class TestMatchPlayerImmutability:

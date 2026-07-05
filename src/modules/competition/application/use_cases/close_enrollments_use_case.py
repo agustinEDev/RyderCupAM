@@ -51,7 +51,7 @@ class CloseEnrollmentsUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: CloseEnrollmentsRequestDTO, user_id: UserId
+        self, request: CloseEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> CloseEnrollmentsResponseDTO:
         """
         Ejecuta el caso de uso de cierre de inscripciones.
@@ -79,7 +79,7 @@ class CloseEnrollmentsUseCase:
                 )
 
             # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede cerrar las inscripciones")
 
             # 3. Contar inscripciones aprobadas

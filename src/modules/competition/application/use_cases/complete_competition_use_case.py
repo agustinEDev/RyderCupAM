@@ -50,7 +50,7 @@ class CompleteCompetitionUseCase:
         self._uow = uow
 
     async def execute(
-        self, request: CompleteCompetitionRequestDTO, user_id: UserId
+        self, request: CompleteCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> CompleteCompetitionResponseDTO:
         """
         Ejecuta el caso de uso de completar competicion.
@@ -77,8 +77,8 @@ class CompleteCompetitionUseCase:
                     f"No existe competición con ID {request.competition_id}"
                 )
 
-            # 2. Verificar que el usuario sea el creador
-            if not competition.is_creator(user_id):
+            # 2. Verificar que el usuario sea el creador (o admin)
+            if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede completar la competicion")
 
             # 3. Completar la competicion (la entidad valida la transicion)

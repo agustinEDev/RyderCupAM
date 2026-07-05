@@ -58,7 +58,7 @@ class SendInvitationByUserIdUseCase:
         self._user_uow = user_uow
         self._email_service = email_service
 
-    async def execute(self, request: SendInvitationByUserIdRequestDTO) -> InvitationResponseDTO:
+    async def execute(self, request: SendInvitationByUserIdRequestDTO, is_admin: bool = False) -> InvitationResponseDTO:
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             inviter_id = UserId(request.inviter_id)
@@ -70,7 +70,7 @@ class SendInvitationByUserIdUseCase:
                 raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 
             # 2. Verificar creator/admin
-            if not competition.is_creator(inviter_id):
+            if not is_admin and not competition.is_creator(inviter_id):
                 raise NotCompetitionCreatorError(
                     "Only the competition creator can send invitations."
                 )

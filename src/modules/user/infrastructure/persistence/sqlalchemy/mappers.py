@@ -110,7 +110,7 @@ users_table = Table(
     Column("email", String(255), nullable=False, unique=True),
     Column("password", String(255), nullable=True),  # Nullable for OAuth-only users
     Column("handicap", HandicapDecorator, nullable=True),
-    Column("handicap_updated_at", DateTime, nullable=True),
+    Column("handicap_updated_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
     Column("email_verified", Boolean, nullable=False, default=False),

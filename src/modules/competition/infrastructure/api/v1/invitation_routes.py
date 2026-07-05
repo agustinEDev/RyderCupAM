@@ -131,7 +131,7 @@ async def send_invitation_by_user_id(
             invitee_user_id=body.invitee_user_id,
             personal_message=body.personal_message,
         )
-        return await use_case.execute(request_dto)
+        return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -170,7 +170,7 @@ async def send_invitation_by_email(
             invitee_email=body.invitee_email,
             personal_message=body.personal_message,
         )
-        return await use_case.execute(request_dto)
+        return await use_case.execute(request_dto, is_admin=current_user.is_admin)
 
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

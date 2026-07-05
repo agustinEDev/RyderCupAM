@@ -8,7 +8,7 @@ Endpoints FastAPI para scoring en vivo del modulo Competition.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_concede_match_use_case,
@@ -125,7 +125,7 @@ async def submit_hole_score(
     Retorna la vista completa de scoring actualizada.
 
     **Restricciones:**
-    - Solo jugadores del partido pueden registrar scores
+    - Solo jugadores del partido pueden registrar scores (o admin con acting_as)
     - El partido debe estar IN_PROGRESS
     - Hoyo debe estar entre 1-18
     - Los campos bloqueados tras la entrega se omiten silenciosamente
@@ -137,9 +137,17 @@ async def submit_hole_score(
     - 404: Partido no encontrado
     - 409: Partido no en estado de scoring
     """
+    if body.acting_as is not None and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admins pueden usar acting_as",
+        )
+    effective_user_id = (
+        UserId(body.acting_as) if body.acting_as is not None else UserId(current_user.id)
+    )
+
     try:
-        current_user_id = UserId(current_user.id)
-        return await use_case.execute(str(match_id), hole_number, body, current_user_id)
+        return await use_case.execute(str(match_id), hole_number, body, effective_user_id)
 
     except MatchNotFoundError as e:
         raise HTTPException(
@@ -176,6 +184,10 @@ async def submit_scorecard(
     match_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SubmitScorecardUseCase = Depends(get_submit_scorecard_use_case),
+    acting_as: UUID | None = Query(
+        None,
+        description="Solo admin: ID del jugador cuya tarjeta se entrega en su nombre.",
+    ),
 ):
     """
     Entrega la tarjeta de scores de un jugador.
@@ -184,7 +196,7 @@ async def submit_scorecard(
     Si todos los jugadores entregan su tarjeta, el partido se completa automaticamente.
 
     **Restricciones:**
-    - Solo jugadores del partido
+    - Solo jugadores del partido (o admin con acting_as)
     - El partido debe estar IN_PROGRESS
     - Todos los hoyos jugados deben tener validation_status MATCH
     - No se puede entregar dos veces
@@ -196,9 +208,15 @@ async def submit_scorecard(
     - 404: Partido no encontrado
     - 409: Partido no en estado de scoring
     """
+    if acting_as is not None and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admins pueden usar acting_as",
+        )
+    effective_user_id = UserId(acting_as) if acting_as is not None else UserId(current_user.id)
+
     try:
-        current_user_id = UserId(current_user.id)
-        return await use_case.execute(str(match_id), current_user_id)
+        return await use_case.execute(str(match_id), effective_user_id)
 
     except MatchNotFoundError as e:
         raise HTTPException(
@@ -283,6 +301,7 @@ async def concede_match(
     **Auth:**
     - Jugadores del partido: solo pueden conceder SU propio equipo
     - Creator de la competicion: puede conceder cualquier equipo
+    - Admin: puede conceder cualquier equipo
 
     **Body:**
     - conceding_team: "A" o "B"
@@ -291,13 +310,14 @@ async def concede_match(
     **Returns:**
     - 200: Partido concedido
     - 409: Partido no en estado de scoring
-    - 403: No es jugador ni creador
+    - 403: No es jugador, creador ni admin
     - 404: Partido no encontrado
     """
     try:
         current_user_id = UserId(current_user.id)
         return await use_case.execute(
-            str(match_id), current_user_id, body.conceding_team, body.reason
+            str(match_id), current_user_id, body.conceding_team, body.reason,
+            is_admin=current_user.is_admin,
         )
 
     except MatchNotFoundError as e:

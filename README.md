@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.14-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.17-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
@@ -29,7 +29,7 @@
 
 ### 🎯 Key Highlights
 
-- ✅ **82 REST API endpoints** fully documented (Swagger UI)
+- ✅ **83 REST API endpoints** fully documented (Swagger UI)
 - ✅ **2,158 tests** passing (100% success rate, ~90s execution)
 - ✅ **OWASP Top 10 Score: 9.4/10** - Production-grade security
 - ✅ **Clean Architecture** - 3-layer separation with DDD patterns
@@ -213,6 +213,15 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### What's New
 
+**v2.0.17 (Jul 2026) — Scoring Improvements**
+- ✅ **Handicap Revert to RFEG**: New `DELETE /enrollments/{id}/handicap` lets creator/admin clear a custom handicap, reverting to the official RFEG value
+- ✅ **Handicap Edit Gating**: Setting/removing custom handicaps only allowed in DRAFT/ACTIVE/CLOSED (blocked once matches are generated)
+- ✅ **Auto Handicap Refresh on Login**: Daily silent RFEG lookup for Spanish players; `needs_handicap` flag for the rest
+- ✅ **Admin Full Access**: Admins bypass creator-only checks across scoring and match management use cases
+- ✅ **Playing Handicap Limit**: Optional `max_playing_handicap` cap (1–54) per competition
+- ✅ **Best Ball Determinism**: Deterministic tie-break + returns both tied player IDs in Fourball
+- ✅ **1 new endpoint**, 51 new tests (1,966 total unit)
+
 **v2.0.14 (Feb 24, 2026)**
 - ✅ **Backward State Transitions**: Revert IN_PROGRESS→CLOSED, reopen CLOSED→ACTIVE
 - ✅ **2 new endpoints**, 29 new tests (2,158 total)
@@ -377,7 +386,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 
 ## 📡 API Endpoints
 
-### Available Endpoints (82 total)
+### Available Endpoints (83 total)
 
 <details>
 <summary><b>Authentication (11 endpoints)</b></summary>
@@ -455,7 +464,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 </details>
 
 <details>
-<summary><b>Enrollment Management (8 endpoints)</b></summary>
+<summary><b>Enrollment Management (9 endpoints)</b></summary>
 
 - `POST /api/v1/competitions/{id}/enrollments`
 - `POST /api/v1/competitions/{id}/enrollments/direct`
@@ -465,6 +474,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 - `POST /api/v1/enrollments/{id}/cancel`
 - `POST /api/v1/enrollments/{id}/withdraw`
 - `PUT /api/v1/enrollments/{id}/handicap`
+- `DELETE /api/v1/enrollments/{id}/handicap` - Revert to official RFEG handicap
 </details>
 
 <details>
@@ -625,13 +635,13 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.14 (Production)
+### Current Version: v2.0.17 (Production)
 
-**Latest Features** (v2.0.14 - Feb 24, 2026):
-- **Backward State Transitions**: Revert competition state to fix schedule issues or reopen enrollments
-- **Live Scoring** (Sprint 4): 5 scoring endpoints, dual validation, leaderboard
-- **Invitations** (Sprint 3): 5 endpoints, bilingual emails, auto-enrollment
-- **Google OAuth** (Sprint 3): Login, link, unlink Google accounts
+**Latest Features** (v2.0.17 - Jul 6, 2026):
+- **Handicap Revert to RFEG**: Creator/admin can clear a custom handicap, reverting to the official RFEG value
+- **Auto Handicap Refresh on Login**: Daily silent RFEG lookup for Spanish players
+- **Admin Full Access**: Admins bypass creator-only checks across scoring and match management
+- **Playing Handicap Limit**: Optional per-competition cap on calculated playing handicap
 - **Total: 82 endpoints, 2,158 tests passing**
 
 **Sprint Breakdown**:

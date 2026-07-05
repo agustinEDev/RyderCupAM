@@ -1,6 +1,7 @@
 """Tests para TypeDecorators y JSONB serialization del Block 5."""
 
 import uuid
+from decimal import Decimal
 
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
@@ -265,6 +266,67 @@ class TestMatchPlayersJsonType:
         assert result == []
         deserialized = self.decorator.process_result_value(result, None)
         assert deserialized == ()
+
+    def test_serialize_player_handicap(self):
+        """HM-1b: serializa player_handicap como string decimal."""
+        player = MatchPlayer(
+            user_id=self.user_id_1,
+            playing_handicap=12,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+            strokes_received=(1, 3),
+            player_handicap=Decimal("14.2"),
+        )
+        result = self.decorator.process_bind_param((player,), None)
+        assert result[0]["player_handicap"] == "14.2"
+
+    def test_serialize_player_handicap_none(self):
+        """HM-1b: player_handicap None se serializa como None."""
+        result = self.decorator.process_bind_param((self.player_1,), None)
+        assert result[0]["player_handicap"] is None
+
+    def test_deserialize_player_handicap(self):
+        """HM-1b: deserializa player_handicap de string a Decimal."""
+        json_data = [
+            {
+                "user_id": str(self.user_id_1.value),
+                "playing_handicap": 12,
+                "tee_category": "AMATEUR",
+                "tee_gender": "MALE",
+                "strokes_received": [1, 3],
+                "player_handicap": "14.2",
+            },
+        ]
+        result = self.decorator.process_result_value(json_data, None)
+        assert result[0].player_handicap == Decimal("14.2")
+
+    def test_deserialize_missing_player_handicap_defaults_none(self):
+        """HM-1b: partidos generados antes de esta feature no tienen la clave en el JSON."""
+        json_data = [
+            {
+                "user_id": str(self.user_id_1.value),
+                "playing_handicap": 12,
+                "tee_category": "AMATEUR",
+                "tee_gender": "MALE",
+                "strokes_received": [1, 3],
+            },
+        ]
+        result = self.decorator.process_result_value(json_data, None)
+        assert result[0].player_handicap is None
+
+    def test_roundtrip_with_player_handicap(self):
+        """Serializa y deserializa player_handicap sin pérdida de datos."""
+        player = MatchPlayer(
+            user_id=self.user_id_1,
+            playing_handicap=12,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+            strokes_received=(1, 3),
+            player_handicap=Decimal("14.2"),
+        )
+        serialized = self.decorator.process_bind_param((player,), None)
+        deserialized = self.decorator.process_result_value(serialized, None)
+        assert deserialized == (player,)
 
 
 class TestUserIdsJsonType:

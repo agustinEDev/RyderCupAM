@@ -1,12 +1,30 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Versión:** 2.0.15 | **Tests:** 1,022 unit (branch) | **Endpoints:** 82 | **OWASP:** 9.4/10
+> **Versión:** 2.0.17 | **Tests:** 1,966 unit | **Endpoints:** 83 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Jun 18, 2026
+> **Last Updated:** Jul 6, 2026
 
 ---
 
-## En progreso: Bugfixes Scoring (branch `bugfix/scoring-matchplay-calculation`)
+## Completado: Scoring Improvements ⭐ v2.0.17
+
+### Pendiente para próxima release
+
+#### Módulo Gestión de Hándicaps
+- **Actualizar hándicap RFEG al inscribir jugador** (H1): al aprobar la inscripción de un jugador (`EnrollmentApprovedEvent`), si `country_code == 'ES'`, lanzar consulta asíncrona a RFEG y actualizar `user.handicap + handicap_updated_at`.
+
+### Completado ✅
+
+- **Auto-refresh hándicap RFEG en login** (H2): `LoginUserUseCase` consulta RFEG en background para usuarios españoles si el hándicap no se refrescó hoy; el resto de casos (no ES, sin país, o RFEG vacío/fallido) recibe `needs_handicap=True` para mostrar el modal en frontend.
+- **Hándicap personalizado por competición + revertir a RFEG** (H3): `SetCustomHandicapUseCase` (existente) y nuevo `RemoveCustomHandicapUseCase` (`DELETE /api/v1/enrollments/{id}/handicap`) permiten al creator/admin fijar o revertir el hándicap de un jugador. Ambas acciones quedan bloqueadas (`HandicapEditNotAllowedError`) una vez la competición pasa a `IN_PROGRESS` (hándicaps ya snapshotados en los partidos).
+- **"Equipo X gana AS"** (#1): fix aplicado en frontend (`LeaderboardView`). El backend ya producía `winner="HALVED"` correctamente; no requirió cambios.
+- **Best ball no determinístico (FOURBALL)** (#3): `find_by_match` añade `ORDER BY _player_user_id ASC` como clave secundaria. `find_best_ball_player` devuelve lista de IDs cuando hay empate dentro del equipo; el DTO `best_ball_player_a/b` pasa de `str | None` a `list[str]`.
+- **Límite hándicap de juego** (#4): campo `max_playing_handicap` en `Competition` + migración Alembic + propagación en use cases y DTOs. `PlayingHandicapCalculator.calculate()` aplica el cap; si el hándicap de juego calculado supera el límite, se usa el valor limitado.
+- **Admin acceso total a scoring** (#5): todas las rutas de scoring (`GET /scoring-view`, `POST /scores/holes/{n}`, `POST /scorecard/submit`, `PUT /concede`) aceptan admin sin estar en el partido (`is_admin OR player_in_match`).
+
+---
+
+## Completado: Bugfixes Scoring (branch `bugfix/scoring-matchplay-calculation`)
 
 ### Correcciones producción ✅
 

@@ -89,6 +89,14 @@ class CompetitionStatus(StrEnum):
         """Verifica si el estado permite modificar la configuración."""
         return self == CompetitionStatus.DRAFT
 
+    def allows_handicap_edits(self) -> bool:
+        """Verifica si el estado permite editar el hándicap personalizado de un jugador."""
+        return self in {
+            CompetitionStatus.DRAFT,
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+        }
+
     def __composite_values__(self):
         """
         Retorna los valores para SQLAlchemy composite mapping.

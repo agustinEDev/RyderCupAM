@@ -150,6 +150,24 @@ class TestSendInvitationByUserIdUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await uc.execute(request)
 
+    async def test_should_succeed_when_admin_not_creator(self, comp_uow, user_uow):
+        """Admin (no creador) puede enviar invitacion con is_admin=True."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        admin = await self._create_user(user_uow, email="admin@test.com")
+        invitee = await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        request = SendInvitationByUserIdRequestDTO(
+            competition_id=created.id,
+            inviter_id=admin.id.value,
+            invitee_user_id=invitee.id.value,
+        )
+
+        result = await uc.execute(request, is_admin=True)
+
+        assert result.status == "PENDING"
+
     async def test_should_raise_invitee_not_found(self, comp_uow, user_uow):
         """Invitee inexistente lanza InviteeNotFoundError."""
         creator = await self._create_user(user_uow, email="creator@test.com")

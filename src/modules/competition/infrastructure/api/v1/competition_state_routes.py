@@ -114,13 +114,13 @@ async def activate_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = ActivateCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -155,13 +155,13 @@ async def close_enrollments(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CloseEnrollmentsRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -196,13 +196,13 @@ async def start_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = StartCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -237,13 +237,13 @@ async def complete_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CompleteCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -278,13 +278,13 @@ async def revert_competition_status(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = RevertCompetitionStatusRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -319,13 +319,13 @@ async def reopen_enrollments(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = ReopenEnrollmentsRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto
@@ -360,13 +360,13 @@ async def cancel_competition(
         current_user_id = UserId(str(current_user.id))
 
         request_dto = CancelCompetitionRequestDTO(competition_id=competition_id)
-        await use_case.execute(request_dto, current_user_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
         competition_vo_id = CompetitionId(competition_id)
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
             dto = await CompetitionDTOMapper.to_response_dto(
-                competition, current_user_id, uow, user_uow
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
         return dto

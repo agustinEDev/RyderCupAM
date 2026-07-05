@@ -67,22 +67,10 @@ class GetScheduleUseCase:
                     round_id=m.round_id.value,
                     match_number=m.match_number,
                     team_a_players=[
-                        MatchPlayerResponseDTO(
-                            user_id=p.user_id.value,
-                            playing_handicap=p.playing_handicap,
-                            tee_category=p.tee_category.value,
-                            strokes_received=list(p.strokes_received),
-                        )
-                        for p in m.team_a_players
+                        MatchPlayerResponseDTO.from_domain(p) for p in m.team_a_players
                     ],
                     team_b_players=[
-                        MatchPlayerResponseDTO(
-                            user_id=p.user_id.value,
-                            playing_handicap=p.playing_handicap,
-                            tee_category=p.tee_category.value,
-                            strokes_received=list(p.strokes_received),
-                        )
-                        for p in m.team_b_players
+                        MatchPlayerResponseDTO.from_domain(p) for p in m.team_b_players
                     ],
                     status=m.status.value,
                     handicap_strokes_given=m.handicap_strokes_given,
