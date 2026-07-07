@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.18] - 2026-07-07
+
+### Fixed
+
+**Competition — Same-Day Start and End Dates**
+
+- `DateRange`: Single-day tournaments were rejected because date range validation required `start_date` to be strictly before `end_date` instead of allowing equality.
+
+**Scoring — Match Result Not Shown Before Every Player Submits**
+
+- The scorecard summary only computed a result once every player had formally submitted their scorecard, so a player who submitted first saw an empty result box even though all 18 holes were already played and validated. The result is now derived from whichever holes are already validated, so it reflects the real outcome immediately; Ryder Cup points are still only awarded once every player submits.
+
+---
+
 ## [2.0.17] - 2026-07-06
 
 ### Fixed
