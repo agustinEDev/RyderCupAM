@@ -137,6 +137,59 @@ class TestSubmitScorecardHappyPath:
         assert result.submitted_by == str(a.user_id)
 
     @pytest.mark.asyncio
+    async def test_result_shown_before_all_submit(self, uow, scoring_service):
+        """The submitting player sees the real result even before the opponent submits."""
+        a, b = _make_player(), _make_player()
+        round_id = RoundId.generate()
+        mock_round = MagicMock()
+        mock_round.id = round_id
+        mock_round.match_format = MatchFormat.SINGLES
+        mock_round.status = RoundStatus.IN_PROGRESS
+        mock_round.competition_id = MagicMock()
+        uow._rounds._rounds[mock_round.id] = mock_round
+
+        match = Match.create(
+            round_id=round_id, match_number=1, team_a_players=[a], team_b_players=[b]
+        )
+        match.start()
+
+        # A wins every hole (score 4 vs 5), all 18 holes validated for both players
+        for hole in range(1, 19):
+            hs_a = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=a.user_id,
+                team="A",
+                strokes_received=0,
+            )
+            hs_a.set_own_score(4)
+            hs_a.set_marker_score(4)
+            hs_a.recalculate_validation()
+            await uow.hole_scores.add(hs_a)
+
+            hs_b = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole,
+                player_user_id=b.user_id,
+                team="B",
+                strokes_received=0,
+            )
+            hs_b.set_own_score(5)
+            hs_b.set_marker_score(5)
+            hs_b.recalculate_validation()
+            await uow.hole_scores.add(hs_b)
+
+        await uow.matches.add(match)
+
+        uc = SubmitScorecardUseCase(uow, scoring_service)
+        result = await uc.execute(str(match.id), a.user_id)
+
+        # Match isn't complete yet (b hasn't submitted), but the result is already known
+        assert result.match_complete is False
+        assert result.result.winner == "A"
+        assert result.result.score == "18UP"
+
+    @pytest.mark.asyncio
     async def test_all_submit_completes_match(self, uow, scoring_service):
         """All players submitting completes the match."""
         a, b = _make_player(), _make_player()
