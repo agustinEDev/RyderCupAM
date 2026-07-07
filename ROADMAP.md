@@ -1,14 +1,21 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Versión:** 2.0.16 | **Tests:** 1,966 unit (branch) | **Endpoints:** 83 | **OWASP:** 9.4/10
+> **Versión:** 2.0.18 | **Tests:** 1,966 unit | **Endpoints:** 83 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Jul 6, 2026
+> **Last Updated:** Jul 7, 2026
 
 ---
 
-## En progreso: Scoring Improvements (branch `feature/scoring-improvements`)
+## Completado: Hotfix ⭐ v2.0.18
 
-### Pendiente de implementar
+- Same-day competition dates (`start_date == end_date`) now accepted
+- Match summary result derived from validated holes instead of waiting for every player's formal submission
+
+---
+
+## Completado: Scoring Improvements ⭐ v2.0.17
+
+### Pendiente para próxima release
 
 #### Módulo Gestión de Hándicaps
 - **Actualizar hándicap RFEG al inscribir jugador** (H1): al aprobar la inscripción de un jugador (`EnrollmentApprovedEvent`), si `country_code == 'ES'`, lanzar consulta asíncrona a RFEG y actualizar `user.handicap + handicap_updated_at`.

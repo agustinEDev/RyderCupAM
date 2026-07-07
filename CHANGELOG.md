@@ -68,6 +68,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `HoleScore.MAX_SCORE`: Raised from 9 to 15 to support scores above 9 (accessible via the "Other..." option in the frontend number pad).
 - `SubmitHoleScoreBodyDTO`: Updated `own_score` and `marked_score` field validation from `le=9` to `le=15`.
 
+---
+
+## [2.0.18] - 2026-07-07
+
+### Fixed
+
+**Competition — Same-Day Start and End Dates**
+
+- `DateRange`: Single-day tournaments were rejected because date range validation required `start_date` to be strictly before `end_date` instead of allowing equality.
+
+**Scoring — Match Result Not Shown Before Every Player Submits**
+
+- The scorecard summary only computed a result once every player had formally submitted their scorecard, so a player who submitted first saw an empty result box even though all 18 holes were already played and validated. The result is now derived from whichever holes are already validated, so it reflects the real outcome immediately; Ryder Cup points are still only awarded once every player submits.
+
+---
+
+## [2.0.17] - 2026-07-06
+
+### Fixed
+
+**Login — Handicap Refresh Not Prompted for Non-Spanish Users (HM-2)**
+
+- `LoginUserUseCase`: `needs_handicap` was only ever computed inside the `country_code == "ES"` branch, so non-Spanish users (or users without a `country_code`) never got prompted to enter their handicap, even though the frontend `HandicapRequestModal` already had a "manual" tab built for exactly that case.
+- New behavior: on every login, if the handicap wasn't already refreshed **today** (`handicap_updated_at.date() != today`), Spanish users get an automatic, silent RFEG lookup; everyone else (non-ES, no country, or failed/empty RFEG result) gets `needs_handicap=True` so the frontend shows the modal.
+- Extracted the refresh logic into `LoginUserUseCase._refresh_handicap()` to keep `execute()` within complexity limits.
+- 2 existing tests updated (`test_non_es_user_no_rfeg_call_needs_handicap_true`, `test_no_country_user_needs_handicap_true`) to assert the corrected behavior; 2 new tests added for the daily-refresh gate.
+
+**Scoring — Best Ball Player Determinism (FOURBALL)**
+
+- `SQLAlchemyHoleScoreRepository.find_by_match()`: Added secondary `ORDER BY _player_user_id ASC` to guarantee consistent row order within each hole. Previously, when two players on the same team had equal net scores, PostgreSQL could return their rows in non-deterministic physical order after updates/vacuums, causing `find_best_ball_player()` to return a different player on each request.
+- `ScoringService.find_best_ball_player()`: When two players on the same team tie on net score, the method now returns **both player IDs** (as a list) instead of a single ID. The DTO field `best_ball_player_a` / `best_ball_player_b` becomes a list to support the "Nombre1 y Nombre2" display in the frontend.
+
+**Scoring — Leaderboard Result for Halved Matches**
+
+- `calculate_match_result()`: When a match finishes AS (All Square), `winner` is now set to `"HALVED"` and `score` to `"AS"`. The frontend was previously displaying "Equipo X gana AS" because a non-empty `winner` string always triggered the `wins` translation key.
+
+### Added
+
+**Competition — Playing Handicap Limit**
+
+- New optional field `max_playing_handicap: int | None` on the `Competition` entity. When set, `PlayingHandicapCalculator.calculate()` caps the result at this value before returning it.
+- Alembic migration: adds nullable column `max_playing_handicap INTEGER` to `competitions` table.
+- `CompetitionRequestDTO` / `CompetitionResponseDTO`: includes new field with validation `ge=1, le=54`.
+- `CreateCompetitionUseCase` / `UpdateCompetitionUseCase`: propagate the new field.
+- API: `POST /api/v1/competitions` and `PUT /api/v1/competitions/{id}` accept `max_playing_handicap`.
+
+**Admin — Full Access to Scoring and Match Actions**
+
+- All scoring routes now accept an admin user regardless of whether they are a player in the match. Check updated from "user must be in match" to "user must be in match OR is_admin".
+- Affected routes: `GET /scoring-view`, `POST /scores/holes/{n}`, `POST /scorecard/submit`, `PUT /concede`.
+- Admin creator-bypass extended to `CreateRoundUseCase`, `DirectEnrollPlayerUseCase`, `HandleEnrollmentUseCase` (approve/reject), `SetCustomHandicapUseCase`, and `SendInvitationByUserIdUseCase`: admins can now perform these actions on any competition without being its creator.
+
+**Enrollment — Revert Custom Handicap to RFEG**
+
+- New endpoint `DELETE /api/v1/enrollments/{enrollment_id}/handicap` + `RemoveCustomHandicapUseCase`: lets the creator (or an admin) clear a player's custom handicap, reverting the enrollment to using their official (RFEG-sourced) handicap.
+- `CompetitionStatus.allows_handicap_edits()`: setting **and** removing a custom handicap are now restricted to competitions in `DRAFT`, `ACTIVE`, or `CLOSED` — once a competition reaches `IN_PROGRESS` (matches already generated and handicaps snapshotted), neither action is allowed. Raises `HandicapEditNotAllowedError` (400) otherwise. Applied to both `SetCustomHandicapUseCase` and the new `RemoveCustomHandicapUseCase`.
+- Frontend: the revert-to-RFEG button only appears inside the handicap edit form, and only for enrollments with a custom handicap belonging to Spanish players (`country_code == "ES"`), since RFEG only covers Spain.
+
+---
+
+## [2.0.16] - 2026-06-19
+
+### Fixed
+
+**Scoring — Match Play Calculation (SINGLES)**
+
+- **SINGLES differential handicap**: `GenerateMatchesUseCase._build_singles_match_players()` now applies the WHS differential approach for Match Play, identical to FOURBALL and FOURSOMES. Only the higher-PH player receives strokes (the difference between both PHs), allocated on the hardest holes (lowest SI first). Previously both players received their individual PHs, causing strokes to cancel out on shared holes and fall on the wrong (less important) holes.
+- Individual Playing Handicap values are preserved in `MatchPlayer.playing_handicap` for scorecard display; only `strokes_received` reflects the differential.
+
+**Leaderboard — Points showing 0 for completed matches**
+
+- `GetLeaderboardUseCase`: Added defensive fallback — when a completed match has `winner=None` (invalid stored result), the use case now recomputes the result from hole scores via `_compute_decided_result()`. Prevents 0-point totals caused by manual match completion with an empty/invalid result.
+- `UpdateMatchStatusUseCase._handle_complete()`: Now validates that `result.winner` is `"A"`, `"B"`, or `"HALVED"` before persisting. Raises `InvalidActionError` for any other value, preventing corrupt results from being stored.
+
+### Changed
+
+- `HoleScore.MAX_SCORE`: Raised from 9 to 15 to support scores above 9 (accessible via the "Other..." option in the frontend number pad).
+- `SubmitHoleScoreBodyDTO`: Updated `own_score` and `marked_score` field validation from `le=9` to `le=15`.
+
 ### Added
 
 **Backward Competition State Transitions**

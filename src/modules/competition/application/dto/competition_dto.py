@@ -166,8 +166,8 @@ class CreateCompetitionRequestDTO(BaseModel):
     def validate_config(self) -> "CreateCompetitionRequestDTO":
         """Validaciones post-inicialización."""
         # Validar fechas
-        if self.start_date >= self.end_date:
-            raise ValueError("start_date debe ser anterior a end_date")
+        if self.start_date > self.end_date:
+            raise ValueError("start_date debe ser anterior o igual a end_date")
 
         # Validar play_mode
         if self.play_mode not in ["SCRATCH", "HANDICAP"]:

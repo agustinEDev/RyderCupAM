@@ -259,10 +259,10 @@ class CompetitionPolicy:
             ... )  # OK
         """
         # 1. Validar orden lógico
-        if start_date >= end_date:
+        if start_date > end_date:
             raise InvalidDateRangeViolation(
                 f"Competition '{competition_name}': Start date ({start_date}) "
-                f"must be before end date ({end_date})."
+                f"must be before or equal to end date ({end_date})."
             )
 
         # 2. Validar duración razonable
