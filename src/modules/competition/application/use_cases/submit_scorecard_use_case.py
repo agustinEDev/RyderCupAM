@@ -75,7 +75,6 @@ class SubmitScorecardUseCase:
             match.submit_scorecard(user_id)
 
             match_complete = False
-            result_data = {"winner": None, "score": None}
             points = {"team_a": 0.0, "team_b": 0.0}
 
             # Load all match scores and round for hole results calculation
@@ -86,15 +85,21 @@ class SubmitScorecardUseCase:
             match_format = round_entity.match_format
             hole_results = self._compute_hole_results(all_scores, match_format)
 
+            # Result is derived from whichever holes are already validated, so the
+            # submitting player sees the real outcome even before every other player
+            # has formally submitted their own scorecard.
+            # Preserve a decided result (e.g. "5&4") instead of recalculating from
+            # all 18 holes, which would give "5UP" (holes_remaining=0).
+            if match.is_decided and match.decided_result:
+                result_data = match.decided_result
+            elif hole_results:
+                result_data = self._scoring_service.format_decided_result(hole_results)
+            else:
+                result_data = {"winner": None, "score": None}
+
             # Check if all scorecards submitted
             if match.all_scorecards_submitted():
                 match_complete = True
-                # Preserve decided result (e.g. "5&4") instead of recalculating
-                # from all 18 holes which would give "5UP" (holes_remaining=0)
-                if match.is_decided and match.decided_result:
-                    result_data = match.decided_result
-                else:
-                    result_data = self._scoring_service.format_decided_result(hole_results)
                 match.complete(result_data)
                 points = self._scoring_service.calculate_ryder_cup_points(
                     result_data, match.status.value

@@ -346,19 +346,19 @@ def test_validate_date_range_rejects_when_start_after_end():
     with pytest.raises(InvalidDateRangeViolation) as exc_info:
         CompetitionPolicy.validate_date_range(start_date, end_date, "Test")
 
-    assert "must be before end date" in str(exc_info.value).lower()
+    assert "must be before or equal to end date" in str(exc_info.value).lower()
 
 
-def test_validate_date_range_rejects_when_start_equals_end():
+def test_validate_date_range_allows_when_start_equals_end():
     """
-    Given: Start date equals end date (zero duration)
+    Given: Start date equals end date (single-day competition)
     When: Validating date range
-    Then: InvalidDateRangeViolation raised
+    Then: No exception raised
     """
     same_date = date(2026, 6, 10)
 
-    with pytest.raises(InvalidDateRangeViolation):
-        CompetitionPolicy.validate_date_range(same_date, same_date, "Test")
+    # Should not raise
+    CompetitionPolicy.validate_date_range(same_date, same_date, "Test")
 
 
 def test_validate_date_range_rejects_when_duration_exceeds_limit():

@@ -75,9 +75,9 @@ class TestCreateCompetitionRequestDTO:
 
         assert dto.play_mode == "HANDICAP"
 
-    def test_start_date_must_be_before_end_date(self):
-        """start_date debe ser anterior a end_date."""
-        with pytest.raises(ValueError, match="start_date debe ser anterior a end_date"):
+    def test_start_date_must_be_before_or_equal_to_end_date(self):
+        """start_date debe ser anterior o igual a end_date."""
+        with pytest.raises(ValueError, match="start_date debe ser anterior o igual a end_date"):
             CreateCompetitionRequestDTO(
                 name="Test Cup",
                 start_date=date(2025, 6, 3),
@@ -85,6 +85,18 @@ class TestCreateCompetitionRequestDTO:
                 main_country="ES",
                 play_mode="SCRATCH",
             )
+
+    def test_start_date_equal_to_end_date_is_allowed(self):
+        """Una competición de un solo día (start_date == end_date) es válida."""
+        dto = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 1),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+
+        assert dto.start_date == dto.end_date
 
     def test_invalid_play_mode(self):
         """Debe rechazar play_mode inválido."""
