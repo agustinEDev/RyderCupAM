@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.0.17-blue?style=for-the-badge&logo=semver)](.)
+[![Version](https://img.shields.io/badge/version-2.0.18-blue?style=for-the-badge&logo=semver)](.)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
@@ -212,6 +212,10 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **Sentry Integration** - Error tracking + APM + profiling
 
 ### What's New
+
+**v2.0.18 (Jul 7, 2026) — Hotfix**
+- ✅ **Same-Day Competition Dates**: Single-day tournaments (`start_date == end_date`) are now accepted
+- ✅ **Live Match Result Visibility**: Scorecard summary now derives the result from validated holes instead of waiting for every player to submit
 
 **v2.0.17 (Jul 2026) — Scoring Improvements**
 - ✅ **Handicap Revert to RFEG**: New `DELETE /enrollments/{id}/handicap` lets creator/admin clear a custom handicap, reverting to the official RFEG value
@@ -635,9 +639,13 @@ See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## 📊 Project Roadmap
 
-### Current Version: v2.0.17 (Production)
+### Current Version: v2.0.18 (Production)
 
-**Latest Features** (v2.0.17 - Jul 6, 2026):
+**Latest Features** (v2.0.18 - Jul 7, 2026):
+- **Same-Day Competition Dates**: Single-day tournaments are now accepted instead of rejected
+- **Live Match Result Visibility**: Match summary shows the result as soon as holes are validated, without waiting for every player's formal submission
+
+**Previous Features** (v2.0.17 - Jul 6, 2026):
 - **Handicap Revert to RFEG**: Creator/admin can clear a custom handicap, reverting to the official RFEG value
 - **Auto Handicap Refresh on Login**: Daily silent RFEG lookup for Spanish players
 - **Admin Full Access**: Admins bypass creator-only checks across scoring and match management

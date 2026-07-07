@@ -1,8 +1,15 @@
 # Roadmap - RyderCupFriends Backend
 
-> **Versión:** 2.0.17 | **Tests:** 1,966 unit | **Endpoints:** 83 | **OWASP:** 9.4/10
+> **Versión:** 2.0.18 | **Tests:** 1,966 unit | **Endpoints:** 83 | **OWASP:** 9.4/10
 >
-> **Last Updated:** Jul 6, 2026
+> **Last Updated:** Jul 7, 2026
+
+---
+
+## Completado: Hotfix ⭐ v2.0.18
+
+- Same-day competition dates (`start_date == end_date`) now accepted
+- Match summary result derived from validated holes instead of waiting for every player's formal submission
 
 ---
 
