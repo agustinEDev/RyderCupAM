@@ -16,6 +16,19 @@ ignore:
   SNYK-PYTHON-SETUPTOOLS-9964606:
     - '*':
         reason: 'setuptools upgraded to 78.1.1 in requirements.txt (resolves CVE-2025-47273)'
+  SNYK-PYTHON-NLTK-17356385:
+    - '*':
+        expires: '2027-01-08T00:00:00.000Z'
+        reason: 'No upgrade or patch available. nltk is a transitive dependency of safety (dev/audit tool only), not used in src/. Real risk is null.'
+  SNYK-PYTHON-NLTK-17817780:
+    - '*':
+        expires: '2027-01-08T00:00:00.000Z'
+        reason: 'No upgrade or patch available. nltk is a transitive dependency of safety (dev/audit tool only), not used in src/. Real risk is null.'
+  SNYK-PYTHON-NLTK-17821336:
+    - '*':
+        expires: '2027-01-08T00:00:00.000Z'
+        reason: 'No upgrade or patch available. nltk is a transitive dependency of safety (dev/audit tool only), not used in src/. Real risk is null.'
 
-# Patch settings - none needed as all vulnerabilities are resolved via upgrades
+# Patch settings - none needed; vulnerabilities are either resolved via upgrades
+# (setuptools) or accepted as dev-only risk with no available fix (NLTK, see above)
 patch: {}
