@@ -131,7 +131,8 @@ cryptography==48.0.1
 # - CVE-2024-6345 (Code Injection via package_index - CVSS 7.5 HIGH)
 # - CVE-2022-40897 (Regular Expression DoS - CVSS 5.9 MEDIUM)
 # - CVE-2025-47273 (Directory Traversal en _download_url - CVSS 6.8 MEDIUM)
-setuptools==78.1.1
+# - CVE-2026-59890 (Improper Handling of Unicode Encoding - MEDIUM)
+setuptools==83.0.0
 
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata)
 # Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)

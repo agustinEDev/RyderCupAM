@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+**Dependencies — setuptools Medium CVE (SNYK-PYTHON-SETUPTOOLS-17895075)**
+
+- Upgraded `setuptools` from `78.1.1` to `83.0.0` to resolve CVE-2026-59890 (Improper Handling of Unicode Encoding).
+
+**Docker base image — accepted risk documented**
+
+- Added `.snyk` ignore entries (90-day expiry) for 4 vulnerabilities (2 High "Link Following" in `libattr1`/`libacl1`, 2 Medium "TOCTOU"/"Use After Free" in `libacl1`/`libblkid1`) inherited from the `python:3.12-slim` base image's Debian packages. Not used by application code; no patched image available yet.
+
 ---
 
 ## [2.0.18] - 2026-07-07
