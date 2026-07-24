@@ -80,6 +80,7 @@ class UpdateProfileUseCase:
                 first_name=request.first_name,
                 last_name=request.last_name,
                 country_code_str=request.country_code,
+                gender=request.gender,
             )
 
             # Guardar cambios
