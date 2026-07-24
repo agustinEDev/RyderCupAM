@@ -369,6 +369,13 @@ async def root() -> HealthResponse:
     )
 
 
+# TEMPORAL: endpoint para verificar la conexion de Sentry tras configurar SENTRY_DSN.
+# Se elimina en cuanto se confirme la recepcion del evento en sentry.io.
+@app.get("/api/v1/debug/sentry-test", include_in_schema=False)
+async def sentry_test(username: str = Depends(verify_docs_credentials)) -> dict:  # noqa: ARG001
+    raise RuntimeError("Sentry backend verification test - safe to ignore")
+
+
 if __name__ == "__main__":
     # Para reload=True necesitamos pasar la app como string
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
