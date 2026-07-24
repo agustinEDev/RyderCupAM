@@ -358,6 +358,11 @@ class UpdateProfileRequestDTO(BaseModel):
         pattern="^[A-Z]{2}$",
         description="Nuevo código ISO del país (2 letras mayúsculas, ej: 'ES', 'FR').",
     )
+    gender: str | None = Field(
+        None,
+        pattern="^(MALE|FEMALE)$",
+        description="Nuevo género del usuario (MALE/FEMALE). Opcional.",
+    )
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -376,9 +381,9 @@ class UpdateProfileRequestDTO(BaseModel):
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo."""
-        if not self.first_name and not self.last_name and not self.country_code:
+        if not self.first_name and not self.last_name and not self.country_code and not self.gender:
             raise ValueError(
-                "Debe proporcionar al menos 'first_name', 'last_name' o 'country_code'."
+                "Debe proporcionar al menos 'first_name', 'last_name', 'country_code' o 'gender'."
             )
 
 
