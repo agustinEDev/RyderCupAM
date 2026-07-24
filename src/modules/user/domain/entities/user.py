@@ -36,20 +36,21 @@ class User:
     y participar en torneos Ryder Cup.
     """
 
-    def _validate_profile_update(self, first_name, last_name, country_code_str):
-        if first_name is None and last_name is None and country_code_str is None:
+    def _validate_profile_update(self, first_name, last_name, country_code_str, gender_str=None):
+        if first_name is None and last_name is None and country_code_str is None and gender_str is None:
             raise ValueError(
-                "At least one field (first_name, last_name, or country_code) must be provided"
+                "At least one field (first_name, last_name, country_code, or gender) must be provided"
             )
         if first_name is not None and first_name.strip() == "":
             raise ValueError("first_name cannot be empty")
         if last_name is not None and last_name.strip() == "":
             raise ValueError("last_name cannot be empty")
 
-    def _detect_profile_changes(self, first_name, last_name, country_code_str):
+    def _detect_profile_changes(self, first_name, last_name, country_code_str, gender_str=None):
         old_first_name = self.first_name
         old_last_name = self.last_name
         old_country_code = self.country_code
+        old_gender = self.gender
         first_name_changed = first_name is not None and first_name != old_first_name
         last_name_changed = last_name is not None and last_name != old_last_name
         new_country_code = old_country_code
@@ -57,11 +58,18 @@ class User:
         if country_code_str is not None:
             new_country_code = CountryCode(country_code_str) if country_code_str else None
             country_code_changed = new_country_code != old_country_code
+        new_gender = old_gender
+        gender_changed = False
+        if gender_str is not None:
+            new_gender = Gender(gender_str) if gender_str else None
+            gender_changed = new_gender != old_gender
         return (
             first_name_changed,
             last_name_changed,
             country_code_changed,
+            gender_changed,
             new_country_code,
+            new_gender,
             old_first_name,
             old_last_name,
             old_country_code,
@@ -408,24 +416,27 @@ class User:
         first_name: str | None = None,
         last_name: str | None = None,
         country_code_str: str | None = None,
+        gender: str | None = None,
     ) -> None:
         """
-        Actualiza la información personal del usuario (nombre, apellidos y país).
+        Actualiza la información personal del usuario (nombre, apellidos, país y género).
         Solo emite evento si al menos uno de los campos cambió.
         El evento ahora incluye el cambio de country_code (old/new) si aplica.
         """
-        self._validate_profile_update(first_name, last_name, country_code_str)
+        self._validate_profile_update(first_name, last_name, country_code_str, gender)
         (
             first_name_changed,
             last_name_changed,
             country_code_changed,
+            gender_changed,
             new_country_code,
+            new_gender,
             old_first_name,
             old_last_name,
             _old_country_code,
-        ) = self._detect_profile_changes(first_name, last_name, country_code_str)
+        ) = self._detect_profile_changes(first_name, last_name, country_code_str, gender)
 
-        if not first_name_changed and not last_name_changed and not country_code_changed:
+        if not first_name_changed and not last_name_changed and not country_code_changed and not gender_changed:
             return
 
         if first_name_changed:
@@ -434,6 +445,8 @@ class User:
             self.last_name = last_name
         if country_code_changed:
             self.country_code = new_country_code
+        if gender_changed:
+            self.gender = new_gender
 
         self.updated_at = datetime.now()
 
