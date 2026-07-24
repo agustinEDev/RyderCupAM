@@ -122,6 +122,12 @@ def init_sentry() -> None:
         release="rydercup-backend@1.8.0",  # Versión actual del backend
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
+        # SECURITY: send_default_pii=False NO cubre las variables locales de cada frame
+        # del stack trace -- el SDK las adjunta por defecto. Cualquier logger.error()
+        # dentro de un except que tenga en scope un secreto (p.ej. self.api_key en
+        # EmailService, o `token` en GitHubIssueService) lo habría mandado a Sentry
+        # íntegro. Causa raíz del incidente de fuga de la API key de Mailgun (Jul 2026).
+        include_local_variables=False,
         max_breadcrumbs=50,  # Máximo de breadcrumbs por evento
         # Debug mode (solo para desarrollo)
         debug=(settings.SENTRY_ENVIRONMENT == "development"),
