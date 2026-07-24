@@ -26,6 +26,9 @@ from ..events.competition_enrollments_reopened_event import (
 from ..events.competition_reverted_to_closed_event import (
     CompetitionRevertedToClosedEvent,
 )
+from ..events.competition_reverted_to_in_progress_event import (
+    CompetitionRevertedToInProgressEvent,
+)
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
 from ..value_objects.competition_id import CompetitionId
@@ -421,6 +424,30 @@ class Competition:
         self._updated_at = datetime.now()
 
         event = CompetitionRevertedToClosedEvent(competition_id=str(self._id), name=str(self._name))
+        self._add_domain_event(event)
+
+    def revert_to_in_progress(self) -> None:
+        """
+        Revierte el torneo completado a IN_PROGRESS (COMPLETED → IN_PROGRESS).
+
+        Permite al creador reabrir un torneo ya finalizado, por ejemplo para
+        añadir una ronda adicional. No modifica rounds ni matches existentes:
+        los partidos ya completados permanecen intactos.
+
+        Raises:
+            CompetitionStateError: Si la transición no es válida
+        """
+        if self._status != CompetitionStatus.COMPLETED:
+            raise CompetitionStateError(
+                f"No se puede revertir a IN_PROGRESS desde estado {self._status.value}"
+            )
+
+        self._status = CompetitionStatus.IN_PROGRESS
+        self._updated_at = datetime.now()
+
+        event = CompetitionRevertedToInProgressEvent(
+            competition_id=str(self._id), name=str(self._name)
+        )
         self._add_domain_event(event)
 
     def reopen_enrollments(self) -> None:
