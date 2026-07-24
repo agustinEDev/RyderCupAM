@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `CompetitionStatus.allows_handicap_edits()`: setting **and** removing a custom handicap are now restricted to competitions in `DRAFT`, `ACTIVE`, or `CLOSED` — once a competition reaches `IN_PROGRESS` (matches already generated and handicaps snapshotted), neither action is allowed. Raises `HandicapEditNotAllowedError` (400) otherwise. Applied to both `SetCustomHandicapUseCase` and the new `RemoveCustomHandicapUseCase`.
 - Frontend: the revert-to-RFEG button only appears inside the handicap edit form, and only for enrollments with a custom handicap belonging to Spanish players (`country_code == "ES"`), since RFEG only covers Spain.
 
+**Competition — Revert to In Progress (COMPLETED → IN_PROGRESS)**
+
+- New endpoint `PUT /api/v1/competitions/{id}/revert-to-in-progress` + `RevertCompetitionToInProgressUseCase`: lets the creator (or an admin) reopen a finished tournament, e.g. to add one more round. Does not touch existing rounds/matches.
+- `Competition.revert_to_in_progress()`: validates the transition only applies from `COMPLETED`, raises `CompetitionStateError` otherwise. Emits `CompetitionRevertedToInProgressEvent`.
+- New DTOs `RevertCompetitionToInProgressRequestDTO` / `RevertCompetitionToInProgressResponseDTO`.
+
 ---
 
 ## [2.0.16] - 2026-06-19
