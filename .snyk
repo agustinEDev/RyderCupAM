@@ -28,7 +28,24 @@ ignore:
     - '*':
         expires: '2027-01-08T00:00:00.000Z'
         reason: 'No upgrade or patch available. nltk is a transitive dependency of safety (dev/audit tool only), not used in src/. Real risk is null.'
+  SNYK-DEBIAN13-ATTR-17678182:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libattr1, Link Following) pulled in transitively via coreutils/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-ACL-17677866:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libacl1, Link Following) pulled in transitively via coreutils/sed/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-ACL-17677882:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libacl1, TOCTOU) pulled in transitively via coreutils/sed/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-17690419:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, Use After Free) pulled in transitively via util-linux/mount in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
 
 # Patch settings - none needed; vulnerabilities are either resolved via upgrades
-# (setuptools) or accepted as dev-only risk with no available fix (NLTK, see above)
+# (setuptools) or accepted as dev-only/base-image risk with no available fix
+# (NLTK, Debian base image packages — see above)
 patch: {}
