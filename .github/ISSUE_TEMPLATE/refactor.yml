@@ -1,0 +1,35 @@
+name: "🔄 Refactor"
+description: "Cambio interno sin alterar el comportamiento externo"
+title: "[Refactor]: "
+labels: ["type:refactor"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: ¿Qué parte del código se refactoriza?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivación
+      description: Deuda técnica, legibilidad, performance, preparación para otra tarea...
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Riesgo / impacto en tests existentes
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad
+      description: Añade también la label priority:P0/P1/P2 correspondiente
+      options:
+        - P0 — Crítico
+        - P1 — Alto
+        - P2 — Normal
+    validations:
+      required: true

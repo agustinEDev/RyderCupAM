@@ -1,0 +1,22 @@
+name: "📄 Docs"
+description: "Cambios solo en documentación"
+title: "[Docs]: "
+labels: ["type:docs"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: ¿Qué documentación falta o hay que corregir?
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad
+      description: Añade también la label priority:P0/P1/P2 correspondiente
+      options:
+        - P0 — Crítico
+        - P1 — Alto
+        - P2 — Normal
+    validations:
+      required: true
