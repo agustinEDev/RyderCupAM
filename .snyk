@@ -10,7 +10,8 @@ language-settings:
 # Debian base image (SNYK-DEBIAN13-*) entries: accepted risk, no fix published
 # by Debian yet. All share expires: 2026-10-22 on purpose, so they resurface
 # together for periodic review — re-run `snyk container test python:3.12-slim
-# --file=docker/Dockerfile` before that date and drop any entry with a fix.
+# --file=docker/Dockerfile --policy-path=.snyk` before that date and drop any
+# entry with a fix.
 ignore:
   SNYK-PYTHON-SETUPTOOLS-7448482:
     - '*':
