@@ -6,6 +6,12 @@ language-settings:
 
 # Ignore specific vulnerabilities that are already resolved
 # These are documented in requirements.txt with explicit version pins
+#
+# Debian base image (SNYK-DEBIAN13-*) entries: accepted risk, no fix published
+# by Debian yet. All share expires: 2026-10-22 on purpose, so they resurface
+# together for periodic review — re-run `snyk container test python:3.12-slim
+# --file=docker/Dockerfile --policy-path=.snyk` before that date and drop any
+# entry with a fix.
 ignore:
   SNYK-PYTHON-SETUPTOOLS-7448482:
     - '*':
@@ -41,6 +47,246 @@ ignore:
     - '*':
         expires: '2026-10-22T00:00:00.000Z'
         reason: 'Base image OS package (libblkid1, Use After Free) pulled in transitively via util-linux/mount in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-ZLIB-15307854:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (zlib1g, Improper Validation of Specified Quantity in Input) pulled in transitively via dpkg/apt in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-14200590:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, Out-of-bounds Read) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-15358019:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, Authentication Bypass) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-15922814:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, Time-of-check Time-of-use (TOCTOU)) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-17366408:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, CVE-2026-53612) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-17366422:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, CVE-2026-53615) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-17366433:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, CVE-2026-53614) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-17366434:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, CVE-2026-53613) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-UTILLINUX-5698535:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libblkid1, Information Exposure) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-TAR-15962848:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (tar, Unrestricted Upload of File with Dangerous Type) pulled in transitively via dpkg in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-TAR-5696683:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (tar, CVE-2005-2541) pulled in transitively via dpkg in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SYSTEMD-16009572:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsystemd0, Incorrect Resource Transfer Between Spheres) pulled in transitively via apt/coreutils in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SYSTEMD-5696564:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsystemd0, Link Following) pulled in transitively via apt/coreutils in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SYSTEMD-5733389:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsystemd0, Improper Validation of Integrity Check Value) pulled in transitively via apt/coreutils in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SYSTEMD-5733399:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsystemd0, Improper Validation of Integrity Check Value) pulled in transitively via apt/coreutils in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SYSTEMD-5733401:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsystemd0, Improper Validation of Integrity Check Value) pulled in transitively via apt/coreutils in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-15682562:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, CVE-2025-70873) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-17334397:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, Heap-based Buffer Overflow) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-17334400:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, Heap-based Buffer Overflow) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-17975833:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, CVE-2026-50813) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-17975841:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, CVE-2026-50812) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SQLITE3-5696112:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libsqlite3-0, Memory Leak) pulled in transitively via util-linux in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SHADOW-5695385:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (login.defs, Access Restriction Bypass) pulled in transitively via util-linux/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-SHADOW-8551157:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (login.defs, CVE-2024-56433) pulled in transitively via util-linux/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-16896261:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-8376) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17037371:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-42497) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17037374:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-9538) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17037434:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-42496) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17079056:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2025-15649) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17082609:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-48961) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17082630:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-48962) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17082645:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-48959) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17167993:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-7010) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17345867:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-12087) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17882234:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-7017) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17960057:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-13221) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17960058:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-57432) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-17960075:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, CVE-2026-57433) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PERL-5692251:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (perl-base, Link Following) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-PAM-17339897:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libpam0g, CVE-2026-54411) pulled in transitively via util-linux/adduser in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-NCURSES-10378958:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libtinfo6, Out-of-Bounds) pulled in transitively via bash/readline in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-NCURSES-15762838:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libtinfo6, Stack-based Buffer Overflow) pulled in transitively via bash/readline in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GZIP-17681782:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (gzip, Insecure Temporary File) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GZIP-17681798:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (gzip, Buffer Over-read) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-16115568:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, CVE-2026-5928) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-16115576:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Out-of-bounds Write) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-16325153:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, CVE-2026-6238) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-16325161:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, CVE-2026-5435) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5680884:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Uncontrolled Recursion) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681058:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Resource Management Errors) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681145:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Use of Insufficiently Random Values) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681177:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, CVE-2019-1010023) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681215:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Uncontrolled Recursion) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681241:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Out-of-Bounds) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-GLIBC-5681256:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libc-bin, Information Exposure) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-DIFFUTILS-18235274:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (diffutils, Integer Overflow or Wraparound) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-COREUTILS-10259260:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (coreutils, Stack-based Buffer Overflow) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-COREUTILS-5673914:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (coreutils, Race Condition) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-BZIP2-17099839:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libbz2-1.0, Out-of-bounds Write) pulled in transitively via dpkg/apt in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
+  SNYK-DEBIAN13-APT-5675173:
+    - '*':
+        expires: '2026-10-22T00:00:00.000Z'
+        reason: 'Base image OS package (libapt-pkg7.0, Improper Verification of Cryptographic Signature) pulled in transitively via the base image in python:3.12-slim. Not used by app code, no fix available yet from Debian. Re-check on expiry for an updated base image build.'
 
 # Patch settings - none needed; vulnerabilities are either resolved via upgrades
 # (setuptools) or accepted as dev-only/base-image risk with no available fix
