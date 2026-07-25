@@ -113,6 +113,9 @@ from src.modules.competition.application.use_cases.respond_to_invitation_use_cas
 from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
     RevertCompetitionStatusUseCase,
 )
+from src.modules.competition.application.use_cases.revert_competition_to_in_progress_use_case import (
+    RevertCompetitionToInProgressUseCase,
+)
 from src.modules.competition.application.use_cases.send_invitation_by_email_use_case import (
     SendInvitationByEmailUseCase,
 )
@@ -1025,6 +1028,20 @@ def get_revert_competition_status_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return RevertCompetitionStatusUseCase(uow)
+
+
+def get_revert_competition_to_in_progress_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RevertCompetitionToInProgressUseCase:
+    """
+    Proveedor del caso de uso RevertCompetitionToInProgressUseCase.
+
+    Esta función:
+    1. Depende de `get_competition_uow` para obtener una Unit of Work.
+    2. Crea una instancia de `RevertCompetitionToInProgressUseCase` con esa dependencia.
+    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    """
+    return RevertCompetitionToInProgressUseCase(uow)
 
 
 def get_reopen_enrollments_use_case(

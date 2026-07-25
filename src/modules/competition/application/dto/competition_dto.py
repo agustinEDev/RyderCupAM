@@ -540,6 +540,34 @@ class RevertCompetitionStatusResponseDTO(BaseModel):
 
 
 # --------------------------------------------------------------------------------------
+# Revert Competition To In Progress (COMPLETED → IN_PROGRESS)
+# --------------------------------------------------------------------------------------
+
+
+class RevertCompetitionToInProgressRequestDTO(BaseModel):
+    """
+    DTO de entrada para revertir una competición finalizada a IN_PROGRESS.
+    Transición: COMPLETED → IN_PROGRESS (permite, p.ej., añadir una ronda más).
+
+    Solo el creador puede revertir la competición. No afecta a rounds/matches existentes.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+
+
+class RevertCompetitionToInProgressResponseDTO(BaseModel):
+    """
+    DTO de salida para reversión de competición a IN_PROGRESS.
+    """
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    status: str = Field(..., description="Nuevo estado (IN_PROGRESS).")
+    reverted_at: datetime = Field(..., description="Fecha y hora de reversión.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
 # Reopen Enrollments (CLOSED → ACTIVE)
 # --------------------------------------------------------------------------------------
 

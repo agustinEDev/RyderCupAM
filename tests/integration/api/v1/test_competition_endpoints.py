@@ -597,6 +597,58 @@ class TestCompetitionStateTransitions:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
+    async def test_revert_to_in_progress_from_completed(self, client: AsyncClient):
+        """Revertir competición de COMPLETED a IN_PROGRESS retorna 200."""
+        user = await create_authenticated_user(
+            client, "revert_to_ip@test.com", "P@ssw0rd123!", "Revert", "ToInProgress"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Avanzar a COMPLETED
+        r1 = await client.post(
+            f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
+        )
+        assert r1.status_code == 200
+        r2 = await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
+        )
+        assert r2.status_code == 200
+        r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
+        assert r3.status_code == 200
+        r4 = await client.post(
+            f"/api/v1/competitions/{comp['id']}/complete", cookies=user["cookies"]
+        )
+        assert r4.status_code == 200
+
+        # Revertir a IN_PROGRESS
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/revert-to-in-progress",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "IN_PROGRESS"
+
+    @pytest.mark.asyncio
+    async def test_revert_to_in_progress_from_wrong_state_returns_400(self, client: AsyncClient):
+        """Revertir a IN_PROGRESS desde estado que no es COMPLETED retorna 400."""
+        user = await create_authenticated_user(
+            client, "revert_to_ip_wrong@test.com", "P@ssw0rd123!", "Revert", "Wrong"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        # Competición está en DRAFT — no se puede revertir a IN_PROGRESS
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}/revert-to-in-progress",
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_reopen_enrollments_from_wrong_state_returns_400(self, client: AsyncClient):
         """Reabrir inscripciones desde ACTIVE (ya abierta) retorna 400."""
         user = await create_authenticated_user(

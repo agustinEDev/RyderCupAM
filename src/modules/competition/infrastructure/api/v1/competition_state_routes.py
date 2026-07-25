@@ -13,6 +13,7 @@ from src.config.dependencies import (
     get_current_user,
     get_reopen_enrollments_use_case,
     get_revert_competition_status_use_case,
+    get_revert_competition_to_in_progress_use_case,
     get_start_competition_use_case,
     get_uow,
 )
@@ -25,6 +26,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CompleteCompetitionRequestDTO,
     ReopenEnrollmentsRequestDTO,
     RevertCompetitionStatusRequestDTO,
+    RevertCompetitionToInProgressRequestDTO,
     StartCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -58,6 +60,9 @@ from src.modules.competition.application.use_cases.reopen_enrollments_use_case i
 from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
     RevertCompetitionStatusUseCase,
 )
+from src.modules.competition.application.use_cases.revert_competition_to_in_progress_use_case import (
+    RevertCompetitionToInProgressUseCase,
+)
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     CompetitionNotFoundError as StartNotFoundError,
     NotCompetitionCreatorError as StartNotCreatorError,
@@ -81,6 +86,8 @@ CompleteNotFoundError = CompetitionNotFoundError
 CompleteNotCreatorError = NotCompetitionCreatorError
 RevertNotFoundError = CompetitionNotFoundError
 RevertNotCreatorError = NotCompetitionCreatorError
+RevertToInProgressNotFoundError = CompetitionNotFoundError
+RevertToInProgressNotCreatorError = NotCompetitionCreatorError
 ReopenNotFoundError = CompetitionNotFoundError
 ReopenNotCreatorError = NotCompetitionCreatorError
 
@@ -292,6 +299,49 @@ async def revert_competition_status(
     except RevertNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RevertNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CompetitionStateError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put(
+    "/{competition_id}/revert-to-in-progress",
+    response_model=CompetitionResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Revertir competición a IN_PROGRESS (COMPLETED → IN_PROGRESS)",
+    description="Reabre un torneo finalizado, p.ej. para añadir una ronda más. Solo el creador.",
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def revert_competition_to_in_progress(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: RevertCompetitionToInProgressUseCase = Depends(
+        get_revert_competition_to_in_progress_use_case
+    ),
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+):
+    """Transición de estado: COMPLETED → IN_PROGRESS. No modifica rounds/matches existentes."""
+    try:
+        current_user_id = UserId(str(current_user.id))
+
+        request_dto = RevertCompetitionToInProgressRequestDTO(competition_id=competition_id)
+        await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
+
+        competition_vo_id = CompetitionId(competition_id)
+        async with uow, user_uow:
+            competition = await uow.competitions.find_by_id(competition_vo_id)
+            dto = await CompetitionDTOMapper.to_response_dto(
+                competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
+            )
+
+        return dto
+
+    except RevertToInProgressNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RevertToInProgressNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
