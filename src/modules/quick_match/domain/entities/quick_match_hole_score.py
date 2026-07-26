@@ -93,8 +93,8 @@ class QuickMatchHoleScore:
         hole_number: int,
         player_user_id: UserId,
         score: int,
-        created_at: datetime | None = None,
-        updated_at: datetime | None = None,
+        created_at: datetime,
+        updated_at: datetime,
     ) -> "QuickMatchHoleScore":
         return cls(
             id=id,

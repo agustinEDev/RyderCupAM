@@ -5,9 +5,10 @@ Endpoints FastAPI para gestion de partidas rapidas siguiendo Clean Architecture.
 """
 
 import logging
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
@@ -77,6 +78,7 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     InvalidHoleScoreViolation,
     InvalidQuickMatchStatusViolation,
     InvalidTeamAssignmentViolation,
+    NotQuickMatchParticipantViolation,
     QuickMatchFullViolation,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -207,6 +209,8 @@ async def remove_participant(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except CreatorCannotBeRemovedViolation as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
@@ -287,7 +291,7 @@ async def cancel_quick_match(
 )
 async def submit_hole_score(
     quick_match_id: UUID,
-    hole_number: int,
+    hole_number: Annotated[int, Path(ge=1, le=18)],
     body: SubmitHoleScoreBody,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SubmitQuickMatchHoleScoreUseCase = Depends(get_submit_quick_match_hole_score_use_case),

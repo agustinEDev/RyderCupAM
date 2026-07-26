@@ -27,6 +27,16 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
+        """
+        Como `find_by_id`, pero bloqueando la fila (row-level lock) hasta el
+        commit/rollback de la transaccion actual. Uso obligatorio en flujos
+        de carga-y-mutacion del roster (p.ej. add_participant) para evitar
+        que altas concurrentes superen el aforo del equipo.
+        """
+        pass
+
+    @abstractmethod
     async def list_for_user(
         self,
         user_id: UserId,

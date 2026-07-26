@@ -38,8 +38,15 @@ class ListMyQuickMatchesUseCase:
             )
             total_count = await self._uow.quick_matches.count_for_user(user_id, status=status_vo)
 
+        participant_ids = list({p.user_id for qm in quick_matches for p in qm.participants})
+        async with self._user_uow:
+            users_by_id = {
+                user.id: user for user in await self._user_uow.users.find_by_ids(participant_ids)
+            }
+
         items = [
-            await QuickMatchDTOMapper.to_response_dto(qm, self._user_uow) for qm in quick_matches
+            await QuickMatchDTOMapper.to_response_dto(qm, self._user_uow, users_by_id=users_by_id)
+            for qm in quick_matches
         ]
 
         return PaginatedQuickMatchResponseDTO(
