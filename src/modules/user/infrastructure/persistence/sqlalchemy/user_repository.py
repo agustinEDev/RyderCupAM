@@ -37,8 +37,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def find_by_email(self, email: Email) -> User | None:
         """Busca un usuario por su email."""
-        # Para composites, necesitamos usar where() y comparar con el atributo privado
-        statement = select(User).where(User._email == email.value)
+        # _email es un composite(Email, "_email_value"): comparar contra el VO completo
+        statement = select(User).where(User._email == email)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -110,8 +110,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""
-        # Para composites, necesitamos usar where() y comparar con el atributo privado
-        statement = select(func.count()).select_from(User).where(User._email == email.value)
+        # _email es un composite(Email, "_email_value"): comparar contra el VO completo
+        statement = select(func.count()).select_from(User).where(User._email == email)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
@@ -123,7 +123,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def find_by_verification_token(self, token: str) -> User | None:
         """Busca un usuario por su token de verificación."""
-        statement = select(User).filter_by(verification_token=token)
+        statement = select(User).filter_by(_verification_token=token)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -141,6 +141,6 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             - Usa índice ix_users_password_reset_token para búsqueda rápida
             - NO valida expiración (esa lógica está en User.can_reset_password())
         """
-        statement = select(User).filter_by(password_reset_token=token)
+        statement = select(User).filter_by(_password_reset_token=token)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
