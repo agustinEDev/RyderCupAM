@@ -6,6 +6,22 @@
 
 ---
 
+## En progreso: Sistema de Amigos + Partida Rápida (BE #103, BE #104)
+
+### Completado ✅ — Módulo `social` (Friends, BE #103)
+
+- **Agregado `Friendship`**: calcado del patrón de `Invitation` (Clean Architecture + DDD). Estados `PENDING → ACCEPTED/DECLINED/BLOCKED`, `ACCEPTED → BLOCKED`.
+- **Endpoints**: `POST /friends/requests`, `POST /friends/requests/{id}/respond`, `DELETE /friends/{id}`, `POST /friends/{user_id}/block`, `GET /friends/me`, `GET /friends/requests/me`.
+- **Seguridad**: rate limit 20/hora en solicitudes; solo amistad `ACCEPTED` habilitará el alta directa en partidas rápidas; autorización estricta por participante.
+- **Tests**: 74 unit + 8 integration, 100% pasando. Lint y mypy limpios.
+
+### Pendiente — Módulo `quick_match` (BE #104)
+
+- Aggregate `QuickMatch` desacoplado de `Competition`, reutilizando `ScoringService`/`PlayingHandicapCalculator` de `competition.domain`.
+- Endpoints create/join/participants, validando `Friendship` ACCEPTED para alta directa de amigos.
+
+---
+
 ## Completado: Hotfix ⭐ v2.0.18
 
 - Same-day competition dates (`start_date == end_date`) now accepted

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+**Social — Friends System (BE #103)**
+
+- New `social` module (Clean Architecture + DDD, mirrors the `competition.Invitation` pattern): `Friendship` aggregate with `FriendshipStatus` state machine (`PENDING` → `ACCEPTED`/`DECLINED`/`BLOCKED`; `ACCEPTED` → `BLOCKED`).
+- Domain: `FriendshipId`/`FriendshipStatus` Value Objects, domain events (`FriendshipRequested/Accepted/Declined/Blocked`), domain exceptions (`SelfFriendRequestViolation`, `DuplicateFriendRequestViolation`, `BlockedUserViolation`, etc.).
+- Endpoints: `POST /api/v1/friends/requests`, `POST /api/v1/friends/requests/{id}/respond`, `DELETE /api/v1/friends/{id}` (unfriend/cancel pending/unblock depending on state), `POST /api/v1/friends/{user_id}/block`, `GET /api/v1/friends/me`, `GET /api/v1/friends/requests/me?direction=received|sent`.
+- Reuses the existing `GET /users/search-autocomplete` endpoint to find people to add.
+- Send-request rate limited to 20/hour. Only mutual `ACCEPTED` friendships authorize direct-add flows in other modules (e.g. the upcoming quick match feature).
+- New `friendships` table (Alembic migration `7cec1e04eb61`) with a partial-independent unique index on the unordered user pair (`LEAST`/`GREATEST`), so only one relationship can exist between two users regardless of direction.
+- 74 unit tests (domain + use cases + in-memory repository) + 8 integration tests (E2E via real DB).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed
