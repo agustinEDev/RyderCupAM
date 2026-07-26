@@ -198,6 +198,57 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
+    AddFriendToQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case import (
+    CancelQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.complete_quick_match_use_case import (
+    CompleteQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
+    CreateQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
+    GetQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
+    ListMyQuickMatchesUseCase,
+)
+from src.modules.quick_match.application.use_cases.remove_participant_use_case import (
+    RemoveParticipantUseCase,
+)
+from src.modules.quick_match.application.use_cases.start_quick_match_use_case import (
+    StartQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.submit_hole_score_use_case import (
+    SubmitQuickMatchHoleScoreUseCase,
+)
+from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
+    QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
+    SQLAlchemyQuickMatchUnitOfWork,
+)
+from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
+from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
+from src.modules.social.application.use_cases.list_pending_requests_use_case import (
+    ListPendingRequestsUseCase,
+)
+from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
+from src.modules.social.application.use_cases.respond_friend_request_use_case import (
+    RespondFriendRequestUseCase,
+)
+from src.modules.social.application.use_cases.send_friend_request_use_case import (
+    SendFriendRequestUseCase,
+)
+from src.modules.social.domain.repositories.social_unit_of_work_interface import (
+    SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
+    SQLAlchemySocialUnitOfWork,
+)
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
@@ -874,6 +925,154 @@ def get_golf_course_uow(
     - countries: Repositorio de países (shared domain)
     """
     return SQLAlchemyGolfCourseUnitOfWork(session)
+
+
+def get_social_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> SocialUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo Social.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemySocialUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `SocialUnitOfWorkInterface`.
+    """
+    return SQLAlchemySocialUnitOfWork(session)
+
+
+def get_send_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SendFriendRequestUseCase:
+    """Proveedor del caso de uso SendFriendRequestUseCase."""
+    return SendFriendRequestUseCase(uow, user_uow)
+
+
+def get_respond_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RespondFriendRequestUseCase:
+    """Proveedor del caso de uso RespondFriendRequestUseCase."""
+    return RespondFriendRequestUseCase(uow, user_uow)
+
+
+def get_remove_friend_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> RemoveFriendUseCase:
+    """Proveedor del caso de uso RemoveFriendUseCase."""
+    return RemoveFriendUseCase(uow)
+
+
+def get_block_user_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> BlockUserUseCase:
+    """Proveedor del caso de uso BlockUserUseCase."""
+    return BlockUserUseCase(uow, user_uow)
+
+
+def get_list_friends_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListFriendsUseCase:
+    """Proveedor del caso de uso ListFriendsUseCase."""
+    return ListFriendsUseCase(uow, user_uow)
+
+
+def get_list_pending_requests_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListPendingRequestsUseCase:
+    """Proveedor del caso de uso ListPendingRequestsUseCase."""
+    return ListPendingRequestsUseCase(uow, user_uow)
+
+
+def get_quick_match_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> QuickMatchUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo QuickMatch.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemyQuickMatchUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `QuickMatchUnitOfWorkInterface`.
+    """
+    return SQLAlchemyQuickMatchUnitOfWork(session)
+
+
+def get_create_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CreateQuickMatchUseCase:
+    """Proveedor del caso de uso CreateQuickMatchUseCase."""
+    return CreateQuickMatchUseCase(uow, golf_course_uow, user_uow)
+
+
+def get_add_friend_to_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AddFriendToQuickMatchUseCase:
+    """Proveedor del caso de uso AddFriendToQuickMatchUseCase."""
+    return AddFriendToQuickMatchUseCase(uow, social_uow, user_uow)
+
+
+def get_remove_quick_match_participant_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RemoveParticipantUseCase:
+    """Proveedor del caso de uso RemoveParticipantUseCase."""
+    return RemoveParticipantUseCase(uow, user_uow)
+
+
+def get_start_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> StartQuickMatchUseCase:
+    """Proveedor del caso de uso StartQuickMatchUseCase."""
+    return StartQuickMatchUseCase(uow, user_uow)
+
+
+def get_complete_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CompleteQuickMatchUseCase:
+    """Proveedor del caso de uso CompleteQuickMatchUseCase."""
+    return CompleteQuickMatchUseCase(uow, user_uow)
+
+
+def get_cancel_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CancelQuickMatchUseCase:
+    """Proveedor del caso de uso CancelQuickMatchUseCase."""
+    return CancelQuickMatchUseCase(uow, user_uow)
+
+
+def get_submit_quick_match_hole_score_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+) -> SubmitQuickMatchHoleScoreUseCase:
+    """Proveedor del caso de uso SubmitQuickMatchHoleScoreUseCase."""
+    return SubmitQuickMatchHoleScoreUseCase(uow)
+
+
+def get_get_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetQuickMatchUseCase:
+    """Proveedor del caso de uso GetQuickMatchUseCase."""
+    return GetQuickMatchUseCase(uow, user_uow)
+
+
+def get_list_my_quick_matches_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyQuickMatchesUseCase:
+    """Proveedor del caso de uso ListMyQuickMatchesUseCase."""
+    return ListMyQuickMatchesUseCase(uow, user_uow)
 
 
 def get_create_competition_use_case(
