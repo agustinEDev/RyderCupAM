@@ -6,19 +6,25 @@
 
 ---
 
-## En progreso: Sistema de Amigos + Partida Rápida (BE #103, BE #104)
+## Completado: Sistema de Amigos + Partida Rápida (BE #103, BE #104)
 
-### Completado ✅ — Módulo `social` (Friends, BE #103)
+### Módulo `social` (Friends, BE #103) ✅
 
 - **Agregado `Friendship`**: calcado del patrón de `Invitation` (Clean Architecture + DDD). Estados `PENDING → ACCEPTED/DECLINED/BLOCKED`, `ACCEPTED → BLOCKED`.
 - **Endpoints**: `POST /friends/requests`, `POST /friends/requests/{id}/respond`, `DELETE /friends/{id}`, `POST /friends/{user_id}/block`, `GET /friends/me`, `GET /friends/requests/me`.
-- **Seguridad**: rate limit 20/hora en solicitudes; solo amistad `ACCEPTED` habilitará el alta directa en partidas rápidas; autorización estricta por participante.
+- **Seguridad**: rate limit 20/hora en solicitudes; solo amistad `ACCEPTED` habilita el alta directa en partidas rápidas; autorización estricta por participante.
 - **Tests**: 74 unit + 8 integration, 100% pasando. Lint y mypy limpios.
+- PR #115 (`feature/friends-system` → `develop`), pendiente de review.
 
-### Pendiente — Módulo `quick_match` (BE #104)
+### Módulo `quick_match` (BE #104) ✅
 
-- Aggregate `QuickMatch` desacoplado de `Competition`, reutilizando `ScoringService`/`PlayingHandicapCalculator` de `competition.domain`.
-- Endpoints create/join/participants, validando `Friendship` ACCEPTED para alta directa de amigos.
+- **Aggregate `QuickMatch`**: desacoplado de `Competition`, estados `PENDING → IN_PROGRESS → COMPLETED` (+ `CANCELLED`). Participantes como lista JSONB embebida (`QuickMatchParticipant`).
+- **Scoring simple (v1)**: `QuickMatchHoleScore` — un score propio por jugador y hoyo, sin validación dual jugador/marcador (decisión explícita para mantener proporcional el alcance de una partida informal; migrar a validación dual más adelante es aditivo, no una reescritura).
+- **Reuso real**: `ScoringService.calculate_hole_winner`/`calculate_match_standing`/`is_match_decided` de `competition.domain` se importan y usan tal cual para calcular el standing en vivo.
+- **Endpoints**: create, participants (add/remove), start, complete, cancel, holes/{n}/score, detail (con standing calculado), `me` (listado).
+- **Seguridad**: añadir participante exige `Friendship` ACCEPTED (403 si no); solo el creador inicia/completa/cancela/añade; campo de golf debe estar `APPROVED`.
+- **Tests**: 77 unit + 5 integration (flujo completo E2E), 100% pasando. Lint y mypy limpios.
+- Validado además contra el clúster K8s local (imagen desplegada expone los 9 endpoints nuevos; tests de integración pasando contra el Postgres del clúster).
 
 ---
 
