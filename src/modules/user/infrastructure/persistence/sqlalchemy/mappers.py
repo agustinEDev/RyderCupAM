@@ -148,15 +148,31 @@ def start_mappers():
             User,
             users_table,
             properties={
-                # Mapeamos las columnas de los ValueObjects a atributos "privados"
-                # para que SQLAlchemy no intente mapearlas automáticamente a los públicos.
-                "_email": users_table.c.email,
-                "_password": users_table.c.password,
-                # Ahora, creamos los atributos públicos usando 'composite' y apuntando
-                # a los atributos privados que acabamos de definir.
-                "email": composite(Email, "_email"),
-                "password": composite(Password, "_password"),
-                # handicap se mapea directamente - el HandicapDecorator maneja la conversión y None
+                # Scalar fields → private attrs (encapsulación, issue #109)
+                "_id": users_table.c.id,
+                "_first_name": users_table.c.first_name,
+                "_last_name": users_table.c.last_name,
+                "_handicap": users_table.c.handicap,
+                "_handicap_updated_at": users_table.c.handicap_updated_at,
+                "_created_at": users_table.c.created_at,
+                "_updated_at": users_table.c.updated_at,
+                "_email_verified": users_table.c.email_verified,
+                "_verification_token": users_table.c.verification_token,
+                "_country_code": users_table.c.country_code,
+                "_password_reset_token": users_table.c.password_reset_token,
+                "_reset_token_expires_at": users_table.c.reset_token_expires_at,
+                "_failed_login_attempts": users_table.c.failed_login_attempts,
+                "_locked_until": users_table.c.locked_until,
+                "_is_admin": users_table.c.is_admin,
+                "_gender": users_table.c.gender,
+                # Value Objects de una columna (Email, Password) → mapeamos la columna
+                # cruda a un atributo "_value" y componemos el VO real sobre el
+                # atributo privado "_email"/"_password" que respalda la @property
+                # pública de solo lectura del dominio.
+                "_email_value": users_table.c.email,
+                "_password_value": users_table.c.password,
+                "_email": composite(Email, "_email_value"),
+                "_password": composite(Password, "_password_value"),
             },
         )
 

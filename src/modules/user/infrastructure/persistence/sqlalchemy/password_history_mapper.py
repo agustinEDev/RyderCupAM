@@ -97,7 +97,12 @@ def start_mappers():
             PasswordHistory,
             password_history_table,
             properties={
-                # Mapeo directo de columnas a atributos
-                # Los Value Objects (PasswordHistoryId, UserId) se manejan con TypeDecorators
+                # Mapeo directo de columnas a atributos privados (encapsulación,
+                # issue #109). Los Value Objects (PasswordHistoryId, UserId) se
+                # manejan con TypeDecorators, por lo que no requieren composite().
+                "_id": password_history_table.c.id,
+                "_user_id": password_history_table.c.user_id,
+                "_password_hash": password_history_table.c.password_hash,
+                "_created_at": password_history_table.c.created_at,
             },
         )
