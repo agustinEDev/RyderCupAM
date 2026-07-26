@@ -1,6 +1,7 @@
 """Tests para BlockUserUseCase."""
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.modules.social.application.exceptions import AddresseeNotFoundError
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
@@ -89,3 +90,28 @@ class TestBlockUserUseCase:
 
         assert first.id == second.id
         assert second.status == "BLOCKED"
+
+    async def test_block_handles_concurrent_insert_race_idempotently(self, uow, user_uow):
+        """Simula dos bloqueos concurrentes chocando contra uq_friendship_pair."""
+        blocker = await self._create_user(user_uow, "blocker5@test.com")
+        blocked = await self._create_user(user_uow, "blocked5@test.com")
+        use_case = BlockUserUseCase(uow, user_uow)
+
+        winning_friendship = Friendship.create_blocked(
+            id=FriendshipId.generate(), blocker_id=blocker.id, blocked_id=blocked.id
+        )
+        original_add = uow.friendships.add
+
+        async def add_with_race(friendship):
+            # La primera llamada simula que otra request concurrente ya gano
+            # la carrera e inserto la fila; la BD real respondería con
+            # IntegrityError por uq_friendship_pair.
+            await original_add(winning_friendship)
+            raise IntegrityError("uq_friendship_pair", params=None, orig=Exception("duplicate"))
+
+        uow.friendships.add = add_with_race
+
+        response = await use_case.execute(str(blocker.id.value), str(blocked.id.value))
+
+        assert response.status == "BLOCKED"
+        assert response.id == winning_friendship.id.value

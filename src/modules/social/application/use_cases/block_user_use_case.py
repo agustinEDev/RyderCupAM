@@ -1,5 +1,7 @@
 """Caso de Uso: Bloquear a un usuario."""
 
+from sqlalchemy.exc import IntegrityError
+
 from src.modules.social.application.dto.friendship_dto import FriendshipResponseDTO
 from src.modules.social.application.exceptions import AddresseeNotFoundError
 from src.modules.social.domain.entities.friendship import Friendship
@@ -52,7 +54,14 @@ class BlockUserUseCase:
                     blocker_id=blocker_id,
                     blocked_id=blocked_id,
                 )
-                await self._uow.friendships.add(friendship)
+                try:
+                    await self._uow.friendships.add(friendship)
+                    await self._uow.flush()
+                except IntegrityError:
+                    # Concurrent block on the same pair: another request already
+                    # won the uq_friendship_pair race. Idempotent: reload and return it.
+                    await self._uow.rollback()
+                    friendship = await self._uow.friendships.find_by_pair(blocker_id, blocked_id)
             elif not friendship.is_blocked():
                 friendship.block(blocker_id)
                 await self._uow.friendships.update(friendship)
