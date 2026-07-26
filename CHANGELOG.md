@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - New `friendships` table (Alembic migration `7cec1e04eb61`) with a partial-independent unique index on the unordered user pair (`LEAST`/`GREATEST`), so only one relationship can exist between two users regardless of direction.
 - 74 unit tests (domain + use cases + in-memory repository) + 8 integration tests (E2E via real DB).
 
+**Quick Match — Play with Friends without a Tournament (BE #104)**
+
+- New `quick_match` module, decoupled from the `Competition` aggregate: `QuickMatch` entity (`PENDING → IN_PROGRESS → COMPLETED`, + `CANCELLED`), participants stored as an embedded JSONB list (`QuickMatchParticipant` Value Object), and a separate `QuickMatchHoleScore` entity for a simple (v1) self-reported score model — no dual player/marker validation, unlike `competition.HoleScore`.
+- Endpoints under `/api/v1/quick-matches`: create, add participant (direct-add, requires a mutual `ACCEPTED` friendship — no invitation step), remove participant (self-leave or creator kick), start, complete, cancel, submit hole score, get detail (with computed match-play standing), list mine.
+- Reuses `competition.domain.services.ScoringService` (`calculate_hole_winner`, `calculate_match_standing`, `is_match_decided`) as-is to compute the live standing from the simple scores — same match-play engine as tournaments, without pulling in the dual-validation/marker-assignment machinery.
+- Requires an `APPROVED` golf course (same rule as linking a course to a competition).
+- New tables `quick_matches` and `quick_match_hole_scores` (Alembic migration `a91cc79ba087`), with a GIN index on the `participants` JSONB column to support the "quick matches I'm in" query.
+- 77 unit tests (domain + 9 use cases + in-memory repos) + 5 integration tests (E2E via real DB, full flow: create → add friend → start → submit scores → complete).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed
