@@ -43,6 +43,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
     start_golf_course_mappers,
 )
+from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
+    start_social_mappers,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
     start_mappers,
@@ -132,6 +135,7 @@ def pytest_configure(config):
         start_country_mappers()  # Shared domain (Country)
         start_competition_mappers()  # Competition module
         start_golf_course_mappers()  # Golf Course module
+        start_social_mappers()  # Social module
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
 
@@ -147,6 +151,7 @@ def pytest_configure(config):
             start_country_mappers()
             start_competition_mappers()
             start_golf_course_mappers()
+            start_social_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
             pass

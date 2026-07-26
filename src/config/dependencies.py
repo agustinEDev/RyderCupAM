@@ -198,6 +198,24 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
+from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
+from src.modules.social.application.use_cases.list_pending_requests_use_case import (
+    ListPendingRequestsUseCase,
+)
+from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
+from src.modules.social.application.use_cases.respond_friend_request_use_case import (
+    RespondFriendRequestUseCase,
+)
+from src.modules.social.application.use_cases.send_friend_request_use_case import (
+    SendFriendRequestUseCase,
+)
+from src.modules.social.domain.repositories.social_unit_of_work_interface import (
+    SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
+    SQLAlchemySocialUnitOfWork,
+)
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
@@ -874,6 +892,67 @@ def get_golf_course_uow(
     - countries: Repositorio de países (shared domain)
     """
     return SQLAlchemyGolfCourseUnitOfWork(session)
+
+
+def get_social_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> SocialUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo Social.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemySocialUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `SocialUnitOfWorkInterface`.
+    """
+    return SQLAlchemySocialUnitOfWork(session)
+
+
+def get_send_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SendFriendRequestUseCase:
+    """Proveedor del caso de uso SendFriendRequestUseCase."""
+    return SendFriendRequestUseCase(uow, user_uow)
+
+
+def get_respond_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RespondFriendRequestUseCase:
+    """Proveedor del caso de uso RespondFriendRequestUseCase."""
+    return RespondFriendRequestUseCase(uow, user_uow)
+
+
+def get_remove_friend_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> RemoveFriendUseCase:
+    """Proveedor del caso de uso RemoveFriendUseCase."""
+    return RemoveFriendUseCase(uow)
+
+
+def get_block_user_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> BlockUserUseCase:
+    """Proveedor del caso de uso BlockUserUseCase."""
+    return BlockUserUseCase(uow, user_uow)
+
+
+def get_list_friends_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListFriendsUseCase:
+    """Proveedor del caso de uso ListFriendsUseCase."""
+    return ListFriendsUseCase(uow, user_uow)
+
+
+def get_list_pending_requests_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListPendingRequestsUseCase:
+    """Proveedor del caso de uso ListPendingRequestsUseCase."""
+    return ListPendingRequestsUseCase(uow, user_uow)
 
 
 def get_create_competition_use_case(
