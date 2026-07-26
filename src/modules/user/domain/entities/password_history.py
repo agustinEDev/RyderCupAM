@@ -51,11 +51,31 @@ class PasswordHistory:
             created_at: Timestamp de creación (None para NOW())
             domain_events: Eventos de dominio pendientes
         """
-        self.id = id or PasswordHistoryId.generate()
-        self.user_id = user_id
-        self.password_hash = password_hash
-        self.created_at = created_at or datetime.now()
+        self._id = id or PasswordHistoryId.generate()
+        self._user_id = user_id
+        self._password_hash = password_hash
+        self._created_at = created_at or datetime.now()
         self._domain_events = domain_events or []
+
+    # ===========================================
+    # PROPERTIES (Encapsulación — solo lectura)
+    # ===========================================
+
+    @property
+    def id(self) -> PasswordHistoryId:
+        return self._id
+
+    @property
+    def user_id(self) -> UserId:
+        return self._user_id
+
+    @property
+    def password_hash(self) -> str:
+        return self._password_hash
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
 
     @classmethod
     def create(
@@ -112,7 +132,7 @@ class PasswordHistory:
             bool: True si el registro es más antiguo que N días
 
         Example:
-            >>> history.created_at = datetime.now() - timedelta(days=400)
+            >>> # Asumiendo un registro creado hace 400 días
             >>> history.is_older_than(365)
             True
         """

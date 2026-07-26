@@ -31,7 +31,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Busca múltiples usuarios por sus IDs en una sola consulta."""
         if not user_ids:
             return []
-        statement = select(User).where(User.id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
+        statement = select(User).where(User._id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
@@ -74,8 +74,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             last_name = " ".join(name_parts[i:])
 
             statement = select(User).filter(
-                func.lower(User.first_name) == func.lower(first_name),
-                func.lower(User.last_name) == func.lower(last_name),
+                func.lower(User._first_name) == func.lower(first_name),
+                func.lower(User._last_name) == func.lower(last_name),
             )
             result = await self._session.execute(statement)
             user = result.scalar_one_or_none()
@@ -96,9 +96,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             select(User)
             .filter(
                 or_(
-                    func.lower(User.first_name).contains(q, autoescape=True),
-                    func.lower(User.last_name).contains(q, autoescape=True),
-                    func.lower(User.first_name + " " + User.last_name).contains(q, autoescape=True),
+                    func.lower(User._first_name).contains(q, autoescape=True),
+                    func.lower(User._last_name).contains(q, autoescape=True),
+                    func.lower(User._first_name + " " + User._last_name).contains(
+                        q, autoescape=True
+                    ),
                 )
             )
             .limit(limit)
