@@ -6,7 +6,10 @@ import pytest
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.dto.quick_match_dto import SubmitHoleScoreRequestDTO
+from src.modules.quick_match.application.dto.quick_match_dto import (
+    SubmitHoleScoreRequestDTO,
+    SubmitProxyHoleScoreRequestDTO,
+)
 from src.modules.quick_match.application.exceptions import (
     NotQuickMatchParticipantError,
     QuickMatchNotFoundError,
@@ -17,8 +20,14 @@ from src.modules.quick_match.application.use_cases.get_quick_match_use_case impo
 from src.modules.quick_match.application.use_cases.submit_hole_score_use_case import (
     SubmitQuickMatchHoleScoreUseCase,
 )
+from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
+    SubmitProxyHoleScoreUseCase,
+)
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.quick_match.conftest import create_user
 
@@ -32,8 +41,8 @@ async def _create_in_progress_match(qm_uow, creator_id, other_id):
         golf_course_id=GolfCourseId(uuid4()),
         match_format=MatchFormat.SINGLES,
     )
-    qm.add_participant(other_id)
-    qm.start()
+    qm.add_participant(QuickMatchParticipant.for_user(other_id))
+    qm.start([qm.creator_participant_id])
     async with qm_uow:
         await qm_uow.quick_matches.add(qm)
     return qm
@@ -51,6 +60,12 @@ class TestGetQuickMatchUseCase:
         assert detail.status == "IN_PROGRESS"
         assert detail.hole_scores == []
         assert detail.standing is None
+        assert len(detail.scoring_assignments) == 1
+        assert detail.scoring_assignments[0].scorer_participant_id == creator.id.value
+        assert set(detail.scoring_assignments[0].covered_participant_ids) == {
+            creator.id.value,
+            other.id.value,
+        }
 
     async def test_non_participant_cannot_view(self, qm_uow, user_uow):
         creator = await create_user(user_uow, "creator2@test.com")
@@ -71,6 +86,8 @@ class TestGetQuickMatchUseCase:
         other = await create_user(user_uow, "other3@test.com")
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
+        # Solo el creador es anotador: registra su propio score y, por
+        # delegacion, el de `other` (que no es anotador en esta partida).
         submit_uc = SubmitQuickMatchHoleScoreUseCase(qm_uow)
         await submit_uc.execute(
             SubmitHoleScoreRequestDTO(
@@ -80,10 +97,12 @@ class TestGetQuickMatchUseCase:
                 score=4,
             )
         )
-        await submit_uc.execute(
-            SubmitHoleScoreRequestDTO(
+        proxy_uc = SubmitProxyHoleScoreUseCase(qm_uow)
+        await proxy_uc.execute(
+            SubmitProxyHoleScoreRequestDTO(
                 quick_match_id=qm.id.value,
-                player_user_id=other.id.value,
+                scorer_user_id=creator.id.value,
+                target_participant_id=other.id.value,
                 hole_number=1,
                 score=5,
             )
@@ -92,6 +111,7 @@ class TestGetQuickMatchUseCase:
         get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
+        assert len(detail.hole_scores) == 2
         assert detail.standing is not None
         assert detail.standing.holes_played == 1
         assert detail.standing.leading_team == "A"

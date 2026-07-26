@@ -201,6 +201,9 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
 from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
     AddFriendToQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.add_guest_to_quick_match_use_case import (
+    AddGuestToQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case import (
     CancelQuickMatchUseCase,
 )
@@ -224,6 +227,9 @@ from src.modules.quick_match.application.use_cases.start_quick_match_use_case im
 )
 from src.modules.quick_match.application.use_cases.submit_hole_score_use_case import (
     SubmitQuickMatchHoleScoreUseCase,
+)
+from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
+    SubmitProxyHoleScoreUseCase,
 )
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -1020,6 +1026,14 @@ def get_add_friend_to_quick_match_use_case(
     return AddFriendToQuickMatchUseCase(uow, social_uow, user_uow)
 
 
+def get_add_guest_to_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AddGuestToQuickMatchUseCase:
+    """Proveedor del caso de uso AddGuestToQuickMatchUseCase."""
+    return AddGuestToQuickMatchUseCase(uow, user_uow)
+
+
 def get_remove_quick_match_participant_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
@@ -1057,6 +1071,13 @@ def get_submit_quick_match_hole_score_use_case(
 ) -> SubmitQuickMatchHoleScoreUseCase:
     """Proveedor del caso de uso SubmitQuickMatchHoleScoreUseCase."""
     return SubmitQuickMatchHoleScoreUseCase(uow)
+
+
+def get_submit_quick_match_proxy_hole_score_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+) -> SubmitProxyHoleScoreUseCase:
+    """Proveedor del caso de uso SubmitProxyHoleScoreUseCase."""
+    return SubmitProxyHoleScoreUseCase(uow)
 
 
 def get_get_quick_match_use_case(

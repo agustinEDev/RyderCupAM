@@ -24,13 +24,17 @@ from ..exceptions.quick_match_violations import (
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
     InvalidQuickMatchStatusViolation,
+    InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
     NotQuickMatchParticipantViolation,
     QuickMatchFullViolation,
 )
+from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_id import QuickMatchId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
 from ..value_objects.quick_match_status import QuickMatchStatus
+
+MAX_SCORERS = 4
 
 
 class QuickMatch:
@@ -38,14 +42,15 @@ class QuickMatch:
     Entidad QuickMatch (Aggregate Root) - Partida rapida entre amigos.
 
     Gestiona:
-    - Alta/baja de participantes mientras esta PENDING
-    - Inicio (roster completo) y finalizacion
+    - Alta/baja de participantes (registrados o invitados) mientras esta PENDING
+    - Inicio (roster completo + configuracion de anotadores) y finalizacion
     - Invariantes de capacidad por formato (SINGLES 1v1, FOURBALL/FOURSOMES 2v2)
 
     Invariantes:
-    - creator_id siempre es participante y nunca puede ser eliminado
+    - El participante del creador siempre existe y nunca puede ser eliminado
     - Solo PENDING permite añadir/quitar participantes
-    - start() exige el roster exacto del formato
+    - start() exige el roster exacto del formato y una configuracion de anotadores valida
+    - scorer_ids es siempre un subconjunto de participantes registrados que incluye al creador
     """
 
     def __init__(
@@ -56,6 +61,7 @@ class QuickMatch:
         match_format: MatchFormat,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -66,6 +72,7 @@ class QuickMatch:
         self._match_format = match_format
         self._status = status
         self._participants = list(participants)
+        self._scorer_ids = list(scorer_ids) if scorer_ids else []
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -85,6 +92,7 @@ class QuickMatch:
         """Factory method: crea una partida rapida con el creador como primer participante."""
         now = datetime.now()
         creator_team = None if match_format == MatchFormat.SINGLES else "A"
+        creator_participant = QuickMatchParticipant.for_user(creator_id, team=creator_team)
 
         quick_match = cls(
             id=id,
@@ -92,7 +100,7 @@ class QuickMatch:
             golf_course_id=golf_course_id,
             match_format=match_format,
             status=QuickMatchStatus.PENDING,
-            participants=[QuickMatchParticipant(user_id=creator_id, team=creator_team)],
+            participants=[creator_participant],
             created_at=now,
             updated_at=now,
         )
@@ -108,7 +116,7 @@ class QuickMatch:
         quick_match.add_domain_event(
             QuickMatchParticipantAddedEvent(
                 quick_match_id=str(quick_match._id),
-                user_id=str(creator_id),
+                participant_id=str(creator_participant.participant_id),
                 team=creator_team,
             )
         )
@@ -124,6 +132,7 @@ class QuickMatch:
         match_format: MatchFormat,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> "QuickMatch":
@@ -135,6 +144,7 @@ class QuickMatch:
             match_format=match_format,
             status=status,
             participants=participants,
+            scorer_ids=scorer_ids,
             created_at=created_at,
             updated_at=updated_at,
         )
@@ -150,6 +160,11 @@ class QuickMatch:
     @property
     def creator_id(self) -> UserId:
         return self._creator_id
+
+    @property
+    def creator_participant_id(self) -> ParticipantId:
+        """Derivado de creator_id — no se persiste como columna propia."""
+        return ParticipantId(self._creator_id.value)
 
     @property
     def golf_course_id(self) -> GolfCourseId:
@@ -168,6 +183,10 @@ class QuickMatch:
         return list(self._participants)
 
     @property
+    def scorer_ids(self) -> list[ParticipantId]:
+        return list(self._scorer_ids)
+
+    @property
     def created_at(self) -> datetime:
         return self._created_at
 
@@ -179,8 +198,17 @@ class QuickMatch:
     # METODOS DE CONSULTA (QUERIES)
     # ===========================================
 
-    def is_participant(self, user_id: UserId) -> bool:
-        return any(p.user_id == user_id for p in self._participants)
+    def is_participant(self, participant_id: ParticipantId) -> bool:
+        return any(p.participant_id == participant_id for p in self._participants)
+
+    def find_participant(self, participant_id: ParticipantId) -> QuickMatchParticipant | None:
+        for p in self._participants:
+            if p.participant_id == participant_id:
+                return p
+        return None
+
+    def is_scorer(self, participant_id: ParticipantId) -> bool:
+        return participant_id in self._scorer_ids
 
     def capacity(self) -> int:
         """Numero total de jugadores requeridos por el formato."""
@@ -189,6 +217,9 @@ class QuickMatch:
     def is_roster_complete(self) -> bool:
         return len(self._participants) == self.capacity()
 
+    def registered_participants(self) -> list[QuickMatchParticipant]:
+        return [p for p in self._participants if not p.is_guest]
+
     def _team_count(self, team: str) -> int:
         return sum(1 for p in self._participants if p.team == team)
 
@@ -196,16 +227,16 @@ class QuickMatch:
     # METODOS DE COMANDO (CAMBIOS DE ESTADO)
     # ===========================================
 
-    def add_participant(self, user_id: UserId, team: str | None = None) -> None:
-        """Añade un participante mientras la partida esta PENDING."""
+    def add_participant(self, participant: QuickMatchParticipant) -> None:
+        """Añade un participante (registrado o invitado) mientras la partida esta PENDING."""
         if not self._status.is_pending():
             raise InvalidQuickMatchStatusViolation(
                 f"Cannot add participants to a quick match in status {self._status.value}."
             )
 
-        if self.is_participant(user_id):
+        if self.is_participant(participant.participant_id):
             raise DuplicateParticipantViolation(
-                f"User {user_id} is already a participant of this quick match."
+                f"{participant.participant_id} is already a participant of this quick match."
             )
 
         if len(self._participants) >= self.capacity():
@@ -213,6 +244,7 @@ class QuickMatch:
                 f"Quick match already has the maximum of {self.capacity()} participants."
             )
 
+        team = participant.team
         if self._match_format == MatchFormat.SINGLES:
             if team is not None:
                 raise InvalidTeamAssignmentViolation("SINGLES matches do not use teams.")
@@ -225,42 +257,54 @@ class QuickMatch:
         now = datetime.now()
         # Reasignar (no `.append()` in-place) para que SQLAlchemy detecte el cambio
         # en la columna JSONB `participants` al hacer flush/commit.
-        self._participants = [*self._participants, QuickMatchParticipant(user_id=user_id, team=team)]
+        self._participants = [*self._participants, participant]
         self._updated_at = now
 
         self.add_domain_event(
             QuickMatchParticipantAddedEvent(
-                quick_match_id=str(self._id), user_id=str(user_id), team=team
+                quick_match_id=str(self._id),
+                participant_id=str(participant.participant_id),
+                team=team,
             )
         )
 
-    def remove_participant(self, user_id: UserId) -> None:
+    def remove_participant(self, participant_id: ParticipantId) -> None:
         """Elimina un participante mientras la partida esta PENDING."""
         if not self._status.is_pending():
             raise InvalidQuickMatchStatusViolation(
                 f"Cannot remove participants from a quick match in status {self._status.value}."
             )
 
-        if user_id == self._creator_id:
+        if participant_id == self.creator_participant_id:
             raise CreatorCannotBeRemovedViolation(
                 "The creator cannot be removed; cancel the quick match instead."
             )
 
-        if not self.is_participant(user_id):
+        if not self.is_participant(participant_id):
             raise NotQuickMatchParticipantViolation(
-                f"User {user_id} is not a participant of this quick match."
+                f"{participant_id} is not a participant of this quick match."
             )
 
         now = datetime.now()
-        self._participants = [p for p in self._participants if p.user_id != user_id]
+        self._participants = [p for p in self._participants if p.participant_id != participant_id]
         self._updated_at = now
 
         self.add_domain_event(
-            QuickMatchParticipantRemovedEvent(quick_match_id=str(self._id), user_id=str(user_id))
+            QuickMatchParticipantRemovedEvent(
+                quick_match_id=str(self._id), participant_id=str(participant_id)
+            )
         )
 
-    def start(self) -> None:
-        """Inicia la partida (PENDING -> IN_PROGRESS). Exige el roster completo."""
+    def start(self, scorer_ids: list[ParticipantId]) -> None:
+        """
+        Inicia la partida (PENDING -> IN_PROGRESS).
+
+        Exige el roster completo y una configuracion de anotadores valida:
+        - Entre 1 y 4 anotadores.
+        - Todos deben ser participantes registrados (no invitados).
+        - El creador debe estar siempre incluido.
+        - No puede haber mas anotadores que participantes registrados.
+        """
         if not self._status.can_transition_to(QuickMatchStatus.IN_PROGRESS):
             raise InvalidQuickMatchStatusViolation(
                 f"Cannot start a quick match in status {self._status.value}."
@@ -272,11 +316,38 @@ class QuickMatch:
                 f"({len(self._participants)} currently)."
             )
 
+        self._validate_scorer_ids(scorer_ids)
+
         now = datetime.now()
         self._status = QuickMatchStatus.IN_PROGRESS
+        self._scorer_ids = list(scorer_ids)
         self._updated_at = now
 
         self.add_domain_event(QuickMatchStartedEvent(quick_match_id=str(self._id)))
+
+    def _validate_scorer_ids(self, scorer_ids: list[ParticipantId]) -> None:
+        if not (1 <= len(scorer_ids) <= MAX_SCORERS):
+            raise InvalidScorerConfigurationViolation(
+                f"scorer_ids must contain between 1 and {MAX_SCORERS} participants."
+            )
+
+        if len(set(scorer_ids)) != len(scorer_ids):
+            raise InvalidScorerConfigurationViolation("scorer_ids cannot contain duplicates.")
+
+        if self.creator_participant_id not in scorer_ids:
+            raise InvalidScorerConfigurationViolation("The creator must always be a scorer.")
+
+        registered_ids = {p.participant_id for p in self.registered_participants()}
+        for sid in scorer_ids:
+            if sid not in registered_ids:
+                raise InvalidScorerConfigurationViolation(
+                    f"{sid} is not a registered participant and cannot be a scorer."
+                )
+
+        if len(scorer_ids) > len(registered_ids):
+            raise InvalidScorerConfigurationViolation(
+                "scorer_ids cannot exceed the number of registered participants."
+            )
 
     def complete(self) -> None:
         """Finaliza la partida (IN_PROGRESS -> COMPLETED)."""

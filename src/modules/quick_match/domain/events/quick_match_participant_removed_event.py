@@ -10,4 +10,4 @@ class QuickMatchParticipantRemovedEvent(DomainEvent):
     """Evento emitido cuando se elimina un participante de una partida rapida."""
 
     quick_match_id: str
-    user_id: str
+    participant_id: str

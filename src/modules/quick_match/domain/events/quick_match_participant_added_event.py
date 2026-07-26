@@ -10,5 +10,5 @@ class QuickMatchParticipantAddedEvent(DomainEvent):
     """Evento emitido cuando se añade un participante a una partida rapida."""
 
     quick_match_id: str
-    user_id: str
+    participant_id: str
     team: str | None

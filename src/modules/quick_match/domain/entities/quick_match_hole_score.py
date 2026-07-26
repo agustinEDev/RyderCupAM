@@ -1,15 +1,17 @@
 """
-QuickMatchHoleScore Entity - Score de un jugador en un hoyo de una partida rapida.
+QuickMatchHoleScore Entity - Score de un participante en un hoyo de una partida rapida.
 
-Modelo simple (v1): un unico score por jugador y hoyo, sin validacion dual
-jugador/marcador (a diferencia de HoleScore en el modulo competition).
+Modelo simple (v1): un unico score por participante y hoyo, sin validacion dual
+jugador/marcador (a diferencia de HoleScore en el modulo competition). Se
+registra ademas quien lo introdujo (`recorded_by_participant_id`), ya que un
+anotador puede registrar el score de otro participante (invitado o registrado
+que no esta anotando en esta partida).
 """
 
 from datetime import datetime
 
-from src.modules.user.domain.value_objects.user_id import UserId
-
 from ..exceptions.quick_match_violations import InvalidHoleScoreViolation
+from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_hole_score_id import QuickMatchHoleScoreId
 from ..value_objects.quick_match_id import QuickMatchId
 
@@ -21,7 +23,7 @@ MAX_HOLE_NUMBER = 18
 
 class QuickMatchHoleScore:
     """
-    Entidad QuickMatchHoleScore - Score de un jugador en un hoyo concreto.
+    Entidad QuickMatchHoleScore - Score de un participante en un hoyo concreto.
 
     Invariantes:
     - hole_number entre 1 y 18
@@ -33,8 +35,9 @@ class QuickMatchHoleScore:
         id: QuickMatchHoleScoreId,
         quick_match_id: QuickMatchId,
         hole_number: int,
-        player_user_id: UserId,
+        participant_id: ParticipantId,
         score: int,
+        recorded_by_participant_id: ParticipantId,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ):
@@ -44,8 +47,9 @@ class QuickMatchHoleScore:
         self._id = id
         self._quick_match_id = quick_match_id
         self._hole_number = hole_number
-        self._player_user_id = player_user_id
+        self._participant_id = participant_id
         self._score = score
+        self._recorded_by_participant_id = recorded_by_participant_id
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
 
@@ -71,16 +75,18 @@ class QuickMatchHoleScore:
         id: QuickMatchHoleScoreId,
         quick_match_id: QuickMatchId,
         hole_number: int,
-        player_user_id: UserId,
+        participant_id: ParticipantId,
         score: int,
+        recorded_by_participant_id: ParticipantId,
     ) -> "QuickMatchHoleScore":
         now = datetime.now()
         return cls(
             id=id,
             quick_match_id=quick_match_id,
             hole_number=hole_number,
-            player_user_id=player_user_id,
+            participant_id=participant_id,
             score=score,
+            recorded_by_participant_id=recorded_by_participant_id,
             created_at=now,
             updated_at=now,
         )
@@ -91,8 +97,9 @@ class QuickMatchHoleScore:
         id: QuickMatchHoleScoreId,
         quick_match_id: QuickMatchId,
         hole_number: int,
-        player_user_id: UserId,
+        participant_id: ParticipantId,
         score: int,
+        recorded_by_participant_id: ParticipantId,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> "QuickMatchHoleScore":
@@ -100,8 +107,9 @@ class QuickMatchHoleScore:
             id=id,
             quick_match_id=quick_match_id,
             hole_number=hole_number,
-            player_user_id=player_user_id,
+            participant_id=participant_id,
             score=score,
+            recorded_by_participant_id=recorded_by_participant_id,
             created_at=created_at,
             updated_at=updated_at,
         )
@@ -123,12 +131,16 @@ class QuickMatchHoleScore:
         return self._hole_number
 
     @property
-    def player_user_id(self) -> UserId:
-        return self._player_user_id
+    def participant_id(self) -> ParticipantId:
+        return self._participant_id
 
     @property
     def score(self) -> int:
         return self._score
+
+    @property
+    def recorded_by_participant_id(self) -> ParticipantId:
+        return self._recorded_by_participant_id
 
     @property
     def created_at(self) -> datetime:
@@ -142,10 +154,11 @@ class QuickMatchHoleScore:
     # METODOS DE COMANDO
     # ===========================================
 
-    def update_score(self, score: int) -> None:
+    def update_score(self, score: int, recorded_by_participant_id: ParticipantId) -> None:
         """Actualiza el score (upsert desde el use case)."""
         self._validate_score(score)
         self._score = score
+        self._recorded_by_participant_id = recorded_by_participant_id
         self._updated_at = datetime.now()
 
     # ===========================================

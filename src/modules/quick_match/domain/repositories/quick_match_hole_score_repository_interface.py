@@ -4,9 +4,8 @@ QuickMatchHoleScore Repository Interface - Domain Layer.
 
 from abc import ABC, abstractmethod
 
-from src.modules.user.domain.value_objects.user_id import UserId
-
 from ..entities.quick_match_hole_score import QuickMatchHoleScore
+from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_hole_score_id import QuickMatchHoleScoreId
 from ..value_objects.quick_match_id import QuickMatchId
 
@@ -29,10 +28,10 @@ class QuickMatchHoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_match_hole_and_player(
-        self, quick_match_id: QuickMatchId, hole_number: int, player_user_id: UserId
+    async def find_by_match_hole_and_participant(
+        self, quick_match_id: QuickMatchId, hole_number: int, participant_id: ParticipantId
     ) -> QuickMatchHoleScore | None:
-        """Busca el score de un jugador en un hoyo concreto (para upsert)."""
+        """Busca el score de un participante en un hoyo concreto (para upsert)."""
         pass
 
     @abstractmethod

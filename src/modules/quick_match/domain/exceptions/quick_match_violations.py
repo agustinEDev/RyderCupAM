@@ -53,3 +53,15 @@ class InvalidHoleScoreViolation(BusinessRuleViolation):
     """El score de hoyo indicado no es valido."""
 
     pass
+
+
+class InvalidScorerConfigurationViolation(BusinessRuleViolation):
+    """La configuracion de anotadores (scorer_ids) no es valida."""
+
+    pass
+
+
+class NotAssignedScorerViolation(BusinessRuleViolation):
+    """El usuario no es el anotador asignado para registrar este score."""
+
+    pass

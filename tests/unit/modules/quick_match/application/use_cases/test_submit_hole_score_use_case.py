@@ -8,6 +8,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.dto.quick_match_dto import SubmitHoleScoreRequestDTO
 from src.modules.quick_match.application.exceptions import (
+    NotAScorerError,
     NotQuickMatchParticipantError,
     QuickMatchNotFoundError,
 )
@@ -19,21 +20,24 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     InvalidQuickMatchStatusViolation,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio
 
 
-async def _create_in_progress_match(qm_uow, creator_id, other_id):
+async def _create_in_progress_match(qm_uow, creator_id, other_id, scorer_ids=None):
     qm = QuickMatch.create(
         id=QuickMatchId.generate(),
         creator_id=creator_id,
         golf_course_id=GolfCourseId(uuid4()),
         match_format=MatchFormat.SINGLES,
     )
-    qm.add_participant(other_id)
-    qm.start()
+    qm.add_participant(QuickMatchParticipant.for_user(other_id))
+    qm.start(scorer_ids or [qm.creator_participant_id])
     async with qm_uow:
         await qm_uow.quick_matches.add(qm)
     return qm
@@ -56,6 +60,7 @@ class TestSubmitQuickMatchHoleScoreUseCase:
         )
 
         assert response.score == 4
+        assert response.recorded_by_participant_id == creator.id.value
 
     async def test_resubmit_updates_existing_score(self, qm_uow, user_uow):
         creator = await create_user(user_uow, "creator2@test.com")
@@ -89,6 +94,25 @@ class TestSubmitQuickMatchHoleScoreUseCase:
                 SubmitHoleScoreRequestDTO(
                     quick_match_id=qm.id.value,
                     player_user_id=UserId(uuid4()).value,
+                    hole_number=1,
+                    score=4,
+                )
+            )
+
+    async def test_non_scorer_participant_cannot_self_submit(self, qm_uow, user_uow):
+        creator = await create_user(user_uow, "creator5@test.com")
+        other = await create_user(user_uow, "other5@test.com")
+        # Solo el creador es anotador; `other` es participante pero no anotador.
+        qm = await _create_in_progress_match(
+            qm_uow, creator.id, other.id, scorer_ids=None
+        )
+
+        use_case = SubmitQuickMatchHoleScoreUseCase(qm_uow)
+        with pytest.raises(NotAScorerError):
+            await use_case.execute(
+                SubmitHoleScoreRequestDTO(
+                    quick_match_id=qm.id.value,
+                    player_user_id=other.id.value,
                     hole_number=1,
                     score=4,
                 )

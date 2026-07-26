@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_add_friend_to_quick_match_use_case,
+    get_add_guest_to_quick_match_use_case,
     get_cancel_quick_match_use_case,
     get_complete_quick_match_use_case,
     get_create_quick_match_use_case,
@@ -21,9 +22,11 @@ from src.config.dependencies import (
     get_remove_quick_match_participant_use_case,
     get_start_quick_match_use_case,
     get_submit_quick_match_hole_score_use_case,
+    get_submit_quick_match_proxy_hole_score_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.quick_match.application.dto.quick_match_dto import (
+    AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
     CreateQuickMatchRequestDTO,
     HoleScoreResponseDTO,
@@ -31,20 +34,27 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickMatchDetailResponseDTO,
     QuickMatchResponseDTO,
     RemoveParticipantRequestDTO,
+    StartQuickMatchRequestDTO,
     SubmitHoleScoreRequestDTO,
+    SubmitProxyHoleScoreRequestDTO,
 )
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    NotAScorerError,
     NotAuthorizedToRemoveError,
     NotFriendsError,
     NotQuickMatchCreatorError,
     NotQuickMatchParticipantError,
     QuickMatchNotFoundError,
+    TargetParticipantNotFoundError,
 )
 from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
     AddFriendToQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.add_guest_to_quick_match_use_case import (
+    AddGuestToQuickMatchUseCase,
 )
 from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case import (
     CancelQuickMatchUseCase,
@@ -70,13 +80,18 @@ from src.modules.quick_match.application.use_cases.start_quick_match_use_case im
 from src.modules.quick_match.application.use_cases.submit_hole_score_use_case import (
     SubmitQuickMatchHoleScoreUseCase,
 )
+from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
+    SubmitProxyHoleScoreUseCase,
+)
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
     InvalidHoleScoreViolation,
     InvalidQuickMatchStatusViolation,
+    InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
+    NotAssignedScorerViolation,
     QuickMatchFullViolation,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -102,6 +117,21 @@ class AddParticipantBody(BaseModel):
 
     friend_user_id: UUID
     team: str | None = Field(None, pattern="^(A|B)$")
+
+
+class AddGuestParticipantBody(BaseModel):
+    """Body para añadir a mano un jugador invitado (sin cuenta)."""
+
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    handicap: float | None = Field(None, ge=-10.0, le=54.0)
+    team: str | None = Field(None, pattern="^(A|B)$")
+
+
+class StartQuickMatchBody(BaseModel):
+    """Body para iniciar la partida, indicando quien va a anotar (1 a 4)."""
+
+    scorer_ids: list[UUID] = Field(..., min_length=1, max_length=4)
 
 
 class SubmitHoleScoreBody(BaseModel):
@@ -181,15 +211,54 @@ async def add_participant(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
+@router.post(
+    "/quick-matches/{quick_match_id}/participants/guest",
+    response_model=QuickMatchResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add guest to quick match",
+    description=(
+        "Creator adds a guest player (no account) by entering their name and handicap. "
+        "Their scores will be recorded by an assigned scorer once the match starts."
+    ),
+)
+async def add_guest_participant(
+    quick_match_id: UUID,
+    body: AddGuestParticipantBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: AddGuestToQuickMatchUseCase = Depends(get_add_guest_to_quick_match_use_case),
+):
+    try:
+        request_dto = AddGuestParticipantRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            handicap=body.handicap,
+            team=body.team,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except DuplicateParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except (QuickMatchFullViolation, InvalidTeamAssignmentViolation) as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidQuickMatchStatusViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
 @router.delete(
-    "/quick-matches/{quick_match_id}/participants/{target_user_id}",
+    "/quick-matches/{quick_match_id}/participants/{target_participant_id}",
     response_model=QuickMatchResponseDTO,
     summary="Remove participant",
-    description="Removes a participant (self-leave or creator kick).",
+    description="Removes a participant (self-leave for registered players, or creator kick).",
 )
 async def remove_participant(
     quick_match_id: UUID,
-    target_user_id: UUID,
+    target_participant_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RemoveParticipantUseCase = Depends(get_remove_quick_match_participant_use_case),
 ):
@@ -197,7 +266,7 @@ async def remove_participant(
         request_dto = RemoveParticipantRequestDTO(
             quick_match_id=quick_match_id,
             requester_id=current_user.id,
-            target_user_id=target_user_id,
+            target_participant_id=target_participant_id,
         )
         return await use_case.execute(request_dto)
 
@@ -215,21 +284,32 @@ async def remove_participant(
     "/quick-matches/{quick_match_id}/start",
     response_model=QuickMatchResponseDTO,
     summary="Start quick match",
-    description="Creator starts the quick match once the roster is complete.",
+    description=(
+        "Creator starts the quick match once the roster is complete, choosing between "
+        "1 and 4 registered participants (always including the creator) as scorers."
+    ),
 )
 async def start_quick_match(
     quick_match_id: UUID,
+    body: StartQuickMatchBody,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: StartQuickMatchUseCase = Depends(get_start_quick_match_use_case),
 ):
     try:
-        return await use_case.execute(str(quick_match_id), str(current_user.id))
+        request_dto = StartQuickMatchRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+            scorer_ids=body.scorer_ids,
+        )
+        return await use_case.execute(request_dto)
 
     except QuickMatchNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotQuickMatchCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except IncompleteRosterViolation as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidScorerConfigurationViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -282,8 +362,8 @@ async def cancel_quick_match(
 @router.post(
     "/quick-matches/{quick_match_id}/holes/{hole_number}/score",
     response_model=HoleScoreResponseDTO,
-    summary="Submit hole score",
-    description="Registers/updates the current user's own score for a hole (simple model).",
+    summary="Submit own hole score",
+    description="Registers/updates the current user's own score for a hole. Scorers only.",
 )
 async def submit_hole_score(
     quick_match_id: UUID,
@@ -304,6 +384,52 @@ async def submit_hole_score(
     except QuickMatchNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotQuickMatchParticipantError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotAScorerError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except InvalidQuickMatchStatusViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except InvalidHoleScoreViolation as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post(
+    "/quick-matches/{quick_match_id}/participants/{target_participant_id}/holes/{hole_number}/score",
+    response_model=HoleScoreResponseDTO,
+    summary="Submit hole score by proxy",
+    description=(
+        "Records a hole score on behalf of another participant (guest, or registered "
+        "player not selected as a scorer). Only the scorer assigned to that "
+        "participant may do this."
+    ),
+)
+async def submit_proxy_hole_score(
+    quick_match_id: UUID,
+    target_participant_id: UUID,
+    hole_number: int,
+    body: SubmitHoleScoreBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SubmitProxyHoleScoreUseCase = Depends(
+        get_submit_quick_match_proxy_hole_score_use_case
+    ),
+):
+    try:
+        request_dto = SubmitProxyHoleScoreRequestDTO(
+            quick_match_id=quick_match_id,
+            scorer_user_id=current_user.id,
+            target_participant_id=target_participant_id,
+            hole_number=hole_number,
+            score=body.score,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except TargetParticipantNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotAScorerError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotAssignedScorerViolation as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -333,7 +459,10 @@ async def list_my_quick_matches(
     "/quick-matches/{quick_match_id}",
     response_model=QuickMatchDetailResponseDTO,
     summary="Get quick match detail",
-    description="Returns quick match detail, hole scores, and computed match standing.",
+    description=(
+        "Returns quick match detail, hole scores, computed match standing, and the "
+        "scorer coverage assignments (who records for whom)."
+    ),
 )
 async def get_quick_match(
     quick_match_id: UUID,

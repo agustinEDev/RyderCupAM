@@ -47,3 +47,15 @@ class NotQuickMatchParticipantError(Exception):
     """El usuario no es participante de esta partida rapida."""
 
     pass
+
+
+class TargetParticipantNotFoundError(Exception):
+    """El participante objetivo no existe en esta partida rapida."""
+
+    pass
+
+
+class NotAScorerError(Exception):
+    """El usuario no esta configurado como anotador de esta partida."""
+
+    pass

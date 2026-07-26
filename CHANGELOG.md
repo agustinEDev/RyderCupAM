@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - New tables `quick_matches` and `quick_match_hole_scores` (Alembic migration `a91cc79ba087`), with a GIN index on the `participants` JSONB column to support the "quick matches I'm in" query.
 - 77 unit tests (domain + 9 use cases + in-memory repos) + 5 integration tests (E2E via real DB, full flow: create → add friend → start → submit scores → complete).
 
+**Quick Match — Guest Players and Scorer Assignment**
+
+- `QuickMatchParticipant` now supports two variants: registered (`user_id`) and **guest** (no account — `first_name`/`last_name`/optional manual `handicap`, entered by the creator). Both share a stable `participant_id` (new `ParticipantId` Value Object) used for removal, scoring, and assignment regardless of type.
+- `POST /quick-matches/{id}/participants/guest`: creator adds a guest player by hand.
+- Starting a match now requires `scorer_ids` (1 to 4 **registered** participants, always including the creator): the subset who will actually operate the app to record scores during the round. `POST /quick-matches/{id}/start` body: `{"scorer_ids": [...]}`.
+- New `ScoringCoverageService` (pure domain service): computes who records for whom. Non-scorers (guests, or registered players not selected as scorers) are split as evenly as possible across all scorers; any remainder from an uneven split is absorbed by the creator.
+- `POST /quick-matches/{id}/participants/{participant_id}/holes/{n}/score`: a scorer records a hole score on behalf of a participant assigned to them (403 if the target isn't covered by that scorer). The existing self-submit endpoint now requires the caller to be a configured scorer (403 `NotAScorerError` otherwise).
+- `QuickMatchHoleScore` renamed `player_user_id` → `participant_id` (no FK to `users`, since guests aren't user rows) and gained `recorded_by_participant_id`, so every score carries who actually entered it.
+- `GET /quick-matches/{id}` detail response now includes `scorer_ids` and `scoring_assignments` (who covers whom), alongside the existing standing.
+- Migration `9a9440cebb07`: adds `quick_matches.scorer_ids` (JSONB); renames `quick_match_hole_scores.player_user_id` → `participant_id` (drops its FK to `users`, type changes `CHAR(36)` → `uuid`) and adds `recorded_by_participant_id`.
+- 109 unit tests (up from 77: new `ParticipantId`/guest-variant VO tests, `ScoringCoverageService` tests, `AddGuestToQuickMatchUseCase`, `SubmitProxyHoleScoreUseCase`, updated entity/use case tests for the new participant model) + 8 integration tests (up from 5: guest + proxy-scoring flow, non-scorer rejection, invalid scorer configuration).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed
