@@ -19,6 +19,7 @@ from src.modules.social.domain.events.friendship_requested_event import (
 )
 from src.modules.social.domain.exceptions.social_violations import (
     InvalidFriendshipStatusViolation,
+    SelfFriendRequestViolation,
 )
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
 from src.modules.social.domain.value_objects.friendship_status import FriendshipStatus
@@ -52,6 +53,15 @@ class TestFriendshipCreate:
         assert friendship.updated_at is not None
         assert friendship.responded_at is None
 
+    def test_create_with_same_requester_and_addressee_raises(self):
+        user_id = UserId(uuid4())
+        with pytest.raises(SelfFriendRequestViolation):
+            Friendship.create(
+                id=FriendshipId.generate(),
+                requester_id=user_id,
+                addressee_id=user_id,
+            )
+
 
 class TestFriendshipCreateBlocked:
     def test_create_blocked_sets_blocked_status(self):
@@ -70,6 +80,13 @@ class TestFriendshipCreateBlocked:
         events = friendship.get_domain_events()
         assert len(events) == 1
         assert isinstance(events[0], FriendshipBlockedEvent)
+
+    def test_create_blocked_with_same_blocker_and_blocked_raises(self):
+        user_id = UserId(uuid4())
+        with pytest.raises(SelfFriendRequestViolation):
+            Friendship.create_blocked(
+                id=FriendshipId.generate(), blocker_id=user_id, blocked_id=user_id
+            )
 
 
 class TestFriendshipAccept:

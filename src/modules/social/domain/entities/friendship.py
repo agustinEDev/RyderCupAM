@@ -13,7 +13,10 @@ from ..events.friendship_accepted_event import FriendshipAcceptedEvent
 from ..events.friendship_blocked_event import FriendshipBlockedEvent
 from ..events.friendship_declined_event import FriendshipDeclinedEvent
 from ..events.friendship_requested_event import FriendshipRequestedEvent
-from ..exceptions.social_violations import InvalidFriendshipStatusViolation
+from ..exceptions.social_violations import (
+    InvalidFriendshipStatusViolation,
+    SelfFriendRequestViolation,
+)
 from ..value_objects.friendship_id import FriendshipId
 from ..value_objects.friendship_status import FriendshipStatus
 
@@ -67,6 +70,9 @@ class Friendship:
         addressee_id: UserId,
     ) -> "Friendship":
         """Factory method para crear una nueva solicitud de amistad con status PENDING."""
+        if requester_id == addressee_id:
+            raise SelfFriendRequestViolation("No puedes enviarte una solicitud a ti mismo.")
+
         now = datetime.now()
         friendship = cls(
             id=id,
@@ -100,6 +106,9 @@ class Friendship:
         almacenamiento, pero la autoridad real sobre quien bloqueo se guarda en
         `blocked_by`.
         """
+        if blocker_id == blocked_id:
+            raise SelfFriendRequestViolation("No puedes bloquearte a ti mismo.")
+
         now = datetime.now()
         friendship = cls(
             id=id,
