@@ -29,6 +29,40 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 pytestmark = pytest.mark.asyncio
 
 
+def _rebuild_user(user: User, **overrides) -> User:
+    """
+    Reconstruye un User con los mismos valores, sobrescribiendo los indicados.
+
+    Tras la encapsulación de User (issue #109), sus atributos son de solo
+    lectura vía @property. Los tests que necesitan simular un estado concreto
+    (p.ej. un token ya expirado) reconstruyen la entidad en vez de mutar
+    atributos directamente.
+    """
+    fields = {
+        "id": user.id,
+        "email": user.email,
+        "password": user.password,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "handicap": user.handicap,
+        "handicap_updated_at": user.handicap_updated_at,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "email_verified": user.email_verified,
+        "verification_token": user.verification_token,
+        "country_code": user.country_code,
+        "password_reset_token": user.password_reset_token,
+        "reset_token_expires_at": user.reset_token_expires_at,
+        "failed_login_attempts": user.failed_login_attempts,
+        "locked_until": user.locked_until,
+        "is_admin": user.is_admin,
+        "gender": user.gender,
+        "domain_events": user.get_domain_events(),
+    }
+    fields.update(overrides)
+    return User(**fields)
+
+
 class TestValidateResetTokenValid:
     """Tests para tokens válidos"""
 
@@ -84,7 +118,7 @@ class TestValidateResetTokenValid:
         token = user.generate_password_reset_token()
 
         # Simular que el token fue generado hace 12 horas (aún válido)
-        user.reset_token_expires_at = datetime.now() + timedelta(hours=12)
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now() + timedelta(hours=12))
 
         async with uow:
             await uow.users.save(user)
@@ -144,7 +178,7 @@ class TestValidateResetTokenInvalid:
         token = user.generate_password_reset_token()
 
         # Simular expiración (hace 2 horas)
-        user.reset_token_expires_at = datetime.now() - timedelta(hours=2)
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
 
         async with uow:
             await uow.users.save(user)
@@ -181,7 +215,7 @@ class TestValidateResetTokenInvalid:
         token = user.generate_password_reset_token()
 
         # Establecer expiración exactamente ahora (boundary)
-        user.reset_token_expires_at = datetime.now()
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now())
 
         async with uow:
             await uow.users.save(user)
@@ -214,8 +248,7 @@ class TestValidateResetTokenInvalid:
         token = user.generate_password_reset_token()
 
         # Invalidar el token manualmente (simulando que ya fue usado)
-        user.password_reset_token = None
-        user.reset_token_expires_at = None
+        user = _rebuild_user(user, password_reset_token=None, reset_token_expires_at=None)
 
         async with uow:
             await uow.users.save(user)

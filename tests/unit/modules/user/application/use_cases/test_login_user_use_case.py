@@ -19,6 +19,40 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
+def _rebuild_user(user: User, **overrides) -> User:
+    """
+    Reconstruye un User con los mismos valores, sobrescribiendo los indicados.
+
+    Tras la encapsulación de User (issue #109), sus atributos son de solo
+    lectura vía @property. Los tests que necesitan simular un estado concreto
+    (p.ej. un handicap desactualizado) reconstruyen la entidad en vez de mutar
+    atributos directamente.
+    """
+    fields = {
+        "id": user.id,
+        "email": user.email,
+        "password": user.password,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "handicap": user.handicap,
+        "handicap_updated_at": user.handicap_updated_at,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "email_verified": user.email_verified,
+        "verification_token": user.verification_token,
+        "country_code": user.country_code,
+        "password_reset_token": user.password_reset_token,
+        "reset_token_expires_at": user.reset_token_expires_at,
+        "failed_login_attempts": user.failed_login_attempts,
+        "locked_until": user.locked_until,
+        "is_admin": user.is_admin,
+        "gender": user.gender,
+        "domain_events": user.get_domain_events(),
+    }
+    fields.update(overrides)
+    return User(**fields)
+
+
 @pytest.fixture
 def uow():
     """Fixture que proporciona un Unit of Work en memoria."""
@@ -380,7 +414,9 @@ class TestLoginUserUseCaseHandicapRFEG:
             country_code_str="ES",
         )
         user.update_handicap(12.5)
-        user.handicap_updated_at = user.handicap_updated_at - timedelta(days=1)
+        user = _rebuild_user(
+            user, handicap_updated_at=user.handicap_updated_at - timedelta(days=1)
+        )
         async with uow:
             await uow.users.save(user)
             await uow.commit()

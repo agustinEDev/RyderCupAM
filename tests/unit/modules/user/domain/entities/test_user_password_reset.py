@@ -25,6 +25,40 @@ from src.modules.user.domain.events.password_reset_requested_event import (
 )
 
 
+def _rebuild_user(user: User, **overrides) -> User:
+    """
+    Reconstruye un User con los mismos valores, sobrescribiendo los indicados.
+
+    Tras la encapsulación de User (issue #109), sus atributos son de solo
+    lectura vía @property. Los tests que necesitan simular un estado concreto
+    (p.ej. un token ya expirado) reconstruyen la entidad en vez de mutar
+    atributos directamente.
+    """
+    fields = {
+        "id": user.id,
+        "email": user.email,
+        "password": user.password,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "handicap": user.handicap,
+        "handicap_updated_at": user.handicap_updated_at,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "email_verified": user.email_verified,
+        "verification_token": user.verification_token,
+        "country_code": user.country_code,
+        "password_reset_token": user.password_reset_token,
+        "reset_token_expires_at": user.reset_token_expires_at,
+        "failed_login_attempts": user.failed_login_attempts,
+        "locked_until": user.locked_until,
+        "is_admin": user.is_admin,
+        "gender": user.gender,
+        "domain_events": user.get_domain_events(),
+    }
+    fields.update(overrides)
+    return User(**fields)
+
+
 class TestGeneratePasswordResetToken:
     """Tests para el método generate_password_reset_token()"""
 
@@ -220,7 +254,7 @@ class TestCanResetPassword:
         token = user.generate_password_reset_token()
 
         # Simular que pasaron 25 horas (token expirado)
-        user.reset_token_expires_at = datetime.now() - timedelta(hours=1)
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=1))
 
         # Act
         result = user.can_reset_password(token)
@@ -267,7 +301,7 @@ class TestCanResetPassword:
         token = user.generate_password_reset_token()
 
         # Establecer expiración exactamente ahora (boundary)
-        user.reset_token_expires_at = datetime.now()
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now())
 
         # Act
         result = user.can_reset_password(token)
@@ -369,7 +403,7 @@ class TestResetPassword:
         token = user.generate_password_reset_token()
 
         # Simular expiración (hace 2 horas)
-        user.reset_token_expires_at = datetime.now() - timedelta(hours=2)
+        user = _rebuild_user(user, reset_token_expires_at=datetime.now() - timedelta(hours=2))
 
         # Act & Assert
         with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):
