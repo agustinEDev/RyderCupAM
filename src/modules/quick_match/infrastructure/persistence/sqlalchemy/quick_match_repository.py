@@ -32,7 +32,9 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         return await self._session.get(QuickMatch, quick_match_id)
 
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
-        return await self._session.get(QuickMatch, quick_match_id, with_for_update=True)
+        return await self._session.get(
+            QuickMatch, quick_match_id, with_for_update=True, populate_existing=True
+        )
 
     def _participant_filter(self, user_id: UserId):
         return quick_matches_table.c.participants.op("@>")(
