@@ -6,8 +6,9 @@ Create Date: 2026-07-26 12:00:00.000000
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "7cec1e04eb61"
@@ -42,6 +43,14 @@ def upgrade() -> None:
             ["blocked_by"],
             ["users.id"],
             ondelete="CASCADE",
+        ),
+        sa.CheckConstraint(
+            "requester_id <> addressee_id",
+            name="ck_friendships_no_self_friend",
+        ),
+        sa.CheckConstraint(
+            "blocked_by IS NULL OR blocked_by = requester_id OR blocked_by = addressee_id",
+            name="ck_friendships_blocked_by_participant",
         ),
     )
 

@@ -42,7 +42,11 @@ class SQLAlchemyQuickMatchUnitOfWork(QuickMatchUnitOfWorkInterface):
         if exc_type:
             await self.rollback()
         else:
-            await self.commit()
+            try:
+                await self.commit()
+            except Exception:
+                await self.rollback()
+                raise
 
     async def commit(self) -> None:
         await self._session.commit()

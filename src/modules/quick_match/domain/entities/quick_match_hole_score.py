@@ -100,8 +100,8 @@ class QuickMatchHoleScore:
         participant_id: ParticipantId,
         score: int,
         recorded_by_participant_id: ParticipantId,
-        created_at: datetime | None = None,
-        updated_at: datetime | None = None,
+        created_at: datetime,
+        updated_at: datetime,
     ) -> "QuickMatchHoleScore":
         return cls(
             id=id,

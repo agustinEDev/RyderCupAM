@@ -295,7 +295,7 @@ def start_quick_match_mappers() -> None:
 
     Es idempotente: puede llamarse multiples veces sin efectos adversos.
     """
-    if QuickMatch not in mapper_registry.mappers:
+    if not any(mapper.class_ is QuickMatch for mapper in mapper_registry.mappers):
         mapper_registry.map_imperatively(
             QuickMatch,
             quick_matches_table,
@@ -312,7 +312,7 @@ def start_quick_match_mappers() -> None:
             },
         )
 
-    if QuickMatchHoleScore not in mapper_registry.mappers:
+    if not any(mapper.class_ is QuickMatchHoleScore for mapper in mapper_registry.mappers):
         mapper_registry.map_imperatively(
             QuickMatchHoleScore,
             quick_match_hole_scores_table,

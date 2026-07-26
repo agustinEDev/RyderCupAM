@@ -10,7 +10,6 @@ from typing import Any
 
 import sqlalchemy.types
 from sqlalchemy import Column, DateTime, ForeignKey, String, Table
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.types import CHAR
 
 from src.modules.social.domain.entities.friendship import Friendship
@@ -25,22 +24,22 @@ from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registr
 
 
 class FriendshipIdType(sqlalchemy.types.TypeDecorator[FriendshipId]):
-    """TypeDecorator para FriendshipId Value Object."""
+    """TypeDecorator para FriendshipId Value Object (compatible con friendships.id CHAR(36))."""
 
-    impl = UUID(as_uuid=True)
+    impl = CHAR(36)
     cache_ok = True
 
-    def process_bind_param(self, value: FriendshipId | None, dialect: Any) -> uuid.UUID | None:
+    def process_bind_param(self, value: FriendshipId | None, dialect: Any) -> str | None:
         if value is None:
             return None
-        return value.value
+        return str(value.value)
 
     def process_result_value(
-        self, value: uuid.UUID | None, dialect: Any
+        self, value: str | None, dialect: Any
     ) -> FriendshipId | None:
         if value is None:
             return None
-        return FriendshipId(value)
+        return FriendshipId(uuid.UUID(value))
 
 
 class SocialUserIdType(sqlalchemy.types.TypeDecorator[UserId]):

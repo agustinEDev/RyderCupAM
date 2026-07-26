@@ -26,6 +26,9 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
     async def find_by_id(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return self._quick_matches.get(quick_match_id)
 
+    async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
+        return self._quick_matches.get(quick_match_id)
+
     async def list_for_user(
         self,
         user_id: UserId,
