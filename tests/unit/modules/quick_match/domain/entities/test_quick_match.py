@@ -29,6 +29,7 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
+    InvalidQuickMatchFormatViolation,
     InvalidQuickMatchStatusViolation,
     InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
@@ -41,6 +42,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -50,6 +52,18 @@ def _make_quick_match(match_format=MatchFormat.SINGLES, **overrides):
         "creator_id": UserId(uuid4()),
         "golf_course_id": GolfCourseId(uuid4()),
         "match_format": match_format,
+    }
+    defaults.update(overrides)
+    return QuickMatch.create(**defaults)
+
+
+def _make_free_play_quick_match(scoring_format=ScoringFormat.STABLEFORD, **overrides):
+    defaults = {
+        "id": QuickMatchId.generate(),
+        "creator_id": UserId(uuid4()),
+        "golf_course_id": GolfCourseId(uuid4()),
+        "match_format": None,
+        "scoring_format": scoring_format,
     }
     defaults.update(overrides)
     return QuickMatch.create(**defaults)
@@ -338,3 +352,75 @@ class TestQuickMatchQueries:
             participants=[],
         )
         assert qm.get_domain_events() == []
+
+
+class TestQuickMatchFormatExclusivity:
+    def test_create_requires_exactly_one_format(self):
+        with pytest.raises(InvalidQuickMatchFormatViolation):
+            QuickMatch.create(
+                id=QuickMatchId.generate(),
+                creator_id=UserId(uuid4()),
+                golf_course_id=GolfCourseId(uuid4()),
+            )
+
+    def test_create_rejects_both_formats_together(self):
+        with pytest.raises(InvalidQuickMatchFormatViolation):
+            QuickMatch.create(
+                id=QuickMatchId.generate(),
+                creator_id=UserId(uuid4()),
+                golf_course_id=GolfCourseId(uuid4()),
+                match_format=MatchFormat.SINGLES,
+                scoring_format=ScoringFormat.MEDAL,
+            )
+
+    def test_reconstruct_requires_exactly_one_format(self):
+        with pytest.raises(InvalidQuickMatchFormatViolation):
+            QuickMatch.reconstruct(
+                id=QuickMatchId.generate(),
+                creator_id=UserId(uuid4()),
+                golf_course_id=GolfCourseId(uuid4()),
+                match_format=None,
+                status=QuickMatchStatus.PENDING,
+                participants=[],
+            )
+
+
+class TestQuickMatchFreePlay:
+    def test_create_stableford_creator_has_no_team(self):
+        qm = _make_free_play_quick_match(scoring_format=ScoringFormat.STABLEFORD)
+        assert qm.match_format is None
+        assert qm.scoring_format == ScoringFormat.STABLEFORD
+        assert qm.participants[0].team is None
+
+    def test_capacity_is_four(self):
+        assert _make_free_play_quick_match().capacity() == 4
+
+    def test_roster_is_always_complete_solo(self):
+        qm = _make_free_play_quick_match()
+        assert qm.is_roster_complete()
+
+    def test_can_start_solo_with_only_creator(self):
+        qm = _make_free_play_quick_match()
+        qm.start([qm.creator_participant_id])
+        assert qm.status == QuickMatchStatus.IN_PROGRESS
+
+    def test_can_start_with_three_players(self):
+        qm = _make_free_play_quick_match()
+        qm.add_participant(_registered())
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
+        assert qm.status == QuickMatchStatus.IN_PROGRESS
+
+    def test_add_participant_rejects_team(self):
+        qm = _make_free_play_quick_match(scoring_format=ScoringFormat.MEDAL)
+        with pytest.raises(InvalidTeamAssignmentViolation):
+            qm.add_participant(_registered(team="A"))
+
+    def test_add_participant_up_to_four_then_full(self):
+        qm = _make_free_play_quick_match()
+        qm.add_participant(_registered())
+        qm.add_participant(_registered())
+        qm.add_participant(_registered())
+        assert len(qm.participants) == 4
+        with pytest.raises(QuickMatchFullViolation):
+            qm.add_participant(_registered())

@@ -27,6 +27,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
@@ -168,6 +169,23 @@ class MatchFormatType(sqlalchemy.types.TypeDecorator[MatchFormat]):
         return MatchFormat(value)
 
 
+class ScoringFormatType(sqlalchemy.types.TypeDecorator[ScoringFormat]):
+    """TypeDecorator para ScoringFormat (VO local a quick_match, formato de partido libre)."""
+
+    impl = String(20)
+    cache_ok = True
+
+    def process_bind_param(self, value: ScoringFormat | None, dialect: Any) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect: Any) -> ScoringFormat | None:
+        if value is None:
+            return None
+        return ScoringFormat(value)
+
+
 class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     """
     TypeDecorator para serializar list[QuickMatchParticipant] a/desde JSONB.
@@ -256,7 +274,8 @@ quick_matches_table = Table(
         ForeignKey("golf_courses.id"),
         nullable=False,
     ),
-    Column("match_format", MatchFormatType, nullable=False),
+    Column("match_format", MatchFormatType, nullable=True),
+    Column("scoring_format", ScoringFormatType, nullable=True),
     Column("status", QuickMatchStatusType, nullable=False),
     Column("name", String(100), nullable=True),
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
@@ -305,6 +324,7 @@ def start_quick_match_mappers() -> None:
                 "_creator_id": quick_matches_table.c.creator_id,
                 "_golf_course_id": quick_matches_table.c.golf_course_id,
                 "_match_format": quick_matches_table.c.match_format,
+                "_scoring_format": quick_matches_table.c.scoring_format,
                 "_status": quick_matches_table.c.status,
                 "_name": quick_matches_table.c.name,
                 "_participants": quick_matches_table.c.participants,

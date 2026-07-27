@@ -20,6 +20,7 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -55,7 +56,10 @@ class CreateQuickMatchUseCase:
             id=QuickMatchId.generate(),
             creator_id=UserId(request.creator_id),
             golf_course_id=golf_course_id,
-            match_format=MatchFormat(request.match_format),
+            match_format=MatchFormat(request.match_format) if request.match_format else None,
+            scoring_format=(
+                ScoringFormat(request.scoring_format) if request.scoring_format else None
+            ),
             name=request.name,
         )
 

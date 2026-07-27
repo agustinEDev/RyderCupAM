@@ -23,6 +23,7 @@ from ..exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
+    InvalidQuickMatchFormatViolation,
     InvalidQuickMatchStatusViolation,
     InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
@@ -33,9 +34,11 @@ from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_id import QuickMatchId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
 from ..value_objects.quick_match_status import QuickMatchStatus
+from ..value_objects.scoring_format import ScoringFormat
 
 MAX_SCORERS = 4
 MAX_NAME_LENGTH = 100
+MAX_FREE_PLAY_PLAYERS = 4
 
 
 class QuickMatch:
@@ -59,19 +62,22 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
         name: str | None = None,
+        scoring_format: ScoringFormat | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
+        self._validate_format(match_format, scoring_format)
         self._id = id
         self._creator_id = creator_id
         self._golf_course_id = golf_course_id
         self._match_format = match_format
+        self._scoring_format = scoring_format
         self._status = status
         self._participants = list(participants)
         self._name = self._validate_name(name)
@@ -79,6 +85,16 @@ class QuickMatch:
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
+
+    @staticmethod
+    def _validate_format(
+        match_format: MatchFormat | None, scoring_format: ScoringFormat | None
+    ) -> None:
+        """Exige exactamente uno de match_format (Ryder Cup) o scoring_format (partido libre)."""
+        if (match_format is None) == (scoring_format is None):
+            raise InvalidQuickMatchFormatViolation(
+                "Exactly one of match_format or scoring_format must be provided."
+            )
 
     @staticmethod
     def _validate_name(name: str | None) -> str | None:
@@ -102,12 +118,19 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None = None,
+        scoring_format: ScoringFormat | None = None,
         name: str | None = None,
     ) -> "QuickMatch":
-        """Factory method: crea una partida rapida con el creador como primer participante."""
+        """
+        Factory method: crea una partida rapida con el creador como primer participante.
+
+        Exactamente uno de match_format (Ryder Cup, por equipos) o scoring_format
+        (partido libre, todos contra todos) debe indicarse.
+        """
         now = datetime.now()
-        creator_team = None if match_format == MatchFormat.SINGLES else "A"
+        uses_teams = match_format is not None and match_format != MatchFormat.SINGLES
+        creator_team = "A" if uses_teams else None
         creator_participant = QuickMatchParticipant.for_user(creator_id, team=creator_team)
 
         quick_match = cls(
@@ -115,6 +138,7 @@ class QuickMatch:
             creator_id=creator_id,
             golf_course_id=golf_course_id,
             match_format=match_format,
+            scoring_format=scoring_format,
             status=QuickMatchStatus.PENDING,
             participants=[creator_participant],
             name=name,
@@ -127,7 +151,8 @@ class QuickMatch:
                 quick_match_id=str(quick_match._id),
                 creator_id=str(creator_id),
                 golf_course_id=str(golf_course_id),
-                match_format=match_format.value,
+                match_format=match_format.value if match_format else None,
+                scoring_format=scoring_format.value if scoring_format else None,
             )
         )
         quick_match.add_domain_event(
@@ -146,10 +171,11 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
         name: str | None = None,
+        scoring_format: ScoringFormat | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -160,6 +186,7 @@ class QuickMatch:
             creator_id=creator_id,
             golf_course_id=golf_course_id,
             match_format=match_format,
+            scoring_format=scoring_format,
             status=status,
             participants=participants,
             name=name,
@@ -190,8 +217,12 @@ class QuickMatch:
         return self._golf_course_id
 
     @property
-    def match_format(self) -> MatchFormat:
+    def match_format(self) -> MatchFormat | None:
         return self._match_format
+
+    @property
+    def scoring_format(self) -> ScoringFormat | None:
+        return self._scoring_format
 
     @property
     def name(self) -> str | None:
@@ -234,11 +265,20 @@ class QuickMatch:
         return participant_id in self._scorer_ids
 
     def capacity(self) -> int:
-        """Numero total de jugadores requeridos por el formato."""
-        return self._match_format.players_per_team() * 2
+        """Numero maximo de jugadores admitidos por el formato."""
+        if self._match_format is not None:
+            return self._match_format.players_per_team() * 2
+        return MAX_FREE_PLAY_PLAYERS
 
     def is_roster_complete(self) -> bool:
-        return len(self._participants) == self.capacity()
+        """
+        Match play (Ryder Cup): exige el roster exacto de la capacidad del formato.
+        Partido libre: cualquier roster es valido para empezar (1 a 4, incluido solo
+        el creador), no hace falta llenar hasta el maximo.
+        """
+        if self._match_format is not None:
+            return len(self._participants) == self.capacity()
+        return True
 
     def registered_participants(self) -> list[QuickMatchParticipant]:
         return [p for p in self._participants if not p.is_guest]
@@ -268,9 +308,12 @@ class QuickMatch:
             )
 
         team = participant.team
-        if self._match_format == MatchFormat.SINGLES:
+        uses_teams = self._match_format is not None and self._match_format != MatchFormat.SINGLES
+        if not uses_teams:
             if team is not None:
-                raise InvalidTeamAssignmentViolation("SINGLES matches do not use teams.")
+                raise InvalidTeamAssignmentViolation(
+                    "This quick match format does not use teams."
+                )
         else:
             if team not in ("A", "B"):
                 raise InvalidTeamAssignmentViolation("team must be 'A' or 'B' for this format.")
@@ -415,7 +458,8 @@ class QuickMatch:
     # ===========================================
 
     def __str__(self) -> str:
-        return f"QuickMatch({self._match_format.value}, {self._status.value})"
+        format_value = self._match_format.value if self._match_format else self._scoring_format.value
+        return f"QuickMatch({format_value}, {self._status.value})"
 
     def __eq__(self, other) -> bool:
         return isinstance(other, QuickMatch) and self._id == other._id

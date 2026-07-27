@@ -148,6 +148,108 @@ class TestCreateQuickMatch:
 
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_create_without_any_format_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_noformat@test.com", "P@ssw0rd123!", "Admin", "NoFormat"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_noformat@test.com", "P@ssw0rd123!", "Creator", "NoFormat"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches", json={"golf_course_id": golf_course_id}
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_with_both_formats_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_bothformat@test.com", "P@ssw0rd123!", "Admin", "BothFormat"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_bothformat@test.com", "P@ssw0rd123!", "Creator", "BothFormat"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={
+                "golf_course_id": golf_course_id,
+                "match_format": "SINGLES",
+                "scoring_format": "MEDAL",
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_free_play_success(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_freeplay@test.com", "P@ssw0rd123!", "Admin", "FreePlay"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_freeplay@test.com", "P@ssw0rd123!", "Creator", "FreePlay"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "scoring_format": "STABLEFORD"},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["match_format"] is None
+        assert data["scoring_format"] == "STABLEFORD"
+        assert data["participants"][0]["team"] is None
+
+
+class TestQuickMatchFreePlayFlow:
+    """Partido libre: 1 a 4 jugadores, sin equipos, se puede jugar en solitario."""
+
+    @pytest.mark.asyncio
+    async def test_solo_free_play_start_and_score(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_solo@test.com", "P@ssw0rd123!", "Admin", "Solo"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_solo@test.com", "P@ssw0rd123!", "Creator", "Solo"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "scoring_format": "MEDAL"},
+        )
+        assert create_response.status_code == 201
+        quick_match_id = create_response.json()["id"]
+        creator_participant_id = create_response.json()["participants"][0]["participant_id"]
+
+        start_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator_participant_id]},
+        )
+        assert start_response.status_code == 200, start_response.text
+        assert start_response.json()["status"] == "IN_PROGRESS"
+
+        score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": 4}
+        )
+        assert score_response.status_code == 200, score_response.text
+
+        detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+        assert detail["standing"] is None
+        assert len(detail["hole_scores"]) == 1
+
 
 class TestQuickMatchFullFlow:
     """Flujo completo: crear, añadir amigo, iniciar, registrar scores, ver detalle."""

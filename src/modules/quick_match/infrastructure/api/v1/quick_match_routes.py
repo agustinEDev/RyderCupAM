@@ -9,7 +9,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.config.dependencies import (
     get_add_friend_to_quick_match_use_case,
@@ -110,16 +110,23 @@ router = APIRouter()
 
 
 class CreateQuickMatchBody(BaseModel):
-    """Body para crear una partida rapida."""
+    """Body para crear una partida rapida. Exactamente uno de match_format/scoring_format."""
 
     golf_course_id: UUID
-    match_format: str = Field(..., pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
+    match_format: str | None = Field(None, pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
+    scoring_format: str | None = Field(None, pattern="^(MEDAL|STABLEFORD)$")
     name: str | None = Field(None, max_length=MAX_NAME_LENGTH)
 
     @field_validator("name", mode="before")
     @classmethod
     def _strip_name(cls, value: str | None) -> str | None:
         return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _exactly_one_format(self) -> "CreateQuickMatchBody":
+        if (self.match_format is None) == (self.scoring_format is None):
+            raise ValueError("Exactly one of match_format or scoring_format must be provided.")
+        return self
 
 
 class AddParticipantBody(BaseModel):
@@ -181,6 +188,7 @@ async def create_quick_match(
             creator_id=current_user.id,
             golf_course_id=body.golf_course_id,
             match_format=body.match_format,
+            scoring_format=body.scoring_format,
             name=body.name,
         )
         return await use_case.execute(request_dto)

@@ -37,6 +37,12 @@ class InvalidTeamAssignmentViolation(BusinessRuleViolation):
     pass
 
 
+class InvalidQuickMatchFormatViolation(BusinessRuleViolation):
+    """match_format y scoring_format no son mutuamente excluyentes o ambos faltan."""
+
+    pass
+
+
 class IncompleteRosterViolation(BusinessRuleViolation):
     """No se puede iniciar la partida sin el numero de jugadores requerido por el formato."""
 

@@ -43,6 +43,23 @@ class TestCreateQuickMatchUseCase:
         assert len(response.participants) == 1
         assert response.participants[0].user_id == creator.id.value
 
+    async def test_create_free_play_success(self, qm_uow, golf_course_uow, user_uow):
+        creator = await create_user(user_uow, "creator-freeplay@test.com")
+        golf_course = await create_golf_course(golf_course_uow, creator.id)
+
+        use_case = CreateQuickMatchUseCase(qm_uow, golf_course_uow, user_uow)
+        response = await use_case.execute(
+            CreateQuickMatchRequestDTO(
+                creator_id=creator.id.value,
+                golf_course_id=golf_course.id.value,
+                scoring_format="STABLEFORD",
+            )
+        )
+
+        assert response.match_format is None
+        assert response.scoring_format == "STABLEFORD"
+        assert response.participants[0].team is None
+
     async def test_golf_course_not_found_raises(self, qm_uow, golf_course_uow, user_uow):
         creator = await create_user(user_uow, "creator2@test.com")
         use_case = CreateQuickMatchUseCase(qm_uow, golf_course_uow, user_uow)

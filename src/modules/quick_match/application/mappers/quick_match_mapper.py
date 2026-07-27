@@ -62,7 +62,10 @@ class QuickMatchDTOMapper:
             id=quick_match.id.value,
             creator_id=quick_match.creator_id.value,
             golf_course_id=quick_match.golf_course_id.value,
-            match_format=quick_match.match_format.value,
+            match_format=quick_match.match_format.value if quick_match.match_format else None,
+            scoring_format=(
+                quick_match.scoring_format.value if quick_match.scoring_format else None
+            ),
             status=quick_match.status.value,
             name=quick_match.name,
             participants=participants_dto,
