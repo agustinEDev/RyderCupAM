@@ -45,6 +45,8 @@ class QuickMatchParticipant:
         if self.user_id is not None:
             if self.first_name is not None or self.last_name is not None:
                 raise ValueError("Un participante registrado no lleva first_name/last_name.")
+            if self.handicap is not None:
+                raise ValueError("Un participante registrado no lleva handicap manual.")
         else:
             if not self.first_name or not self.first_name.strip():
                 raise ValueError("Un participante invitado requiere first_name.")

@@ -27,6 +27,7 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.quick_match.application.dto.quick_match_dto import (
+    MAX_SCORERS,
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
     CreateQuickMatchRequestDTO,
@@ -133,7 +134,7 @@ class AddGuestParticipantBody(BaseModel):
 class StartQuickMatchBody(BaseModel):
     """Body para iniciar la partida, indicando quien va a anotar (1 a 4)."""
 
-    scorer_ids: list[UUID] = Field(..., min_length=1, max_length=4)
+    scorer_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
 
 
 class SubmitHoleScoreBody(BaseModel):
@@ -410,7 +411,7 @@ async def submit_hole_score(
 async def submit_proxy_hole_score(
     quick_match_id: UUID,
     target_participant_id: UUID,
-    hole_number: int,
+    hole_number: Annotated[int, Path(ge=1, le=18)],
     body: SubmitHoleScoreBody,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SubmitProxyHoleScoreUseCase = Depends(

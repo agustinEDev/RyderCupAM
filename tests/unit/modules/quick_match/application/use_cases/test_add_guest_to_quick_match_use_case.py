@@ -57,6 +57,13 @@ class TestAddGuestToQuickMatchUseCase:
         assert guest_dto.handicap == 18.4
         assert guest_dto.user_id is None
 
+        persisted = await qm_uow.quick_matches.find_by_id(qm.id)
+        guest = next(p for p in persisted.participants if p.is_guest)
+        assert guest.participant_id.value == guest_dto.participant_id
+        assert guest.first_name == "Jane"
+        assert guest.last_name == "Doe"
+        assert guest.handicap == 18.4
+
     async def test_non_creator_cannot_add_guest(self, qm_uow, user_uow):
         creator = await create_user(user_uow, "creator2@test.com")
         qm = await _create_pending_match(qm_uow, creator.id)

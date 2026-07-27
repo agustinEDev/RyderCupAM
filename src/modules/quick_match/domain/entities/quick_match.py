@@ -344,11 +344,6 @@ class QuickMatch:
                     f"{sid} is not a registered participant and cannot be a scorer."
                 )
 
-        if len(scorer_ids) > len(registered_ids):
-            raise InvalidScorerConfigurationViolation(
-                "scorer_ids cannot exceed the number of registered participants."
-            )
-
     def complete(self) -> None:
         """Finaliza la partida (IN_PROGRESS -> COMPLETED)."""
         if not self._status.can_transition_to(QuickMatchStatus.COMPLETED):

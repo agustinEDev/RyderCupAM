@@ -80,6 +80,12 @@ def downgrade() -> None:
         "ALTER TABLE quick_match_hole_scores "
         "RENAME COLUMN participant_id TO player_user_id"
     )
+    # Los scores de invitados (sin cuenta) no tienen fila en users: no se
+    # pueden conservar bajo la FK previa a este cambio, se eliminan.
+    op.execute(
+        "DELETE FROM quick_match_hole_scores "
+        "WHERE player_user_id NOT IN (SELECT id::text FROM users)"
+    )
     op.create_foreign_key(
         "quick_match_hole_scores_player_user_id_fkey",
         "quick_match_hole_scores",

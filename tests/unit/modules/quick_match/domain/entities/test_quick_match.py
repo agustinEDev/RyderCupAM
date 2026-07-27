@@ -231,10 +231,10 @@ class TestQuickMatchStart:
         with pytest.raises(InvalidScorerConfigurationViolation, match="not a registered"):
             qm.start([qm.creator_participant_id, guest.participant_id])
 
-    def test_start_with_too_many_scorers_raises(self):
+    def test_start_with_non_registered_scorer_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         qm.add_participant(_registered())
-        with pytest.raises(InvalidScorerConfigurationViolation):
+        with pytest.raises(InvalidScorerConfigurationViolation, match="not a registered participant"):
             qm.start([qm.creator_participant_id, ParticipantId.generate(), ParticipantId.generate()])
 
     def test_start_with_duplicate_scorers_raises(self):
