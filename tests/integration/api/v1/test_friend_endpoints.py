@@ -64,6 +64,34 @@ class TestSendFriendRequest:
 
         assert response.status_code == 409
 
+    @pytest.mark.asyncio
+    async def test_resend_after_decline_succeeds(self, client: AsyncClient):
+        a = await create_authenticated_user(
+            client, "friend_o@test.com", "P@ssw0rd123!", "Friend", "Oo"
+        )
+        b = await create_authenticated_user(
+            client, "friend_p@test.com", "P@ssw0rd123!", "Friend", "Pp"
+        )
+
+        set_auth_cookies(client, a["cookies"])
+        first_response = await client.post(
+            "/api/v1/friends/requests", json={"addressee_id": b["user"]["id"]}
+        )
+        friendship_id = first_response.json()["id"]
+
+        set_auth_cookies(client, b["cookies"])
+        await client.post(
+            f"/api/v1/friends/requests/{friendship_id}/respond", json={"action": "DECLINE"}
+        )
+
+        set_auth_cookies(client, a["cookies"])
+        second_response = await client.post(
+            "/api/v1/friends/requests", json={"addressee_id": b["user"]["id"]}
+        )
+
+        assert second_response.status_code == 201
+        assert second_response.json()["status"] == "PENDING"
+
 
 class TestRespondFriendRequest:
     """Tests para POST /api/v1/friends/requests/{id}/respond"""
