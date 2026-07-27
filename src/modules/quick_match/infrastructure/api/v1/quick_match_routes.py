@@ -27,6 +27,7 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.quick_match.application.dto.quick_match_dto import (
+    MAX_NAME_LENGTH,
     MAX_SCORERS,
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
@@ -113,7 +114,12 @@ class CreateQuickMatchBody(BaseModel):
 
     golf_course_id: UUID
     match_format: str = Field(..., pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
-    name: str | None = Field(None, max_length=100)
+    name: str | None = Field(None, max_length=MAX_NAME_LENGTH)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
 
 
 class AddParticipantBody(BaseModel):

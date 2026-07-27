@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.modules.quick_match.domain.entities.quick_match import MAX_NAME_LENGTH, MAX_SCORERS
 
@@ -17,6 +17,11 @@ class CreateQuickMatchRequestDTO(BaseModel):
     name: str | None = Field(
         None, max_length=MAX_NAME_LENGTH, description="Nombre opcional para diferenciar la partida"
     )
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
 
 
 class AddParticipantRequestDTO(BaseModel):
