@@ -7,11 +7,11 @@ from src.modules.quick_match.domain.entities.quick_match_hole_score import Quick
 from src.modules.quick_match.domain.repositories.quick_match_hole_score_repository_interface import (
     QuickMatchHoleScoreRepositoryInterface,
 )
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_hole_score_id import (
     QuickMatchHoleScoreId,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
-from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterface):
@@ -31,14 +31,14 @@ class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInter
     ) -> QuickMatchHoleScore | None:
         return await self._session.get(QuickMatchHoleScore, hole_score_id)
 
-    async def find_by_match_hole_and_player(
-        self, quick_match_id: QuickMatchId, hole_number: int, player_user_id: UserId
+    async def find_by_match_hole_and_participant(
+        self, quick_match_id: QuickMatchId, hole_number: int, participant_id: ParticipantId
     ) -> QuickMatchHoleScore | None:
         stmt = select(QuickMatchHoleScore).where(
             and_(
                 QuickMatchHoleScore._quick_match_id == quick_match_id,
                 QuickMatchHoleScore._hole_number == hole_number,
-                QuickMatchHoleScore._player_user_id == player_user_id,
+                QuickMatchHoleScore._participant_id == participant_id,
             )
         )
         result = await self._session.execute(stmt)

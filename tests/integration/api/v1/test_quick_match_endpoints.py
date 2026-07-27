@@ -62,6 +62,7 @@ class TestCreateQuickMatch:
         data = response.json()
         assert data["status"] == "PENDING"
         assert len(data["participants"]) == 1
+        assert data["scorer_ids"] == []
 
     @pytest.mark.asyncio
     async def test_create_with_unapproved_course_returns_422(self, client: AsyncClient):
@@ -106,9 +107,12 @@ class TestQuickMatchFullFlow:
             json={"friend_user_id": friend["user"]["id"]},
         )
         assert add_response.status_code == 201
-        assert len(add_response.json()["participants"]) == 2
+        assert len(add_response.json()["participants"]) == 2  # noqa: PLR2004
 
-        start_response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/start")
+        start_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator["user"]["id"], friend["user"]["id"]]},
+        )
         assert start_response.status_code == 200, start_response.text
         assert start_response.json()["status"] == "IN_PROGRESS"
 
@@ -116,7 +120,7 @@ class TestQuickMatchFullFlow:
             f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": 4}
         )
         assert score_response.status_code == 200
-        assert score_response.json()["score"] == 4
+        assert score_response.json()["score"] == 4  # noqa: PLR2004
 
         set_auth_cookies(client, friend["cookies"])
         friend_score_response = await client.post(
@@ -127,7 +131,7 @@ class TestQuickMatchFullFlow:
         detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
         assert detail_response.status_code == 200
         detail = detail_response.json()
-        assert len(detail["hole_scores"]) == 2
+        assert len(detail["hole_scores"]) == 2  # noqa: PLR2004
         assert detail["standing"]["holes_played"] == 1
 
         set_auth_cookies(client, creator["cookies"])
@@ -181,3 +185,129 @@ class TestQuickMatchFullFlow:
         assert response.status_code == 200
         data = response.json()
         assert data["total_count"] == 1
+
+
+class TestQuickMatchGuestsAndScoringAssignment:
+    """Flujo con jugador invitado (sin cuenta) y anotacion por delegacion."""
+
+    @pytest.mark.asyncio
+    async def test_add_guest_and_proxy_score(self, client: AsyncClient):
+        admin = await create_admin_user(client, "qm_admin5@test.com", "P@ssw0rd123!", "Admin", "Five")
+        creator = await create_authenticated_user(
+            client, "qm_creator6@test.com", "P@ssw0rd123!", "Creator", "Six"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+
+        guest_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants/guest",
+            json={"first_name": "Jane", "last_name": "Doe", "handicap": 18.4},
+        )
+        assert guest_response.status_code == 201, guest_response.text
+        guest_dto = next(p for p in guest_response.json()["participants"] if p["is_guest"])
+        assert guest_dto["name"] == "Jane Doe"
+        assert guest_dto["handicap"] == 18.4  # noqa: PLR2004
+        guest_participant_id = guest_dto["participant_id"]
+
+        # Solo el creador anota (1 anotador): debe cubrir tambien al invitado.
+        start_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator["user"]["id"]]},
+        )
+        assert start_response.status_code == 200, start_response.text
+
+        own_score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": 4}
+        )
+        assert own_score_response.status_code == 200
+
+        proxy_score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{guest_participant_id}"
+            "/holes/1/score",
+            json={"score": 6},
+        )
+        assert proxy_score_response.status_code == 200, proxy_score_response.text
+        proxy_data = proxy_score_response.json()
+        assert proxy_data["participant_id"] == guest_participant_id
+        assert proxy_data["recorded_by_participant_id"] == creator["user"]["id"]
+
+        detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+        assert len(detail["hole_scores"]) == 2  # noqa: PLR2004
+        assert len(detail["scoring_assignments"]) == 1
+        assert set(detail["scoring_assignments"][0]["covered_participant_ids"]) == {
+            creator["user"]["id"],
+            guest_participant_id,
+        }
+
+    @pytest.mark.asyncio
+    async def test_non_scorer_cannot_self_submit(self, client: AsyncClient):
+        admin = await create_admin_user(client, "qm_admin6@test.com", "P@ssw0rd123!", "Admin", "Six")
+        creator = await create_authenticated_user(
+            client, "qm_creator7@test.com", "P@ssw0rd123!", "Creator", "Seven"
+        )
+        friend = await create_authenticated_user(
+            client, "qm_friend7@test.com", "P@ssw0rd123!", "Friend", "Seven"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={"friend_user_id": friend["user"]["id"]},
+        )
+        # Solo el creador anota; `friend` es participante pero no anotador.
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator["user"]["id"]]},
+        )
+
+        set_auth_cookies(client, friend["cookies"])
+        response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": 5}
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_start_without_creator_as_scorer_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(client, "qm_admin7@test.com", "P@ssw0rd123!", "Admin", "Seven")
+        creator = await create_authenticated_user(
+            client, "qm_creator8@test.com", "P@ssw0rd123!", "Creator", "Eight"
+        )
+        friend = await create_authenticated_user(
+            client, "qm_friend8@test.com", "P@ssw0rd123!", "Friend", "Eight"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={"friend_user_id": friend["user"]["id"]},
+        )
+
+        response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [friend["user"]["id"]]},
+        )
+
+        assert response.status_code == 422

@@ -30,11 +30,16 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
     InvalidQuickMatchStatusViolation,
+    InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
     NotQuickMatchParticipantViolation,
     QuickMatchFullViolation,
 )
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
+)
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -50,6 +55,14 @@ def _make_quick_match(match_format=MatchFormat.SINGLES, **overrides):
     return QuickMatch.create(**defaults)
 
 
+def _registered(team=None):
+    return QuickMatchParticipant.for_user(UserId(uuid4()), team=team)
+
+
+def _guest(team=None):
+    return QuickMatchParticipant.for_guest(first_name="Guest", last_name="Player", team=team)
+
+
 class TestQuickMatchCreate:
     def test_create_sets_pending_status(self):
         qm = _make_quick_match()
@@ -58,7 +71,7 @@ class TestQuickMatchCreate:
     def test_create_adds_creator_as_first_participant(self):
         qm = _make_quick_match()
         assert len(qm.participants) == 1
-        assert qm.participants[0].user_id == qm.creator_id
+        assert qm.participants[0].participant_id == qm.creator_participant_id
 
     def test_create_singles_creator_has_no_team(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -76,33 +89,41 @@ class TestQuickMatchCreate:
 
 
 class TestQuickMatchAddParticipant:
-    def test_add_participant_singles_succeeds(self):
+    def test_add_registered_participant_singles_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         qm.clear_domain_events()
-        other = UserId(uuid4())
+        other = _registered()
         qm.add_participant(other)
 
-        assert qm.is_participant(other)
+        assert qm.is_participant(other.participant_id)
         assert qm.is_roster_complete()
         events = qm.get_domain_events()
         assert len(events) == 1
         assert isinstance(events[0], QuickMatchParticipantAddedEvent)
 
+    def test_add_guest_participant_succeeds(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        guest = _guest()
+        qm.add_participant(guest)
+
+        assert qm.is_participant(guest.participant_id)
+        assert qm.find_participant(guest.participant_id).is_guest
+
     def test_add_participant_singles_rejects_team(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         with pytest.raises(InvalidTeamAssignmentViolation):
-            qm.add_participant(UserId(uuid4()), team="A")
+            qm.add_participant(_registered(team="A"))
 
     def test_add_participant_fourball_requires_team(self):
         qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
         with pytest.raises(InvalidTeamAssignmentViolation):
-            qm.add_participant(UserId(uuid4()), team=None)
+            qm.add_participant(_registered(team=None))
 
     def test_add_participant_fourball_fills_teams(self):
         qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
-        qm.add_participant(UserId(uuid4()), team="A")
-        qm.add_participant(UserId(uuid4()), team="B")
-        qm.add_participant(UserId(uuid4()), team="B")
+        qm.add_participant(_registered(team="A"))
+        qm.add_participant(_registered(team="B"))
+        qm.add_participant(_guest(team="B"))
 
         assert qm.is_roster_complete()
         assert qm._team_count("A") == 2
@@ -110,39 +131,41 @@ class TestQuickMatchAddParticipant:
 
     def test_add_participant_team_full_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
-        qm.add_participant(UserId(uuid4()), team="A")
+        qm.add_participant(_registered(team="A"))
         with pytest.raises(QuickMatchFullViolation):
-            qm.add_participant(UserId(uuid4()), team="A")
+            qm.add_participant(_registered(team="A"))
 
     def test_add_duplicate_participant_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        creator_participant = QuickMatchParticipant.for_user(qm.creator_id)
         with pytest.raises(DuplicateParticipantViolation):
-            qm.add_participant(qm.creator_id)
+            qm.add_participant(creator_participant)
 
     def test_add_participant_when_full_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
+        qm.add_participant(_registered())
         with pytest.raises(QuickMatchFullViolation):
-            qm.add_participant(UserId(uuid4()))
+            qm.add_participant(_registered())
 
     def test_add_participant_not_pending_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
-        qm.start()
+        other = _registered()
+        qm.add_participant(other)
+        qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
-            qm.add_participant(UserId(uuid4()))
+            qm.add_participant(_registered())
 
 
 class TestQuickMatchRemoveParticipant:
     def test_remove_participant_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        other = UserId(uuid4())
+        other = _registered()
         qm.add_participant(other)
         qm.clear_domain_events()
 
-        qm.remove_participant(other)
+        qm.remove_participant(other.participant_id)
 
-        assert not qm.is_participant(other)
+        assert not qm.is_participant(other.participant_id)
         events = qm.get_domain_events()
         assert len(events) == 1
         assert isinstance(events[0], QuickMatchParticipantRemovedEvent)
@@ -150,31 +173,32 @@ class TestQuickMatchRemoveParticipant:
     def test_remove_creator_raises(self):
         qm = _make_quick_match()
         with pytest.raises(CreatorCannotBeRemovedViolation):
-            qm.remove_participant(qm.creator_id)
+            qm.remove_participant(qm.creator_participant_id)
 
     def test_remove_non_participant_raises(self):
         qm = _make_quick_match()
         with pytest.raises(NotQuickMatchParticipantViolation):
-            qm.remove_participant(UserId(uuid4()))
+            qm.remove_participant(ParticipantId.generate())
 
     def test_remove_participant_not_pending_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        other = UserId(uuid4())
+        other = _registered()
         qm.add_participant(other)
-        qm.start()
+        qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
-            qm.remove_participant(other)
+            qm.remove_participant(other.participant_id)
 
 
 class TestQuickMatchStart:
     def test_start_with_complete_roster_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
+        qm.add_participant(_registered())
         qm.clear_domain_events()
 
-        qm.start()
+        qm.start([qm.creator_participant_id])
 
         assert qm.status == QuickMatchStatus.IN_PROGRESS
+        assert qm.scorer_ids == [qm.creator_participant_id]
         events = qm.get_domain_events()
         assert len(events) == 1
         assert isinstance(events[0], QuickMatchStartedEvent)
@@ -182,21 +206,49 @@ class TestQuickMatchStart:
     def test_start_with_incomplete_roster_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         with pytest.raises(IncompleteRosterViolation):
-            qm.start()
+            qm.start([qm.creator_participant_id])
 
     def test_start_when_not_pending_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
-        qm.start()
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
-            qm.start()
+            qm.start([qm.creator_participant_id])
+
+    def test_start_without_creator_in_scorers_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+        with pytest.raises(InvalidScorerConfigurationViolation, match="creator"):
+            qm.start([other.participant_id])
+
+    def test_start_with_guest_as_scorer_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        qm.add_participant(_registered(team="A"))
+        qm.add_participant(_registered(team="B"))
+        guest = _guest(team="B")
+        qm.add_participant(guest)
+        with pytest.raises(InvalidScorerConfigurationViolation, match="not a registered"):
+            qm.start([qm.creator_participant_id, guest.participant_id])
+
+    def test_start_with_non_registered_scorer_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        qm.add_participant(_registered())
+        with pytest.raises(InvalidScorerConfigurationViolation, match="not a registered participant"):
+            qm.start([qm.creator_participant_id, ParticipantId.generate(), ParticipantId.generate()])
+
+    def test_start_with_duplicate_scorers_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        qm.add_participant(_registered())
+        with pytest.raises(InvalidScorerConfigurationViolation, match="duplicates"):
+            qm.start([qm.creator_participant_id, qm.creator_participant_id])
 
 
 class TestQuickMatchComplete:
     def test_complete_from_in_progress_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
-        qm.start()
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
         qm.clear_domain_events()
 
         qm.complete()
@@ -221,15 +273,15 @@ class TestQuickMatchCancel:
 
     def test_cancel_from_in_progress_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
-        qm.start()
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
         qm.cancel()
         assert qm.status == QuickMatchStatus.CANCELLED
 
     def test_cancel_from_completed_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
-        qm.add_participant(UserId(uuid4()))
-        qm.start()
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
         qm.complete()
         with pytest.raises(InvalidQuickMatchStatusViolation):
             qm.cancel()
@@ -241,6 +293,14 @@ class TestQuickMatchQueries:
 
     def test_capacity_fourball(self):
         assert _make_quick_match(match_format=MatchFormat.FOURBALL).capacity() == 4
+
+    def test_registered_participants_excludes_guests(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        guest = _guest()
+        qm.add_participant(guest)
+        registered = qm.registered_participants()
+        assert guest not in registered
+        assert len(registered) == 1
 
     def test_reconstruct_does_not_emit_events(self):
         qm = QuickMatch.reconstruct(

@@ -4,6 +4,7 @@ from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_repository_interface import (
     QuickMatchRepositoryInterface,
 )
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -38,7 +39,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         results = [
             qm
             for qm in self._quick_matches.values()
-            if qm.is_participant(user_id) and (status is None or qm.status == status)
+            if qm.is_participant(ParticipantId(user_id.value)) and (status is None or qm.status == status)
         ]
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
@@ -49,5 +50,5 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         return sum(
             1
             for qm in self._quick_matches.values()
-            if qm.is_participant(user_id) and (status is None or qm.status == status)
+            if qm.is_participant(ParticipantId(user_id.value)) and (status is None or qm.status == status)
         )

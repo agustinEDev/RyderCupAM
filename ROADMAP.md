@@ -25,6 +25,15 @@
 - **Seguridad**: añadir participante exige `Friendship` ACCEPTED (403 si no); solo el creador inicia/completa/cancela/añade; campo de golf debe estar `APPROVED`.
 - **Tests**: 77 unit + 5 integration (flujo completo E2E), 100% pasando. Lint y mypy limpios.
 - Validado además contra el clúster K8s local (imagen desplegada expone los 9 endpoints nuevos; tests de integración pasando contra el Postgres del clúster).
+- PR #116 (`feature/quick-match` → `feature/friends-system`), pendiente de review.
+
+### Módulo `quick_match` — invitados y reparto de anotación ✅
+
+- **Invitados sin cuenta**: `QuickMatchParticipant` admite jugadores invitados (nombre/apellidos/hándicap manual), identificados por un `ParticipantId` común a registrados e invitados.
+- **Anotadores configurables**: al iniciar la partida, el creador indica entre 1 y 4 participantes registrados (siempre incluido él mismo) que anotarán resultados. `ScoringCoverageService` reparte a los no-anotadores (invitados o registrados no seleccionados) lo más uniforme posible; el sobrante de un reparto no exacto lo absorbe el creador.
+- **Endpoint de delegación**: `POST /quick-matches/{id}/participants/{participant_id}/holes/{n}/score` permite a un anotador registrar el resultado de quien tenga asignado.
+- **Tests**: 109 unit + 8 integration, 100% pasando. Migración `9a9440cebb07` verificada (aplicada automáticamente al redesplegar en K8s, esquema correcto, sin pérdida de datos).
+- Rama `feature/quick-match-guests-scoring` (sobre `feature/quick-match`), pendiente de PR.
 
 ---
 

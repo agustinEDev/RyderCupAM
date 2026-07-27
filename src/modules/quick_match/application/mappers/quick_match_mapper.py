@@ -26,21 +26,36 @@ class QuickMatchDTOMapper:
 
         Si `users_by_id` se proporciona (precargado en bloque por el caller,
         p.ej. al listar varias partidas), se evita una query por participante.
+        Los invitados (`is_guest=True`) no tienen `user_id` y se resuelven
+        directamente desde sus datos manuales, sin tocar `users_by_id`.
         """
         if users_by_id is None:
+            registered_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
             async with user_uow:
                 users_by_id = {}
-                for p in quick_match.participants:
-                    user = await user_uow.users.find_by_id(p.user_id)
+                for user_id in registered_ids:
+                    user = await user_uow.users.find_by_id(user_id)
                     if user:
-                        users_by_id[p.user_id] = user
+                        users_by_id[user_id] = user
 
         participants_dto = []
         for p in quick_match.participants:
-            user = users_by_id.get(p.user_id)
-            name = f"{user.first_name} {user.last_name}" if user else "Unknown"
+            if p.is_guest:
+                name = f"{p.first_name} {p.last_name}"
+                handicap = p.handicap
+            else:
+                user = users_by_id.get(p.user_id)
+                name = f"{user.first_name} {user.last_name}" if user else "Unknown"
+                handicap = None
             participants_dto.append(
-                QuickMatchParticipantDTO(user_id=p.user_id.value, name=name, team=p.team)
+                QuickMatchParticipantDTO(
+                    participant_id=p.participant_id.value,
+                    user_id=p.user_id.value if p.user_id else None,
+                    name=name,
+                    handicap=handicap,
+                    team=p.team,
+                    is_guest=p.is_guest,
+                )
             )
 
         return QuickMatchResponseDTO(
@@ -50,6 +65,7 @@ class QuickMatchDTOMapper:
             match_format=quick_match.match_format.value,
             status=quick_match.status.value,
             participants=participants_dto,
+            scorer_ids=[sid.value for sid in quick_match.scorer_ids],
             created_at=quick_match.created_at,
             updated_at=quick_match.updated_at,
         )

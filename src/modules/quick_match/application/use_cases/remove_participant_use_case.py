@@ -12,6 +12,7 @@ from src.modules.quick_match.application.mappers.quick_match_mapper import Quick
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -23,7 +24,8 @@ class RemoveParticipantUseCase:
     """
     Elimina a un participante de una partida rapida.
 
-    Autorizacion: el propio participante (leave) o el creador (kick).
+    Autorizacion: el propio participante registrado (leave) o el creador
+    (kick, unica via posible para eliminar a un invitado sin cuenta).
     """
 
     def __init__(self, uow: QuickMatchUnitOfWorkInterface, user_uow: UserUnitOfWorkInterface):
@@ -32,7 +34,8 @@ class RemoveParticipantUseCase:
 
     async def execute(self, request: RemoveParticipantRequestDTO) -> QuickMatchResponseDTO:
         requester_id = UserId(request.requester_id)
-        target_id = UserId(request.target_user_id)
+        requester_participant_id = ParticipantId(requester_id.value)
+        target_participant_id = ParticipantId(request.target_participant_id)
 
         async with self._uow:
             quick_match = await self._uow.quick_matches.find_by_id(
@@ -41,12 +44,14 @@ class RemoveParticipantUseCase:
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {request.quick_match_id}")
 
-            if requester_id not in (target_id, quick_match.creator_id):
+            is_self_leave = requester_participant_id == target_participant_id
+            is_creator = quick_match.creator_id == requester_id
+            if not (is_self_leave or is_creator):
                 raise NotAuthorizedToRemoveError(
                     "Only the participant themselves or the creator can remove a participant."
                 )
 
-            quick_match.remove_participant(target_id)
+            quick_match.remove_participant(target_participant_id)
             await self._uow.quick_matches.update(quick_match)
 
         return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)

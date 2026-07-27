@@ -2,7 +2,7 @@
 SQLAlchemy Mapper for QuickMatch aggregate (QuickMatch module).
 
 Tablas:
-- quick_matches (agregado raiz; participantes como JSONB embebido)
+- quick_matches (agregado raiz; participantes y scorer_ids como JSONB embebido)
 - quick_match_hole_scores (scores por hoyo, modelo simple sin validacion dual)
 """
 
@@ -18,6 +18,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_hole_score_id import (
     QuickMatchHoleScoreId,
 )
@@ -70,6 +71,25 @@ class QuickMatchHoleScoreIdType(sqlalchemy.types.TypeDecorator[QuickMatchHoleSco
         if value is None:
             return None
         return QuickMatchHoleScoreId(value)
+
+
+class ParticipantIdType(sqlalchemy.types.TypeDecorator[ParticipantId]):
+    """TypeDecorator para ParticipantId Value Object."""
+
+    impl = UUID(as_uuid=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: ParticipantId | None, dialect: Any) -> uuid.UUID | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(
+        self, value: uuid.UUID | None, dialect: Any
+    ) -> ParticipantId | None:
+        if value is None:
+            return None
+        return ParticipantId(value)
 
 
 class QuickMatchUserIdType(sqlalchemy.types.TypeDecorator[UserId]):
@@ -153,7 +173,14 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     TypeDecorator para serializar list[QuickMatchParticipant] a/desde JSONB.
 
     Cada QuickMatchParticipant se serializa como:
-    {"user_id": "uuid-string", "team": "A" | "B" | null}
+    {
+        "participant_id": "uuid-string",
+        "user_id": "uuid-string" | null,       # null para invitados
+        "first_name": "..." | null,             # solo invitados
+        "last_name": "..." | null,              # solo invitados
+        "handicap": number | null,              # solo invitados (opcional)
+        "team": "A" | "B" | null
+    }
     """
 
     impl = JSONB
@@ -162,15 +189,51 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     def process_bind_param(self, value: list | None, dialect: Any) -> list | None:
         if value is None:
             return None
-        return [{"user_id": str(p.user_id.value), "team": p.team} for p in value]
+        return [
+            {
+                "participant_id": str(p.participant_id.value),
+                "user_id": str(p.user_id.value) if p.user_id else None,
+                "first_name": p.first_name,
+                "last_name": p.last_name,
+                "handicap": p.handicap,
+                "team": p.team,
+            }
+            for p in value
+        ]
 
     def process_result_value(self, value: list | None, dialect: Any) -> list | None:
         if value is None:
             return None
-        return [
-            QuickMatchParticipant(user_id=UserId(uuid.UUID(p["user_id"])), team=p["team"])
-            for p in value
-        ]
+        participants = []
+        for p in value:
+            participants.append(
+                QuickMatchParticipant(
+                    participant_id=ParticipantId(p["participant_id"]),
+                    user_id=UserId(uuid.UUID(p["user_id"])) if p.get("user_id") else None,
+                    first_name=p.get("first_name"),
+                    last_name=p.get("last_name"),
+                    handicap=p.get("handicap"),
+                    team=p.get("team"),
+                )
+            )
+        return participants
+
+
+class ScorerIdsJsonType(sqlalchemy.types.TypeDecorator[list]):
+    """TypeDecorator para serializar list[ParticipantId] (scorer_ids) a/desde JSONB."""
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: list | None, dialect: Any) -> list | None:
+        if value is None:
+            return None
+        return [str(pid.value) for pid in value]
+
+    def process_result_value(self, value: list | None, dialect: Any) -> list | None:
+        if value is None:
+            return []
+        return [ParticipantId(v) for v in value]
 
 
 # ============================================================================
@@ -196,6 +259,7 @@ quick_matches_table = Table(
     Column("match_format", MatchFormatType, nullable=False),
     Column("status", QuickMatchStatusType, nullable=False),
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
+    Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -216,13 +280,10 @@ quick_match_hole_scores_table = Table(
         nullable=False,
     ),
     Column("hole_number", Integer, nullable=False),
-    Column(
-        "player_user_id",
-        QuickMatchUserIdType,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-    ),
+    # participant_id NO tiene FK a `users`: puede ser un invitado sin cuenta.
+    Column("participant_id", ParticipantIdType, nullable=False),
     Column("score", Integer, nullable=False),
+    Column("recorded_by_participant_id", ParticipantIdType, nullable=False),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -245,6 +306,7 @@ def start_quick_match_mappers() -> None:
                 "_match_format": quick_matches_table.c.match_format,
                 "_status": quick_matches_table.c.status,
                 "_participants": quick_matches_table.c.participants,
+                "_scorer_ids": quick_matches_table.c.scorer_ids,
                 "_created_at": quick_matches_table.c.created_at,
                 "_updated_at": quick_matches_table.c.updated_at,
             },
@@ -258,8 +320,11 @@ def start_quick_match_mappers() -> None:
                 "_id": quick_match_hole_scores_table.c.id,
                 "_quick_match_id": quick_match_hole_scores_table.c.quick_match_id,
                 "_hole_number": quick_match_hole_scores_table.c.hole_number,
-                "_player_user_id": quick_match_hole_scores_table.c.player_user_id,
+                "_participant_id": quick_match_hole_scores_table.c.participant_id,
                 "_score": quick_match_hole_scores_table.c.score,
+                "_recorded_by_participant_id": (
+                    quick_match_hole_scores_table.c.recorded_by_participant_id
+                ),
                 "_created_at": quick_match_hole_scores_table.c.created_at,
                 "_updated_at": quick_match_hole_scores_table.c.updated_at,
             },

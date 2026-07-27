@@ -15,6 +15,9 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -70,7 +73,8 @@ class AddFriendToQuickMatchUseCase:
                     "Only the quick match creator can add participants."
                 )
 
-            quick_match.add_participant(friend_id, team=request.team)
+            participant = QuickMatchParticipant.for_user(friend_id, team=request.team)
+            quick_match.add_participant(participant)
             await self._uow.quick_matches.update(quick_match)
 
         return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
