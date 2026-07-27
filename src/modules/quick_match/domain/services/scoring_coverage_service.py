@@ -13,6 +13,7 @@ Reglas (confirmadas con el usuario):
 - El sobrante de un reparto no exacto lo absorbe el creador.
 """
 
+from ..exceptions.quick_match_violations import InvalidScorerConfigurationViolation
 from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
 
@@ -38,6 +39,11 @@ class ScoringCoverageService:
         Returns:
             Dict {scorer_participant_id: [participant_ids cubiertos]}
         """
+        if creator_participant_id not in scorer_ids:
+            raise InvalidScorerConfigurationViolation(
+                "creator_participant_id must be included in scorer_ids."
+            )
+
         all_ids = [p.participant_id for p in participants]
         non_scorer_ids = [pid for pid in all_ids if pid not in scorer_ids]
 

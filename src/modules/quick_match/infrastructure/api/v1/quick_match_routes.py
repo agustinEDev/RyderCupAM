@@ -9,7 +9,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.config.dependencies import (
     get_add_friend_to_quick_match_use_case,
@@ -135,6 +135,13 @@ class StartQuickMatchBody(BaseModel):
     """Body para iniciar la partida, indicando quien va a anotar (1 a 4)."""
 
     scorer_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
+
+    @field_validator("scorer_ids")
+    @classmethod
+    def _unique_scorer_ids(cls, v: list[UUID]) -> list[UUID]:
+        if len(set(v)) != len(v):
+            raise ValueError("scorer_ids must not contain duplicates.")
+        return v
 
 
 class SubmitHoleScoreBody(BaseModel):

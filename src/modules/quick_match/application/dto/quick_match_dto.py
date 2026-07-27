@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-MAX_SCORERS = 4
+from src.modules.quick_match.domain.entities.quick_match import MAX_SCORERS
 
 
 class CreateQuickMatchRequestDTO(BaseModel):

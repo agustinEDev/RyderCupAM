@@ -56,7 +56,17 @@ class GetQuickMatchUseCase:
 
             hole_scores = await self._uow.quick_match_hole_scores.find_by_match(quick_match.id)
 
-        base_dto = await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
+        registered_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
+        async with self._user_uow:
+            users_by_id = {}
+            for user_id in registered_ids:
+                user = await self._user_uow.users.find_by_id(user_id)
+                if user:
+                    users_by_id[user_id] = user
+
+        base_dto = await QuickMatchDTOMapper.to_response_dto(
+            quick_match, self._user_uow, users_by_id=users_by_id
+        )
 
         hole_scores_dto = [
             HoleScoreResponseDTO(
@@ -69,7 +79,7 @@ class GetQuickMatchUseCase:
         ]
 
         standing_dto = self._compute_standing(quick_match, hole_scores)
-        assignments_dto = await self._build_assignments(quick_match)
+        assignments_dto = self._build_assignments(quick_match, users_by_id)
 
         return QuickMatchDetailResponseDTO(
             **base_dto.model_dump(),
@@ -78,7 +88,7 @@ class GetQuickMatchUseCase:
             scoring_assignments=assignments_dto,
         )
 
-    async def _build_assignments(self, quick_match) -> list[ScoringAssignmentDTO]:
+    def _build_assignments(self, quick_match, users_by_id) -> list[ScoringAssignmentDTO]:
         if not quick_match.scorer_ids:
             return []
 
@@ -91,8 +101,7 @@ class GetQuickMatchUseCase:
         result = []
         for scorer_id, covered_ids in assignments.items():
             scorer = quick_match.find_participant(scorer_id)
-            async with self._user_uow:
-                user = await self._user_uow.users.find_by_id(scorer.user_id) if scorer else None
+            user = users_by_id.get(scorer.user_id) if scorer else None
             scorer_name = f"{user.first_name} {user.last_name}" if user else "Unknown"
             result.append(
                 ScoringAssignmentDTO(
