@@ -87,6 +87,11 @@ class TestCreateQuickMatch:
         assert response.status_code == 201
         assert response.json()["name"] == "Viernes con Rafa"
 
+        quick_match_id = response.json()["id"]
+        detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
+        assert detail_response.status_code == 200
+        assert detail_response.json()["name"] == "Viernes con Rafa"
+
     @pytest.mark.asyncio
     async def test_create_without_name_returns_null(self, client: AsyncClient):
         admin = await create_admin_user(
