@@ -57,7 +57,11 @@ class SendFriendRequestUseCase:
                         "A friendship or pending request already exists between both users."
                     )
                 # DECLINED es terminal: se elimina el registro anterior y se reenvia.
+                # Flush explicito: el indice unico uq_friendship_pair (LEAST/GREATEST)
+                # rechaza el INSERT si el DELETE no se ha aplicado ya en BD (SQLAlchemy
+                # ordena inserts antes que deletes en el flush por defecto).
                 await self._uow.friendships.remove(existing)
+                await self._uow.flush()
 
             friendship = Friendship.create(
                 id=FriendshipId.generate(),
