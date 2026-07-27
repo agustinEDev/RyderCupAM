@@ -7,8 +7,9 @@ paths-ignore:
   - tests/**
   - **/test_*.py
   - **/*_test.py
-  - k8s/*-secret.yaml  # Template secrets with placeholders
-  - k8s/api-secret.yaml
+  # k8s/api-secret.yaml is NOT excluded: it must only ever contain
+  # genuine placeholders. Real values live in k8s/api-secret.local.yaml
+  # (gitignored, never committed) — see k8s/README.md.
 
 # Specific secrets to ignore (these are examples/placeholders, not real secrets)
 matches-ignore:

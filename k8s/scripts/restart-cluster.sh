@@ -83,7 +83,10 @@ apply_configs() {
         print_success "api-configmap aplicado"
     fi
 
-    if [ -f "$k8s_dir/api-secret.yaml" ]; then
+    if [ -f "$k8s_dir/api-secret.local.yaml" ]; then
+        kubectl apply -f "$k8s_dir/api-secret.local.yaml"
+        print_success "api-secret.local aplicado"
+    elif [ -f "$k8s_dir/api-secret.yaml" ]; then
         kubectl apply -f "$k8s_dir/api-secret.yaml"
         print_success "api-secret aplicado"
     fi
