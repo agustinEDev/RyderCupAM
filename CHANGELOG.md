@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Migration `9a9440cebb07`: adds `quick_matches.scorer_ids` (JSONB); renames `quick_match_hole_scores.player_user_id` → `participant_id` (drops its FK to `users`, type changes `CHAR(36)` → `uuid`) and adds `recorded_by_participant_id`.
 - 109 unit tests (up from 77: new `ParticipantId`/guest-variant VO tests, `ScoringCoverageService` tests, `AddGuestToQuickMatchUseCase`, `SubmitProxyHoleScoreUseCase`, updated entity/use case tests for the new participant model) + 8 integration tests (up from 5: guest + proxy-scoring flow, non-scorer rejection, invalid scorer configuration).
 
+**Quick Match — Optional Name**
+
+- Users could create several quick matches with the same golf course and format, with no way to tell them apart in the frontend history/dashboard views. `QuickMatch` now accepts an optional free-text `name` (trimmed, max 100 chars, blank → `null`), plain `str | None` rather than a Value Object — it's just a label, unlike `CompetitionName` which normalizes case for tournament listings.
+- `POST /api/v1/quick-matches` accepts `name` in the body; every response (`QuickMatchResponseDTO` and detail) now includes it.
+- New `quick_matches.name` column (Alembic migration `de76ad1f8cf2`, nullable, chained after `9a9440cebb07`).
+- 6 new unit tests (trimming, blank → null, max-length validation) + 3 integration tests (round-trip, absent → null, over-max-length → 422).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed

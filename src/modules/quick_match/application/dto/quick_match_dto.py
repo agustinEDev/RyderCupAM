@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from src.modules.quick_match.domain.entities.quick_match import MAX_SCORERS
+from src.modules.quick_match.domain.entities.quick_match import MAX_NAME_LENGTH, MAX_SCORERS
 
 
 class CreateQuickMatchRequestDTO(BaseModel):
@@ -14,6 +14,9 @@ class CreateQuickMatchRequestDTO(BaseModel):
     creator_id: UUID
     golf_course_id: UUID
     match_format: str = Field(..., pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
+    name: str | None = Field(
+        None, max_length=MAX_NAME_LENGTH, description="Nombre opcional para diferenciar la partida"
+    )
 
 
 class AddParticipantRequestDTO(BaseModel):
@@ -90,6 +93,7 @@ class QuickMatchResponseDTO(BaseModel):
     golf_course_id: UUID
     match_format: str
     status: str
+    name: str | None = None
     participants: list[QuickMatchParticipantDTO]
     scorer_ids: list[UUID]
     created_at: datetime

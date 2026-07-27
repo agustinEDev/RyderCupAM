@@ -65,6 +65,70 @@ class TestCreateQuickMatch:
         assert data["scorer_ids"] == []
 
     @pytest.mark.asyncio
+    async def test_create_with_name_round_trips(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_name@test.com", "P@ssw0rd123!", "Admin", "Name"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_name@test.com", "P@ssw0rd123!", "Creator", "Name"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={
+                "golf_course_id": golf_course_id,
+                "match_format": "SINGLES",
+                "name": "  Viernes con Rafa  ",
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["name"] == "Viernes con Rafa"
+
+    @pytest.mark.asyncio
+    async def test_create_without_name_returns_null(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_noname@test.com", "P@ssw0rd123!", "Admin", "NoName"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_noname@test.com", "P@ssw0rd123!", "Creator", "NoName"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+
+        assert response.status_code == 201
+        assert response.json()["name"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_with_name_over_max_length_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_long@test.com", "P@ssw0rd123!", "Admin", "Long"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_long@test.com", "P@ssw0rd123!", "Creator", "Long"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={
+                "golf_course_id": golf_course_id,
+                "match_format": "SINGLES",
+                "name": "a" * 101,
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_create_with_unapproved_course_returns_422(self, client: AsyncClient):
         creator = await create_authenticated_user(
             client, "qm_creator2@test.com", "P@ssw0rd123!", "Creator", "Two"

@@ -113,6 +113,7 @@ class CreateQuickMatchBody(BaseModel):
 
     golf_course_id: UUID
     match_format: str = Field(..., pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
+    name: str | None = Field(None, max_length=100)
 
 
 class AddParticipantBody(BaseModel):
@@ -174,6 +175,7 @@ async def create_quick_match(
             creator_id=current_user.id,
             golf_course_id=body.golf_course_id,
             match_format=body.match_format,
+            name=body.name,
         )
         return await use_case.execute(request_dto)
 

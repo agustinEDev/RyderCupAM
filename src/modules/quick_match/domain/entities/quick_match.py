@@ -35,6 +35,7 @@ from ..value_objects.quick_match_participant import QuickMatchParticipant
 from ..value_objects.quick_match_status import QuickMatchStatus
 
 MAX_SCORERS = 4
+MAX_NAME_LENGTH = 100
 
 
 class QuickMatch:
@@ -61,6 +62,7 @@ class QuickMatch:
         match_format: MatchFormat,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        name: str | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -72,10 +74,23 @@ class QuickMatch:
         self._match_format = match_format
         self._status = status
         self._participants = list(participants)
+        self._name = self._validate_name(name)
         self._scorer_ids = list(scorer_ids) if scorer_ids else []
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
+
+    @staticmethod
+    def _validate_name(name: str | None) -> str | None:
+        """Nombre libre y opcional para diferenciar partidas (sin normalizar mayusculas)."""
+        if name is None:
+            return None
+        trimmed = name.strip()
+        if not trimmed:
+            return None
+        if len(trimmed) > MAX_NAME_LENGTH:
+            raise ValueError(f"Quick match name cannot exceed {MAX_NAME_LENGTH} characters.")
+        return trimmed
 
     # ===========================================
     # FACTORY METHODS
@@ -88,6 +103,7 @@ class QuickMatch:
         creator_id: UserId,
         golf_course_id: GolfCourseId,
         match_format: MatchFormat,
+        name: str | None = None,
     ) -> "QuickMatch":
         """Factory method: crea una partida rapida con el creador como primer participante."""
         now = datetime.now()
@@ -101,6 +117,7 @@ class QuickMatch:
             match_format=match_format,
             status=QuickMatchStatus.PENDING,
             participants=[creator_participant],
+            name=name,
             created_at=now,
             updated_at=now,
         )
@@ -132,6 +149,7 @@ class QuickMatch:
         match_format: MatchFormat,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        name: str | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -144,6 +162,7 @@ class QuickMatch:
             match_format=match_format,
             status=status,
             participants=participants,
+            name=name,
             scorer_ids=scorer_ids,
             created_at=created_at,
             updated_at=updated_at,
@@ -173,6 +192,10 @@ class QuickMatch:
     @property
     def match_format(self) -> MatchFormat:
         return self._match_format
+
+    @property
+    def name(self) -> str | None:
+        return self._name
 
     @property
     def status(self) -> QuickMatchStatus:

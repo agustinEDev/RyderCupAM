@@ -56,6 +56,7 @@ class CreateQuickMatchUseCase:
             creator_id=UserId(request.creator_id),
             golf_course_id=golf_course_id,
             match_format=MatchFormat(request.match_format),
+            name=request.name,
         )
 
         async with self._uow:

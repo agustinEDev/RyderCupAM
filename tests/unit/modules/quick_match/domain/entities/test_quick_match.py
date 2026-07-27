@@ -88,6 +88,32 @@ class TestQuickMatchCreate:
         assert any(isinstance(e, QuickMatchParticipantAddedEvent) for e in events)
 
 
+class TestQuickMatchName:
+    def test_create_without_name_defaults_to_none(self):
+        qm = _make_quick_match()
+        assert qm.name is None
+
+    def test_create_with_name_stores_it(self):
+        qm = _make_quick_match(name="Viernes con los del club")
+        assert qm.name == "Viernes con los del club"
+
+    def test_create_trims_surrounding_whitespace(self):
+        qm = _make_quick_match(name="  Revancha  ")
+        assert qm.name == "Revancha"
+
+    def test_create_blank_name_normalizes_to_none(self):
+        qm = _make_quick_match(name="   ")
+        assert qm.name is None
+
+    def test_create_rejects_name_over_max_length(self):
+        with pytest.raises(ValueError, match="cannot exceed 100 characters"):
+            _make_quick_match(name="a" * 101)
+
+    def test_create_accepts_name_at_max_length(self):
+        qm = _make_quick_match(name="a" * 100)
+        assert qm.name == "a" * 100
+
+
 class TestQuickMatchAddParticipant:
     def test_add_registered_participant_singles_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
