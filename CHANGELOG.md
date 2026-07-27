@@ -56,6 +56,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Migration `a3f7c1d9e2b4`: adds `quick_matches.scoring_format` (nullable) and makes `quick_matches.match_format` nullable.
 - New unit tests (entity mutual-exclusivity/capacity/roster, create use case) + 4 integration tests (validation errors, free-play creation, solo free-play start-and-score flow).
 
+**Quick Match — Playing Handicap (WHS)**
+
+- Fixed a gap where every **registered** participant's `handicap` was always returned as `null` in the API — only guests' manually-entered handicap ever reached the response, silently treating every registered player as scratch in the frontend's Stableford classification. Now mapped from `User.handicap`.
+- Each participant (registered or guest) can now pick a tee from the golf course (`tee_category`/`tee_gender`, identified the same way `Enrollment.tee_category` is in `competition` — tees have no own id, unique per category+gender pair), captured on `QuickMatchParticipant` at add-time. Optional: without a tee, scoring falls back to the participant's raw handicap as before.
+- `QuickMatch` gains `allowance_percentage` (nullable, 50-100 in increments of 5, `InvalidAllowanceViolation` otherwise): the creator can override it at creation; if omitted, `get_effective_allowance()` returns the WHS default per format (Singles match play 100%, Fourball 90%, Foursomes 50%, free play/stroke play 95% — mirrors `Round.get_effective_allowance()` in `competition`).
+- `POST /api/v1/quick-matches` accepts `allowance_percentage`, `creator_tee_category`, `creator_tee_gender`; `POST .../participants` and `.../participants/guest` accept `tee_category`/`tee_gender`. Response DTOs expose `allowance_percentage` (raw) + `effective_allowance` (computed) at the match level, and `tee_category`/`tee_gender` per participant. The actual Playing Handicap calculation (WHS formula) stays a frontend concern, same as the existing Stableford display.
+- Migration `b8e2f4a6c1d7`: adds `quick_matches.allowance_percentage` (nullable integer); tee selection lives inside the existing `participants` JSONB column, no schema change needed there.
+- New unit tests (participant tee fields, entity allowance validation/defaults, handicap-mapping regression) + 4 integration tests (default/custom allowance, invalid allowance → 422, tee round-trip through create + add-friend + detail).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed

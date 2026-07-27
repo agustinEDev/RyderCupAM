@@ -48,13 +48,15 @@ def user_uow():
     return UserInMemoryUoW()
 
 
-async def create_user(user_uow, email: str):
+async def create_user(user_uow, email: str, handicap: float | None = None):
     user = User.create(
         first_name="Test",
         last_name="User",
         email_str=email,
         plain_password="SecureP@ssw0rd123",
     )
+    if handicap is not None:
+        user.update_handicap(handicap)
     async with user_uow:
         await user_uow.users.save(user)
     return user

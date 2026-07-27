@@ -6,6 +6,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.quick_match.application.dto.quick_match_dto import (
     CreateQuickMatchRequestDTO,
     QuickMatchResponseDTO,
@@ -25,6 +26,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class CreateQuickMatchUseCase:
@@ -61,6 +63,13 @@ class CreateQuickMatchUseCase:
                 ScoringFormat(request.scoring_format) if request.scoring_format else None
             ),
             name=request.name,
+            allowance_percentage=request.allowance_percentage,
+            creator_tee_category=(
+                TeeCategory(request.creator_tee_category) if request.creator_tee_category else None
+            ),
+            creator_tee_gender=(
+                Gender(request.creator_tee_gender) if request.creator_tee_gender else None
+            ),
         )
 
         async with self._uow:

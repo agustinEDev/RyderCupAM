@@ -29,6 +29,7 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
+    InvalidAllowanceViolation,
     InvalidQuickMatchFormatViolation,
     InvalidQuickMatchStatusViolation,
     InvalidScorerConfigurationViolation,
@@ -424,3 +425,35 @@ class TestQuickMatchFreePlay:
         assert len(qm.participants) == 4
         with pytest.raises(QuickMatchFullViolation):
             qm.add_participant(_registered())
+
+
+class TestQuickMatchAllowance:
+    def test_default_allowance_singles(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        assert qm.allowance_percentage is None
+        assert qm.get_effective_allowance() == 100
+
+    def test_default_allowance_fourball(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        assert qm.get_effective_allowance() == 90
+
+    def test_default_allowance_foursomes(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURSOMES)
+        assert qm.get_effective_allowance() == 50
+
+    def test_default_allowance_free_play(self):
+        qm = _make_free_play_quick_match()
+        assert qm.get_effective_allowance() == 95
+
+    def test_custom_allowance_overrides_default(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES, allowance_percentage=80)
+        assert qm.allowance_percentage == 80
+        assert qm.get_effective_allowance() == 80
+
+    def test_rejects_allowance_not_multiple_of_five(self):
+        with pytest.raises(InvalidAllowanceViolation):
+            _make_quick_match(allowance_percentage=77)
+
+    def test_rejects_allowance_out_of_range(self):
+        with pytest.raises(InvalidAllowanceViolation):
+            _make_quick_match(allowance_percentage=45)

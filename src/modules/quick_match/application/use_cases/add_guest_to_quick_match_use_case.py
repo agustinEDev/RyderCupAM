@@ -1,5 +1,6 @@
 """Caso de Uso: Añadir a mano un jugador invitado (sin cuenta) a una partida rapida."""
 
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.quick_match.application.dto.quick_match_dto import (
     AddGuestParticipantRequestDTO,
     QuickMatchResponseDTO,
@@ -20,6 +21,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class AddGuestToQuickMatchUseCase:
@@ -55,6 +57,8 @@ class AddGuestToQuickMatchUseCase:
                 last_name=request.last_name,
                 handicap=request.handicap,
                 team=request.team,
+                tee_category=TeeCategory(request.tee_category) if request.tee_category else None,
+                tee_gender=Gender(request.tee_gender) if request.tee_gender else None,
             )
             quick_match.add_participant(participant)
             await self._uow.quick_matches.update(quick_match)

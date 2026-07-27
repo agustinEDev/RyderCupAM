@@ -43,6 +43,12 @@ class InvalidQuickMatchFormatViolation(BusinessRuleViolation):
     pass
 
 
+class InvalidAllowanceViolation(BusinessRuleViolation):
+    """allowance_percentage no es uno de los valores permitidos (50-100 en incrementos de 5)."""
+
+    pass
+
+
 class IncompleteRosterViolation(BusinessRuleViolation):
     """No se puede iniciar la partida sin el numero de jugadores requerido por el formato."""
 

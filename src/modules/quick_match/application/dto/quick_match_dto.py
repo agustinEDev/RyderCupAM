@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.modules.quick_match.domain.entities.quick_match import MAX_NAME_LENGTH, MAX_SCORERS
 
+TEE_CATEGORY_PATTERN = "^(CHAMPIONSHIP|AMATEUR|SENIOR|FORWARD|JUNIOR)$"
+TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
+
 
 class CreateQuickMatchRequestDTO(BaseModel):
     """DTO para crear una partida rapida. Exactamente uno de match_format/scoring_format."""
@@ -18,6 +21,11 @@ class CreateQuickMatchRequestDTO(BaseModel):
     name: str | None = Field(
         None, max_length=MAX_NAME_LENGTH, description="Nombre opcional para diferenciar la partida"
     )
+    allowance_percentage: int | None = Field(
+        None, ge=50, le=100, description="Allowance WHS personalizado (50-100, incrementos de 5)."
+    )
+    creator_tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    creator_tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -38,6 +46,8 @@ class AddParticipantRequestDTO(BaseModel):
     requester_id: UUID
     friend_user_id: UUID
     team: str | None = Field(None, pattern="^(A|B)$")
+    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
 
 class AddGuestParticipantRequestDTO(BaseModel):
@@ -49,6 +59,8 @@ class AddGuestParticipantRequestDTO(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     handicap: float | None = Field(None, ge=-10.0, le=54.0)
     team: str | None = Field(None, pattern="^(A|B)$")
+    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
 
 class RemoveParticipantRequestDTO(BaseModel):
@@ -95,6 +107,8 @@ class QuickMatchParticipantDTO(BaseModel):
     handicap: float | None = None
     team: str | None = None
     is_guest: bool = False
+    tee_category: str | None = None
+    tee_gender: str | None = None
 
 
 class QuickMatchResponseDTO(BaseModel):
@@ -107,6 +121,8 @@ class QuickMatchResponseDTO(BaseModel):
     scoring_format: str | None = None
     status: str
     name: str | None = None
+    allowance_percentage: int | None = None
+    effective_allowance: int
     participants: list[QuickMatchParticipantDTO]
     scorer_ids: list[UUID]
     created_at: datetime

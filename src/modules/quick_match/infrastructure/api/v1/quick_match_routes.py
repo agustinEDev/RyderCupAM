@@ -90,6 +90,7 @@ from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
+    InvalidAllowanceViolation,
     InvalidHoleScoreViolation,
     InvalidQuickMatchStatusViolation,
     InvalidScorerConfigurationViolation,
@@ -109,6 +110,10 @@ router = APIRouter()
 # ======================================================================================
 
 
+TEE_CATEGORY_PATTERN = "^(CHAMPIONSHIP|AMATEUR|SENIOR|FORWARD|JUNIOR)$"
+TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
+
+
 class CreateQuickMatchBody(BaseModel):
     """Body para crear una partida rapida. Exactamente uno de match_format/scoring_format."""
 
@@ -116,6 +121,9 @@ class CreateQuickMatchBody(BaseModel):
     match_format: str | None = Field(None, pattern="^(SINGLES|FOURBALL|FOURSOMES)$")
     scoring_format: str | None = Field(None, pattern="^(MEDAL|STABLEFORD)$")
     name: str | None = Field(None, max_length=MAX_NAME_LENGTH)
+    allowance_percentage: int | None = Field(None, ge=50, le=100)
+    creator_tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    creator_tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -134,6 +142,8 @@ class AddParticipantBody(BaseModel):
 
     friend_user_id: UUID
     team: str | None = Field(None, pattern="^(A|B)$")
+    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
 
 class AddGuestParticipantBody(BaseModel):
@@ -143,6 +153,8 @@ class AddGuestParticipantBody(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     handicap: float | None = Field(None, ge=-10.0, le=54.0)
     team: str | None = Field(None, pattern="^(A|B)$")
+    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
 
 class StartQuickMatchBody(BaseModel):
@@ -190,12 +202,17 @@ async def create_quick_match(
             match_format=body.match_format,
             scoring_format=body.scoring_format,
             name=body.name,
+            allowance_percentage=body.allowance_percentage,
+            creator_tee_category=body.creator_tee_category,
+            creator_tee_gender=body.creator_tee_gender,
         )
         return await use_case.execute(request_dto)
 
     except GolfCourseNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except GolfCourseNotApprovedError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidAllowanceViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
@@ -218,6 +235,8 @@ async def add_participant(
             requester_id=current_user.id,
             friend_user_id=body.friend_user_id,
             team=body.team,
+            tee_category=body.tee_category,
+            tee_gender=body.tee_gender,
         )
         return await use_case.execute(request_dto)
 
@@ -261,6 +280,8 @@ async def add_guest_participant(
             last_name=body.last_name,
             handicap=body.handicap,
             team=body.team,
+            tee_category=body.tee_category,
+            tee_gender=body.tee_gender,
         )
         return await use_case.execute(request_dto)
 
