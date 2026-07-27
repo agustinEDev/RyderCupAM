@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - New `quick_matches.name` column (Alembic migration `de76ad1f8cf2`, nullable, chained after `9a9440cebb07`).
 - 6 new unit tests (trimming, blank → null, max-length validation) + 3 integration tests (round-trip, absent → null, over-max-length → 422).
 
+**Quick Match — Free-Play Mode (Medal / Stableford)**
+
+- Quick matches only supported Ryder Cup-style team match play (`SINGLES`/`FOURBALL`/`FOURSOMES`, always A-vs-B). Added a free-play mode for 1 to 4 players with no teams (including solo rounds), scored at `MEDAL` (stroke play) or `STABLEFORD` — a new `ScoringFormat` Value Object local to `quick_match`.
+- `match_format` is now nullable and mutually exclusive with the new `scoring_format` field, enforced in the `QuickMatch` constructor (`InvalidQuickMatchFormatViolation` if both or neither are given). `capacity()`/`is_roster_complete()`/`add_participant()` branch accordingly: free play caps at 4 participants, allows starting with any roster from 1 up, and never assigns a team.
+- `POST /api/v1/quick-matches` accepts `scoring_format` as an alternative to `match_format`.
+- Team-based standing (`GET /quick-matches/{id}` → `standing`) is skipped (`null`) for free-play matches — head-to-head A-vs-B scoring doesn't apply; individual ranking is computed client-side as it already was for the Stableford display.
+- Migration `a3f7c1d9e2b4`: adds `quick_matches.scoring_format` (nullable) and makes `quick_matches.match_format` nullable.
+- New unit tests (entity mutual-exclusivity/capacity/roster, create use case) + 4 integration tests (validation errors, free-play creation, solo free-play start-and-score flow).
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed
