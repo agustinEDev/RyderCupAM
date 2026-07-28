@@ -127,7 +127,7 @@ class TestAddGuestToQuickMatchUseCase:
                     requester_id=creator.id.value,
                     first_name="Jane",
                     last_name="Doe",
-                    tee_category="FORWARD",
+                    tee_category="AMATEUR",
                     tee_gender="FEMALE",
                 )
             )

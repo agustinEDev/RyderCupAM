@@ -115,6 +115,12 @@ TEE_CATEGORY_PATTERN = "^(CHAMPIONSHIP|AMATEUR|SENIOR|FORWARD|JUNIOR)$"
 TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
 
 
+def _require_tee_category_for_gender(tee_category: str | None, tee_gender: str | None) -> None:
+    """A gender alone doesn't identify a course tee — category is required alongside it."""
+    if tee_gender is not None and tee_category is None:
+        raise ValueError("tee_gender requires tee_category to be provided as well.")
+
+
 class CreateQuickMatchBody(BaseModel):
     """Body para crear una partida rapida. Exactamente uno de match_format/scoring_format."""
 
@@ -137,6 +143,11 @@ class CreateQuickMatchBody(BaseModel):
             raise ValueError("Exactly one of match_format or scoring_format must be provided.")
         return self
 
+    @model_validator(mode="after")
+    def _tee_gender_requires_category(self) -> "CreateQuickMatchBody":
+        _require_tee_category_for_gender(self.creator_tee_category, self.creator_tee_gender)
+        return self
+
 
 class AddParticipantBody(BaseModel):
     """Body para añadir un amigo como participante."""
@@ -145,6 +156,11 @@ class AddParticipantBody(BaseModel):
     team: str | None = Field(None, pattern="^(A|B)$")
     tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
     tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
+
+    @model_validator(mode="after")
+    def _tee_gender_requires_category(self) -> "AddParticipantBody":
+        _require_tee_category_for_gender(self.tee_category, self.tee_gender)
+        return self
 
 
 class AddGuestParticipantBody(BaseModel):
@@ -156,6 +172,11 @@ class AddGuestParticipantBody(BaseModel):
     team: str | None = Field(None, pattern="^(A|B)$")
     tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
     tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
+
+    @model_validator(mode="after")
+    def _tee_gender_requires_category(self) -> "AddGuestParticipantBody":
+        _require_tee_category_for_gender(self.tee_category, self.tee_gender)
+        return self
 
 
 class StartQuickMatchBody(BaseModel):

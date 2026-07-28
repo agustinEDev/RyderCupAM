@@ -48,6 +48,10 @@ class TestQuickMatchParticipantForUser:
         assert p.tee_category == TeeCategory.AMATEUR
         assert p.tee_gender == Gender.MALE
 
+    def test_for_user_rejects_tee_gender_without_tee_category(self):
+        with pytest.raises(ValueError, match="tee_gender requiere tee_category"):
+            QuickMatchParticipant.for_user(UserId(uuid4()), tee_gender=Gender.MALE)
+
 
 class TestQuickMatchParticipantForGuest:
     def test_for_guest_creates_without_user_id(self):

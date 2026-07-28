@@ -164,7 +164,7 @@ class TestAddFriendToQuickMatchUseCase:
                     quick_match_id=qm.id.value,
                     requester_id=creator.id.value,
                     friend_user_id=friend.id.value,
-                    tee_category="FORWARD",
+                    tee_category="AMATEUR",
                     tee_gender="FEMALE",
                 )
             )

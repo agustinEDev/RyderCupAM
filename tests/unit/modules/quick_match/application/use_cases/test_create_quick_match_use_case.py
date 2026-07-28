@@ -92,7 +92,7 @@ class TestCreateQuickMatchUseCase:
                     creator_id=creator.id.value,
                     golf_course_id=golf_course.id.value,
                     match_format="SINGLES",
-                    creator_tee_category="FORWARD",
+                    creator_tee_category="AMATEUR",
                     creator_tee_gender="FEMALE",
                 )
             )

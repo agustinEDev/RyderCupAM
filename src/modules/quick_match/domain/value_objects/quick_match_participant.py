@@ -63,6 +63,9 @@ class QuickMatchParticipant:
         if self.handicap is not None and not (MIN_HANDICAP <= self.handicap <= MAX_HANDICAP):
             raise ValueError(f"handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
+        if self.tee_gender is not None and self.tee_category is None:
+            raise ValueError("tee_gender requiere tee_category (un genero solo no identifica un tee).")
+
     @property
     def is_guest(self) -> bool:
         return self.user_id is None
