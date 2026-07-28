@@ -170,7 +170,12 @@ print_step "Aplicando ConfigMaps y Secrets..."
 
 kubectl apply -f "$K8S_DIR/api-configmap.yaml"
 kubectl apply -f "$K8S_DIR/frontend-configmap.yaml"
-kubectl apply -f "$K8S_DIR/api-secret.yaml"
+
+if [ -f "$K8S_DIR/api-secret.local.yaml" ]; then
+    kubectl apply -f "$K8S_DIR/api-secret.local.yaml"
+else
+    kubectl apply -f "$K8S_DIR/api-secret.yaml"
+fi
 
 print_success "ConfigMaps y Secrets aplicados"
 echo ""

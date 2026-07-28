@@ -108,6 +108,20 @@ Elimina por completo el entorno de Kubernetes. **Esta acción es irreversible y 
 
 ---
 
+## 🔐 Secrets
+
+`k8s/api-secret.yaml` está **versionado en git** y debe contener únicamente placeholders de ejemplo — nunca valores reales (el repo es público).
+
+Para tener credenciales reales en local (p. ej. para que Mailgun envíe correos de verdad en desarrollo):
+
+1. Crea `k8s/api-secret.local.yaml` (ya está en `.gitignore`, nunca se commitea) copiando la estructura de `api-secret.yaml`.
+2. Rellena ahí los valores reales (p. ej. `MAILGUN_API_KEY`, copiada directamente del dashboard de Render → Environment, sin pasar por ningún fichero versionado ni por el chat).
+3. `deploy-cluster.sh` y `restart-cluster.sh` aplican automáticamente `api-secret.local.yaml` si existe, en lugar de `api-secret.yaml`.
+
+⚠️ Si algún valor real llega a `api-secret.yaml` por error, rótalo de inmediato en el proveedor correspondiente (Mailgun, etc.) — el fichero es público en cuanto se commitea.
+
+---
+
 ## 🗃️ Gestión de la Base de Datos
 
 ### Backups
