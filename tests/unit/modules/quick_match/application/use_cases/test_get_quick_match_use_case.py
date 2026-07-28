@@ -28,6 +28,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.quick_match.conftest import create_user
 
@@ -116,3 +117,49 @@ class TestGetQuickMatchUseCase:
         assert detail.standing.holes_played == 1
         assert detail.standing.leading_team == "A"
         assert detail.standing.status == "1UP"
+
+    async def test_registered_participant_handicap_comes_from_user_profile(
+        self, qm_uow, user_uow
+    ):
+        creator = await create_user(user_uow, "creator-hcp@test.com", handicap=12.4)
+        other = await create_user(user_uow, "other-hcp@test.com", handicap=None)
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+
+        get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
+        detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
+
+        creator_dto = next(p for p in detail.participants if p.user_id == creator.id.value)
+        other_dto = next(p for p in detail.participants if p.user_id == other.id.value)
+        assert creator_dto.handicap == 12.4
+        assert other_dto.handicap is None
+
+    async def test_free_play_standing_is_always_none(self, qm_uow, user_uow):
+        creator = await create_user(user_uow, "creator-freeplay@test.com")
+        other = await create_user(user_uow, "other-freeplay@test.com")
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=creator.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        qm.add_participant(QuickMatchParticipant.for_user(other.id))
+        qm.start([qm.creator_participant_id])
+        async with qm_uow:
+            await qm_uow.quick_matches.add(qm)
+
+        submit_uc = SubmitQuickMatchHoleScoreUseCase(qm_uow)
+        await submit_uc.execute(
+            SubmitHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                player_user_id=creator.id.value,
+                hole_number=1,
+                score=4,
+            )
+        )
+
+        get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
+        detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.match_format is None
+        assert detail.scoring_format == "STABLEFORD"
+        assert detail.standing is None

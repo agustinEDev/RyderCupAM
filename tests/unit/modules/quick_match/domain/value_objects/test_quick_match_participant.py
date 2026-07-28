@@ -4,11 +4,13 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 class TestQuickMatchParticipantForUser:
@@ -33,6 +35,22 @@ class TestQuickMatchParticipantForUser:
         assert p.first_name is None
         assert p.last_name is None
         assert p.handicap is None
+
+    def test_for_user_defaults_to_no_tee_selected(self):
+        p = QuickMatchParticipant.for_user(UserId(uuid4()))
+        assert p.tee_category is None
+        assert p.tee_gender is None
+
+    def test_for_user_accepts_tee_selection(self):
+        p = QuickMatchParticipant.for_user(
+            UserId(uuid4()), tee_category=TeeCategory.AMATEUR, tee_gender=Gender.MALE
+        )
+        assert p.tee_category == TeeCategory.AMATEUR
+        assert p.tee_gender == Gender.MALE
+
+    def test_for_user_rejects_tee_gender_without_tee_category(self):
+        with pytest.raises(ValueError, match="tee_gender requiere tee_category"):
+            QuickMatchParticipant.for_user(UserId(uuid4()), tee_gender=Gender.MALE)
 
 
 class TestQuickMatchParticipantForGuest:
@@ -64,6 +82,16 @@ class TestQuickMatchParticipantForGuest:
         a = QuickMatchParticipant.for_guest(first_name="Jane", last_name="Doe")
         b = QuickMatchParticipant.for_guest(first_name="Jane", last_name="Doe")
         assert a.participant_id != b.participant_id
+
+    def test_for_guest_accepts_tee_selection(self):
+        p = QuickMatchParticipant.for_guest(
+            first_name="Jane",
+            last_name="Doe",
+            tee_category=TeeCategory.FORWARD,
+            tee_gender=Gender.FEMALE,
+        )
+        assert p.tee_category == TeeCategory.FORWARD
+        assert p.tee_gender == Gender.FEMALE
 
 
 class TestQuickMatchParticipantEquality:

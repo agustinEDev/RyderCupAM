@@ -46,7 +46,7 @@ class QuickMatchDTOMapper:
             else:
                 user = users_by_id.get(p.user_id)
                 name = f"{user.first_name} {user.last_name}" if user else "Unknown"
-                handicap = None
+                handicap = user.handicap.value if user and user.handicap else None
             participants_dto.append(
                 QuickMatchParticipantDTO(
                     participant_id=p.participant_id.value,
@@ -55,6 +55,8 @@ class QuickMatchDTOMapper:
                     handicap=handicap,
                     team=p.team,
                     is_guest=p.is_guest,
+                    tee_category=p.tee_category.value if p.tee_category else None,
+                    tee_gender=p.tee_gender.value if p.tee_gender else None,
                 )
             )
 
@@ -62,8 +64,14 @@ class QuickMatchDTOMapper:
             id=quick_match.id.value,
             creator_id=quick_match.creator_id.value,
             golf_course_id=quick_match.golf_course_id.value,
-            match_format=quick_match.match_format.value,
+            match_format=quick_match.match_format.value if quick_match.match_format else None,
+            scoring_format=(
+                quick_match.scoring_format.value if quick_match.scoring_format else None
+            ),
             status=quick_match.status.value,
+            name=quick_match.name,
+            allowance_percentage=quick_match.allowance_percentage,
+            effective_allowance=quick_match.get_effective_allowance(),
             participants=participants_dto,
             scorer_ids=[sid.value for sid in quick_match.scorer_ids],
             created_at=quick_match.created_at,

@@ -113,6 +113,11 @@ class GetQuickMatchUseCase:
         return result
 
     def _compute_standing(self, quick_match, hole_scores) -> QuickMatchStandingResponseDTO | None:
+        if quick_match.match_format is None:
+            # Partido libre (MEDAL/STABLEFORD): sin equipos, no hay standing A-vs-B.
+            # La clasificacion individual se calcula en el frontend a partir de hole_scores.
+            return None
+
         participants = quick_match.participants
         if len(participants) < 2:  # noqa: PLR2004
             return None

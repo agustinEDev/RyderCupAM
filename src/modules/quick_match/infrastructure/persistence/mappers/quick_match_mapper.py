@@ -10,12 +10,13 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
@@ -27,7 +28,9 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
 # ============================================================================
@@ -168,6 +171,23 @@ class MatchFormatType(sqlalchemy.types.TypeDecorator[MatchFormat]):
         return MatchFormat(value)
 
 
+class ScoringFormatType(sqlalchemy.types.TypeDecorator[ScoringFormat]):
+    """TypeDecorator para ScoringFormat (VO local a quick_match, formato de partido libre)."""
+
+    impl = String(20)
+    cache_ok = True
+
+    def process_bind_param(self, value: ScoringFormat | None, dialect: Any) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect: Any) -> ScoringFormat | None:
+        if value is None:
+            return None
+        return ScoringFormat(value)
+
+
 class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     """
     TypeDecorator para serializar list[QuickMatchParticipant] a/desde JSONB.
@@ -179,7 +199,9 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         "first_name": "..." | null,             # solo invitados
         "last_name": "..." | null,              # solo invitados
         "handicap": number | null,              # solo invitados (opcional)
-        "team": "A" | "B" | null
+        "team": "A" | "B" | null,
+        "tee_category": "AMATEUR" | ... | null,
+        "tee_gender": "MALE" | "FEMALE" | null
     }
     """
 
@@ -197,6 +219,8 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                 "last_name": p.last_name,
                 "handicap": p.handicap,
                 "team": p.team,
+                "tee_category": p.tee_category.value if p.tee_category else None,
+                "tee_gender": p.tee_gender.value if p.tee_gender else None,
             }
             for p in value
         ]
@@ -214,6 +238,10 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                     last_name=p.get("last_name"),
                     handicap=p.get("handicap"),
                     team=p.get("team"),
+                    tee_category=(
+                        TeeCategory(p["tee_category"]) if p.get("tee_category") else None
+                    ),
+                    tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 )
             )
         return participants
@@ -256,12 +284,19 @@ quick_matches_table = Table(
         ForeignKey("golf_courses.id"),
         nullable=False,
     ),
-    Column("match_format", MatchFormatType, nullable=False),
+    Column("match_format", MatchFormatType, nullable=True),
+    Column("scoring_format", ScoringFormatType, nullable=True),
     Column("status", QuickMatchStatusType, nullable=False),
+    Column("name", String(100), nullable=True),
+    Column("allowance_percentage", Integer, nullable=True),
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
     Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    CheckConstraint(
+        "(match_format IS NULL) <> (scoring_format IS NULL)",
+        name="ck_quick_matches_exactly_one_format",
+    ),
 )
 
 
@@ -304,7 +339,10 @@ def start_quick_match_mappers() -> None:
                 "_creator_id": quick_matches_table.c.creator_id,
                 "_golf_course_id": quick_matches_table.c.golf_course_id,
                 "_match_format": quick_matches_table.c.match_format,
+                "_scoring_format": quick_matches_table.c.scoring_format,
                 "_status": quick_matches_table.c.status,
+                "_name": quick_matches_table.c.name,
+                "_allowance_percentage": quick_matches_table.c.allowance_percentage,
                 "_participants": quick_matches_table.c.participants,
                 "_scorer_ids": quick_matches_table.c.scorer_ids,
                 "_created_at": quick_matches_table.c.created_at,
