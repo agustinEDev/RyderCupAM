@@ -13,6 +13,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import CreateQuickM
 from src.modules.quick_match.application.exceptions import (
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidTeeSelectionError,
 )
 from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
     CreateQuickMatchUseCase,
@@ -59,6 +60,42 @@ class TestCreateQuickMatchUseCase:
         assert response.match_format is None
         assert response.scoring_format == "STABLEFORD"
         assert response.participants[0].team is None
+
+    async def test_create_with_valid_creator_tee_succeeds(self, qm_uow, golf_course_uow, user_uow):
+        creator = await create_user(user_uow, "creator-tee@test.com")
+        golf_course = await create_golf_course(golf_course_uow, creator.id)
+
+        use_case = CreateQuickMatchUseCase(qm_uow, golf_course_uow, user_uow)
+        response = await use_case.execute(
+            CreateQuickMatchRequestDTO(
+                creator_id=creator.id.value,
+                golf_course_id=golf_course.id.value,
+                match_format="SINGLES",
+                creator_tee_category="AMATEUR",
+                creator_tee_gender="MALE",
+            )
+        )
+
+        assert response.participants[0].tee_category == "AMATEUR"
+        assert response.participants[0].tee_gender == "MALE"
+
+    async def test_create_with_creator_tee_not_on_course_raises(
+        self, qm_uow, golf_course_uow, user_uow
+    ):
+        creator = await create_user(user_uow, "creator-badtee@test.com")
+        golf_course = await create_golf_course(golf_course_uow, creator.id)
+
+        use_case = CreateQuickMatchUseCase(qm_uow, golf_course_uow, user_uow)
+        with pytest.raises(InvalidTeeSelectionError):
+            await use_case.execute(
+                CreateQuickMatchRequestDTO(
+                    creator_id=creator.id.value,
+                    golf_course_id=golf_course.id.value,
+                    match_format="SINGLES",
+                    creator_tee_category="FORWARD",
+                    creator_tee_gender="FEMALE",
+                )
+            )
 
     async def test_golf_course_not_found_raises(self, qm_uow, golf_course_uow, user_uow):
         creator = await create_user(user_uow, "creator2@test.com")

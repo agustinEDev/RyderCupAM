@@ -1021,17 +1021,19 @@ def get_add_friend_to_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> AddFriendToQuickMatchUseCase:
     """Proveedor del caso de uso AddFriendToQuickMatchUseCase."""
-    return AddFriendToQuickMatchUseCase(uow, social_uow, user_uow)
+    return AddFriendToQuickMatchUseCase(uow, social_uow, user_uow, golf_course_uow)
 
 
 def get_add_guest_to_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> AddGuestToQuickMatchUseCase:
     """Proveedor del caso de uso AddGuestToQuickMatchUseCase."""
-    return AddGuestToQuickMatchUseCase(uow, user_uow)
+    return AddGuestToQuickMatchUseCase(uow, user_uow, golf_course_uow)
 
 
 def get_remove_quick_match_participant_use_case(

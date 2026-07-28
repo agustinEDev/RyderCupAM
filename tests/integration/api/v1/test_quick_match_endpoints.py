@@ -335,6 +335,62 @@ class TestQuickMatchTeeAndAllowance:
         )
         assert detail_creator_dto["tee_category"] == "AMATEUR"
 
+    @pytest.mark.asyncio
+    async def test_create_with_tee_not_on_course_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_badtee@test.com", "P@ssw0rd123!", "Admin", "BadTee"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_badtee@test.com", "P@ssw0rd123!", "Creator", "BadTee"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches",
+            json={
+                "golf_course_id": golf_course_id,
+                "match_format": "SINGLES",
+                # the test golf course fixture only has CHAMPIONSHIP/MALE and AMATEUR/MALE tees
+                "creator_tee_category": "FORWARD",
+                "creator_tee_gender": "FEMALE",
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_add_friend_with_tee_not_on_course_returns_422(self, client: AsyncClient):
+        admin = await create_admin_user(
+            client, "qm_admin_badtee2@test.com", "P@ssw0rd123!", "Admin", "BadTeeFriend"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_badtee2@test.com", "P@ssw0rd123!", "Creator", "BadTeeFriend"
+        )
+        friend = await create_authenticated_user(
+            client, "qm_friend_badtee2@test.com", "P@ssw0rd123!", "Friend", "BadTeeFriend"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+
+        add_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={
+                "friend_user_id": friend["user"]["id"],
+                "tee_category": "FORWARD",
+                "tee_gender": "FEMALE",
+            },
+        )
+
+        assert add_response.status_code == 422
+
 
 class TestQuickMatchFreePlayFlow:
     """Partido libre: 1 a 4 jugadores, sin equipos, se puede jugar en solitario."""

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 from ..events.golf_course_approved_event import GolfCourseApprovedEvent
 from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
@@ -17,6 +18,7 @@ from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.course_type import CourseType
 from ..value_objects.golf_course_id import GolfCourseId
+from ..value_objects.tee_category import TeeCategory
 from .hole import Hole
 from .tee import Tee
 
@@ -634,3 +636,9 @@ class GolfCourse:
     def is_pending_update(self) -> bool:
         """Retorna TRUE si este campo tiene un clone pendiente de aprobación."""
         return self._is_pending_update
+
+    # Metodos de consulta
+
+    def has_tee(self, category: TeeCategory, gender: Gender | None) -> bool:
+        """Retorna True si el campo tiene un tee para esa categoria/genero."""
+        return any(t.category == category and t.gender == gender for t in self._tees)

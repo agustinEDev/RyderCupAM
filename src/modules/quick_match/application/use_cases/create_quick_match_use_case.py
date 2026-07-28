@@ -14,6 +14,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
 from src.modules.quick_match.application.exceptions import (
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidTeeSelectionError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -44,6 +45,10 @@ class CreateQuickMatchUseCase:
 
     async def execute(self, request: CreateQuickMatchRequestDTO) -> QuickMatchResponseDTO:
         golf_course_id = GolfCourseId(request.golf_course_id)
+        creator_tee_category = (
+            TeeCategory(request.creator_tee_category) if request.creator_tee_category else None
+        )
+        creator_tee_gender = Gender(request.creator_tee_gender) if request.creator_tee_gender else None
 
         async with self._golf_course_uow:
             golf_course = await self._golf_course_uow.golf_courses.find_by_id(golf_course_id)
@@ -52,6 +57,12 @@ class CreateQuickMatchUseCase:
             if golf_course.approval_status != ApprovalStatus.APPROVED:
                 raise GolfCourseNotApprovedError(
                     f"Golf course '{golf_course.name}' is not approved."
+                )
+            if creator_tee_category is not None and not golf_course.has_tee(
+                creator_tee_category, creator_tee_gender
+            ):
+                raise InvalidTeeSelectionError(
+                    f"{creator_tee_category.value} is not a valid tee for this golf course."
                 )
 
         quick_match = QuickMatch.create(
@@ -64,12 +75,8 @@ class CreateQuickMatchUseCase:
             ),
             name=request.name,
             allowance_percentage=request.allowance_percentage,
-            creator_tee_category=(
-                TeeCategory(request.creator_tee_category) if request.creator_tee_category else None
-            ),
-            creator_tee_gender=(
-                Gender(request.creator_tee_gender) if request.creator_tee_gender else None
-            ),
+            creator_tee_category=creator_tee_category,
+            creator_tee_gender=creator_tee_gender,
         )
 
         async with self._uow:

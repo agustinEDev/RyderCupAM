@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
@@ -293,6 +293,10 @@ quick_matches_table = Table(
     Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    CheckConstraint(
+        "(match_format IS NULL) <> (scoring_format IS NULL)",
+        name="ck_quick_matches_exactly_one_format",
+    ),
 )
 
 

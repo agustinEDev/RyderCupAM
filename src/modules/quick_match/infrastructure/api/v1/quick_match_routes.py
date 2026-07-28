@@ -45,6 +45,7 @@ from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidTeeSelectionError,
     NotAScorerError,
     NotAuthorizedToRemoveError,
     NotFriendsError,
@@ -214,6 +215,8 @@ async def create_quick_match(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except InvalidAllowanceViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidTeeSelectionError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 @router.post(
@@ -254,6 +257,8 @@ async def add_participant(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except InvalidTeeSelectionError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 @router.post(
@@ -295,6 +300,8 @@ async def add_guest_participant(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except InvalidTeeSelectionError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 @router.delete(

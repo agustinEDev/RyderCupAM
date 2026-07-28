@@ -16,6 +16,8 @@ down_revision = "de76ad1f8cf2"
 branch_labels = None
 depends_on = None
 
+CHECK_CONSTRAINT_NAME = "ck_quick_matches_exactly_one_format"
+
 
 def upgrade() -> None:
     op.add_column(
@@ -23,9 +25,28 @@ def upgrade() -> None:
         sa.Column("scoring_format", sa.String(length=20), nullable=True),
     )
     op.alter_column("quick_matches", "match_format", existing_type=sa.String(length=20), nullable=True)
+    op.create_check_constraint(
+        CHECK_CONSTRAINT_NAME,
+        "quick_matches",
+        "(match_format IS NULL) <> (scoring_format IS NULL)",
+    )
 
 
 def downgrade() -> None:
-    op.execute("UPDATE quick_matches SET match_format = 'SINGLES' WHERE match_format IS NULL")
+    # Free-play matches (scoring_format set) carry rosters up to 4 players and no
+    # teams, incompatible with the pre-existing match_format-only schema (SINGLES
+    # is 1v1, capacity 2). Rewriting them to SINGLES would silently corrupt their
+    # roster/scoring semantics, so refuse the downgrade instead.
+    connection = op.get_bind()
+    remaining = connection.execute(
+        sa.text("SELECT COUNT(*) FROM quick_matches WHERE scoring_format IS NOT NULL")
+    ).scalar()
+    if remaining:
+        raise RuntimeError(
+            f"Cannot downgrade: {remaining} quick_matches row(s) have scoring_format set "
+            "(free-play matches). Archive or manually migrate those rows before retrying."
+        )
+
+    op.drop_constraint(CHECK_CONSTRAINT_NAME, "quick_matches", type_="check")
     op.alter_column("quick_matches", "match_format", existing_type=sa.String(length=20), nullable=False)
     op.drop_column("quick_matches", "scoring_format")

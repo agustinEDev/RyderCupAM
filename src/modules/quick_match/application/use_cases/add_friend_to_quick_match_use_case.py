@@ -1,5 +1,8 @@
 """Caso de Uso: Añadir un amigo directamente a una partida rapida."""
 
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.quick_match.application.dto.quick_match_dto import (
     AddParticipantRequestDTO,
@@ -7,6 +10,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
 )
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
+    InvalidTeeSelectionError,
     NotFriendsError,
     NotQuickMatchCreatorError,
     QuickMatchNotFoundError,
@@ -42,14 +46,18 @@ class AddFriendToQuickMatchUseCase:
         uow: QuickMatchUnitOfWorkInterface,
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
     ):
         self._uow = uow
         self._social_uow = social_uow
         self._user_uow = user_uow
+        self._golf_course_uow = golf_course_uow
 
     async def execute(self, request: AddParticipantRequestDTO) -> QuickMatchResponseDTO:
         requester_id = UserId(request.requester_id)
         friend_id = UserId(request.friend_user_id)
+        tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+        tee_gender = Gender(request.tee_gender) if request.tee_gender else None
 
         async with self._user_uow:
             friend_user = await self._user_uow.users.find_by_id(friend_id)
@@ -75,11 +83,21 @@ class AddFriendToQuickMatchUseCase:
                     "Only the quick match creator can add participants."
                 )
 
+            if tee_category is not None:
+                async with self._golf_course_uow:
+                    golf_course = await self._golf_course_uow.golf_courses.find_by_id(
+                        quick_match.golf_course_id
+                    )
+                    if not golf_course or not golf_course.has_tee(tee_category, tee_gender):
+                        raise InvalidTeeSelectionError(
+                            f"{tee_category.value} is not a valid tee for this golf course."
+                        )
+
             participant = QuickMatchParticipant.for_user(
                 friend_id,
                 team=request.team,
-                tee_category=TeeCategory(request.tee_category) if request.tee_category else None,
-                tee_gender=Gender(request.tee_gender) if request.tee_gender else None,
+                tee_category=tee_category,
+                tee_gender=tee_gender,
             )
             quick_match.add_participant(participant)
             await self._uow.quick_matches.update(quick_match)

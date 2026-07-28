@@ -8,6 +8,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.quick_match.application.dto.quick_match_dto import AddParticipantRequestDTO
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
+    InvalidTeeSelectionError,
     NotFriendsError,
     NotQuickMatchCreatorError,
     QuickMatchNotFoundError,
@@ -48,7 +49,7 @@ class TestAddFriendToQuickMatchUseCase:
         await create_accepted_friendship(social_uow, creator.id, friend.id)
         qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
 
-        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow)
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
         response = await use_case.execute(
             AddParticipantRequestDTO(
                 quick_match_id=qm.id.value,
@@ -64,7 +65,7 @@ class TestAddFriendToQuickMatchUseCase:
         stranger = await create_user(user_uow, "stranger@test.com")
         qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
 
-        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow)
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
         with pytest.raises(NotFriendsError):
             await use_case.execute(
                 AddParticipantRequestDTO(
@@ -81,7 +82,7 @@ class TestAddFriendToQuickMatchUseCase:
         await create_accepted_friendship(social_uow, other_participant.id, friend.id)
         qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
 
-        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow)
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
         with pytest.raises(NotQuickMatchCreatorError):
             await use_case.execute(
                 AddParticipantRequestDTO(
@@ -97,7 +98,7 @@ class TestAddFriendToQuickMatchUseCase:
         creator = await create_user(user_uow, "creator4@test.com")
         qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
 
-        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow)
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
         with pytest.raises(FriendUserNotFoundError):
             await use_case.execute(
                 AddParticipantRequestDTO(
@@ -114,12 +115,56 @@ class TestAddFriendToQuickMatchUseCase:
         friend = await create_user(user_uow, "friend5@test.com")
         await create_accepted_friendship(social_uow, creator.id, friend.id)
 
-        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow)
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
         with pytest.raises(QuickMatchNotFoundError):
             await use_case.execute(
                 AddParticipantRequestDTO(
                     quick_match_id=uuid4(),
                     requester_id=creator.id.value,
                     friend_user_id=friend.id.value,
+                )
+            )
+
+    async def test_add_friend_with_valid_tee_succeeds(
+        self, qm_uow, golf_course_uow, social_uow, user_uow
+    ):
+        creator = await create_user(user_uow, "creator6@test.com")
+        friend = await create_user(user_uow, "friend6@test.com")
+        await create_accepted_friendship(social_uow, creator.id, friend.id)
+        qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
+
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
+        response = await use_case.execute(
+            AddParticipantRequestDTO(
+                quick_match_id=qm.id.value,
+                requester_id=creator.id.value,
+                friend_user_id=friend.id.value,
+                tee_category="AMATEUR",
+                tee_gender="MALE",
+            )
+        )
+
+        friend_dto = next(p for p in response.participants if p.user_id == friend.id.value)
+        assert friend_dto.tee_category == "AMATEUR"
+        assert friend_dto.tee_gender == "MALE"
+
+    async def test_add_friend_with_tee_not_on_course_raises(
+        self, qm_uow, golf_course_uow, social_uow, user_uow
+    ):
+        creator = await create_user(user_uow, "creator7@test.com")
+        friend = await create_user(user_uow, "friend7@test.com")
+        await create_accepted_friendship(social_uow, creator.id, friend.id)
+        qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
+
+        # conftest's create_golf_course only has CHAMPIONSHIP/MALE and AMATEUR/MALE tees
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
+        with pytest.raises(InvalidTeeSelectionError):
+            await use_case.execute(
+                AddParticipantRequestDTO(
+                    quick_match_id=qm.id.value,
+                    requester_id=creator.id.value,
+                    friend_user_id=friend.id.value,
+                    tee_category="FORWARD",
+                    tee_gender="FEMALE",
                 )
             )
