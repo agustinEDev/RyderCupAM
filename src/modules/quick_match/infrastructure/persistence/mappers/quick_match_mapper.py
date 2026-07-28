@@ -199,6 +199,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         "first_name": "..." | null,             # solo invitados
         "last_name": "..." | null,              # solo invitados
         "handicap": number | null,              # solo invitados (opcional)
+        "custom_handicap": number | null,       # solo registrados (override, opcional)
         "team": "A" | "B" | null,
         "tee_category": "AMATEUR" | ... | null,
         "tee_gender": "MALE" | "FEMALE" | null
@@ -218,6 +219,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                 "first_name": p.first_name,
                 "last_name": p.last_name,
                 "handicap": p.handicap,
+                "custom_handicap": p.custom_handicap,
                 "team": p.team,
                 "tee_category": p.tee_category.value if p.tee_category else None,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
@@ -237,6 +239,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                     first_name=p.get("first_name"),
                     last_name=p.get("last_name"),
                     handicap=p.get("handicap"),
+                    custom_handicap=p.get("custom_handicap"),
                     team=p.get("team"),
                     tee_category=(
                         TeeCategory(p["tee_category"]) if p.get("tee_category") else None

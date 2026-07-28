@@ -52,6 +52,22 @@ class TestQuickMatchParticipantForUser:
         with pytest.raises(ValueError, match="tee_gender requiere tee_category"):
             QuickMatchParticipant.for_user(UserId(uuid4()), tee_gender=Gender.MALE)
 
+    def test_for_user_defaults_to_no_custom_handicap(self):
+        p = QuickMatchParticipant.for_user(UserId(uuid4()))
+        assert p.custom_handicap is None
+
+    def test_registered_rejects_custom_handicap_out_of_range(self):
+        user_id = UserId(uuid4())
+        with pytest.raises(ValueError, match="custom_handicap debe estar entre"):
+            QuickMatchParticipant(
+                participant_id=ParticipantId(user_id.value),
+                user_id=user_id,
+                first_name=None,
+                last_name=None,
+                handicap=None,
+                custom_handicap=99,
+            )
+
 
 class TestQuickMatchParticipantForGuest:
     def test_for_guest_creates_without_user_id(self):
@@ -92,6 +108,42 @@ class TestQuickMatchParticipantForGuest:
         )
         assert p.tee_category == TeeCategory.FORWARD
         assert p.tee_gender == Gender.FEMALE
+
+    def test_guest_rejects_custom_handicap(self):
+        with pytest.raises(ValueError, match="Un invitado no lleva custom_handicap"):
+            QuickMatchParticipant(
+                participant_id=ParticipantId.generate(),
+                user_id=None,
+                first_name="Jane",
+                last_name="Doe",
+                handicap=None,
+                custom_handicap=12.0,
+            )
+
+
+class TestQuickMatchParticipantWithHandicap:
+    def test_registered_with_handicap_sets_custom_handicap(self):
+        p = QuickMatchParticipant.for_user(UserId(uuid4()))
+        updated = p.with_handicap(15.5)
+        assert updated.custom_handicap == 15.5
+        assert updated.handicap is None
+        assert updated.participant_id == p.participant_id
+
+    def test_registered_with_handicap_none_clears_override(self):
+        p = QuickMatchParticipant.for_user(UserId(uuid4())).with_handicap(15.5)
+        cleared = p.with_handicap(None)
+        assert cleared.custom_handicap is None
+
+    def test_guest_with_handicap_sets_handicap(self):
+        p = QuickMatchParticipant.for_guest(first_name="Jane", last_name="Doe")
+        updated = p.with_handicap(9.2)
+        assert updated.handicap == 9.2
+        assert updated.custom_handicap is None
+
+    def test_with_handicap_rejects_out_of_range(self):
+        p = QuickMatchParticipant.for_user(UserId(uuid4()))
+        with pytest.raises(ValueError, match="custom_handicap debe estar entre"):
+            p.with_handicap(99)
 
 
 class TestQuickMatchParticipantEquality:

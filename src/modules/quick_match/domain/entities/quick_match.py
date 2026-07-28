@@ -19,6 +19,9 @@ from ..events.quick_match_cancelled_event import QuickMatchCancelledEvent
 from ..events.quick_match_completed_event import QuickMatchCompletedEvent
 from ..events.quick_match_created_event import QuickMatchCreatedEvent
 from ..events.quick_match_participant_added_event import QuickMatchParticipantAddedEvent
+from ..events.quick_match_participant_handicap_updated_event import (
+    QuickMatchParticipantHandicapUpdatedEvent,
+)
 from ..events.quick_match_participant_removed_event import QuickMatchParticipantRemovedEvent
 from ..events.quick_match_started_event import QuickMatchStartedEvent
 from ..exceptions.quick_match_violations import (
@@ -421,6 +424,41 @@ class QuickMatch:
         self.add_domain_event(
             QuickMatchParticipantRemovedEvent(
                 quick_match_id=str(self._id), participant_id=str(participant_id)
+            )
+        )
+
+    def set_participant_handicap(self, participant_id: ParticipantId, handicap: float | None) -> None:
+        """
+        Edita el handicap de un participante mientras la partida esta PENDING.
+
+        Manual (`handicap`) para invitados, override (`custom_handicap`) para
+        registrados — pensado para el resumen previo a `start()`, donde el creador
+        puede ajustar el handicap de quien no tenga uno en su perfil.
+        """
+        if not self._status.is_pending():
+            raise InvalidQuickMatchStatusViolation(
+                f"Cannot edit participant handicap in status {self._status.value}."
+            )
+
+        participant = self.find_participant(participant_id)
+        if participant is None:
+            raise NotQuickMatchParticipantViolation(
+                f"{participant_id} is not a participant of this quick match."
+            )
+
+        updated_participant = participant.with_handicap(handicap)
+        now = datetime.now()
+        self._participants = [
+            updated_participant if p.participant_id == participant_id else p
+            for p in self._participants
+        ]
+        self._updated_at = now
+
+        self.add_domain_event(
+            QuickMatchParticipantHandicapUpdatedEvent(
+                quick_match_id=str(self._id),
+                participant_id=str(participant_id),
+                handicap=handicap,
             )
         )
 

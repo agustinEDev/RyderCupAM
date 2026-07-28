@@ -19,6 +19,9 @@ from src.modules.quick_match.domain.events.quick_match_created_event import (
 from src.modules.quick_match.domain.events.quick_match_participant_added_event import (
     QuickMatchParticipantAddedEvent,
 )
+from src.modules.quick_match.domain.events.quick_match_participant_handicap_updated_event import (
+    QuickMatchParticipantHandicapUpdatedEvent,
+)
 from src.modules.quick_match.domain.events.quick_match_participant_removed_event import (
     QuickMatchParticipantRemovedEvent,
 )
@@ -228,6 +231,73 @@ class TestQuickMatchRemoveParticipant:
         qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
             qm.remove_participant(other.participant_id)
+
+
+class TestQuickMatchSetParticipantHandicap:
+    def test_set_registered_participant_handicap_sets_override(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+        qm.clear_domain_events()
+
+        qm.set_participant_handicap(other.participant_id, 12.3)
+
+        updated = qm.find_participant(other.participant_id)
+        assert updated.custom_handicap == 12.3
+        events = qm.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], QuickMatchParticipantHandicapUpdatedEvent)
+
+    def test_set_guest_participant_handicap_sets_manual_handicap(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        guest = _guest()
+        qm.add_participant(guest)
+
+        qm.set_participant_handicap(guest.participant_id, 24.0)
+
+        assert qm.find_participant(guest.participant_id).handicap == 24.0
+
+    def test_set_participant_handicap_none_clears_it(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        guest = _guest()
+        qm.add_participant(guest)
+        qm.set_participant_handicap(guest.participant_id, 24.0)
+
+        qm.set_participant_handicap(guest.participant_id, None)
+
+        assert qm.find_participant(guest.participant_id).handicap is None
+
+    def test_set_handicap_preserves_other_participant_fields(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        other = _registered(team="B")
+        qm.add_participant(other)
+
+        qm.set_participant_handicap(other.participant_id, 5.0)
+
+        updated = qm.find_participant(other.participant_id)
+        assert updated.team == "B"
+        assert updated.user_id == other.user_id
+
+    def test_set_handicap_for_non_participant_raises(self):
+        qm = _make_quick_match()
+        with pytest.raises(NotQuickMatchParticipantViolation):
+            qm.set_participant_handicap(ParticipantId.generate(), 10.0)
+
+    def test_set_handicap_not_pending_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+        qm.start([qm.creator_participant_id])
+
+        with pytest.raises(InvalidQuickMatchStatusViolation):
+            qm.set_participant_handicap(other.participant_id, 10.0)
+
+    def test_set_handicap_out_of_range_raises(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+        with pytest.raises(ValueError, match="custom_handicap debe estar entre"):
+            qm.set_participant_handicap(other.participant_id, 99)
 
 
 class TestQuickMatchStart:

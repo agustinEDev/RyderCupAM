@@ -21,6 +21,7 @@ from src.config.dependencies import (
     get_get_quick_match_use_case,
     get_list_my_quick_matches_use_case,
     get_remove_quick_match_participant_use_case,
+    get_set_quick_match_participant_handicap_use_case,
     get_start_quick_match_use_case,
     get_submit_quick_match_hole_score_use_case,
     get_submit_quick_match_proxy_hole_score_use_case,
@@ -37,6 +38,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickMatchDetailResponseDTO,
     QuickMatchResponseDTO,
     RemoveParticipantRequestDTO,
+    SetParticipantHandicapRequestDTO,
     StartQuickMatchRequestDTO,
     SubmitHoleScoreRequestDTO,
     SubmitProxyHoleScoreRequestDTO,
@@ -77,6 +79,9 @@ from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_cas
 )
 from src.modules.quick_match.application.use_cases.remove_participant_use_case import (
     RemoveParticipantUseCase,
+)
+from src.modules.quick_match.application.use_cases.set_participant_handicap_use_case import (
+    SetParticipantHandicapUseCase,
 )
 from src.modules.quick_match.application.use_cases.start_quick_match_use_case import (
     StartQuickMatchUseCase,
@@ -177,6 +182,12 @@ class AddGuestParticipantBody(BaseModel):
     def _tee_gender_requires_category(self) -> "AddGuestParticipantBody":
         _require_tee_category_for_gender(self.tee_category, self.tee_gender)
         return self
+
+
+class SetParticipantHandicapBody(BaseModel):
+    """Body para editar el handicap de un participante (manual u override)."""
+
+    handicap: float | None = Field(None, ge=-10.0, le=54.0)
 
 
 class StartQuickMatchBody(BaseModel):
@@ -351,6 +362,44 @@ async def remove_participant(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except CreatorCannotBeRemovedViolation as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except InvalidQuickMatchStatusViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.patch(
+    "/quick-matches/{quick_match_id}/participants/{target_participant_id}/handicap",
+    response_model=QuickMatchResponseDTO,
+    summary="Set participant handicap",
+    description=(
+        "Creator sets/overrides a participant's handicap before starting the match — "
+        "a manual value for guests, or an override for registered players (e.g. one "
+        "without a handicap on their profile). Only allowed while the match is PENDING."
+    ),
+)
+async def set_participant_handicap(
+    quick_match_id: UUID,
+    target_participant_id: UUID,
+    body: SetParticipantHandicapBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SetParticipantHandicapUseCase = Depends(
+        get_set_quick_match_participant_handicap_use_case
+    ),
+):
+    try:
+        request_dto = SetParticipantHandicapRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+            target_participant_id=target_participant_id,
+            handicap=body.handicap,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotQuickMatchParticipantViolation as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:

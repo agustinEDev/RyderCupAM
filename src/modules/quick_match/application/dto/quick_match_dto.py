@@ -84,6 +84,15 @@ class AddGuestParticipantRequestDTO(BaseModel):
         return self
 
 
+class SetParticipantHandicapRequestDTO(BaseModel):
+    """DTO para editar el handicap (manual u override) de un participante, en PENDING."""
+
+    quick_match_id: UUID
+    requester_id: UUID
+    target_participant_id: UUID
+    handicap: float | None = Field(None, ge=-10.0, le=54.0)
+
+
 class RemoveParticipantRequestDTO(BaseModel):
     """DTO para eliminar un participante (leave o kick por el creador)."""
 

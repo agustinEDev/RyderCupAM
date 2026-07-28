@@ -3,6 +3,7 @@
 from sqlalchemy import and_, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_repository_interface import (
@@ -27,6 +28,12 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
 
     async def update(self, quick_match: QuickMatch) -> None:
         self._session.add(quick_match)
+        # QuickMatchParticipant.__eq__ compares only participant_id (by domain design,
+        # for stable identity across list ops) — so SQLAlchemy's default dirty-check
+        # on the `participants` JSONB column (list equality via `==`) can't see a
+        # same-length list where only e.g. custom_handicap changed on one entry, and
+        # silently skips writing it. Force it into every UPDATE regardless.
+        flag_modified(quick_match, "_participants")
 
     async def find_by_id(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return await self._session.get(QuickMatch, quick_match_id)
