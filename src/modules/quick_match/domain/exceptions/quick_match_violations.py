@@ -37,6 +37,18 @@ class InvalidTeamAssignmentViolation(BusinessRuleViolation):
     pass
 
 
+class InvalidQuickMatchFormatViolation(BusinessRuleViolation):
+    """match_format y scoring_format no son mutuamente excluyentes o ambos faltan."""
+
+    pass
+
+
+class InvalidAllowanceViolation(BusinessRuleViolation):
+    """allowance_percentage no es uno de los valores permitidos (50-100 en incrementos de 5)."""
+
+    pass
+
+
 class IncompleteRosterViolation(BusinessRuleViolation):
     """No se puede iniciar la partida sin el numero de jugadores requerido por el formato."""
 

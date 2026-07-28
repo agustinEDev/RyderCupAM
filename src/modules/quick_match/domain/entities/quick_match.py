@@ -10,8 +10,10 @@ from datetime import datetime
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.value_objects.gender import Gender
 
 from ..events.quick_match_cancelled_event import QuickMatchCancelledEvent
 from ..events.quick_match_completed_event import QuickMatchCompletedEvent
@@ -23,6 +25,8 @@ from ..exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
     IncompleteRosterViolation,
+    InvalidAllowanceViolation,
+    InvalidQuickMatchFormatViolation,
     InvalidQuickMatchStatusViolation,
     InvalidScorerConfigurationViolation,
     InvalidTeamAssignmentViolation,
@@ -33,8 +37,19 @@ from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_id import QuickMatchId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
 from ..value_objects.quick_match_status import QuickMatchStatus
+from ..value_objects.scoring_format import ScoringFormat
 
 MAX_SCORERS = 4
+MAX_NAME_LENGTH = 100
+MAX_FREE_PLAY_PLAYERS = 4
+
+# WHS allowance defaults (%), igual que Round.get_effective_allowance() en `competition`
+# para los formatos por equipos; FREE_PLAY_ALLOWANCE es el estandar WHS de Stroke Play.
+ALLOWED_ALLOWANCE_PERCENTAGES = frozenset(range(50, 101, 5))  # {50, 55, ..., 100}
+SINGLES_ALLOWANCE = 100
+FOURBALL_ALLOWANCE = 90
+FOURSOMES_ALLOWANCE = 50
+FREE_PLAY_ALLOWANCE = 95
 
 
 class QuickMatch:
@@ -58,24 +73,66 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        name: str | None = None,
+        scoring_format: ScoringFormat | None = None,
+        allowance_percentage: int | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
+        self._validate_format(match_format, scoring_format)
+        self._validate_allowance(allowance_percentage)
         self._id = id
         self._creator_id = creator_id
         self._golf_course_id = golf_course_id
         self._match_format = match_format
+        self._scoring_format = scoring_format
+        self._allowance_percentage = allowance_percentage
         self._status = status
         self._participants = list(participants)
+        self._name = self._validate_name(name)
         self._scorer_ids = list(scorer_ids) if scorer_ids else []
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
+
+    @staticmethod
+    def _validate_format(
+        match_format: MatchFormat | None, scoring_format: ScoringFormat | None
+    ) -> None:
+        """Exige exactamente uno de match_format (Ryder Cup) o scoring_format (partido libre)."""
+        if (match_format is None) == (scoring_format is None):
+            raise InvalidQuickMatchFormatViolation(
+                "Exactly one of match_format or scoring_format must be provided."
+            )
+
+    @staticmethod
+    def _validate_allowance(allowance_percentage: int | None) -> None:
+        """Si se personaliza, debe ser 50-100 en incrementos de 5 (igual que Round)."""
+        if (
+            allowance_percentage is not None
+            and allowance_percentage not in ALLOWED_ALLOWANCE_PERCENTAGES
+        ):
+            raise InvalidAllowanceViolation(
+                f"allowance_percentage must be one of {sorted(ALLOWED_ALLOWANCE_PERCENTAGES)}, "
+                f"got {allowance_percentage}."
+            )
+
+    @staticmethod
+    def _validate_name(name: str | None) -> str | None:
+        """Nombre libre y opcional para diferenciar partidas (sin normalizar mayusculas)."""
+        if name is None:
+            return None
+        trimmed = name.strip()
+        if not trimmed:
+            return None
+        if len(trimmed) > MAX_NAME_LENGTH:
+            raise ValueError(f"Quick match name cannot exceed {MAX_NAME_LENGTH} characters.")
+        return trimmed
 
     # ===========================================
     # FACTORY METHODS
@@ -87,20 +144,41 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None = None,
+        scoring_format: ScoringFormat | None = None,
+        name: str | None = None,
+        allowance_percentage: int | None = None,
+        creator_tee_category: TeeCategory | None = None,
+        creator_tee_gender: Gender | None = None,
     ) -> "QuickMatch":
-        """Factory method: crea una partida rapida con el creador como primer participante."""
+        """
+        Factory method: crea una partida rapida con el creador como primer participante.
+
+        Exactamente uno de match_format (Ryder Cup, por equipos) o scoring_format
+        (partido libre, todos contra todos) debe indicarse. allowance_percentage
+        personalizado debe ser 50-100 en incrementos de 5; si se omite, se usa el
+        default WHS del formato (ver get_effective_allowance()).
+        """
         now = datetime.now()
-        creator_team = None if match_format == MatchFormat.SINGLES else "A"
-        creator_participant = QuickMatchParticipant.for_user(creator_id, team=creator_team)
+        uses_teams = match_format is not None and match_format != MatchFormat.SINGLES
+        creator_team = "A" if uses_teams else None
+        creator_participant = QuickMatchParticipant.for_user(
+            creator_id,
+            team=creator_team,
+            tee_category=creator_tee_category,
+            tee_gender=creator_tee_gender,
+        )
 
         quick_match = cls(
             id=id,
             creator_id=creator_id,
             golf_course_id=golf_course_id,
             match_format=match_format,
+            scoring_format=scoring_format,
+            allowance_percentage=allowance_percentage,
             status=QuickMatchStatus.PENDING,
             participants=[creator_participant],
+            name=name,
             created_at=now,
             updated_at=now,
         )
@@ -110,7 +188,8 @@ class QuickMatch:
                 quick_match_id=str(quick_match._id),
                 creator_id=str(creator_id),
                 golf_course_id=str(golf_course_id),
-                match_format=match_format.value,
+                match_format=match_format.value if match_format else None,
+                scoring_format=scoring_format.value if scoring_format else None,
             )
         )
         quick_match.add_domain_event(
@@ -129,9 +208,12 @@ class QuickMatch:
         id: QuickMatchId,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
-        match_format: MatchFormat,
+        match_format: MatchFormat | None,
         status: QuickMatchStatus,
         participants: list[QuickMatchParticipant],
+        name: str | None = None,
+        scoring_format: ScoringFormat | None = None,
+        allowance_percentage: int | None = None,
         scorer_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -142,8 +224,11 @@ class QuickMatch:
             creator_id=creator_id,
             golf_course_id=golf_course_id,
             match_format=match_format,
+            scoring_format=scoring_format,
+            allowance_percentage=allowance_percentage,
             status=status,
             participants=participants,
+            name=name,
             scorer_ids=scorer_ids,
             created_at=created_at,
             updated_at=updated_at,
@@ -171,8 +256,40 @@ class QuickMatch:
         return self._golf_course_id
 
     @property
-    def match_format(self) -> MatchFormat:
+    def match_format(self) -> MatchFormat | None:
         return self._match_format
+
+    @property
+    def scoring_format(self) -> ScoringFormat | None:
+        return self._scoring_format
+
+    @property
+    def allowance_percentage(self) -> int | None:
+        """Allowance personalizado (50-100); None si se usa el default WHS del formato."""
+        return self._allowance_percentage
+
+    def get_effective_allowance(self) -> int:
+        """
+        Porcentaje de allowance efectivo para el Playing Handicap.
+
+        Si se configuro un allowance_percentage personalizado, lo retorna. Si no,
+        el default WHS: SINGLES 100% (match play), FOURBALL 90%, FOURSOMES 50%,
+        partido libre (MEDAL/STABLEFORD, stroke play) 95%.
+        """
+        if self._allowance_percentage is not None:
+            return self._allowance_percentage
+
+        if self._match_format == MatchFormat.SINGLES:
+            return SINGLES_ALLOWANCE
+        if self._match_format == MatchFormat.FOURBALL:
+            return FOURBALL_ALLOWANCE
+        if self._match_format == MatchFormat.FOURSOMES:
+            return FOURSOMES_ALLOWANCE
+        return FREE_PLAY_ALLOWANCE
+
+    @property
+    def name(self) -> str | None:
+        return self._name
 
     @property
     def status(self) -> QuickMatchStatus:
@@ -211,11 +328,20 @@ class QuickMatch:
         return participant_id in self._scorer_ids
 
     def capacity(self) -> int:
-        """Numero total de jugadores requeridos por el formato."""
-        return self._match_format.players_per_team() * 2
+        """Numero maximo de jugadores admitidos por el formato."""
+        if self._match_format is not None:
+            return self._match_format.players_per_team() * 2
+        return MAX_FREE_PLAY_PLAYERS
 
     def is_roster_complete(self) -> bool:
-        return len(self._participants) == self.capacity()
+        """
+        Match play (Ryder Cup): exige el roster exacto de la capacidad del formato.
+        Partido libre: cualquier roster es valido para empezar (1 a 4, incluido solo
+        el creador), no hace falta llenar hasta el maximo.
+        """
+        if self._match_format is not None:
+            return len(self._participants) == self.capacity()
+        return True
 
     def registered_participants(self) -> list[QuickMatchParticipant]:
         return [p for p in self._participants if not p.is_guest]
@@ -245,9 +371,12 @@ class QuickMatch:
             )
 
         team = participant.team
-        if self._match_format == MatchFormat.SINGLES:
+        uses_teams = self._match_format is not None and self._match_format != MatchFormat.SINGLES
+        if not uses_teams:
             if team is not None:
-                raise InvalidTeamAssignmentViolation("SINGLES matches do not use teams.")
+                raise InvalidTeamAssignmentViolation(
+                    "This quick match format does not use teams."
+                )
         else:
             if team not in ("A", "B"):
                 raise InvalidTeamAssignmentViolation("team must be 'A' or 'B' for this format.")
@@ -392,7 +521,8 @@ class QuickMatch:
     # ===========================================
 
     def __str__(self) -> str:
-        return f"QuickMatch({self._match_format.value}, {self._status.value})"
+        format_value = self._match_format.value if self._match_format else self._scoring_format.value
+        return f"QuickMatch({format_value}, {self._status.value})"
 
     def __eq__(self, other) -> bool:
         return isinstance(other, QuickMatch) and self._id == other._id

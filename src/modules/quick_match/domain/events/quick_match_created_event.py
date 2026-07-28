@@ -12,4 +12,5 @@ class QuickMatchCreatedEvent(DomainEvent):
     quick_match_id: str
     creator_id: str
     golf_course_id: str
-    match_format: str
+    match_format: str | None
+    scoring_format: str | None = None

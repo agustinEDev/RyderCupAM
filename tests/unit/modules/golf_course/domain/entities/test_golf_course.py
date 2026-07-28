@@ -705,3 +705,50 @@ def test_golf_course_holes_property_returns_copy(valid_tees, valid_holes):
     # Then
     assert holes_copy is not golf_course._holes  # Es una copia
     assert len(holes_copy) == len(valid_holes)
+
+
+# ============================================================================
+# Tests: GolfCourse.has_tee()
+# ============================================================================
+
+
+def test_has_tee_returns_true_for_existing_category_and_gender(valid_tees, valid_holes):
+    golf_course = GolfCourse.create(
+        name="Test Course",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=valid_tees,
+        holes=valid_holes,
+    )
+
+    assert golf_course.has_tee(TeeCategory.CHAMPIONSHIP, Gender.MALE) is True
+    assert golf_course.has_tee(TeeCategory.AMATEUR, Gender.MALE) is True
+    assert golf_course.has_tee(TeeCategory.CHAMPIONSHIP, Gender.FEMALE) is True
+
+
+def test_has_tee_returns_false_for_missing_gender(valid_tees, valid_holes):
+    golf_course = GolfCourse.create(
+        name="Test Course",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=valid_tees,
+        holes=valid_holes,
+    )
+
+    # AMATEUR only exists for MALE in valid_tees
+    assert golf_course.has_tee(TeeCategory.AMATEUR, Gender.FEMALE) is False
+
+
+def test_has_tee_returns_false_for_missing_category(valid_tees, valid_holes):
+    golf_course = GolfCourse.create(
+        name="Test Course",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=valid_tees,
+        holes=valid_holes,
+    )
+
+    assert golf_course.has_tee(TeeCategory.JUNIOR, Gender.MALE) is False

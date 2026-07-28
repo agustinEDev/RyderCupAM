@@ -19,6 +19,12 @@ class GolfCourseNotApprovedError(Exception):
     pass
 
 
+class InvalidTeeSelectionError(Exception):
+    """El tee (categoria/genero) elegido no existe en el campo de golf de la partida."""
+
+    pass
+
+
 class FriendUserNotFoundError(Exception):
     """El usuario a añadir como amigo no existe."""
 
