@@ -222,6 +222,9 @@ from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_cas
 from src.modules.quick_match.application.use_cases.remove_participant_use_case import (
     RemoveParticipantUseCase,
 )
+from src.modules.quick_match.application.use_cases.set_participant_handicap_use_case import (
+    SetParticipantHandicapUseCase,
+)
 from src.modules.quick_match.application.use_cases.start_quick_match_use_case import (
     StartQuickMatchUseCase,
 )
@@ -1042,6 +1045,14 @@ def get_remove_quick_match_participant_use_case(
 ) -> RemoveParticipantUseCase:
     """Proveedor del caso de uso RemoveParticipantUseCase."""
     return RemoveParticipantUseCase(uow, user_uow)
+
+
+def get_set_quick_match_participant_handicap_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SetParticipantHandicapUseCase:
+    """Proveedor del caso de uso SetParticipantHandicapUseCase."""
+    return SetParticipantHandicapUseCase(uow, user_uow)
 
 
 def get_start_quick_match_use_case(

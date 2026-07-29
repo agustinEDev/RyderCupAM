@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Migration `b8e2f4a6c1d7`: adds `quick_matches.allowance_percentage` (nullable integer); tee selection lives inside the existing `participants` JSONB column, no schema change needed there.
 - New unit tests (participant tee fields, entity allowance validation/defaults, handicap-mapping regression) + 4 integration tests (default/custom allowance, invalid allowance → 422, tee round-trip through create + add-friend + detail).
 
+**Quick Match — Participant Handicap Override**
+
+- New `PATCH /api/v1/quick-matches/{id}/participants/{participant_id}/handicap` endpoint: the creator can set/override a participant's handicap while the match is `PENDING` — a manual value for guests, or a new `custom_handicap` override (takes precedence over `User.handicap`) for registered players, e.g. one without a handicap on their profile. 403 for non-creators, 409 once the match has started, 422 out of range (-10 to 54). No migration needed — `custom_handicap` lives inside the existing `participants` JSONB column.
+- Fixed a persistence bug found while testing this: `QuickMatchParticipant.__eq__` only compares `participant_id` (by design, for list operations like `is_participant`/`find_participant`), so SQLAlchemy's default dirty-check on the `participants` column — a same-length list `==` comparison — couldn't see a change when only one entry's handicap differed, and silently skipped the `UPDATE`. Editing a second participant would then persist only that one, discarding the first one's already-"saved" (but never actually written) override. Fixed by forcing `flag_modified()` in `SQLAlchemyQuickMatchRepository.update()`.
+- 20 new unit tests (VO override field, entity method, use case) + 6 integration tests against real Postgres, including a regression test that reproduces the exact persistence bug and re-fetches via a fresh request to prove the write actually reached the database.
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed

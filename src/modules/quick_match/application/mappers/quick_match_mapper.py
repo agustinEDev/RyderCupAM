@@ -46,7 +46,8 @@ class QuickMatchDTOMapper:
             else:
                 user = users_by_id.get(p.user_id)
                 name = f"{user.first_name} {user.last_name}" if user else "Unknown"
-                handicap = user.handicap.value if user and user.handicap else None
+                profile_handicap = user.handicap.value if user and user.handicap else None
+                handicap = p.custom_handicap if p.custom_handicap is not None else profile_handicap
             participants_dto.append(
                 QuickMatchParticipantDTO(
                     participant_id=p.participant_id.value,
