@@ -321,7 +321,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
         # Si hay búsqueda por creador, necesitamos hacer JOIN con User
         if search_creator:
-            query = query.join(User, Competition._creator_id == User.id)
+            query = query.join(User, Competition._creator_id == User._id)
 
         # Lista de condiciones WHERE
         conditions = []
@@ -334,8 +334,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         if search_creator:
             conditions.append(
                 or_(
-                    User.first_name.ilike(f"%{search_creator}%"),
-                    User.last_name.ilike(f"%{search_creator}%"),
+                    User._first_name.ilike(f"%{search_creator}%"),
+                    User._last_name.ilike(f"%{search_creator}%"),
                 )
             )
 

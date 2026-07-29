@@ -45,6 +45,14 @@ from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # 
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (  # noqa: E402
     start_golf_course_mappers,
 )
+from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
+from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (  # noqa: E402
+    start_quick_match_mappers,
+)
+from src.modules.social.infrastructure.api.v1 import friend_routes  # noqa: E402
+from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (  # noqa: E402
+    start_social_mappers,
+)
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
@@ -88,6 +96,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_country_mappers()  # Shared domain (Country) mappers
     start_golf_course_mappers()  # Golf Course module mappers (before Competition - dependency)
     start_competition_mappers()  # Competition module mappers (depends on GolfCourse)
+    start_social_mappers()  # Social module mappers (depends on User)
+    start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
     yield
     print("INFO:     Apagando aplicación...")
 
@@ -325,6 +335,18 @@ app.include_router(
     invitation_routes.router,
     prefix="/api/v1",
     tags=["Invitations"],
+)
+
+app.include_router(
+    friend_routes.router,
+    prefix="/api/v1",
+    tags=["Friends"],
+)
+
+app.include_router(
+    quick_match_routes.router,
+    prefix="/api/v1",
+    tags=["Quick Matches"],
 )
 
 app.include_router(

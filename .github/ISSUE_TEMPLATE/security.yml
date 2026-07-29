@@ -1,0 +1,34 @@
+name: "🔒 Security"
+description: "Vulnerabilidad o hardening de seguridad (uso interno, no público)"
+title: "[Security]: "
+labels: ["type:security"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción de la vulnerabilidad o riesgo
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto / componente afectado
+    validations:
+      required: true
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Propuesta de solución
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad
+      description: Añade también la label priority:P0/P1/P2 correspondiente
+      options:
+        - P0 — Crítico
+        - P1 — Alto
+        - P2 — Normal
+    validations:
+      required: true

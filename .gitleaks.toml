@@ -11,7 +11,9 @@ title = "Ryder Cup AM - GitLeaks Configuration"
   paths = [
     '''tests/.*''',
     '''.*test.*\.py''',
-    '''k8s/.*-secret\.yaml''',  # Kubernetes secret templates with placeholders
+    # k8s/api-secret.yaml is intentionally NOT excluded: it must only
+    # ever contain genuine placeholders. Real values live in
+    # k8s/api-secret.local.yaml (gitignored, never committed).
   ]
 
   # Ignore specific patterns that are safe
