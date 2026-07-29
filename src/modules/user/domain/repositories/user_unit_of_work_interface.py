@@ -15,6 +15,9 @@ from ..repositories.password_history_repository_interface import (
 from ..repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from ..repositories.user_avatar_upload_repository_interface import (
+    UserAvatarUploadRepositoryInterface,
+)
 from ..repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
@@ -141,5 +144,20 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             UserOAuthAccountRepositoryInterface: Repositorio de OAuth accounts transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def avatar_uploads(self) -> UserAvatarUploadRepositoryInterface:
+        """
+        Acceso al repositorio de fotos de avatar subidas dentro de la transacción.
+
+        Avatar (v2.3.0):
+        - Permite guardar/listar/borrar fotos subidas por el usuario (historial acotado a 5)
+        - Mantiene consistencia transaccional con users
+
+        Returns:
+            UserAvatarUploadRepositoryInterface: Repositorio de avatar uploads transaccional
         """
         pass

@@ -90,6 +90,10 @@ class TestUserUnitOfWorkInterface:
             def oauth_accounts(self):
                 return MagicMock()
 
+            @property
+            def avatar_uploads(self):
+                return MagicMock()
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -207,6 +211,10 @@ class TestUserUnitOfWorkContractCompliance:
             def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
                 return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
 
+            @property
+            def avatar_uploads(self):
+                return AsyncMock()
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -286,6 +294,10 @@ class TestUserUnitOfWorkContractCompliance:
             def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
                 return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
 
+            @property
+            def avatar_uploads(self):
+                return AsyncMock()
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -356,6 +368,10 @@ class TestUserUnitOfWorkIntegration:
             @property
             def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
                 return AsyncMock(spec=UserOAuthAccountRepositoryInterface)
+
+            @property
+            def avatar_uploads(self):
+                return AsyncMock()
 
             async def __aenter__(self):
                 return self

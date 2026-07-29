@@ -56,6 +56,7 @@ from src.modules.social.infrastructure.persistence.mappers.friendship_mapper imp
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
+    avatar_routes,
     device_routes,
     google_auth_routes,
     handicap_routes,
@@ -286,6 +287,12 @@ app.include_router(
     user_routes.router,
     prefix="/api/v1/users",
     tags=["Users"],
+)
+
+app.include_router(
+    avatar_routes.router,
+    prefix="/api/v1",
+    tags=["Avatars"],
 )
 
 app.include_router(

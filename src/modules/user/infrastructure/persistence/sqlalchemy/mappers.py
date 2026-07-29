@@ -17,9 +17,11 @@ from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.value_objects.avatar_source import AvatarSource
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.password import Password
+from src.modules.user.domain.value_objects.user_avatar_upload_id import UserAvatarUploadId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
@@ -72,6 +74,44 @@ class GenderDecorator(TypeDecorator):
         if value is None:
             return None
         return Gender(value)
+
+
+# --- TypeDecorator para AvatarSource ---
+class AvatarSourceDecorator(TypeDecorator):
+    """Convierte entre AvatarSource enum y string en BD."""
+
+    impl = String(10)
+    cache_ok = True
+
+    def process_bind_param(self, value: AvatarSource | None, dialect) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect) -> AvatarSource | None:
+        if value is None:
+            return AvatarSource.NONE
+        return AvatarSource(value)
+
+
+# --- TypeDecorator para UserAvatarUploadId (nullable) ---
+class ActiveAvatarUploadIdDecorator(TypeDecorator):
+    """TypeDecorator para manejar UserAvatarUploadId (nullable) como CHAR(36) en BD."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: UserAvatarUploadId | str | None, dialect) -> str | None:
+        if isinstance(value, UserAvatarUploadId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> UserAvatarUploadId | None:
+        if value is None:
+            return None
+        return UserAvatarUploadId(uuid.UUID(value))
 
 
 # --- TypeDecorator para Handicap ---
@@ -130,6 +170,24 @@ users_table = Table(
     Column("is_admin", Boolean, nullable=False, default=False),
     # Gender field (tee system refactor)
     Column("gender", GenderDecorator(), nullable=True),
+    # Avatar fields (v2.3.0)
+    Column(
+        "avatar_source", AvatarSourceDecorator(), nullable=False, default="NONE", server_default="NONE"
+    ),
+    Column("avatar_preset_id", Integer, nullable=True),
+    Column(
+        "active_avatar_upload_id",
+        ActiveAvatarUploadIdDecorator,
+        # use_alter=True: rompe el ciclo de FKs con user_avatar_uploads.user_id -> users.id
+        # (SQLAlchemy crea la columna primero y añade el constraint en un ALTER TABLE aparte).
+        ForeignKey(
+            "user_avatar_uploads.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_users_active_avatar_upload_id",
+        ),
+        nullable=True,
+    ),
 )
 
 
@@ -165,6 +223,9 @@ def start_mappers():
                 "_locked_until": users_table.c.locked_until,
                 "_is_admin": users_table.c.is_admin,
                 "_gender": users_table.c.gender,
+                "_avatar_source": users_table.c.avatar_source,
+                "_avatar_preset_id": users_table.c.avatar_preset_id,
+                "_active_avatar_upload_id": users_table.c.active_avatar_upload_id,
                 # Value Objects de una columna (Email, Password) → mapeamos la columna
                 # cruda a un atributo "_value" y componemos el VO real sobre el
                 # atributo privado "_email"/"_password" que respalda la @property
@@ -184,6 +245,9 @@ def start_mappers():
     from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (  # noqa: PLC0415
         start_mappers as start_refresh_token_mappers,
     )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_avatar_upload_mapper import (  # noqa: PLC0415
+        start_mappers as start_user_avatar_upload_mappers,
+    )
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (  # noqa: PLC0415
         start_user_device_mappers,
     )
@@ -195,3 +259,4 @@ def start_mappers():
     start_password_history_mappers()
     start_user_device_mappers()
     start_oauth_account_mappers()
+    start_user_avatar_upload_mappers()

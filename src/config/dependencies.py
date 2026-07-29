@@ -265,20 +265,42 @@ from src.modules.support.infrastructure.services.github_issue_service import (
     GitHubIssueService,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.avatar_preset_provider_interface import (
+    IAvatarPresetProvider,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
+from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
+    ActivateUploadedAvatarUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_avatar_image_use_case import (
+    GetAvatarImageUseCase,
+)
+from src.modules.user.application.use_cases.get_avatar_preset_image_use_case import (
+    GetAvatarPresetImageUseCase,
+)
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
+)
+from src.modules.user.application.use_cases.get_my_avatar_upload_image_use_case import (
+    GetMyAvatarUploadImageUseCase,
 )
 from src.modules.user.application.use_cases.google_login_use_case import (
     GoogleLoginUseCase,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
     LinkGoogleAccountUseCase,
+)
+from src.modules.user.application.use_cases.list_avatar_presets_use_case import (
+    ListAvatarPresetsUseCase,
+)
+from src.modules.user.application.use_cases.list_my_avatar_uploads_use_case import (
+    ListMyAvatarUploadsUseCase,
 )
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
@@ -296,6 +318,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
+from src.modules.user.application.use_cases.remove_avatar_use_case import RemoveAvatarUseCase
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
 )
@@ -309,6 +332,9 @@ from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
 from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
+from src.modules.user.application.use_cases.set_avatar_preset_use_case import (
+    SetAvatarPresetUseCase,
+)
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
@@ -330,6 +356,7 @@ from src.modules.user.application.use_cases.update_user_handicap_manually_use_ca
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
 )
+from src.modules.user.application.use_cases.upload_avatar_use_case import UploadAvatarUseCase
 from src.modules.user.application.use_cases.validate_reset_token_use_case import (
     ValidateResetTokenUseCase,
 )
@@ -343,8 +370,14 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.external.filesystem_avatar_preset_provider import (
+    FileSystemAvatarPresetProvider,
+)
 from src.modules.user.infrastructure.external.google_oauth_service import (
     GoogleOAuthService,
+)
+from src.modules.user.infrastructure.external.pillow_image_processor import (
+    PillowImageProcessor,
 )
 from src.modules.user.infrastructure.external.rfeg_handicap_service import (
     RFEGHandicapService,
@@ -654,6 +687,84 @@ def get_update_security_use_case(
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return UpdateSecurityUseCase(uow, email_service)
+
+
+# ============================================================================
+# AVATAR (v2.3.0)
+# ============================================================================
+
+
+def get_image_processor() -> IImageProcessor:
+    """Proveedor del procesador de imágenes (Pillow) para avatares subidos."""
+    return PillowImageProcessor()
+
+
+def get_avatar_preset_provider() -> IAvatarPresetProvider:
+    """Proveedor del catálogo de presets de avatar (assets estáticos en disco)."""
+    return FileSystemAvatarPresetProvider()
+
+
+def get_set_avatar_preset_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SetAvatarPresetUseCase:
+    """Proveedor del caso de uso SetAvatarPresetUseCase."""
+    return SetAvatarPresetUseCase(uow)
+
+
+def get_upload_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    image_processor: IImageProcessor = Depends(get_image_processor),
+) -> UploadAvatarUseCase:
+    """Proveedor del caso de uso UploadAvatarUseCase."""
+    return UploadAvatarUseCase(uow, image_processor)
+
+
+def get_activate_uploaded_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ActivateUploadedAvatarUseCase:
+    """Proveedor del caso de uso ActivateUploadedAvatarUseCase."""
+    return ActivateUploadedAvatarUseCase(uow)
+
+
+def get_list_my_avatar_uploads_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyAvatarUploadsUseCase:
+    """Proveedor del caso de uso ListMyAvatarUploadsUseCase."""
+    return ListMyAvatarUploadsUseCase(uow)
+
+
+def get_remove_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RemoveAvatarUseCase:
+    """Proveedor del caso de uso RemoveAvatarUseCase."""
+    return RemoveAvatarUseCase(uow)
+
+
+def get_avatar_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+) -> GetAvatarImageUseCase:
+    """Proveedor del caso de uso GetAvatarImageUseCase."""
+    return GetAvatarImageUseCase(uow, preset_provider)
+
+
+def get_my_avatar_upload_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetMyAvatarUploadImageUseCase:
+    """Proveedor del caso de uso GetMyAvatarUploadImageUseCase."""
+    return GetMyAvatarUploadImageUseCase(uow)
+
+
+def get_list_avatar_presets_use_case() -> ListAvatarPresetsUseCase:
+    """Proveedor del caso de uso ListAvatarPresetsUseCase."""
+    return ListAvatarPresetsUseCase()
+
+
+def get_avatar_preset_image_use_case(
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+) -> GetAvatarPresetImageUseCase:
+    """Proveedor del caso de uso GetAvatarPresetImageUseCase."""
+    return GetAvatarPresetImageUseCase(preset_provider)
 
 
 # Esquema de seguridad HTTP Bearer para Swagger

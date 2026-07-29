@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+**User Avatars**
+
+- Nuevo campo de avatar en `User`: `avatar_source` (`NONE`/`PRESET`/`UPLOAD`), `avatar_preset_id` (1-10) y `active_avatar_upload_id`. Preset y foto subida son mutuamente excluyentes; cambiar entre ellos no borra el historial de subidas.
+- Nueva entidad `UserAvatarUpload` (BYTEA en Postgres) para fotos subidas por el usuario: historial acotado a 5 por usuario (FIFO, se poda la más antigua al superar el límite).
+- 10 presets de golf (fotos Pexels, licencia gratuita sin atribución obligatoria) empaquetados como assets estáticos del backend (`src/modules/user/infrastructure/static/avatar_presets/`), servidos vía `GET /api/v1/avatar-presets/{id}/image`.
+- Subida de foto propia: valida tamaño (máx. 10MB de entrada) y formato (JPEG/PNG/WEBP), redimensiona a cuadrado 512x512 y comprime a JPEG calidad 85 con Pillow antes de guardar.
+- Endpoints nuevos: `GET /api/v1/avatar-presets`, `GET /api/v1/avatar-presets/{id}/image`, `GET /api/v1/users/{id}/avatar` (avatar activo de cualquier usuario, resuelve preset o subida sin que el frontend necesite saber el origen), `POST /api/v1/users/me/avatar/preset`, `POST /api/v1/users/me/avatar/upload` (rate limited 10/hora), `GET /api/v1/users/me/avatar/uploads`, `GET /api/v1/users/me/avatar/uploads/{id}/image`, `POST /api/v1/users/me/avatar/uploads/{id}/activate`, `DELETE /api/v1/users/me/avatar`.
+- Migración Alembic (tabla `user_avatar_uploads` + columnas en `users`, con FK circular resuelta vía `use_alter`).
+- Nueva dependencia: Pillow (procesado de imágenes) y python-multipart (requerido por FastAPI para `UploadFile`).
+- Tests: dominio, casos de uso (con dobles para Pillow y el catálogo de presets) e integración E2E completos.
+
 ## [2.2.0] - 2026-07-29
 
 ### Added

@@ -190,6 +190,14 @@ class UserResponseDTO(BaseModel):
         default=True,
         description="True si el usuario tiene contraseña configurada. False si se registró solo con OAuth.",
     )
+    # Avatar fields (v2.3.0)
+    avatar_source: str = Field(
+        default="NONE",
+        description="Origen del avatar activo: NONE, PRESET o UPLOAD.",
+    )
+    avatar_preset_id: int | None = Field(
+        None, description="ID del preset activo (1-10), solo si avatar_source=PRESET."
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
