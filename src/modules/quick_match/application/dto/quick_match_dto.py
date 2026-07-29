@@ -6,6 +6,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.modules.quick_match.domain.entities.quick_match import MAX_NAME_LENGTH, MAX_SCORERS
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    MAX_HANDICAP,
+    MIN_HANDICAP,
+)
 
 TEE_CATEGORY_PATTERN = "^(CHAMPIONSHIP|AMATEUR|SENIOR|FORWARD|JUNIOR)$"
 TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
@@ -90,7 +94,7 @@ class SetParticipantHandicapRequestDTO(BaseModel):
     quick_match_id: UUID
     requester_id: UUID
     target_participant_id: UUID
-    handicap: float | None = Field(None, ge=-10.0, le=54.0)
+    handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
 
 
 class RemoveParticipantRequestDTO(BaseModel):

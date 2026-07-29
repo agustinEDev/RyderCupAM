@@ -28,8 +28,10 @@ from src.config.dependencies import (
 )
 from src.config.rate_limit import limiter
 from src.modules.quick_match.application.dto.quick_match_dto import (
+    MAX_HANDICAP,
     MAX_NAME_LENGTH,
     MAX_SCORERS,
+    MIN_HANDICAP,
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
     CreateQuickMatchRequestDTO,
@@ -187,7 +189,7 @@ class AddGuestParticipantBody(BaseModel):
 class SetParticipantHandicapBody(BaseModel):
     """Body para editar el handicap de un participante (manual u override)."""
 
-    handicap: float | None = Field(None, ge=-10.0, le=54.0)
+    handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
 
 
 class StartQuickMatchBody(BaseModel):
@@ -404,6 +406,8 @@ async def set_participant_handicap(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
