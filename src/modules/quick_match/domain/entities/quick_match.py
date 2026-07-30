@@ -349,6 +349,32 @@ class QuickMatch:
     def registered_participants(self) -> list[QuickMatchParticipant]:
         return [p for p in self._participants if not p.is_guest]
 
+    def team_rosters(self) -> tuple[set[ParticipantId], set[ParticipantId]] | None:
+        """
+        Deriva los dos bandos (A y B) de participantes para el calculo de standing.
+
+        Reutiliza la misma convencion de asignacion de equipo que `add_participant()`:
+        en formatos que usan equipos (FOURBALL/FOURSOMES), el campo `team` de cada
+        participante decide el bando. En SINGLES (que no usa el campo `team`, ver
+        `add_participant`) los dos unicos participantes son cada bando por convencion.
+
+        Devuelve `None` si no hay exactamente dos bandos no vacios resolubles (por
+        ejemplo, con menos de 2 participantes).
+        """
+        if len(self._participants) < 2:  # noqa: PLR2004
+            return None
+
+        team_a_ids = {p.participant_id for p in self._participants if (p.team or "A") == "A"}
+        team_b_ids = {p.participant_id for p in self._participants if p.team == "B"}
+        if not team_b_ids and len(self._participants) == 2:  # noqa: PLR2004 - SINGLES: no team field
+            team_a_ids = {self._participants[0].participant_id}
+            team_b_ids = {self._participants[1].participant_id}
+
+        if not team_a_ids or not team_b_ids:
+            return None
+
+        return team_a_ids, team_b_ids
+
     def _team_count(self, team: str) -> int:
         return sum(1 for p in self._participants if p.team == team)
 
@@ -377,9 +403,7 @@ class QuickMatch:
         uses_teams = self._match_format is not None and self._match_format != MatchFormat.SINGLES
         if not uses_teams:
             if team is not None:
-                raise InvalidTeamAssignmentViolation(
-                    "This quick match format does not use teams."
-                )
+                raise InvalidTeamAssignmentViolation("This quick match format does not use teams.")
         else:
             if team not in ("A", "B"):
                 raise InvalidTeamAssignmentViolation("team must be 'A' or 'B' for this format.")
@@ -427,7 +451,9 @@ class QuickMatch:
             )
         )
 
-    def set_participant_handicap(self, participant_id: ParticipantId, handicap: float | None) -> None:
+    def set_participant_handicap(
+        self, participant_id: ParticipantId, handicap: float | None
+    ) -> None:
         """
         Edita el handicap de un participante mientras la partida esta PENDING.
 
@@ -559,7 +585,9 @@ class QuickMatch:
     # ===========================================
 
     def __str__(self) -> str:
-        format_value = self._match_format.value if self._match_format else self._scoring_format.value
+        format_value = (
+            self._match_format.value if self._match_format else self._scoring_format.value
+        )
         return f"QuickMatch({format_value}, {self._status.value})"
 
     def __eq__(self, other) -> bool:
