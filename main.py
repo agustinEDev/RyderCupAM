@@ -226,6 +226,12 @@ async def add_security_headers(request: Request, call_next):
 # trozos con corte temprano en el propio endpoint sigue siendo la protección
 # real; esto es un fast-fail adicional para el caso común.
 _AVATAR_UPLOAD_PATH = "/api/v1/users/me/avatar/upload"
+# Content-Length cubre el multipart body ENTERO (boundaries + cabeceras de cada
+# parte), no solo los bytes del fichero — un archivo justo en el límite (o algo
+# por debajo) puede declarar un tamaño total ligeramente mayor que
+# MAX_UPLOAD_BYTES por ese framing. Se permite un margen para no rechazar
+# subidas válidas; el chequeo exacto por bytes reales sigue en el endpoint.
+_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES = 16 * 1024
 
 
 @app.middleware("http")
@@ -237,7 +243,10 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
                 declared_size = int(content_length)
             except ValueError:
                 declared_size = None
-            if declared_size is not None and declared_size > MAX_UPLOAD_BYTES:
+            if (
+                declared_size is not None
+                and declared_size > MAX_UPLOAD_BYTES + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
+            ):
                 return JSONResponse(
                     status_code=413,
                     content={

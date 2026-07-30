@@ -153,14 +153,16 @@ class TestUploadAvatar:
         """
         El middleware de Content-Length debe rechazar según lo que el cliente
         DECLARA, sin depender de autenticación ni de parsear el multipart body
-        — por eso este test no crea usuario ni hace login.
+        — por eso este test no crea usuario ni hace login. El valor declarado
+        debe superar también el margen de framing multipart permitido (16KB),
+        no solo el límite de bytes del fichero.
         """
         request = client.build_request(
             "POST",
             "/api/v1/users/me/avatar/upload",
             content=b"tiny-body-but-lying-about-its-size",
         )
-        request.headers["content-length"] = str(10 * 1024 * 1024 + 1)
+        request.headers["content-length"] = str(10 * 1024 * 1024 + 16 * 1024 + 1)
 
         response = await client.send(request)
 
