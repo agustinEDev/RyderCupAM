@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.dto.quick_match_dto import (
@@ -24,6 +25,9 @@ from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_c
     SubmitProxyHoleScoreUseCase,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.services.scoring_coverage_service import (
+    ScoringCoverageService,
+)
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
@@ -55,7 +59,9 @@ class TestGetQuickMatchUseCase:
         other = await create_user(user_uow, "other@test.com")
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
-        use_case = GetQuickMatchUseCase(qm_uow, user_uow)
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService()
+        )
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.status == "IN_PROGRESS"
@@ -73,12 +79,16 @@ class TestGetQuickMatchUseCase:
         other = await create_user(user_uow, "other2@test.com")
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
-        use_case = GetQuickMatchUseCase(qm_uow, user_uow)
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService()
+        )
         with pytest.raises(NotQuickMatchParticipantError):
             await use_case.execute(str(qm.id.value), str(UserId(uuid4()).value))
 
     async def test_not_found_raises(self, qm_uow, user_uow):
-        use_case = GetQuickMatchUseCase(qm_uow, user_uow)
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService()
+        )
         with pytest.raises(QuickMatchNotFoundError):
             await use_case.execute(str(uuid4()), str(uuid4()))
 
@@ -98,7 +108,7 @@ class TestGetQuickMatchUseCase:
                 score=4,
             )
         )
-        proxy_uc = SubmitProxyHoleScoreUseCase(qm_uow)
+        proxy_uc = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
         await proxy_uc.execute(
             SubmitProxyHoleScoreRequestDTO(
                 quick_match_id=qm.id.value,
@@ -109,7 +119,7 @@ class TestGetQuickMatchUseCase:
             )
         )
 
-        get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
+        get_uc = GetQuickMatchUseCase(qm_uow, user_uow, ScoringService(), ScoringCoverageService())
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
         assert len(detail.hole_scores) == 2
@@ -118,14 +128,12 @@ class TestGetQuickMatchUseCase:
         assert detail.standing.leading_team == "A"
         assert detail.standing.status == "1UP"
 
-    async def test_registered_participant_handicap_comes_from_user_profile(
-        self, qm_uow, user_uow
-    ):
+    async def test_registered_participant_handicap_comes_from_user_profile(self, qm_uow, user_uow):
         creator = await create_user(user_uow, "creator-hcp@test.com", handicap=12.4)
         other = await create_user(user_uow, "other-hcp@test.com", handicap=None)
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
-        get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
+        get_uc = GetQuickMatchUseCase(qm_uow, user_uow, ScoringService(), ScoringCoverageService())
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
         creator_dto = next(p for p in detail.participants if p.user_id == creator.id.value)
@@ -157,7 +165,7 @@ class TestGetQuickMatchUseCase:
             )
         )
 
-        get_uc = GetQuickMatchUseCase(qm_uow, user_uow)
+        get_uc = GetQuickMatchUseCase(qm_uow, user_uow, ScoringService(), ScoringCoverageService())
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.match_format is None
