@@ -22,7 +22,10 @@ class SetAvatarPresetUseCase:
     async def execute(self, user_id: str, request: SetAvatarPresetRequestDTO) -> UserResponseDTO:
         async with self._uow:
             user_id_vo = UserId(user_id)
-            user = await self._uow.users.find_by_id(user_id_vo)
+            # find_by_id_for_update: mismo bloqueo de fila que UploadAvatarUseCase,
+            # para que un cambio de avatar concurrente (subida/activar histórico/
+            # quitar) con esta misma operación se serialice de forma consistente.
+            user = await self._uow.users.find_by_id_for_update(user_id_vo)
             if not user:
                 raise UserNotFoundError(f"User with id {user_id} not found")
 

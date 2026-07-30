@@ -35,7 +35,12 @@ class PillowImageProcessor(IImageProcessor):
             probe = Image.open(io.BytesIO(raw_bytes))
             probe_format = probe.format
             width, height = probe.size
-        except (UnidentifiedImageError, OSError, ValueError) as exc:
+        except (
+            UnidentifiedImageError,
+            OSError,
+            ValueError,
+            Image.DecompressionBombError,
+        ) as exc:
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida") from exc
 
         if probe_format not in ALLOWED_INPUT_FORMATS:

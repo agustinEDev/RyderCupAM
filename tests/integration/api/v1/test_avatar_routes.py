@@ -146,6 +146,26 @@ class TestUploadAvatar:
 
         assert response.status_code == 413
 
+    @pytest.mark.asyncio
+    async def test_rejects_declared_content_length_over_limit_before_parsing_body(
+        self, client: AsyncClient
+    ):
+        """
+        El middleware de Content-Length debe rechazar según lo que el cliente
+        DECLARA, sin depender de autenticación ni de parsear el multipart body
+        — por eso este test no crea usuario ni hace login.
+        """
+        request = client.build_request(
+            "POST",
+            "/api/v1/users/me/avatar/upload",
+            content=b"tiny-body-but-lying-about-its-size",
+        )
+        request.headers["content-length"] = str(10 * 1024 * 1024 + 1)
+
+        response = await client.send(request)
+
+        assert response.status_code == 413
+
 
 class TestAvatarUploadHistoryAndSwitching:
     @pytest.mark.asyncio

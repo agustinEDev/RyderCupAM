@@ -19,6 +19,7 @@ import uvicorn  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from secure import Secure  # noqa: E402
@@ -54,6 +55,9 @@ from src.modules.social.infrastructure.persistence.mappers.friendship_mapper imp
     start_social_mappers,
 )
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
+from src.modules.user.application.use_cases.upload_avatar_use_case import (  # noqa: E402
+    MAX_UPLOAD_BYTES,
+)
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
     avatar_routes,
@@ -206,6 +210,44 @@ async def add_security_headers(request: Request, call_next):
     if route_cache_control is not None:
         response.headers["cache-control"] = route_cache_control
     return response
+
+
+# ================================
+# AVATAR UPLOAD SIZE GUARD (Content-Length fast-fail)
+# ================================
+# Rechaza subidas de avatar por encima del límite ANTES de que FastAPI/Starlette
+# parseen el multipart body: sin esto, un archivo enorme se bufferiza igualmente
+# durante el parseo del form (UploadFile ya se construye a partir del cuerpo ya
+# parseado), y el chequeo de tamaño dentro del endpoint llega demasiado tarde
+# para evitar ese coste. Solo inspecciona la cabecera (no toca el body), así
+# que su orden relativo a los demás middlewares no importa.
+# Nota: Content-Length es lo que el cliente DECLARA, no una garantía absoluta
+# (podría mentir, o usar chunked encoding sin esa cabecera) — la lectura por
+# trozos con corte temprano en el propio endpoint sigue siendo la protección
+# real; esto es un fast-fail adicional para el caso común.
+_AVATAR_UPLOAD_PATH = "/api/v1/users/me/avatar/upload"
+
+
+@app.middleware("http")
+async def limit_avatar_upload_content_length(request: Request, call_next):
+    if request.url.path == _AVATAR_UPLOAD_PATH and request.method == "POST":
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = None
+            if declared_size is not None and declared_size > MAX_UPLOAD_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            "El archivo supera el tamaño máximo permitido "
+                            f"({MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+                        )
+                    },
+                )
+    return await call_next(request)
 
 
 # ================================

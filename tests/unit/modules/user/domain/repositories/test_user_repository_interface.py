@@ -35,6 +35,7 @@ class TestUserRepositoryInterface:
         required_methods = {
             "save",
             "find_by_id",
+            "find_by_id_for_update",
             "find_by_ids",
             "find_by_email",
             "exists_by_email",
