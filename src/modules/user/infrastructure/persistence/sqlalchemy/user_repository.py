@@ -27,6 +27,16 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Busca un usuario por su ID."""
         return await self._session.get(User, user_id)
 
+    async def find_by_id_for_update(self, user_id: UserId) -> User | None:
+        """
+        Busca un usuario por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Serializa transacciones concurrentes sobre el mismo usuario (p.ej. subidas
+        de avatar simultáneas) para que operaciones read-modify-write como podar
+        el historial FIFO no se pisen entre sí.
+        """
+        return await self._session.get(User, user_id, with_for_update=True)
+
     async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
         """Busca múltiples usuarios por sus IDs en una sola consulta."""
         if not user_ids:

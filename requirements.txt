@@ -170,6 +170,19 @@ pygments==2.20.0
 
 
 # ================================
+# IMÁGENES (Avatar de usuario)
+# ================================
+
+# python-multipart - Requerido por FastAPI para parsear multipart/form-data (UploadFile)
+# Usado en el endpoint de subida de foto de avatar
+python-multipart==0.0.32
+
+# Pillow - Procesado de imágenes (validar formato, recortar a cuadrado, redimensionar,
+# comprimir a JPEG) antes de guardar la foto de avatar subida por el usuario en BD
+Pillow==12.3.0
+
+
+# ================================
 # TESTING Y DESARROLLO
 # ================================
 

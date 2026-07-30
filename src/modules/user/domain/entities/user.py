@@ -5,6 +5,7 @@ from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
+from ..errors.user_errors import InvalidAvatarPresetError
 from ..events.account_locked_event import AccountLockedEvent
 from ..events.account_unlocked_event import AccountUnlockedEvent
 from ..events.email_verified_event import EmailVerifiedEvent
@@ -18,14 +19,20 @@ from ..events.user_logged_out_event import UserLoggedOutEvent
 from ..events.user_password_changed_event import UserPasswordChangedEvent
 from ..events.user_profile_updated_event import UserProfileUpdatedEvent
 from ..events.user_registered_event import UserRegisteredEvent
+from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
 from ..value_objects.password import Password
+from ..value_objects.user_avatar_upload_id import UserAvatarUploadId
 from ..value_objects.user_id import UserId
 
 # Account Lockout Configuration
 MAX_FAILED_ATTEMPTS = 10
 LOCKOUT_DURATION_MINUTES = 30
+
+# Avatar Configuration
+AVATAR_PRESET_COUNT = 10
+AVATAR_MAX_STORED_UPLOADS = 5
 
 
 class User:
@@ -95,6 +102,9 @@ class User:
         locked_until: datetime | None = None,
         is_admin: bool = False,
         gender: Gender | None = None,
+        avatar_source: AvatarSource = AvatarSource.NONE,
+        avatar_preset_id: int | None = None,
+        active_avatar_upload_id: UserAvatarUploadId | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
         # Asignación de atributos privados (encapsulación)
@@ -116,6 +126,9 @@ class User:
         self._locked_until = locked_until
         self._is_admin = is_admin
         self._gender = gender
+        self._avatar_source = avatar_source
+        self._avatar_preset_id = avatar_preset_id
+        self._active_avatar_upload_id = active_avatar_upload_id
         self._domain_events = domain_events or []
 
     # ===========================================
@@ -193,6 +206,54 @@ class User:
     @property
     def gender(self) -> Gender | None:
         return self._gender
+
+    @property
+    def avatar_source(self) -> AvatarSource:
+        return self._avatar_source
+
+    @property
+    def avatar_preset_id(self) -> int | None:
+        return self._avatar_preset_id
+
+    @property
+    def active_avatar_upload_id(self) -> UserAvatarUploadId | None:
+        return self._active_avatar_upload_id
+
+    def set_preset_avatar(self, preset_id: int) -> None:
+        """
+        Activa un avatar predefinido (catálogo fijo 1..AVATAR_PRESET_COUNT).
+
+        Preset y foto subida son mutuamente excluyentes: activar un preset
+        desactiva cualquier foto subida como avatar activo (sin borrar el
+        historial de subidas, que se conserva para poder volver a él).
+        """
+        if not (1 <= preset_id <= AVATAR_PRESET_COUNT):
+            raise InvalidAvatarPresetError(
+                f"preset_id debe estar entre 1 y {AVATAR_PRESET_COUNT}, recibido: {preset_id}"
+            )
+        self._avatar_source = AvatarSource.PRESET
+        self._avatar_preset_id = preset_id
+        self._active_avatar_upload_id = None
+        self._updated_at = datetime.now()
+
+    def set_uploaded_avatar(self, upload_id: UserAvatarUploadId) -> None:
+        """
+        Activa como avatar una foto ya subida por el propio usuario (nueva o del historial).
+
+        Mutuamente excluyente con el preset: activar una foto subida desactiva
+        cualquier preset activo.
+        """
+        self._avatar_source = AvatarSource.UPLOAD
+        self._avatar_preset_id = None
+        self._active_avatar_upload_id = upload_id
+        self._updated_at = datetime.now()
+
+    def clear_avatar(self) -> None:
+        """Quita el avatar activo (vuelve al placeholder por defecto). No borra el historial de subidas."""
+        self._avatar_source = AvatarSource.NONE
+        self._avatar_preset_id = None
+        self._active_avatar_upload_id = None
+        self._updated_at = datetime.now()
 
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""

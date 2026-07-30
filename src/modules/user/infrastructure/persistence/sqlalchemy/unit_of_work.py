@@ -6,6 +6,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_avatar_upload_repository_interface import (
+    UserAvatarUploadRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
@@ -23,6 +26,9 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_rep
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_repository import (
     SQLAlchemyRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_avatar_upload_repository import (
+    SQLAlchemyUserAvatarUploadRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_repository import (
     SQLAlchemyUserDeviceRepository,
@@ -53,6 +59,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         self._password_history = SQLAlchemyPasswordHistoryRepository(session)
         self._user_devices = SQLAlchemyUserDeviceRepository(session)
         self._oauth_accounts = SQLAlchemyUserOAuthAccountRepository(session)
+        self._avatar_uploads = SQLAlchemyUserAvatarUploadRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
@@ -73,6 +80,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     @property
     def oauth_accounts(self) -> UserOAuthAccountRepositoryInterface:
         return self._oauth_accounts
+
+    @property
+    def avatar_uploads(self) -> UserAvatarUploadRepositoryInterface:
+        return self._avatar_uploads
 
     async def __aenter__(self):
         return self
