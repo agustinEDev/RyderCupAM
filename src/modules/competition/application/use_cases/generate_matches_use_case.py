@@ -253,7 +253,9 @@ class GenerateMatchesUseCase:
             for pid, user in zip(all_player_ids, users, strict=True):
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
-                    has_custom_handicap = enrollment is not None and enrollment.custom_handicap is not None
+                    has_custom_handicap = (
+                        enrollment is not None and enrollment.custom_handicap is not None
+                    )
                     if not has_custom_handicap:
                         await self._maybe_refresh_rfeg_handicap(user)
                     if user.handicap is not None:
@@ -572,7 +574,9 @@ class GenerateMatchesUseCase:
                 f"(gender: {tee_gender}) en el campo de golf"
             )
 
-        playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance, max_playing_handicap)
+        playing_handicap = calculator.calculate(
+            handicap_index, tee_rating, allowance, max_playing_handicap
+        )
         strokes_received = calculator.compute_strokes_received(
             playing_handicap, holes_by_stroke_index
         )
@@ -667,7 +671,9 @@ class GenerateMatchesUseCase:
 
         # Aplicar cap de max_playing_handicap si está definido
         if max_playing_handicap is not None:
-            differential_phs = {k: min(v, max_playing_handicap) for k, v in differential_phs.items()}
+            differential_phs = {
+                k: min(v, max_playing_handicap) for k, v in differential_phs.items()
+            }
 
         # 3. Construir MatchPlayers con PH diferencial
         def build_player(uid):
@@ -723,12 +729,20 @@ class GenerateMatchesUseCase:
         if is_scratch:
             return (
                 MatchPlayer.create(
-                    user_id=a_player_id, playing_handicap=0, tee_category=tee_cat_a,
-                    strokes_received=[], tee_gender=tee_gen_a, player_handicap=hi_a,
+                    user_id=a_player_id,
+                    playing_handicap=0,
+                    tee_category=tee_cat_a,
+                    strokes_received=[],
+                    tee_gender=tee_gen_a,
+                    player_handicap=hi_a,
                 ),
                 MatchPlayer.create(
-                    user_id=b_player_id, playing_handicap=0, tee_category=tee_cat_b,
-                    strokes_received=[], tee_gender=tee_gen_b, player_handicap=hi_b,
+                    user_id=b_player_id,
+                    playing_handicap=0,
+                    tee_category=tee_cat_b,
+                    strokes_received=[],
+                    tee_gender=tee_gen_b,
+                    player_handicap=hi_b,
                 ),
             )
 
@@ -746,25 +760,26 @@ class GenerateMatchesUseCase:
         ph_a = calculator.calculate(hi_a, tee_rating_a, allowance, max_playing_handicap)
         ph_b = calculator.calculate(hi_b, tee_rating_b, allowance, max_playing_handicap)
 
-        diff = ph_a - ph_b
-        if diff > 0:
-            strokes_a = calculator.compute_strokes_received(diff, holes_by_stroke_index)
-            strokes_b: list[int] = []
-        elif diff < 0:
-            strokes_a = []
-            strokes_b = calculator.compute_strokes_received(-diff, holes_by_stroke_index)
-        else:
-            strokes_a = []
-            strokes_b = []
+        strokes_a, strokes_b = calculator.calculate_singles_differential(
+            ph_a, ph_b, holes_by_stroke_index
+        )
 
         return (
             MatchPlayer.create(
-                user_id=a_player_id, playing_handicap=ph_a, tee_category=tee_cat_a,
-                strokes_received=strokes_a, tee_gender=tee_gen_a, player_handicap=hi_a,
+                user_id=a_player_id,
+                playing_handicap=ph_a,
+                tee_category=tee_cat_a,
+                strokes_received=strokes_a,
+                tee_gender=tee_gen_a,
+                player_handicap=hi_a,
             ),
             MatchPlayer.create(
-                user_id=b_player_id, playing_handicap=ph_b, tee_category=tee_cat_b,
-                strokes_received=strokes_b, tee_gender=tee_gen_b, player_handicap=hi_b,
+                user_id=b_player_id,
+                playing_handicap=ph_b,
+                tee_category=tee_cat_b,
+                strokes_received=strokes_b,
+                tee_gender=tee_gen_b,
+                player_handicap=hi_b,
             ),
         )
 
