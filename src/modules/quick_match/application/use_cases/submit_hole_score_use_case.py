@@ -44,7 +44,7 @@ class SubmitQuickMatchHoleScoreUseCase:
         quick_match_id = QuickMatchId(request.quick_match_id)
 
         async with self._uow:
-            quick_match = await self._uow.quick_matches.find_by_id(quick_match_id)
+            quick_match = await self._uow.quick_matches.find_by_id_for_update(quick_match_id)
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {request.quick_match_id}")
 
