@@ -10,6 +10,7 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CreateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -20,7 +21,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 async def create_competition(uow: InMemoryUnitOfWork, creator_id: UserId):
     """Crea una competición en DRAFT."""
-    create_uc = CreateCompetitionUseCase(uow)
+    create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
     request = CreateCompetitionRequestDTO(
         name="Test Cup",
         start_date=date(2026, 6, 1),

@@ -30,6 +30,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvitationRateLimitViolation,
     SelfInvitationViolation,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
@@ -69,7 +70,7 @@ class TestSendInvitationByEmailUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id):
-        create_uc = CreateCompetitionUseCase(comp_uow)
+        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),

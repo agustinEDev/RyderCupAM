@@ -25,6 +25,7 @@ from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import (
@@ -66,7 +67,7 @@ class TestRespondToInvitationUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, max_players=24):
-        create_uc = CreateCompetitionUseCase(comp_uow)
+        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),
