@@ -1,6 +1,9 @@
 """In-Memory Friendship Repository para testing."""
 
 from src.modules.social.domain.entities.friendship import Friendship
+from src.modules.social.domain.exceptions.social_violations import (
+    DuplicateFriendshipViolation,
+)
 from src.modules.social.domain.repositories.friendship_repository_interface import (
     FriendshipRepositoryInterface,
 )
@@ -16,6 +19,16 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
         self._friendships: dict[FriendshipId, Friendship] = {}
 
     async def add(self, friendship: Friendship) -> None:
+        # Mismo invariante que el indice unico `uq_friendship_pair` de la BD real:
+        # una unica relacion (en cualquier estado) por pareja de usuarios, en
+        # cualquier direccion. Permite simular en tests la misma race que
+        # traduce SQLAlchemySocialUnitOfWork.flush() a DuplicateFriendshipViolation.
+        pair = {friendship.requester_id, friendship.addressee_id}
+        for existing in self._friendships.values():
+            if {existing.requester_id, existing.addressee_id} == pair:
+                raise DuplicateFriendshipViolation(
+                    "A friendship between these users already exists."
+                )
         self._friendships[friendship.id] = friendship
 
     async def update(self, friendship: Friendship) -> None:
