@@ -237,6 +237,9 @@ from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_c
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
+from src.modules.quick_match.domain.services.scoring_coverage_service import (
+    ScoringCoverageService,
+)
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
@@ -1197,19 +1200,32 @@ def get_submit_quick_match_hole_score_use_case(
     return SubmitQuickMatchHoleScoreUseCase(uow)
 
 
+def get_scoring_service() -> ScoringService:
+    """Proveedor del servicio de dominio ScoringService."""
+    return ScoringService()
+
+
+def get_scoring_coverage_service() -> ScoringCoverageService:
+    """Proveedor del servicio de dominio ScoringCoverageService."""
+    return ScoringCoverageService()
+
+
 def get_submit_quick_match_proxy_hole_score_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
 ) -> SubmitProxyHoleScoreUseCase:
     """Proveedor del caso de uso SubmitProxyHoleScoreUseCase."""
-    return SubmitProxyHoleScoreUseCase(uow)
+    return SubmitProxyHoleScoreUseCase(uow, coverage_service)
 
 
 def get_get_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
-    return GetQuickMatchUseCase(uow, user_uow)
+    return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service)
 
 
 def get_list_my_quick_matches_use_case(
@@ -1578,11 +1594,6 @@ def get_assign_teams_use_case(
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
     )
-
-
-def get_scoring_service() -> ScoringService:
-    """Proveedor del servicio de dominio ScoringService."""
-    return ScoringService()
 
 
 def get_generate_matches_use_case(

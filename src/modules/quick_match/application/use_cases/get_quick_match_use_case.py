@@ -31,11 +31,17 @@ TOTAL_HOLES = 18
 class GetQuickMatchUseCase:
     """Obtiene el detalle de una partida rapida: datos, scores, standing y reparto de anotacion."""
 
-    def __init__(self, uow: QuickMatchUnitOfWorkInterface, user_uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: QuickMatchUnitOfWorkInterface,
+        user_uow: UserUnitOfWorkInterface,
+        scoring_service: ScoringService,
+        coverage_service: ScoringCoverageService,
+    ):
         self._uow = uow
         self._user_uow = user_uow
-        self._scoring_service = ScoringService()
-        self._coverage_service = ScoringCoverageService()
+        self._scoring_service = scoring_service
+        self._coverage_service = coverage_service
 
     async def execute(
         self, quick_match_id_raw: str, current_user_id_raw: str
@@ -43,9 +49,7 @@ class GetQuickMatchUseCase:
         current_participant_id = ParticipantId(UserId(current_user_id_raw).value)
 
         async with self._uow:
-            quick_match = await self._uow.quick_matches.find_by_id(
-                QuickMatchId(quick_match_id_raw)
-            )
+            quick_match = await self._uow.quick_matches.find_by_id(QuickMatchId(quick_match_id_raw))
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
 
