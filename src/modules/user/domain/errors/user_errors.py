@@ -118,3 +118,49 @@ class RepositoryTimeoutError(RepositoryError):
     """
 
     pass
+
+
+class InvalidAvatarPresetError(UserDomainError):
+    """
+    Excepción lanzada cuando se referencia un preset_id de avatar fuera de rango.
+
+    Los presets son un catálogo fijo (1..AVATAR_PRESET_COUNT) empaquetado con el backend,
+    no una tabla en BD, así que la validación es puramente de rango.
+    """
+
+    pass
+
+
+class AvatarUploadNotFoundError(UserDomainError):
+    """
+    Excepción lanzada cuando no se encuentra una foto subida por el usuario
+    (id inexistente, o perteneciente a otro usuario).
+    """
+
+    pass
+
+
+class AvatarNotFoundError(UserDomainError):
+    """
+    Excepción lanzada al pedir la imagen de avatar activa de un usuario que no tiene
+    ninguna (avatar_source == NONE).
+    """
+
+    pass
+
+
+class AvatarUploadTooLargeError(UserDomainError):
+    """Excepción lanzada cuando el archivo subido supera el tamaño máximo permitido."""
+
+    pass
+
+
+class InvalidAvatarImageError(UserDomainError):
+    """
+    Excepción lanzada cuando el archivo subido no es una imagen válida/soportada
+    (no se puede decodificar, o el formato no está en la lista permitida).
+    """
+
+    pass
+
+    pass

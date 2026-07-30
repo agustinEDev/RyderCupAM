@@ -20,6 +20,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
     async def find_by_id(self, user_id: UserId) -> User | None:
         return self._users.get(user_id)
 
+    async def find_by_id_for_update(self, user_id: UserId) -> User | None:
+        # En memoria no hay concurrencia real de transacciones que bloquear.
+        return self._users.get(user_id)
+
     async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
         return [self._users[uid] for uid in user_ids if uid in self._users]
 
