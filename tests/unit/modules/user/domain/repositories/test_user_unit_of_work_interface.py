@@ -16,6 +16,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.user_avatar_upload_repository_interface import (
+    UserAvatarUploadRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
 )
@@ -92,7 +95,7 @@ class TestUserUnitOfWorkInterface:
 
             @property
             def avatar_uploads(self):
-                return MagicMock()
+                return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -213,7 +216,7 @@ class TestUserUnitOfWorkContractCompliance:
 
             @property
             def avatar_uploads(self):
-                return AsyncMock()
+                return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -296,7 +299,7 @@ class TestUserUnitOfWorkContractCompliance:
 
             @property
             def avatar_uploads(self):
-                return AsyncMock()
+                return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -371,7 +374,7 @@ class TestUserUnitOfWorkIntegration:
 
             @property
             def avatar_uploads(self):
-                return AsyncMock()
+                return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
             async def __aenter__(self):
                 return self

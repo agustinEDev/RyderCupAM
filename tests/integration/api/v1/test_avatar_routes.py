@@ -42,6 +42,17 @@ class TestAvatarPresetsPublicEndpoints:
         assert response.content.startswith(b"\xff\xd8\xff")
 
     @pytest.mark.asyncio
+    async def test_get_avatar_preset_image_has_long_lived_cache_headers(
+        self, client: AsyncClient
+    ):
+        response = await client.get("/api/v1/avatar-presets/5/image")
+
+        assert response.status_code == 200
+        assert "immutable" in response.headers["cache-control"]
+        assert "max-age=31536000" in response.headers["cache-control"]
+        assert response.headers["etag"]
+
+    @pytest.mark.asyncio
     async def test_get_avatar_preset_image_out_of_range_returns_404(self, client: AsyncClient):
         response = await client.get("/api/v1/avatar-presets/99/image")
 

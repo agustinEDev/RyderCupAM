@@ -56,3 +56,40 @@ class TestPillowImageProcessor:
 
         with pytest.raises(InvalidAvatarImageError):
             processor.process_avatar_image(buffer.getvalue())
+
+    def test_corrects_exif_orientation_before_cropping(self):
+        """
+        Una foto tomada en vertical con el móvil se guarda con los píxeles
+        "en crudo" en una orientación y un tag EXIF que indica cómo rotarla
+        para verse bien. Sin aplicar ese tag, el avatar saldría girado.
+        """
+        processor = PillowImageProcessor()
+        image = Image.new("RGB", (400, 400))
+        image.paste(Image.new("RGB", (400, 200), color=(255, 0, 0)), (0, 0))
+        image.paste(Image.new("RGB", (400, 200), color=(0, 0, 255)), (0, 200))
+
+        exif = image.getexif()
+        exif[0x0112] = 3  # Orientation: rotar 180°
+
+        buffer = io.BytesIO()
+        image.save(buffer, "JPEG", exif=exif)
+
+        result = processor.process_avatar_image(buffer.getvalue())
+
+        output_image = Image.open(io.BytesIO(result)).convert("RGB")
+        top_left = output_image.getpixel((5, 5))
+        # Tras corregir una orientación de 180°, lo que era la mitad "azul"
+        # (almacenada abajo) pasa a quedar arriba.
+        assert top_left[2] > top_left[0]
+
+    def test_rejects_image_exceeding_max_pixel_count(self, monkeypatch):
+        """Protección contra 'decompression bombs': un archivo pequeño que
+        declara dimensiones absurdas debe rechazarse antes de decodificarse."""
+        import src.modules.user.infrastructure.external.pillow_image_processor as module
+
+        monkeypatch.setattr(module, "MAX_INPUT_PIXELS", 100)
+        processor = PillowImageProcessor()
+        raw_bytes = _make_test_image_bytes(50, 50)  # 2500 px > 100 px (límite fingido)
+
+        with pytest.raises(InvalidAvatarImageError):
+            processor.process_avatar_image(raw_bytes)

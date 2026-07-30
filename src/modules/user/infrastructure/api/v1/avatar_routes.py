@@ -10,6 +10,7 @@ por una única ruta `GET /users/{user_id}/avatar`, para que el frontend nunca
 necesite saber el origen — solo conoce el user_id.
 """
 
+import hashlib
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
@@ -51,7 +52,10 @@ from src.modules.user.application.use_cases.remove_avatar_use_case import Remove
 from src.modules.user.application.use_cases.set_avatar_preset_use_case import (
     SetAvatarPresetUseCase,
 )
-from src.modules.user.application.use_cases.upload_avatar_use_case import UploadAvatarUseCase
+from src.modules.user.application.use_cases.upload_avatar_use_case import (
+    MAX_UPLOAD_BYTES,
+    UploadAvatarUseCase,
+)
 from src.modules.user.domain.errors.user_errors import (
     AvatarNotFoundError,
     AvatarUploadNotFoundError,
@@ -62,6 +66,31 @@ from src.modules.user.domain.errors.user_errors import (
 )
 
 router = APIRouter()
+
+_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
+
+
+async def _read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
+    """
+    Lee un UploadFile por trozos, cortando en cuanto se supera `max_bytes`.
+
+    A diferencia de `await file.read()` (que carga el cuerpo entero en memoria
+    antes de que nadie pueda comprobar su tamaño), esto evita que un archivo
+    absurdamente grande llegue a bufferizarse por completo — el rechazo por
+    tamaño ocurre tan pronto como se cruza el límite, no después.
+    """
+    buffer = bytearray()
+    while True:
+        chunk = await file.read(_UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            raise AvatarUploadTooLargeError(
+                f"El archivo supera el tamaño máximo permitido "
+                f"({max_bytes // (1024 * 1024)}MB)"
+            )
+    return bytes(buffer)
 
 
 # ======================================================================================
@@ -91,7 +120,19 @@ async def get_avatar_preset_image(
 ):
     try:
         image_bytes, content_type = await use_case.execute(preset_id)
-        return Response(content=image_bytes, media_type=content_type)
+        # Los presets son assets estáticos empaquetados con el backend: nunca
+        # cambian para un preset_id dado, así que se pueden cachear "para
+        # siempre" (un cambio real de la foto pasaría por un despliegue nuevo,
+        # lo que ya invalida cualquier caché de CDN/navegador vía nuevo deploy).
+        etag = hashlib.sha256(image_bytes).hexdigest()
+        return Response(
+            content=image_bytes,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "ETag": f'"{etag}"',
+            },
+        )
     except InvalidAvatarPresetError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -163,7 +204,7 @@ async def upload_avatar(
     use_case: UploadAvatarUseCase = Depends(get_upload_avatar_use_case),
 ):
     try:
-        raw_bytes = await file.read()
+        raw_bytes = await _read_upload_within_limit(file, MAX_UPLOAD_BYTES)
         return await use_case.execute(str(current_user.id), raw_bytes)
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

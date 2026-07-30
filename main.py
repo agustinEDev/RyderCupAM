@@ -198,7 +198,13 @@ async def add_security_headers(request: Request, call_next):
     - A05: Security Misconfiguration
     """
     response = await call_next(request)
+    # Algunas rutas (p.ej. las imágenes de preset de avatar, assets estáticos
+    # inmutables) fijan su propio Cache-Control antes de llegar aquí; sin esto,
+    # el Cache-Control: no-store por defecto de `secure` lo pisaría siempre.
+    route_cache_control = response.headers.get("cache-control")
     secure_headers.framework.fastapi(response)
+    if route_cache_control is not None:
+        response.headers["cache-control"] = route_cache_control
     return response
 
 

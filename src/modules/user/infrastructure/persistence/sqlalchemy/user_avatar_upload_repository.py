@@ -4,7 +4,7 @@ SQLAlchemy User Avatar Upload Repository.
 Implementación del repositorio de fotos de avatar usando SQLAlchemy (async).
 """
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user_avatar_upload import UserAvatarUpload
@@ -45,11 +45,13 @@ class SQLAlchemyUserAvatarUploadRepository(UserAvatarUploadRepositoryInterface):
         return list(result.scalars().all())
 
     async def count_by_user(self, user_id: UserId) -> int:
-        stmt = select(UserAvatarUpload).where(
+        # COUNT(*) en el servidor: evita traer y materializar cada fila (con su
+        # BYTEA de imagen) solo para contar cuántas hay.
+        stmt = select(func.count()).select_from(user_avatar_uploads_table).where(
             user_avatar_uploads_table.c.user_id == str(user_id.value)
         )
         result = await self._session.execute(stmt)
-        return len(list(result.scalars().all()))
+        return result.scalar_one()
 
     async def delete(self, upload_id: UserAvatarUploadId) -> None:
         stmt = delete(user_avatar_uploads_table).where(

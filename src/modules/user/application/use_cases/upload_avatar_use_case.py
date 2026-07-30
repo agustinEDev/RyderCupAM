@@ -6,6 +6,8 @@ vía IImageProcessor), la guarda en el historial del usuario (acotado a
 AVATAR_MAX_STORED_UPLOADS, podando la más antigua si se supera) y la activa.
 """
 
+import asyncio
+
 from src.modules.user.application.dto.avatar_dto import AvatarUploadInfoDTO
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.domain.entities.user import AVATAR_MAX_STORED_UPLOADS
@@ -37,11 +39,21 @@ class UploadAvatarUseCase:
 
         # Procesado (validación de formato + crop/resize/compresión) fuera de la
         # transacción: es CPU-bound, no necesita la sesión de BD abierta.
-        processed_bytes = self._image_processor.process_avatar_image(raw_bytes)
+        # Se despacha a un hilo aparte porque Pillow es síncrono/bloqueante y esta
+        # función se ejecuta dentro del event loop async de FastAPI: sin esto,
+        # decodificar/redimensionar una imagen bloquearía TODAS las peticiones
+        # concurrentes del proceso mientras dura el procesado.
+        processed_bytes = await asyncio.to_thread(
+            self._image_processor.process_avatar_image, raw_bytes
+        )
 
         async with self._uow:
             user_id_vo = UserId(user_id)
-            user = await self._uow.users.find_by_id(user_id_vo)
+            # find_by_id_for_update (SELECT ... FOR UPDATE) serializa subidas
+            # concurrentes del mismo usuario: sin esto, dos uploads casi
+            # simultáneos podrían leer el mismo historial antes de que ninguno
+            # podara, dejando más de AVATAR_MAX_STORED_UPLOADS filas.
+            user = await self._uow.users.find_by_id_for_update(user_id_vo)
             if not user:
                 raise UserNotFoundError(f"User with id {user_id} not found")
 

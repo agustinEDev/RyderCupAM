@@ -5,8 +5,10 @@ bajo la [Pexels License](https://www.pexels.com/license/): uso gratuito, incluid
 modificación permitida, **atribución no obligatoria**. Se han recortado a cuadrado y redimensionado
 a 512x512 (JPEG calidad 85) respecto al original.
 
-No se pueden revender sin modificar ni usar de forma que implique el respaldo de las personas
-que aparecen en ellas (condiciones de la propia licencia Pexels).
+No se pueden revender ni redistribuir como fotos de stock — ni tal cual ni recortadas/redimensionadas
+como aquí (el recorte/resize no las convierte en "creación propia" a efectos de reventa) — ni usarlas
+de forma que implique el respaldo de las personas que aparecen en ellas (condiciones de la propia
+licencia Pexels: https://www.pexels.com/license/).
 
 | preset_id | Foto original (Pexels) |
 |-----------|-------------------------|
