@@ -483,3 +483,49 @@ class TestPlayingHandicapCalculatorMaxHandicap:
         )
 
         assert result == 18
+
+    def test_fourball_differential_caps_result_when_above_limit(self):
+        """calculate_fourball_differential aplica el mismo cap que calculate()."""
+        result = PlayingHandicapCalculator.calculate_fourball_differential(
+            player_course_handicaps=[("p1", 10), ("p2", 30)],
+            allowance_percentage=100,
+            max_playing_handicap=15,
+        )
+
+        # p1: diff=0 → ph=0 (sin cap). p2: diff=20 → ph=20 → acotado a 15
+        assert result["p1"] == 0
+        assert result["p2"] == 15
+
+    def test_fourball_differential_no_cap_when_none(self):
+        """Sin cap (None), calculate_fourball_differential no acota el resultado."""
+        result = PlayingHandicapCalculator.calculate_fourball_differential(
+            player_course_handicaps=[("p1", 10), ("p2", 30)],
+            allowance_percentage=100,
+            max_playing_handicap=None,
+        )
+
+        assert result["p2"] == 20
+
+    def test_foursomes_differential_caps_result_when_above_limit(self):
+        """calculate_foursomes_differential aplica el mismo cap que calculate()."""
+        team_a_ph, team_b_ph = PlayingHandicapCalculator.calculate_foursomes_differential(
+            team_a_course_handicaps=[10, 10],
+            team_b_course_handicaps=[30, 30],
+            allowance_percentage=100,
+            max_playing_handicap=15,
+        )
+
+        # Equipo B tiene mayor CH promedio: diff=20 → 20 strokes → acotado a 15
+        assert team_a_ph == 0
+        assert team_b_ph == 15
+
+    def test_foursomes_differential_no_cap_when_none(self):
+        """Sin cap (None), calculate_foursomes_differential no acota el resultado."""
+        _team_a_ph, team_b_ph = PlayingHandicapCalculator.calculate_foursomes_differential(
+            team_a_course_handicaps=[10, 10],
+            team_b_course_handicaps=[30, 30],
+            allowance_percentage=100,
+            max_playing_handicap=None,
+        )
+
+        assert team_b_ph == 20
