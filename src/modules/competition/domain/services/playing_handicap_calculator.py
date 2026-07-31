@@ -256,6 +256,40 @@ class PlayingHandicapCalculator:
         return result
 
     @staticmethod
+    def calculate_singles_differential(
+        ph_a: int,
+        ph_b: int,
+        holes_by_stroke_index: list[int],
+    ) -> tuple[list[int], list[int]]:
+        """
+        Método diferencial WHS para Singles (Match Play).
+
+        Solo el jugador con mayor Playing Handicap recibe golpes, en los hoyos
+        más difíciles (menor Stroke Index). El jugador de menor PH juega off
+        scratch (0 golpes recibidos). Si ambos PH son iguales, ninguno recibe.
+
+        Args:
+            ph_a: Playing Handicap del jugador A (ya con allowance aplicado)
+            ph_b: Playing Handicap del jugador B (ya con allowance aplicado)
+            holes_by_stroke_index: Números de hoyo ordenados por stroke index
+
+        Returns:
+            (strokes_a, strokes_b) — hoyos donde cada jugador recibe golpe.
+            Exactamente una de las dos listas tendrá elementos (o ninguna, si
+            ph_a == ph_b).
+        """
+        diff = ph_a - ph_b
+        if diff > 0:
+            return PlayingHandicapCalculator.compute_strokes_received(
+                diff, holes_by_stroke_index
+            ), []
+        if diff < 0:
+            return [], PlayingHandicapCalculator.compute_strokes_received(
+                -diff, holes_by_stroke_index
+            )
+        return [], []
+
+    @staticmethod
     def calculate_foursomes_differential(
         team_a_course_handicaps: list[int],
         team_b_course_handicaps: list[int],

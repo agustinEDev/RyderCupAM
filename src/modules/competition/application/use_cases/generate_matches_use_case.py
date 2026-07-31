@@ -757,16 +757,9 @@ class GenerateMatchesUseCase:
         ph_a = calculator.calculate(hi_a, tee_rating_a, allowance, max_playing_handicap)
         ph_b = calculator.calculate(hi_b, tee_rating_b, allowance, max_playing_handicap)
 
-        diff = ph_a - ph_b
-        if diff > 0:
-            strokes_a = calculator.compute_strokes_received(diff, holes_by_stroke_index)
-            strokes_b: list[int] = []
-        elif diff < 0:
-            strokes_a = []
-            strokes_b = calculator.compute_strokes_received(-diff, holes_by_stroke_index)
-        else:
-            strokes_a = []
-            strokes_b = []
+        strokes_a, strokes_b = calculator.calculate_singles_differential(
+            ph_a, ph_b, holes_by_stroke_index
+        )
 
         return (
             MatchPlayer.create(
