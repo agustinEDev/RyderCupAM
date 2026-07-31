@@ -56,6 +56,26 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, user_id: UserId) -> User | None:
+        """
+        Busca un usuario por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Usar dentro de una transacción cuando la operación es read-modify-write
+        y debe serializarse frente a otras transacciones concurrentes sobre el
+        mismo usuario (p.ej. podar el historial de avatares subidos).
+
+        Args:
+            user_id (UserId): El identificador único del usuario
+
+        Returns:
+            Optional[User]: El usuario encontrado (con la fila bloqueada) o None
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
         """
         Busca múltiples usuarios por sus IDs en una sola consulta.

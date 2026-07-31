@@ -27,18 +27,28 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """Busca un usuario por su ID."""
         return await self._session.get(User, user_id)
 
+    async def find_by_id_for_update(self, user_id: UserId) -> User | None:
+        """
+        Busca un usuario por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Serializa transacciones concurrentes sobre el mismo usuario (p.ej. subidas
+        de avatar simultáneas) para que operaciones read-modify-write como podar
+        el historial FIFO no se pisen entre sí.
+        """
+        return await self._session.get(User, user_id, with_for_update=True)
+
     async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
         """Busca múltiples usuarios por sus IDs en una sola consulta."""
         if not user_ids:
             return []
-        statement = select(User).where(User.id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
+        statement = select(User).where(User._id.in_([str(uid) for uid in user_ids]))  # type: ignore[union-attr]
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
     async def find_by_email(self, email: Email) -> User | None:
         """Busca un usuario por su email."""
-        # Para composites, necesitamos usar where() y comparar con el atributo privado
-        statement = select(User).where(User._email == email.value)
+        # _email es un composite(Email, "_email_value"): comparar contra el VO completo
+        statement = select(User).where(User._email == email)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -74,8 +84,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             last_name = " ".join(name_parts[i:])
 
             statement = select(User).filter(
-                func.lower(User.first_name) == func.lower(first_name),
-                func.lower(User.last_name) == func.lower(last_name),
+                func.lower(User._first_name) == func.lower(first_name),
+                func.lower(User._last_name) == func.lower(last_name),
             )
             result = await self._session.execute(statement)
             user = result.scalar_one_or_none()
@@ -96,9 +106,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             select(User)
             .filter(
                 or_(
-                    func.lower(User.first_name).contains(q, autoescape=True),
-                    func.lower(User.last_name).contains(q, autoescape=True),
-                    func.lower(User.first_name + " " + User.last_name).contains(q, autoescape=True),
+                    func.lower(User._first_name).contains(q, autoescape=True),
+                    func.lower(User._last_name).contains(q, autoescape=True),
+                    func.lower(User._first_name + " " + User._last_name).contains(
+                        q, autoescape=True
+                    ),
                 )
             )
             .limit(limit)
@@ -108,8 +120,8 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def exists_by_email(self, email: Email) -> bool:
         """Verifica si un usuario existe por su email."""
-        # Para composites, necesitamos usar where() y comparar con el atributo privado
-        statement = select(func.count()).select_from(User).where(User._email == email.value)
+        # _email es un composite(Email, "_email_value"): comparar contra el VO completo
+        statement = select(func.count()).select_from(User).where(User._email == email)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
@@ -121,7 +133,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def find_by_verification_token(self, token: str) -> User | None:
         """Busca un usuario por su token de verificación."""
-        statement = select(User).filter_by(verification_token=token)
+        statement = select(User).filter_by(_verification_token=token)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
@@ -139,6 +151,6 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             - Usa índice ix_users_password_reset_token para búsqueda rápida
             - NO valida expiración (esa lógica está en User.can_reset_password())
         """
-        statement = select(User).filter_by(password_reset_token=token)
+        statement = select(User).filter_by(_password_reset_token=token)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()

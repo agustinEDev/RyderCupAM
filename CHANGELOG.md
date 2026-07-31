@@ -20,6 +20,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   #111, #112 (Medium/P2, business-logic-in-use-case and DI/duplication findings in the
   Competition module).
 
+## [2.3.0] - 2026-07-30
+
+### Added
+
+**User Avatars**
+
+- Nuevo campo de avatar en `User`: `avatar_source` (`NONE`/`PRESET`/`UPLOAD`), `avatar_preset_id` (1-10) y `active_avatar_upload_id`. Preset y foto subida son mutuamente excluyentes; cambiar entre ellos no borra el historial de subidas.
+- Nueva entidad `UserAvatarUpload` (BYTEA en Postgres) para fotos subidas por el usuario: historial acotado a 5 por usuario (FIFO, se poda la más antigua al superar el límite).
+- 10 presets de golf (fotos Pexels, licencia gratuita sin atribución obligatoria) empaquetados como assets estáticos del backend (`src/modules/user/infrastructure/static/avatar_presets/`), servidos vía `GET /api/v1/avatar-presets/{id}/image`.
+- Subida de foto propia: valida tamaño (máx. 10MB de entrada) y formato (JPEG/PNG/WEBP), redimensiona a cuadrado 512x512 y comprime a JPEG calidad 85 con Pillow antes de guardar.
+- Endpoints nuevos: `GET /api/v1/avatar-presets`, `GET /api/v1/avatar-presets/{id}/image`, `GET /api/v1/users/{id}/avatar` (avatar activo de cualquier usuario, resuelve preset o subida sin que el frontend necesite saber el origen), `POST /api/v1/users/me/avatar/preset`, `POST /api/v1/users/me/avatar/upload` (rate limited 10/hora), `GET /api/v1/users/me/avatar/uploads`, `GET /api/v1/users/me/avatar/uploads/{id}/image`, `POST /api/v1/users/me/avatar/uploads/{id}/activate`, `DELETE /api/v1/users/me/avatar`.
+- Migración Alembic (tabla `user_avatar_uploads` + columnas en `users`, con FK circular resuelta vía `use_alter`).
+- Nueva dependencia: Pillow (procesado de imágenes) y python-multipart (requerido por FastAPI para `UploadFile`).
+- Tests: dominio, casos de uso (con dobles para Pillow y el catálogo de presets) e integración E2E completos.
+
+## [2.2.0] - 2026-07-29
+
+### Added
+
+**Social — Friends System (BE #103)**
+
+- New `social` module (Clean Architecture + DDD, mirrors the `competition.Invitation` pattern): `Friendship` aggregate with `FriendshipStatus` state machine (`PENDING` → `ACCEPTED`/`DECLINED`/`BLOCKED`; `ACCEPTED` → `BLOCKED`).
+- Domain: `FriendshipId`/`FriendshipStatus` Value Objects, domain events (`FriendshipRequested/Accepted/Declined/Blocked`), domain exceptions (`SelfFriendRequestViolation`, `DuplicateFriendRequestViolation`, `BlockedUserViolation`, etc.).
+- Endpoints: `POST /api/v1/friends/requests`, `POST /api/v1/friends/requests/{id}/respond`, `DELETE /api/v1/friends/{id}` (unfriend/cancel pending/unblock depending on state), `POST /api/v1/friends/{user_id}/block`, `GET /api/v1/friends/me`, `GET /api/v1/friends/requests/me?direction=received|sent`.
+- Reuses the existing `GET /users/search-autocomplete` endpoint to find people to add.
+- Send-request rate limited to 20/hour. Only mutual `ACCEPTED` friendships authorize direct-add flows in other modules (e.g. the upcoming quick match feature).
+- New `friendships` table (Alembic migration `7cec1e04eb61`) with a partial-independent unique index on the unordered user pair (`LEAST`/`GREATEST`), so only one relationship can exist between two users regardless of direction.
+- 74 unit tests (domain + use cases + in-memory repository) + 8 integration tests (E2E via real DB).
+
+**Quick Match — Play with Friends without a Tournament (BE #104)**
+
+- New `quick_match` module, decoupled from the `Competition` aggregate: `QuickMatch` entity (`PENDING → IN_PROGRESS → COMPLETED`, + `CANCELLED`), participants stored as an embedded JSONB list (`QuickMatchParticipant` Value Object), and a separate `QuickMatchHoleScore` entity for a simple (v1) self-reported score model — no dual player/marker validation, unlike `competition.HoleScore`.
+- Endpoints under `/api/v1/quick-matches`: create, add participant (direct-add, requires a mutual `ACCEPTED` friendship — no invitation step), remove participant (self-leave or creator kick), start, complete, cancel, submit hole score, get detail (with computed match-play standing), list mine.
+- Reuses `competition.domain.services.ScoringService` (`calculate_hole_winner`, `calculate_match_standing`, `is_match_decided`) as-is to compute the live standing from the simple scores — same match-play engine as tournaments, without pulling in the dual-validation/marker-assignment machinery.
+- Requires an `APPROVED` golf course (same rule as linking a course to a competition).
+- New tables `quick_matches` and `quick_match_hole_scores` (Alembic migration `a91cc79ba087`), with a GIN index on the `participants` JSONB column to support the "quick matches I'm in" query.
+- 77 unit tests (domain + 9 use cases + in-memory repos) + 5 integration tests (E2E via real DB, full flow: create → add friend → start → submit scores → complete).
+
+**Quick Match — Guest Players and Scorer Assignment**
+
+- `QuickMatchParticipant` now supports two variants: registered (`user_id`) and **guest** (no account — `first_name`/`last_name`/optional manual `handicap`, entered by the creator). Both share a stable `participant_id` (new `ParticipantId` Value Object) used for removal, scoring, and assignment regardless of type.
+- `POST /quick-matches/{id}/participants/guest`: creator adds a guest player by hand.
+- Starting a match now requires `scorer_ids` (1 to 4 **registered** participants, always including the creator): the subset who will actually operate the app to record scores during the round. `POST /quick-matches/{id}/start` body: `{"scorer_ids": [...]}`.
+- New `ScoringCoverageService` (pure domain service): computes who records for whom. Non-scorers (guests, or registered players not selected as scorers) are split as evenly as possible across all scorers; any remainder from an uneven split is absorbed by the creator.
+- `POST /quick-matches/{id}/participants/{participant_id}/holes/{n}/score`: a scorer records a hole score on behalf of a participant assigned to them (403 if the target isn't covered by that scorer). The existing self-submit endpoint now requires the caller to be a configured scorer (403 `NotAScorerError` otherwise).
+- `QuickMatchHoleScore` renamed `player_user_id` → `participant_id` (no FK to `users`, since guests aren't user rows) and gained `recorded_by_participant_id`, so every score carries who actually entered it.
+- `GET /quick-matches/{id}` detail response now includes `scorer_ids` and `scoring_assignments` (who covers whom), alongside the existing standing.
+- Migration `9a9440cebb07`: adds `quick_matches.scorer_ids` (JSONB); renames `quick_match_hole_scores.player_user_id` → `participant_id` (drops its FK to `users`, type changes `CHAR(36)` → `uuid`) and adds `recorded_by_participant_id`.
+- 109 unit tests (up from 77: new `ParticipantId`/guest-variant VO tests, `ScoringCoverageService` tests, `AddGuestToQuickMatchUseCase`, `SubmitProxyHoleScoreUseCase`, updated entity/use case tests for the new participant model) + 8 integration tests (up from 5: guest + proxy-scoring flow, non-scorer rejection, invalid scorer configuration).
+
+**Quick Match — Optional Name**
+
+- Users could create several quick matches with the same golf course and format, with no way to tell them apart in the frontend history/dashboard views. `QuickMatch` now accepts an optional free-text `name` (trimmed, max 100 chars, blank → `null`), plain `str | None` rather than a Value Object — it's just a label, unlike `CompetitionName` which normalizes case for tournament listings.
+- `POST /api/v1/quick-matches` accepts `name` in the body; every response (`QuickMatchResponseDTO` and detail) now includes it.
+- New `quick_matches.name` column (Alembic migration `de76ad1f8cf2`, nullable, chained after `9a9440cebb07`).
+- 6 new unit tests (trimming, blank → null, max-length validation) + 3 integration tests (round-trip, absent → null, over-max-length → 422).
+
+**Quick Match — Free-Play Mode (Medal / Stableford)**
+
+- Quick matches only supported Ryder Cup-style team match play (`SINGLES`/`FOURBALL`/`FOURSOMES`, always A-vs-B). Added a free-play mode for 1 to 4 players with no teams (including solo rounds), scored at `MEDAL` (stroke play) or `STABLEFORD` — a new `ScoringFormat` Value Object local to `quick_match`.
+- `match_format` is now nullable and mutually exclusive with the new `scoring_format` field, enforced in the `QuickMatch` constructor (`InvalidQuickMatchFormatViolation` if both or neither are given). `capacity()`/`is_roster_complete()`/`add_participant()` branch accordingly: free play caps at 4 participants, allows starting with any roster from 1 up, and never assigns a team.
+- `POST /api/v1/quick-matches` accepts `scoring_format` as an alternative to `match_format`.
+- Team-based standing (`GET /quick-matches/{id}` → `standing`) is skipped (`null`) for free-play matches — head-to-head A-vs-B scoring doesn't apply; individual ranking is computed client-side as it already was for the Stableford display.
+- Migration `a3f7c1d9e2b4`: adds `quick_matches.scoring_format` (nullable) and makes `quick_matches.match_format` nullable.
+- New unit tests (entity mutual-exclusivity/capacity/roster, create use case) + 4 integration tests (validation errors, free-play creation, solo free-play start-and-score flow).
+
+**Quick Match — Playing Handicap (WHS)**
+
+- Fixed a gap where every **registered** participant's `handicap` was always returned as `null` in the API — only guests' manually-entered handicap ever reached the response, silently treating every registered player as scratch in the frontend's Stableford classification. Now mapped from `User.handicap`.
+- Each participant (registered or guest) can now pick a tee from the golf course (`tee_category`/`tee_gender`, identified the same way `Enrollment.tee_category` is in `competition` — tees have no own id, unique per category+gender pair), captured on `QuickMatchParticipant` at add-time. Optional: without a tee, scoring falls back to the participant's raw handicap as before.
+- `QuickMatch` gains `allowance_percentage` (nullable, 50-100 in increments of 5, `InvalidAllowanceViolation` otherwise): the creator can override it at creation; if omitted, `get_effective_allowance()` returns the WHS default per format (Singles match play 100%, Fourball 90%, Foursomes 50%, free play/stroke play 95% — mirrors `Round.get_effective_allowance()` in `competition`).
+- `POST /api/v1/quick-matches` accepts `allowance_percentage`, `creator_tee_category`, `creator_tee_gender`; `POST .../participants` and `.../participants/guest` accept `tee_category`/`tee_gender`. Response DTOs expose `allowance_percentage` (raw) + `effective_allowance` (computed) at the match level, and `tee_category`/`tee_gender` per participant. The actual Playing Handicap calculation (WHS formula) stays a frontend concern, same as the existing Stableford display.
+- Migration `b8e2f4a6c1d7`: adds `quick_matches.allowance_percentage` (nullable integer); tee selection lives inside the existing `participants` JSONB column, no schema change needed there.
+- New unit tests (participant tee fields, entity allowance validation/defaults, handicap-mapping regression) + 4 integration tests (default/custom allowance, invalid allowance → 422, tee round-trip through create + add-friend + detail).
+
+**Quick Match — Participant Handicap Override**
+
+- New `PATCH /api/v1/quick-matches/{id}/participants/{participant_id}/handicap` endpoint: the creator can set/override a participant's handicap while the match is `PENDING` — a manual value for guests, or a new `custom_handicap` override (takes precedence over `User.handicap`) for registered players, e.g. one without a handicap on their profile. 403 for non-creators, 409 once the match has started, 422 out of range (-10 to 54). No migration needed — `custom_handicap` lives inside the existing `participants` JSONB column.
+- Fixed a persistence bug found while testing this: `QuickMatchParticipant.__eq__` only compares `participant_id` (by design, for list operations like `is_participant`/`find_participant`), so SQLAlchemy's default dirty-check on the `participants` column — a same-length list `==` comparison — couldn't see a change when only one entry's handicap differed, and silently skipped the `UPDATE`. Editing a second participant would then persist only that one, discarding the first one's already-"saved" (but never actually written) override. Fixed by forcing `flag_modified()` in `SQLAlchemyQuickMatchRepository.update()`.
+- 20 new unit tests (VO override field, entity method, use case) + 6 integration tests against real Postgres, including a regression test that reproduces the exact persistence bug and re-fetches via a fresh request to prove the write actually reached the database.
+
 ## [2.1.0] - 2026-07-25
 
 ### Fixed

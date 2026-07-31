@@ -18,6 +18,7 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     NotCompetitionCreatorError,
     UpdateCompetitionUseCase,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -52,7 +53,7 @@ class TestUpdateCompetitionUseCase:
         Then: El nombre se actualiza correctamente
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Original Name",
             start_date=date(2025, 6, 1),
@@ -63,7 +64,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act: Actualizar nombre
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(name="Updated Name")
 
         response = await update_use_case.execute(
@@ -87,7 +88,7 @@ class TestUpdateCompetitionUseCase:
         Then: Todos los campos se actualizan correctamente
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Original",
             start_date=date(2025, 6, 1),
@@ -98,7 +99,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(
             name="Updated",
             start_date=date(2025, 7, 1),
@@ -126,7 +127,7 @@ class TestUpdateCompetitionUseCase:
         Then: El play_mode se actualiza correctamente
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -137,7 +138,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(play_mode="HANDICAP")
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
@@ -157,7 +158,7 @@ class TestUpdateCompetitionUseCase:
         Then: Se lanza CompetitionNotFoundError
         """
         # Arrange
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         fake_id = CompetitionId(uuid4())
         update_request = UpdateCompetitionRequestDTO(name="Test")
 
@@ -178,7 +179,7 @@ class TestUpdateCompetitionUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear con creator_id
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -189,7 +190,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act & Assert: Intentar actualizar con otro usuario
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         other_user = UserId(uuid4())
         update_request = UpdateCompetitionRequestDTO(name="Hacked")
 
@@ -209,7 +210,7 @@ class TestUpdateCompetitionUseCase:
         Then: Se lanza CompetitionNotEditableError
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -227,7 +228,7 @@ class TestUpdateCompetitionUseCase:
             await uow.commit()
 
         # Act & Assert: Intentar actualizar
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(name="Cannot Update")
 
         with pytest.raises(CompetitionNotEditableError) as exc_info:
@@ -244,7 +245,7 @@ class TestUpdateCompetitionUseCase:
         Then: Se llama a commit() en el UoW
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -255,7 +256,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(name="Updated")
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)

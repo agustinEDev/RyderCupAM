@@ -19,6 +19,7 @@ import uvicorn  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from secure import Secure  # noqa: E402
@@ -45,9 +46,21 @@ from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # 
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (  # noqa: E402
     start_golf_course_mappers,
 )
+from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
+from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (  # noqa: E402
+    start_quick_match_mappers,
+)
+from src.modules.social.infrastructure.api.v1 import friend_routes  # noqa: E402
+from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (  # noqa: E402
+    start_social_mappers,
+)
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
+from src.modules.user.application.use_cases.upload_avatar_use_case import (  # noqa: E402
+    MAX_UPLOAD_BYTES,
+)
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     auth_routes,
+    avatar_routes,
     device_routes,
     google_auth_routes,
     handicap_routes,
@@ -88,6 +101,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_country_mappers()  # Shared domain (Country) mappers
     start_golf_course_mappers()  # Golf Course module mappers (before Competition - dependency)
     start_competition_mappers()  # Competition module mappers (depends on GolfCourse)
+    start_social_mappers()  # Social module mappers (depends on User)
+    start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
     yield
     print("INFO:     Apagando aplicación...")
 
@@ -187,8 +202,61 @@ async def add_security_headers(request: Request, call_next):
     - A05: Security Misconfiguration
     """
     response = await call_next(request)
+    # Algunas rutas (p.ej. las imágenes de preset de avatar, assets estáticos
+    # inmutables) fijan su propio Cache-Control antes de llegar aquí; sin esto,
+    # el Cache-Control: no-store por defecto de `secure` lo pisaría siempre.
+    route_cache_control = response.headers.get("cache-control")
     secure_headers.framework.fastapi(response)
+    if route_cache_control is not None:
+        response.headers["cache-control"] = route_cache_control
     return response
+
+
+# ================================
+# AVATAR UPLOAD SIZE GUARD (Content-Length fast-fail)
+# ================================
+# Rechaza subidas de avatar por encima del límite ANTES de que FastAPI/Starlette
+# parseen el multipart body: sin esto, un archivo enorme se bufferiza igualmente
+# durante el parseo del form (UploadFile ya se construye a partir del cuerpo ya
+# parseado), y el chequeo de tamaño dentro del endpoint llega demasiado tarde
+# para evitar ese coste. Solo inspecciona la cabecera (no toca el body), así
+# que su orden relativo a los demás middlewares no importa.
+# Nota: Content-Length es lo que el cliente DECLARA, no una garantía absoluta
+# (podría mentir, o usar chunked encoding sin esa cabecera) — la lectura por
+# trozos con corte temprano en el propio endpoint sigue siendo la protección
+# real; esto es un fast-fail adicional para el caso común.
+_AVATAR_UPLOAD_PATH = "/api/v1/users/me/avatar/upload"
+# Content-Length cubre el multipart body ENTERO (boundaries + cabeceras de cada
+# parte), no solo los bytes del fichero — un archivo justo en el límite (o algo
+# por debajo) puede declarar un tamaño total ligeramente mayor que
+# MAX_UPLOAD_BYTES por ese framing. Se permite un margen para no rechazar
+# subidas válidas; el chequeo exacto por bytes reales sigue en el endpoint.
+_MAX_AVATAR_MULTIPART_OVERHEAD_BYTES = 16 * 1024
+
+
+@app.middleware("http")
+async def limit_avatar_upload_content_length(request: Request, call_next):
+    if request.url.path == _AVATAR_UPLOAD_PATH and request.method == "POST":
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = None
+            if (
+                declared_size is not None
+                and declared_size > MAX_UPLOAD_BYTES + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
+            ):
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            "El archivo supera el tamaño máximo permitido "
+                            f"({MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+                        )
+                    },
+                )
+    return await call_next(request)
 
 
 # ================================
@@ -279,6 +347,12 @@ app.include_router(
 )
 
 app.include_router(
+    avatar_routes.router,
+    prefix="/api/v1",
+    tags=["Avatars"],
+)
+
+app.include_router(
     device_routes.router,
     prefix="/api/v1",
     tags=["Devices"],
@@ -325,6 +399,18 @@ app.include_router(
     invitation_routes.router,
     prefix="/api/v1",
     tags=["Invitations"],
+)
+
+app.include_router(
+    friend_routes.router,
+    prefix="/api/v1",
+    tags=["Friends"],
+)
+
+app.include_router(
+    quick_match_routes.router,
+    prefix="/api/v1",
+    tags=["Quick Matches"],
 )
 
 app.include_router(

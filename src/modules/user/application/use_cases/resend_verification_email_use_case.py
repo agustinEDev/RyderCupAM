@@ -105,7 +105,7 @@ class ResendVerificationEmailUseCase:
                 raise ResendVerificationError(GENERIC_ERROR_MESSAGE)
 
             # Asignar el token generado fuera de transacción
-            user.verification_token = verification_token
+            user.set_verification_token(verification_token)
 
             await self._uow.users.save(user)
             # El context manager (__aexit__) hace commit automático

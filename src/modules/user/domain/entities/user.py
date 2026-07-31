@@ -5,6 +5,7 @@ from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
+from ..errors.user_errors import InvalidAvatarPresetError
 from ..events.account_locked_event import AccountLockedEvent
 from ..events.account_unlocked_event import AccountUnlockedEvent
 from ..events.email_verified_event import EmailVerifiedEvent
@@ -18,14 +19,20 @@ from ..events.user_logged_out_event import UserLoggedOutEvent
 from ..events.user_password_changed_event import UserPasswordChangedEvent
 from ..events.user_profile_updated_event import UserProfileUpdatedEvent
 from ..events.user_registered_event import UserRegisteredEvent
+from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
 from ..value_objects.password import Password
+from ..value_objects.user_avatar_upload_id import UserAvatarUploadId
 from ..value_objects.user_id import UserId
 
 # Account Lockout Configuration
 MAX_FAILED_ATTEMPTS = 10
 LOCKOUT_DURATION_MINUTES = 30
+
+# Avatar Configuration
+AVATAR_PRESET_COUNT = 10
+AVATAR_MAX_STORED_UPLOADS = 5
 
 
 class User:
@@ -82,7 +89,7 @@ class User:
         password: Password | None,
         first_name: str,
         last_name: str,
-        handicap: float | None = None,
+        handicap: Handicap | None = None,
         handicap_updated_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -95,27 +102,158 @@ class User:
         locked_until: datetime | None = None,
         is_admin: bool = False,
         gender: Gender | None = None,
+        avatar_source: AvatarSource = AvatarSource.NONE,
+        avatar_preset_id: int | None = None,
+        active_avatar_upload_id: UserAvatarUploadId | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
-        self.id = id
-        self.email = email
-        self.password = password
-        self.first_name = first_name
-        self.last_name = last_name
-        self.handicap = handicap
-        self.handicap_updated_at = handicap_updated_at
-        self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
-        self.email_verified = email_verified
-        self.verification_token = verification_token
-        self.country_code = country_code
-        self.password_reset_token = password_reset_token
-        self.reset_token_expires_at = reset_token_expires_at
-        self.failed_login_attempts = failed_login_attempts
-        self.locked_until = locked_until
-        self.is_admin = is_admin
-        self.gender = gender
+        # Asignación de atributos privados (encapsulación)
+        self._id = id
+        self._email = email
+        self._password = password
+        self._first_name = first_name
+        self._last_name = last_name
+        self._handicap = handicap
+        self._handicap_updated_at = handicap_updated_at
+        self._created_at = created_at or datetime.now()
+        self._updated_at = updated_at or datetime.now()
+        self._email_verified = email_verified
+        self._verification_token = verification_token
+        self._country_code = country_code
+        self._password_reset_token = password_reset_token
+        self._reset_token_expires_at = reset_token_expires_at
+        self._failed_login_attempts = failed_login_attempts
+        self._locked_until = locked_until
+        self._is_admin = is_admin
+        self._gender = gender
+        self._avatar_source = avatar_source
+        self._avatar_preset_id = avatar_preset_id
+        self._active_avatar_upload_id = active_avatar_upload_id
         self._domain_events = domain_events or []
+
+    # ===========================================
+    # PROPERTIES (Encapsulación — solo lectura)
+    # ===========================================
+
+    @property
+    def id(self) -> UserId | None:
+        return self._id
+
+    @property
+    def email(self) -> Email | None:
+        return self._email
+
+    @property
+    def password(self) -> Password | None:
+        return self._password
+
+    @property
+    def first_name(self) -> str:
+        return self._first_name
+
+    @property
+    def last_name(self) -> str:
+        return self._last_name
+
+    @property
+    def handicap(self) -> Handicap | None:
+        return self._handicap
+
+    @property
+    def handicap_updated_at(self) -> datetime | None:
+        return self._handicap_updated_at
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
+
+    @property
+    def updated_at(self) -> datetime:
+        return self._updated_at
+
+    @property
+    def email_verified(self) -> bool:
+        return self._email_verified
+
+    @property
+    def verification_token(self) -> str | None:
+        return self._verification_token
+
+    @property
+    def country_code(self) -> CountryCode | None:
+        return self._country_code
+
+    @property
+    def password_reset_token(self) -> str | None:
+        return self._password_reset_token
+
+    @property
+    def reset_token_expires_at(self) -> datetime | None:
+        return self._reset_token_expires_at
+
+    @property
+    def failed_login_attempts(self) -> int:
+        return self._failed_login_attempts
+
+    @property
+    def locked_until(self) -> datetime | None:
+        return self._locked_until
+
+    @property
+    def is_admin(self) -> bool:
+        return self._is_admin
+
+    @property
+    def gender(self) -> Gender | None:
+        return self._gender
+
+    @property
+    def avatar_source(self) -> AvatarSource:
+        return self._avatar_source
+
+    @property
+    def avatar_preset_id(self) -> int | None:
+        return self._avatar_preset_id
+
+    @property
+    def active_avatar_upload_id(self) -> UserAvatarUploadId | None:
+        return self._active_avatar_upload_id
+
+    def set_preset_avatar(self, preset_id: int) -> None:
+        """
+        Activa un avatar predefinido (catálogo fijo 1..AVATAR_PRESET_COUNT).
+
+        Preset y foto subida son mutuamente excluyentes: activar un preset
+        desactiva cualquier foto subida como avatar activo (sin borrar el
+        historial de subidas, que se conserva para poder volver a él).
+        """
+        if not (1 <= preset_id <= AVATAR_PRESET_COUNT):
+            raise InvalidAvatarPresetError(
+                f"preset_id debe estar entre 1 y {AVATAR_PRESET_COUNT}, recibido: {preset_id}"
+            )
+        self._avatar_source = AvatarSource.PRESET
+        self._avatar_preset_id = preset_id
+        self._active_avatar_upload_id = None
+        self._updated_at = datetime.now()
+
+    def set_uploaded_avatar(self, upload_id: UserAvatarUploadId) -> None:
+        """
+        Activa como avatar una foto ya subida por el propio usuario (nueva o del historial).
+
+        Mutuamente excluyente con el preset: activar una foto subida desactiva
+        cualquier preset activo.
+        """
+        self._avatar_source = AvatarSource.UPLOAD
+        self._avatar_preset_id = None
+        self._active_avatar_upload_id = upload_id
+        self._updated_at = datetime.now()
+
+    def clear_avatar(self) -> None:
+        """Quita el avatar activo (vuelve al placeholder por defecto). No borra el historial de subidas."""
+        self._avatar_source = AvatarSource.NONE
+        self._avatar_preset_id = None
+        self._active_avatar_upload_id = None
+        self._updated_at = datetime.now()
 
     def get_full_name(self) -> str:
         """Devuelve el nombre completo del usuario."""
@@ -166,21 +304,21 @@ class User:
         Raises:
             ValueError: Si el hándicap no está en el rango válido
         """
-        old_handicap = getattr(self, "handicap", None)
+        old_handicap = self._handicap
 
         # Validar si es un Handicap válido usando el Value Object
         if new_handicap is not None:
             validated = Handicap(new_handicap)  # Valida el rango
-            self.handicap = validated
+            self._handicap = validated
         else:
-            self.handicap = None
+            self._handicap = None
 
         # Actualizar timestamps
         # handicap_updated_at se guarda en UTC (columna timezone-aware) para que el
         # frontend pueda convertirlo correctamente a la hora local del usuario.
         now = datetime.now()
-        self.handicap_updated_at = datetime.now(UTC)
-        self.updated_at = now
+        self._handicap_updated_at = datetime.now(UTC)
+        self._updated_at = now
 
         # Emitir evento solo si cambió
         if old_handicap != self.handicap:
@@ -347,8 +485,8 @@ class User:
         Solo actúa si el email aún no está verificado.
         """
         if not self.email_verified:
-            self.email_verified = True
-            self.updated_at = datetime.now()
+            self._email_verified = True
+            self._updated_at = datetime.now()
 
     def record_google_unlinked(self, provider: str, unlinked_at: datetime) -> None:
         """
@@ -440,15 +578,15 @@ class User:
             return
 
         if first_name_changed:
-            self.first_name = first_name
+            self._first_name = first_name
         if last_name_changed:
-            self.last_name = last_name
+            self._last_name = last_name
         if country_code_changed:
-            self.country_code = new_country_code
+            self._country_code = new_country_code
         if gender_changed:
-            self.gender = new_gender
+            self._gender = new_gender
 
-        self.updated_at = datetime.now()
+        self._updated_at = datetime.now()
 
         self._add_domain_event(
             UserProfileUpdatedEvent(
@@ -482,9 +620,9 @@ class User:
         if new_email == old_email_str:
             return  # No cambió nada
 
-        self.email = new_email_vo
-        self.email_verified = False  # Requiere nueva verificación
-        self.updated_at = datetime.now()
+        self._email = new_email_vo
+        self._email_verified = False  # Requiere nueva verificación
+        self._updated_at = datetime.now()
 
         self._add_domain_event(
             UserEmailChangedEvent(
@@ -506,8 +644,8 @@ class User:
             ValueError: Si el password no es válido
         """
         new_password_vo = Password.from_plain_text(new_password)
-        self.password = new_password_vo
-        self.updated_at = datetime.now()
+        self._password = new_password_vo
+        self._updated_at = datetime.now()
 
         self._add_domain_event(
             UserPasswordChangedEvent(
@@ -525,9 +663,25 @@ class User:
             str: Token de verificación único
         """
         token = secrets.token_urlsafe(32)
-        self.verification_token = token
-        self.updated_at = datetime.now()
+        self._verification_token = token
+        self._updated_at = datetime.now()
         return token
+
+    def set_verification_token(self, token: str) -> None:
+        """
+        Asigna un token de verificación ya generado externamente.
+
+        A diferencia de `generate_verification_token()`, este método no genera
+        el token internamente ni actualiza `updated_at`: solo persiste un token
+        creado previamente por el caller. Existe para casos de uso que necesitan
+        generar el token ANTES de enviarlo por email y solo guardarlo si el envío
+        tuvo éxito (ver `ResendVerificationEmailUseCase`), evitando que dicho caso
+        de uso escriba directamente sobre el estado privado de la entidad.
+
+        Args:
+            token: Token de verificación generado previamente
+        """
+        self._verification_token = token
 
     def verify_email(self, token: str) -> bool:
         """
@@ -549,9 +703,9 @@ class User:
             raise ValueError("Token de verificación inválido")
 
         # Token válido - proceder con verificación
-        self.email_verified = True
-        self.verification_token = None
-        self.updated_at = datetime.now()
+        self._email_verified = True
+        self._verification_token = None
+        self._updated_at = datetime.now()
 
         # Emitir evento de dominio
         self._add_domain_event(
@@ -629,12 +783,13 @@ class User:
         """
         # Generar token seguro (mismo método que email verification)
         token = secrets.token_urlsafe(32)
-        self.password_reset_token = token
+        self._password_reset_token = token
 
         # Establecer expiración a 24 horas desde ahora
         now = datetime.now()
-        self.reset_token_expires_at = now + timedelta(hours=24)
-        self.updated_at = now
+        expires_at = now + timedelta(hours=24)
+        self._reset_token_expires_at = expires_at
+        self._updated_at = now
 
         # Emitir evento de dominio para auditoría
         self._add_domain_event(
@@ -642,7 +797,7 @@ class User:
                 user_id=str(self.id.value),
                 email=str(self.email.value),
                 requested_at=now,
-                reset_token_expires_at=self.reset_token_expires_at,
+                reset_token_expires_at=expires_at,
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
@@ -745,15 +900,15 @@ class User:
 
         # Cambiar la contraseña (Password VO valida la política de seguridad)
         new_password_vo = Password.from_plain_text(new_password)
-        self.password = new_password_vo
+        self._password = new_password_vo
 
         # Invalidar el token (uso único)
-        self.password_reset_token = None
-        self.reset_token_expires_at = None
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
 
         # Actualizar timestamp
         now = datetime.now()
-        self.updated_at = now
+        self._updated_at = now
 
         # Emitir evento de dominio (trigger para invalidar refresh tokens)
         self._add_domain_event(
@@ -796,19 +951,20 @@ class User:
             >>> user.is_locked()
             True
         """
-        self.failed_login_attempts += 1
-        self.updated_at = datetime.now()
+        self._failed_login_attempts += 1
+        self._updated_at = datetime.now()
 
         # Bloquear si alcanza el límite
         if self.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
             now = datetime.now()
-            self.locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+            locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+            self._locked_until = locked_until
 
             # Emitir evento de bloqueo
             self._add_domain_event(
                 AccountLockedEvent(
                     user_id=str(self.id.value),
-                    locked_until=self.locked_until,
+                    locked_until=locked_until,
                     failed_attempts=self.failed_login_attempts,
                     locked_at=now,
                 )
@@ -831,10 +987,12 @@ class User:
             - No requiere intervención manual para desbloqueos temporales
 
         Ejemplo:
-            >>> user.locked_until = datetime.now() + timedelta(minutes=10)
+            >>> # Tras alcanzar MAX_FAILED_ATTEMPTS, record_failed_login() bloquea la cuenta
+            >>> user.locked_until is not None
+            True
             >>> user.is_locked()
             True
-            >>> # Después de 10 minutos...
+            >>> # Después de 30 minutos...
             >>> user.is_locked()
             False
         """
@@ -881,9 +1039,9 @@ class User:
         old_failed_attempts = self.failed_login_attempts
 
         # Resetear estado de bloqueo
-        self.failed_login_attempts = 0
-        self.locked_until = None
-        self.updated_at = now
+        self._failed_login_attempts = 0
+        self._locked_until = None
+        self._updated_at = now
 
         # Emitir evento de desbloqueo
         self._add_domain_event(
@@ -913,14 +1071,14 @@ class User:
             - Si la cuenta está bloqueada, permanece bloqueada hasta expiración o unlock manual
 
         Ejemplo:
-            >>> user.failed_login_attempts = 5
+            >>> # Asumiendo que ya hay intentos fallidos registrados (record_failed_login())
             >>> user.reset_failed_attempts()
             >>> user.failed_login_attempts
             0
         """
         if self.failed_login_attempts > 0:
-            self.failed_login_attempts = 0
-            self.updated_at = datetime.now()
+            self._failed_login_attempts = 0
+            self._updated_at = datetime.now()
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

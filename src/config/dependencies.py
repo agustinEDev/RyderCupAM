@@ -149,6 +149,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
 )
@@ -198,6 +199,69 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
+    AddFriendToQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.add_guest_to_quick_match_use_case import (
+    AddGuestToQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case import (
+    CancelQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.complete_quick_match_use_case import (
+    CompleteQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
+    CreateQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
+    GetQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
+    ListMyQuickMatchesUseCase,
+)
+from src.modules.quick_match.application.use_cases.remove_participant_use_case import (
+    RemoveParticipantUseCase,
+)
+from src.modules.quick_match.application.use_cases.set_participant_handicap_use_case import (
+    SetParticipantHandicapUseCase,
+)
+from src.modules.quick_match.application.use_cases.start_quick_match_use_case import (
+    StartQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.submit_hole_score_use_case import (
+    SubmitQuickMatchHoleScoreUseCase,
+)
+from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
+    SubmitProxyHoleScoreUseCase,
+)
+from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
+    QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.services.scoring_coverage_service import (
+    ScoringCoverageService,
+)
+from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
+    SQLAlchemyQuickMatchUnitOfWork,
+)
+from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
+from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
+from src.modules.social.application.use_cases.list_pending_requests_use_case import (
+    ListPendingRequestsUseCase,
+)
+from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
+from src.modules.social.application.use_cases.respond_friend_request_use_case import (
+    RespondFriendRequestUseCase,
+)
+from src.modules.social.application.use_cases.send_friend_request_use_case import (
+    SendFriendRequestUseCase,
+)
+from src.modules.social.domain.repositories.social_unit_of_work_interface import (
+    SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
+    SQLAlchemySocialUnitOfWork,
+)
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
@@ -205,20 +269,42 @@ from src.modules.support.infrastructure.services.github_issue_service import (
     GitHubIssueService,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.avatar_preset_provider_interface import (
+    IAvatarPresetProvider,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
+from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
+    ActivateUploadedAvatarUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_avatar_image_use_case import (
+    GetAvatarImageUseCase,
+)
+from src.modules.user.application.use_cases.get_avatar_preset_image_use_case import (
+    GetAvatarPresetImageUseCase,
+)
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
+)
+from src.modules.user.application.use_cases.get_my_avatar_upload_image_use_case import (
+    GetMyAvatarUploadImageUseCase,
 )
 from src.modules.user.application.use_cases.google_login_use_case import (
     GoogleLoginUseCase,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
     LinkGoogleAccountUseCase,
+)
+from src.modules.user.application.use_cases.list_avatar_presets_use_case import (
+    ListAvatarPresetsUseCase,
+)
+from src.modules.user.application.use_cases.list_my_avatar_uploads_use_case import (
+    ListMyAvatarUploadsUseCase,
 )
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
@@ -236,6 +322,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
 )
+from src.modules.user.application.use_cases.remove_avatar_use_case import RemoveAvatarUseCase
 from src.modules.user.application.use_cases.request_password_reset_use_case import (
     RequestPasswordResetUseCase,
 )
@@ -249,6 +336,9 @@ from src.modules.user.application.use_cases.revoke_device_use_case import (
     RevokeDeviceUseCase,
 )
 from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
+from src.modules.user.application.use_cases.set_avatar_preset_use_case import (
+    SetAvatarPresetUseCase,
+)
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
@@ -270,6 +360,7 @@ from src.modules.user.application.use_cases.update_user_handicap_manually_use_ca
 from src.modules.user.application.use_cases.update_user_handicap_use_case import (
     UpdateUserHandicapUseCase,
 )
+from src.modules.user.application.use_cases.upload_avatar_use_case import UploadAvatarUseCase
 from src.modules.user.application.use_cases.validate_reset_token_use_case import (
     ValidateResetTokenUseCase,
 )
@@ -283,8 +374,14 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.external.filesystem_avatar_preset_provider import (
+    FileSystemAvatarPresetProvider,
+)
 from src.modules.user.infrastructure.external.google_oauth_service import (
     GoogleOAuthService,
+)
+from src.modules.user.infrastructure.external.pillow_image_processor import (
+    PillowImageProcessor,
 )
 from src.modules.user.infrastructure.external.rfeg_handicap_service import (
     RFEGHandicapService,
@@ -596,6 +693,84 @@ def get_update_security_use_case(
     return UpdateSecurityUseCase(uow, email_service)
 
 
+# ============================================================================
+# AVATAR (v2.3.0)
+# ============================================================================
+
+
+def get_image_processor() -> IImageProcessor:
+    """Proveedor del procesador de imágenes (Pillow) para avatares subidos."""
+    return PillowImageProcessor()
+
+
+def get_avatar_preset_provider() -> IAvatarPresetProvider:
+    """Proveedor del catálogo de presets de avatar (assets estáticos en disco)."""
+    return FileSystemAvatarPresetProvider()
+
+
+def get_set_avatar_preset_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SetAvatarPresetUseCase:
+    """Proveedor del caso de uso SetAvatarPresetUseCase."""
+    return SetAvatarPresetUseCase(uow)
+
+
+def get_upload_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    image_processor: IImageProcessor = Depends(get_image_processor),
+) -> UploadAvatarUseCase:
+    """Proveedor del caso de uso UploadAvatarUseCase."""
+    return UploadAvatarUseCase(uow, image_processor)
+
+
+def get_activate_uploaded_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ActivateUploadedAvatarUseCase:
+    """Proveedor del caso de uso ActivateUploadedAvatarUseCase."""
+    return ActivateUploadedAvatarUseCase(uow)
+
+
+def get_list_my_avatar_uploads_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyAvatarUploadsUseCase:
+    """Proveedor del caso de uso ListMyAvatarUploadsUseCase."""
+    return ListMyAvatarUploadsUseCase(uow)
+
+
+def get_remove_avatar_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RemoveAvatarUseCase:
+    """Proveedor del caso de uso RemoveAvatarUseCase."""
+    return RemoveAvatarUseCase(uow)
+
+
+def get_avatar_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+) -> GetAvatarImageUseCase:
+    """Proveedor del caso de uso GetAvatarImageUseCase."""
+    return GetAvatarImageUseCase(uow, preset_provider)
+
+
+def get_my_avatar_upload_image_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetMyAvatarUploadImageUseCase:
+    """Proveedor del caso de uso GetMyAvatarUploadImageUseCase."""
+    return GetMyAvatarUploadImageUseCase(uow)
+
+
+def get_list_avatar_presets_use_case() -> ListAvatarPresetsUseCase:
+    """Proveedor del caso de uso ListAvatarPresetsUseCase."""
+    return ListAvatarPresetsUseCase()
+
+
+def get_avatar_preset_image_use_case(
+    preset_provider: IAvatarPresetProvider = Depends(get_avatar_preset_provider),
+) -> GetAvatarPresetImageUseCase:
+    """Proveedor del caso de uso GetAvatarPresetImageUseCase."""
+    return GetAvatarPresetImageUseCase(preset_provider)
+
+
 # Esquema de seguridad HTTP Bearer para Swagger
 # IMPORTANTE: auto_error=False permite que el endpoint no falle si no hay header Authorization
 # Esto es necesario para el middleware dual (cookies + headers)
@@ -876,18 +1051,219 @@ def get_golf_course_uow(
     return SQLAlchemyGolfCourseUnitOfWork(session)
 
 
+def get_social_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> SocialUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo Social.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemySocialUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `SocialUnitOfWorkInterface`.
+    """
+    return SQLAlchemySocialUnitOfWork(session)
+
+
+def get_send_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SendFriendRequestUseCase:
+    """Proveedor del caso de uso SendFriendRequestUseCase."""
+    return SendFriendRequestUseCase(uow, user_uow)
+
+
+def get_respond_friend_request_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RespondFriendRequestUseCase:
+    """Proveedor del caso de uso RespondFriendRequestUseCase."""
+    return RespondFriendRequestUseCase(uow, user_uow)
+
+
+def get_remove_friend_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> RemoveFriendUseCase:
+    """Proveedor del caso de uso RemoveFriendUseCase."""
+    return RemoveFriendUseCase(uow)
+
+
+def get_block_user_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> BlockUserUseCase:
+    """Proveedor del caso de uso BlockUserUseCase."""
+    return BlockUserUseCase(uow, user_uow)
+
+
+def get_list_friends_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListFriendsUseCase:
+    """Proveedor del caso de uso ListFriendsUseCase."""
+    return ListFriendsUseCase(uow, user_uow)
+
+
+def get_list_pending_requests_use_case(
+    uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListPendingRequestsUseCase:
+    """Proveedor del caso de uso ListPendingRequestsUseCase."""
+    return ListPendingRequestsUseCase(uow, user_uow)
+
+
+def get_quick_match_uow(
+    session: AsyncSession = Depends(get_db_session),
+) -> QuickMatchUnitOfWorkInterface:
+    """
+    Proveedor de la Unit of Work para el módulo QuickMatch.
+
+    Esta función:
+    1. Depende de `get_db_session` para obtener una sesión de BD.
+    2. Crea una instancia de `SQLAlchemyQuickMatchUnitOfWork` con esa sesión.
+    3. Devuelve la instancia, cumpliendo con la interfaz `QuickMatchUnitOfWorkInterface`.
+    """
+    return SQLAlchemyQuickMatchUnitOfWork(session)
+
+
+def get_create_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CreateQuickMatchUseCase:
+    """Proveedor del caso de uso CreateQuickMatchUseCase."""
+    return CreateQuickMatchUseCase(uow, golf_course_uow, user_uow)
+
+
+def get_add_friend_to_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> AddFriendToQuickMatchUseCase:
+    """Proveedor del caso de uso AddFriendToQuickMatchUseCase."""
+    return AddFriendToQuickMatchUseCase(uow, social_uow, user_uow, golf_course_uow)
+
+
+def get_add_guest_to_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> AddGuestToQuickMatchUseCase:
+    """Proveedor del caso de uso AddGuestToQuickMatchUseCase."""
+    return AddGuestToQuickMatchUseCase(uow, user_uow, golf_course_uow)
+
+
+def get_remove_quick_match_participant_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RemoveParticipantUseCase:
+    """Proveedor del caso de uso RemoveParticipantUseCase."""
+    return RemoveParticipantUseCase(uow, user_uow)
+
+
+def get_set_quick_match_participant_handicap_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SetParticipantHandicapUseCase:
+    """Proveedor del caso de uso SetParticipantHandicapUseCase."""
+    return SetParticipantHandicapUseCase(uow, user_uow)
+
+
+def get_start_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> StartQuickMatchUseCase:
+    """Proveedor del caso de uso StartQuickMatchUseCase."""
+    return StartQuickMatchUseCase(uow, user_uow)
+
+
+def get_complete_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CompleteQuickMatchUseCase:
+    """Proveedor del caso de uso CompleteQuickMatchUseCase."""
+    return CompleteQuickMatchUseCase(uow, user_uow)
+
+
+def get_cancel_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CancelQuickMatchUseCase:
+    """Proveedor del caso de uso CancelQuickMatchUseCase."""
+    return CancelQuickMatchUseCase(uow, user_uow)
+
+
+def get_submit_quick_match_hole_score_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+) -> SubmitQuickMatchHoleScoreUseCase:
+    """Proveedor del caso de uso SubmitQuickMatchHoleScoreUseCase."""
+    return SubmitQuickMatchHoleScoreUseCase(uow)
+
+
+def get_scoring_service() -> ScoringService:
+    """Proveedor del servicio de dominio ScoringService."""
+    return ScoringService()
+
+
+def get_scoring_coverage_service() -> ScoringCoverageService:
+    """Proveedor del servicio de dominio ScoringCoverageService."""
+    return ScoringCoverageService()
+
+
+def get_submit_quick_match_proxy_hole_score_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
+) -> SubmitProxyHoleScoreUseCase:
+    """Proveedor del caso de uso SubmitProxyHoleScoreUseCase."""
+    return SubmitProxyHoleScoreUseCase(uow, coverage_service)
+
+
+def get_get_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
+) -> GetQuickMatchUseCase:
+    """Proveedor del caso de uso GetQuickMatchUseCase."""
+    return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service)
+
+
+def get_list_my_quick_matches_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ListMyQuickMatchesUseCase:
+    """Proveedor del caso de uso ListMyQuickMatchesUseCase."""
+    return ListMyQuickMatchesUseCase(uow, user_uow)
+
+
+def get_location_builder(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> LocationBuilder:
+    """
+    Proveedor del domain service LocationBuilder.
+
+    Reutiliza el mismo `uow` (y por tanto el mismo `uow.countries`) que reciben
+    los use cases que lo consumen, ya que FastAPI cachea `Depends(get_competition_uow)`
+    dentro de una misma request.
+    """
+    return LocationBuilder(uow.countries)
+
+
 def get_create_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    location_builder: LocationBuilder = Depends(get_location_builder),
 ) -> CreateCompetitionUseCase:
     """
     Proveedor del caso de uso CreateCompetitionUseCase.
 
     Esta función:
     1. Depende de `get_competition_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `CreateCompetitionUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_location_builder` para el domain service de ubicación.
+    3. Crea una instancia de `CreateCompetitionUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return CreateCompetitionUseCase(uow)
+    return CreateCompetitionUseCase(uow, location_builder)
 
 
 def get_list_competitions_use_case(
@@ -906,16 +1282,18 @@ def get_list_competitions_use_case(
 
 def get_update_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    location_builder: LocationBuilder = Depends(get_location_builder),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
 
     Esta función:
     1. Depende de `get_competition_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `UpdateCompetitionUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_location_builder` para el domain service de ubicación.
+    3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateCompetitionUseCase(uow)
+    return UpdateCompetitionUseCase(uow, location_builder)
 
 
 def get_get_competition_use_case(
@@ -1234,11 +1612,6 @@ def get_assign_teams_use_case(
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
     )
-
-
-def get_scoring_service() -> ScoringService:
-    """Proveedor del servicio de dominio ScoringService."""
-    return ScoringService()
 
 
 def get_generate_matches_use_case(
