@@ -15,6 +15,7 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -49,7 +50,7 @@ class TestGetCompetitionUseCase:
         Then: Se retorna el DTO completo
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -86,7 +87,7 @@ class TestGetCompetitionUseCase:
         Then: El DTO muestra play_mode como SCRATCH
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Scratch Cup",
             start_date=date(2025, 6, 1),
@@ -132,7 +133,7 @@ class TestGetCompetitionUseCase:
         Then: Los países adyacentes son None en el DTO
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Single Country Cup",
             start_date=date(2025, 6, 1),
