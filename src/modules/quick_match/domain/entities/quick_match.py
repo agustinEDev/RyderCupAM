@@ -359,16 +359,22 @@ class QuickMatch:
         `add_participant`) los dos unicos participantes son cada bando por convencion.
 
         Devuelve `None` si no hay exactamente dos bandos no vacios resolubles (por
-        ejemplo, con menos de 2 participantes).
+        ejemplo, con menos de 2 participantes, o un FOURBALL/FOURSOMES incompleto
+        con ambos participantes aun en el mismo equipo).
         """
-        if len(self._participants) < 2:  # noqa: PLR2004
+        if self._match_format == MatchFormat.SINGLES:
+            if len(self._participants) != 2:  # noqa: PLR2004
+                return None
+            return (
+                {self._participants[0].participant_id},
+                {self._participants[1].participant_id},
+            )
+
+        if self._match_format is None:
             return None
 
-        team_a_ids = {p.participant_id for p in self._participants if (p.team or "A") == "A"}
+        team_a_ids = {p.participant_id for p in self._participants if p.team == "A"}
         team_b_ids = {p.participant_id for p in self._participants if p.team == "B"}
-        if not team_b_ids and len(self._participants) == 2:  # noqa: PLR2004 - SINGLES: no team field
-            team_a_ids = {self._participants[0].participant_id}
-            team_b_ids = {self._participants[1].participant_id}
 
         if not team_a_ids or not team_b_ids:
             return None

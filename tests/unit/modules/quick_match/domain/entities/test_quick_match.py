@@ -228,6 +228,12 @@ class TestQuickMatchTeamRosters:
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         assert qm.team_rosters() is None
 
+    def test_incomplete_fourball_with_two_participants_on_same_team_returns_none(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        qm.add_participant(_registered(team="A"))
+
+        assert qm.team_rosters() is None
+
 
 class TestQuickMatchRemoveParticipant:
     def test_remove_participant_succeeds(self):
