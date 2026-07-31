@@ -253,7 +253,9 @@ class GenerateMatchesUseCase:
             for pid, user in zip(all_player_ids, users, strict=True):
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
-                    has_custom_handicap = enrollment is not None and enrollment.custom_handicap is not None
+                    has_custom_handicap = (
+                        enrollment is not None and enrollment.custom_handicap is not None
+                    )
                     if not has_custom_handicap:
                         await self._maybe_refresh_rfeg_handicap(user)
                     if user.handicap is not None:
@@ -572,7 +574,9 @@ class GenerateMatchesUseCase:
                 f"(gender: {tee_gender}) en el campo de golf"
             )
 
-        playing_handicap = calculator.calculate(handicap_index, tee_rating, allowance, max_playing_handicap)
+        playing_handicap = calculator.calculate(
+            handicap_index, tee_rating, allowance, max_playing_handicap
+        )
         strokes_received = calculator.compute_strokes_received(
             playing_handicap, holes_by_stroke_index
         )
@@ -663,11 +667,10 @@ class GenerateMatchesUseCase:
             course_handicaps.append((str(uid.value), ch))
 
         # 2. Método diferencial: aplica allowance% a diferencias respecto al menor CH
-        differential_phs = calculator.calculate_fourball_differential(course_handicaps, allowance)
-
-        # Aplicar cap de max_playing_handicap si está definido
-        if max_playing_handicap is not None:
-            differential_phs = {k: min(v, max_playing_handicap) for k, v in differential_phs.items()}
+        # (calculate_fourball_differential aplica el cap de max_playing_handicap internamente)
+        differential_phs = calculator.calculate_fourball_differential(
+            course_handicaps, allowance, max_playing_handicap
+        )
 
         # 3. Construir MatchPlayers con PH diferencial
         def build_player(uid):
@@ -723,12 +726,20 @@ class GenerateMatchesUseCase:
         if is_scratch:
             return (
                 MatchPlayer.create(
-                    user_id=a_player_id, playing_handicap=0, tee_category=tee_cat_a,
-                    strokes_received=[], tee_gender=tee_gen_a, player_handicap=hi_a,
+                    user_id=a_player_id,
+                    playing_handicap=0,
+                    tee_category=tee_cat_a,
+                    strokes_received=[],
+                    tee_gender=tee_gen_a,
+                    player_handicap=hi_a,
                 ),
                 MatchPlayer.create(
-                    user_id=b_player_id, playing_handicap=0, tee_category=tee_cat_b,
-                    strokes_received=[], tee_gender=tee_gen_b, player_handicap=hi_b,
+                    user_id=b_player_id,
+                    playing_handicap=0,
+                    tee_category=tee_cat_b,
+                    strokes_received=[],
+                    tee_gender=tee_gen_b,
+                    player_handicap=hi_b,
                 ),
             )
 
@@ -759,12 +770,20 @@ class GenerateMatchesUseCase:
 
         return (
             MatchPlayer.create(
-                user_id=a_player_id, playing_handicap=ph_a, tee_category=tee_cat_a,
-                strokes_received=strokes_a, tee_gender=tee_gen_a, player_handicap=hi_a,
+                user_id=a_player_id,
+                playing_handicap=ph_a,
+                tee_category=tee_cat_a,
+                strokes_received=strokes_a,
+                tee_gender=tee_gen_a,
+                player_handicap=hi_a,
             ),
             MatchPlayer.create(
-                user_id=b_player_id, playing_handicap=ph_b, tee_category=tee_cat_b,
-                strokes_received=strokes_b, tee_gender=tee_gen_b, player_handicap=hi_b,
+                user_id=b_player_id,
+                playing_handicap=ph_b,
+                tee_category=tee_cat_b,
+                strokes_received=strokes_b,
+                tee_gender=tee_gen_b,
+                player_handicap=hi_b,
             ),
         )
 
@@ -852,14 +871,10 @@ class GenerateMatchesUseCase:
                 team_b_chs.append(ch)
 
         # 2. Método diferencial por equipos: allowance% se aplica a la diferencia de promedios
+        # (calculate_foursomes_differential aplica el cap de max_playing_handicap internamente)
         team_a_ph, team_b_ph = calculator.calculate_foursomes_differential(
-            team_a_chs, team_b_chs, allowance
+            team_a_chs, team_b_chs, allowance, max_playing_handicap
         )
-
-        # Aplicar cap de max_playing_handicap si está definido
-        if max_playing_handicap is not None:
-            team_a_ph = min(team_a_ph, max_playing_handicap)
-            team_b_ph = min(team_b_ph, max_playing_handicap)
 
         # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola)
         team_a_strokes = calculator.compute_strokes_received(team_a_ph, holes_by_stroke_index)

@@ -38,3 +38,14 @@ class BlockedUserViolation(BusinessRuleViolation):
     """La accion no es posible porque existe un bloqueo entre ambos usuarios."""
 
     pass
+
+
+class DuplicateFriendshipViolation(BusinessRuleViolation):
+    """Ya existe una relacion (de cualquier estado) para esta pareja de usuarios.
+
+    Traduce la violacion del indice unico `uq_friendship_pair` (o su equivalente
+    en el repositorio en memoria) a una excepcion de dominio, para que la capa
+    de aplicacion no dependa de la jerarquia de excepciones de SQLAlchemy.
+    """
+
+    pass

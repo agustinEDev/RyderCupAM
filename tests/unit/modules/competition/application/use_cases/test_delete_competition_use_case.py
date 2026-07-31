@@ -20,6 +20,7 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -59,7 +60,7 @@ class TestDeleteCompetitionUseCase:
         Then: Se elimina correctamente y retorna confirmación
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -117,7 +118,7 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -148,7 +149,7 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza CompetitionNotDeletableError
         """
         # Arrange: Crear competición y activarla
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -187,7 +188,7 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza CompetitionNotDeletableError
         """
         # Arrange: Crear competición y llevarla a IN_PROGRESS
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -228,7 +229,7 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza CompetitionNotDeletableError
         """
         # Arrange: Crear competición y llevarla a COMPLETED
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),

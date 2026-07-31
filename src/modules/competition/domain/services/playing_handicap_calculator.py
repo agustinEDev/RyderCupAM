@@ -215,6 +215,7 @@ class PlayingHandicapCalculator:
     def calculate_fourball_differential(
         player_course_handicaps: list[tuple[str, int]],
         allowance_percentage: int,
+        max_playing_handicap: int | None = None,
     ) -> dict[str, int]:
         """
         Método diferencial WHS para Fourball (Match Play).
@@ -227,13 +228,15 @@ class PlayingHandicapCalculator:
         1. Encontrar el menor course handicap entre los 4 jugadores
         2. Para cada jugador: diferencia = CH - menor_CH
         3. Playing Handicap = diferencia x allowance_percentage / 100
+        4. Si se indica max_playing_handicap, se acota a ese límite
 
         Args:
             player_course_handicaps: Lista de (user_id, course_handicap) para los 4 jugadores
             allowance_percentage: Porcentaje de allowance de la ronda (50-100)
+            max_playing_handicap: Límite superior opcional (cap WHS de la competición)
 
         Returns:
-            dict de user_id → playing_handicap diferencial
+            dict de user_id → playing_handicap diferencial (acotado si se indica el cap)
         """
         if not player_course_handicaps:
             return {}
@@ -247,6 +250,8 @@ class PlayingHandicapCalculator:
             ph = int(
                 (Decimal(str(diff)) * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
             )
+            if max_playing_handicap is not None:
+                ph = min(ph, max_playing_handicap)
             result[user_id] = ph
         return result
 
@@ -255,6 +260,7 @@ class PlayingHandicapCalculator:
         team_a_course_handicaps: list[int],
         team_b_course_handicaps: list[int],
         allowance_percentage: int,
+        max_playing_handicap: int | None = None,
     ) -> tuple[int, int]:
         """
         Método diferencial WHS para Foursomes (Golpe Alterno).
@@ -264,6 +270,7 @@ class PlayingHandicapCalculator:
         2. Calcular diferencia entre promedios
         3. Aplicar allowance_percentage a la diferencia
         4. El equipo con mayor promedio CH recibe los strokes; el otro recibe 0
+        5. Si se indica max_playing_handicap, se acota a ese límite
 
         Ambos jugadores del equipo reciben los mismos strokes porque
         comparten una bola (golpe alterno).
@@ -272,10 +279,11 @@ class PlayingHandicapCalculator:
             team_a_course_handicaps: CHs de los jugadores del equipo A
             team_b_course_handicaps: CHs de los jugadores del equipo B
             allowance_percentage: Porcentaje de allowance de la ronda (50-100)
+            max_playing_handicap: Límite superior opcional (cap WHS de la competición)
 
         Returns:
-            (team_a_ph, team_b_ph) — Playing Handicap por equipo.
-            Solo un equipo recibe strokes (el de mayor CH promedio).
+            (team_a_ph, team_b_ph) — Playing Handicap por equipo (acotado si se indica
+            el cap). Solo un equipo recibe strokes (el de mayor CH promedio).
         """
         if not team_a_course_handicaps or not team_b_course_handicaps:
             return 0, 0
@@ -290,6 +298,8 @@ class PlayingHandicapCalculator:
         difference = abs(team_a_avg - team_b_avg)
         allowance = Decimal(str(allowance_percentage)) / Decimal("100")
         strokes = int((difference * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        if max_playing_handicap is not None:
+            strokes = min(strokes, max_playing_handicap)
 
         if team_a_avg > team_b_avg:
             return strokes, 0

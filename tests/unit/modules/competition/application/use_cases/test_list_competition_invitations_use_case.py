@@ -19,6 +19,7 @@ from src.modules.competition.application.use_cases.list_competition_invitations_
     ListCompetitionInvitationsUseCase,
 )
 from src.modules.competition.domain.entities.invitation import Invitation
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -57,7 +58,7 @@ class TestListCompetitionInvitationsUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, name="Test Cup"):
-        create_uc = CreateCompetitionUseCase(comp_uow)
+        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
         request = CreateCompetitionRequestDTO(
             name=name,
             start_date=date(2026, 6, 1),

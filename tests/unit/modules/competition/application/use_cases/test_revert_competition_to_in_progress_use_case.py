@@ -23,6 +23,7 @@ from src.modules.competition.domain.entities.competition import CompetitionState
 from src.modules.competition.domain.events.competition_reverted_to_in_progress_event import (
     CompetitionRevertedToInProgressEvent,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -52,7 +53,7 @@ class TestRevertCompetitionToInProgressUseCase:
 
     async def _create_completed_competition(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Helper: crea una competición en estado COMPLETED."""
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -135,7 +136,7 @@ class TestRevertCompetitionToInProgressUseCase:
         When: Se intenta revertir
         Then: Se lanza CompetitionStateError
         """
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),

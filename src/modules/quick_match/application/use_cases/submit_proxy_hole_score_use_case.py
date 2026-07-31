@@ -38,9 +38,11 @@ class SubmitProxyHoleScoreUseCase:
     (segun el reparto calculado por ScoringCoverageService).
     """
 
-    def __init__(self, uow: QuickMatchUnitOfWorkInterface):
+    def __init__(
+        self, uow: QuickMatchUnitOfWorkInterface, coverage_service: ScoringCoverageService
+    ):
         self._uow = uow
-        self._coverage_service = ScoringCoverageService()
+        self._coverage_service = coverage_service
 
     async def execute(self, request: SubmitProxyHoleScoreRequestDTO) -> HoleScoreResponseDTO:
         scorer_id = UserId(request.scorer_user_id)
