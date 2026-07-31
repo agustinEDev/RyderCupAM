@@ -122,15 +122,10 @@ class GetQuickMatchUseCase:
             # La clasificacion individual se calcula en el frontend a partir de hole_scores.
             return None
 
-        participants = quick_match.participants
-        if len(participants) < 2:  # noqa: PLR2004
+        rosters = quick_match.team_rosters()
+        if rosters is None:
             return None
-
-        team_a_ids = {p.participant_id for p in participants if (p.team or "A") == "A"}
-        team_b_ids = {p.participant_id for p in participants if p.team == "B"}
-        if not team_b_ids and len(participants) == 2:  # noqa: PLR2004 - SINGLES: no team field
-            team_a_ids = {participants[0].participant_id}
-            team_b_ids = {participants[1].participant_id}
+        team_a_ids, team_b_ids = rosters
 
         scores_by_hole: dict[int, dict] = {}
         for hs in hole_scores:
