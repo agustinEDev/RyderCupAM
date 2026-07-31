@@ -667,13 +667,10 @@ class GenerateMatchesUseCase:
             course_handicaps.append((str(uid.value), ch))
 
         # 2. Método diferencial: aplica allowance% a diferencias respecto al menor CH
-        differential_phs = calculator.calculate_fourball_differential(course_handicaps, allowance)
-
-        # Aplicar cap de max_playing_handicap si está definido
-        if max_playing_handicap is not None:
-            differential_phs = {
-                k: min(v, max_playing_handicap) for k, v in differential_phs.items()
-            }
+        # (calculate_fourball_differential aplica el cap de max_playing_handicap internamente)
+        differential_phs = calculator.calculate_fourball_differential(
+            course_handicaps, allowance, max_playing_handicap
+        )
 
         # 3. Construir MatchPlayers con PH diferencial
         def build_player(uid):
@@ -867,14 +864,10 @@ class GenerateMatchesUseCase:
                 team_b_chs.append(ch)
 
         # 2. Método diferencial por equipos: allowance% se aplica a la diferencia de promedios
+        # (calculate_foursomes_differential aplica el cap de max_playing_handicap internamente)
         team_a_ph, team_b_ph = calculator.calculate_foursomes_differential(
-            team_a_chs, team_b_chs, allowance
+            team_a_chs, team_b_chs, allowance, max_playing_handicap
         )
-
-        # Aplicar cap de max_playing_handicap si está definido
-        if max_playing_handicap is not None:
-            team_a_ph = min(team_a_ph, max_playing_handicap)
-            team_b_ph = min(team_b_ph, max_playing_handicap)
 
         # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola)
         team_a_strokes = calculator.compute_strokes_received(team_a_ph, holes_by_stroke_index)

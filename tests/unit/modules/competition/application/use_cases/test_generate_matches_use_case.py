@@ -755,9 +755,7 @@ class TestGenerateMatchesUseCase:
             total_strokes = sum(
                 len(p.strokes_received) for p in (*m.team_a_players, *m.team_b_players)
             )
-            assert total_strokes == 0, (
-                "Equal PHs → differential = 0 → no strokes for either player"
-            )
+            assert total_strokes == 0, "Equal PHs → differential = 0 → no strokes for either player"
 
     async def test_singles_differential_strokes_only_higher_ph_receives(
         self,
@@ -1221,6 +1219,76 @@ class TestGenerateMatchesUseCase:
 
         high_hi_player = next(p for p in all_players if p.user_id == high_hi_uid)
         assert high_hi_player.playing_handicap == 3
+
+    async def test_max_playing_handicap_is_applied_in_foursomes(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+    ):
+        """
+        Verifica que max_playing_handicap se aplica al generar partidos FOURSOMES.
+
+        Given: Competicion HANDICAP con max_playing_handicap=3, equipo A con HI=36
+               en ambos jugadores y equipo B con HI=0, de forma que el metodo
+               diferencial WHS por equipos produzca un PH > 3 para el equipo A
+               antes de aplicar el cap
+        When: Se generan partidos FOURSOMES
+        Then: playing_handicap de todos los jugadores <= 3, y el equipo A (mayor CH
+              promedio) queda exactamente en 3 (confirma que el cap realmente actuo)
+        """
+        competition = Competition.create(
+            id=CompetitionId(uuid4()),
+            creator_id=creator_id,
+            name=CompetitionName("Cap Foursomes"),
+            dates=DateRange(start_date=date(2026, 6, 1), end_date=date(2026, 6, 3)),
+            location=Location(main_country=CountryCode("ES")),
+            play_mode=PlayMode.HANDICAP,
+            max_players=24,
+            team_assignment=TeamAssignment.MANUAL,
+            team_1_name="Team A",
+            team_2_name="Team B",
+            max_playing_handicap=3,
+        )
+        competition.activate()
+        competition.close_enrollments()
+        async with uow:
+            await uow.competitions.add(competition)
+
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.FOURSOMES
+        )
+        team_a_ids, _team_b_ids = await self._create_teams_and_enrollments_with_tees(
+            uow, competition, 2, 2
+        )
+        high_hi_uids = set(team_a_ids)
+
+        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
+
+        async def mock_find_user(uid):
+            hi = 36.0 if uid in high_hi_uids else 0.0
+            return self._build_mock_user(uid, hi, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+        request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
+
+        await use_case.execute(request, creator_id)
+
+        matches = await uow.matches.find_by_round(round_entity.id)
+        assert len(matches) == 1
+        all_players = (*matches[0].team_a_players, *matches[0].team_b_players)
+        for p in all_players:
+            assert p.playing_handicap <= 3
+
+        high_hi_players = [p for p in all_players if p.user_id in high_hi_uids]
+        assert all(p.playing_handicap == 3 for p in high_hi_players)
 
     # =========================================================================
     # HM-1b: PLAYER_HANDICAP SNAPSHOT TESTS

@@ -50,16 +50,16 @@ class CreateCompetitionUseCase:
     - Persistir mediante repositorio
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface, location_builder: LocationBuilder):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            location_builder: Domain Service para construir Location (patrón UserFinder)
         """
         self._uow = uow
-        # Domain Service para construir Location (patrón UserFinder)
-        self._location_builder = LocationBuilder(self._uow.countries)
+        self._location_builder = location_builder
 
     async def execute(
         self, request: CreateCompetitionRequestDTO, creator_id: UserId

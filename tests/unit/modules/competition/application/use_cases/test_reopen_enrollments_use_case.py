@@ -23,6 +23,7 @@ from src.modules.competition.domain.entities.competition import CompetitionState
 from src.modules.competition.domain.events.competition_enrollments_reopened_event import (
     CompetitionEnrollmentsReopenedEvent,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -52,7 +53,7 @@ class TestReopenEnrollmentsUseCase:
 
     async def _create_closed_competition(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Helper: crea una competición en estado CLOSED."""
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -134,7 +135,7 @@ class TestReopenEnrollmentsUseCase:
         When: Se intenta reabrir inscripciones
         Then: Se lanza CompetitionStateError (ya está en ACTIVE)
         """
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),

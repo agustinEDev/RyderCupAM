@@ -149,6 +149,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
 )
@@ -1236,18 +1237,33 @@ def get_list_my_quick_matches_use_case(
     return ListMyQuickMatchesUseCase(uow, user_uow)
 
 
+def get_location_builder(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> LocationBuilder:
+    """
+    Proveedor del domain service LocationBuilder.
+
+    Reutiliza el mismo `uow` (y por tanto el mismo `uow.countries`) que reciben
+    los use cases que lo consumen, ya que FastAPI cachea `Depends(get_competition_uow)`
+    dentro de una misma request.
+    """
+    return LocationBuilder(uow.countries)
+
+
 def get_create_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    location_builder: LocationBuilder = Depends(get_location_builder),
 ) -> CreateCompetitionUseCase:
     """
     Proveedor del caso de uso CreateCompetitionUseCase.
 
     Esta función:
     1. Depende de `get_competition_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `CreateCompetitionUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_location_builder` para el domain service de ubicación.
+    3. Crea una instancia de `CreateCompetitionUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return CreateCompetitionUseCase(uow)
+    return CreateCompetitionUseCase(uow, location_builder)
 
 
 def get_list_competitions_use_case(
@@ -1266,16 +1282,18 @@ def get_list_competitions_use_case(
 
 def get_update_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    location_builder: LocationBuilder = Depends(get_location_builder),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
 
     Esta función:
     1. Depende de `get_competition_uow` para obtener una Unit of Work.
-    2. Crea una instancia de `UpdateCompetitionUseCase` con esa dependencia.
-    3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+    2. Depende de `get_location_builder` para el domain service de ubicación.
+    3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
+    4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateCompetitionUseCase(uow)
+    return UpdateCompetitionUseCase(uow, location_builder)
 
 
 def get_get_competition_use_case(

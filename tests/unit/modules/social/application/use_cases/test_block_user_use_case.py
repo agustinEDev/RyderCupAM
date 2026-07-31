@@ -1,7 +1,6 @@
 """Tests para BlockUserUseCase."""
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from src.modules.social.application.exceptions import AddresseeNotFoundError
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
@@ -92,7 +91,16 @@ class TestBlockUserUseCase:
         assert second.status == "BLOCKED"
 
     async def test_block_handles_concurrent_insert_race_idempotently(self, uow, user_uow):
-        """Simula dos bloqueos concurrentes chocando contra uq_friendship_pair."""
+        """Simula dos bloqueos concurrentes chocando contra uq_friendship_pair.
+
+        A diferencia de un mock que fuerce directamente la excepcion, aqui la
+        fila "ganadora" se inserta con el `add()` real del repositorio en
+        memoria (que ahora aplica el mismo invariante de pareja unica que el
+        indice `uq_friendship_pair` de la BD) — solo se parchea `find_by_pair`
+        para simular la ventana de carrera (lectura antes del commit
+        concurrente). La excepcion `DuplicateFriendshipViolation` la produce
+        el propio adaptador, no el test.
+        """
         blocker = await self._create_user(user_uow, "blocker5@test.com")
         blocked = await self._create_user(user_uow, "blocked5@test.com")
         use_case = BlockUserUseCase(uow, user_uow)
@@ -100,16 +108,22 @@ class TestBlockUserUseCase:
         winning_friendship = Friendship.create_blocked(
             id=FriendshipId.generate(), blocker_id=blocker.id, blocked_id=blocked.id
         )
-        original_add = uow.friendships.add
+        async with uow:
+            await uow.friendships.add(winning_friendship)
 
-        async def add_with_race(friendship):
-            # La primera llamada simula que otra request concurrente ya gano
-            # la carrera e inserto la fila; la BD real respondería con
-            # IntegrityError por uq_friendship_pair.
-            await original_add(winning_friendship)
-            raise IntegrityError("uq_friendship_pair", params=None, orig=Exception("duplicate"))
+        original_find_by_pair = uow.friendships.find_by_pair
+        call_count = 0
 
-        uow.friendships.add = add_with_race
+        async def find_by_pair_with_race(user_id_a, user_id_b):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Simula que la lectura ocurrio antes de que la request
+                # concurrente ganara la carrera e insertara la fila.
+                return None
+            return await original_find_by_pair(user_id_a, user_id_b)
+
+        uow.friendships.find_by_pair = find_by_pair_with_race
 
         response = await use_case.execute(str(blocker.id.value), str(blocked.id.value))
 

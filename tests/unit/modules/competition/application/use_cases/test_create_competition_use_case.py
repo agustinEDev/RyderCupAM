@@ -12,7 +12,10 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
 )
-from src.modules.competition.domain.services.location_builder import InvalidCountryError
+from src.modules.competition.domain.services.location_builder import (
+    InvalidCountryError,
+    LocationBuilder,
+)
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -46,7 +49,7 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea en estado DRAFT y se persiste
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -91,7 +94,7 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea con los 3 países correctamente
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Iberian Cup 2025",
             start_date=date(2025, 7, 1),
@@ -127,7 +130,7 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza CompetitionAlreadyExistsError
         """
         # Arrange: Crear competición existente
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         existing_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -162,7 +165,7 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza InvalidCountryError
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Invalid Cup",
             start_date=date(2025, 6, 1),
@@ -188,7 +191,7 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza InvalidCountryError
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Invalid Adjacency Cup",
             start_date=date(2025, 6, 1),
@@ -215,7 +218,7 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea con play_mode configurado
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Handicap Cup",
             start_date=date(2025, 6, 1),
@@ -243,7 +246,7 @@ class TestCreateCompetitionUseCase:
         Then: Se crea un enrollment APPROVED para el creador
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Auto Enroll Cup",
             start_date=date(2025, 6, 1),
@@ -272,7 +275,7 @@ class TestCreateCompetitionUseCase:
         Then: Se llama a commit() en el UoW
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow)
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         request_dto = CreateCompetitionRequestDTO(
             name="Commit Test Cup",
             start_date=date(2025, 6, 1),

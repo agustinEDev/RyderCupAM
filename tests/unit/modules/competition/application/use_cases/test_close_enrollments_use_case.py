@@ -18,6 +18,7 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CreateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -57,7 +58,7 @@ class TestCloseEnrollmentsUseCase:
         Then: Se cierran correctamente y cambia a estado CLOSED
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -122,7 +123,7 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -160,7 +161,7 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear competición (queda en DRAFT)
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -191,7 +192,7 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -230,7 +231,7 @@ class TestCloseEnrollmentsUseCase:
         Then: Se emite el evento de dominio
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow)
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
