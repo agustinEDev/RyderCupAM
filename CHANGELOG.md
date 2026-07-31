@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+**Full Backend Security & Architecture Audit (issue #106)**
+
+- Proactive audit covering dependency security (Snyk SCA: 92 dependencies, 0 vulnerable
+  paths), auth/authz, secrets handling, SQL-injection surface, Clean Architecture layering
+  (10 golden rules), and DDD compliance (aggregates, Repository/UoW pattern, bounded
+  contexts).
+- Report: `docs/AUDIT_BACKEND_2026-07.md` — 0 Critical, 1 High, 3 Medium, 2 Low findings.
+- 4 follow-up issues opened: #109 (High/P1, `User` aggregate public mutable state), #110,
+  #111, #112 (Medium/P2, business-logic-in-use-case and DI/duplication findings in the
+  Competition module).
+
 ## [2.3.0] - 2026-07-30
 
 ### Added
