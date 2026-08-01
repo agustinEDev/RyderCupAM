@@ -12,6 +12,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Placeholder usado cuando get_trusted_client_ip() no puede resolver una IP real
+# (p.ej. tráfico vía kubectl port-forward, donde el peer siempre es 127.0.0.1 y
+# validate_ip_address() lo rechaza como sentinel). Sin esto, el registro de
+# dispositivo se saltaba por completo y la cookie device_id nunca se fijaba,
+# dejando al usuario sin ningún dispositivo "current" — lo que
+# useDeviceRevocationMonitor del frontend interpreta como revocación y fuerza
+# logout inmediato. DeviceFingerprint.create() exige una IP sintácticamente
+# válida, de ahí "0.0.0.0" (ya reconocida como sentinel en el resto del código)
+# en vez de un string arbitrario como "unknown".
+UNRESOLVED_IP_PLACEHOLDER = "0.0.0.0"
+
 # ======================================================================================
 # DTO para el Caso de Uso: Register/Update Device
 # ======================================================================================

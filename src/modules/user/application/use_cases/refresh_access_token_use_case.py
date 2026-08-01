@@ -9,7 +9,10 @@ Device Fingerprinting (v1.13.0): Registra/actualiza dispositivo en cada refresh.
 """
 
 from src.config.csrf_config import generate_csrf_token
-from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
+from src.modules.user.application.dto.device_dto import (
+    UNRESOLVED_IP_PLACEHOLDER,
+    RegisterDeviceRequestDTO,
+)
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
     RefreshAccessTokenResponseDTO,
@@ -150,11 +153,11 @@ class RefreshAccessTokenUseCase:
         # Cookie-based identification: device_id_from_cookie tiene prioridad
         device_id: str | None = None
         should_set_device_cookie = False
-        if request.user_agent and request.ip_address:
+        if request.user_agent:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
-                ip_address=request.ip_address,
+                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
                 device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
             )
             # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
