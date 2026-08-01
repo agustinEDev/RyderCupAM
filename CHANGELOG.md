@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Email de notificación al enviar una solicitud de amistad (`ISocialEmailService`/`send_friend_request_email`), siguiendo el mismo patrón que las invitaciones a competición. Envío no bloqueante: un fallo de Mailgun no impide crear la solicitud.
+
+### Changed
+
+- Extraído `mask_email()` (enmascarado de emails para logs de seguridad) a `src/shared/infrastructure/security/email_masking.py`, reemplazando 3 copias idénticas/divergentes en los módulos Competition y Social.
+- `EmailService`: los métodos async (`send_password_reset_email`, `send_password_changed_notification`, `send_invitation_email`, `send_friend_request_email`) ya no bloquean el event loop mientras esperan a Mailgun — el envío síncrono ahora se despacha vía `asyncio.to_thread`. Issue de deuda técnica para migrar a un cliente HTTP async de verdad: #148.
+
+### Fixed
+
+- `mask_email()` no enmascaraba correctamente emails con dominio vacío (ej. `"alice@"`), devolviendo `"a***@"` en vez de `"***"`.
+
 ## [2.3.1] - 2026-08-01
 
 ### Added

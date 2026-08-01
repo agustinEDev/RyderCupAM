@@ -1,5 +1,7 @@
 """Tests para SendFriendRequestUseCase."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.modules.social.application.dto.friendship_dto import SendFriendRequestRequestDTO
@@ -133,3 +135,56 @@ class TestSendFriendRequestUseCase:
 
         assert response.status == "PENDING"
         assert response.id != declined.id.value
+
+    async def test_should_call_email_service_on_success(self, uow, user_uow):
+        """Email service se llama con los parametros correctos al enviar la solicitud."""
+        requester = await self._create_user(user_uow, "requester6@test.com")
+        addressee = await self._create_user(user_uow, "addressee6@test.com")
+
+        mock_email = AsyncMock()
+        mock_email.send_friend_request_email = AsyncMock(return_value=True)
+
+        use_case = SendFriendRequestUseCase(uow, user_uow, email_service=mock_email)
+        response = await use_case.execute(
+            SendFriendRequestRequestDTO(
+                requester_id=requester.id.value, addressee_id=addressee.id.value
+            )
+        )
+
+        assert response.status == "PENDING"
+        mock_email.send_friend_request_email.assert_awaited_once()
+        call_kwargs = mock_email.send_friend_request_email.call_args[1]
+        assert call_kwargs["to_email"] == "addressee6@test.com"
+        assert call_kwargs["addressee_name"] == "Test User"
+        assert call_kwargs["requester_name"] == "Test User"
+
+    async def test_should_create_friendship_even_if_email_fails(self, uow, user_uow):
+        """La solicitud se crea aunque el envio del email falle."""
+        requester = await self._create_user(user_uow, "requester7@test.com")
+        addressee = await self._create_user(user_uow, "addressee7@test.com")
+
+        mock_email = AsyncMock()
+        mock_email.send_friend_request_email = AsyncMock(side_effect=Exception("SMTP error"))
+
+        use_case = SendFriendRequestUseCase(uow, user_uow, email_service=mock_email)
+        response = await use_case.execute(
+            SendFriendRequestRequestDTO(
+                requester_id=requester.id.value, addressee_id=addressee.id.value
+            )
+        )
+
+        assert response.status == "PENDING"
+
+    async def test_no_email_sent_when_email_service_not_provided(self, uow, user_uow):
+        """Sin email_service inyectado (default None), no debe intentarse enviar nada."""
+        requester = await self._create_user(user_uow, "requester8@test.com")
+        addressee = await self._create_user(user_uow, "addressee8@test.com")
+
+        use_case = SendFriendRequestUseCase(uow, user_uow)
+        response = await use_case.execute(
+            SendFriendRequestRequestDTO(
+                requester_id=requester.id.value, addressee_id=addressee.id.value
+            )
+        )
+
+        assert response.status == "PENDING"

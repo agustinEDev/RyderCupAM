@@ -244,6 +244,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.social_email_service_interface import (
+    ISocialEmailService,
+)
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
 from src.modules.social.application.use_cases.list_pending_requests_use_case import (
@@ -1065,12 +1068,18 @@ def get_social_uow(
     return SQLAlchemySocialUnitOfWork(session)
 
 
+def get_social_email_service() -> ISocialEmailService:
+    """Proveedor del servicio de email para el modulo Social (amistades)."""
+    return EmailService()
+
+
 def get_send_friend_request_use_case(
     uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: ISocialEmailService = Depends(get_social_email_service),
 ) -> SendFriendRequestUseCase:
     """Proveedor del caso de uso SendFriendRequestUseCase."""
-    return SendFriendRequestUseCase(uow, user_uow)
+    return SendFriendRequestUseCase(uow, user_uow, email_service)
 
 
 def get_respond_friend_request_use_case(
