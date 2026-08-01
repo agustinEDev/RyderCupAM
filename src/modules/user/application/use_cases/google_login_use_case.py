@@ -11,7 +11,10 @@ Soporta tres flujos:
 from datetime import datetime
 
 from src.config.csrf_config import generate_csrf_token
-from src.modules.user.application.dto.device_dto import RegisterDeviceRequestDTO
+from src.modules.user.application.dto.device_dto import (
+    UNRESOLVED_IP_PLACEHOLDER,
+    RegisterDeviceRequestDTO,
+)
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
     GoogleLoginResponseDTO,
@@ -132,13 +135,13 @@ class GoogleLoginUseCase:
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
         """Register device and return (device_id, device_id_str, should_set_cookie)."""
-        if not request.user_agent or not request.ip_address:
+        if not request.user_agent:
             return None, None, False
 
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
             user_agent=request.user_agent,
-            ip_address=request.ip_address,
+            ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
             device_id_from_cookie=request.device_id_from_cookie,
         )
         device_response = await self._register_device_use_case.execute(device_request)

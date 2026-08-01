@@ -139,6 +139,46 @@ class TestRefreshAccessTokenUseCase:
         token_service.verify_refresh_token.assert_called_once_with(valid_refresh_token_jwt)
         token_service.create_access_token.assert_called_once()
 
+    async def test_registers_device_with_placeholder_ip_when_ip_unresolved(
+        self,
+        use_case,
+        uow,
+        token_service,
+        register_device_use_case,
+        sample_user,
+        valid_refresh_token_jwt,
+        refresh_token_entity,
+    ):
+        """
+        Debe seguir registrando/actualizando el dispositivo (con IP placeholder)
+        cuando ip_address es None pero hay user_agent — ver test equivalente en
+        test_login_user_use_case.py para el porqué (device_id cookie nunca se
+        fijaba, causando logout inmediato por falsa revocación).
+        """
+        from src.modules.user.application.dto.device_dto import UNRESOLVED_IP_PLACEHOLDER
+
+        register_device_use_case.execute.return_value = AsyncMock(
+            device_id="7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            set_device_cookie=True,
+        )
+        request = RefreshAccessTokenRequestDTO(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            ip_address=None,
+        )
+        token_service.verify_refresh_token.return_value = {
+            "sub": str(sample_user.id.value),
+            "type": "refresh",
+        }
+        await uow.users.save(sample_user)
+        await uow.refresh_tokens.save(refresh_token_entity)
+
+        result = await use_case.execute(request, valid_refresh_token_jwt)
+
+        assert result is not None
+        register_device_use_case.execute.assert_awaited_once()
+        call_kwargs = register_device_use_case.execute.call_args.args[0]
+        assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
+
     async def test_execute_with_invalid_jwt_returns_none(
         self,
         use_case,
