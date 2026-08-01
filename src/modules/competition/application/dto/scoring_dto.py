@@ -61,7 +61,9 @@ class PlayerHoleScoreDTO(BaseModel):
 
     user_id: str
     own_score: int | None = None
+    own_submitted: bool = False
     marker_score: int | None = None
+    marker_submitted: bool = False
     validation_status: str
     net_score: int | None = None
     strokes_received_this_hole: int

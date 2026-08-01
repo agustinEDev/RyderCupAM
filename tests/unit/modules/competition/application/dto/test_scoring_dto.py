@@ -128,12 +128,23 @@ class TestSubDTOs:
         dto = PlayerHoleScoreDTO(
             user_id="u1",
             own_score=5,
+            own_submitted=True,
             marker_score=5,
+            marker_submitted=True,
             validation_status="match",
             net_score=4,
             strokes_received_this_hole=1,
         )
         assert dto.net_score == 4
+
+    def test_player_hole_score_defaults_to_not_submitted(self):
+        dto = PlayerHoleScoreDTO(
+            user_id="u1",
+            validation_status="pending",
+            strokes_received_this_hole=1,
+        )
+        assert dto.own_submitted is False
+        assert dto.marker_submitted is False
 
     def test_hole_result(self):
         dto = HoleResultDTO(winner="A", standing="1UP", standing_team="A")
