@@ -52,3 +52,11 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
             for qm in self._quick_matches.values()
             if qm.is_participant(ParticipantId(user_id.value)) and (status is None or qm.status == status)
         )
+
+    async def count_all(self) -> int:
+        """Cuenta el total de partidas rapidas en el sistema."""
+        return len(self._quick_matches)
+
+    async def exists_created_by(self, creator_id: UserId) -> bool:
+        """True si el usuario ha creado alguna partida rapida."""
+        return any(qm.creator_id == creator_id for qm in self._quick_matches.values())

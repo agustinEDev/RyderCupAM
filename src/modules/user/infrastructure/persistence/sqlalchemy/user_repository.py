@@ -52,17 +52,61 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def find_all(self) -> list[User]:
-        """Devuelve todos los usuarios."""
-        statement = select(User)
+    def _search_filter(self, search: str | None):
+        """Construye la condición ILIKE compartida por find_all/count_all."""
+        if not search or not search.strip():
+            return None
+        q = search.strip().lower()
+        return or_(
+            func.lower(User._first_name).contains(q, autoescape=True),
+            func.lower(User._last_name).contains(q, autoescape=True),
+            func.lower(User._first_name + " " + User._last_name).contains(q, autoescape=True),
+            func.lower(User._email_value).contains(q, autoescape=True),
+        )
+
+    def _build_filters(
+        self,
+        search: str | None,
+        is_admin: bool | None,
+        is_active: bool | None,
+        email_verified: bool | None,
+    ) -> list:
+        conditions = []
+        search_condition = self._search_filter(search)
+        if search_condition is not None:
+            conditions.append(search_condition)
+        if is_admin is not None:
+            conditions.append(User._is_admin == is_admin)
+        if is_active is not None:
+            conditions.append(User._is_active == is_active)
+        if email_verified is not None:
+            conditions.append(User._email_verified == email_verified)
+        return conditions
+
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> list[User]:
+        """Devuelve una página de usuarios, opcionalmente filtrada."""
+        statement = select(User).order_by(User._created_at.desc())
+        for condition in self._build_filters(search, is_admin, is_active, email_verified):
+            statement = statement.where(condition)
+        statement = statement.limit(limit).offset(offset)
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def delete_by_id(self, user_id: UserId) -> None:
-        """Elimina un usuario por su ID."""
+    async def delete_by_id(self, user_id: UserId) -> bool:
+        """Elimina un usuario por su ID. Devuelve True si existía y se eliminó."""
         user = await self.find_by_id(user_id)
-        if user:
-            await self._session.delete(user)
+        if not user:
+            return False
+        await self._session.delete(user)
+        return True
 
     async def update(self, user: User) -> None:
         """
@@ -125,9 +169,17 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 
-    async def count_all(self) -> int:
-        """Cuenta todos los usuarios."""
+    async def count_all(
+        self,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> int:
+        """Cuenta usuarios, opcionalmente filtrados (ver find_all)."""
         statement = select(func.count()).select_from(User)
+        for condition in self._build_filters(search, is_admin, is_active, email_verified):
+            statement = statement.where(condition)
         result = await self._session.execute(statement)
         return result.scalar_one()
 

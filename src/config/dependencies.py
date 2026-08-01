@@ -284,7 +284,22 @@ from src.modules.user.application.ports.token_service_interface import ITokenSer
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
     ActivateUploadedAvatarUseCase,
 )
+from src.modules.user.application.use_cases.admin_delete_user_use_case import (
+    AdminDeleteUserUseCase,
+)
+from src.modules.user.application.use_cases.admin_list_users_use_case import (
+    AdminListUsersUseCase,
+)
+from src.modules.user.application.use_cases.admin_set_user_active_use_case import (
+    AdminSetUserActiveUseCase,
+)
+from src.modules.user.application.use_cases.admin_update_user_use_case import (
+    AdminUpdateUserUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_admin_stats_use_case import (
+    GetAdminStatsUseCase,
+)
 from src.modules.user.application.use_cases.get_avatar_image_use_case import (
     GetAvatarImageUseCase,
 )
@@ -1133,6 +1148,52 @@ def get_quick_match_uow(
     3. Devuelve la instancia, cumpliendo con la interfaz `QuickMatchUnitOfWorkInterface`.
     """
     return SQLAlchemyQuickMatchUnitOfWork(session)
+
+
+# ======================================================================================
+# ADMIN PANEL USE CASE PROVIDERS
+# ======================================================================================
+
+
+def get_admin_list_users_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminListUsersUseCase:
+    """Proveedor del caso de uso AdminListUsersUseCase."""
+    return AdminListUsersUseCase(uow)
+
+
+def get_admin_update_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminUpdateUserUseCase:
+    """Proveedor del caso de uso AdminUpdateUserUseCase."""
+    return AdminUpdateUserUseCase(uow)
+
+
+def get_admin_set_user_active_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminSetUserActiveUseCase:
+    """Proveedor del caso de uso AdminSetUserActiveUseCase."""
+    return AdminSetUserActiveUseCase(uow)
+
+
+def get_admin_delete_user_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> AdminDeleteUserUseCase:
+    """Proveedor del caso de uso AdminDeleteUserUseCase."""
+    return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+
+
+def get_get_admin_stats_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetAdminStatsUseCase:
+    """Proveedor del caso de uso GetAdminStatsUseCase."""
+    return GetAdminStatsUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
 
 
 def get_create_quick_match_use_case(

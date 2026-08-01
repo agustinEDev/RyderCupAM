@@ -168,6 +168,8 @@ users_table = Table(
     Column("locked_until", DateTime, nullable=True),
     # RBAC field (v2.0.0)
     Column("is_admin", Boolean, nullable=False, default=False),
+    # Admin panel: deactivation (v2.4.0)
+    Column("is_active", Boolean, nullable=False, default=True, server_default="true"),
     # Gender field (tee system refactor)
     Column("gender", GenderDecorator(), nullable=True),
     # Avatar fields (v2.3.0)
@@ -222,6 +224,7 @@ def start_mappers():
                 "_failed_login_attempts": users_table.c.failed_login_attempts,
                 "_locked_until": users_table.c.locked_until,
                 "_is_admin": users_table.c.is_admin,
+                "_is_active": users_table.c.is_active,
                 "_gender": users_table.c.gender,
                 "_avatar_source": users_table.c.avatar_source,
                 "_avatar_preset_id": users_table.c.avatar_preset_id,
