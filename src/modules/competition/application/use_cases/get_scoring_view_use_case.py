@@ -203,7 +203,9 @@ class GetScoringViewUseCase:
                 PlayerHoleScoreDTO(
                     user_id=str(hs.player_user_id),
                     own_score=hs.own_score,
+                    own_submitted=hs.own_submitted,
                     marker_score=hs.marker_score,
+                    marker_submitted=hs.marker_submitted,
                     validation_status=hs.validation_status.value.lower(),
                     net_score=hs.net_score,
                     strokes_received_this_hole=hs.strokes_received,
