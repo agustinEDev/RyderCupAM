@@ -200,6 +200,41 @@ class TestQuickMatchAddParticipant:
             qm.add_participant(_registered())
 
 
+class TestQuickMatchTeamRosters:
+    def test_singles_falls_back_to_each_participant_as_a_side(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+
+        rosters = qm.team_rosters()
+
+        assert rosters == ({qm.creator_participant_id}, {other.participant_id})
+
+    def test_fourball_derives_rosters_from_team_field(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        partner_a = _registered(team="A")
+        opponent_b1 = _registered(team="B")
+        opponent_b2 = _guest(team="B")
+        qm.add_participant(partner_a)
+        qm.add_participant(opponent_b1)
+        qm.add_participant(opponent_b2)
+
+        team_a_ids, team_b_ids = qm.team_rosters()
+
+        assert team_a_ids == {qm.creator_participant_id, partner_a.participant_id}
+        assert team_b_ids == {opponent_b1.participant_id, opponent_b2.participant_id}
+
+    def test_returns_none_with_fewer_than_two_participants(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        assert qm.team_rosters() is None
+
+    def test_incomplete_fourball_with_two_participants_on_same_team_returns_none(self):
+        qm = _make_quick_match(match_format=MatchFormat.FOURBALL)
+        qm.add_participant(_registered(team="A"))
+
+        assert qm.team_rosters() is None
+
+
 class TestQuickMatchRemoveParticipant:
     def test_remove_participant_succeeds(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
@@ -345,8 +380,12 @@ class TestQuickMatchStart:
     def test_start_with_non_registered_scorer_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         qm.add_participant(_registered())
-        with pytest.raises(InvalidScorerConfigurationViolation, match="not a registered participant"):
-            qm.start([qm.creator_participant_id, ParticipantId.generate(), ParticipantId.generate()])
+        with pytest.raises(
+            InvalidScorerConfigurationViolation, match="not a registered participant"
+        ):
+            qm.start(
+                [qm.creator_participant_id, ParticipantId.generate(), ParticipantId.generate()]
+            )
 
     def test_start_with_duplicate_scorers_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)

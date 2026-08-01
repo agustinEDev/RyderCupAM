@@ -401,3 +401,29 @@ class TestGoogleLoginUseCaseTokenGeneration:
         assert response.device_id is None
         assert response.should_set_device_cookie is False
         register_device_use_case.execute.assert_not_called()
+
+    async def test_registers_device_with_placeholder_ip_when_ip_unresolved(
+        self, use_case, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Debe seguir registrando el dispositivo (con IP placeholder) cuando
+        ip_address es None pero hay user_agent — ver test equivalente en
+        test_login_user_use_case.py para el porqué (device_id cookie nunca se
+        fijaba, causando logout inmediato por falsa revocación).
+        """
+        from src.modules.user.application.dto.device_dto import UNRESOLVED_IP_PLACEHOLDER
+
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        request = GoogleLoginRequestDTO(
+            authorization_code="valid-code",
+            ip_address=None,
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+        )
+
+        response = await use_case.execute(request)
+
+        assert response.should_set_device_cookie is True
+        register_device_use_case.execute.assert_awaited_once()
+        call_kwargs = register_device_use_case.execute.call_args.args[0]
+        assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER

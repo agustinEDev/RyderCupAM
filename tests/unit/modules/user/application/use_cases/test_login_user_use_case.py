@@ -187,6 +187,41 @@ class TestLoginUserUseCase:
         assert payload["sub"] == str(existing_user.id.value)
         assert "exp" in payload  # Debe tener tiempo de expiración
 
+    async def test_registers_device_with_placeholder_ip_when_ip_unresolved(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
+        """
+        Debe seguir registrando el dispositivo (con IP placeholder) cuando
+        ip_address es None pero hay user_agent.
+
+        Antes de este fix, el registro de dispositivo (y por tanto la cookie
+        device_id) se saltaba por completo si no había IP resuelta — lo que
+        ocurre siempre que get_trusted_client_ip() rechaza el peer como
+        sentinel (p.ej. 127.0.0.1 vía kubectl port-forward). Sin cookie
+        device_id, ningún dispositivo se marca is_current_device=True y el
+        frontend fuerza un logout inmediato interpretándolo como revocación.
+        """
+        from src.modules.user.application.dto.device_dto import UNRESOLVED_IP_PLACEHOLDER
+
+        register_device_use_case.execute.return_value = AsyncMock(
+            device_id="7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            set_device_cookie=True,
+        )
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(
+            email="test@example.com",
+            password="V@l1dP@ss123!",
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            ip_address=None,
+        )
+
+        response = await use_case.execute(request)
+
+        assert response is not None
+        register_device_use_case.execute.assert_awaited_once()
+        call_kwargs = register_device_use_case.execute.call_args.args[0]
+        assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
+
 
 @pytest.mark.asyncio
 class TestLoginUserUseCaseHandicapRFEG:

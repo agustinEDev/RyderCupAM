@@ -206,6 +206,12 @@ class TestGetScoringView:
         assert data["match_standing"]["holes_remaining"] == 18
         assert data["scorecard_submitted_by"] == []
 
+        # No hole has been scored yet: own/marker_submitted must be False for every player
+        for hole in data["scores"]:
+            for ps in hole["player_scores"]:
+                assert ps["own_submitted"] is False
+                assert ps["marker_submitted"] is False
+
     @pytest.mark.asyncio
     async def test_get_scoring_view_not_found(self, client: AsyncClient):
         """Scoring view de partido inexistente retorna 404."""
@@ -254,10 +260,14 @@ class TestSubmitHoleScore:
         hole_1 = next(s for s in data["scores"] if s["hole_number"] == 1)
         a_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id)
         assert a_score["own_score"] == 4
+        assert a_score["own_submitted"] is True
 
         # Player B should have marker_score set by A
         b_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_b_id)
         assert b_score["marker_score"] == 5
+        assert b_score["marker_submitted"] is True
+        # Player B hasn't submitted their own score yet
+        assert b_score["own_submitted"] is False
 
     @pytest.mark.asyncio
     async def test_cross_validation_produces_match(self, client: AsyncClient):

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-01
+
+### Added
+
+- Scoring view (`GET .../scoring-view`, `PlayerHoleScoreDTO`) now exposes `own_submitted`/`marker_submitted`, letting clients distinguish "hole not scored yet" from "score explicitly submitted as a pick-up" — both previously showed identically as `own_score: null`. Issue #101.
+
+### Fixed
+
+- Login, token refresh and Google login silently skipped device registration (and never set the `device_id` cookie) whenever the client IP couldn't be resolved — e.g. always the case behind `kubectl port-forward`, where the peer is `127.0.0.1` and correctly rejected as a sentinel value. With no `device_id` cookie, `GET /users/me/devices` could never mark any device as current, and the frontend's device-revocation monitor treated that as an explicit revocation, forcing an immediate logout right after a successful login. Now falls back to a fixed placeholder IP instead of skipping device registration outright.
+
+### Security
+
+**Full Backend Security & Architecture Audit (issue #106)**
+
+- Proactive audit covering dependency security (Snyk SCA: 92 dependencies, 0 vulnerable
+  paths), auth/authz, secrets handling, SQL-injection surface, Clean Architecture layering
+  (10 golden rules), and DDD compliance (aggregates, Repository/UoW pattern, bounded
+  contexts).
+- Report: `docs/AUDIT_BACKEND_2026-07.md` — 0 Critical, 1 High, 3 Medium, 2 Low findings.
+- 4 follow-up issues opened: #109 (High/P1, `User` aggregate public mutable state), #110,
+  #111, #112 (Medium/P2, business-logic-in-use-case and DI/duplication findings in the
+  Competition module).
+
 ## [2.3.0] - 2026-07-30
 
 ### Added

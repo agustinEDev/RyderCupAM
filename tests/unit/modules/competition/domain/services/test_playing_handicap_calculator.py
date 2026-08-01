@@ -1,6 +1,7 @@
 """Tests para PlayingHandicapCalculator domain service."""
 
 from decimal import Decimal
+from typing import ClassVar
 
 import pytest
 
@@ -206,6 +207,46 @@ class TestPlayingHandicapCalculatorSingles:
         # HI=10 × 90% = 9
         assert player_ph == 18
         assert opponent_ph == 9
+
+
+class TestPlayingHandicapCalculatorSinglesDifferential:
+    """Tests para calculate_singles_differential (método diferencial WHS Match Play)."""
+
+    HOLES_BY_STROKE_INDEX: ClassVar[list[int]] = list(range(1, 19))  # hoyo 1 = mas dificil (SI 1)
+
+    def test_higher_ph_player_receives_strokes(self):
+        strokes_a, strokes_b = PlayingHandicapCalculator.calculate_singles_differential(
+            ph_a=16, ph_b=11, holes_by_stroke_index=self.HOLES_BY_STROKE_INDEX
+        )
+
+        assert strokes_a == [1, 2, 3, 4, 5]
+        assert strokes_b == []
+
+    def test_lower_ph_player_plays_off_scratch(self):
+        strokes_a, strokes_b = PlayingHandicapCalculator.calculate_singles_differential(
+            ph_a=11, ph_b=16, holes_by_stroke_index=self.HOLES_BY_STROKE_INDEX
+        )
+
+        assert strokes_a == []
+        assert strokes_b == [1, 2, 3, 4, 5]
+
+    def test_equal_ph_nobody_receives_strokes(self):
+        strokes_a, strokes_b = PlayingHandicapCalculator.calculate_singles_differential(
+            ph_a=12, ph_b=12, holes_by_stroke_index=self.HOLES_BY_STROKE_INDEX
+        )
+
+        assert strokes_a == []
+        assert strokes_b == []
+
+    def test_diff_over_18_wraps_around_hardest_holes(self):
+        strokes_a, strokes_b = PlayingHandicapCalculator.calculate_singles_differential(
+            ph_a=20, ph_b=0, holes_by_stroke_index=self.HOLES_BY_STROKE_INDEX
+        )
+
+        assert len(strokes_a) == 20
+        assert strokes_a.count(1) == 2  # hoyo mas dificil recibe 2 golpes
+        assert strokes_a.count(18) == 1
+        assert strokes_b == []
 
 
 class TestPlayingHandicapCalculatorFourball:
@@ -483,3 +524,49 @@ class TestPlayingHandicapCalculatorMaxHandicap:
         )
 
         assert result == 18
+
+    def test_fourball_differential_caps_result_when_above_limit(self):
+        """calculate_fourball_differential aplica el mismo cap que calculate()."""
+        result = PlayingHandicapCalculator.calculate_fourball_differential(
+            player_course_handicaps=[("p1", 10), ("p2", 30)],
+            allowance_percentage=100,
+            max_playing_handicap=15,
+        )
+
+        # p1: diff=0 → ph=0 (sin cap). p2: diff=20 → ph=20 → acotado a 15
+        assert result["p1"] == 0
+        assert result["p2"] == 15
+
+    def test_fourball_differential_no_cap_when_none(self):
+        """Sin cap (None), calculate_fourball_differential no acota el resultado."""
+        result = PlayingHandicapCalculator.calculate_fourball_differential(
+            player_course_handicaps=[("p1", 10), ("p2", 30)],
+            allowance_percentage=100,
+            max_playing_handicap=None,
+        )
+
+        assert result["p2"] == 20
+
+    def test_foursomes_differential_caps_result_when_above_limit(self):
+        """calculate_foursomes_differential aplica el mismo cap que calculate()."""
+        team_a_ph, team_b_ph = PlayingHandicapCalculator.calculate_foursomes_differential(
+            team_a_course_handicaps=[10, 10],
+            team_b_course_handicaps=[30, 30],
+            allowance_percentage=100,
+            max_playing_handicap=15,
+        )
+
+        # Equipo B tiene mayor CH promedio: diff=20 → 20 strokes → acotado a 15
+        assert team_a_ph == 0
+        assert team_b_ph == 15
+
+    def test_foursomes_differential_no_cap_when_none(self):
+        """Sin cap (None), calculate_foursomes_differential no acota el resultado."""
+        _team_a_ph, team_b_ph = PlayingHandicapCalculator.calculate_foursomes_differential(
+            team_a_course_handicaps=[10, 10],
+            team_b_course_handicaps=[30, 30],
+            allowance_percentage=100,
+            max_playing_handicap=None,
+        )
+
+        assert team_b_ph == 20

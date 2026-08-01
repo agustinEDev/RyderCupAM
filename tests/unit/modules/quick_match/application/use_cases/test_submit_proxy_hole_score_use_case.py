@@ -20,6 +20,9 @@ from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     NotAssignedScorerViolation,
 )
+from src.modules.quick_match.domain.services.scoring_coverage_service import (
+    ScoringCoverageService,
+)
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
@@ -49,7 +52,7 @@ class TestSubmitProxyHoleScoreUseCase:
         creator = await create_user(user_uow, "creator@test.com")
         qm, guest = await _create_in_progress_match_with_guest(qm_uow, creator.id)
 
-        use_case = SubmitProxyHoleScoreUseCase(qm_uow)
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
         response = await use_case.execute(
             SubmitProxyHoleScoreRequestDTO(
                 quick_match_id=qm.id.value,
@@ -68,7 +71,7 @@ class TestSubmitProxyHoleScoreUseCase:
         creator = await create_user(user_uow, "creator2@test.com")
         qm, guest = await _create_in_progress_match_with_guest(qm_uow, creator.id)
 
-        use_case = SubmitProxyHoleScoreUseCase(qm_uow)
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
         with pytest.raises(NotAScorerError):
             await use_case.execute(
                 SubmitProxyHoleScoreRequestDTO(
@@ -84,7 +87,7 @@ class TestSubmitProxyHoleScoreUseCase:
         creator = await create_user(user_uow, "creator3@test.com")
         qm, _guest = await _create_in_progress_match_with_guest(qm_uow, creator.id)
 
-        use_case = SubmitProxyHoleScoreUseCase(qm_uow)
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
         with pytest.raises(TargetParticipantNotFoundError):
             await use_case.execute(
                 SubmitProxyHoleScoreRequestDTO(
@@ -108,12 +111,8 @@ class TestSubmitProxyHoleScoreUseCase:
             match_format=MatchFormat.FOURBALL,
         )
         scorer_b = QuickMatchParticipant.for_user(other.id, team="A")
-        guest_a = QuickMatchParticipant.for_guest(
-            first_name="Guest", last_name="A", team="B"
-        )
-        guest_b = QuickMatchParticipant.for_guest(
-            first_name="Guest", last_name="B", team="B"
-        )
+        guest_a = QuickMatchParticipant.for_guest(first_name="Guest", last_name="A", team="B")
+        guest_b = QuickMatchParticipant.for_guest(first_name="Guest", last_name="B", team="B")
         qm.add_participant(scorer_b)
         qm.add_participant(guest_a)
         qm.add_participant(guest_b)
@@ -124,7 +123,7 @@ class TestSubmitProxyHoleScoreUseCase:
         # Con 2 anotadores y 2 no-anotadores, el reparto es 1 y 1: cada guest
         # queda asignado a un anotador distinto. Forzamos que "other" intente
         # anotar al invitado que NO le corresponde.
-        use_case = SubmitProxyHoleScoreUseCase(qm_uow)
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
         assignments = use_case._coverage_service.compute_assignments(
             participants=qm.participants,
             scorer_ids=qm.scorer_ids,
