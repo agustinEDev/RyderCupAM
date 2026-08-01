@@ -2,7 +2,7 @@
 GolfCourseRepository - Implementación SQLAlchemy del repositorio de campos de golf.
 """
 
-from sqlalchemy import delete, inspect, select
+from sqlalchemy import delete, func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -183,6 +183,42 @@ class GolfCourseRepository(IGolfCourseRepository):
         result = await self._session.execute(stmt)
         result = result.unique()
         return list(result.scalars().all())
+
+    async def count_by_approval_status(self, approval_status: ApprovalStatus) -> int:
+        """
+        Cuenta campos de golf por estado de aprobación, sin materializarlos.
+
+        Args:
+            approval_status: Estado a contar (PENDING_APPROVAL, APPROVED, REJECTED)
+
+        Returns:
+            Número de campos con ese estado
+        """
+        stmt = (
+            select(func.count())
+            .select_from(golf_courses_table)
+            .where(golf_courses_table.c.approval_status == approval_status)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_by_creator(self, creator_id: UserId) -> int:
+        """
+        Cuenta campos creados por un usuario específico, sin materializarlos.
+
+        Args:
+            creator_id: ID del creator
+
+        Returns:
+            Número de campos creados por ese usuario
+        """
+        stmt = (
+            select(func.count())
+            .select_from(golf_courses_table)
+            .where(golf_courses_table.c.creator_id == creator_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def delete(self, golf_course_id: GolfCourseId) -> None:
         """

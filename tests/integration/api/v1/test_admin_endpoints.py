@@ -1,17 +1,23 @@
 """Tests de integración para /api/v1/admin/* (panel de administración)."""
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 
-from tests.conftest import create_authenticated_user
+from tests.conftest import (
+    create_authenticated_user,
+    create_golf_course,
+    set_auth_cookies,
+)
 
 
 async def _make_admin(email: str) -> None:
     from main import app as fastapi_app
     from src.config.dependencies import get_db_session
 
-    db_session_override = fastapi_app.dependency_overrides.get(get_db_session)
+    db_session_override = fastapi_app.dependency_overrides[get_db_session]
     async for session in db_session_override():
         try:
             await session.execute(
@@ -157,6 +163,7 @@ class TestAdminSetUserActive:
         login_response = await client.post(
             "/api/v1/auth/login",
             json={"email": "target_deact@test.com", "password": "P@ssw0rd123!"},
+            headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
         )
         assert login_response.status_code == 403
 
@@ -185,6 +192,7 @@ class TestAdminSetUserActive:
         login_response = await client.post(
             "/api/v1/auth/login",
             json={"email": "target_react@test.com", "password": "P@ssw0rd123!"},
+            headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
         )
         assert login_response.status_code == 200
 
@@ -208,6 +216,7 @@ class TestAdminDeleteUser:
         login_response = await client.post(
             "/api/v1/auth/login",
             json={"email": "target_delete@test.com", "password": "P@ssw0rd123!"},
+            headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
         )
         assert login_response.status_code == 401
 
@@ -223,3 +232,58 @@ class TestAdminDeleteUser:
             f"/api/v1/admin/users/{target['user']['id']}", cookies=user["cookies"]
         )
         assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_delete_blocked_when_user_has_activity(self, client: AsyncClient):
+        """Bloquea (409) el borrado definitivo si el usuario tiene actividad,
+        para no romper la restricción de BD (golf_courses.creator_id sin
+        ON DELETE) ni el dato de otros (competitions/quick_matches CASCADE).
+        La cuenta debe seguir existiendo tras el intento fallido."""
+        admin = await create_authenticated_user(
+            client, "admin_delete_blocked@test.com", "AdminPass123!", "Admin", "Blocked"
+        )
+        await _make_admin("admin_delete_blocked@test.com")
+        target = await create_authenticated_user(
+            client, "target_delete_blocked@test.com", "P@ssw0rd123!", "Target", "User"
+        )
+
+        await create_golf_course(client, target["cookies"])
+
+        set_auth_cookies(client, admin["cookies"])
+        response = await client.delete(f"/api/v1/admin/users/{target['user']['id']}")
+        assert response.status_code == 409
+        assert "golf course" in response.json()["detail"]
+
+        list_response = await client.get(
+            "/api/v1/admin/users", params={"search": "target_delete_blocked"}
+        )
+        assert list_response.status_code == 200
+        assert list_response.json()["total_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_delete_own_account(self, client: AsyncClient):
+        admin = await create_authenticated_user(
+            client, "admin_self_delete@test.com", "AdminPass123!", "Admin", "Self"
+        )
+        await _make_admin("admin_self_delete@test.com")
+
+        response = await client.delete(
+            f"/api/v1/admin/users/{admin['user']['id']}", cookies=admin["cookies"]
+        )
+        assert response.status_code == 400
+
+
+class TestAdminSelfDeactivationGuard:
+    @pytest.mark.asyncio
+    async def test_admin_cannot_deactivate_own_account(self, client: AsyncClient):
+        admin = await create_authenticated_user(
+            client, "admin_self_deact@test.com", "AdminPass123!", "Admin", "SelfDeact"
+        )
+        await _make_admin("admin_self_deact@test.com")
+
+        response = await client.put(
+            f"/api/v1/admin/users/{admin['user']['id']}/active",
+            json={"is_active": False},
+            cookies=admin["cookies"],
+        )
+        assert response.status_code == 400

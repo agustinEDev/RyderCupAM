@@ -1,10 +1,12 @@
 """Account Deactivated Event - Emitido cuando un admin desactiva una cuenta."""
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from src.shared.domain.events.domain_event import DomainEvent
 
 
+@dataclass(frozen=True)
 class AccountDeactivatedEvent(DomainEvent):
     """
     Evento de dominio emitido cuando un administrador desactiva la cuenta
@@ -20,13 +22,11 @@ class AccountDeactivatedEvent(DomainEvent):
         deactivated_at: Timestamp de la desactivación
     """
 
-    def __init__(
-        self,
-        user_id: str,
-        deactivated_by_user_id: str,
-        deactivated_at: datetime,
-    ):
-        super().__init__()
-        self.user_id = user_id
-        self.deactivated_by_user_id = deactivated_by_user_id
-        self.deactivated_at = deactivated_at
+    user_id: str
+    deactivated_by_user_id: str
+    deactivated_at: datetime
+
+    @property
+    def aggregate_id(self) -> str:
+        """El ID del agregado es el ID del usuario."""
+        return self.user_id

@@ -79,8 +79,10 @@ class AdminDeleteUserUseCase:
                 reasons.append("has created one or more quick matches")
 
         async with self._golf_course_uow:
-            golf_courses = await self._golf_course_uow.golf_courses.find_by_creator(user_id)
-            if golf_courses:
-                reasons.append(f"has requested {len(golf_courses)} golf course(s)")
+            golf_courses_requested = await self._golf_course_uow.golf_courses.count_by_creator(
+                user_id
+            )
+            if golf_courses_requested > 0:
+                reasons.append(f"has requested {golf_courses_requested} golf course(s)")
 
         return reasons

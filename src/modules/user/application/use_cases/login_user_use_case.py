@@ -146,18 +146,6 @@ class LoginUserUseCase:
                 message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}",
             )
 
-        # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin
-        if not user.is_active:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=request.email,
-                success=False,
-                failure_reason="Account deactivated by admin",
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-            raise AccountDeactivatedException()
-
         # Verificar contraseña
         if not user.verify_password(request.password):
             # Account Lockout (v1.13.0): Registrar intento fallido
@@ -196,6 +184,20 @@ class LoginUserUseCase:
 
         # Account Lockout (v1.13.0): Resetear intentos fallidos tras login exitoso
         user.reset_failed_attempts()
+
+        # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin.
+        # Se comprueba DESPUES de validar la contraseña para no filtrar el estado
+        # de la cuenta (activa/desactivada) a quien no conoce las credenciales.
+        if not user.is_active:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=False,
+                failure_reason="Account deactivated by admin",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise AccountDeactivatedException()
 
         # Registrar evento de login exitoso (Clean Architecture)
         # UTC-aware: handicap_updated_at ahora es timezone-aware, y la comparación

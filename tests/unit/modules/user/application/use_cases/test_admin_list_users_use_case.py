@@ -86,8 +86,13 @@ class TestAdminListUsersUseCase:
 
     async def test_filters_by_email_verified(self, uow):
         await self._create_user(uow, "Unverified", "User", "unverified@test.com")
+        verified = await self._create_user(uow, "Verified", "User", "verified@test.com")
+        async with uow:
+            verified.verify_email_from_oauth()
+            await uow.users.save(verified)
 
         use_case = AdminListUsersUseCase(uow)
         response = await use_case.execute(AdminListUsersRequestDTO(email_verified=False))
 
         assert response.total_count == 1
+        assert response.users[0].email == "unverified@test.com"

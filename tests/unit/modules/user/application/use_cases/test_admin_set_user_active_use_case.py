@@ -63,3 +63,26 @@ class TestAdminSetUserActiveUseCase:
         use_case = AdminSetUserActiveUseCase(uow)
         with pytest.raises(UserNotFoundError):
             await use_case.execute(str(uuid4()), False, actor_user_id="admin-id")
+
+    async def test_blocks_admin_from_deactivating_own_account(self, uow, existing_user):
+        use_case = AdminSetUserActiveUseCase(uow)
+        actor_id = str(existing_user.id.value)
+
+        with pytest.raises(ValueError, match="cannot deactivate their own account"):
+            await use_case.execute(actor_id, False, actor_user_id=actor_id)
+
+        async with uow:
+            user = await uow.users.find_by_id(existing_user.id)
+        assert user.is_active is True
+
+    async def test_allows_admin_to_reactivate_own_account(self, uow, existing_user):
+        """El guard solo bloquea auto-desactivación; reactivar la propia cuenta es inofensivo."""
+        use_case = AdminSetUserActiveUseCase(uow)
+        actor_id = str(existing_user.id.value)
+        await use_case.execute(actor_id, False, actor_user_id="other-admin-id")
+
+        await use_case.execute(actor_id, True, actor_user_id=actor_id)
+
+        async with uow:
+            user = await uow.users.find_by_id(existing_user.id)
+        assert user.is_active is True

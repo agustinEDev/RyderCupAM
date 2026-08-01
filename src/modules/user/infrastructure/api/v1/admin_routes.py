@@ -128,6 +128,8 @@ async def set_user_active(
         await use_case.execute(user_id, body.is_active, actor_user_id=str(current_user.id))
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.delete(
@@ -146,6 +148,11 @@ async def delete_user(
     use_case: AdminDeleteUserUseCase = Depends(get_admin_delete_user_use_case),
 ):
     require_admin(current_user)
+    if user_id == str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admins cannot delete their own account",
+        )
     try:
         await use_case.execute(user_id)
     except UserNotFoundError as e:

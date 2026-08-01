@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.user.application.use_cases.get_admin_stats_use_case import (
     GetAdminStatsUseCase,
 )
@@ -49,16 +50,12 @@ class TestGetAdminStatsUseCase:
         quick_match_uow = _make_uow_mock(quick_matches=quick_matches_repo)
 
         golf_courses_repo = AsyncMock()
-        golf_courses_repo.find_by_approval_status = AsyncMock(
-            side_effect=lambda status: [object()] * 9
-            if status.value == "APPROVED"
-            else [object()] * 2
+        golf_courses_repo.count_by_approval_status = AsyncMock(
+            side_effect=lambda status: 9 if status is ApprovalStatus.APPROVED else 2
         )
         golf_course_uow = _make_uow_mock(golf_courses=golf_courses_repo)
 
-        use_case = GetAdminStatsUseCase(
-            user_uow, competition_uow, quick_match_uow, golf_course_uow
-        )
+        use_case = GetAdminStatsUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
         stats = await use_case.execute()
 
         assert stats.total_users == 3

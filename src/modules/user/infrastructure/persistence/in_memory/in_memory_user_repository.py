@@ -39,7 +39,12 @@ class InMemoryUserRepository(UserRepositoryInterface):
         q = search.strip().lower()
         full_name = f"{user.first_name} {user.last_name}".lower()
         email = str(user.email).lower() if user.email else ""
-        return q in user.first_name.lower() or q in user.last_name.lower() or q in full_name or q in email
+        return (
+            q in user.first_name.lower()
+            or q in user.last_name.lower()
+            or q in full_name
+            or q in email
+        )
 
     def _matches_filters(
         self,
@@ -85,7 +90,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             for u in self._users.values()
             if self._matches_filters(u, search, is_admin, is_active, email_verified)
         ]
-        matching.sort(key=lambda u: u.created_at, reverse=True)
+        matching.sort(key=lambda u: (u.created_at, str(u.id)), reverse=True)
         return matching[offset : offset + limit]
 
     async def delete_by_id(self, user_id: UserId) -> bool:

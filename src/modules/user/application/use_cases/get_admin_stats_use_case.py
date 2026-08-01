@@ -42,10 +42,10 @@ class GetAdminStatsUseCase:
             total_quick_matches = await self._quick_match_uow.quick_matches.count_all()
 
         async with self._golf_course_uow:
-            approved = await self._golf_course_uow.golf_courses.find_by_approval_status(
+            approved_count = await self._golf_course_uow.golf_courses.count_by_approval_status(
                 ApprovalStatus.APPROVED
             )
-            pending = await self._golf_course_uow.golf_courses.find_by_approval_status(
+            pending_count = await self._golf_course_uow.golf_courses.count_by_approval_status(
                 ApprovalStatus.PENDING_APPROVAL
             )
 
@@ -53,6 +53,6 @@ class GetAdminStatsUseCase:
             total_users=total_users,
             total_competitions=total_competitions,
             total_quick_matches=total_quick_matches,
-            total_golf_courses_approved=len(approved),
-            total_golf_courses_pending=len(pending),
+            total_golf_courses_approved=approved_count,
+            total_golf_courses_pending=pending_count,
         )

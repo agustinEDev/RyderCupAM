@@ -13,6 +13,7 @@ from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceUnavailableError
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -46,6 +47,7 @@ def _rebuild_user(user: User, **overrides) -> User:
         "failed_login_attempts": user.failed_login_attempts,
         "locked_until": user.locked_until,
         "is_admin": user.is_admin,
+        "is_active": user.is_active,
         "gender": user.gender,
         "domain_events": user.get_domain_events(),
     }
@@ -449,9 +451,7 @@ class TestLoginUserUseCaseHandicapRFEG:
             country_code_str="ES",
         )
         user.update_handicap(12.5)
-        user = _rebuild_user(
-            user, handicap_updated_at=user.handicap_updated_at - timedelta(days=1)
-        )
+        user = _rebuild_user(user, handicap_updated_at=user.handicap_updated_at - timedelta(days=1))
         async with uow:
             await uow.users.save(user)
             await uow.commit()
@@ -467,3 +467,50 @@ class TestLoginUserUseCaseHandicapRFEG:
         assert response.needs_handicap is False
         assert response.user.handicap == 15.0
         handicap_svc.search_handicap.assert_awaited_once_with("Juan Garcia")
+
+
+@pytest.mark.asyncio
+class TestLoginUserUseCaseDeactivatedAccount:
+    """
+    Tests para el bloqueo de login en cuentas desactivadas (Admin Panel v2.4.0).
+
+    La verificación de is_active ocurre DESPUÉS de validar la contraseña, para
+    no filtrar el estado de la cuenta a quien no conoce las credenciales.
+    """
+
+    async def test_deactivated_account_with_correct_password_raises_exception(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
+        """Contraseña correcta + cuenta desactivada → AccountDeactivatedException."""
+        deactivated_user = _rebuild_user(existing_user, is_active=False)
+        async with uow:
+            await uow.users.save(deactivated_user)
+            await uow.commit()
+
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
+
+        with pytest.raises(AccountDeactivatedException):
+            await use_case.execute(request)
+
+    async def test_deactivated_account_with_wrong_password_returns_none(
+        self, uow, token_service, register_device_use_case, existing_user
+    ):
+        """
+        Contraseña incorrecta + cuenta desactivada → None (no la excepción).
+
+        Verifica el orden correcto: la contraseña se valida ANTES que el
+        estado is_active, así que unas credenciales inválidas no revelan si
+        la cuenta está o no desactivada.
+        """
+        deactivated_user = _rebuild_user(existing_user, is_active=False)
+        async with uow:
+            await uow.users.save(deactivated_user)
+            await uow.commit()
+
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
+
+        response = await use_case.execute(request)
+
+        assert response is None

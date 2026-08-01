@@ -93,7 +93,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         email_verified: bool | None = None,
     ) -> list[User]:
         """Devuelve una página de usuarios, opcionalmente filtrada."""
-        statement = select(User).order_by(User._created_at.desc())
+        statement = select(User).order_by(User._created_at.desc(), User._id.desc())  # type: ignore[union-attr]
         for condition in self._build_filters(search, is_admin, is_active, email_verified):
             statement = statement.where(condition)
         statement = statement.limit(limit).offset(offset)

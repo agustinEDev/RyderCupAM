@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `PUT /admin/users/{id}`: editar nombre, email, hándicap, país y rol de administrador.
   - `PUT /admin/users/{id}/active`: desactivar/reactivar una cuenta (bloquea el login, reversible, no toca ningún dato).
   - `DELETE /admin/users/{id}`: borrado definitivo, bloqueado (409) si la cuenta ha creado torneos/partidas rápidas, solicitado campos de golf, o tiene scores registrados — evita borrar en cascada datos de otros usuarios o romper una restricción de base de datos.
+  - Un admin no puede desactivar (400) ni borrar (400) su propia cuenta, evitando quedarse sin acceso al panel si es el único administrador.
   - Nuevo campo `User.is_active` (migración `f3a9c2e7b1d4`), con eventos de dominio `AccountDeactivatedEvent`/`AccountReactivatedEvent`.
 
 ### Changed

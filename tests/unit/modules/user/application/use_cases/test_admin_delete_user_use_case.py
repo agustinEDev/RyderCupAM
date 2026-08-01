@@ -50,20 +50,22 @@ class TestAdminDeleteUserUseCase:
         competitions_created=0,
         has_scores=False,
         quick_match_created=False,
-        golf_courses_created=None,
+        golf_courses_created=0,
     ):
         competitions_repo = AsyncMock()
         competitions_repo.count_by_creator = AsyncMock(return_value=competitions_created)
         hole_scores_repo = AsyncMock()
         hole_scores_repo.exists_by_player = AsyncMock(return_value=has_scores)
-        competition_uow = _make_uow_mock(competitions=competitions_repo, hole_scores=hole_scores_repo)
+        competition_uow = _make_uow_mock(
+            competitions=competitions_repo, hole_scores=hole_scores_repo
+        )
 
         quick_matches_repo = AsyncMock()
         quick_matches_repo.exists_created_by = AsyncMock(return_value=quick_match_created)
         quick_match_uow = _make_uow_mock(quick_matches=quick_matches_repo)
 
         golf_courses_repo = AsyncMock()
-        golf_courses_repo.find_by_creator = AsyncMock(return_value=golf_courses_created or [])
+        golf_courses_repo.count_by_creator = AsyncMock(return_value=golf_courses_created)
         golf_course_uow = _make_uow_mock(golf_courses=golf_courses_repo)
 
         return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
@@ -98,7 +100,7 @@ class TestAdminDeleteUserUseCase:
             await use_case.execute(str(existing_user.id.value))
 
     async def test_blocks_delete_when_user_requested_golf_course(self, user_uow, existing_user):
-        use_case = self._make_use_case(user_uow, golf_courses_created=[object()])
+        use_case = self._make_use_case(user_uow, golf_courses_created=1)
 
         with pytest.raises(UserHasActivityException):
             await use_case.execute(str(existing_user.id.value))

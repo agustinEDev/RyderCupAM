@@ -19,6 +19,9 @@ class AdminSetUserActiveUseCase:
         self._uow = uow
 
     async def execute(self, user_id_str: str, is_active: bool, actor_user_id: str) -> None:
+        if not is_active and user_id_str == actor_user_id:
+            raise ValueError("Admins cannot deactivate their own account")
+
         user_id = UserId(user_id_str)
 
         async with self._uow:
