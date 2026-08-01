@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Email de notificación al enviar una solicitud de amistad (`ISocialEmailService`/`send_friend_request_email`), siguiendo el mismo patrón que las invitaciones a competición. Envío no bloqueante: un fallo de Mailgun no impide crear la solicitud.
+
+### Changed
+
+- Extraído `mask_email()` (enmascarado de emails para logs de seguridad) a `src/shared/infrastructure/security/email_masking.py`, reemplazando 3 copias idénticas/divergentes en los módulos Competition y Social.
+
 ## [2.3.1] - 2026-08-01
 
 ### Added

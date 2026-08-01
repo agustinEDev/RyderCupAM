@@ -1,10 +1,15 @@
 """Caso de Uso: Enviar una Solicitud de Amistad."""
 
+import logging
+
 from src.modules.social.application.dto.friendship_dto import (
     FriendshipResponseDTO,
     SendFriendRequestRequestDTO,
 )
 from src.modules.social.application.exceptions import AddresseeNotFoundError
+from src.modules.social.application.ports.social_email_service_interface import (
+    ISocialEmailService,
+)
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.exceptions.social_violations import (
     BlockedUserViolation,
@@ -19,6 +24,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.security.email_masking import mask_email as _mask_email
+
+logger = logging.getLogger(__name__)
 
 
 class SendFriendRequestUseCase:
@@ -28,9 +36,11 @@ class SendFriendRequestUseCase:
         self,
         uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        email_service: ISocialEmailService | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
+        self._email_service = email_service
 
     async def execute(self, request: SendFriendRequestRequestDTO) -> FriendshipResponseDTO:
         requester_id = UserId(request.requester_id)
@@ -82,6 +92,22 @@ class SendFriendRequestUseCase:
             addressee_name = (
                 f"{addressee.first_name} {addressee.last_name}" if addressee else "Unknown"
             )
+
+        # Enviar email de notificacion (fuera de la transaccion, no bloquea la creacion)
+        if self._email_service and addressee and addressee.email:
+            addressee_email = str(addressee.email)
+            try:
+                await self._email_service.send_friend_request_email(
+                    to_email=addressee_email,
+                    addressee_name=addressee_name,
+                    requester_name=requester_name,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to send friend request email to %s: %s",
+                    _mask_email(addressee_email),
+                    str(e),
+                )
 
         return FriendshipResponseDTO(
             id=friendship.id.value,
