@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-01
+
+### Added
+
+- Scoring view (`GET .../scoring-view`, `PlayerHoleScoreDTO`) now exposes `own_submitted`/`marker_submitted`, letting clients distinguish "hole not scored yet" from "score explicitly submitted as a pick-up" — both previously showed identically as `own_score: null`. Issue #101.
+
+### Fixed
+
+- Login, token refresh and Google login silently skipped device registration (and never set the `device_id` cookie) whenever the client IP couldn't be resolved — e.g. always the case behind `kubectl port-forward`, where the peer is `127.0.0.1` and correctly rejected as a sentinel value. With no `device_id` cookie, `GET /users/me/devices` could never mark any device as current, and the frontend's device-revocation monitor treated that as an explicit revocation, forcing an immediate logout right after a successful login. Now falls back to a fixed placeholder IP instead of skipping device registration outright.
+
 ### Security
 
 **Full Backend Security & Architecture Audit (issue #106)**
