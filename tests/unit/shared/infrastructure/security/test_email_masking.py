@@ -18,3 +18,6 @@ class TestMaskEmail:
 
     def test_empty_local_part_returns_fully_masked(self):
         assert mask_email("@example.com") == "***"
+
+    def test_empty_domain_part_returns_fully_masked(self):
+        assert mask_email("alice@") == "***"

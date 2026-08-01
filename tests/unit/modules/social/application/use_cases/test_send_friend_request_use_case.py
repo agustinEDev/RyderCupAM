@@ -152,7 +152,7 @@ class TestSendFriendRequestUseCase:
         )
 
         assert response.status == "PENDING"
-        mock_email.send_friend_request_email.assert_called_once()
+        mock_email.send_friend_request_email.assert_awaited_once()
         call_kwargs = mock_email.send_friend_request_email.call_args[1]
         assert call_kwargs["to_email"] == "addressee6@test.com"
         assert call_kwargs["addressee_name"] == "Test User"

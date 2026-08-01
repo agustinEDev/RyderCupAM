@@ -4,6 +4,7 @@ Email Service - Infrastructure Layer
 Servicio para enviar emails usando Mailgun.
 """
 
+import asyncio
 import html
 import logging
 from datetime import datetime
@@ -370,7 +371,7 @@ The Ryder Cup Friends Team
 </html>
         """
 
-        return self._send_email(to_email, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
@@ -524,7 +525,7 @@ The Ryder Cup Friends Team
 </html>
         """
 
-        return self._send_email(to_email, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
@@ -742,7 +743,7 @@ The Ryder Cup Friends Team
         """
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
-        return self._send_email(recipient, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
 
     async def send_friend_request_email(
         self,
@@ -875,4 +876,4 @@ The Ryder Cup Friends Team
         """
 
         recipient = f'"{safe_addressee}" <{to_email}>'
-        return self._send_email(recipient, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
