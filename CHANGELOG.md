@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-02
+
 ### Added
 
 - Email de notificación al enviar una solicitud de amistad (`ISocialEmailService`/`send_friend_request_email`), siguiendo el mismo patrón que las invitaciones a competición. Envío no bloqueante: un fallo de Mailgun no impide crear la solicitud.
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `DELETE /admin/users/{id}`: borrado definitivo, bloqueado (409) si la cuenta ha creado torneos/partidas rápidas, solicitado campos de golf, o tiene scores registrados — evita borrar en cascada datos de otros usuarios o romper una restricción de base de datos.
   - Un admin no puede desactivar (400) ni borrar (400) su propia cuenta, evitando quedarse sin acceso al panel si es el único administrador.
   - Nuevo campo `User.is_active` (migración `f3a9c2e7b1d4`), con eventos de dominio `AccountDeactivatedEvent`/`AccountReactivatedEvent`.
+- **Última conexión en el listado de usuarios del panel de administración**: nuevo campo `last_login_at` en `GET /admin/users` y `PUT /admin/users/{id}`, reutilizando el tracking de device fingerprinting ya existente (`MAX(last_used_at)` por usuario vía `UserDeviceRepositoryInterface.find_last_login_map()`) — sin migración ni columna nueva. `null` para usuarios sin ningún dispositivo registrado.
+- **Ocultar una partida rápida del propio historial** (sustituye el borrado físico planteado originalmente en #127): nuevos endpoints `POST`/`DELETE /api/v1/quick-matches/{id}/hide`. Cualquier participante (no solo el creador) puede excluir una partida de su propio `GET /quick-matches/me`, en cualquier estado, sin afectar lo que ven los demás participantes ni borrar ningún dato (scores, roster, etc.). Nuevo campo `hidden_by_participant_ids` en `QuickMatch` (migración `2a33bf8e43ff`).
 
 ### Changed
 
