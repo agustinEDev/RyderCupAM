@@ -14,7 +14,9 @@ Responsabilidades:
 Patrón: Repository Pattern + Async SQLAlchemy
 """
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user_device import UserDevice
@@ -188,6 +190,31 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
+
+    async def find_last_login_map(self, user_ids: list[UserId]) -> dict[str, datetime]:
+        """
+        Agrega MAX(last_used_at) por usuario entre todos sus dispositivos.
+
+        No filtra por is_active: un dispositivo revocado sigue reflejando
+        una conexión real pasada.
+
+        Args:
+            user_ids: IDs de usuario a consultar
+
+        Returns:
+            dict[str, datetime]: user_id (str) -> última conexión. Usuarios sin
+            dispositivos no aparecen en el dict.
+        """
+        if not user_ids:
+            return {}
+
+        statement = (
+            select(UserDevice._user_id, func.max(UserDevice._last_used_at))  # type: ignore[call-overload]
+            .where(UserDevice._user_id.in_(user_ids))
+            .group_by(UserDevice._user_id)
+        )
+        result = await self._session.execute(statement)
+        return {str(user_id): last_used_at for user_id, last_used_at in result.all()}
 
     async def revoke(self, device_id: UserDeviceId) -> None:
         """

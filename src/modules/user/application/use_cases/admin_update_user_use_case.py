@@ -53,6 +53,9 @@ class AdminUpdateUserUseCase:
                 user.set_is_admin(request.is_admin)
 
             await self._uow.users.save(user)
+            last_login_map = await self._uow.user_devices.find_last_login_map(
+                [uid] if (uid := user.id) is not None else []
+            )
 
         return AdminUserSummaryDTO(
             id=user.id.value,
@@ -64,4 +67,5 @@ class AdminUpdateUserUseCase:
             is_active=user.is_active,
             email_verified=user.email_verified,
             created_at=user.created_at,
+            last_login_at=last_login_map.get(str(user.id.value)),
         )

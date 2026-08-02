@@ -1,5 +1,7 @@
 """Tests para AdminListUsersUseCase."""
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from src.modules.user.application.dto.admin_dto import AdminListUsersRequestDTO
@@ -7,6 +9,8 @@ from src.modules.user.application.use_cases.admin_list_users_use_case import (
     AdminListUsersUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.entities.user_device import UserDevice
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -96,3 +100,48 @@ class TestAdminListUsersUseCase:
 
         assert response.total_count == 1
         assert response.users[0].email == "unverified@test.com"
+
+    async def test_last_login_at_is_max_last_used_at_across_devices(self, uow):
+        user = await self._create_user(uow, "Con", "Dispositivos", "devices@test.com")
+        older = datetime.now() - timedelta(days=5)
+        newer = datetime.now() - timedelta(hours=1)
+        async with uow:
+            await uow.user_devices.save(
+                UserDevice.reconstitute(
+                    id=UserDeviceId.generate(),
+                    user_id=user.id,
+                    device_name="Chrome on macOS",
+                    user_agent="ua-1",
+                    ip_address="1.1.1.1",
+                    fingerprint_hash="hash-1",
+                    is_active=True,
+                    last_used_at=older,
+                    created_at=older,
+                )
+            )
+            await uow.user_devices.save(
+                UserDevice.reconstitute(
+                    id=UserDeviceId.generate(),
+                    user_id=user.id,
+                    device_name="Safari on iOS",
+                    user_agent="ua-2",
+                    ip_address="1.1.1.2",
+                    fingerprint_hash="hash-2",
+                    is_active=False,
+                    last_used_at=newer,
+                    created_at=older,
+                )
+            )
+
+        use_case = AdminListUsersUseCase(uow)
+        response = await use_case.execute(AdminListUsersRequestDTO(search="devices@test.com"))
+
+        assert response.users[0].last_login_at == newer
+
+    async def test_last_login_at_is_none_without_devices(self, uow):
+        await self._create_user(uow, "Sin", "Dispositivos", "nodevice@test.com")
+
+        use_case = AdminListUsersUseCase(uow)
+        response = await use_case.execute(AdminListUsersRequestDTO(search="nodevice@test.com"))
+
+        assert response.users[0].last_login_at is None

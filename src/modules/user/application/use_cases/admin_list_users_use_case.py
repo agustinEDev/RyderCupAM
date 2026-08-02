@@ -32,6 +32,9 @@ class AdminListUsersUseCase:
                 is_active=request.is_active,
                 email_verified=request.email_verified,
             )
+            last_login_map = await self._uow.user_devices.find_last_login_map(
+                [user.id for user in users if user.id is not None]
+            )
 
         return AdminListUsersResponseDTO(
             users=[
@@ -45,6 +48,7 @@ class AdminListUsersUseCase:
                     is_active=user.is_active,
                     email_verified=user.email_verified,
                     created_at=user.created_at,
+                    last_login_at=last_login_map.get(str(user.id.value)),
                 )
                 for user in users
             ],

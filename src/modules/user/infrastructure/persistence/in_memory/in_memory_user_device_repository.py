@@ -5,6 +5,8 @@ Este módulo implementa UserDeviceRepositoryInterface para tests unitarios.
 Los datos se almacenan en diccionarios Python en memoria.
 """
 
+from datetime import datetime
+
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_device_repository_interface import (
     UserDeviceRepositoryInterface,
@@ -118,6 +120,27 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
             if device.user_id == user_id and device.is_active
         ]
         return active_devices
+
+    async def find_last_login_map(self, user_ids: list[UserId]) -> dict[str, datetime]:
+        """
+        Agrega el last_used_at más reciente por usuario entre todos sus dispositivos.
+
+        Args:
+            user_ids: IDs de usuario a consultar
+
+        Returns:
+            dict[str, datetime]: user_id (str) -> última conexión. Usuarios sin
+            dispositivos no aparecen en el dict.
+        """
+        target_ids = {str(uid.value) for uid in user_ids}
+        result: dict[str, datetime] = {}
+        for device in self._devices.values():
+            key = str(device.user_id.value)
+            if key not in target_ids:
+                continue
+            if key not in result or device.last_used_at > result[key]:
+                result[key] = device.last_used_at
+        return result
 
     async def revoke(self, device_id: UserDeviceId) -> None:
         """

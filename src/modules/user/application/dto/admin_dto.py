@@ -37,6 +37,7 @@ class AdminUserSummaryDTO(BaseModel):
     is_active: bool
     email_verified: bool
     created_at: datetime
+    last_login_at: datetime | None = None
 
 
 class AdminListUsersResponseDTO(BaseModel):
