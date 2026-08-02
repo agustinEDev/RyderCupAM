@@ -19,12 +19,14 @@ from src.config.dependencies import (
     get_create_quick_match_use_case,
     get_current_user,
     get_get_quick_match_use_case,
+    get_hide_quick_match_use_case,
     get_list_my_quick_matches_use_case,
     get_remove_quick_match_participant_use_case,
     get_set_quick_match_participant_handicap_use_case,
     get_start_quick_match_use_case,
     get_submit_quick_match_hole_score_use_case,
     get_submit_quick_match_proxy_hole_score_use_case,
+    get_unhide_quick_match_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.quick_match.application.dto.quick_match_dto import (
@@ -35,6 +37,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
     CreateQuickMatchRequestDTO,
+    HideQuickMatchRequestDTO,
     HoleScoreResponseDTO,
     PaginatedQuickMatchResponseDTO,
     QuickMatchDetailResponseDTO,
@@ -76,6 +79,9 @@ from src.modules.quick_match.application.use_cases.create_quick_match_use_case i
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
+    HideQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
 )
@@ -93,6 +99,9 @@ from src.modules.quick_match.application.use_cases.submit_hole_score_use_case im
 )
 from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
     SubmitProxyHoleScoreUseCase,
+)
+from src.modules.quick_match.application.use_cases.unhide_quick_match_use_case import (
+    UnhideQuickMatchUseCase,
 )
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
@@ -368,6 +377,59 @@ async def remove_participant(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.post(
+    "/quick-matches/{quick_match_id}/hide",
+    response_model=QuickMatchResponseDTO,
+    summary="Hide quick match from my history",
+    description=(
+        "Hides the quick match from the caller's own /quick-matches/me list, without "
+        "affecting what other participants see or deleting any data. Any participant "
+        "(not just the creator) can hide it for themselves, in any match status. "
+        "Idempotent."
+    ),
+)
+async def hide_quick_match(
+    quick_match_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: HideQuickMatchUseCase = Depends(get_hide_quick_match_use_case),
+):
+    try:
+        request_dto = HideQuickMatchRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.delete(
+    "/quick-matches/{quick_match_id}/hide",
+    response_model=QuickMatchResponseDTO,
+    summary="Unhide quick match from my history",
+    description="Reverses hide_quick_match: the match shows up again in the caller's own list. Idempotent.",
+)
+async def unhide_quick_match(
+    quick_match_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: UnhideQuickMatchUseCase = Depends(get_unhide_quick_match_use_case),
+):
+    try:
+        request_dto = HideQuickMatchRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch(

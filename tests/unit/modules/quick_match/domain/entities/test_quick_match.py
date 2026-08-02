@@ -16,6 +16,9 @@ from src.modules.quick_match.domain.events.quick_match_completed_event import (
 from src.modules.quick_match.domain.events.quick_match_created_event import (
     QuickMatchCreatedEvent,
 )
+from src.modules.quick_match.domain.events.quick_match_hidden_event import (
+    QuickMatchHiddenEvent,
+)
 from src.modules.quick_match.domain.events.quick_match_participant_added_event import (
     QuickMatchParticipantAddedEvent,
 )
@@ -27,6 +30,9 @@ from src.modules.quick_match.domain.events.quick_match_participant_removed_event
 )
 from src.modules.quick_match.domain.events.quick_match_started_event import (
     QuickMatchStartedEvent,
+)
+from src.modules.quick_match.domain.events.quick_match_unhidden_event import (
+    QuickMatchUnhiddenEvent,
 )
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
@@ -266,6 +272,93 @@ class TestQuickMatchRemoveParticipant:
         qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
             qm.remove_participant(other.participant_id)
+
+
+class TestQuickMatchHideForHistory:
+    def test_hide_for_creator_succeeds(self):
+        qm = _make_quick_match()
+        qm.clear_domain_events()
+
+        qm.hide_for(qm.creator_participant_id)
+
+        assert qm.is_hidden_for(qm.creator_participant_id)
+        events = qm.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], QuickMatchHiddenEvent)
+
+    def test_hide_for_non_creator_participant_succeeds(self):
+        """Cualquier participante puede ocultar la partida, no solo el creador."""
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+
+        qm.hide_for(other.participant_id)
+
+        assert qm.is_hidden_for(other.participant_id)
+        assert not qm.is_hidden_for(qm.creator_participant_id)
+
+    def test_hide_for_non_participant_raises(self):
+        qm = _make_quick_match()
+        with pytest.raises(NotQuickMatchParticipantViolation):
+            qm.hide_for(ParticipantId.generate())
+
+    def test_hide_for_is_idempotent(self):
+        qm = _make_quick_match()
+        qm.hide_for(qm.creator_participant_id)
+        qm.clear_domain_events()
+
+        qm.hide_for(qm.creator_participant_id)
+
+        assert qm.is_hidden_for(qm.creator_participant_id)
+        assert qm.get_domain_events() == []
+
+    def test_hide_does_not_require_pending_status(self):
+        """A diferencia de add/remove_participant, ocultar no depende del estado."""
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+        qm.start([qm.creator_participant_id])
+
+        qm.hide_for(other.participant_id)
+
+        assert qm.is_hidden_for(other.participant_id)
+
+    def test_unhide_for_reverses_hide(self):
+        qm = _make_quick_match()
+        qm.hide_for(qm.creator_participant_id)
+        qm.clear_domain_events()
+
+        qm.unhide_for(qm.creator_participant_id)
+
+        assert not qm.is_hidden_for(qm.creator_participant_id)
+        events = qm.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], QuickMatchUnhiddenEvent)
+
+    def test_unhide_for_non_participant_raises(self):
+        qm = _make_quick_match()
+        with pytest.raises(NotQuickMatchParticipantViolation):
+            qm.unhide_for(ParticipantId.generate())
+
+    def test_unhide_for_is_idempotent(self):
+        qm = _make_quick_match()
+        qm.clear_domain_events()
+
+        qm.unhide_for(qm.creator_participant_id)
+
+        assert not qm.is_hidden_for(qm.creator_participant_id)
+        assert qm.get_domain_events() == []
+
+    def test_hiding_does_not_affect_other_participants(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        other = _registered()
+        qm.add_participant(other)
+
+        qm.hide_for(qm.creator_participant_id)
+
+        assert qm.is_hidden_for(qm.creator_participant_id)
+        assert not qm.is_hidden_for(other.participant_id)
+        assert qm.is_participant(qm.creator_participant_id)  # sigue siendo participante
 
 
 class TestQuickMatchSetParticipantHandicap:

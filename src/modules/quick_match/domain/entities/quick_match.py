@@ -18,12 +18,14 @@ from src.shared.domain.value_objects.gender import Gender
 from ..events.quick_match_cancelled_event import QuickMatchCancelledEvent
 from ..events.quick_match_completed_event import QuickMatchCompletedEvent
 from ..events.quick_match_created_event import QuickMatchCreatedEvent
+from ..events.quick_match_hidden_event import QuickMatchHiddenEvent
 from ..events.quick_match_participant_added_event import QuickMatchParticipantAddedEvent
 from ..events.quick_match_participant_handicap_updated_event import (
     QuickMatchParticipantHandicapUpdatedEvent,
 )
 from ..events.quick_match_participant_removed_event import QuickMatchParticipantRemovedEvent
 from ..events.quick_match_started_event import QuickMatchStartedEvent
+from ..events.quick_match_unhidden_event import QuickMatchUnhiddenEvent
 from ..exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
     DuplicateParticipantViolation,
@@ -83,6 +85,7 @@ class QuickMatch:
         scoring_format: ScoringFormat | None = None,
         allowance_percentage: int | None = None,
         scorer_ids: list[ParticipantId] | None = None,
+        hidden_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -99,6 +102,9 @@ class QuickMatch:
         self._participants = list(participants)
         self._name = self._validate_name(name)
         self._scorer_ids = list(scorer_ids) if scorer_ids else []
+        self._hidden_by_participant_ids = (
+            list(hidden_by_participant_ids) if hidden_by_participant_ids else []
+        )
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -218,6 +224,7 @@ class QuickMatch:
         scoring_format: ScoringFormat | None = None,
         allowance_percentage: int | None = None,
         scorer_ids: list[ParticipantId] | None = None,
+        hidden_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> "QuickMatch":
@@ -233,6 +240,7 @@ class QuickMatch:
             participants=participants,
             name=name,
             scorer_ids=scorer_ids,
+            hidden_by_participant_ids=hidden_by_participant_ids,
             created_at=created_at,
             updated_at=updated_at,
         )
@@ -307,6 +315,11 @@ class QuickMatch:
         return list(self._scorer_ids)
 
     @property
+    def hidden_by_participant_ids(self) -> list[ParticipantId]:
+        """Participantes que han ocultado esta partida de su propio historial."""
+        return list(self._hidden_by_participant_ids)
+
+    @property
     def created_at(self) -> datetime:
         return self._created_at
 
@@ -329,6 +342,9 @@ class QuickMatch:
 
     def is_scorer(self, participant_id: ParticipantId) -> bool:
         return participant_id in self._scorer_ids
+
+    def is_hidden_for(self, participant_id: ParticipantId) -> bool:
+        return participant_id in self._hidden_by_participant_ids
 
     def capacity(self) -> int:
         """Numero maximo de jugadores admitidos por el formato."""
@@ -491,6 +507,52 @@ class QuickMatch:
                 quick_match_id=str(self._id),
                 participant_id=str(participant_id),
                 handicap=handicap,
+            )
+        )
+
+    def hide_for(self, participant_id: ParticipantId) -> None:
+        """
+        Oculta la partida del historial personal de un participante.
+
+        No requiere ningun estado concreto de la partida (a diferencia de
+        add/remove_participant): un participante puede ocultar una partida
+        PENDING, IN_PROGRESS, COMPLETED o CANCELLED por igual. No afecta al
+        resto de participantes ni borra ningun dato — es puramente personal.
+        Idempotente: ocultar dos veces no es un error.
+        """
+        if not self.is_participant(participant_id):
+            raise NotQuickMatchParticipantViolation(
+                f"{participant_id} is not a participant of this quick match."
+            )
+
+        if participant_id in self._hidden_by_participant_ids:
+            return
+
+        self._hidden_by_participant_ids = [*self._hidden_by_participant_ids, participant_id]
+        self._updated_at = datetime.now()
+
+        self.add_domain_event(
+            QuickMatchHiddenEvent(quick_match_id=str(self._id), participant_id=str(participant_id))
+        )
+
+    def unhide_for(self, participant_id: ParticipantId) -> None:
+        """Vuelve a mostrar la partida en el historial personal de un participante. Idempotente."""
+        if not self.is_participant(participant_id):
+            raise NotQuickMatchParticipantViolation(
+                f"{participant_id} is not a participant of this quick match."
+            )
+
+        if participant_id not in self._hidden_by_participant_ids:
+            return
+
+        self._hidden_by_participant_ids = [
+            pid for pid in self._hidden_by_participant_ids if pid != participant_id
+        ]
+        self._updated_at = datetime.now()
+
+        self.add_domain_event(
+            QuickMatchUnhiddenEvent(
+                quick_match_id=str(self._id), participant_id=str(participant_id)
             )
         )
 

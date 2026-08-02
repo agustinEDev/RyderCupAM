@@ -29,6 +29,16 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return self._quick_matches.get(quick_match_id)
 
+    def _matches_user(
+        self, qm: QuickMatch, user_id: UserId, status: QuickMatchStatus | None
+    ) -> bool:
+        participant_id = ParticipantId(user_id.value)
+        return (
+            qm.is_participant(participant_id)
+            and not qm.is_hidden_for(participant_id)
+            and (status is None or qm.status == status)
+        )
+
     async def list_for_user(
         self,
         user_id: UserId,
@@ -37,9 +47,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         offset: int = 0,
     ) -> list[QuickMatch]:
         results = [
-            qm
-            for qm in self._quick_matches.values()
-            if qm.is_participant(ParticipantId(user_id.value)) and (status is None or qm.status == status)
+            qm for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
         ]
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
@@ -48,9 +56,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         self, user_id: UserId, status: QuickMatchStatus | None = None
     ) -> int:
         return sum(
-            1
-            for qm in self._quick_matches.values()
-            if qm.is_participant(ParticipantId(user_id.value)) and (status is None or qm.status == status)
+            1 for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
         )
 
     async def count_all(self) -> int:
