@@ -18,6 +18,7 @@ Patrón: Repository Pattern + Dependency Inversion Principle (SOLID)
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
@@ -209,6 +210,25 @@ class UserDeviceRepositoryInterface(ABC):
             ...     print(f"{device.device_name} - Usado: {device.last_used_at}")
             Chrome on macOS - Usado: 2026-01-09 10:30:00
             Safari on iOS - Usado: 2026-01-08 14:20:00
+        """
+        pass
+
+    @abstractmethod
+    async def find_last_login_map(self, user_ids: list[UserId]) -> dict[str, datetime]:
+        """
+        Devuelve, para cada usuario con al menos un dispositivo registrado,
+        el last_used_at más reciente entre todos sus dispositivos (activos o no).
+
+        Usado por el panel de administración para mostrar la "última conexión"
+        sin añadir una columna dedicada en `users` (se reutiliza el tracking
+        de dispositivos ya existente).
+
+        Args:
+            user_ids: IDs de usuario a consultar (p.ej. la página actual del listado admin)
+
+        Returns:
+            dict[str, datetime]: user_id (str) -> último last_used_at. Usuarios sin
+            dispositivos registrados no aparecen en el dict.
         """
         pass
 
