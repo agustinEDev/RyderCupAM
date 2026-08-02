@@ -217,6 +217,9 @@ from src.modules.quick_match.application.use_cases.create_quick_match_use_case i
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
+    HideQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
 )
@@ -234,6 +237,9 @@ from src.modules.quick_match.application.use_cases.submit_hole_score_use_case im
 )
 from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
     SubmitProxyHoleScoreUseCase,
+)
+from src.modules.quick_match.application.use_cases.unhide_quick_match_use_case import (
+    UnhideQuickMatchUseCase,
 )
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -1230,6 +1236,22 @@ def get_remove_quick_match_participant_use_case(
 ) -> RemoveParticipantUseCase:
     """Proveedor del caso de uso RemoveParticipantUseCase."""
     return RemoveParticipantUseCase(uow, user_uow)
+
+
+def get_hide_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> HideQuickMatchUseCase:
+    """Proveedor del caso de uso HideQuickMatchUseCase."""
+    return HideQuickMatchUseCase(uow, user_uow)
+
+
+def get_unhide_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UnhideQuickMatchUseCase:
+    """Proveedor del caso de uso UnhideQuickMatchUseCase."""
+    return UnhideQuickMatchUseCase(uow, user_uow)
 
 
 def get_set_quick_match_participant_handicap_use_case(

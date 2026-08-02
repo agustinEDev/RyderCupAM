@@ -42,3 +42,30 @@ class TestListMyQuickMatchesUseCase:
 
         assert result.total_count == 1
         assert result.quick_matches[0].id == mine.id.value
+
+    async def test_excludes_matches_the_user_has_hidden(self, qm_uow, user_uow):
+        """Ver RyderCupAm#127: ocultar una partida la saca del listado propio (no un borrado)."""
+        me = await create_user(user_uow, "me-hides@test.com")
+
+        visible = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        hidden = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        hidden.hide_for(hidden.creator_participant_id)
+        async with qm_uow:
+            await qm_uow.quick_matches.add(visible)
+            await qm_uow.quick_matches.add(hidden)
+
+        use_case = ListMyQuickMatchesUseCase(qm_uow, user_uow)
+        result = await use_case.execute(str(me.id.value))
+
+        assert result.total_count == 1
+        assert result.quick_matches[0].id == visible.id.value

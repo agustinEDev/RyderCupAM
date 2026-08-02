@@ -105,6 +105,13 @@ class RemoveParticipantRequestDTO(BaseModel):
     target_participant_id: UUID
 
 
+class HideQuickMatchRequestDTO(BaseModel):
+    """DTO para ocultar/mostrar una partida rapida del propio historial (siempre self-scoped)."""
+
+    quick_match_id: UUID
+    requester_id: UUID
+
+
 class StartQuickMatchRequestDTO(BaseModel):
     """DTO para iniciar la partida, configurando quien anota (1 a 4 anotadores)."""
 

@@ -251,7 +251,12 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
 
 
 class ScorerIdsJsonType(sqlalchemy.types.TypeDecorator[list]):
-    """TypeDecorator para serializar list[ParticipantId] (scorer_ids) a/desde JSONB."""
+    """
+    TypeDecorator para serializar list[ParticipantId] a/desde JSONB.
+
+    Generico: se reutiliza tanto para `scorer_ids` como para
+    `hidden_by_participant_ids` (misma forma, listas de ParticipantId).
+    """
 
     impl = JSONB
     cache_ok = True
@@ -294,6 +299,7 @@ quick_matches_table = Table(
     Column("allowance_percentage", Integer, nullable=True),
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
     Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
+    Column("hidden_by_participant_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
     CheckConstraint(
@@ -348,6 +354,7 @@ def start_quick_match_mappers() -> None:
                 "_allowance_percentage": quick_matches_table.c.allowance_percentage,
                 "_participants": quick_matches_table.c.participants,
                 "_scorer_ids": quick_matches_table.c.scorer_ids,
+                "_hidden_by_participant_ids": quick_matches_table.c.hidden_by_participant_ids,
                 "_created_at": quick_matches_table.c.created_at,
                 "_updated_at": quick_matches_table.c.updated_at,
             },

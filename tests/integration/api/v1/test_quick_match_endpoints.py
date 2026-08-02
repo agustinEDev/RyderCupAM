@@ -928,3 +928,127 @@ class TestQuickMatchSetParticipantHandicap:
         )
 
         assert response.status_code == 422
+
+
+class TestQuickMatchHideFromHistory:
+    """Tests para POST/DELETE /api/v1/quick-matches/{id}/hide (RyderCupAm#127)."""
+
+    async def _create_match_with_two_participants(
+        self, client: AsyncClient
+    ) -> tuple[dict, dict, dict, str]:
+        admin = await create_admin_user(
+            client, "qm_admin_hide1@test.com", "P@ssw0rd123!", "Admin", "HideOne"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_hide1@test.com", "P@ssw0rd123!", "Creator", "HideOne"
+        )
+        friend = await create_authenticated_user(
+            client, "qm_friend_hide1@test.com", "P@ssw0rd123!", "Friend", "HideOne"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={"friend_user_id": friend["user"]["id"]},
+        )
+
+        return admin, creator, friend, quick_match_id
+
+    @pytest.mark.asyncio
+    async def test_hide_removes_it_from_my_list_but_not_from_the_other_participant(
+        self, client: AsyncClient
+    ):
+        _admin, creator, friend, quick_match_id = await self._create_match_with_two_participants(
+            client
+        )
+
+        set_auth_cookies(client, creator["cookies"])
+        hide_response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+        assert hide_response.status_code == 200, hide_response.text
+
+        my_matches = await client.get("/api/v1/quick-matches/me")
+        assert quick_match_id not in [m["id"] for m in my_matches.json()["quick_matches"]]
+
+        # El otro participante, que no la ha ocultado, la sigue viendo.
+        set_auth_cookies(client, friend["cookies"])
+        friend_matches = await client.get("/api/v1/quick-matches/me")
+        assert quick_match_id in [m["id"] for m in friend_matches.json()["quick_matches"]]
+
+        # Tampoco se ha borrado ni afectado el registro en si.
+        detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
+        assert detail_response.status_code == 200
+        assert len(detail_response.json()["participants"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_non_creator_participant_can_hide_it_too(self, client: AsyncClient):
+        _admin, _creator, friend, quick_match_id = await self._create_match_with_two_participants(
+            client
+        )
+
+        set_auth_cookies(client, friend["cookies"])
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+
+        assert response.status_code == 200, response.text
+        my_matches = await client.get("/api/v1/quick-matches/me")
+        assert quick_match_id not in [m["id"] for m in my_matches.json()["quick_matches"]]
+
+    @pytest.mark.asyncio
+    async def test_hide_is_idempotent(self, client: AsyncClient):
+        _admin, creator, _friend, quick_match_id = await self._create_match_with_two_participants(
+            client
+        )
+
+        set_auth_cookies(client, creator["cookies"])
+        first = await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+        second = await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_unhide_brings_it_back_to_my_list(self, client: AsyncClient):
+        _admin, creator, _friend, quick_match_id = await self._create_match_with_two_participants(
+            client
+        )
+        set_auth_cookies(client, creator["cookies"])
+        await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+
+        unhide_response = await client.delete(f"/api/v1/quick-matches/{quick_match_id}/hide")
+        assert unhide_response.status_code == 200, unhide_response.text
+
+        my_matches = await client.get("/api/v1/quick-matches/me")
+        assert quick_match_id in [m["id"] for m in my_matches.json()["quick_matches"]]
+
+    @pytest.mark.asyncio
+    async def test_hide_a_non_participant_match_returns_404(self, client: AsyncClient):
+        _admin, _creator, _friend, quick_match_id = (
+            await self._create_match_with_two_participants(client)
+        )
+        outsider = await create_authenticated_user(
+            client, "qm_outsider_hide1@test.com", "P@ssw0rd123!", "Outsider", "HideOne"
+        )
+
+        set_auth_cookies(client, outsider["cookies"])
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/hide")
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_hide_nonexistent_match_returns_404(self, client: AsyncClient):
+        creator = await create_authenticated_user(
+            client, "qm_creator_hide2@test.com", "P@ssw0rd123!", "Creator", "HideTwo"
+        )
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(
+            "/api/v1/quick-matches/00000000-0000-0000-0000-000000000000/hide"
+        )
+
+        assert response.status_code == 404
