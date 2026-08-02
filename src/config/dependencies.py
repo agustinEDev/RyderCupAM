@@ -217,6 +217,9 @@ from src.modules.quick_match.application.use_cases.create_quick_match_use_case i
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
+    HideQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
 )
@@ -235,6 +238,9 @@ from src.modules.quick_match.application.use_cases.submit_hole_score_use_case im
 from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_case import (
     SubmitProxyHoleScoreUseCase,
 )
+from src.modules.quick_match.application.use_cases.unhide_quick_match_use_case import (
+    UnhideQuickMatchUseCase,
+)
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -243,6 +249,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 )
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
+)
+from src.modules.social.application.ports.social_email_service_interface import (
+    ISocialEmailService,
 )
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
@@ -281,7 +290,22 @@ from src.modules.user.application.ports.token_service_interface import ITokenSer
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
     ActivateUploadedAvatarUseCase,
 )
+from src.modules.user.application.use_cases.admin_delete_user_use_case import (
+    AdminDeleteUserUseCase,
+)
+from src.modules.user.application.use_cases.admin_list_users_use_case import (
+    AdminListUsersUseCase,
+)
+from src.modules.user.application.use_cases.admin_set_user_active_use_case import (
+    AdminSetUserActiveUseCase,
+)
+from src.modules.user.application.use_cases.admin_update_user_use_case import (
+    AdminUpdateUserUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_admin_stats_use_case import (
+    GetAdminStatsUseCase,
+)
 from src.modules.user.application.use_cases.get_avatar_image_use_case import (
     GetAvatarImageUseCase,
 )
@@ -1065,12 +1089,18 @@ def get_social_uow(
     return SQLAlchemySocialUnitOfWork(session)
 
 
+def get_social_email_service() -> ISocialEmailService:
+    """Proveedor del servicio de email para el modulo Social (amistades)."""
+    return EmailService()
+
+
 def get_send_friend_request_use_case(
     uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: ISocialEmailService = Depends(get_social_email_service),
 ) -> SendFriendRequestUseCase:
     """Proveedor del caso de uso SendFriendRequestUseCase."""
-    return SendFriendRequestUseCase(uow, user_uow)
+    return SendFriendRequestUseCase(uow, user_uow, email_service)
 
 
 def get_respond_friend_request_use_case(
@@ -1126,6 +1156,52 @@ def get_quick_match_uow(
     return SQLAlchemyQuickMatchUnitOfWork(session)
 
 
+# ======================================================================================
+# ADMIN PANEL USE CASE PROVIDERS
+# ======================================================================================
+
+
+def get_admin_list_users_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminListUsersUseCase:
+    """Proveedor del caso de uso AdminListUsersUseCase."""
+    return AdminListUsersUseCase(uow)
+
+
+def get_admin_update_user_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminUpdateUserUseCase:
+    """Proveedor del caso de uso AdminUpdateUserUseCase."""
+    return AdminUpdateUserUseCase(uow)
+
+
+def get_admin_set_user_active_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> AdminSetUserActiveUseCase:
+    """Proveedor del caso de uso AdminSetUserActiveUseCase."""
+    return AdminSetUserActiveUseCase(uow)
+
+
+def get_admin_delete_user_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> AdminDeleteUserUseCase:
+    """Proveedor del caso de uso AdminDeleteUserUseCase."""
+    return AdminDeleteUserUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+
+
+def get_get_admin_stats_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetAdminStatsUseCase:
+    """Proveedor del caso de uso GetAdminStatsUseCase."""
+    return GetAdminStatsUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+
+
 def get_create_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
@@ -1160,6 +1236,22 @@ def get_remove_quick_match_participant_use_case(
 ) -> RemoveParticipantUseCase:
     """Proveedor del caso de uso RemoveParticipantUseCase."""
     return RemoveParticipantUseCase(uow, user_uow)
+
+
+def get_hide_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> HideQuickMatchUseCase:
+    """Proveedor del caso de uso HideQuickMatchUseCase."""
+    return HideQuickMatchUseCase(uow, user_uow)
+
+
+def get_unhide_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UnhideQuickMatchUseCase:
+    """Proveedor del caso de uso UnhideQuickMatchUseCase."""
+    return UnhideQuickMatchUseCase(uow, user_uow)
 
 
 def get_set_quick_match_participant_handicap_use_case(

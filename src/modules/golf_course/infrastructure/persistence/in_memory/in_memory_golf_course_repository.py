@@ -97,6 +97,30 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         """
         return [gc for gc in self._golf_courses.values() if gc.requested_by == creator_id]
 
+    async def count_by_approval_status(self, approval_status: ApprovalStatus) -> int:
+        """
+        Cuenta campos por estado de aprobación.
+
+        Args:
+            approval_status: Estado a contar
+
+        Returns:
+            Número de campos con ese estado
+        """
+        return len(await self.find_by_approval_status(approval_status))
+
+    async def count_by_creator(self, creator_id: UserId) -> int:
+        """
+        Cuenta campos creados por un usuario específico.
+
+        Args:
+            creator_id: ID del creator
+
+        Returns:
+            Número de campos creados por ese usuario
+        """
+        return len(await self.find_by_creator(creator_id))
+
     async def delete(self, golf_course_id: GolfCourseId) -> None:
         """
         Elimina un campo de golf (hard delete).

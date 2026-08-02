@@ -4,6 +4,7 @@ Email Service - Infrastructure Layer
 Servicio para enviar emails usando Mailgun.
 """
 
+import asyncio
 import html
 import logging
 from datetime import datetime
@@ -15,12 +16,15 @@ from src.config.settings import settings
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
+from src.modules.social.application.ports.social_email_service_interface import (
+    ISocialEmailService,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 
 logger = logging.getLogger(__name__)
 
 
-class EmailService(IEmailService, IInvitationEmailService):
+class EmailService(IEmailService, IInvitationEmailService, ISocialEmailService):
     """
     Implementación de IEmailService usando Mailgun.
 
@@ -367,7 +371,7 @@ The Ryder Cup Friends Team
 </html>
         """
 
-        return self._send_email(to_email, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
@@ -521,7 +525,7 @@ The Ryder Cup Friends Team
 </html>
         """
 
-        return self._send_email(to_email, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
@@ -739,4 +743,137 @@ The Ryder Cup Friends Team
         """
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
-        return self._send_email(recipient, subject, text_body, html_body)
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+
+    async def send_friend_request_email(
+        self,
+        to_email: str,
+        addressee_name: str,
+        requester_name: str,
+    ) -> bool:
+        """
+        Envia un email notificando una nueva solicitud de amistad.
+
+        Template bilingue (ES/EN) con diseno consistente con send_invitation_email.
+        """
+        safe_addressee = self._sanitize_name(addressee_name)
+        safe_requester = self._sanitize_name(requester_name)
+        html_addressee = html.escape(safe_addressee)
+        html_requester = html.escape(safe_requester)
+
+        friends_link = f"{settings.FRONTEND_URL}/friends"
+
+        subject = (
+            f"{safe_requester} quiere ser tu amigo | {safe_requester} wants to be your friend"
+        )
+
+        text_body = f"""
+Hola {safe_addressee},
+
+{safe_requester} te ha enviado una solicitud de amistad en Ryder Cup Friends.
+
+Para aceptarla o rechazarla, visita: {friends_link}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_addressee},
+
+{safe_requester} has sent you a friend request on Ryder Cup Friends.
+
+To accept or decline it, visit: {friends_link}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .container {{
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 30px;
+        }}
+        .header {{
+            background-color: #0066cc;
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }}
+        .content {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 0 0 10px 10px;
+        }}
+        .button {{
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #0066cc;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: bold;
+        }}
+        .footer {{
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }}
+        .divider {{
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Nueva Solicitud de Amistad</h1>
+            <h2>New Friend Request</h2>
+        </div>
+        <div class="content">
+            <!-- Spanish -->
+            <p>Hola <strong>{html_addressee}</strong>,</p>
+            <p><strong>{html_requester}</strong> te ha enviado una solicitud de amistad en Ryder Cup Friends.</p>
+            <center>
+                <a href="{friends_link}" class="button">Ver solicitud</a>
+            </center>
+
+            <div class="divider"></div>
+
+            <!-- English -->
+            <p>Hello <strong>{html_addressee}</strong>,</p>
+            <p><strong>{html_requester}</strong> has sent you a friend request on Ryder Cup Friends.</p>
+            <center>
+                <a href="{friends_link}" class="button">View request</a>
+            </center>
+
+            <div class="footer">
+                <p>Saludos | Best regards,<br>
+                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        recipient = f'"{safe_addressee}" <{to_email}>'
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)

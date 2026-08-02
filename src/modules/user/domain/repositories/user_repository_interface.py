@@ -181,13 +181,26 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_all(self, limit: int = 100, offset: int = 0) -> list[User]:
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> list[User]:
         """
-        Obtiene una lista paginada de usuarios.
+        Obtiene una lista paginada de usuarios, opcionalmente filtrada.
 
         Args:
             limit (int): Número máximo de usuarios a retornar (default: 100)
             offset (int): Número de usuarios a saltar (default: 0)
+            search (str | None): Si se indica, filtra por coincidencia parcial
+                (case-insensitive) en nombre, apellidos o email
+            is_admin (bool | None): Si se indica, filtra por rol (admin/jugador)
+            is_active (bool | None): Si se indica, filtra por cuentas activas/desactivadas
+            email_verified (bool | None): Si se indica, filtra por email verificado o no
 
         Returns:
             List[User]: Lista de usuarios encontrados
@@ -198,12 +211,18 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def count_all(self) -> int:
+    async def count_all(
+        self,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> int:
         """
-        Cuenta el total de usuarios en el repositorio.
+        Cuenta usuarios, opcionalmente filtrados (ver find_all).
 
         Returns:
-            int: Número total de usuarios
+            int: Número total de usuarios que coinciden con el filtro
 
         Raises:
             RepositoryError: Si ocurre un error de consulta

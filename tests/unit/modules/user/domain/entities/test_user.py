@@ -11,6 +11,8 @@ Este archivo contiene tests que verifican:
 import pytest
 
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.events.account_deactivated_event import AccountDeactivatedEvent
+from src.modules.user.domain.events.account_reactivated_event import AccountReactivatedEvent
 from src.modules.user.domain.value_objects.email import InvalidEmailError
 
 
@@ -155,6 +157,66 @@ class TestUserMethods:
 
         # Assert
         assert full_name == "Ana Martín"
+
+
+class TestUserAccountDeactivation:
+    """Tests para deactivate()/reactivate() (panel de administración)."""
+
+    def _make_user(self):
+        return User.create(
+            first_name="Carlos",
+            last_name="Rodríguez",
+            email_str="carlos@test.com",
+            plain_password="DefaultPassword123!",
+        )
+
+    def test_new_user_is_active_by_default(self):
+        user = self._make_user()
+        assert user.is_active is True
+
+    def test_deactivate_sets_is_active_false(self):
+        user = self._make_user()
+        user.deactivate(deactivated_by_user_id="admin-id")
+        assert user.is_active is False
+
+    def test_deactivate_raises_if_already_deactivated(self):
+        user = self._make_user()
+        user.deactivate(deactivated_by_user_id="admin-id")
+        with pytest.raises(ValueError, match="already deactivated"):
+            user.deactivate(deactivated_by_user_id="admin-id")
+
+    def test_deactivate_emits_account_deactivated_event(self):
+        user = self._make_user()
+        user.clear_domain_events()
+        user.deactivate(deactivated_by_user_id="admin-id")
+
+        events = user.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], AccountDeactivatedEvent)
+        assert events[0].user_id == str(user.id.value)
+        assert events[0].deactivated_by_user_id == "admin-id"
+
+    def test_reactivate_sets_is_active_true(self):
+        user = self._make_user()
+        user.deactivate(deactivated_by_user_id="admin-id")
+        user.reactivate(reactivated_by_user_id="admin-id")
+        assert user.is_active is True
+
+    def test_reactivate_raises_if_already_active(self):
+        user = self._make_user()
+        with pytest.raises(ValueError, match="already active"):
+            user.reactivate(reactivated_by_user_id="admin-id")
+
+    def test_reactivate_emits_account_reactivated_event(self):
+        user = self._make_user()
+        user.deactivate(deactivated_by_user_id="admin-id")
+        user.clear_domain_events()
+        user.reactivate(reactivated_by_user_id="admin-id")
+
+        events = user.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], AccountReactivatedEvent)
+        assert events[0].reactivated_by_user_id == "admin-id"
 
 
 class TestUserValidation:

@@ -48,6 +48,12 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             cast([{"user_id": str(user_id.value)}], JSONB)
         )
 
+    def _not_hidden_filter(self, user_id: UserId):
+        """Excluye partidas que el propio usuario ha ocultado de su historial (ver hide_for())."""
+        return ~quick_matches_table.c.hidden_by_participant_ids.op("@>")(
+            cast([str(user_id.value)], JSONB)
+        )
+
     async def list_for_user(
         self,
         user_id: UserId,
@@ -55,7 +61,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         limit: int = 20,
         offset: int = 0,
     ) -> list[QuickMatch]:
-        conditions = [self._participant_filter(user_id)]
+        conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
         if status is not None:
             conditions.append(QuickMatch._status == status)
 
@@ -72,10 +78,26 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
     async def count_for_user(
         self, user_id: UserId, status: QuickMatchStatus | None = None
     ) -> int:
-        conditions = [self._participant_filter(user_id)]
+        conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
         if status is not None:
             conditions.append(QuickMatch._status == status)
 
         stmt = select(func.count()).select_from(QuickMatch).where(and_(*conditions))
         result = await self._session.execute(stmt)
         return result.scalar() or 0
+
+    async def count_all(self) -> int:
+        """Cuenta el total de partidas rapidas en el sistema."""
+        stmt = select(func.count()).select_from(QuickMatch)
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
+
+    async def exists_created_by(self, creator_id: UserId) -> bool:
+        """True si el usuario ha creado alguna partida rapida."""
+        stmt = (
+            select(func.count())
+            .select_from(QuickMatch)
+            .where(QuickMatch._creator_id == creator_id)
+        )
+        result = await self._session.execute(stmt)
+        return (result.scalar() or 0) > 0

@@ -62,3 +62,6 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
         for hs_id in to_delete:
             del self._scores[hs_id]
         return len(to_delete)
+
+    async def exists_by_player(self, player_user_id: UserId) -> bool:
+        return any(hs.player_user_id == player_user_id for hs in self._scores.values())
