@@ -88,6 +88,10 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Retorna todas las competiciones."""
         return list(self._competitions.values())
 
+    async def count_all(self) -> int:
+        """Cuenta el total de competiciones en el sistema."""
+        return len(self._competitions)
+
     async def count_by_creator(self, creator_id: UserId) -> int:
         """Cuenta el total de competiciones creadas por un usuario."""
         return sum(1 for comp in self._competitions.values() if comp.creator_id == creator_id)

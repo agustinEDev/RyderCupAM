@@ -268,6 +268,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def count_all(self) -> int:
+        """Cuenta el total de competiciones en el sistema."""
+        statement = select(func.count()).select_from(Competition)
+        result = await self._session.execute(statement)
+        return result.scalar_one()
+
     async def count_by_creator(self, creator_id: UserId) -> int:
         """
         Cuenta el total de competiciones creadas por un usuario.

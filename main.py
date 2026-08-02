@@ -59,6 +59,7 @@ from src.modules.user.application.use_cases.upload_avatar_use_case import (  # n
     MAX_UPLOAD_BYTES,
 )
 from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
+    admin_routes,
     auth_routes,
     avatar_routes,
     device_routes,
@@ -344,6 +345,12 @@ app.include_router(
     user_routes.router,
     prefix="/api/v1/users",
     tags=["Users"],
+)
+
+app.include_router(
+    admin_routes.router,
+    prefix="/api/v1/admin",
+    tags=["Admin"],
 )
 
 app.include_router(

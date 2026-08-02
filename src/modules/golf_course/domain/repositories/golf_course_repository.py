@@ -91,6 +91,32 @@ class IGolfCourseRepository(ABC):
         pass
 
     @abstractmethod
+    async def count_by_approval_status(self, approval_status: ApprovalStatus) -> int:
+        """
+        Cuenta campos de golf por estado de aprobación, sin materializarlos.
+
+        Args:
+            approval_status: Estado a contar (PENDING_APPROVAL, APPROVED, REJECTED)
+
+        Returns:
+            Número de campos con ese estado
+        """
+        pass
+
+    @abstractmethod
+    async def count_by_creator(self, creator_id: UserId) -> int:
+        """
+        Cuenta campos creados por un usuario específico, sin materializarlos.
+
+        Args:
+            creator_id: ID del creator
+
+        Returns:
+            Número de campos creados por ese usuario
+        """
+        pass
+
+    @abstractmethod
     async def delete(self, golf_course_id: GolfCourseId) -> None:
         """
         Elimina un campo de golf (hard delete).

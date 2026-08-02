@@ -54,3 +54,14 @@ class HoleScoreRepositoryInterface(ABC):
     async def delete_by_match(self, match_id: MatchId) -> int:
         """Elimina todos los hole scores de un partido. Retorna la cantidad eliminada."""
         pass
+
+    @abstractmethod
+    async def exists_by_player(self, player_user_id: UserId) -> bool:
+        """
+        True si el jugador tiene algun hole score registrado (en cualquier partido).
+
+        Util para bloquear el borrado definitivo de una cuenta: hole_scores.player_user_id
+        no tiene ON DELETE definido (RESTRICT por defecto en Postgres), asi que borrar a
+        un jugador con historial de scores fallaria con un IntegrityError si no se bloquea antes.
+        """
+        pass

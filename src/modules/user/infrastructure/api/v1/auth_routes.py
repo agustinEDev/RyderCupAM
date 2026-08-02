@@ -71,7 +71,7 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
-from src.modules.user.domain.exceptions import AccountLockedException
+from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -249,6 +249,12 @@ async def login_user(
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
+        ) from e
+    except AccountDeactivatedException as e:
+        # Admin Panel (v2.4.0): Cuenta desactivada por un administrador
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated. Contact an administrator.",
         ) from e
 
     if not login_response:

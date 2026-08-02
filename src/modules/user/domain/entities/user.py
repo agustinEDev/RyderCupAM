@@ -6,7 +6,9 @@ from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
 from ..errors.user_errors import InvalidAvatarPresetError
+from ..events.account_deactivated_event import AccountDeactivatedEvent
 from ..events.account_locked_event import AccountLockedEvent
+from ..events.account_reactivated_event import AccountReactivatedEvent
 from ..events.account_unlocked_event import AccountUnlockedEvent
 from ..events.email_verified_event import EmailVerifiedEvent
 from ..events.google_account_unlinked_event import GoogleAccountUnlinkedEvent
@@ -101,6 +103,7 @@ class User:
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
         is_admin: bool = False,
+        is_active: bool = True,
         gender: Gender | None = None,
         avatar_source: AvatarSource = AvatarSource.NONE,
         avatar_preset_id: int | None = None,
@@ -125,6 +128,7 @@ class User:
         self._failed_login_attempts = failed_login_attempts
         self._locked_until = locked_until
         self._is_admin = is_admin
+        self._is_active = is_active
         self._gender = gender
         self._avatar_source = avatar_source
         self._avatar_preset_id = avatar_preset_id
@@ -202,6 +206,10 @@ class User:
     @property
     def is_admin(self) -> bool:
         return self._is_admin
+
+    @property
+    def is_active(self) -> bool:
+        return self._is_active
 
     @property
     def gender(self) -> Gender | None:
@@ -1079,6 +1087,71 @@ class User:
         if self.failed_login_attempts > 0:
             self._failed_login_attempts = 0
             self._updated_at = datetime.now()
+
+    def set_is_admin(self, is_admin: bool) -> None:
+        """Concede o revoca privilegios de administrador (solo desde el panel de admin)."""
+        self._is_admin = is_admin
+        self._updated_at = datetime.now()
+
+    # === Account Deactivation Methods (Admin) ===
+
+    def deactivate(self, deactivated_by_user_id: str) -> None:
+        """
+        Desactiva la cuenta del usuario (solo Admin, desde el panel de administración).
+
+        Una cuenta desactivada no puede iniciar sesión (ver LoginUserUseCase),
+        pero conserva todos sus datos (torneos, partidas, amistades) intactos.
+        Es una acción reversible mediante reactivate().
+
+        Emite AccountDeactivatedEvent para auditoría.
+
+        Args:
+            deactivated_by_user_id: ID del admin que realiza la desactivación
+
+        Raises:
+            ValueError: Si la cuenta ya está desactivada
+        """
+        if not self._is_active:
+            raise ValueError("Account is already deactivated")
+
+        now = datetime.now()
+        self._is_active = False
+        self._updated_at = now
+
+        self._add_domain_event(
+            AccountDeactivatedEvent(
+                user_id=str(self.id.value),
+                deactivated_by_user_id=deactivated_by_user_id,
+                deactivated_at=now,
+            )
+        )
+
+    def reactivate(self, reactivated_by_user_id: str) -> None:
+        """
+        Reactiva una cuenta previamente desactivada por un admin.
+
+        Emite AccountReactivatedEvent para auditoría.
+
+        Args:
+            reactivated_by_user_id: ID del admin que realiza la reactivación
+
+        Raises:
+            ValueError: Si la cuenta ya está activa
+        """
+        if self._is_active:
+            raise ValueError("Account is already active")
+
+        now = datetime.now()
+        self._is_active = True
+        self._updated_at = now
+
+        self._add_domain_event(
+            AccountReactivatedEvent(
+                user_id=str(self.id.value),
+                reactivated_by_user_id=reactivated_by_user_id,
+                reactivated_at=now,
+            )
+        )
 
     def __str__(self) -> str:
         """Representación string del usuario (sin mostrar password)."""

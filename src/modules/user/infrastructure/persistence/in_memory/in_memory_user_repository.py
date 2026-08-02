@@ -33,23 +33,71 @@ class InMemoryUserRepository(UserRepositoryInterface):
                 return user
         return None
 
-    async def find_all(self, limit: int = 100, offset: int = 0) -> list[User]:
+    def _matches_search(self, user: User, search: str | None) -> bool:
+        if not search or not search.strip():
+            return True
+        q = search.strip().lower()
+        full_name = f"{user.first_name} {user.last_name}".lower()
+        email = str(user.email).lower() if user.email else ""
+        return (
+            q in user.first_name.lower()
+            or q in user.last_name.lower()
+            or q in full_name
+            or q in email
+        )
+
+    def _matches_filters(
+        self,
+        user: User,
+        search: str | None,
+        is_admin: bool | None,
+        is_active: bool | None,
+        email_verified: bool | None,
+    ) -> bool:
+        if not self._matches_search(user, search):
+            return False
+        if is_admin is not None and user.is_admin != is_admin:
+            return False
+        if is_active is not None and user.is_active != is_active:
+            return False
+        return email_verified is None or user.email_verified == email_verified
+
+    async def find_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> list[User]:
         """
-        Obtiene una lista paginada de usuarios.
+        Obtiene una lista paginada de usuarios, opcionalmente filtrada.
 
         Args:
             limit: Número máximo de usuarios a retornar
             offset: Número de usuarios a saltar
+            search: Filtro opcional por nombre/apellidos/email
+            is_admin: Filtro opcional por rol
+            is_active: Filtro opcional por cuentas activas/desactivadas
+            email_verified: Filtro opcional por verificación de email
 
         Returns:
             Lista de usuarios paginada
         """
-        all_users = list(self._users.values())
-        return all_users[offset : offset + limit]
+        matching = [
+            u
+            for u in self._users.values()
+            if self._matches_filters(u, search, is_admin, is_active, email_verified)
+        ]
+        matching.sort(key=lambda u: (u.created_at, str(u.id)), reverse=True)
+        return matching[offset : offset + limit]
 
-    async def delete_by_id(self, user_id: UserId) -> None:
+    async def delete_by_id(self, user_id: UserId) -> bool:
         if user_id in self._users:
             del self._users[user_id]
+            return True
+        return False
 
     async def update(self, user: User) -> None:
         if user.id in self._users:
@@ -86,8 +134,20 @@ class InMemoryUserRepository(UserRepositoryInterface):
     async def exists_by_email(self, email: Email) -> bool:
         return any(user.email == email for user in self._users.values())
 
-    async def count_all(self) -> int:
-        return len(self._users)
+    async def count_all(
+        self,
+        search: str | None = None,
+        is_admin: bool | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+    ) -> int:
+        return len(
+            [
+                u
+                for u in self._users.values()
+                if self._matches_filters(u, search, is_admin, is_active, email_verified)
+            ]
+        )
 
     async def find_by_verification_token(self, token: str) -> User | None:
         """Busca un usuario por su token de verificación."""

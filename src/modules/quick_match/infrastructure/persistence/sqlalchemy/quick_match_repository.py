@@ -79,3 +79,19 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         stmt = select(func.count()).select_from(QuickMatch).where(and_(*conditions))
         result = await self._session.execute(stmt)
         return result.scalar() or 0
+
+    async def count_all(self) -> int:
+        """Cuenta el total de partidas rapidas en el sistema."""
+        stmt = select(func.count()).select_from(QuickMatch)
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
+
+    async def exists_created_by(self, creator_id: UserId) -> bool:
+        """True si el usuario ha creado alguna partida rapida."""
+        stmt = (
+            select(func.count())
+            .select_from(QuickMatch)
+            .where(QuickMatch._creator_id == creator_id)
+        )
+        result = await self._session.execute(stmt)
+        return (result.scalar() or 0) > 0

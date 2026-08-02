@@ -52,3 +52,19 @@ class QuickMatchRepositoryInterface(ABC):
         self, user_id: UserId, status: QuickMatchStatus | None = None
     ) -> int:
         pass
+
+    @abstractmethod
+    async def count_all(self) -> int:
+        """Cuenta el total de partidas rapidas en el sistema (estadisticas de admin)."""
+        pass
+
+    @abstractmethod
+    async def exists_created_by(self, creator_id: UserId) -> bool:
+        """
+        True si el usuario ha creado alguna partida rapida.
+
+        Util para bloquear el borrado definitivo de una cuenta: quick_matches.creator_id
+        tiene ON DELETE CASCADE, asi que borrar al creador borraria la partida entera
+        (incluyendo a otros participantes) si no se bloquea antes.
+        """
+        pass

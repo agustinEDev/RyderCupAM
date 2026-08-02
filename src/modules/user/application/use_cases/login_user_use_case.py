@@ -27,7 +27,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.exceptions import AccountLockedException
+from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -184,6 +184,20 @@ class LoginUserUseCase:
 
         # Account Lockout (v1.13.0): Resetear intentos fallidos tras login exitoso
         user.reset_failed_attempts()
+
+        # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin.
+        # Se comprueba DESPUES de validar la contraseña para no filtrar el estado
+        # de la cuenta (activa/desactivada) a quien no conoce las credenciales.
+        if not user.is_active:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=False,
+                failure_reason="Account deactivated by admin",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise AccountDeactivatedException()
 
         # Registrar evento de login exitoso (Clean Architecture)
         # UTC-aware: handicap_updated_at ahora es timezone-aware, y la comparación
