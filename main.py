@@ -30,6 +30,12 @@ from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
+from src.config.version import (  # noqa: E402
+    APP_VERSION,
+    get_deployed_branch,
+    get_deployed_commit,
+    get_environment,
+)
 from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     competition_crud_routes,
     competition_golf_course_routes,
@@ -152,7 +158,7 @@ def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security
 
 
 class HealthResponse(BaseModel):
-    """Response model para el health check."""
+    """Response model para el endpoint raiz."""
 
     message: str
     version: str
@@ -161,12 +167,22 @@ class HealthResponse(BaseModel):
     description: str
 
 
+class DeploymentHealthResponse(BaseModel):
+    """Response model para /health: identifica el despliegue concreto."""
+
+    status: str
+    version: str
+    commit: str
+    branch: str
+    environment: str
+
+
 # Crear la app, registrando el gestor de ciclo de vida 'lifespan'
 # Deshabilitamos docs_url y redoc_url para crear endpoints protegidos manualmente
 app = FastAPI(
     title="Ryder Cup Manager",
     description="API para gestion de torneos tipo Ryder Cup entre amigos",
-    version="1.0.0",
+    version=APP_VERSION,
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
     lifespan=lifespan,
@@ -455,10 +471,24 @@ async def get_redoc_documentation(
 async def root() -> HealthResponse:
     return HealthResponse(
         message="Ryder Cup Manager API",
-        version="1.0.0",
+        version=APP_VERSION,
         status="running",
         docs="Visita /docs para la documentacion interactiva",
         description="API para gestion de torneos tipo Ryder Cup entre amigos",
+    )
+
+
+# Health check de despliegue: responde QUE version y QUE commit estan corriendo,
+# que es lo unico que permite verificar si una release ha llegado a produccion.
+# `/` no sirve para eso porque no distingue un despliegue de otro.
+@app.get("/health", response_model=DeploymentHealthResponse)
+async def health() -> DeploymentHealthResponse:
+    return DeploymentHealthResponse(
+        status="ok",
+        version=APP_VERSION,
+        commit=get_deployed_commit(),
+        branch=get_deployed_branch(),
+        environment=get_environment(),
     )
 
 
