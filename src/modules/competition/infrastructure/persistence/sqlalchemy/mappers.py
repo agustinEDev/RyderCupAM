@@ -867,7 +867,7 @@ invitations_table = Table(
     Column(
         "invitee_user_id",
         UserIdDecorator,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     ),
     Column("status", InvitationStatusDecorator, nullable=False),
@@ -897,7 +897,7 @@ hole_scores_table = Table(
     Column(
         "player_user_id",
         UserIdDecorator,
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     ),
     Column("team", String(1), nullable=False),
