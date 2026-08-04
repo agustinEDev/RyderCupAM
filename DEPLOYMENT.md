@@ -284,9 +284,19 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
      ```
 
 3. **Verificar deployment:**
-   - Tu API: `https://rydercup-api.onrender.com`
-   - Health check: `curl https://rydercup-api.onrender.com/`
-   - Swagger UI: `https://rydercup-api.onrender.com/docs`
+   - Tu API: `https://api.rydercupfriends.com`
+   - Health check: `curl https://api.rydercupfriends.com/health`
+   - Swagger UI: `https://api.rydercupfriends.com/docs`
+
+   `/health` devuelve la versión y el commit realmente desplegados, que es lo
+   único que permite confirmar que una release ha llegado a producción:
+
+   ```bash
+   curl -s https://api.rydercupfriends.com/health
+   # {"status":"ok","version":"2.4.0","commit":"abc1234","branch":"main","environment":"production"}
+   ```
+
+   Comparar ese `commit` con el SHA de la release para saber si el deploy ya ocurrió.
 
 ---
 

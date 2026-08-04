@@ -163,14 +163,26 @@ update_deployment() {
 
     local tag="${DOCKER_IMAGE}:${VERSION}"
 
-    # Si es "latest", usar rollout restart (fuerza a usar nueva imagen)
-    if [ "$VERSION" == "latest" ]; then
-        print_info "Reiniciando deployment (usando nueva imagen)..."
+    # Imagen que el deployment tiene configurada ahora mismo
+    local current_image
+    current_image=$(kubectl get deployment/$DEPLOYMENT_NAME -n $NAMESPACE \
+        -o jsonpath="{.spec.template.spec.containers[?(@.name=='${CONTAINER_NAME}')].image}")
+
+    # Siempre fijamos la imagen explícitamente: si el deployment se quedó apuntando
+    # a una imagen ad-hoc de alguna prueba manual (p.ej. rydercup-api:localtest),
+    # un simple 'rollout restart' relanzaría esa imagen vieja en lugar de la recién construida
+    if [ -n "$current_image" ] && [ "$current_image" != "$tag" ]; then
+        print_warning "El deployment apuntaba a otra imagen: $current_image"
+    fi
+
+    print_info "Fijando imagen a: $tag"
+    kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$tag -n $NAMESPACE
+
+    # Si la imagen ya era la correcta, 'set image' no modifica el spec y no dispara
+    # ningún rollout: hace falta un restart para que los pods recojan la build nueva
+    if [ "$current_image" == "$tag" ]; then
+        print_info "La imagen ya estaba fijada; reiniciando para recoger la nueva build..."
         kubectl rollout restart deployment/$DEPLOYMENT_NAME -n $NAMESPACE
-    else
-        # Si es una versión específica, actualizar la imagen
-        print_info "Actualizando imagen a: $tag"
-        kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$tag -n $NAMESPACE
     fi
 
     print_success "Comando de actualización ejecutado"

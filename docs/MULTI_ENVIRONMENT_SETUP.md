@@ -144,7 +144,7 @@ DOCS_PASSWORD=<secure-password>
 
 **Frontend (Static Site):**
 ```bash
-VITE_API_BASE_URL=https://rydercup-api.onrender.com
+VITE_API_BASE_URL=https://api.rydercupfriends.com
 ```
 
 ### Deployment
@@ -156,9 +156,10 @@ git push origin main
 ```
 
 ### Verification
-- Frontend: https://rydercupfriends.com
-- Backend: https://rydercup-api.onrender.com/docs
-- Email links: `https://rydercupfriends.com/verify-email?token=xxx`
+- Frontend: https://www.rydercupfriends.com
+- Backend: https://api.rydercupfriends.com/docs
+- Qué release está desplegada: `curl -s https://api.rydercupfriends.com/health`
+- Email links: `https://www.rydercupfriends.com/verify-email?token=xxx`
 
 ---
 
