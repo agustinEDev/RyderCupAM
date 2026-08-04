@@ -89,28 +89,72 @@ def migrated_schema():
         admin_engine.dispose()
 
 
-def _mapper_foreign_keys() -> dict[tuple[str, tuple[str, ...]], str | None]:
-    """FKs declaradas por los mappers, indexadas por (tabla, columnas origen)."""
+# Identidad de una FK: origen y destino completos. Incluir el destino evita dos
+# fallos: que repuntar una FK a otra tabla con la misma regla pase inadvertido, y
+# que dos FKs con las mismas columnas de origen se pisen en el diccionario. El
+# orden de las columnas se preserva (no se ordena alfabeticamente) porque en una
+# FK compuesta el emparejamiento origen/destino es posicional.
+FKIdentity = tuple[str, tuple[str, ...], str, tuple[str, ...]]
+
+
+def _describe(fk: FKIdentity) -> str:
+    table, columns, referred_table, referred_columns = fk
+    return f"{table}.({', '.join(columns)}) -> {referred_table}.({', '.join(referred_columns)})"
+
+
+def _mapper_foreign_keys() -> dict[FKIdentity, str | None]:
+    """FKs declaradas por los mappers, indexadas por origen y destino."""
     from src.shared.infrastructure.persistence.sqlalchemy.base import metadata
 
-    declared: dict[tuple[str, tuple[str, ...]], str | None] = {}
+    declared: dict[FKIdentity, str | None] = {}
     for table in metadata.tables.values():
         for constraint in table.foreign_key_constraints:
-            columns = tuple(sorted(col.name for col in constraint.columns))
-            declared[(table.name, columns)] = _normalize_ondelete(constraint.ondelete)
+            # `elements` mantiene el emparejamiento posicional origen/destino.
+            columns = tuple(element.parent.name for element in constraint.elements)
+            referred_columns = tuple(element.column.name for element in constraint.elements)
+            referred_table = constraint.elements[0].column.table.name
+            identity = (table.name, columns, referred_table, referred_columns)
+            declared[identity] = _normalize_ondelete(constraint.ondelete)
     return declared
 
 
-def _migrated_foreign_keys(engine) -> dict[tuple[str, tuple[str, ...]], str | None]:
+def _migrated_foreign_keys(engine) -> dict[FKIdentity, str | None]:
     """FKs presentes en el esquema que produce Alembic."""
     inspector = inspect(engine)
-    actual: dict[tuple[str, tuple[str, ...]], str | None] = {}
+    actual: dict[FKIdentity, str | None] = {}
     for table_name in inspector.get_table_names():
         for fk in inspector.get_foreign_keys(table_name):
-            columns = tuple(sorted(fk["constrained_columns"]))
+            identity = (
+                table_name,
+                tuple(fk["constrained_columns"]),
+                fk["referred_table"],
+                tuple(fk["referred_columns"]),
+            )
             ondelete = (fk.get("options") or {}).get("ondelete")
-            actual[(table_name, columns)] = _normalize_ondelete(ondelete)
+            actual[identity] = _normalize_ondelete(ondelete)
     return actual
+
+
+def _mapper_columns() -> dict[tuple[str, str], bool]:
+    """Columnas declaradas por los mappers: (tabla, columna) -> nullable."""
+    from src.shared.infrastructure.persistence.sqlalchemy.base import metadata
+
+    return {
+        (table.name, column.name): bool(column.nullable)
+        for table in metadata.tables.values()
+        for column in table.columns
+    }
+
+
+def _migrated_columns(engine) -> dict[tuple[str, str], bool]:
+    """Columnas presentes en el esquema que produce Alembic."""
+    inspector = inspect(engine)
+    return {
+        (table_name, column["name"]): bool(column["nullable"])
+        for table_name in inspector.get_table_names()
+        if table_name != "alembic_version"
+        for column in inspector.get_columns(table_name)
+    }
 
 
 def _format(entries) -> str:
@@ -130,10 +174,10 @@ class TestSchemaParity:
         actual = _migrated_foreign_keys(migrated_schema)
 
         mismatches = [
-            f"{table}.{', '.join(columns)}: mapper={declared[(table, columns)] or 'ninguno'} "
-            f"vs migración={actual[(table, columns)] or 'ninguno'}"
-            for (table, columns) in declared.keys() & actual.keys()
-            if declared[(table, columns)] != actual[(table, columns)]
+            f"{_describe(fk)}: mapper={declared[fk] or 'ninguno'} "
+            f"vs migración={actual[fk] or 'ninguno'}"
+            for fk in declared.keys() & actual.keys()
+            if declared[fk] != actual[fk]
         ]
 
         assert not mismatches, (
@@ -148,12 +192,8 @@ class TestSchemaParity:
         declared = _mapper_foreign_keys()
         actual = _migrated_foreign_keys(migrated_schema)
 
-        only_in_mappers = [
-            f"{table}.{', '.join(columns)}" for (table, columns) in declared.keys() - actual.keys()
-        ]
-        only_in_migrations = [
-            f"{table}.{', '.join(columns)}" for (table, columns) in actual.keys() - declared.keys()
-        ]
+        only_in_mappers = [_describe(fk) for fk in declared.keys() - actual.keys()]
+        only_in_migrations = [_describe(fk) for fk in actual.keys() - declared.keys()]
 
         problems = []
         if only_in_mappers:
@@ -189,3 +229,53 @@ class TestSchemaParity:
             )
 
         assert not problems, "\n\n".join(problems)
+
+    def test_no_columns_missing_from_either_side(self, migrated_schema):
+        """Ninguna columna debe existir solo en los mappers o solo en las migraciones."""
+        declared = _mapper_columns()
+        actual = _migrated_columns(migrated_schema)
+
+        only_in_mappers = [
+            f"{table}.{column}" for (table, column) in declared.keys() - actual.keys()
+        ]
+        only_in_migrations = [
+            f"{table}.{column}" for (table, column) in actual.keys() - declared.keys()
+        ]
+
+        problems = []
+        if only_in_mappers:
+            problems.append(
+                f"Columnas declaradas en los mappers que ninguna migración crea:\n"
+                f"{_format(only_in_mappers)}"
+            )
+        if only_in_migrations:
+            problems.append(
+                f"Columnas creadas por las migraciones que los mappers no declaran:\n"
+                f"{_format(only_in_migrations)}"
+            )
+
+        assert not problems, "\n\n".join(problems)
+
+    def test_column_nullability_matches(self, migrated_schema):
+        """Cada columna debe ser nullable (o no) en ambos lados.
+
+        No se comparan tipos ni defaults: los TypeDecorator del proyecto hacen
+        que el tipo declarado y el reflejado difieran de forma legítima (un
+        `UserIdDecorator` se refleja como CHAR(36)), asi que compararlos daria
+        ruido constante en vez de señal.
+        """
+        declared = _mapper_columns()
+        actual = _migrated_columns(migrated_schema)
+
+        mismatches = [
+            f"{table}.{column}: mapper={'nullable' if declared[(table, column)] else 'NOT NULL'} "
+            f"vs migración={'nullable' if actual[(table, column)] else 'NOT NULL'}"
+            for (table, column) in declared.keys() & actual.keys()
+            if declared[(table, column)] != actual[(table, column)]
+        ]
+
+        assert not mismatches, (
+            "Los mappers y las migraciones discrepan en la nulabilidad de estas columnas, "
+            "así que aceptan datos distintos en tests y en producción:\n"
+            f"{_format(mismatches)}"
+        )
