@@ -124,7 +124,10 @@ authlib==1.6.12
 # - PYSEC-2026-35 (fixed in 46.0.6)
 # - PYSEC-2026-36 (fixed in 46.0.7)
 # - CVE-2026-34180 (Out-of-bounds Read, CVSS 8.7 HIGH, fixed in 48.0.1)
-cryptography==48.0.1
+# - CVE-2026-69247 (fixed in 50.0.0)
+# - CVE-2026-69248 (fixed in 49.0.0)
+# - CVE-2026-69249 (fixed in 49.0.0)
+cryptography==50.0.0
 
 # setuptools - Build system y package installer (dependencia transitiva de safety)
 # Fijada explícitamente para resolver:

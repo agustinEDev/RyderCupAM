@@ -27,10 +27,16 @@ class AdminDeleteUserUseCase:
       borraria el torneo entero para todos sus participantes).
     - Ha creado alguna partida rapida (mismo motivo, quick_matches.creator_id CASCADE).
     - Ha solicitado algun campo de golf (golf_courses.creator_id sin ON DELETE: fallaria).
-    - Tiene algun hole score registrado (hole_scores.player_user_id sin ON DELETE: fallaria).
+    - Tiene algun hole score registrado (hole_scores.player_user_id es ON DELETE
+      CASCADE, pero borrarlos falsearia el resultado del partido para sus rivales).
 
     En esos casos, el panel de administracion debe ofrecer "Desactivar" en su lugar
     (ver AdminSetUserActiveUseCase).
+
+    Las invitaciones NO bloquean: ambas FKs de `invitations` hacia `users` son
+    ON DELETE CASCADE (migracion c7d1e4f8a2b6), asi que las invitaciones enviadas
+    y recibidas por la cuenta desaparecen con ella. Bloquear ahi dejaria al admin
+    sin salida, porque no existe forma de borrar invitaciones ajenas.
     """
 
     def __init__(

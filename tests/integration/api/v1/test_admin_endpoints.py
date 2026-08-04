@@ -7,7 +7,9 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 from tests.conftest import (
+    activate_competition,
     create_authenticated_user,
+    create_competition,
     create_golf_course,
     set_auth_cookies,
 )
@@ -259,6 +261,45 @@ class TestAdminDeleteUser:
         )
         assert list_response.status_code == 200
         assert list_response.json()["total_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_admin_deletes_user_with_received_invitation(self, client: AsyncClient):
+        """Una invitación recibida NO debe bloquear el borrado (regresión #154).
+
+        Ambas FKs de `invitations` hacia `users` son ON DELETE CASCADE, así que
+        la invitación desaparece con la cuenta. Antes de la migración
+        c7d1e4f8a2b6 no declaraban ON DELETE y el commit reventaba con
+        ForeignKeyViolationError, devolviendo un 500 al panel de administración.
+        """
+        admin = await create_authenticated_user(
+            client, "admin_del_inv@test.com", "AdminPass123!", "Admin", "Inv"
+        )
+        await _make_admin("admin_del_inv@test.com")
+        inviter = await create_authenticated_user(
+            client, "inviter_del_inv@test.com", "P@ssw0rd123!", "Inviter", "User"
+        )
+        target = await create_authenticated_user(
+            client, "target_del_inv@test.com", "P@ssw0rd123!", "Target", "User"
+        )
+
+        competition = await create_competition(client, inviter["cookies"])
+        await activate_competition(client, inviter["cookies"], competition["id"])
+
+        set_auth_cookies(client, inviter["cookies"])
+        invitation_response = await client.post(
+            f"/api/v1/competitions/{competition['id']}/invitations",
+            json={"invitee_user_id": target["user"]["id"]},
+        )
+        assert invitation_response.status_code == 201, invitation_response.text
+
+        set_auth_cookies(client, admin["cookies"])
+        response = await client.delete(f"/api/v1/admin/users/{target['user']['id']}")
+        assert response.status_code == 204, response.text
+
+        list_response = await client.get(
+            "/api/v1/admin/users", params={"search": "target_del_inv"}
+        )
+        assert list_response.json()["total_count"] == 0
 
     @pytest.mark.asyncio
     async def test_admin_cannot_delete_own_account(self, client: AsyncClient):
