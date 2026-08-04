@@ -4,7 +4,7 @@ Country Mappers - SQLAlchemy Imperative Mapping for Country entity (Shared Domai
 Este mapper es parte del shared domain y se usa en múltiples módulos.
 """
 
-from sqlalchemy import Boolean, Column, String, Table
+from sqlalchemy import Boolean, Column, ForeignKey, String, Table
 from sqlalchemy.types import CHAR, TypeDecorator
 from src.shared.domain.entities.country import Country
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -79,8 +79,18 @@ countries_table = Table(
 country_adjacencies_table = Table(
     "country_adjacencies",
     metadata,
-    Column("country_code_1", CountryCodeDecorator, primary_key=True),
-    Column("country_code_2", CountryCodeDecorator, primary_key=True),
+    Column(
+        "country_code_1",
+        CountryCodeDecorator,
+        ForeignKey("countries.code", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "country_code_2",
+        CountryCodeDecorator,
+        ForeignKey("countries.code", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
