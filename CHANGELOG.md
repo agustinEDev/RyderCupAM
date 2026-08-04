@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-04
+
+### Added
+
+- **Endpoint de salud real** (issue #158): nuevo `GET /health` que devuelve estado, versión, commit, rama y entorno. Hasta ahora no había forma fiable de saber qué release corría en producción — una pregunta abierta desde la v2.2.0. El endpoint figuraba como exento de CSRF pero la ruta nunca llegó a registrarse, y el único que respondía (`GET /`) reportaba la versión `1.0.0` hardcodeada en dos sitios con el proyecto ya en 2.4.x. Render inyecta `RENDER_GIT_COMMIT` y `RENDER_GIT_BRANCH` en cada deploy, así que el commit identifica exactamente el despliegue en marcha, y degrada a `"unknown"` fuera de Render.
+- **`src/config/version.py` como única fuente de verdad de la versión**, sustituyendo los dos literales hardcodeados. Debe subirse en el commit de preparación de cada release, igual que el `package.json` del frontend.
+
+### Fixed
+
+- **Borrar un usuario fallaba con 500 si tenía invitaciones** (issue #154): las FKs de `invitations` hacia `users` no declaraban ningún `ON DELETE` en la migración, pese a que el mapper sí lo hacía, de modo que la base de datos abortaba el borrado con `ForeignKeyViolationError`. Nueva migración `c7d1e4f8a2b6` que alinea la base de datos con el mapper (`CASCADE` en el invitador, `SET NULL` en el invitado).
+- **Los scripts de despliegue a Kubernetes no corregían la deriva de imagen**: `update_deployment()` solo ejecutaba `kubectl rollout restart` cuando la versión era `latest`, nunca `kubectl set image`. Si el deployment había quedado apuntando a una imagen ad-hoc por un `kubectl set image` manual, el restart relanzaba esa imagen obsoleta en lugar de la recién construida — lo que se manifestó como los pods de la API en `CrashLoopBackOff` con alembic fallando con *"Can't locate revision identified by ..."*, porque la imagen antigua era anterior a una migración que la base de datos ya tenía aplicada. Ahora `deploy-api.sh` y `deploy-front.sh` fijan siempre la imagen de forma explícita, avisan si el deployment apuntaba a otro sitio, y solo recurren al restart cuando la imagen ya era la correcta (caso en que `set image` no dispara ningún rollout).
+
+### Security
+
+- `cryptography` actualizado a 50.0.0 por tres CVEs (CVE-2026-69247, CVE-2026-69248 y CVE-2026-69249) que hacían fallar el job bloqueante de `pip-audit`. Es dependencia transitiva de Authlib, fijada explícitamente desde bumps anteriores por CVE.
+
+### Tests
+
+- **Comprobación de paridad entre mappers y migraciones** (issue #156): la suite construye su esquema con `metadata.create_all()` (los mappers) mientras producción corre el esquema que produce Alembic. Cuando ambos divergen, los tests validan un esquema que no existe en ningún sitio — que es justo lo que dejó pasar el bug #154 con el pipeline en verde. Se añaden tres comprobaciones que ejecutan `alembic upgrade head` contra una base de datos desechable, la reflejan y la comparan con los mappers: reglas `ON DELETE` de cada FK, FKs presentes en un solo lado y tablas presentes en un solo lado. Las tres reportan todas las diferencias de golpe en vez de parar en la primera. En su primera ejecución la comprobación encontró una segunda divergencia preexistente: `country_adjacencies` declaraba sus dos FKs hacia `countries.code` en la migración y ninguna en el mapper, así que los tests corrían sin esa integridad referencial. Mapper alineado con la migración.
+- Identidad de las FKs reforzada y paridad de columnas añadida: el mapa de claves foráneas se indexaba solo por tabla origen y columnas, descartando el destino, de modo que repuntar una FK a otra tabla conservando la regla de borrado habría pasado ambas comprobaciones, y dos FKs con las mismas columnas de origen se sobrescribían entre sí. Se añade también la paridad de columnas (existencia en ambos lados y nulabilidad); tipos y valores por defecto quedan deliberadamente fuera, porque los TypeDecorator del proyecto hacen que el tipo declarado y el reflejado difieran legítimamente y eso generaría ruido constante en vez de señal.
+
 ## [2.4.0] - 2026-08-02
 
 ### Added
