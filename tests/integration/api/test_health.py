@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from src.config.settings import settings
+from src.config.version import APP_VERSION
 
 # ================================
 # SETUP DE CLIENTE DE PRUEBAS
@@ -97,7 +98,7 @@ class TestHealthEndpoint:
 
         # Assert - Verificar valores específicos
         assert data["message"] == "Ryder Cup Manager API"
-        assert data["version"] == "1.0.0"
+        assert data["version"] == APP_VERSION
         assert data["status"] == "running"
         assert "documentacion" in data["docs"].lower()
         assert "ryder cup" in data["description"].lower()
@@ -119,6 +120,72 @@ class TestHealthEndpoint:
         assert isinstance(data["status"], str)
         assert isinstance(data["docs"], str)
         assert isinstance(data["description"], str)
+
+
+class TestDeploymentHealthEndpoint:
+    """Tests para /health, que identifica el despliegue concreto.
+
+    A diferencia de `/`, este endpoint responde QUE version y QUE commit estan
+    corriendo, que es lo unico que permite verificar si una release ha llegado
+    realmente a produccion (ver #158).
+    """
+
+    def test_health_endpoint_returns_200(self, client):
+        """
+        Test: /health responde 200 sin autenticacion
+        Given: API de FastAPI funcionando
+        When: Se hace GET request a /health sin credenciales
+        Then: Responde 200 (es publico, lo consulta el health check de Render)
+        """
+        response = client.get("/health")
+
+        assert response.status_code == 200
+
+    def test_health_endpoint_response_structure(self, client):
+        """
+        Test: /health expone los campos que identifican el despliegue
+        Given: API de FastAPI funcionando
+        When: Se hace GET request a /health
+        Then: Devuelve status, version, commit, branch y environment
+        """
+        response = client.get("/health")
+        data = response.json()
+
+        assert data["status"] == "ok"
+        assert data["version"] == APP_VERSION
+        for field in ("commit", "branch", "environment"):
+            assert field in data
+            assert isinstance(data[field], str)
+
+    def test_health_endpoint_reports_render_commit(self, client, monkeypatch):
+        """
+        Test: /health refleja el commit inyectado por Render
+        Given: Render inyecta RENDER_GIT_COMMIT y RENDER_GIT_BRANCH en el entorno
+        When: Se hace GET request a /health
+        Then: Los devuelve tal cual, permitiendo comparar con el SHA liberado
+        """
+        monkeypatch.setenv("RENDER_GIT_COMMIT", "abc1234def5678")
+        monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
+
+        data = client.get("/health").json()
+
+        assert data["commit"] == "abc1234def5678"
+        assert data["branch"] == "main"
+
+    def test_health_endpoint_without_render_env(self, client, monkeypatch):
+        """
+        Test: /health degrada limpiamente fuera de Render
+        Given: Un entorno sin las variables de Render (local, Docker, k8s)
+        When: Se hace GET request a /health
+        Then: Devuelve "unknown" en vez de fallar
+        """
+        monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+        monkeypatch.delenv("RENDER_GIT_BRANCH", raising=False)
+
+        data = client.get("/health").json()
+
+        assert data["commit"] == "unknown"
+        assert data["branch"] == "unknown"
 
 
 # ================================
