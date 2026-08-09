@@ -318,6 +318,12 @@ from src.modules.user.application.use_cases.get_current_user_use_case import (
 from src.modules.user.application.use_cases.get_my_avatar_upload_image_use_case import (
     GetMyAvatarUploadImageUseCase,
 )
+from src.modules.user.application.use_cases.get_player_stats_use_case import (
+    GetPlayerStatsUseCase,
+)
+from src.modules.user.application.use_cases.get_recent_matches_use_case import (
+    GetRecentMatchesUseCase,
+)
 from src.modules.user.application.use_cases.google_login_use_case import (
     GoogleLoginUseCase,
 )
@@ -1200,6 +1206,26 @@ def get_get_admin_stats_use_case(
 ) -> GetAdminStatsUseCase:
     """Proveedor del caso de uso GetAdminStatsUseCase."""
     return GetAdminStatsUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+
+
+def get_get_player_stats_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetPlayerStatsUseCase:
+    """Proveedor del caso de uso GetPlayerStatsUseCase."""
+    return GetPlayerStatsUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
+
+
+def get_get_recent_matches_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetRecentMatchesUseCase:
+    """Proveedor del caso de uso GetRecentMatchesUseCase."""
+    return GetRecentMatchesUseCase(user_uow, competition_uow, quick_match_uow, golf_course_uow)
 
 
 def get_create_quick_match_use_case(
