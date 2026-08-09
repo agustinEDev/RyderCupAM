@@ -199,6 +199,7 @@ async def _played_competition_match(
     strokes_received_per_hole: int = 0,
     holes_played: int = 18,
     unscored_holes: list[int] | None = None,
+    decided_early: bool = False,
     round_date: date = date(2026, 6, 1),
 ):
     """
@@ -242,7 +243,10 @@ async def _played_competition_match(
         team_b_players=[match_player(rival.id)],
     )
     match.start()
-    match.complete({"winner": "A", "score": "2UP"})
+    if decided_early:
+        # Matemáticamente ganado en el 15: 4 arriba y 3 por jugar
+        match.mark_decided({"winner": "A", "score": "4&3"})
+    match.complete({"winner": "A", "score": "4&3" if decided_early else "2UP"})
 
     async with competition_uow:
         await competition_uow.competitions.add(competition)
@@ -499,13 +503,35 @@ class TestCompetitionScorecards:
         assert stats.rounds_played == 2
         assert stats.scoring_avg == 9.0
 
+    async def test_a_match_decided_early_counts_if_the_card_was_finished_anyway(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Lo que decide es la tarjeta, no en qué hoyo se ganó el partido. Si el
+        partido se resolvió en el 15 pero los jugadores siguieron anotando
+        hasta el 18, la vuelta está entera y computa como cualquier otra.
+        """
+        player = await create_user(user_uow, unique_email("decided"), handicap=0)
+        rival = await create_user(user_uow, unique_email("rival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow, course, player, rival, strokes_per_hole=5, decided_early=True
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 1
+        assert stats.scoring_avg == 18.0
+
     async def test_a_match_closed_before_the_18th_does_not_count(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        Un partido decidido en el hoyo 15 está terminado, pero su tarjeta no:
-        faltan hoyos, y media vuelta no se puede comparar con una entera. Es el
-        precio de que la media hable siempre de rondas iguales.
+        El mismo partido resuelto pronto, pero dejando de anotar al cerrarse:
+        la tarjeta se queda sin hoyos, y media vuelta no se puede comparar con
+        una entera. Es el precio de que la media hable de rondas iguales.
         """
         player = await create_user(user_uow, unique_email("conceded"), handicap=0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)

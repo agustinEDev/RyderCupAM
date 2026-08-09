@@ -260,10 +260,10 @@ class GetPlayerStatsUseCase:
         Neto respecto al par de una tarjeta entera, o None si le falta un hoyo.
 
         Un hoyo con `own_score` a None no se rellena ni se ignora: invalida la
-        vuelta. En match play es lo normal —te conceden los hoyos que ibas
-        ganando y el partido se cierra antes del 18—, así que un partido
-        decidido en el 15 no entra en las estadísticas por mucho que esté
-        terminado. Es el precio de que la media compare vueltas iguales.
+        vuelta. Lo que decide es la tarjeta, no en qué hoyo se ganó el partido:
+        un match play resuelto en el 15 cuenta igual que cualquier otra vuelta
+        si los jugadores siguieron anotando hasta el 18. Lo que deja la ronda
+        fuera es dejar de anotar, no cerrar pronto.
         """
         pars = {hole.number: hole.par for hole in course.holes}
         scored = {
