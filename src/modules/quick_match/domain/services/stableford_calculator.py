@@ -21,6 +21,10 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
     TeeRating,
 )
 
+# El catálogo solo admite campos de 18 hoyos: `GolfCourse` lo valida como
+# invariante y rechaza cualquier otro número. Por eso el reparto de golpes es
+# una constante y no se deriva del campo. El día que se admitan campos de nueve
+# hay que derivarlo de los hoyos recibidos, aquí y en la inversión del 19.
 HOLES_PER_ROUND = 18
 
 # Doble bogey neto: el tope por hoyo que el WHS aplica a lo que puntúa para

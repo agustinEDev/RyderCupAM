@@ -21,8 +21,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Tope de partidas que se agregan para la media. Sin él, una cuenta con años de
-# historial cargaría todos sus scores para calcular un único número.
+# Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
+# cuenta con años de historial cargaría todos sus scores para calcular un único
+# número, y en torneo cada partido añade además una consulta de tarjeta.
 MAX_ROUNDS_AGGREGATED = 100
 
 
@@ -79,7 +80,9 @@ class GetPlayerStatsUseCase:
 
         async with self._competition_uow:
             competition_matches = (
-                await self._competition_uow.matches.find_completed_for_player(user_id)
+                await self._competition_uow.matches.find_completed_for_player(
+                    user_id, limit=MAX_ROUNDS_AGGREGATED
+                )
             )
             rounds_by_match = await self._rounds_by_match(competition_matches)
             if golf_course_id is not None:

@@ -38,6 +38,10 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 DEFAULT_LIMIT = 10
+
+# `GolfCourse` valida exactamente 18 hoyos como invariante, así que recorrer el
+# rango fijo equivale a recorrer los hoyos del campo. Si algún día se admiten
+# campos de nueve, hay que iterar los hoyos anotados en lugar de este rango.
 TOTAL_HOLES = 18
 
 # Cómo queda el partido para quien pregunta, no para el equipo A
