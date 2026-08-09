@@ -13,8 +13,9 @@ class PlayerStatsResponseDTO(BaseModel):
 
     `scoring_avg` es la media de golpes netos respecto al par de lo jugado, no
     de golpes brutos: comparar brutos entre campos y hándicaps distintos no
-    dice nada. Va en None cuando no hay ninguna ronda terminada, que no es lo
-    mismo que una media de cero.
+    dice nada. Entran todas las tarjetas, de partida rápida y de torneo, con
+    cada hoyo topado en el net double bogey (Regla WHS 3.1). Va en None cuando
+    no hay ninguna ronda terminada, que no es lo mismo que una media de cero.
     """
 
     handicap: float | None = None

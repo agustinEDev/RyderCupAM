@@ -23,6 +23,10 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
 
 HOLES_PER_ROUND = 18
 
+# Doble bogey neto: el tope por hoyo que el WHS aplica a lo que puntúa para
+# hándicap (Regla 3.1)
+NET_DOUBLE_BOGEY_OVER_PAR = 2
+
 
 @dataclass(frozen=True)
 class HoleSetup:
@@ -118,6 +122,20 @@ class StablefordCalculator:
         net_score = gross_score - strokes_received
         return max(0, 2 - (net_score - par))
 
+    @staticmethod
+    def adjusted_gross(gross_score: int, par: int, strokes_received: int) -> int:
+        """
+        Golpes del hoyo topados en el net double bogey (Regla WHS 3.1).
+
+        Máximo computable: doble bogey neto, o sea `par + 2 + golpes recibidos`.
+        Sin ese tope, un hoyo desastroso mueve la media de una temporada entera,
+        que es justo lo que la regla existe para evitar.
+
+        No afecta a los puntos Stableford: un hoyo en net double bogey ya vale
+        cero puntos, y a partir de ahí sigue valiendo cero.
+        """
+        return min(gross_score, par + NET_DOUBLE_BOGEY_OVER_PAR + strokes_received)
+
     def compute_participant_totals(
         self,
         handicap: float | None,
@@ -125,12 +143,19 @@ class StablefordCalculator:
         scores_by_hole: dict[int, int],
         tee_rating: TeeRating | None = None,
         allowance_percentage: int = 100,
+        cap_at_net_double_bogey: bool = False,
     ) -> ParticipantTotals:
         """
         Agrega puntos y golpes de un participante sobre los hoyos anotados.
 
         Los hoyos sin score no cuentan: una partida a medias puntúa por lo
         jugado, no por lo que falta.
+
+        `cap_at_net_double_bogey` topa cada hoyo en el máximo que el WHS deja
+        computar para hándicap. Va apagado por defecto porque el detalle de la
+        partida enseña los golpes que se dieron, no los que puntúan; lo encienden
+        las estadísticas agregadas, donde un hoyo suelto no debe pesar más que
+        una temporada.
         """
         strokes_basis = self.resolve_strokes_basis(handicap, tee_rating, allowance_percentage)
 
@@ -148,7 +173,12 @@ class StablefordCalculator:
             strokes_received = self.allocate_strokes(strokes_basis, hole.stroke_index)
             stableford_points += self.hole_points(score, hole.par, strokes_received)
             total_strokes += score
-            net_strokes += score - strokes_received
+            computable = (
+                self.adjusted_gross(score, hole.par, strokes_received)
+                if cap_at_net_double_bogey
+                else score
+            )
+            net_strokes += computable - strokes_received
             par_played += hole.par
             holes_played += 1
 

@@ -176,6 +176,65 @@ class TestComputeParticipantTotals:
         assert totals.to_par == 0
 
 
+class TestNetDoubleBogeyCap:
+    """Regla WHS 3.1: lo que puntúa para hándicap tiene techo por hoyo."""
+
+    def test_a_normal_hole_is_left_alone(self):
+        assert StablefordCalculator.adjusted_gross(5, par=4, strokes_received=0) == 5
+
+    def test_a_disaster_hole_is_capped_at_net_double_bogey(self):
+        """Un 11 en un par 4 sin golpes cuenta como 6, no como 11."""
+        assert StablefordCalculator.adjusted_gross(11, par=4, strokes_received=0) == 6
+
+    def test_the_cap_rises_with_the_strokes_received(self):
+        """Con dos golpes en el hoyo, el techo sube a par + 2 + 2."""
+        assert StablefordCalculator.adjusted_gross(11, par=4, strokes_received=2) == 8
+
+    def test_the_cap_is_off_by_default_so_the_scorecard_shows_real_strokes(self):
+        calculator = StablefordCalculator()
+        scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
+
+        totals = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole=scores
+        )
+
+        assert totals.total_strokes == 79
+        assert totals.to_par == 7
+
+    def test_the_cap_limits_what_a_single_hole_can_do_to_the_average(self):
+        """Los mismos 11 golpes, ya topados: el hoyo aporta +2 y no +7."""
+        calculator = StablefordCalculator()
+        scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
+
+        totals = calculator.compute_participant_totals(
+            handicap=0,
+            holes=_course(),
+            scores_by_hole=scores,
+            cap_at_net_double_bogey=True,
+        )
+
+        # Los golpes de verdad no se tocan; lo que baja es lo computable
+        assert totals.total_strokes == 79
+        assert totals.to_par == 2
+
+    def test_capping_does_not_move_the_stableford_points(self):
+        """Un hoyo en net double bogey ya vale cero; peor sigue valiendo cero."""
+        calculator = StablefordCalculator()
+        scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
+
+        raw = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole=scores
+        )
+        capped = calculator.compute_participant_totals(
+            handicap=0,
+            holes=_course(),
+            scores_by_hole=scores,
+            cap_at_net_double_bogey=True,
+        )
+
+        assert raw.stableford_points == capped.stableford_points
+
+
 class TestResolveStrokesBasis:
     """De qué hándicap salen los golpes."""
 

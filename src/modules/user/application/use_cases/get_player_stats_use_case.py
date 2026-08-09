@@ -75,10 +75,19 @@ class GetPlayerStatsUseCase:
             competition_matches = (
                 await self._competition_uow.matches.find_completed_for_player(user_id)
             )
+            rounds_by_match = await self._rounds_by_match(competition_matches)
             if golf_course_id is not None:
-                competition_matches = await self._filter_matches_by_course(
-                    competition_matches, golf_course_id
+                competition_matches = [
+                    match
+                    for match in competition_matches
+                    if self._match_course(match, rounds_by_match) == golf_course_id
+                ]
+            scorecards = {
+                match.id: await self._competition_uow.hole_scores.find_by_match_and_player(
+                    match.id, user_id
                 )
+                for match in competition_matches
+            }
 
             tournaments_total = 0
             tournaments_active = 0
@@ -89,8 +98,12 @@ class GetPlayerStatsUseCase:
                     await self._competition_uow.enrollments.count_active_by_user(user_id)
                 )
 
+        competition_rounds_to_par = await self._collect_competition_rounds(
+            competition_matches, rounds_by_match, scorecards
+        )
+
         rounds_played = quick_rounds_played + len(competition_matches)
-        scoring_avg = self._average_to_par(quick_rounds_to_par)
+        scoring_avg = self._average_to_par(quick_rounds_to_par + competition_rounds_to_par)
 
         return PlayerStatsResponseDTO(
             handicap=handicap,
@@ -160,19 +173,101 @@ class GetPlayerStatsUseCase:
                     holes=holes,
                     scores_by_hole=scores_by_hole,
                     allowance_percentage=match.get_effective_allowance(),
+                    # La media junta partidas rápidas y torneo: si solo una de
+                    # las dos topara los hoyos malos, no serían comparables
+                    cap_at_net_double_bogey=True,
                 )
                 results.append(totals.to_par)
 
         return rounds_played, results
 
-    async def _filter_matches_by_course(self, matches: list, golf_course_id: GolfCourseId) -> list:
-        """El campo de un partido vive en su ronda, no en el propio partido."""
-        kept = []
+    async def _rounds_by_match(self, matches: list) -> dict:
+        """
+        La ronda de cada partido, una consulta por ronda distinta.
+
+        Hace falta para dos cosas que el partido no sabe por sí solo: en qué
+        campo se jugó y con qué pares se compara su tarjeta.
+        """
+        rounds: dict = {}
+        by_match: dict = {}
         for match in matches:
-            round_ = await self._competition_uow.rounds.find_by_id(match.round_id)
-            if round_ is not None and round_.golf_course_id == golf_course_id:
-                kept.append(match)
-        return kept
+            if match.round_id not in rounds:
+                rounds[match.round_id] = await self._competition_uow.rounds.find_by_id(
+                    match.round_id
+                )
+            by_match[match.id] = rounds[match.round_id]
+        return by_match
+
+    @staticmethod
+    def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
+        round_ = rounds_by_match.get(match.id)
+        return round_.golf_course_id if round_ is not None else None
+
+    async def _collect_competition_rounds(
+        self, matches: list, rounds_by_match: dict, scorecards: dict
+    ) -> list[int]:
+        """
+        Neto respecto al par de cada tarjeta de torneo.
+
+        El formato del partido da igual: en match play también firmas una
+        tarjeta con tus golpes, y esa tarjeta dice a qué nivel jugaste tan bien
+        como la de una vuelta de medal.
+
+        Se usa `own_score`, no el `net_score` de la entidad: ese solo se calcula
+        cuando el marcador ha validado el hoyo, así que media tarjeta legítima
+        se quedaría fuera por no haberse cerrado la validación cruzada. Los
+        golpes recibidos ya vienen resueltos por hoyo desde que se generó el
+        partido, sin repartirlos aquí otra vez.
+        """
+        results: list[int] = []
+        courses: dict = {}
+
+        async with self._golf_course_uow:
+            for match in matches:
+                course_id = self._match_course(match, rounds_by_match)
+                if course_id is None:
+                    continue
+                if course_id not in courses:
+                    courses[course_id] = await self._golf_course_uow.golf_courses.find_by_id(
+                        course_id
+                    )
+                course = courses[course_id]
+                if course is None:
+                    continue
+
+                to_par = self._scorecard_to_par(scorecards.get(match.id, []), course)
+                if to_par is not None:
+                    results.append(to_par)
+
+        return results
+
+    def _scorecard_to_par(self, hole_scores: list, course) -> int | None:
+        """
+        Neto respecto al par de una tarjeta, o None si no hay nada anotado.
+
+        Los hoyos concedidos o sin anotar (`own_score` a None) se quedan fuera
+        en lugar de rellenarse: en match play te dan hoyos que ibas ganando, y
+        contarlos como doble bogey castigaría por ir por delante. La vuelta se
+        mide contra el par de lo que sí se jugó, igual que en partida rápida.
+        """
+        pars = {hole.number: hole.par for hole in course.holes}
+
+        to_par = 0
+        holes_played = 0
+        for hole_score in hole_scores:
+            if hole_score.own_score is None:
+                continue
+            par = pars.get(hole_score.hole_number)
+            if par is None:
+                continue
+
+            computable = self._calculator.adjusted_gross(
+                hole_score.own_score, par, hole_score.strokes_received
+            )
+            to_par += computable - hole_score.strokes_received - par
+            holes_played += 1
+
+        return to_par if holes_played else None
 
     @staticmethod
     def _find_participant(match, user_id: UserId):
