@@ -1007,3 +1007,37 @@ class TestScoreDifferentials:
         )
 
         assert stats.differentials == [18.1]
+
+
+class TestScoringRecordWindow:
+    """
+    La serie publicada y las cifras calculadas hablan de las mismas vueltas.
+
+    Sin esto, un cliente que sacara el mínimo de `differentials` por su cuenta
+    obtendría un número que no coincide con `best_differential`.
+    """
+
+    async def test_the_series_is_capped_at_the_twenty_round_record(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, unique_email("window"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        for _ in range(21):
+            await _played_quick_match(
+                qm_uow,
+                course,
+                player,
+                strokes_per_hole=5,
+                tee_category=TeeCategory.AMATEUR,
+                tee_gender=Gender.MALE,
+            )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        # Las 21 se cuentan y se promedian, pero solo 20 se publican
+        assert stats.rounds_played == 21
+        assert stats.rounds_with_differential == 21
+        assert len(stats.differentials) == 20
+        assert min(stats.differentials) == stats.best_differential

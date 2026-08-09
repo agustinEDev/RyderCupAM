@@ -64,18 +64,27 @@ class PlayerStatsResponseDTO(BaseModel):
         ),
     )
     best_differential: float | None = Field(
-        default=None, description="El mejor diferencial del registro: su mejor vuelta"
+        default=None,
+        description=(
+            "El mejor diferencial del registro: su mejor vuelta entre las 20 "
+            "más recientes, que son las que el WHS mira."
+        ),
     )
     rounds_with_differential: int = Field(
         default=0,
         description=(
             "Cuántas de las vueltas computadas tienen diferencial. Menor que "
-            "`rounds_played` cuando alguna se jugó sin registrar el tee."
+            "`rounds_played` cuando alguna se jugó sin registrar el tee. Puede "
+            "superar los 20 de la ventana: cuenta las que hay, no las que se miran."
         ),
     )
     differentials: list[float] = Field(
         default_factory=list,
-        description="Diferenciales del más reciente al más antiguo, para pintar la tendencia",
+        description=(
+            "Los 20 diferenciales más recientes, del más nuevo al más antiguo, "
+            "para pintar la tendencia. Es la misma ventana sobre la que se "
+            "calculan el índice, la media y la mejor vuelta."
+        ),
     )
 
 

@@ -166,7 +166,12 @@ class GetPlayerStatsUseCase:
             playing_avg=self._as_float(self._differentials.playing_average(differentials)),
             best_differential=self._as_float(self._differentials.best_differential(differentials)),
             rounds_with_differential=len(differentials),
-            differentials=[float(value) for value in differentials],
+            # La serie que se publica es la misma ventana que miran el índice y
+            # la mejor vuelta: publicar más dejaría que un cliente calculase su
+            # propio mínimo sobre vueltas que ninguna otra cifra está contando
+            differentials=[
+                float(value) for value in self._differentials.scoring_record(differentials)
+            ],
         )
 
     async def _collect_quick_match_rounds(

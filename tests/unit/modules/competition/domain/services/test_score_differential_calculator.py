@@ -211,3 +211,28 @@ class TestTrend:
         differentials = _differentials(["10.0"] * 5 + ["10.5", "10.0", "10.0", "10.0", "10.0"])
         # 0.5 repartido entre 5 vueltas
         assert ScoreDifferentialCalculator.trend(differentials) == Decimal("-0.1")
+
+
+class TestScoringRecord:
+    """La ventana que todas las demás métricas comparten."""
+
+    def test_keeps_every_round_when_there_are_no_more_than_twenty(self):
+        differentials = _differentials(["10.0"] * 20)
+        assert ScoreDifferentialCalculator.scoring_record(differentials) == differentials
+
+    def test_drops_anything_older_than_the_twentieth_round(self):
+        differentials = _differentials([f"{value}.0" for value in range(1, 26)])
+        record = ScoreDifferentialCalculator.scoring_record(differentials)
+        assert len(record) == 20
+        assert record[-1] == Decimal("20.0")
+
+    def test_is_the_window_the_other_metrics_agree_on(self):
+        """
+        Lo que hace útil el método: una vuelta excelente fuera de la ventana no
+        puede aparecer como la mejor por un lado y ser ignorada por otro.
+        """
+        differentials = _differentials(["10.0"] * 20 + ["1.0"])
+        record = ScoreDifferentialCalculator.scoring_record(differentials)
+
+        assert min(record) == ScoreDifferentialCalculator.best_differential(differentials)
+        assert Decimal("1.0") not in record

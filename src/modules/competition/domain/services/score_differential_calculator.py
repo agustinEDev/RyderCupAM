@@ -8,10 +8,18 @@ Vive junto a `PlayingHandicapCalculator` porque son la misma familia de reglas
 WHS y comparten `TeeRating`, aunque ninguno de los dos sea exclusivo del módulo
 de competición.
 
-**Este índice no es el oficial de la federación.** Falta el PCC (Playing
-Conditions Calculation), que ajusta los diferenciales por cómo estaba el campo
-ese día y que solo puede calcular quien tiene todas las tarjetas de la jornada.
-Aquí se asume PCC = 0.
+**Este índice no es el oficial de la federación.** Le faltan dos cosas:
+
+- El **PCC** (Playing Conditions Calculation), el ajuste por cómo estaba el
+  campo ese día, que solo puede calcular quien tiene todas las tarjetas de la
+  jornada, incluidas las de jugadores que no usan esta aplicación. Se asume 0.
+- El **soft cap y el hard cap** (Regla WHS 5.8), que frenan cuánto puede subir
+  un índice respecto al más bajo que el jugador tuvo en los últimos 365 días.
+  Calcularlos exige reconstruir el índice en cada momento de ese año para saber
+  cuál fue el mínimo, que es bastante más que una fórmula. Sin ellos, un
+  jugador que empeora ve aquí un índice más alto que el que le daría el sistema
+  oficial, y esa es justo la dirección en la que un número informativo no
+  engaña: no regala golpes.
 """
 
 from dataclasses import dataclass
@@ -94,6 +102,18 @@ class ScoreDifferentialCalculator:
         return [cls.differential(played_round) for played_round in played_rounds]
 
     @staticmethod
+    def scoring_record(differentials: list[Decimal]) -> list[Decimal]:
+        """
+        Las vueltas que el sistema mira: las 20 más recientes.
+
+        Todas las métricas de aquí trabajan sobre esta ventana, así que quien
+        publique la serie debe publicar esta y no la lista entera. Si no, un
+        cliente que calcule el mínimo por su cuenta encontrará vueltas que
+        ninguna otra cifra está contando.
+        """
+        return differentials[:SCORING_RECORD_SIZE]
+
+    @staticmethod
     def estimated_index(differentials: list[Decimal]) -> Decimal | None:
         """
         Índice estimado a partir de los diferenciales, del más reciente al más
@@ -103,7 +123,7 @@ class ScoreDifferentialCalculator:
         del WHS. Devuelve None por debajo de tres vueltas: no es un índice de
         cero, es que todavía no hay con qué calcularlo.
         """
-        window = differentials[:SCORING_RECORD_SIZE]
+        window = ScoreDifferentialCalculator.scoring_record(differentials)
         if len(window) < MIN_ROUNDS_FOR_INDEX:
             return None
 
@@ -123,7 +143,7 @@ class ScoreDifferentialCalculator:
         dice de lo que un jugador es capaz. Esta media dice a qué juega de
         media, incluidos los días malos, y suele ser varios golpes peor.
         """
-        window = differentials[:SCORING_RECORD_SIZE]
+        window = ScoreDifferentialCalculator.scoring_record(differentials)
         if not window:
             return None
         average = sum(window, Decimal("0")) / Decimal(len(window))
@@ -132,7 +152,7 @@ class ScoreDifferentialCalculator:
     @staticmethod
     def best_differential(differentials: list[Decimal]) -> Decimal | None:
         """La mejor vuelta del registro: el diferencial más bajo."""
-        window = differentials[:SCORING_RECORD_SIZE]
+        window = ScoreDifferentialCalculator.scoring_record(differentials)
         return min(window) if window else None
 
     @staticmethod
