@@ -1,7 +1,16 @@
-"""Caso de Uso: resumen de rendimiento de un jugador (BE #128)."""
+"""Caso de Uso: resumen de rendimiento de un jugador (BE #128, BE #167)."""
+
+from dataclasses import dataclass
+from datetime import date as date_type
+from decimal import Decimal
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
+from src.modules.competition.domain.services.score_differential_calculator import (
+    PlayedRound,
+    ScoreDifferentialCalculator,
 )
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -26,6 +35,27 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # número, y en torneo cada partido añade además una consulta de tarjeta.
 MAX_ROUNDS_AGGREGATED = 100
 
+# El Score Differential se calcula con el Course Handicap, que es el Playing
+# Handicap sin recortar por formato: el allowance reparte ventaja dentro de una
+# partida, y el WHS mide la vuelta contra el campo, no contra los rivales.
+COURSE_HANDICAP_ALLOWANCE = 100
+
+
+@dataclass(frozen=True)
+class _ComputableRound:
+    """
+    Una vuelta entera ya reducida a lo que las estadísticas necesitan.
+
+    `played_round` va en None cuando la vuelta no se puede convertir en un
+    diferencial (no se sabe desde qué tee se jugó, o sus ratings no son válidos
+    para el WHS). Esa vuelta sigue contando para la media y para el total: lo
+    único que no puede hacer es decir a qué hándicap se jugó.
+    """
+
+    played_on: date_type
+    to_par: int
+    played_round: PlayedRound | None
+
 
 class GetPlayerStatsUseCase:
     """
@@ -36,6 +66,11 @@ class GetPlayerStatsUseCase:
     como del contador de rondas. Media docena de vueltas comparables valen más
     que veinte a medio anotar, y un `rounds_played` que incluyera rondas que no
     entran en la media daría dos números que no cuadran entre sí.
+
+    Sobre esas mismas vueltas se calculan los **Score Differentials** del WHS
+    (BE #167), que dicen a qué hándicap se jugó cada una. Ahí la exigencia es
+    mayor: hace falta saber desde qué tee se jugó, porque sin Slope ni Course
+    Rating no hay diferencial que calcular.
 
     Sigue el patrón de `GetAdminStatsUseCase`: los casos de uso de `user`
     reciben las unidades de trabajo de los módulos que consultan, en lugar de
@@ -53,12 +88,14 @@ class GetPlayerStatsUseCase:
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         stableford_calculator: StablefordCalculator | None = None,
+        differential_calculator: ScoreDifferentialCalculator | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
         self._calculator = stableford_calculator or StablefordCalculator()
+        self._differentials = differential_calculator or ScoreDifferentialCalculator()
 
     async def execute(
         self, user_id: UserId, golf_course_id: GolfCourseId | None = None
@@ -74,9 +111,7 @@ class GetPlayerStatsUseCase:
             user = await self._user_uow.users.find_by_id(user_id)
             handicap = float(user.handicap.value) if user and user.handicap else None
 
-        quick_rounds_to_par = await self._collect_quick_match_rounds(
-            user_id, golf_course_id, handicap
-        )
+        quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
         async with self._competition_uow:
             competition_matches = (
@@ -107,21 +142,36 @@ class GetPlayerStatsUseCase:
                     await self._competition_uow.enrollments.count_active_by_user(user_id)
                 )
 
-        competition_rounds_to_par = await self._collect_competition_rounds(
-            competition_matches, rounds_by_match, scorecards
+        competition_rounds = await self._collect_competition_rounds(
+            user_id, competition_matches, rounds_by_match, scorecards, handicap
         )
 
-        computable_rounds = quick_rounds_to_par + competition_rounds_to_par
-        rounds_played = len(computable_rounds)
-        scoring_avg = self._average_to_par(computable_rounds)
+        # Las dos fuentes llegan ordenadas por su cuenta; el registro del WHS es
+        # cronológico y no distingue de dónde salió cada vuelta
+        computable_rounds = sorted(
+            quick_rounds + competition_rounds, key=lambda item: item.played_on, reverse=True
+        )
+        differentials = self._differentials.differentials(
+            [item.played_round for item in computable_rounds if item.played_round is not None]
+        )
 
         return PlayerStatsResponseDTO(
             handicap=handicap,
-            handicap_trend=None,
-            scoring_avg=scoring_avg,
-            rounds_played=rounds_played,
+            handicap_trend=self._as_float(self._differentials.trend(differentials)),
+            scoring_avg=self._average_to_par([item.to_par for item in computable_rounds]),
+            rounds_played=len(computable_rounds),
             tournaments_total=tournaments_total,
             tournaments_active=tournaments_active,
+            estimated_index=self._as_float(self._differentials.estimated_index(differentials)),
+            playing_avg=self._as_float(self._differentials.playing_average(differentials)),
+            best_differential=self._as_float(self._differentials.best_differential(differentials)),
+            rounds_with_differential=len(differentials),
+            # La serie que se publica es la misma ventana que miran el índice y
+            # la mejor vuelta: publicar más dejaría que un cliente calculase su
+            # propio mínimo sobre vueltas que ninguna otra cifra está contando
+            differentials=[
+                float(value) for value in self._differentials.scoring_record(differentials)
+            ],
         )
 
     async def _collect_quick_match_rounds(
@@ -129,9 +179,9 @@ class GetPlayerStatsUseCase:
         user_id: UserId,
         golf_course_id: GolfCourseId | None,
         profile_handicap: float | None,
-    ) -> list[int]:
+    ) -> list[_ComputableRound]:
         """
-        Neto respecto al par de cada vuelta rápida computable.
+        Vueltas rápidas computables del jugador.
 
         Solo entran las partidas terminadas con la tarjeta entera: una vuelta a
         medias no se puede comparar con una completa, y con el campo borrado no
@@ -141,7 +191,7 @@ class GetPlayerStatsUseCase:
         lo hace por participante: una partida que A ocultó sigue contando para
         B. Esa regla se hereda tal cual en lugar de reimplementarse aquí.
         """
-        results: list[int] = []
+        results: list[_ComputableRound] = []
 
         async with self._quick_match_uow, self._golf_course_uow:
             matches = await self._quick_match_uow.quick_matches.list_for_user(
@@ -175,8 +225,9 @@ class GetPlayerStatsUseCase:
                     HoleSetup(hole.number, hole.par, hole.stroke_index)
                     for hole in course.holes
                 ]
+                handicap = self._effective_handicap(participant, profile_handicap)
                 totals = self._calculator.compute_participant_totals(
-                    handicap=self._effective_handicap(participant, profile_handicap),
+                    handicap=handicap,
                     holes=holes,
                     scores_by_hole=scores_by_hole,
                     allowance_percentage=match.get_effective_allowance(),
@@ -184,9 +235,170 @@ class GetPlayerStatsUseCase:
                     # las dos topara los hoyos malos, no serían comparables
                     cap_at_net_double_bogey=True,
                 )
-                results.append(totals.to_par)
+                results.append(
+                    _ComputableRound(
+                        # No hay campo de cuándo se jugó: la partida rápida se
+                        # crea el mismo día que se juega
+                        played_on=match.created_at.date(),
+                        to_par=totals.to_par,
+                        played_round=self._to_played_round(
+                            course=course,
+                            holes=holes,
+                            scores_by_hole=scores_by_hole,
+                            handicap=handicap,
+                            tee_category=participant.tee_category,
+                            tee_gender=participant.tee_gender,
+                        ),
+                    )
+                )
 
         return results
+
+    async def _collect_competition_rounds(
+        self,
+        user_id: UserId,
+        matches: list,
+        rounds_by_match: dict,
+        scorecards: dict,
+        profile_handicap: float | None,
+    ) -> list[_ComputableRound]:
+        """
+        Vueltas de torneo computables del jugador.
+
+        El formato del partido da igual: en match play también firmas una
+        tarjeta con tus golpes, y esa tarjeta dice a qué nivel jugaste tan bien
+        como la de una vuelta de medal. Solo entran las que estén enteras.
+
+        Se usa `own_score`, no el `net_score` de la entidad: ese solo se calcula
+        cuando el marcador ha validado el hoyo, así que media tarjeta legítima
+        se quedaría fuera por no haberse cerrado la validación cruzada. Los
+        golpes recibidos ya vienen resueltos por hoyo desde que se generó el
+        partido, sin repartirlos aquí otra vez.
+        """
+        results: list[_ComputableRound] = []
+        courses: dict = {}
+
+        async with self._golf_course_uow:
+            for match in matches:
+                round_ = rounds_by_match.get(match.id)
+                course_id = self._match_course(match, rounds_by_match)
+                if round_ is None or course_id is None:
+                    continue
+                if course_id not in courses:
+                    courses[course_id] = await self._golf_course_uow.golf_courses.find_by_id(
+                        course_id
+                    )
+                course = courses[course_id]
+                if course is None:
+                    continue
+
+                hole_scores = scorecards.get(match.id, [])
+                to_par = self._scorecard_to_par(hole_scores, course)
+                if to_par is None:
+                    continue
+
+                player = self._find_match_player(match, user_id)
+                holes = [
+                    HoleSetup(hole.number, hole.par, hole.stroke_index)
+                    for hole in course.holes
+                ]
+                results.append(
+                    _ComputableRound(
+                        played_on=round_.round_date,
+                        to_par=to_par,
+                        played_round=self._to_played_round(
+                            course=course,
+                            holes=holes,
+                            scores_by_hole={
+                                hole_score.hole_number: hole_score.own_score
+                                for hole_score in hole_scores
+                                if hole_score.own_score is not None
+                            },
+                            # El partido guardó el hándicap del jugador cuando
+                            # se generó: una vuelta de hace meses se mide con el
+                            # hándicap que tenía entonces, no con el de hoy
+                            handicap=self._match_player_handicap(player, profile_handicap),
+                            tee_category=player.tee_category if player else None,
+                            tee_gender=player.tee_gender if player else None,
+                        ),
+                    )
+                )
+
+        return results
+
+    # ==================== Diferenciales ====================
+
+    def _to_played_round(
+        self,
+        course,
+        holes: list[HoleSetup],
+        scores_by_hole: dict,
+        handicap: float | None,
+        tee_category,
+        tee_gender,
+    ) -> PlayedRound | None:
+        """
+        La vuelta convertida en materia prima para el diferencial, o None.
+
+        El Adjusted Gross Score se recalcula con el Course Handicap en lugar de
+        reaprovechar el de la media: son dos topes distintos a propósito. La
+        media es una métrica de la casa y usa el hándicap con el que se jugó la
+        partida; el diferencial pretende ser WHS y el WHS ignora el allowance.
+        """
+        tee_rating = self._tee_rating(course, tee_category, tee_gender)
+        if tee_rating is None:
+            return None
+
+        totals = self._calculator.compute_participant_totals(
+            handicap=handicap,
+            holes=holes,
+            scores_by_hole=scores_by_hole,
+            tee_rating=tee_rating,
+            allowance_percentage=COURSE_HANDICAP_ALLOWANCE,
+            cap_at_net_double_bogey=True,
+        )
+        return PlayedRound(
+            adjusted_gross_score=totals.adjusted_gross_strokes, tee_rating=tee_rating
+        )
+
+    @staticmethod
+    def _tee_rating(course, tee_category, tee_gender) -> TeeRating | None:
+        """
+        Ratings del tee que se jugó, o None si no se puede saber.
+
+        El tee se identifica por categoría y género, que es su clave única en el
+        campo: los tees no tienen id propio. El par no vive en el tee, sale de
+        sumar los hoyos.
+
+        Un tee cuyos ratings no entran en los límites del WHS devuelve None en
+        lugar de propagar el error: el catálogo de campos admite un rango de
+        Course Rating más ancho que el que el sistema acepta para calcular, y
+        una estadística no es motivo para tumbar la respuesta entera.
+        """
+        if tee_category is None:
+            return None
+
+        tee = next(
+            (
+                candidate
+                for candidate in course.tees
+                if candidate.category == tee_category and candidate.gender == tee_gender
+            ),
+            None,
+        )
+        if tee is None:
+            return None
+
+        try:
+            return TeeRating(
+                course_rating=Decimal(str(tee.course_rating)),
+                slope_rating=tee.slope_rating,
+                par=sum(hole.par for hole in course.holes),
+            )
+        except ValueError:
+            return None
+
+    # ==================== Lectura de tarjetas ====================
 
     @staticmethod
     def _is_full_scorecard(scores_by_hole: dict, course) -> bool:
@@ -202,8 +414,8 @@ class GetPlayerStatsUseCase:
         """
         La ronda de cada partido, una consulta por ronda distinta.
 
-        Hace falta para dos cosas que el partido no sabe por sí solo: en qué
-        campo se jugó y con qué pares se compara su tarjeta.
+        Hace falta para tres cosas que el partido no sabe por sí solo: en qué
+        campo se jugó, con qué pares se compara su tarjeta y qué día fue.
         """
         rounds: dict = {}
         by_match: dict = {}
@@ -219,44 +431,6 @@ class GetPlayerStatsUseCase:
     def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
         round_ = rounds_by_match.get(match.id)
         return round_.golf_course_id if round_ is not None else None
-
-    async def _collect_competition_rounds(
-        self, matches: list, rounds_by_match: dict, scorecards: dict
-    ) -> list[int]:
-        """
-        Neto respecto al par de cada tarjeta de torneo.
-
-        El formato del partido da igual: en match play también firmas una
-        tarjeta con tus golpes, y esa tarjeta dice a qué nivel jugaste tan bien
-        como la de una vuelta de medal. Solo entran las que estén enteras.
-
-        Se usa `own_score`, no el `net_score` de la entidad: ese solo se calcula
-        cuando el marcador ha validado el hoyo, así que media tarjeta legítima
-        se quedaría fuera por no haberse cerrado la validación cruzada. Los
-        golpes recibidos ya vienen resueltos por hoyo desde que se generó el
-        partido, sin repartirlos aquí otra vez.
-        """
-        results: list[int] = []
-        courses: dict = {}
-
-        async with self._golf_course_uow:
-            for match in matches:
-                course_id = self._match_course(match, rounds_by_match)
-                if course_id is None:
-                    continue
-                if course_id not in courses:
-                    courses[course_id] = await self._golf_course_uow.golf_courses.find_by_id(
-                        course_id
-                    )
-                course = courses[course_id]
-                if course is None:
-                    continue
-
-                to_par = self._scorecard_to_par(scorecards.get(match.id, []), course)
-                if to_par is not None:
-                    results.append(to_par)
-
-        return results
 
     def _scorecard_to_par(self, hole_scores: list, course) -> int | None:
         """
@@ -287,10 +461,24 @@ class GetPlayerStatsUseCase:
 
         return to_par
 
+    # ==================== Jugadores y hándicaps ====================
+
     @staticmethod
     def _find_participant(match, user_id: UserId):
         return next(
             (p for p in match.participants if p.user_id is not None and p.user_id == user_id),
+            None,
+        )
+
+    @staticmethod
+    def _find_match_player(match, user_id: UserId):
+        """El jugador dentro del partido, mire en el equipo que mire."""
+        return next(
+            (
+                player
+                for player in (*match.team_a_players, *match.team_b_players)
+                if player.user_id == user_id
+            ),
             None,
         )
 
@@ -309,8 +497,27 @@ class GetPlayerStatsUseCase:
         return profile_handicap
 
     @staticmethod
+    def _match_player_handicap(player, profile_handicap: float | None) -> float | None:
+        """
+        Hándicap del jugador en ese partido de torneo.
+
+        `MatchPlayer.player_handicap` es una foto del hándicap en el momento de
+        generar el partido, que es exactamente lo que el WHS quiere para medir
+        una vuelta antigua. Cuando falta, no queda más que el del perfil.
+        """
+        if player is not None and player.player_handicap is not None:
+            return float(player.player_handicap)
+        return profile_handicap
+
+    # ==================== Agregación ====================
+
+    @staticmethod
     def _average_to_par(rounds_to_par: list[int]) -> float | None:
         """None sin rondas: no hay media que dar, que no es una media de cero."""
         if not rounds_to_par:
             return None
         return round(sum(rounds_to_par) / len(rounds_to_par), 1)
+
+    @staticmethod
+    def _as_float(value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
