@@ -28,7 +28,6 @@ class MatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    @abstractmethod
     async def find_completed_for_player(
         self, user_id: UserId, limit: int | None = None
     ) -> list[Match]:

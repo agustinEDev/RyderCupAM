@@ -1,0 +1,488 @@
+"""Caso de Uso: historial reciente de partidas de un jugador (BE #128)."""
+
+from dataclasses import dataclass, field
+from datetime import date as date_type
+
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
+    QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.services.stableford_calculator import (
+    HoleSetup,
+    StablefordCalculator,
+)
+from src.modules.quick_match.domain.value_objects.quick_match_participant import (
+    QuickMatchParticipant,
+)
+from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
+from src.modules.user.application.dto.player_stats_dto import (
+    RecentMatchDTO,
+    RecentMatchesResponseDTO,
+)
+from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.repositories.user_unit_of_work_interface import (
+    UserUnitOfWorkInterface,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+
+DEFAULT_LIMIT = 10
+TOTAL_HOLES = 18
+
+# Cómo queda el partido para quien pregunta, no para el equipo A
+RESULT_WON = "WON"
+RESULT_LOST = "LOST"
+RESULT_HALVED = "HALVED"
+HALVED_WINNER = "HALVED"
+
+
+@dataclass
+class _QuickMatchRaw:
+    """Lo leído de una partida rápida antes de resolver nombres y campo."""
+
+    match: QuickMatch
+    participant: QuickMatchParticipant
+    scores_by_participant: dict = field(default_factory=dict)
+
+
+@dataclass
+class _CompetitionMatchRaw:
+    """Lo leído de un partido de torneo antes de resolver nombres y campo."""
+
+    match: Match
+    round_: Round
+    tournament_name: str | None
+
+
+class GetRecentMatchesUseCase:
+    """
+    Historial de partidas del jugador, unificando torneo y partida rápida.
+
+    Son dos cosas distintas puestas en una misma lista: un partido de torneo se
+    juega por hoyos contra un rival y termina en "3&2"; una partida rápida libre
+    se juega contra el par y termina en "+4" o en puntos Stableford. El DTO deja
+    en `None` lo que no aplica a cada una en lugar de inventar equivalencias.
+
+    Cada fuente se lee en su propia unidad de trabajo y solo después se resuelven
+    nombres de jugadores y campos, en bloque: así una lista de diez partidas no
+    dispara una consulta por participante.
+    """
+
+    def __init__(
+        self,
+        user_uow: UserUnitOfWorkInterface,
+        competition_uow: CompetitionUnitOfWorkInterface,
+        quick_match_uow: QuickMatchUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
+        stableford_calculator: StablefordCalculator | None = None,
+        scoring_service: ScoringService | None = None,
+    ):
+        self._user_uow = user_uow
+        self._competition_uow = competition_uow
+        self._quick_match_uow = quick_match_uow
+        self._golf_course_uow = golf_course_uow
+        self._calculator = stableford_calculator or StablefordCalculator()
+        self._scoring_service = scoring_service or ScoringService()
+
+    async def execute(
+        self, user_id: UserId, limit: int = DEFAULT_LIMIT
+    ) -> RecentMatchesResponseDTO:
+        """
+        Últimas `limit` partidas del jugador, de la más reciente a la más antigua.
+
+        Se piden `limit` de cada fuente y se recorta después de mezclarlas: no se
+        sabe de qué lado caen las más recientes hasta tenerlas todas.
+        """
+        quick_raws = await self._read_quick_matches(user_id, limit)
+        competition_raws = await self._read_competition_matches(user_id, limit)
+
+        users_by_id = await self._load_users(user_id, quick_raws, competition_raws)
+        courses_by_id = await self._load_golf_courses(quick_raws, competition_raws)
+
+        player = users_by_id.get(user_id)
+        profile_handicap = float(player.handicap.value) if player and player.handicap else None
+
+        entries = [
+            self._to_quick_match_dto(raw, users_by_id, courses_by_id, profile_handicap)
+            for raw in quick_raws
+        ] + [
+            self._to_competition_match_dto(raw, user_id, users_by_id, courses_by_id)
+            for raw in competition_raws
+        ]
+
+        # Una partida sin fecha resoluble se va al final en lugar de romper el orden
+        entries.sort(key=lambda entry: entry.date or date_type.min, reverse=True)
+        return RecentMatchesResponseDTO(matches=entries[:limit])
+
+    # ==================== Lectura ====================
+
+    async def _read_quick_matches(self, user_id: UserId, limit: int) -> list[_QuickMatchRaw]:
+        """
+        Partidas rápidas terminadas del jugador, con sus scores.
+
+        `list_for_user` ya descarta las que este jugador ocultó (#127), y solo
+        para él: una partida que A ocultó sigue en el historial de B.
+        """
+        raws: list[_QuickMatchRaw] = []
+
+        async with self._quick_match_uow:
+            matches = await self._quick_match_uow.quick_matches.list_for_user(
+                user_id, status=QuickMatchStatus.COMPLETED, limit=limit
+            )
+
+            for match in matches:
+                participant = self._find_participant(match, user_id)
+                if participant is None:
+                    continue
+
+                hole_scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(
+                    match.id
+                )
+                scores_by_participant: dict = {}
+                for hole_score in hole_scores:
+                    scores_by_participant.setdefault(hole_score.participant_id, {})[
+                        hole_score.hole_number
+                    ] = hole_score.score
+
+                raws.append(
+                    _QuickMatchRaw(
+                        match=match,
+                        participant=participant,
+                        scores_by_participant=scores_by_participant,
+                    )
+                )
+
+        return raws
+
+    async def _read_competition_matches(
+        self, user_id: UserId, limit: int
+    ) -> list[_CompetitionMatchRaw]:
+        """
+        Partidos de torneo terminados del jugador, con su ronda y su torneo.
+
+        La fecha y el campo viven en la ronda, y el nombre del torneo en la
+        competición: un partido por sí solo no sabe cuándo ni dónde se jugó.
+        """
+        raws: list[_CompetitionMatchRaw] = []
+        rounds_cache: dict = {}
+        competition_names: dict = {}
+
+        async with self._competition_uow:
+            matches = await self._competition_uow.matches.find_completed_for_player(
+                user_id, limit=limit
+            )
+
+            for match in matches:
+                if match.round_id not in rounds_cache:
+                    rounds_cache[match.round_id] = await self._competition_uow.rounds.find_by_id(
+                        match.round_id
+                    )
+                round_ = rounds_cache[match.round_id]
+                if round_ is None:
+                    continue
+
+                if round_.competition_id not in competition_names:
+                    competition = await self._competition_uow.competitions.find_by_id(
+                        round_.competition_id
+                    )
+                    competition_names[round_.competition_id] = (
+                        competition.name.value if competition else None
+                    )
+
+                raws.append(
+                    _CompetitionMatchRaw(
+                        match=match,
+                        round_=round_,
+                        tournament_name=competition_names[round_.competition_id],
+                    )
+                )
+
+        return raws
+
+    async def _load_users(
+        self,
+        user_id: UserId,
+        quick_raws: list[_QuickMatchRaw],
+        competition_raws: list[_CompetitionMatchRaw],
+    ) -> dict[UserId, User]:
+        """Todos los jugadores que aparecen en el historial, en una sola consulta."""
+        user_ids = {user_id}
+        for quick_raw in quick_raws:
+            user_ids.update(
+                p.user_id for p in quick_raw.match.participants if p.user_id is not None
+            )
+        for competition_raw in competition_raws:
+            user_ids.update(
+                player.user_id
+                for player in (
+                    *competition_raw.match.team_a_players,
+                    *competition_raw.match.team_b_players,
+                )
+            )
+
+        async with self._user_uow:
+            users = await self._user_uow.users.find_by_ids(list(user_ids))
+        return {user.id: user for user in users if user.id is not None}
+
+    async def _load_golf_courses(
+        self,
+        quick_raws: list[_QuickMatchRaw],
+        competition_raws: list[_CompetitionMatchRaw],
+    ) -> dict[GolfCourseId, GolfCourse]:
+        """Campos jugados, uno por id distinto y no uno por partida."""
+        course_ids = {raw.match.golf_course_id for raw in quick_raws}
+        course_ids.update(raw.round_.golf_course_id for raw in competition_raws)
+
+        courses: dict[GolfCourseId, GolfCourse] = {}
+        async with self._golf_course_uow:
+            for course_id in course_ids:
+                course = await self._golf_course_uow.golf_courses.find_by_id(course_id)
+                if course is not None:
+                    courses[course_id] = course
+        return courses
+
+    # ==================== Mapeo ====================
+
+    def _to_quick_match_dto(
+        self,
+        raw: _QuickMatchRaw,
+        users_by_id: dict[UserId, User],
+        courses_by_id: dict[GolfCourseId, GolfCourse],
+        profile_handicap: float | None,
+    ) -> RecentMatchDTO:
+        match = raw.match
+        course = courses_by_id.get(match.golf_course_id)
+        partners, opponents = self._quick_match_rivals(match, raw.participant, users_by_id)
+
+        result = None
+        score = None
+        stableford_points = None
+
+        if match.match_format is not None:
+            result, score = self._quick_match_play_outcome(raw)
+        else:
+            totals = self._participant_totals(raw, course, profile_handicap)
+            if totals is not None:
+                if match.scoring_format == ScoringFormat.STABLEFORD:
+                    stableford_points = totals.stableford_points
+                    score = f"{totals.stableford_points} pts"
+                else:
+                    score = self._calculator.format_to_par(totals.to_par)
+
+        return RecentMatchDTO(
+            id=str(match.id.value),
+            # Una partida rápida no guarda cuándo se jugó, solo cuándo se creó:
+            # se juegan del tirón, así que la fecha de creación es la del juego
+            date=match.created_at.date(),
+            match_format=match.match_format.value if match.match_format else None,
+            scoring_format=match.scoring_format.value if match.scoring_format else None,
+            golf_course_id=str(match.golf_course_id.value),
+            golf_course_name=course.name if course else None,
+            tournament_name=None,
+            result=result,
+            score=score,
+            stableford_points=stableford_points,
+            partners=partners,
+            opponents=opponents,
+        )
+
+    def _to_competition_match_dto(
+        self,
+        raw: _CompetitionMatchRaw,
+        user_id: UserId,
+        users_by_id: dict[UserId, User],
+        courses_by_id: dict[GolfCourseId, GolfCourse],
+    ) -> RecentMatchDTO:
+        match = raw.match
+        course = courses_by_id.get(raw.round_.golf_course_id)
+
+        in_team_a = any(player.user_id == user_id for player in match.team_a_players)
+        own_team, rival_team = (
+            (match.team_a_players, match.team_b_players)
+            if in_team_a
+            else (match.team_b_players, match.team_a_players)
+        )
+        partners = [
+            self._user_name(player.user_id, users_by_id)
+            for player in own_team
+            if player.user_id != user_id
+        ]
+        opponents = [self._user_name(player.user_id, users_by_id) for player in rival_team]
+
+        return RecentMatchDTO(
+            id=str(match.id.value),
+            date=raw.round_.round_date,
+            match_format=raw.round_.match_format.value,
+            # Un partido de torneo se juega siempre por hoyos: el eje MEDAL /
+            # STABLEFORD es de las partidas rápidas y aquí no aplica
+            scoring_format=None,
+            golf_course_id=str(raw.round_.golf_course_id.value),
+            golf_course_name=course.name if course else None,
+            tournament_name=raw.tournament_name,
+            result=self._result_for_team(match.get_winner(), "A" if in_team_a else "B"),
+            score=match.result.get("score") if match.result else None,
+            stableford_points=None,
+            partners=partners,
+            opponents=opponents,
+        )
+
+    # ==================== Cálculo ====================
+
+    def _quick_match_play_outcome(self, raw: _QuickMatchRaw) -> tuple[str | None, str | None]:
+        """
+        Cómo quedó una partida rápida por equipos, desde el lado del jugador.
+
+        El resultado no está guardado en ningún sitio: se recalcula hoyo a hoyo
+        con el mismo motor que usa el detalle de la partida. Solo cuentan los
+        hoyos donde anotaron los dos bandos, porque un hoyo a medias no se puede
+        adjudicar.
+        """
+        rosters = raw.match.team_rosters()
+        if rosters is None:
+            return None, None
+        team_a_ids, team_b_ids = rosters
+
+        hole_results = []
+        for hole_number in range(1, TOTAL_HOLES + 1):
+            scores = {
+                participant_id: holes[hole_number]
+                for participant_id, holes in raw.scores_by_participant.items()
+                if hole_number in holes
+            }
+            if not all(pid in scores for pid in team_a_ids | team_b_ids):
+                continue
+            hole_results.append(
+                self._scoring_service.calculate_hole_winner(
+                    [scores[pid] for pid in team_a_ids],
+                    [scores[pid] for pid in team_b_ids],
+                    raw.match.match_format,
+                )
+            )
+
+        if not hole_results:
+            return None, None
+
+        own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
+        standing = self._scoring_service.calculate_match_standing(hole_results)
+
+        if self._scoring_service.is_match_decided(standing):
+            # Se cerró antes del 18: el resultado va en "3&2", ventaja y hoyos
+            # que quedaban
+            outcome = self._scoring_service.format_decided_result(hole_results)
+            return self._result_for_team(outcome["winner"], own_team), outcome["score"]
+
+        if standing["leading_team"] is None:
+            return RESULT_HALVED, "AS"
+
+        # Terminado sin decidirse antes de tiempo: la ventaja tal cual ("2UP").
+        # No vale `format_decided_result` aquí: inventaría un "2&7" con los hoyos
+        # que quedaban sin anotar, como si el partido se hubiera cerrado en ellos
+        return (
+            self._result_for_team(standing["leading_team"], own_team),
+            standing["status"],
+        )
+
+    def _participant_totals(
+        self,
+        raw: _QuickMatchRaw,
+        course: GolfCourse | None,
+        profile_handicap: float | None,
+    ):
+        """Puntos y golpes del jugador en una partida libre; None si no hay con qué."""
+        if course is None:
+            return None
+
+        scores_by_hole = raw.scores_by_participant.get(raw.participant.participant_id)
+        if not scores_by_hole:
+            return None
+
+        holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in course.holes]
+        return self._calculator.compute_participant_totals(
+            handicap=self._effective_handicap(raw.participant, profile_handicap),
+            holes=holes,
+            scores_by_hole=scores_by_hole,
+            allowance_percentage=raw.match.get_effective_allowance(),
+        )
+
+    def _quick_match_rivals(
+        self,
+        match: QuickMatch,
+        participant: QuickMatchParticipant,
+        users_by_id: dict[UserId, User],
+    ) -> tuple[list[str], list[str]]:
+        """
+        Con quién jugó y contra quién.
+
+        En partido libre no hay bandos: se juega la clasificación individual, de
+        modo que los demás son rivales y no compañeros.
+        """
+        others = [p for p in match.participants if p.participant_id != participant.participant_id]
+        if match.match_format is None:
+            return [], [self._participant_name(p, users_by_id) for p in others]
+
+        rosters = match.team_rosters()
+        if rosters is None:
+            return [], [self._participant_name(p, users_by_id) for p in others]
+        team_a_ids, _ = rosters
+
+        in_team_a = participant.participant_id in team_a_ids
+        partners: list[str] = []
+        opponents: list[str] = []
+        for other in others:
+            same_team = (other.participant_id in team_a_ids) == in_team_a
+            (partners if same_team else opponents).append(
+                self._participant_name(other, users_by_id)
+            )
+        return partners, opponents
+
+    # ==================== Helpers ====================
+
+    @staticmethod
+    def _result_for_team(winner: str | None, own_team: str) -> str | None:
+        """Traduce el ganador del partido ("A"/"B"/"HALVED") al lado del jugador."""
+        if winner is None:
+            return None
+        if winner == HALVED_WINNER:
+            return RESULT_HALVED
+        return RESULT_WON if winner == own_team else RESULT_LOST
+
+    @staticmethod
+    def _find_participant(match: QuickMatch, user_id: UserId) -> QuickMatchParticipant | None:
+        return next(
+            (p for p in match.participants if p.user_id is not None and p.user_id == user_id),
+            None,
+        )
+
+    @staticmethod
+    def _user_name(user_id: UserId, users_by_id: dict[UserId, User]) -> str:
+        user = users_by_id.get(user_id)
+        return f"{user.first_name} {user.last_name}" if user else "Unknown"
+
+    @classmethod
+    def _participant_name(
+        cls, participant: QuickMatchParticipant, users_by_id: dict[UserId, User]
+    ) -> str:
+        """Un invitado trae su nombre dentro de la partida; un registrado, en su perfil."""
+        if participant.is_guest:
+            return f"{participant.first_name} {participant.last_name}"
+        return cls._user_name(participant.user_id, users_by_id)
+
+    @staticmethod
+    def _effective_handicap(
+        participant: QuickMatchParticipant, profile_handicap: float | None
+    ) -> float | None:
+        """Override manual del creador si lo hay, y si no el hándicap del perfil."""
+        if participant.custom_handicap is not None:
+            return participant.custom_handicap
+        return profile_handicap
