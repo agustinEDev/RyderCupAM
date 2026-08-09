@@ -50,6 +50,7 @@ class ParticipantTotals:
     net_strokes: int
     par_played: int
     holes_played: int
+    adjusted_gross_strokes: int
 
     @property
     def to_par(self) -> int:
@@ -160,6 +161,10 @@ class StablefordCalculator:
         partida enseña los golpes que se dieron, no los que puntúan; lo encienden
         las estadísticas agregadas, donde un hoyo suelto no debe pesar más que
         una temporada.
+
+        `adjusted_gross_strokes` sale siempre topado, mire o no `net_strokes` al
+        tope: es el Adjusted Gross Score del WHS, que por definición lo lleva, y
+        de él sale el Score Differential de la vuelta (BE #167).
         """
         strokes_basis = self.resolve_strokes_basis(handicap, tee_rating, allowance_percentage)
 
@@ -168,6 +173,7 @@ class StablefordCalculator:
         net_strokes = 0
         par_played = 0
         holes_played = 0
+        adjusted_gross_strokes = 0
 
         for hole in holes:
             score = scores_by_hole.get(hole.hole_number)
@@ -177,11 +183,9 @@ class StablefordCalculator:
             strokes_received = self.allocate_strokes(strokes_basis, hole.stroke_index)
             stableford_points += self.hole_points(score, hole.par, strokes_received)
             total_strokes += score
-            computable = (
-                self.adjusted_gross(score, hole.par, strokes_received)
-                if cap_at_net_double_bogey
-                else score
-            )
+            adjusted = self.adjusted_gross(score, hole.par, strokes_received)
+            adjusted_gross_strokes += adjusted
+            computable = adjusted if cap_at_net_double_bogey else score
             net_strokes += computable - strokes_received
             par_played += hole.par
             holes_played += 1
@@ -192,6 +196,7 @@ class StablefordCalculator:
             net_strokes=net_strokes,
             par_played=par_played,
             holes_played=holes_played,
+            adjusted_gross_strokes=adjusted_gross_strokes,
         )
 
     @staticmethod
