@@ -148,6 +148,8 @@ async def _played_quick_match(
     strokes_per_hole: int = 4,
     others=(),
     holes_played: int = 18,
+    tee_category: TeeCategory | None = None,
+    tee_gender: Gender | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -155,12 +157,18 @@ async def _played_quick_match(
     `create()` mete al creador como primer participante, así que su
     `participant_id` se lee de la entidad en vez de construirlo aquí.
     `holes_played` deja la tarjeta a medias.
+
+    Sin `tee_category` la partida no dice desde dónde se jugó, que es el caso
+    de las partidas anteriores a que el frontend empezara a exigir el tee: esas
+    cuentan para la media pero no generan diferencial.
     """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
         creator_id=user.id,
         golf_course_id=golf_course.id,
         scoring_format=ScoringFormat.MEDAL,
+        creator_tee_category=tee_category,
+        creator_tee_gender=tee_gender,
     )
     for participant in others:
         match.add_participant(participant)
@@ -677,3 +685,325 @@ class TestHiddenMatches:
 
         assert (await use_case.execute(hider.id)).rounds_played == 0
         assert (await use_case.execute(other.id)).rounds_played == 1
+
+
+class TestScoreDifferentials:
+    """
+    Score Differentials y el índice estimado (BE #167).
+
+    El campo de estas pruebas es par 72 con dos tees: AMATEUR (CR 70.0, slope
+    125) y CHAMPIONSHIP (CR 72.0, slope 130). Los números esperados están
+    calculados a mano con la fórmula del WHS, no copiados de la implementación:
+    son la única defensa real contra que el cálculo se tuerza en silencio.
+    """
+
+    async def test_a_round_from_a_known_tee_yields_its_differential(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        18 hoyos a 5 golpes son 90 brutos. El jugador de 10 recibe un golpe en
+        los nueve hoyos más difíciles, así que ningún hoyo llega a su doble
+        bogey neto y los golpes ajustados siguen siendo 90.
+
+        Diferencial = (113 / 125) x (90 - 70.0) = 18.08 -> 18.1
+        """
+        player = await create_user(user_uow, unique_email("diff"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.differentials == [18.1]
+        assert stats.rounds_with_differential == 1
+        assert stats.best_differential == 18.1
+
+    async def test_the_same_round_is_worth_more_from_a_harder_tee(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Mismos 90 golpes desde CHAMPIONSHIP (CR 72.0, slope 130):
+        (113 / 130) x (90 - 72.0) = 15.646... -> 15.6
+
+        Es la razón de ser del diferencial: sin él, dos vueltas de 90 en campos
+        distintos parecerían el mismo juego.
+        """
+        player = await create_user(user_uow, unique_email("hardtee"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_category=TeeCategory.CHAMPIONSHIP,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.differentials == [15.6]
+
+    async def test_a_disastrous_round_is_capped_at_net_double_bogey(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Ocho golpes en cada hoyo son 144 brutos, pero el WHS solo deja computar
+        hasta el doble bogey neto: 7 en los nueve hoyos donde recibe golpe y 6
+        en el resto, o sea 117 ajustados.
+
+        Diferencial = (113 / 125) x (117 - 70.0) = 42.488 -> 42.5, no el 66.9
+        que saldría sin topar. Ese tope es justo lo que impide que un día
+        horrible marque el hándicap de una temporada.
+        """
+        player = await create_user(user_uow, unique_email("capped"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=8,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.differentials == [42.5]
+
+    async def test_a_round_without_a_known_tee_counts_but_has_no_differential(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Sin tee no hay Slope ni Course Rating, así que no hay diferencial que
+        calcular. La vuelta sigue contando para la media: lo que no puede es
+        decir a qué hándicap se jugó.
+        """
+        player = await create_user(user_uow, unique_email("notee"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(qm_uow, course, player, strokes_per_hole=5)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 1
+        assert stats.rounds_with_differential == 0
+        assert stats.differentials == []
+        assert stats.scoring_avg is not None
+
+    async def test_the_two_counters_diverge_when_only_some_rounds_have_a_tee(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El caso que obliga a publicar los dos números: el índice se calcula
+        sobre menos vueltas de las que el jugador ha jugado, y sin decirlo
+        parecería que las mira todas.
+        """
+        player = await create_user(user_uow, unique_email("mixed"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+        await _played_quick_match(qm_uow, course, player, strokes_per_hole=5)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 2
+        assert stats.rounds_with_differential == 1
+
+    async def test_no_index_below_three_rounds(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Dos vueltas dan un número, pero sería ruido con aspecto de dato."""
+        player = await create_user(user_uow, unique_email("tworounds"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        for _ in range(2):
+            await _played_quick_match(
+                qm_uow,
+                course,
+                player,
+                strokes_per_hole=5,
+                tee_category=TeeCategory.AMATEUR,
+                tee_gender=Gender.MALE,
+            )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_with_differential == 2
+        assert stats.estimated_index is None
+        assert stats.playing_avg == 18.1
+
+    async def test_three_rounds_give_the_best_one_minus_two(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Tres vueltas de 18.1: la mejor menos el ajuste de la tabla WHS."""
+        player = await create_user(user_uow, unique_email("threerounds"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        for _ in range(3):
+            await _played_quick_match(
+                qm_uow,
+                course,
+                player,
+                strokes_per_hole=5,
+                tee_category=TeeCategory.AMATEUR,
+                tee_gender=Gender.MALE,
+            )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.estimated_index == 16.1
+
+    async def test_a_tournament_round_also_yields_a_differential(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El tee de torneo va en el `MatchPlayer`, no en el participante, pero la
+        vuelta se mide igual: el formato del partido no cambia lo que dice la
+        tarjeta.
+        """
+        player = await create_user(user_uow, unique_email("tourney"), handicap=10.0)
+        rival = await create_user(user_uow, unique_email("rival"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow, course, player, rival, strokes_per_hole=5
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.differentials == [18.1]
+
+    async def test_differentials_come_newest_first_across_both_sources(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El registro del WHS es cronológico y no distingue de dónde salió cada
+        vuelta. La partida rápida se juega hoy; el torneo, en junio.
+        """
+        player = await create_user(user_uow, unique_email("ordered"), handicap=10.0)
+        rival = await create_user(user_uow, unique_email("rival2"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            round_date=date(2026, 6, 1),
+        )
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=6,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        # La de hoy (108 golpes -> 34.4) antes que la de junio (90 -> 18.1)
+        assert stats.differentials == [34.4, 18.1]
+        assert stats.best_differential == 18.1
+
+    async def test_no_trend_without_ten_rounds_to_compare(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Con menos de dos ventanas, la "tendencia" sería la diferencia entre dos
+        vueltas sueltas, que es cualquier cosa menos una tendencia.
+        """
+        player = await create_user(user_uow, unique_email("notrend"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        for _ in range(3):
+            await _played_quick_match(
+                qm_uow,
+                course,
+                player,
+                strokes_per_hole=5,
+                tee_category=TeeCategory.AMATEUR,
+                tee_gender=Gender.MALE,
+            )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.handicap_trend is None
+
+    async def test_a_player_with_no_rounds_gets_nulls_and_empty_series(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Nada que enseñar no es un cero: son huecos, y se dicen como tales."""
+        player = await create_user(user_uow, unique_email("empty"), handicap=10.0)
+        await create_golf_course(golf_course_uow, player.id)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.estimated_index is None
+        assert stats.playing_avg is None
+        assert stats.best_differential is None
+        assert stats.handicap_trend is None
+        assert stats.differentials == []
+        assert stats.rounds_with_differential == 0
+
+    async def test_the_course_filter_also_narrows_the_differentials(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El desglose por campo tiene que ser coherente consigo mismo: si la
+        vuelta no entra en la media de ese campo, tampoco en su índice.
+        """
+        player = await create_user(user_uow, unique_email("bycourse"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        other_course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+        await _played_quick_match(
+            qm_uow,
+            other_course,
+            player,
+            strokes_per_hole=8,
+            tee_category=TeeCategory.AMATEUR,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id, golf_course_id=course.id
+        )
+
+        assert stats.differentials == [18.1]

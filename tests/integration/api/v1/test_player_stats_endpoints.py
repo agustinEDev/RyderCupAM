@@ -31,14 +31,25 @@ async def _approved_golf_course(client: AsyncClient, admin: dict, creator: dict)
 
 
 async def _played_medal_match(
-    client: AsyncClient, player: dict, golf_course_id: str, strokes_per_hole: int = 5
+    client: AsyncClient,
+    player: dict,
+    golf_course_id: str,
+    strokes_per_hole: int = 5,
+    tee_category: str | None = None,
+    tee_gender: str | None = None,
 ) -> str:
-    """Una partida libre MEDAL terminada con la vuelta entera anotada."""
+    """
+    Una partida libre MEDAL terminada con la vuelta entera anotada.
+
+    Sin tee la vuelta cuenta para la media pero no genera diferencial: no hay
+    Slope ni Course Rating con los que calcularlo.
+    """
     set_auth_cookies(client, player["cookies"])
-    create_response = await client.post(
-        "/api/v1/quick-matches",
-        json={"golf_course_id": golf_course_id, "scoring_format": "MEDAL"},
-    )
+    payload: dict = {"golf_course_id": golf_course_id, "scoring_format": "MEDAL"}
+    if tee_category is not None:
+        payload["creator_tee_category"] = tee_category
+        payload["creator_tee_gender"] = tee_gender
+    create_response = await client.post("/api/v1/quick-matches", json=payload)
     assert create_response.status_code == 201, create_response.text
     quick_match_id = create_response.json()["id"]
     participant_id = create_response.json()["participants"][0]["participant_id"]
@@ -237,3 +248,94 @@ class TestHiddenMatches:
         assert stats.json()["rounds_played"] == 0
         assert stats.json()["scoring_avg"] is None
         assert feed.json()["matches"] == []
+
+
+class TestScoreDifferentials:
+    """
+    El hándicap al que el jugador está jugando (BE #167).
+
+    El campo de estas pruebas es par 72, y su tee AMATEUR/MALE tiene Course
+    Rating 70.2 y Slope 128.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_round_from_a_known_tee_yields_its_differential(
+        self, client: AsyncClient
+    ):
+        """
+        18 hoyos a 5 golpes, sin hándicap en el perfil, son 90 golpes ajustados
+        (ningún hoyo llega a doble bogey neto).
+
+        Diferencial = (113 / 128) x (90 - 70.2) = 17.4796... -> 17.5
+        """
+        admin = await create_admin_user(
+            client, "stats_diff_admin@test.com", "P@ssw0rd123!", "Diff", "Admin"
+        )
+        player = await create_authenticated_user(
+            client, "stats_diff@test.com", "P@ssw0rd123!", "Diff", "Player"
+        )
+        course_id = await _approved_golf_course(client, admin, player)
+        await _played_medal_match(
+            client, player, course_id, tee_category="AMATEUR", tee_gender="MALE"
+        )
+
+        set_auth_cookies(client, player["cookies"])
+        body = (await client.get("/api/v1/users/me/stats")).json()
+
+        assert body["differentials"] == [17.5]
+        assert body["best_differential"] == 17.5
+        assert body["playing_avg"] == 17.5
+        assert body["rounds_with_differential"] == 1
+        # Una sola vuelta no da índice: el WHS pide 54 hoyos
+        assert body["estimated_index"] is None
+        assert body["handicap_trend"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_round_without_a_tee_counts_but_has_no_differential(
+        self, client: AsyncClient
+    ):
+        """
+        Las partidas creadas antes de que el frontend exigiera el tee siguen
+        contando para la media. Los dos contadores dejan verlo.
+        """
+        admin = await create_admin_user(
+            client, "stats_notee_admin@test.com", "P@ssw0rd123!", "NoTee", "Admin"
+        )
+        player = await create_authenticated_user(
+            client, "stats_notee@test.com", "P@ssw0rd123!", "NoTee", "Player"
+        )
+        course_id = await _approved_golf_course(client, admin, player)
+        await _played_medal_match(client, player, course_id)
+
+        set_auth_cookies(client, player["cookies"])
+        body = (await client.get("/api/v1/users/me/stats")).json()
+
+        assert body["rounds_played"] == 1
+        assert body["scoring_avg"] == 18.0
+        assert body["rounds_with_differential"] == 0
+        assert body["differentials"] == []
+        assert body["estimated_index"] is None
+
+    @pytest.mark.asyncio
+    async def test_three_rounds_publish_an_estimated_index(self, client: AsyncClient):
+        """
+        Con tres vueltas ya hay índice: la mejor menos 2.0, que es lo que manda
+        la tabla del WHS cuando la muestra es tan pequeña.
+        """
+        admin = await create_admin_user(
+            client, "stats_index_admin@test.com", "P@ssw0rd123!", "Index", "Admin"
+        )
+        player = await create_authenticated_user(
+            client, "stats_index@test.com", "P@ssw0rd123!", "Index", "Player"
+        )
+        course_id = await _approved_golf_course(client, admin, player)
+        for _ in range(3):
+            await _played_medal_match(
+                client, player, course_id, tee_category="AMATEUR", tee_gender="MALE"
+            )
+
+        set_auth_cookies(client, player["cookies"])
+        body = (await client.get("/api/v1/users/me/stats")).json()
+
+        assert body["rounds_with_differential"] == 3
+        assert body["estimated_index"] == 15.5

@@ -20,20 +20,63 @@ class PlayerStatsResponseDTO(BaseModel):
     Cada hoyo va topado en el net double bogey (Regla WHS 3.1). Va en None
     cuando no hay ninguna vuelta computable, que no es lo mismo que una media
     de cero.
+
+    Los campos de diferencial (BE #167) se calculan sobre un subconjunto de
+    esas vueltas: solo las jugadas desde un tee conocido, porque sin Slope ni
+    Course Rating no hay diferencial. De ahí que `rounds_with_differential`
+    pueda ser menor que `rounds_played`; la interfaz debería decirlo cuando no
+    coincidan, en lugar de dar a entender que el índice mira todas las vueltas.
+
+    **El índice estimado no es el oficial de la federación.** Le falta el PCC,
+    el ajuste por las condiciones de juego de cada jornada, que solo puede
+    calcular quien tiene todas las tarjetas del día. Conviene que la interfaz
+    lo diga para no crear la expectativa equivocada.
     """
 
-    handicap: float | None = None
+    handicap: float | None = Field(
+        default=None, description="El hándicap oficial que el jugador tiene en su perfil"
+    )
     handicap_trend: float | None = Field(
         default=None,
         description=(
-            "Siempre None por ahora: no existe histórico de hándicap, solo la "
-            "fecha del último cambio. Calcularlo exige tabla nueva (BE #128)."
+            "Cambio entre las 5 vueltas más recientes y las 5 anteriores. "
+            "**Negativo es mejorar**, igual que baja un hándicap. None hasta "
+            "que haya 10 vueltas con diferencial que comparar."
         ),
     )
     scoring_avg: float | None = None
     rounds_played: int = 0
     tournaments_total: int = 0
     tournaments_active: int = 0
+    estimated_index: float | None = Field(
+        default=None,
+        description=(
+            "A qué hándicap está jugando: media de sus mejores diferenciales "
+            "recientes según la tabla WHS 5.2. None con menos de 3 vueltas."
+        ),
+    )
+    playing_avg: float | None = Field(
+        default=None,
+        description=(
+            "Media de todos los diferenciales recientes, no solo de los mejores. "
+            "Suele ser varios golpes peor que el índice: ese mira de lo que el "
+            "jugador es capaz, este a lo que juega de media."
+        ),
+    )
+    best_differential: float | None = Field(
+        default=None, description="El mejor diferencial del registro: su mejor vuelta"
+    )
+    rounds_with_differential: int = Field(
+        default=0,
+        description=(
+            "Cuántas de las vueltas computadas tienen diferencial. Menor que "
+            "`rounds_played` cuando alguna se jugó sin registrar el tee."
+        ),
+    )
+    differentials: list[float] = Field(
+        default_factory=list,
+        description="Diferenciales del más reciente al más antiguo, para pintar la tendencia",
+    )
 
 
 class RecentMatchDTO(BaseModel):
