@@ -11,11 +11,15 @@ class PlayerStatsResponseDTO(BaseModel):
     """
     Resumen de rendimiento de un jugador, para el panel.
 
-    `scoring_avg` es la media de golpes netos respecto al par de lo jugado, no
-    de golpes brutos: comparar brutos entre campos y hándicaps distintos no
-    dice nada. Entran todas las tarjetas, de partida rápida y de torneo, con
-    cada hoyo topado en el net double bogey (Regla WHS 3.1). Va en None cuando
-    no hay ninguna ronda terminada, que no es lo mismo que una media de cero.
+    Solo cuentan las vueltas enteras de partidas terminadas, de partida rápida
+    y de torneo. Una tarjeta a la que le falta un hoyo no entra ni en la media
+    ni en `rounds_played`: los dos números hablan siempre de las mismas rondas.
+
+    `scoring_avg` es la media de golpes netos respecto al par, no de golpes
+    brutos: comparar brutos entre campos y hándicaps distintos no dice nada.
+    Cada hoyo va topado en el net double bogey (Regla WHS 3.1). Va en None
+    cuando no hay ninguna vuelta computable, que no es lo mismo que una media
+    de cero.
     """
 
     handicap: float | None = None

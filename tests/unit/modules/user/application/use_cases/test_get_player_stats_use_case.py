@@ -140,12 +140,21 @@ def _use_case(user_uow, competition_uow, qm_uow, golf_course_uow):
     )
 
 
-async def _played_quick_match(qm_uow, golf_course, user, *, strokes_per_hole: int = 4, others=()):
+async def _played_quick_match(
+    qm_uow,
+    golf_course,
+    user,
+    *,
+    strokes_per_hole: int = 4,
+    others=(),
+    holes_played: int = 18,
+):
     """
-    Una partida rápida terminada con la vuelta entera anotada.
+    Una partida rápida terminada con la vuelta anotada.
 
     `create()` mete al creador como primer participante, así que su
     `participant_id` se lee de la entidad en vez de construirlo aquí.
+    `holes_played` deja la tarjeta a medias.
     """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
@@ -162,17 +171,19 @@ async def _played_quick_match(qm_uow, golf_course, user, *, strokes_per_hole: in
 
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
-        for hole_number in range(1, 19):
-            await qm_uow.quick_match_hole_scores.add(
-                QuickMatchHoleScore(
-                    id=QuickMatchHoleScoreId.generate(),
-                    quick_match_id=match.id,
-                    hole_number=hole_number,
-                    participant_id=creator_participant_id,
-                    score=strokes_per_hole,
-                    recorded_by_participant_id=creator_participant_id,
+        # Todos firman su vuelta: una tarjeta a medias no computa
+        for participant in match.participants:
+            for hole_number in range(1, holes_played + 1):
+                await qm_uow.quick_match_hole_scores.add(
+                    QuickMatchHoleScore(
+                        id=QuickMatchHoleScoreId.generate(),
+                        quick_match_id=match.id,
+                        hole_number=hole_number,
+                        participant_id=participant.participant_id,
+                        score=strokes_per_hole,
+                        recorded_by_participant_id=creator_participant_id,
+                    )
                 )
-            )
         await qm_uow.commit()
 
     return match
@@ -187,13 +198,15 @@ async def _played_competition_match(
     strokes_per_hole: int | None = 4,
     strokes_received_per_hole: int = 0,
     holes_played: int = 18,
+    unscored_holes: list[int] | None = None,
     round_date: date = date(2026, 6, 1),
 ):
     """
     Un partido de torneo terminado con la tarjeta del jugador anotada.
 
-    `strokes_per_hole=None` deja los hoyos sin anotar, que es como queda un
-    hoyo concedido en match play.
+    `strokes_per_hole=None` deja la tarjeta entera sin anotar; `holes_played`
+    la corta antes del 18 (partido cerrado antes de tiempo) y `unscored_holes`
+    deja huecos sueltos, que es como queda un hoyo concedido en match play.
     """
     competition = Competition.create(
         id=CompetitionId(uuid4()),
@@ -243,7 +256,7 @@ async def _played_competition_match(
                 team="A",
                 strokes_received=strokes_received_per_hole,
             )
-            if strokes_per_hole is not None:
+            if strokes_per_hole is not None and hole_number not in (unscored_holes or []):
                 hole_score.set_own_score(strokes_per_hole)
             await competition_uow.hole_scores.add(hole_score)
         await competition_uow.commit()
@@ -362,6 +375,62 @@ class TestRoundsAndAverage:
 
 
 @pytest.mark.asyncio
+class TestIncompleteQuickMatchCards:
+    """Media vuelta no es una vuelta, tampoco en partida rápida."""
+
+    async def test_a_partial_card_counts_for_nothing(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("partial"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=9)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
+        assert stats.scoring_avg is None
+
+    async def test_a_match_still_in_progress_counts_for_nothing(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La vuelta está entera, pero la partida sigue abierta."""
+        user = await create_user(user_uow, unique_email("open"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        match = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=user.id,
+            golf_course_id=course.id,
+            scoring_format=ScoringFormat.MEDAL,
+        )
+        participant_id = match.participants[0].participant_id
+        match.start(scorer_ids=[participant_id])
+
+        async with qm_uow:
+            await qm_uow.quick_matches.add(match)
+            for hole_number in range(1, 19):
+                await qm_uow.quick_match_hole_scores.add(
+                    QuickMatchHoleScore(
+                        id=QuickMatchHoleScoreId.generate(),
+                        quick_match_id=match.id,
+                        hole_number=hole_number,
+                        participant_id=participant_id,
+                        score=5,
+                        recorded_by_participant_id=participant_id,
+                    )
+                )
+            await qm_uow.commit()
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
+        assert stats.scoring_avg is None
+
+
+@pytest.mark.asyncio
 class TestCompetitionScorecards:
     """
     Los partidos de torneo también entran en la media.
@@ -430,33 +499,52 @@ class TestCompetitionScorecards:
         assert stats.rounds_played == 2
         assert stats.scoring_avg == 9.0
 
-    async def test_conceded_holes_do_not_count_as_played(
+    async def test_a_match_closed_before_the_18th_does_not_count(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        En match play te conceden hoyos que ibas ganando. Rellenarlos con un
-        doble bogey castigaría por ir por delante, así que se dejan fuera y la
-        vuelta se mide contra el par de lo que sí se jugó.
+        Un partido decidido en el hoyo 15 está terminado, pero su tarjeta no:
+        faltan hoyos, y media vuelta no se puede comparar con una entera. Es el
+        precio de que la media hable siempre de rondas iguales.
         """
         player = await create_user(user_uow, unique_email("conceded"), handicap=0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)
         course = await create_golf_course(golf_course_uow, player.id)
         await _played_competition_match(
-            competition_uow, course, player, rival, strokes_per_hole=5, holes_played=9
+            competition_uow, course, player, rival, strokes_per_hole=5, holes_played=15
         )
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
         )
 
-        # Nueve hoyos a +1: la vuelta cuenta como +9, no como +18
-        assert stats.rounds_played == 1
-        assert stats.scoring_avg == 9.0
+        assert stats.rounds_played == 0
+        assert stats.scoring_avg is None
 
-    async def test_a_match_without_a_single_hole_scored_is_not_averaged(
+    async def test_a_single_conceded_hole_invalidates_the_card(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Se jugó (cuenta como ronda) pero no dice nada: no hay media que sacar."""
+        """
+        Los 18 hoyos existen en la tarjeta, pero uno se quedó sin anotar. No se
+        rellena con un doble bogey ni se ignora: la vuelta no computa.
+        """
+        player = await create_user(user_uow, unique_email("gap"), handicap=0)
+        rival = await create_user(user_uow, unique_email("rival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow, course, player, rival, strokes_per_hole=5, unscored_holes=[7]
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 0
+        assert stats.scoring_avg is None
+
+    async def test_a_match_without_a_single_hole_scored_does_not_count(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
         player = await create_user(user_uow, unique_email("noscore"), handicap=0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)
         course = await create_golf_course(golf_course_uow, player.id)
@@ -468,7 +556,7 @@ class TestCompetitionScorecards:
             player.id
         )
 
-        assert stats.rounds_played == 1
+        assert stats.rounds_played == 0
         assert stats.scoring_avg is None
 
     async def test_a_disaster_hole_is_capped_at_net_double_bogey(
