@@ -25,7 +25,14 @@ DEFAULT_PAGE_SIZE = 20
 
 class GetFriendsFeedUseCase:
     """
-    Lo que han conseguido mis amigos, de lo mas reciente a lo mas antiguo.
+    Lo que hemos conseguido mis amigos y yo, de lo mas reciente a lo mas antiguo.
+
+    **Uno se ve a si mismo en su propio feed.** Un feed donde no sale lo que
+    acabas de hacer se lee como si no se hubiera guardado, y ademas deja el feed
+    vacio a quien todavia no tiene amigos. Lo propio se incluye sin mirar el
+    interruptor de publicacion: ese decide lo que ven los demas, no lo que uno
+    ve de si mismo. El aviso de novedades, en cambio, solo cuenta lo de los
+    amigos — los logros de uno no son noticia para uno.
 
     **El feed se lee, no se escribe** (fan-out on read): al pedirlo se consultan
     los eventos de mis amigos. No hay una copia por amigo creada al publicar.
@@ -62,19 +69,26 @@ class GetFriendsFeedUseCase:
         async with self._social_uow:
             amigos = await self._social_uow.friendships.find_friend_ids(viewer_id)
 
-        publicables, visto_hasta = await self._publicables_y_ultima_visita(viewer_id, amigos)
-        if not publicables:
-            return FeedResponseDTO()
+        de_amigos, visto_hasta = await self._publicables_y_ultima_visita(viewer_id, amigos)
+
+        # El jugador se ve a si mismo en su propio feed, junto a sus amigos: un
+        # feed donde no sale lo que uno acaba de hacer se lee como si no se
+        # hubiera guardado. Se añade sin mirar su `share_activity`, porque ese
+        # interruptor gobierna lo que ven los demas, no lo que uno ve de si mismo
+        publicables = [*de_amigos, viewer_id]
 
         async with self._social_uow:
             eventos = await self._social_uow.activity_events.find_for_users(
                 publicables, limit=limit, before=before, before_id=before_id
             )
+            # El aviso cuenta solo lo de los amigos: los logros de uno mismo no
+            # son novedad para uno. Terminar una partida y que el feed anuncie
+            # "3 novedades" que son tuyas seria absurdo
             no_vistos = (
                 0
-                if visto_hasta is None
+                if visto_hasta is None or not de_amigos
                 else await self._social_uow.activity_events.count_for_users_since(
-                    publicables, since=visto_hasta
+                    de_amigos, since=visto_hasta
                 )
             )
 

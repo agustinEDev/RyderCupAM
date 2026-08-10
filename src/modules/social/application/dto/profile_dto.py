@@ -76,5 +76,10 @@ class FeedResponseDTO(BaseModel):
         description="Pasalo como `cursor` para la siguiente pagina. None cuando no hay mas",
     )
     unseen_count: int = Field(
-        default=0, description="Cuantas entradas se han publicado desde la ultima visita"
+        default=0,
+        description=(
+            "Cuantas entradas **de amigos** se han publicado desde la ultima visita. "
+            "Los logros propios no cuentan: lo que uno acaba de hacer no es novedad "
+            "para uno"
+        ),
     )

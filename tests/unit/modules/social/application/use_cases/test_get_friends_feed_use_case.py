@@ -121,14 +121,56 @@ class TestQueSeVe:
 
         assert feed.events == []
 
-    async def test_sin_amigos_el_feed_llega_vacio(self, social_uow, user_uow):
-        """Given un jugador sin amigos / When pide el feed / Then llega vacio."""
+    async def test_sin_amigos_ni_logros_propios_el_feed_llega_vacio(
+        self, social_uow, user_uow
+    ):
+        """Given un jugador recien llegado / When pide el feed / Then llega vacio."""
         yo = await _create_user(user_uow)
 
         feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
 
         assert feed.events == []
         assert feed.next_cursor is None
+
+    async def test_me_veo_a_mi_mismo_en_mi_feed(self, social_uow, user_uow):
+        """
+        Given un logro mio y otro de un amigo / When pido el feed / Then salen
+        los dos: un feed donde no aparece lo que acabo de hacer se lee como si
+        no se hubiera guardado.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        await _publica(social_uow, yo, "mio")
+        await _publica(social_uow, amigo, "suyo", CUANDO - timedelta(days=1))
+
+        feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
+
+        assert [e.source_match_id for e in feed.events] == ["mio", "suyo"]
+
+    async def test_me_veo_aunque_no_tenga_amigos(self, social_uow, user_uow):
+        """
+        Given un jugador sin amigos pero con logros / When pide el feed / Then
+        ve los suyos: el feed no nace vacio para quien aun no ha hecho amigos.
+        """
+        yo = await _create_user(user_uow)
+        await _publica(social_uow, yo, "mio")
+
+        feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
+
+        assert [e.source_match_id for e in feed.events] == ["mio"]
+
+    async def test_me_veo_aunque_tenga_la_publicacion_apagada(self, social_uow, user_uow):
+        """
+        Given que apague mi publicacion / When pido mi feed / Then sigo viendo
+        lo mio: el interruptor decide lo que ven los demas, no lo que veo yo.
+        """
+        yo = await _create_user(user_uow, share_activity=False)
+        await _publica(social_uow, yo, "mio")
+
+        feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
+
+        assert [e.source_match_id for e in feed.events] == ["mio"]
 
     async def test_deshacer_la_amistad_retira_sus_logros_del_feed(self, social_uow, user_uow):
         """Given un amigo con logros / When dejamos de ser amigos / Then desaparecen."""
@@ -281,6 +323,25 @@ class TestAvisoDeNovedades:
 
         feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
 
+        assert feed.unseen_count == 0
+
+    async def test_mis_propios_logros_no_cuentan_como_novedad(self, social_uow, user_uow):
+        """
+        Given que acabo de publicar tres logros mios / When pido el feed / Then
+        el aviso sigue a cero: lo que uno acaba de hacer no es noticia para uno.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        yo.mark_feed_as_seen(CUANDO)
+        async with user_uow:
+            await user_uow.users.save(yo)
+        for i in range(3):
+            await _publica(social_uow, yo, f"mio-{i}", CUANDO + timedelta(hours=i + 1))
+
+        feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
+
+        assert len(feed.events) == 3
         assert feed.unseen_count == 0
 
     async def test_cuenta_lo_publicado_despues_de_la_ultima_visita(self, social_uow, user_uow):

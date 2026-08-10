@@ -99,10 +99,12 @@ async def get_player_activity(
 @router.get(
     "/users/me/feed",
     response_model=FeedResponseDTO,
-    summary="Get my friends' activity feed",
+    summary="Get my activity feed",
     description=(
-        "What your friends have achieved, newest first, paginated by cursor rather than "
-        "page number — the feed grows from the top, so an offset would repeat entries."
+        "What you and your friends have achieved, newest first, paginated by cursor "
+        "rather than page number — the feed grows from the top, so an offset would "
+        "repeat entries. Your own achievements appear in it, but never count towards "
+        "`unseen_count`."
     ),
 )
 async def get_my_feed(
