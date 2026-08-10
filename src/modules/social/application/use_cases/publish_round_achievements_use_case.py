@@ -12,6 +12,9 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.social.application.ports.player_course_history_interface import (
+    PlayerCourseHistoryInterface,
+)
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
@@ -51,7 +54,6 @@ class _RoundToJudge:
     golf_course_id: str
     occurred_at: datetime
     holes: list[PlayedHole]
-    estrena_campo: bool
 
 
 class PublishRoundAchievementsUseCase:
@@ -77,6 +79,7 @@ class PublishRoundAchievementsUseCase:
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         differentials: PlayerDifferentialsInterface,
+        history: PlayerCourseHistoryInterface,
         detector: AchievementDetector | None = None,
     ):
         self._social_uow = social_uow
@@ -84,6 +87,7 @@ class PublishRoundAchievementsUseCase:
         self._golf_course_uow = golf_course_uow
         self._user_uow = user_uow
         self._differentials = differentials
+        self._history = history
         self._detector = detector or AchievementDetector()
 
     async def execute(
@@ -117,7 +121,9 @@ class PublishRoundAchievementsUseCase:
         eventos: list[ActivityEvent] = []
         for vuelta in vueltas:
             contexto = RoundContext(
-                is_first_round_on_course=vuelta.estrena_campo,
+                is_first_round_on_course=not await self._history.has_played_course_before(
+                    vuelta.user_id, vuelta.golf_course_id, vuelta.match_id
+                ),
                 # Esto es una partida rápida: estrenar torneo se publica desde
                 # el cierre de la competición
                 is_first_tournament=False,
@@ -204,27 +210,10 @@ class PublishRoundAchievementsUseCase:
                             )
                             for hole in jugados
                         ],
-                        estrena_campo=await self._estrena_campo(participant.user_id, match),
                     )
                 )
 
         return vueltas
-
-    async def _estrena_campo(self, user_id: UserId, match) -> bool:
-        """
-        Si esta es su primera vuelta terminada en ese campo.
-
-        Se compara contra las **demás** partidas terminadas: la actual ya está
-        cerrada cuando esto corre, así que incluirla haría que nadie estrenara
-        campo nunca.
-        """
-        anteriores = await self._quick_match_uow.quick_matches.list_for_user(
-            user_id, status=QuickMatchStatus.COMPLETED, limit=MAX_HISTORY_LOOKUP
-        )
-        return not any(
-            otra.id != match.id and otra.golf_course_id == match.golf_course_id
-            for otra in anteriores
-        )
 
     async def _diferencial_si_es_record(
         self, user_id: UserId, best_before: float | None

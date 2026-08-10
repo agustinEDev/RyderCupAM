@@ -5,6 +5,8 @@ Permite completar/finalizar una competicion (IN_PROGRESS -> COMPLETED).
 Solo el creador puede realizar esta accion.
 """
 
+import logging
+
 from src.modules.competition.application.dto.competition_dto import (
     CompleteCompetitionRequestDTO,
     CompleteCompetitionResponseDTO,
@@ -13,11 +15,16 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
+    TournamentAchievementsPublisherInterface,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class CompleteCompetitionUseCase:
@@ -40,14 +47,21 @@ class CompleteCompetitionUseCase:
     5. Commit de la transaccion
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        achievements: TournamentAchievementsPublisherInterface | None = None,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            achievements: Publicador del feed de logros (BE #175). Opcional:
+                sin el, cerrar el torneo sigue funcionando y no se publica nada.
         """
         self._uow = uow
+        self._achievements = achievements
 
     async def execute(
         self, request: CompleteCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -81,15 +95,59 @@ class CompleteCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede completar la competicion")
 
-            # 3. Completar la competicion (la entidad valida la transicion)
+            # 3. Antes de cerrar: una vez cerrado, estas vueltas ya cuentan para
+            # las estadisticas y no habria forma de saber la marca previa
+            marca_previa = await self._marca_previa(competition_id)
+
+            # 4. Completar la competicion (la entidad valida la transicion)
             competition.complete()
 
-            # 4. Persistir cambios
+            # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
-        # 6. Retornar DTO de respuesta
+        # 6. Publicar los logros del torneo en el feed de los amigos
+        await self._publicar_logros(request.competition_id, marca_previa)
+
+        # 7. Retornar DTO de respuesta
         return CompleteCompetitionResponseDTO(
             id=competition.id.value,
             status=competition.status.value,
             completed_at=competition.updated_at,
         )
+
+    async def _marca_previa(self, competition_id: CompetitionId) -> dict[str, float | None]:
+        """El mejor diferencial de cada inscrito, antes de cerrar el torneo."""
+        if self._achievements is None:
+            return {}
+
+        try:
+            enrollments = await self._uow.enrollments.find_by_competition(competition_id)
+            return await self._achievements.capture_best_differentials(
+                [enrollment.user_id for enrollment in enrollments]
+            )
+        except Exception:
+            # Sin marca previa se publica todo menos el record personal, que es
+            # mejor que no publicar nada
+            logger.warning("Could not capture differentials before completing", exc_info=True)
+            return {}
+
+    async def _publicar_logros(
+        self, competition_id_raw: str, marca_previa: dict[str, float | None]
+    ) -> None:
+        """
+        Publica los logros del torneo sin dejar que un fallo tumbe el cierre.
+
+        El torneo ya esta cerrado y guardado cuando esto corre. El feed es
+        accesorio y el resultado del torneo no.
+        """
+        if self._achievements is None:
+            return
+
+        try:
+            await self._achievements.publish(competition_id_raw, marca_previa)
+        except Exception:
+            logger.warning(
+                "Could not publish achievements for competition %s",
+                competition_id_raw,
+                exc_info=True,
+            )

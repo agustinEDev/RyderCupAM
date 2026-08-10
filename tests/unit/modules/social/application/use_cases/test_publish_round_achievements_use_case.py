@@ -31,6 +31,9 @@ from src.modules.quick_match.domain.value_objects.scoring_format import ScoringF
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.player_course_history_interface import (
+    PlayerCourseHistoryInterface,
+)
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
@@ -61,6 +64,32 @@ class _DifferentialsStub(PlayerDifferentialsInterface):
 
     async def best_differential(self, user_id):
         return self._por_jugador.get(str(user_id.value))
+
+
+class _CourseHistoryFake(PlayerCourseHistoryInterface):
+    """
+    Historial de campos en memoria.
+
+    Recuerda cada vuelta que se le pregunta, que es lo que hace el adaptador de
+    verdad al consultar partidas rapidas y torneos: la segunda vez que un
+    jugador pisa un campo, ya no lo estrena.
+    """
+
+    def __init__(self):
+        self._vueltas: set = set()
+
+    def registra(self, user_id, golf_course_id: str, match_id: str) -> None:
+        self._vueltas.add((str(user_id.value), golf_course_id, match_id))
+
+    async def has_played_course_before(
+        self, user_id, golf_course_id: str, excluding_match_id: str
+    ) -> bool:
+        return any(
+            usuario == str(user_id.value)
+            and campo == golf_course_id
+            and partida != excluding_match_id
+            for usuario, campo, partida in self._vueltas
+        )
 
 
 @pytest.fixture
@@ -175,13 +204,14 @@ async def _played_match(
     return match
 
 
-def _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials=None):
+def _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials=None, history=None):
     return PublishRoundAchievementsUseCase(
         social_uow=social_uow,
         quick_match_uow=qm_uow,
         golf_course_uow=golf_course_uow,
         user_uow=user_uow,
         differentials=differentials or _DifferentialsStub(),
+        history=history or _CourseHistoryFake(),
     )
 
 
@@ -242,11 +272,13 @@ class TestQueSePublica:
         """
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
-        await _played_match(qm_uow, course, user)
+        anterior = await _played_match(qm_uow, course, user)
         match = await _played_match(qm_uow, course, user)
+        history = _CourseHistoryFake()
+        history.registra(user.id, str(course.id.value), str(anterior.id.value))
 
         publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
+            social_uow, qm_uow, golf_course_uow, user_uow, history=history
         ).execute(str(match.id.value))
 
         assert publicados == 0
@@ -257,10 +289,12 @@ class TestQueSePublica:
         """Given dos vueltas en el mismo campo / When se publican / Then solo la primera estrena."""
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
-        use_case = _use_case(social_uow, qm_uow, golf_course_uow, user_uow)
+        history = _CourseHistoryFake()
+        use_case = _use_case(social_uow, qm_uow, golf_course_uow, user_uow, history=history)
 
         primera = await _played_match(qm_uow, course, user)
         await use_case.execute(str(primera.id.value))
+        history.registra(user.id, str(course.id.value), str(primera.id.value))
         segunda = await _played_match(qm_uow, course, user)
         await use_case.execute(str(segunda.id.value))
 

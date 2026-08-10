@@ -11,6 +11,9 @@ from src.config.settings import settings
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
+from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
+    TournamentAchievementsPublisherInterface,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -253,6 +256,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.player_course_history_interface import (
+    PlayerCourseHistoryInterface,
+)
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
@@ -267,6 +273,9 @@ from src.modules.social.application.use_cases.list_pending_requests_use_case imp
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
     PublishRoundAchievementsUseCase,
 )
+from src.modules.social.application.use_cases.publish_tournament_achievements_use_case import (
+    PublishTournamentAchievementsUseCase,
+)
 from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
 from src.modules.social.application.use_cases.respond_friend_request_use_case import (
     RespondFriendRequestUseCase,
@@ -274,14 +283,23 @@ from src.modules.social.application.use_cases.respond_friend_request_use_case im
 from src.modules.social.application.use_cases.send_friend_request_use_case import (
     SendFriendRequestUseCase,
 )
+from src.modules.social.application.use_cases.set_activity_sharing_use_case import (
+    SetActivitySharingUseCase,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
+    PlayerCourseHistoryAdapter,
 )
 from src.modules.social.infrastructure.adapters.player_differentials_adapter import (
     StatsPlayerDifferentialsAdapter,
 )
 from src.modules.social.infrastructure.adapters.quick_match_achievements_publisher import (
     QuickMatchAchievementsPublisher,
+)
+from src.modules.social.infrastructure.adapters.tournament_achievements_publisher import (
+    TournamentAchievementsPublisher,
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
@@ -1318,12 +1336,29 @@ def get_player_differentials(
     return StatsPlayerDifferentialsAdapter(stats_use_case)
 
 
+def get_set_activity_sharing_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> SetActivitySharingUseCase:
+    """Proveedor del caso de uso SetActivitySharingUseCase."""
+    return SetActivitySharingUseCase(user_uow, social_uow)
+
+
+def get_player_course_history(
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> PlayerCourseHistoryInterface:
+    """Proveedor del puerto que dice si un campo ya se habia jugado."""
+    return PlayerCourseHistoryAdapter(quick_match_uow, competition_uow)
+
+
 def get_publish_round_achievements_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+    history: PlayerCourseHistoryInterface = Depends(get_player_course_history),
 ) -> PublishRoundAchievementsUseCase:
     """Proveedor del caso de uso PublishRoundAchievementsUseCase."""
     return PublishRoundAchievementsUseCase(
@@ -1332,7 +1367,37 @@ def get_publish_round_achievements_use_case(
         golf_course_uow=golf_course_uow,
         user_uow=user_uow,
         differentials=differentials,
+        history=history,
     )
+
+
+def get_publish_tournament_achievements_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+    history: PlayerCourseHistoryInterface = Depends(get_player_course_history),
+) -> PublishTournamentAchievementsUseCase:
+    """Proveedor del caso de uso PublishTournamentAchievementsUseCase."""
+    return PublishTournamentAchievementsUseCase(
+        social_uow=social_uow,
+        competition_uow=competition_uow,
+        golf_course_uow=golf_course_uow,
+        user_uow=user_uow,
+        differentials=differentials,
+        history=history,
+    )
+
+
+def get_tournament_achievements_publisher(
+    publish_use_case: PublishTournamentAchievementsUseCase = Depends(
+        get_publish_tournament_achievements_use_case
+    ),
+    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+) -> TournamentAchievementsPublisherInterface:
+    """Proveedor del adaptador que conecta competition con el feed social."""
+    return TournamentAchievementsPublisher(publish_use_case, differentials)
 
 
 def get_round_achievements_publisher(
@@ -1538,6 +1603,9 @@ def get_start_competition_use_case(
 
 def get_complete_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    achievements: TournamentAchievementsPublisherInterface = Depends(
+        get_tournament_achievements_publisher
+    ),
 ) -> CompleteCompetitionUseCase:
     """
     Proveedor del caso de uso CompleteCompetitionUseCase.
@@ -1546,8 +1614,11 @@ def get_complete_competition_use_case(
     1. Depende de `get_competition_uow` para obtener una Unit of Work.
     2. Crea una instancia de `CompleteCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
+
+    Cerrar el torneo es lo que dispara el feed de logros (BE #175), de ahí el
+    publicador.
     """
-    return CompleteCompetitionUseCase(uow)
+    return CompleteCompetitionUseCase(uow, achievements)
 
 
 def get_cancel_competition_use_case(
