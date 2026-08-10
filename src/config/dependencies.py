@@ -266,9 +266,21 @@ from src.modules.social.application.ports.social_email_service_interface import 
     ISocialEmailService,
 )
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
+from src.modules.social.application.use_cases.get_friends_feed_use_case import (
+    GetFriendsFeedUseCase,
+)
+from src.modules.social.application.use_cases.get_player_activity_use_case import (
+    GetPlayerActivityUseCase,
+)
+from src.modules.social.application.use_cases.get_player_profile_use_case import (
+    GetPlayerProfileUseCase,
+)
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
 from src.modules.social.application.use_cases.list_pending_requests_use_case import (
     ListPendingRequestsUseCase,
+)
+from src.modules.social.application.use_cases.mark_feed_as_seen_use_case import (
+    MarkFeedAsSeenUseCase,
 )
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
     PublishRoundAchievementsUseCase,
@@ -1334,6 +1346,38 @@ def get_player_differentials(
 ) -> PlayerDifferentialsInterface:
     """Proveedor del puerto de diferenciales que usa el feed de logros."""
     return StatsPlayerDifferentialsAdapter(stats_use_case)
+
+
+def get_player_profile_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    stats_use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+) -> GetPlayerProfileUseCase:
+    """Proveedor del caso de uso GetPlayerProfileUseCase."""
+    return GetPlayerProfileUseCase(social_uow, user_uow, stats_use_case)
+
+
+def get_player_activity_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetPlayerActivityUseCase:
+    """Proveedor del caso de uso GetPlayerActivityUseCase."""
+    return GetPlayerActivityUseCase(social_uow, user_uow)
+
+
+def get_friends_feed_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetFriendsFeedUseCase:
+    """Proveedor del caso de uso GetFriendsFeedUseCase."""
+    return GetFriendsFeedUseCase(social_uow, user_uow)
+
+
+def get_mark_feed_as_seen_use_case(
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> MarkFeedAsSeenUseCase:
+    """Proveedor del caso de uso MarkFeedAsSeenUseCase."""
+    return MarkFeedAsSeenUseCase(user_uow)
 
 
 def get_set_activity_sharing_use_case(

@@ -104,3 +104,11 @@ class InMemoryFriendshipRepository(FriendshipRepositoryInterface):
     async def are_friends(self, user_id_a: UserId, user_id_b: UserId) -> bool:
         friendship = await self.find_by_pair(user_id_a, user_id_b)
         return friendship is not None and friendship.status == FriendshipStatus.ACCEPTED
+
+    async def find_friend_ids(self, user_id: UserId) -> list[UserId]:
+        return [
+            f.addressee_id if f.requester_id == user_id else f.requester_id
+            for f in self._friendships.values()
+            if f.status == FriendshipStatus.ACCEPTED
+            and user_id in (f.requester_id, f.addressee_id)
+        ]

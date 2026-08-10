@@ -11,6 +11,12 @@ class SearchUsersUseCase:
     """
     Use case for autocomplete user search by partial name.
     Returns a list of users matching the query.
+
+    Devuelve **solo lo publico**: nombre, apellidos y foto. Cualquier usuario
+    registrado puede buscar por nombre, asi que todo lo que salga de aqui es
+    visible para cualquiera. El correo se retiro por eso: tecleando nombres
+    sueltos se podian recolectar direcciones de gente con la que no tienes
+    ninguna relacion.
     """
 
     MIN_QUERY_LENGTH = 2
@@ -32,8 +38,12 @@ class SearchUsersUseCase:
                 users=[
                     SearchUsersItemDTO(
                         user_id=user.id.value,
-                        email=user.email.value,
                         full_name=user.get_full_name(),
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        avatar_source=user.avatar_source.value,
+                        avatar_preset_id=user.avatar_preset_id,
+                        has_avatar_upload=user.active_avatar_upload_id is not None,
                     )
                     for user in users
                 ]

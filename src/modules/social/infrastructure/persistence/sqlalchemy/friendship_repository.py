@@ -9,6 +9,9 @@ from src.modules.social.domain.repositories.friendship_repository_interface impo
 )
 from src.modules.social.domain.value_objects.friendship_id import FriendshipId
 from src.modules.social.domain.value_objects.friendship_status import FriendshipStatus
+from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
+    friendships_table,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -151,3 +154,28 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
     async def are_friends(self, user_id_a: UserId, user_id_b: UserId) -> bool:
         friendship = await self.find_by_pair(user_id_a, user_id_b)
         return friendship is not None and friendship.status == FriendshipStatus.ACCEPTED
+
+    async def find_friend_ids(self, user_id: UserId) -> list[UserId]:
+        """
+        Los ids de los amigos aceptados, en una sola consulta.
+
+        Se piden las dos columnas y se descarta la propia: la amistad se guarda
+        una vez con quien la pidio y quien la recibio, y el usuario puede estar
+        en cualquiera de los dos lados.
+        """
+        stmt = select(
+            friendships_table.c.requester_id, friendships_table.c.addressee_id
+        ).where(
+            and_(
+                friendships_table.c.status == FriendshipStatus.ACCEPTED,
+                or_(
+                    friendships_table.c.requester_id == user_id,
+                    friendships_table.c.addressee_id == user_id,
+                ),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [
+            addressee_id if requester_id == user_id else requester_id
+            for requester_id, addressee_id in result.all()
+        ]
