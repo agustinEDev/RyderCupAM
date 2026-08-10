@@ -18,6 +18,11 @@ ALLOWED_INPUT_FORMATS = {"JPEG", "PNG", "WEBP"}
 # Dimensión final (cuadrada) del avatar
 AVATAR_TARGET_SIZE = 512
 
+# Lado mayor de las fotos de galeria. Medido con esta misma compresion: 512 px
+# pesa 85 KB, 1080 px pesa 375 KB y 1600 px pesa 818 KB. 1600 casi triplica el
+# peso de 1080 y en un telefono no se aprecia (BE #177).
+GALLERY_MAX_SIDE = 1080
+
 # Calidad de compresión JPEG de salida
 AVATAR_JPEG_QUALITY = 85
 
@@ -31,6 +36,51 @@ class PillowImageProcessor(IImageProcessor):
     """Procesa imágenes de avatar con Pillow: valida formato, crop centrado + resize + compresión."""
 
     def process_avatar_image(self, raw_bytes: bytes) -> bytes:
+        image = self._decode_and_validate(raw_bytes)
+
+        width, height = image.size
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        image = image.crop((left, top, left + side, top + side))
+        image = image.resize((AVATAR_TARGET_SIZE, AVATAR_TARGET_SIZE), Image.Resampling.LANCZOS)
+
+        return self._to_jpeg(image)
+
+    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+        """
+        La misma validación que el avatar, pero sin recortar.
+
+        Se conserva la proporción y se encaja el lado mayor en `GALLERY_MAX_SIDE`.
+        Una foto que ya sea más pequeña se deja como está: ampliarla no añadiría
+        detalle, solo peso.
+        """
+        image = self._decode_and_validate(raw_bytes)
+
+        width, height = image.size
+        lado_mayor = max(width, height)
+        if lado_mayor > GALLERY_MAX_SIDE:
+            escala = GALLERY_MAX_SIDE / lado_mayor
+            nuevo = (max(1, round(width * escala)), max(1, round(height * escala)))
+            image = image.resize(nuevo, Image.Resampling.LANCZOS)
+
+        return self._to_jpeg(image)
+
+    @staticmethod
+    def _to_jpeg(image: Image.Image) -> bytes:
+        output = io.BytesIO()
+        image.save(output, "JPEG", quality=AVATAR_JPEG_QUALITY, optimize=True)
+        return output.getvalue()
+
+    def _decode_and_validate(self, raw_bytes: bytes) -> Image.Image:
+        """
+        Los pasos comunes a cualquier imagen que entre: comprobar que es una
+        imagen de un formato admitido, que no es una bomba de descompresión, y
+        dejarla en RGB con la orientación corregida.
+
+        Es compartido a proposito: la validacion es lo unico que protege al
+        servidor de lo que suba un cliente, y dos copias se separarian.
+        """
         try:
             probe = Image.open(io.BytesIO(raw_bytes))
             probe_format = probe.format
@@ -70,14 +120,4 @@ class PillowImageProcessor(IImageProcessor):
         if transposed is not None:
             image = transposed
 
-        image = image.convert("RGB")
-        width, height = image.size
-        side = min(width, height)
-        left = (width - side) // 2
-        top = (height - side) // 2
-        image = image.crop((left, top, left + side, top + side))
-        image = image.resize((AVATAR_TARGET_SIZE, AVATAR_TARGET_SIZE), Image.Resampling.LANCZOS)
-
-        output = io.BytesIO()
-        image.save(output, "JPEG", quality=AVATAR_JPEG_QUALITY, optimize=True)
-        return output.getvalue()
+        return image.convert("RGB")
