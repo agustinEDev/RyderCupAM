@@ -358,3 +358,27 @@ class TestAvisoDeNovedades:
         feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
 
         assert feed.unseen_count == 1
+
+
+class TestCursorManipulado:
+    async def test_un_cursor_con_zona_horaria_no_tumba_la_peticion(
+        self, social_uow, user_uow
+    ):
+        """
+        Given un cursor con desfase horario / When se pide el feed / Then
+        responde en vez de reventar.
+
+        El cursor viene del cliente y puede traer `+02:00` a mano. Comparar una
+        fecha con zona contra las de la base de datos —que no la llevan— lanza
+        TypeError y tumbaria la peticion entera.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        await _publica(social_uow, amigo, "match-1", CUANDO - timedelta(days=1))
+
+        feed = await _use_case(social_uow, user_uow).execute(
+            str(yo.id.value), cursor=f"{CUANDO.isoformat()}+02:00|{uuid4()}"
+        )
+
+        assert isinstance(feed.events, list)

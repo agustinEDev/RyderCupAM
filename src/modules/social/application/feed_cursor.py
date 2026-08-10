@@ -11,7 +11,7 @@ instante—, asi que un cursor por fecha sola dejaria fuera los que aun no se ha
 enseñado de esa vuelta.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
@@ -26,12 +26,21 @@ def parse_cursor(cursor: str | None) -> tuple[datetime | None, UUID | None]:
 
     Un cursor corrupto devuelve la primera pagina en lugar de un error: lo peor
     que le pasa a quien manipule el parametro es empezar por arriba.
+
+    La fecha se deja **sin zona horaria** aunque venga con ella. El cursor llega
+    del cliente, que puede mandar `...+02:00` a mano, y comparar una fecha con
+    zona contra las de la base de datos —que no la llevan— revienta con
+    `TypeError` y tumba la peticion entera. Se convierte a UTC y se le quita la
+    zona, que deja el mismo instante en la escala que usa el resto.
     """
     if not cursor:
         return None, None
     try:
         fecha, id_raw = cursor.split(CURSOR_SEPARATOR, 1)
-        return datetime.fromisoformat(fecha), UUID(id_raw)
+        parsed = datetime.fromisoformat(fecha)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        return parsed, UUID(id_raw)
     except (ValueError, AttributeError):
         return None, None
 

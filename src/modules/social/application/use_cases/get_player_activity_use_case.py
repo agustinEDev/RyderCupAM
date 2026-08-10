@@ -67,8 +67,14 @@ class GetPlayerActivityUseCase:
                     raise ActivityNotVisibleError("Only friends can see this player's activity")
 
         # El interruptor apagado no es un error: el perfil existe y es visible,
-        # simplemente no tiene actividad publicada
-        if not publica:
+        # simplemente no tiene actividad publicada.
+        #
+        # No se aplica a uno mismo. El interruptor gobierna lo que ven los demas,
+        # no lo que uno ve de si mismo — es la misma regla que ya sigue el feed,
+        # donde los logros propios salen tenga el interruptor como lo tenga.
+        # Sin esta excepcion, apagarlo dejaria al jugador sin poder consultar su
+        # propio historial.
+        if not publica and viewer_id != target_id:
             return FeedResponseDTO()
 
         async with self._social_uow:

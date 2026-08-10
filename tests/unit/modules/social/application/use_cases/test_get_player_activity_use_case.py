@@ -197,3 +197,22 @@ async def test_pagina_con_cursor(social_uow, user_uow):
             break
 
     assert len({e.id for e in vistos}) == 5
+
+
+async def test_puedo_ver_mi_historial_con_la_publicacion_apagada(social_uow, user_uow):
+    """
+    Given que apague mi publicacion / When consulto mi propia actividad / Then
+    sigo viendola.
+
+    Es la misma regla que ya sigue el feed: el interruptor gobierna lo que ven
+    los demas, no lo que uno ve de si mismo. Sin esto, apagarlo dejaria al
+    jugador sin acceso a su propio historial.
+    """
+    yo = await _create_user(user_uow, share_activity=False)
+    await _publica(social_uow, yo, "match-1")
+
+    resultado = await _use_case(social_uow, user_uow).execute(
+        str(yo.id.value), str(yo.id.value)
+    )
+
+    assert len(resultado.events) == 1
