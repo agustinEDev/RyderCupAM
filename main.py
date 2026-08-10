@@ -57,6 +57,7 @@ from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapp
     start_quick_match_mappers,
 )
 from src.modules.social.infrastructure.api.v1 import friend_routes  # noqa: E402
+from src.modules.social.infrastructure.api.v1 import profile_routes  # noqa: E402
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (  # noqa: E402
     start_activity_event_mappers,
 )
@@ -432,6 +433,12 @@ app.include_router(
     friend_routes.router,
     prefix="/api/v1",
     tags=["Friends"],
+)
+
+app.include_router(
+    profile_routes.router,
+    prefix="/api/v1",
+    tags=["Profiles & Feed"],
 )
 
 app.include_router(

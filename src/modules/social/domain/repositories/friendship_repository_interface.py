@@ -87,3 +87,18 @@ class FriendshipRepositoryInterface(ABC):
     async def are_friends(self, user_id_a: UserId, user_id_b: UserId) -> bool:
         """Verifica si dos usuarios tienen una amistad en estado ACCEPTED."""
         pass
+
+    @abstractmethod
+    async def find_friend_ids(self, user_id: UserId) -> list[UserId]:
+        """
+        Los ids de todos los amigos aceptados, sin paginar.
+
+        El feed los necesita todos a la vez para preguntar por sus eventos en
+        una sola consulta, asi que aqui no cabe la paginacion de `list_friends`:
+        con media lista de amigos, el feed se dejaria fuera a la otra media.
+
+        Devuelve solo los ids y no las relaciones porque es lo unico que el feed
+        usa; traer las entidades enteras seria cargar dos ids, dos fechas y un
+        estado por amigo para tirarlos acto seguido.
+        """
+        pass
