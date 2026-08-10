@@ -1,6 +1,7 @@
 """In-Memory Activity Event Repository para testing."""
 
 from datetime import datetime
+from uuid import UUID
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
@@ -37,11 +38,25 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         )
 
     async def find_for_users(
-        self, user_ids: list[UserId], limit: int, before: datetime | None = None
+        self,
+        user_ids: list[UserId],
+        limit: int,
+        before: datetime | None = None,
+        before_id: UUID | None = None,
     ) -> list[ActivityEvent]:
         encontrados = [e for e in self._events if e.user_id in user_ids]
         if before is not None:
-            encontrados = [e for e in encontrados if e.occurred_at < before]
+            # El mismo par (fecha, id) que compara el SQL: sin el id, los eventos
+            # de una misma vuelta —que comparten `occurred_at`— se perderian al
+            # pasar de pagina
+            if before_id is not None:
+                encontrados = [
+                    e
+                    for e in encontrados
+                    if (e.occurred_at, str(e.id)) < (before, str(before_id))
+                ]
+            else:
+                encontrados = [e for e in encontrados if e.occurred_at < before]
 
         encontrados.sort(key=lambda e: (e.occurred_at, str(e.id)), reverse=True)
         return encontrados[:limit]

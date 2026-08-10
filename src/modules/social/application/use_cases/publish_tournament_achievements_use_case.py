@@ -101,7 +101,13 @@ class PublishTournamentAchievementsUseCase:
             return 0
 
         eventos: list[ActivityEvent] = []
-        for user_id_raw, vueltas in vueltas_por_jugador.items():
+        for user_id_raw, sin_ordenar in vueltas_por_jugador.items():
+            # `FIRST_TOURNAMENT` y el record cuelgan de `vueltas[0]`, asi que
+            # cual sea esa vuelta no puede depender del orden en que la base de
+            # datos devolvio los partidos: si cambia entre ejecuciones, el mismo
+            # logro colgaria de otro partido y la clave unica dejaria de
+            # reconocerlo como repetido
+            vueltas = sorted(sin_ordenar, key=lambda v: (v.occurred_at, v.match_id))
             marca_previa = best_before.get(user_id_raw)
             # El record se mide una vez por jugador, no una por vuelta: solo hay
             # una marca previa con la que comparar y la mejor de sus vueltas

@@ -58,6 +58,14 @@ def upgrade() -> None:
         "activity_events",
         ["user_id", "occurred_at"],
     )
+    # La comprobación de «esta partida ya se publicó» filtra solo por partida.
+    # El índice de arriba empieza por `user_id`, así que no le sirve, y sin este
+    # la comprobación acabaría recorriendo la tabla entera según crece el feed
+    op.create_index(
+        "ix_activity_events_source_match",
+        "activity_events",
+        ["source_match_id"],
+    )
 
     # Cuándo miró cada jugador su feed por última vez. De aquí sale el aviso de
     # novedades: contar lo publicado después de esta fecha. Nulo significa que
@@ -76,5 +84,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("users", "share_activity")
     op.drop_column("users", "feed_last_seen_at")
+    op.drop_index("ix_activity_events_source_match", table_name="activity_events")
     op.drop_index("ix_activity_events_user_occurred", table_name="activity_events")
     op.drop_table("activity_events")

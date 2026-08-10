@@ -9,7 +9,16 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Table, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Table,
+    UniqueConstraint,
+    inspect,
+)
 from sqlalchemy.dialects import postgresql
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
@@ -64,6 +73,9 @@ activity_events_table = Table(
     # El feed siempre pregunta lo mismo: los eventos de estos jugadores, del más
     # reciente al más antiguo
     Index("ix_activity_events_user_occurred", "user_id", "occurred_at"),
+    # "Esta partida ya se publico?" filtra solo por partida, y el indice de
+    # arriba empieza por user_id, asi que no le sirve
+    Index("ix_activity_events_source_match", "source_match_id"),
     # Reprocesar una partida no debe duplicar sus entradas
     UniqueConstraint(
         "user_id", "source_match_id", "type", name="uq_activity_events_match_type"
@@ -73,9 +85,14 @@ activity_events_table = Table(
 
 def start_activity_event_mappers() -> None:
     """
-    Inicia el mapeo de ActivityEvent. Idempotente.
+    Inicia el mapeo de ActivityEvent. Idempotente de verdad.
+
+    Se pregunta con `inspect(..., raiseerr=False)` y no con
+    `ActivityEvent not in mapper_registry.mappers`: ese conjunto contiene
+    objetos `Mapper`, no clases, asi que la pregunta siempre da cierto y la
+    segunda llamada revienta con "already has a primary mapper defined".
     """
-    if ActivityEvent not in mapper_registry.mappers:
+    if inspect(ActivityEvent, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             ActivityEvent,
             activity_events_table,

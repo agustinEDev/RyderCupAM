@@ -132,6 +132,26 @@ async def test_encenderlo_no_borra_ni_recupera_nada(user_uow, social_uow):
     assert guardado.share_activity is True
 
 
+async def test_lo_retirado_no_vuelve_al_encenderlo_de_nuevo(user_uow, social_uow):
+    """
+    Given un jugador que apago la publicacion y borro su historial / When lo
+    vuelve a encender / Then lo retirado sigue sin estar: el feed se llena otra
+    vez con las vueltas que juegue a partir de ahi.
+    """
+    user = await _create_user(user_uow)
+    await _publica(social_uow, user, "match-1")
+    use_case = SetActivitySharingUseCase(user_uow, social_uow)
+
+    retirados = await use_case.execute(str(user.id.value), enabled=False)
+    await use_case.execute(str(user.id.value), enabled=True)
+
+    assert retirados == 1
+    assert await _feed_de(social_uow, user) == []
+    async with user_uow:
+        guardado = await user_uow.users.find_by_id(user.id)
+    assert guardado.share_activity is True
+
+
 async def test_un_jugador_que_no_existe_falla(user_uow, social_uow):
     """Given un id que no existe / When se cambia el interruptor / Then falla."""
     with pytest.raises(UserNotFoundError):

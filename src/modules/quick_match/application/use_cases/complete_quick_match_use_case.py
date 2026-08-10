@@ -56,9 +56,21 @@ class CompleteQuickMatchUseCase:
             if quick_match.creator_id != requester_id:
                 raise NotQuickMatchCreatorError("Only the creator can complete the quick match.")
 
-            # Antes de cerrar: una vez cerrada, esta vuelta ya cuenta para las
-            # estadisticas y no habria forma de saber cual era su marca previa
-            marca_previa = await self._marca_previa(quick_match)
+            jugadores = [p.user_id for p in quick_match.participants if p.user_id is not None]
+
+        # Fuera de la transaccion a proposito: preguntar por el mejor diferencial
+        # entra en las estadisticas del jugador, que abren esta misma unidad de
+        # trabajo. Anidarla aqui la cerraria antes de que se guarde el cierre.
+        # Y tiene que ser antes de completar: despues, esta vuelta ya cuenta para
+        # sus estadisticas y su marca previa seria imposible de saber
+        marca_previa = await self._marca_previa(jugadores)
+
+        async with self._uow:
+            quick_match = await self._uow.quick_matches.find_by_id(
+                QuickMatchId(quick_match_id_raw)
+            )
+            if not quick_match:
+                raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
 
             quick_match.complete()
             await self._uow.quick_matches.update(quick_match)
@@ -67,14 +79,13 @@ class CompleteQuickMatchUseCase:
 
         return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
 
-    async def _marca_previa(self, quick_match) -> dict[str, float | None]:
+    async def _marca_previa(self, jugadores: list[UserId]) -> dict[str, float | None]:
         """El mejor diferencial de cada jugador con cuenta, antes de cerrar."""
         if self._achievements is None:
             return {}
 
-        user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
         try:
-            return await self._achievements.capture_best_differentials(user_ids)
+            return await self._achievements.capture_best_differentials(jugadores)
         except Exception:
             # Sin marca previa se publica todo menos el record personal, que es
             # mejor que no publicar nada

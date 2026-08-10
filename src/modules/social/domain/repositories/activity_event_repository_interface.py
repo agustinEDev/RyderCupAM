@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from uuid import UUID
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -25,14 +26,23 @@ class ActivityEventRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_for_users(
-        self, user_ids: list[UserId], limit: int, before: datetime | None = None
+        self,
+        user_ids: list[UserId],
+        limit: int,
+        before: datetime | None = None,
+        before_id: UUID | None = None,
     ) -> list[ActivityEvent]:
         """
         Eventos de un conjunto de jugadores, del más reciente al más antiguo.
 
-        `before` pagina por fecha y no por número de página: el feed crece por
+        Se pagina por cursor y no por número de página: el feed crece por
         arriba, así que un desplazamiento numérico repetiría entradas cada vez
         que alguien publica algo mientras se navega.
+
+        El cursor son **las dos cosas**, `before` y `before_id`, porque la fecha
+        sola no es única: todos los eventos de una misma vuelta comparten
+        `occurred_at`. Paginar solo por fecha se dejaría fuera los que aún no se
+        han enseñado de esa vuelta.
         """
 
     @abstractmethod

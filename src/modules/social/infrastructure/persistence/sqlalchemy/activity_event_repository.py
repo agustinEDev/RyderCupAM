@@ -1,8 +1,9 @@
 """Activity Event Repository - SQLAlchemy Implementation."""
 
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,18 +61,31 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
 
     async def find_for_users(
-        self, user_ids: list[UserId], limit: int, before: datetime | None = None
+        self,
+        user_ids: list[UserId],
+        limit: int,
+        before: datetime | None = None,
+        before_id: UUID | None = None,
     ) -> list[ActivityEvent]:
         if not user_ids:
             return []
 
         stmt = select(ActivityEvent).where(ActivityEvent._user_id.in_(user_ids))
         if before is not None:
-            stmt = stmt.where(ActivityEvent._occurred_at < before)
+            # El cursor compara el par entero, no solo la fecha. Todos los
+            # eventos de una misma vuelta comparten `occurred_at` al
+            # microsegundo —salen del mismo `created_at`— asi que filtrar por
+            # fecha estricta tiraria tambien los que aun no se han enseñado, y
+            # filtrar por `<=` repetiria los ya vistos. El par (fecha, id) si es
+            # unico, y `id` desempata de forma estable entre paginas
+            if before_id is not None:
+                stmt = stmt.where(
+                    tuple_(ActivityEvent._occurred_at, ActivityEvent._id)
+                    < tuple_(before, before_id)
+                )
+            else:
+                stmt = stmt.where(ActivityEvent._occurred_at < before)
 
-        # El desempate por id evita que dos eventos de la misma vuelta —que
-        # comparten `occurred_at` al milisegundo— salgan en orden distinto en
-        # cada pagina y uno de ellos se repita o se pierda al paginar
         stmt = stmt.order_by(
             ActivityEvent._occurred_at.desc(), ActivityEvent._id.desc()
         ).limit(limit)

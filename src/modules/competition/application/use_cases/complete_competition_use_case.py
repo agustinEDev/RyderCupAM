@@ -95,36 +95,51 @@ class CompleteCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede completar la competicion")
 
-            # 3. Antes de cerrar: una vez cerrado, estas vueltas ya cuentan para
-            # las estadisticas y no habria forma de saber la marca previa
-            marca_previa = await self._marca_previa(competition_id)
+            # 3. Los inscritos, para preguntar por su marca previa fuera de aqui
+            inscritos = [
+                enrollment.user_id
+                for enrollment in await self._uow.enrollments.find_by_competition(
+                    competition_id
+                )
+            ]
 
-            # 4. Completar la competicion (la entidad valida la transicion)
+        # 4. Fuera de la transaccion a proposito: preguntar por el mejor
+        # diferencial entra en las estadisticas del jugador, que abren esta misma
+        # unidad de trabajo. Anidarla arriba la cerraria antes de guardar el
+        # cierre. Y va antes de completar: despues, estas vueltas ya cuentan para
+        # sus estadisticas y su marca previa seria imposible de saber
+        marca_previa = await self._marca_previa(inscritos)
+
+        async with self._uow:
+            competition = await self._uow.competitions.find_by_id(competition_id)
+            if not competition:
+                raise CompetitionNotFoundError(
+                    f"No existe competición con ID {request.competition_id}"
+                )
+
+            # 5. Completar la competicion (la entidad valida la transicion)
             competition.complete()
 
-            # 5. Persistir cambios
+            # 6. Persistir cambios
             await self._uow.competitions.update(competition)
 
-        # 6. Publicar los logros del torneo en el feed de los amigos
+        # 7. Publicar los logros del torneo en el feed de los amigos
         await self._publicar_logros(request.competition_id, marca_previa)
 
-        # 7. Retornar DTO de respuesta
+        # 8. Retornar DTO de respuesta
         return CompleteCompetitionResponseDTO(
             id=competition.id.value,
             status=competition.status.value,
             completed_at=competition.updated_at,
         )
 
-    async def _marca_previa(self, competition_id: CompetitionId) -> dict[str, float | None]:
+    async def _marca_previa(self, inscritos: list[UserId]) -> dict[str, float | None]:
         """El mejor diferencial de cada inscrito, antes de cerrar el torneo."""
         if self._achievements is None:
             return {}
 
         try:
-            enrollments = await self._uow.enrollments.find_by_competition(competition_id)
-            return await self._achievements.capture_best_differentials(
-                [enrollment.user_id for enrollment in enrollments]
-            )
+            return await self._achievements.capture_best_differentials(inscritos)
         except Exception:
             # Sin marca previa se publica todo menos el record personal, que es
             # mejor que no publicar nada

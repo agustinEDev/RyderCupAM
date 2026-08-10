@@ -25,6 +25,12 @@ def countable_holes(scores_by_hole: dict, course) -> list | None:
     diez anotados no hay ni vuelta entera ni mitad limpia.
     """
     holes = sorted(course.holes, key=lambda hole: hole.number)
+    # Sin hoyos no hay vuelta que contar. Hay que decirlo explícitamente porque
+    # `all()` sobre una lista vacía es cierto, así que un campo sin hoyos
+    # devolvería `[]` — que no es `None` y pasaría por vuelta válida de cero
+    # hoyos ante quien pregunte `if holes is None`
+    if not holes:
+        return None
 
     def all_scored(subset: list) -> bool:
         return all(hole.number in scores_by_hole for hole in subset)

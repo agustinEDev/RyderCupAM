@@ -149,11 +149,53 @@ async def test_pagina_por_fecha_y_no_por_numero_de_pagina(db_session):
 
     primera = await repository.find_for_users([user.id], limit=2)
     segunda = await repository.find_for_users(
-        [user.id], limit=2, before=primera[-1].occurred_at
+        [user.id],
+        limit=2,
+        before=primera[-1].occurred_at,
+        before_id=primera[-1].id,
     )
 
     assert [e.source_match_id for e in primera] == ["match-0", "match-1"]
     assert [e.source_match_id for e in segunda] == ["match-2", "match-3"]
+
+
+async def test_no_pierde_eventos_que_comparten_la_misma_fecha(db_session):
+    """
+    Given cuatro logros de la misma vuelta —misma `occurred_at` al microsegundo—
+    / When se pagina de dos en dos / Then salen los cuatro, cada uno una vez.
+
+    Es el caso normal, no un borde: todos los eventos de una vuelta se publican
+    con el mismo `occurred_at`. Paginando solo por fecha, la segunda pagina se
+    saltaria los que compartieran la del ultimo de la primera.
+    """
+    user = await _make_saved_user(db_session, "feed-repo-11@example.com")
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many(
+        [
+            _event(user, ActivityEventType.BIRDIE, "match-1"),
+            _event(user, ActivityEventType.EAGLE_OR_BETTER, "match-1"),
+            _event(user, ActivityEventType.NEW_COURSE, "match-1"),
+            _event(user, ActivityEventType.HOLE_IN_ONE, "match-1"),
+        ]
+    )
+    await db_session.commit()
+
+    vistos = []
+    cursor = None
+    while True:
+        pagina = await repository.find_for_users(
+            [user.id],
+            limit=2,
+            before=cursor.occurred_at if cursor else None,
+            before_id=cursor.id if cursor else None,
+        )
+        if not pagina:
+            break
+        vistos.extend(pagina)
+        cursor = pagina[-1]
+
+    assert len(vistos) == 4
+    assert len({e.id for e in vistos}) == 4
 
 
 async def test_solo_devuelve_lo_de_los_jugadores_pedidos(db_session):
