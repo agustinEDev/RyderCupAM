@@ -57,6 +57,9 @@ from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapp
     start_quick_match_mappers,
 )
 from src.modules.social.infrastructure.api.v1 import friend_routes  # noqa: E402
+from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (  # noqa: E402
+    start_activity_event_mappers,
+)
 from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (  # noqa: E402
     start_social_mappers,
 )
@@ -109,6 +112,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_golf_course_mappers()  # Golf Course module mappers (before Competition - dependency)
     start_competition_mappers()  # Competition module mappers (depends on GolfCourse)
     start_social_mappers()  # Social module mappers (depends on User)
+    start_activity_event_mappers()  # Activity feed (depends on User)
     start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
     yield
     print("INFO:     Apagando aplicación...")

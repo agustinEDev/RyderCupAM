@@ -177,6 +177,10 @@ users_table = Table(
         "avatar_source", AvatarSourceDecorator(), nullable=False, default="NONE", server_default="NONE"
     ),
     Column("avatar_preset_id", Integer, nullable=True),
+    # Feed de actividad (BE #175): cuándo miró el feed por última vez, de donde
+    # sale el aviso de novedades, y si publica o no sus logros
+    Column("feed_last_seen_at", DateTime, nullable=True),
+    Column("share_activity", Boolean, nullable=False, default=True, server_default="true"),
     Column(
         "active_avatar_upload_id",
         ActiveAvatarUploadIdDecorator,
@@ -228,6 +232,8 @@ def start_mappers():
                 "_gender": users_table.c.gender,
                 "_avatar_source": users_table.c.avatar_source,
                 "_avatar_preset_id": users_table.c.avatar_preset_id,
+                "_feed_last_seen_at": users_table.c.feed_last_seen_at,
+                "_share_activity": users_table.c.share_activity,
                 "_active_avatar_upload_id": users_table.c.active_avatar_upload_id,
                 # Value Objects de una columna (Email, Password) → mapeamos la columna
                 # cruda a un atributo "_value" y componemos el VO real sobre el
