@@ -11,7 +11,10 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.social.application.exceptions import ProfileNotVisibleError
+from src.modules.social.application.exceptions import (
+    ActivityNotVisibleError,
+    ProfileNotVisibleError,
+)
 from src.modules.social.application.use_cases.get_player_activity_use_case import (
     GetPlayerActivityUseCase,
 )
@@ -99,15 +102,33 @@ async def test_un_amigo_ve_la_actividad(social_uow, user_uow):
 
 
 async def test_un_desconocido_no_ve_la_actividad(social_uow, user_uow):
-    """Given dos sin amistad / When se pide la actividad / Then no existe para el."""
+    """
+    Given dos sin amistad / When se pide la actividad / Then se rechaza.
+
+    La actividad es solo para amigos, a diferencia de la ficha del perfil. Y el
+    rechazo es explicito, no un "no existe": el jugador si existe y quien
+    pregunta ya ha podido ver su ficha.
+    """
     yo = await _create_user(user_uow)
     extranio = await _create_user(user_uow)
     await _publica(social_uow, extranio, "match-1")
 
-    with pytest.raises(ProfileNotVisibleError):
+    with pytest.raises(ActivityNotVisibleError):
         await _use_case(social_uow, user_uow).execute(
             str(yo.id.value), str(extranio.id.value)
         )
+
+
+async def test_un_jugador_que_no_existe_da_un_error_distinto(social_uow, user_uow):
+    """
+    Given un id inventado / When se pide su actividad / Then el error dice que
+    no existe, no que sea privado: son dos situaciones distintas y el cliente
+    reacciona distinto a cada una.
+    """
+    yo = await _create_user(user_uow)
+
+    with pytest.raises(ProfileNotVisibleError):
+        await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(uuid4()))
 
 
 async def test_el_interruptor_apagado_no_es_un_error(social_uow, user_uow):

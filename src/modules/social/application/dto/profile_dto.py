@@ -7,30 +7,68 @@ from pydantic import BaseModel, Field
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
 
 
+class FriendshipStateDTO(BaseModel):
+    """
+    En que punto esta la relacion con el jugador del perfil.
+
+    Va en el perfil para que el cliente sepa que boton pintar sin tener que
+    cruzar la lista de amigos con la de solicitudes. `PENDING_SENT` y
+    `PENDING_RECEIVED` se distinguen porque no llevan al mismo sitio: una espera
+    respuesta del otro, la otra pide una respuesta tuya.
+    """
+
+    status: str = Field(
+        description="NONE, PENDING_SENT, PENDING_RECEIVED, ACCEPTED, DECLINED o BLOCKED"
+    )
+    friendship_id: str | None = Field(
+        default=None,
+        description=(
+            "Id de la relacion, necesario para aceptarla o deshacerla. "
+            "None cuando todavia no hay ninguna"
+        ),
+    )
+
+
 class PlayerProfileResponseDTO(BaseModel):
     """
-    El perfil de un jugador tal y como lo ve un amigo.
+    El perfil de un jugador, con dos niveles de detalle segun quien mire.
 
-    Lleva lo justo para pintar la ficha: quien es, su avatar, su handicap y el
-    mismo resumen de rendimiento que el jugador ve en su propio panel. No lleva
-    correo ni nada de la cuenta: es el perfil de golf de alguien, no su ficha
-    de usuario.
+    **Cualquiera ve la ficha minima**: nombre, apellidos y foto. Es lo que hace
+    falta para encontrar a alguien por su nombre y reconocerlo antes de mandarle
+    una solicitud, y no dice nada de el que no diga ya la busqueda.
+
+    **Solo los amigos ven lo de detras**: handicap, estadisticas y actividad.
+    Esos campos llegan en None a quien no es amigo, no recortados ni a cero — un
+    cero se leeria como "juega fatal" en lugar de "no puedes ver esto".
+
+    Nunca lleva correo ni datos de la cuenta, ni siquiera entre amigos: esto es
+    el perfil de golf de alguien, no su ficha de usuario.
     """
 
     id: str
     first_name: str
     last_name: str
-    handicap: float | None = Field(
-        default=None, description="Handicap del perfil, None si aun no lo ha fijado"
-    )
     avatar_source: str
     avatar_preset_id: int | None = None
     has_avatar_upload: bool = Field(
         default=False,
         description="Si tiene foto propia subida; la imagen se pide al endpoint de avatares",
     )
-    stats: PlayerStatsResponseDTO = Field(
-        description="El mismo resumen de rendimiento que su propio panel (BE #128, #167)"
+    friendship: FriendshipStateDTO = Field(
+        description="En que punto esta tu relacion con el, para saber que boton ofrecer"
+    )
+    is_friend: bool = Field(
+        default=False, description="Atajo de `friendship.status == ACCEPTED`"
+    )
+    handicap: float | None = Field(
+        default=None, description="Solo entre amigos. None si no lo sois o si no lo ha fijado"
+    )
+    stats: PlayerStatsResponseDTO | None = Field(
+        default=None,
+        description=(
+            "Solo entre amigos: el mismo resumen que su propio panel (BE #128, #167). "
+            "None cuando no sois amigos"
+        ),
     )
 
 

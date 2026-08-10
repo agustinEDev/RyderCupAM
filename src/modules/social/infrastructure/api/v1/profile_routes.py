@@ -20,7 +20,10 @@ from src.modules.social.application.dto.profile_dto import (
     FeedResponseDTO,
     PlayerProfileResponseDTO,
 )
-from src.modules.social.application.exceptions import ProfileNotVisibleError
+from src.modules.social.application.exceptions import (
+    ActivityNotVisibleError,
+    ProfileNotVisibleError,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -51,9 +54,10 @@ PROFILE_NOT_FOUND = "Profile not found"
     response_model=PlayerProfileResponseDTO,
     summary="Get a player's profile",
     description=(
-        "The profile of a player you are friends with, including their performance "
-        "summary. Returns 404 when there is no accepted friendship — deliberately "
-        "indistinguishable from a profile that does not exist."
+        "Any registered user sees the minimum card — name, surname and photo — which is "
+        "what makes it possible to recognise someone found by name before sending them a "
+        "request. Handicap and stats come back as null unless you are friends. Returns "
+        "404 only when the player does not exist or has been deactivated."
     ),
 )
 async def get_player_profile(
@@ -74,9 +78,9 @@ async def get_player_profile(
     response_model=FeedResponseDTO,
     summary="Get a player's published achievements",
     description=(
-        "The achievements a friend has published, newest first. Returns 404 under the "
-        "same rule as the profile. An empty list means they publish nothing, which is "
-        "not an error."
+        "The achievements a friend has published, newest first. Friends only: 403 "
+        "otherwise, since the player's existence is already public. 404 means the player "
+        "does not exist. An empty list means they publish nothing, which is not an error."
     ),
 )
 async def get_player_activity(
@@ -94,6 +98,8 @@ async def get_player_activity(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND
         ) from e
+    except ActivityNotVisibleError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 @router.get(

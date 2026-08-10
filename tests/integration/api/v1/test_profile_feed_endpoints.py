@@ -52,12 +52,10 @@ class TestPerfil:
         assert "email" not in datos
 
     @pytest.mark.asyncio
-    async def test_un_desconocido_recibe_404_y_no_403(self, client: AsyncClient):
+    async def test_un_desconocido_ve_la_ficha_pero_no_lo_privado(self, client: AsyncClient):
         """
-        Given dos usuarios sin amistad / When uno pide el perfil / Then 404.
-
-        Un 403 confirmaria que la cuenta existe, que es justo lo que no debe
-        poder averiguarse probando identificadores.
+        Given dos usuarios sin amistad / When uno pide el perfil / Then 200 con
+        nombre, apellidos y foto, pero sin handicap ni estadisticas.
         """
         ana = await create_authenticated_user(
             client, "perfil_c@test.com", "P@ssw0rd123!", "Ana", "Garcia"
@@ -69,29 +67,52 @@ class TestPerfil:
         set_auth_cookies(client, ana["cookies"])
         respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/profile")
 
-        assert respuesta.status_code == 404
+        assert respuesta.status_code == 200
+        datos = respuesta.json()
+        assert datos["first_name"] == "Luis"
+        assert datos["is_friend"] is False
+        assert datos["friendship"]["status"] == "NONE"
+        assert datos["stats"] is None
+        assert datos["handicap"] is None
+        assert "email" not in datos
 
     @pytest.mark.asyncio
-    async def test_una_cuenta_inventada_responde_igual_que_un_desconocido(
-        self, client: AsyncClient
-    ):
+    async def test_una_cuenta_inventada_si_da_404(self, client: AsyncClient):
         """
-        Given un id que no existe / When se pide su perfil / Then la respuesta es
-        indistinguible de la de alguien que existe pero no es amigo.
+        Given un id que no existe / When se pide su perfil / Then 404.
+
+        El 404 se reserva para lo que de verdad no esta. Ya no sirve para ocultar
+        que una cuenta existe: los jugadores se buscan por nombre, asi que su
+        existencia es publica por diseño.
         """
         ana = await create_authenticated_user(
             client, "perfil_e@test.com", "P@ssw0rd123!", "Ana", "Garcia"
         )
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get(f"/api/v1/users/{uuid4()}/profile")
+
+        assert respuesta.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_el_perfil_dice_en_que_punto_esta_la_solicitud(self, client: AsyncClient):
+        """
+        Given una solicitud enviada / When miro su perfil / Then el estado lo
+        refleja, para no ofrecerme mandar otra.
+        """
+        ana = await create_authenticated_user(
+            client, "perfil_g@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
         luis = await create_authenticated_user(
-            client, "perfil_f@test.com", "P@ssw0rd123!", "Luis", "Perez"
+            client, "perfil_h@test.com", "P@ssw0rd123!", "Luis", "Perez"
         )
 
         set_auth_cookies(client, ana["cookies"])
-        inventado = await client.get(f"/api/v1/users/{uuid4()}/profile")
-        desconocido = await client.get(f"/api/v1/users/{luis['user']['id']}/profile")
+        await client.post("/api/v1/friends/requests", json={"addressee_id": luis["user"]["id"]})
+        respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/profile")
 
-        assert inventado.status_code == desconocido.status_code == 404
-        assert inventado.json() == desconocido.json()
+        assert respuesta.json()["friendship"]["status"] == "PENDING_SENT"
+        assert respuesta.json()["friendship"]["friendship_id"] is not None
 
     @pytest.mark.asyncio
     async def test_requiere_autenticacion(self, client: AsyncClient):
@@ -101,6 +122,36 @@ class TestPerfil:
         respuesta = await client.get(f"/api/v1/users/{uuid4()}/profile")
 
         assert respuesta.status_code == 401
+
+
+class TestBusqueda:
+    @pytest.mark.asyncio
+    async def test_la_busqueda_no_devuelve_correos(self, client: AsyncClient):
+        """
+        Given un jugador buscando por nombre / When encuentra a alguien / Then
+        recibe nombre, apellidos y foto, nunca su correo.
+
+        Cualquiera puede buscar por nombre, asi que lo que salga de aqui es
+        publico. Devolver el correo permitia recolectar direcciones tecleando
+        nombres sueltos.
+        """
+        await create_authenticated_user(
+            client, "busca_diana@test.com", "P@ssw0rd123!", "Diana", "Buscada"
+        )
+        ana = await create_authenticated_user(
+            client, "busca_ana@test.com", "P@ssw0rd123!", "Ana", "Buscadora"
+        )
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get("/api/v1/users/search-autocomplete?query=Diana")
+
+        assert respuesta.status_code == 200
+        encontrados = respuesta.json()["users"]
+        assert len(encontrados) >= 1
+        for usuario in encontrados:
+            assert "email" not in usuario
+            assert "avatar_source" in usuario
+        assert "busca_diana@test.com" not in respuesta.text
 
 
 class TestFeed:
@@ -147,8 +198,14 @@ class TestFeed:
 
 class TestActividad:
     @pytest.mark.asyncio
-    async def test_la_actividad_de_un_desconocido_da_404(self, client: AsyncClient):
-        """Given dos sin amistad / When se pide su actividad / Then 404, igual que el perfil."""
+    async def test_la_actividad_de_un_desconocido_da_403(self, client: AsyncClient):
+        """
+        Given dos sin amistad / When se pide su actividad / Then 403, no 404.
+
+        Aqui el 403 no filtra nada: el perfil de esa persona ya es visible, asi
+        que su existencia no es ningun secreto. Fingir un 404 confundiria al
+        cliente, que acaba de recibir su ficha.
+        """
         ana = await create_authenticated_user(
             client, "act_a@test.com", "P@ssw0rd123!", "Ana", "Garcia"
         )
@@ -158,6 +215,18 @@ class TestActividad:
 
         set_auth_cookies(client, ana["cookies"])
         respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/activity")
+
+        assert respuesta.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_la_actividad_de_una_cuenta_inventada_da_404(self, client: AsyncClient):
+        """Given un id que no existe / When se pide su actividad / Then 404, no 403."""
+        ana = await create_authenticated_user(
+            client, "act_e@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get(f"/api/v1/users/{uuid4()}/activity")
 
         assert respuesta.status_code == 404
 

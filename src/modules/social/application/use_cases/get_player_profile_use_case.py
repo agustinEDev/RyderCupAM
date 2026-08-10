@@ -1,10 +1,15 @@
-"""Caso de Uso: Ver el perfil de un amigo."""
+"""Caso de Uso: Ver el perfil de un jugador."""
 
-from src.modules.social.application.dto.profile_dto import PlayerProfileResponseDTO
+from src.modules.social.application.dto.profile_dto import (
+    FriendshipStateDTO,
+    PlayerProfileResponseDTO,
+)
 from src.modules.social.application.exceptions import ProfileNotVisibleError
+from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.social.domain.value_objects.friendship_status import FriendshipStatus
 from src.modules.user.application.use_cases.get_player_stats_use_case import (
     GetPlayerStatsUseCase,
 )
@@ -13,24 +18,34 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
+# Estados que ve el cliente. Los dos "pendiente" se separan porque no llevan al
+# mismo boton: uno espera respuesta del otro, el otro pide respuesta tuya.
+NO_RELATIONSHIP = "NONE"
+PENDING_SENT = "PENDING_SENT"
+PENDING_RECEIVED = "PENDING_RECEIVED"
+
 
 class GetPlayerProfileUseCase:
     """
-    El perfil de otro jugador, visible solo entre amigos.
+    El perfil de un jugador, con dos niveles segun quien mire.
 
-    **La amistad es un guard, no un filtro.** Quien no es amigo no recibe una
-    version recortada del perfil: no recibe perfil. La comprobacion decide si se
-    responde, no cuanto se responde.
+    **La ficha minima es publica entre usuarios registrados**: nombre, apellidos
+    y foto. Es lo que permite buscar a alguien por su nombre, reconocerlo y
+    mandarle una solicitud, y no dice nada que la propia busqueda no diga ya.
 
-    Se comprueba en cada peticion y no se guarda nada en cache, que es lo que
-    hace que deshacer una amistad retire el acceso al instante: la siguiente
-    peticion ya no encuentra la relacion.
+    **Lo de detras es solo para amigos**: handicap, estadisticas y actividad.
+    Quien no es amigo los recibe en None, no recortados ni a cero: un cero se
+    leeria como "juega fatal" en vez de "esto no se puede ver".
 
-    El resumen de rendimiento sale de `GetPlayerStatsUseCase` tal cual. Ese caso
-    de uso recibe un `UserId` cualquiera, asi que sirve para otro jugador sin
-    tocar nada, y asi el perfil de un amigo enseña exactamente las mismas
-    cifras que el propio panel en vez de una segunda version que se separaria
-    con el tiempo.
+    Antes esto era un 404 para cualquiera que no fuera amigo, con la idea de no
+    confirmar que la cuenta existia. Esa proteccion dejo de tener sentido cuando
+    se decidio que los jugadores se buscan por nombre: la cuenta ya es
+    descubrible por diseño, y seguir fingiendo que no existe solo impediria
+    mandarle una solicitud. El 404 se reserva ahora para lo que de verdad no
+    esta: cuentas inexistentes o dadas de baja.
+
+    La relacion se consulta en cada peticion y no se guarda en cache, que es lo
+    que hace que deshacer una amistad retire el acceso al instante.
     """
 
     def __init__(
@@ -44,39 +59,68 @@ class GetPlayerProfileUseCase:
         self._stats = stats_use_case
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> PlayerProfileResponseDTO:
-        """
-        El perfil pedido, o `ProfileNotVisibleError` si no procede enseñarlo.
-
-        Un jugador siempre puede verse a si mismo: sin esa salida, mirar el
-        propio perfil exigiria ser amigo de uno mismo.
-        """
         viewer_id = UserId(viewer_id_raw)
         target_id = UserId(target_id_raw)
-
-        if viewer_id != target_id:
-            async with self._social_uow:
-                if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
-                    raise ProfileNotVisibleError("Profile not found")
+        propio = viewer_id == target_id
 
         async with self._user_uow:
             user = await self._user_uow.users.find_by_id(target_id)
-            # La misma excepcion que para un desconocido: distinguir "no existe"
-            # de "no sois amigos" convertiria esto en un detector de cuentas
             if user is None or not user.is_active:
                 raise ProfileNotVisibleError("Profile not found")
 
-            perfil = {
+            ficha = {
                 "id": str(user.id.value),
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "handicap": float(user.handicap.value) if user.handicap else None,
                 "avatar_source": user.avatar_source.value,
                 "avatar_preset_id": user.avatar_preset_id,
                 "has_avatar_upload": user.active_avatar_upload_id is not None,
             }
+            handicap = float(user.handicap.value) if user.handicap else None
+
+        relacion = await self._relacion(viewer_id, target_id, propio)
+        puede_ver_todo = propio or relacion.status == FriendshipStatus.ACCEPTED.value
 
         # Fuera de la unidad de trabajo: las estadisticas abren las suyas, y
         # anidarlas sobre la misma sesion la cerraria antes de tiempo
-        stats = await self._stats.execute(target_id)
+        stats = await self._stats.execute(target_id) if puede_ver_todo else None
 
-        return PlayerProfileResponseDTO(**perfil, stats=stats)
+        return PlayerProfileResponseDTO(
+            **ficha,
+            friendship=relacion,
+            is_friend=relacion.status == FriendshipStatus.ACCEPTED.value,
+            handicap=handicap if puede_ver_todo else None,
+            stats=stats,
+        )
+
+    async def _relacion(
+        self, viewer_id: UserId, target_id: UserId, propio: bool
+    ) -> FriendshipStateDTO:
+        """En que punto esta la relacion, para que el cliente sepa que ofrecer."""
+        if propio:
+            return FriendshipStateDTO(status=NO_RELATIONSHIP)
+
+        async with self._social_uow:
+            friendship = await self._social_uow.friendships.find_by_pair(viewer_id, target_id)
+
+        if friendship is None:
+            return FriendshipStateDTO(status=NO_RELATIONSHIP)
+
+        return FriendshipStateDTO(
+            status=self._estado(friendship, viewer_id),
+            friendship_id=str(friendship.id.value),
+        )
+
+    @staticmethod
+    def _estado(friendship: Friendship, viewer_id: UserId) -> str:
+        """
+        El estado desde el punto de vista de quien mira.
+
+        Una solicitud pendiente no significa lo mismo para los dos lados, asi
+        que se traduce a dos estados distintos en lugar de devolver `PENDING` y
+        dejar que el cliente deduzca quien la mando.
+        """
+        if friendship.status != FriendshipStatus.PENDING:
+            return friendship.status.value
+
+        return PENDING_SENT if friendship.requester_id == viewer_id else PENDING_RECEIVED

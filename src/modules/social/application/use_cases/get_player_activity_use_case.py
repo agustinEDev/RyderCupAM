@@ -1,7 +1,10 @@
 """Caso de Uso: La actividad publicada por un jugador."""
 
 from src.modules.social.application.dto.profile_dto import ActivityEventDTO, FeedResponseDTO
-from src.modules.social.application.exceptions import ProfileNotVisibleError
+from src.modules.social.application.exceptions import (
+    ActivityNotVisibleError,
+    ProfileNotVisibleError,
+)
 from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
@@ -20,9 +23,13 @@ class GetPlayerActivityUseCase:
     """
     Los logros de un jugador concreto, visibles solo entre amigos.
 
-    Mismo guard que el perfil: quien no es amigo recibe el mismo error que si la
-    cuenta no existiera. Y la misma regla de publicacion: con el interruptor
-    apagado no hay actividad que enseñar, ni siquiera a un amigo.
+    A diferencia del perfil —cuya ficha minima ve cualquiera—, la actividad es
+    **solo para amigos**: es de lo que trata el componente social. Quien no lo
+    sea recibe un 403 y no un 404, porque la existencia del jugador ya no es
+    ningun secreto: acaba de poder ver su ficha.
+
+    Y la misma regla de publicacion: con el interruptor apagado no hay actividad
+    que enseñar, ni siquiera a un amigo.
 
     Reutiliza el paginado del feed en vez de repetirlo — es el mismo cursor
     sobre los mismos eventos, solo que de un autor en lugar de varios.
@@ -48,16 +55,16 @@ class GetPlayerActivityUseCase:
         limit = max(1, min(limit, MAX_PAGE_SIZE))
         before, before_id = parse_cursor(cursor)
 
-        if viewer_id != target_id:
-            async with self._social_uow:
-                if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
-                    raise ProfileNotVisibleError("Profile not found")
-
         async with self._user_uow:
             target = await self._user_uow.users.find_by_id(target_id)
             if target is None or not target.is_active:
                 raise ProfileNotVisibleError("Profile not found")
             publica = target.share_activity
+
+        if viewer_id != target_id:
+            async with self._social_uow:
+                if not await self._social_uow.friendships.are_friends(viewer_id, target_id):
+                    raise ActivityNotVisibleError("Only friends can see this player's activity")
 
         # El interruptor apagado no es un error: el perfil existe y es visible,
         # simplemente no tiene actividad publicada

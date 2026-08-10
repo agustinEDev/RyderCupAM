@@ -27,15 +27,25 @@ class NotAddresseeError(Exception):
 
 class ProfileNotVisibleError(Exception):
     """
-    El perfil pedido no es visible para quien pregunta.
+    El jugador pedido no esta: no existe o esta dado de baja.
 
-    **Se traduce a 404, nunca a 403.** Un 403 diria "existe, pero no puedes
-    verlo", que es justo lo que no debe saberse: convertiria el endpoint en un
-    detector de cuentas, donde probar identificadores distingue las que existen
-    de las que no. Para quien no es amigo, el perfil sencillamente no esta.
+    **Se traduce a 404.** No cubre el caso de "existe pero no sois amigos": la
+    ficha minima de un jugador (nombre, apellidos y foto) la ve cualquier
+    usuario registrado, porque los jugadores se buscan por nombre y hay que
+    poder reconocer a alguien antes de mandarle una solicitud.
+    """
 
-    Por eso tampoco distingue entre "no existe esa cuenta" y "existe pero no
-    sois amigos": las dos situaciones producen esta misma excepcion.
+    pass
+
+
+class ActivityNotVisibleError(Exception):
+    """
+    La actividad de ese jugador es privada para quien pregunta.
+
+    **Se traduce a 403 y no a 404**, al contrario que el perfil. Aqui un 403 no
+    filtra nada: la ficha minima del jugador ya es visible, asi que su
+    existencia no es ningun secreto que proteger. Fingir un 404 solo confundiria
+    al cliente, que acaba de recibir el perfil de esa misma persona.
     """
 
     pass
