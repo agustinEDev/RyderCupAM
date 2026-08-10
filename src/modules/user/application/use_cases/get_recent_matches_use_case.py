@@ -67,6 +67,9 @@ class _CompetitionMatchRaw:
     match: Match
     round_: Round
     tournament_name: str | None
+    # La tarjeta del jugador, para poder dar sus golpes y sus puntos: el
+    # partido guarda quién ganó, no cómo jugó cada uno
+    hole_scores: list
 
 
 class GetRecentMatchesUseCase:
@@ -209,6 +212,9 @@ class GetRecentMatchesUseCase:
                         match=match,
                         round_=round_,
                         tournament_name=competition_names[round_.competition_id],
+                        hole_scores=await self._competition_uow.hole_scores.find_by_match_and_player(
+                            match.id, user_id
+                        ),
                     )
                 )
 
@@ -271,18 +277,19 @@ class GetRecentMatchesUseCase:
 
         result = None
         score = None
-        stableford_points = None
+
+        # Los totales se calculan siempre, sea cual sea el formato: los puntos
+        # Stableford son la única cifra que compara vueltas entre sí, porque 36
+        # puntos es jugar a tu hándicap en cualquier campo y cualquier formato
+        totals = self._participant_totals(raw, course, profile_handicap)
 
         if match.match_format is not None:
             result, score = self._quick_match_play_outcome(raw)
-        else:
-            totals = self._participant_totals(raw, course, profile_handicap)
-            if totals is not None:
-                if match.scoring_format == ScoringFormat.STABLEFORD:
-                    stableford_points = totals.stableford_points
-                    score = f"{totals.stableford_points} pts"
-                else:
-                    score = self._calculator.format_to_par(totals.to_par)
+        elif totals is not None:
+            if match.scoring_format == ScoringFormat.STABLEFORD:
+                score = f"{totals.stableford_points} pts"
+            else:
+                score = self._calculator.format_to_par(totals.to_par)
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -296,7 +303,9 @@ class GetRecentMatchesUseCase:
             tournament_name=None,
             result=result,
             score=score,
-            stableford_points=stableford_points,
+            stableford_points=totals.stableford_points if totals else None,
+            total_strokes=totals.total_strokes if totals else None,
+            holes_played=totals.holes_played if totals else None,
             partners=partners,
             opponents=opponents,
         )
@@ -323,6 +332,7 @@ class GetRecentMatchesUseCase:
             if player.user_id != user_id
         ]
         opponents = [self._user_name(player.user_id, users_by_id) for player in rival_team]
+        total_strokes, holes_played, points = self._scorecard_totals(raw, course)
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -336,7 +346,9 @@ class GetRecentMatchesUseCase:
             tournament_name=raw.tournament_name,
             result=self._result_for_team(match.get_winner(), "A" if in_team_a else "B"),
             score=match.result.get("score") if match.result else None,
-            stableford_points=None,
+            stableford_points=points,
+            total_strokes=total_strokes,
+            holes_played=holes_played,
             partners=partners,
             opponents=opponents,
         )
@@ -418,6 +430,39 @@ class GetRecentMatchesUseCase:
             scores_by_hole=scores_by_hole,
             allowance_percentage=raw.match.get_effective_allowance(),
         )
+
+    def _scorecard_totals(self, raw: _CompetitionMatchRaw, course) -> tuple:
+        """
+        Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
+
+        Los golpes recibidos ya vienen resueltos por hoyo desde que se generó el
+        partido, así que no hay que repartirlos otra vez. Se usa `own_score` y
+        no `net_score` porque este último solo existe cuando el marcador validó
+        el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
+        cifras que enseñar.
+        """
+        if course is None:
+            return None, None, None
+
+        pars = {hole.number: hole.par for hole in course.holes}
+        scored = [
+            hole_score
+            for hole_score in raw.hole_scores
+            if hole_score.own_score is not None and hole_score.hole_number in pars
+        ]
+        if not scored:
+            return None, None, None
+
+        total_strokes = sum(hole_score.own_score for hole_score in scored)
+        points = sum(
+            self._calculator.hole_points(
+                hole_score.own_score,
+                pars[hole_score.hole_number],
+                hole_score.strokes_received,
+            )
+            for hole_score in scored
+        )
+        return total_strokes, len(scored), points
 
     def _quick_match_rivals(
         self,
