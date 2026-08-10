@@ -52,6 +52,9 @@ from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper
 from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
     start_social_mappers,
 )
+from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (
+    start_profile_photo_mappers,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
     start_mappers,
@@ -143,6 +146,7 @@ def pytest_configure(config):
         start_golf_course_mappers()  # Golf Course module
         start_social_mappers()  # Social module
         start_activity_event_mappers()  # Activity feed (depends on User)
+        start_profile_photo_mappers()  # Profile photo gallery (depends on User)
         start_quick_match_mappers()  # QuickMatch module
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
@@ -161,6 +165,7 @@ def pytest_configure(config):
             start_golf_course_mappers()
             start_social_mappers()
             start_activity_event_mappers()
+            start_profile_photo_mappers()
             start_quick_match_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.

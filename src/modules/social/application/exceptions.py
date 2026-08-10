@@ -38,6 +38,24 @@ class ProfileNotVisibleError(Exception):
     pass
 
 
+class ProfileGalleryFullError(Exception):
+    """
+    La galeria ya tiene el maximo de fotos.
+
+    Se rechaza la subida en lugar de borrar la mas antigua para hacer sitio. Los
+    avatares si podan, porque son historial de una misma cosa; aqui cada foto es
+    una decision del jugador y quitarle una sin avisar seria perderle contenido.
+    """
+
+    pass
+
+
+class PhotoNotFoundError(Exception):
+    """La foto pedida no existe, o no es de quien intenta manejarla."""
+
+    pass
+
+
 class ActivityNotVisibleError(Exception):
     """
     La actividad de ese jugador es privada para quien pregunta.

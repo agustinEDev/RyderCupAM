@@ -266,6 +266,9 @@ from src.modules.social.application.ports.social_email_service_interface import 
     ISocialEmailService,
 )
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
+from src.modules.social.application.use_cases.delete_profile_photo_use_case import (
+    DeleteProfilePhotoUseCase,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
@@ -274,6 +277,12 @@ from src.modules.social.application.use_cases.get_player_activity_use_case impor
 )
 from src.modules.social.application.use_cases.get_player_profile_use_case import (
     GetPlayerProfileUseCase,
+)
+from src.modules.social.application.use_cases.get_profile_gallery_use_case import (
+    GetProfileGalleryUseCase,
+)
+from src.modules.social.application.use_cases.get_profile_photo_image_use_case import (
+    GetProfilePhotoImageUseCase,
 )
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
 from src.modules.social.application.use_cases.list_pending_requests_use_case import (
@@ -297,6 +306,9 @@ from src.modules.social.application.use_cases.send_friend_request_use_case impor
 )
 from src.modules.social.application.use_cases.set_activity_sharing_use_case import (
     SetActivitySharingUseCase,
+)
+from src.modules.social.application.use_cases.upload_profile_photo_use_case import (
+    UploadProfilePhotoUseCase,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -1346,6 +1358,37 @@ def get_player_differentials(
 ) -> PlayerDifferentialsInterface:
     """Proveedor del puerto de diferenciales que usa el feed de logros."""
     return StatsPlayerDifferentialsAdapter(stats_use_case)
+
+
+def get_upload_profile_photo_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    image_processor: IImageProcessor = Depends(get_image_processor),
+) -> UploadProfilePhotoUseCase:
+    """Proveedor del caso de uso UploadProfilePhotoUseCase."""
+    return UploadProfilePhotoUseCase(social_uow, user_uow, image_processor)
+
+
+def get_profile_gallery_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetProfileGalleryUseCase:
+    """Proveedor del caso de uso GetProfileGalleryUseCase."""
+    return GetProfileGalleryUseCase(social_uow, user_uow)
+
+
+def get_profile_photo_image_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> GetProfilePhotoImageUseCase:
+    """Proveedor del caso de uso GetProfilePhotoImageUseCase."""
+    return GetProfilePhotoImageUseCase(social_uow)
+
+
+def get_delete_profile_photo_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> DeleteProfilePhotoUseCase:
+    """Proveedor del caso de uso DeleteProfilePhotoUseCase."""
+    return DeleteProfilePhotoUseCase(social_uow)
 
 
 def get_player_profile_use_case(

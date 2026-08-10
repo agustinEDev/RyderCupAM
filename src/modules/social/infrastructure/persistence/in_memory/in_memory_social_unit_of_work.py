@@ -6,6 +6,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.repositories.friendship_repository_interface import (
     FriendshipRepositoryInterface,
 )
+from src.modules.social.domain.repositories.profile_photo_repository_interface import (
+    ProfilePhotoRepositoryInterface,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -15,6 +18,9 @@ from src.modules.social.infrastructure.persistence.in_memory.in_memory_activity_
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_friendship_repository import (
     InMemoryFriendshipRepository,
 )
+from src.modules.social.infrastructure.persistence.in_memory.in_memory_profile_photo_repository import (
+    InMemoryProfilePhotoRepository,
+)
 
 
 class InMemorySocialUnitOfWork(SocialUnitOfWorkInterface):
@@ -23,6 +29,7 @@ class InMemorySocialUnitOfWork(SocialUnitOfWorkInterface):
     def __init__(self):
         self._friendships = InMemoryFriendshipRepository()
         self._activity_events = InMemoryActivityEventRepository()
+        self._profile_photos = InMemoryProfilePhotoRepository()
         self.committed = False
 
     @property
@@ -32,6 +39,10 @@ class InMemorySocialUnitOfWork(SocialUnitOfWorkInterface):
     @property
     def activity_events(self) -> ActivityEventRepositoryInterface:
         return self._activity_events
+
+    @property
+    def profile_photos(self) -> ProfilePhotoRepositoryInterface:
+        return self._profile_photos
 
     async def __aenter__(self):
         self.committed = False

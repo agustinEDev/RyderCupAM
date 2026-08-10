@@ -12,6 +12,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.repositories.friendship_repository_interface import (
     FriendshipRepositoryInterface,
 )
+from src.modules.social.domain.repositories.profile_photo_repository_interface import (
+    ProfilePhotoRepositoryInterface,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -20,6 +23,9 @@ from src.modules.social.infrastructure.persistence.sqlalchemy.activity_event_rep
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.friendship_repository import (
     SQLAlchemyFriendshipRepository,
+)
+from src.modules.social.infrastructure.persistence.sqlalchemy.profile_photo_repository import (
+    SQLAlchemyProfilePhotoRepository,
 )
 
 UQ_FRIENDSHIP_PAIR_CONSTRAINT = "uq_friendship_pair"
@@ -32,6 +38,7 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
         self._session = session
         self._friendships = SQLAlchemyFriendshipRepository(session)
         self._activity_events = SQLAlchemyActivityEventRepository(session)
+        self._profile_photos = SQLAlchemyProfilePhotoRepository(session)
 
     @property
     def friendships(self) -> FriendshipRepositoryInterface:
@@ -40,6 +47,10 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
     @property
     def activity_events(self) -> ActivityEventRepositoryInterface:
         return self._activity_events
+
+    @property
+    def profile_photos(self) -> ProfilePhotoRepositoryInterface:
+        return self._profile_photos
 
     async def __aenter__(self):
         return self

@@ -38,6 +38,12 @@ class FakeImageProcessor(IImageProcessor):
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida")
         return b"processed-jpeg-bytes"
 
+    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+        """La galería no se prueba aquí, pero el puerto la exige (BE #177)."""
+        if self.should_fail:
+            raise InvalidAvatarImageError("El archivo subido no es una imagen válida")
+        return b"processed-gallery-bytes"
+
 
 @pytest.fixture
 def uow():

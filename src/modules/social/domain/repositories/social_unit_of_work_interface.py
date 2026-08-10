@@ -10,6 +10,7 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .activity_event_repository_interface import ActivityEventRepositoryInterface
 from .friendship_repository_interface import FriendshipRepositoryInterface
+from .profile_photo_repository_interface import ProfilePhotoRepositoryInterface
 
 
 class SocialUnitOfWorkInterface(UnitOfWorkInterface):
@@ -30,4 +31,10 @@ class SocialUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def activity_events(self) -> ActivityEventRepositoryInterface:
         """Acceso al repositorio de eventos de actividad."""
+        pass
+
+    @property
+    @abstractmethod
+    def profile_photos(self) -> ProfilePhotoRepositoryInterface:
+        """Acceso al repositorio de fotos de perfil."""
         pass
