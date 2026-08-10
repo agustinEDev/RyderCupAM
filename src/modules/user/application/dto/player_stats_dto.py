@@ -111,7 +111,20 @@ class RecentMatchDTO(BaseModel):
     score: str | None = Field(
         default=None, description='Neto respecto al par ("PAR", "+4") o puntos Stableford'
     )
-    stableford_points: int | None = None
+    stableford_points: int | None = Field(
+        default=None,
+        description=(
+            "Puntos Stableford de la vuelta, **calculados en cualquier formato**: "
+            "36 puntos es jugar a tu hándicap, así que es la única cifra que "
+            "compara vueltas de medal, Stableford y match play entre sí."
+        ),
+    )
+    total_strokes: int | None = Field(
+        default=None, description="Golpes brutos de los hoyos anotados"
+    )
+    holes_played: int | None = Field(
+        default=None, description="Cuántos hoyos se anotaron: 18 en vuelta entera, 9 en media"
+    )
     partners: list[str] = Field(default_factory=list)
     opponents: list[str] = Field(default_factory=list)
 
