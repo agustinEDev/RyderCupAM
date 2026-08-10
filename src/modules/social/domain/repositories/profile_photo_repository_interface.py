@@ -14,8 +14,8 @@ class ProfilePhotoMetadata:
     """
     Una foto **sin sus bytes**.
 
-    Existe porque listar una galeria no necesita las imagenes: diez fotos son
-    casi cuatro megas, y pintarlas es cosa de diez peticiones aparte que el
+    Existe porque listar una galeria no necesita las imagenes: una galeria llena
+    son mas de siete megas, y pintarlas es cosa de peticiones aparte que el
     navegador cachea. Traerlas para enseñar una lista de miniaturas seria mover
     esos megas en cada visita al perfil para tirarlos acto seguido.
     """

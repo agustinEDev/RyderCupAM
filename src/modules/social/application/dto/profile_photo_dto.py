@@ -11,7 +11,7 @@ class ProfilePhotoDTO(BaseModel):
 
     Los bytes no van aqui: se piden aparte, uno por foto, y el navegador los
     cachea para siempre porque una foto no cambia nunca. Meterlos en el listado
-    haria que abrir un perfil moviera casi cuatro megas en base64 cada vez.
+    haria que abrir un perfil moviera siete megas en base64 cada vez.
     """
 
     id: str

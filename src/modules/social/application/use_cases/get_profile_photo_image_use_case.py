@@ -32,7 +32,7 @@ class GetProfilePhotoImageUseCase:
     quedarselos indefinidamente.
 
     Esto es lo que decide si la galeria es viable: cada foto la sirve el backend
-    ocupando un worker, y un perfil con diez fotos son diez peticiones. Sin
+    ocupando un worker, y un perfil lleno son veinte peticiones. Sin
     cache, cada visita al perfil las pide las diez otra vez.
     """
 

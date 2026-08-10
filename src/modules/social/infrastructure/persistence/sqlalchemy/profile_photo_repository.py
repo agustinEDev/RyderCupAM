@@ -32,8 +32,8 @@ class SQLAlchemyProfilePhotoRepository(ProfilePhotoRepositoryInterface):
         La galeria sin las imagenes.
 
         Se seleccionan columnas sueltas en lugar de la entidad a proposito: pedir
-        `ProfilePhoto` traeria tambien `image_data`, y diez fotos son casi cuatro
-        megas movidos para enseñar una lista de pies de foto.
+        `ProfilePhoto` traeria tambien `image_data`, y una galeria llena son mas de
+        siete megas movidos para enseñar una lista de pies de foto.
         """
         stmt = (
             select(

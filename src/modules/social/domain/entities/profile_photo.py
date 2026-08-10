@@ -5,9 +5,15 @@ from datetime import datetime
 from src.modules.social.domain.value_objects.profile_photo_id import ProfilePhotoId
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Tope de fotos por perfil. A 375 KB cada una son ~3,7 MB por jugador; 200
-# jugadores ocupan unos 750 MB de los 10 GB contratados (BE #177).
-MAX_PHOTOS_PER_PROFILE = 10
+# Tope de fotos por perfil. A 375 KB cada una son ~7,3 MB por jugador: 200
+# jugadores ocupan 1,4 GB de los 10 GB contratados (BE #177).
+#
+# No lo limita el disco sino la señal acordada para sacar las imagenes de la
+# base de datos —tabla por encima de 2 GB—, que con este tope se alcanza sobre
+# los 280 jugadores en lugar de los 560 que daban 10 fotos. Sigue siendo margen
+# de sobra para una aplicacion entre amigos, y migrar entonces es mover bytes,
+# no rehacer nada.
+MAX_PHOTOS_PER_PROFILE = 20
 
 
 class ProfilePhoto:

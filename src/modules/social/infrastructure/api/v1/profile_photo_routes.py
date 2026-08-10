@@ -155,7 +155,7 @@ async def get_photo_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     # Si el cliente ya la tiene, no se reenvian los bytes. Es lo que evita que
-    # abrir un perfil diez veces mueva cuarenta megas
+    # abrir un perfil diez veces mueva setenta megas
     if request.headers.get("if-none-match") == imagen.etag:
         return Response(
             status_code=status.HTTP_304_NOT_MODIFIED,

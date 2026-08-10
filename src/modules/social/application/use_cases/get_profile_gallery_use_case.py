@@ -28,7 +28,7 @@ class GetProfileGalleryUseCase:
     existencia no es ningun secreto.
 
     El listado **no lleva las imagenes**, solo por donde bajarlas. Diez fotos son
-    casi cuatro megas: mandarlas dentro del listado obligaria a esperar a que
+    mas de siete megas: mandarlas dentro del listado obligaria a esperar a que
     llegaran todas para pintar nada, cuando el navegador puede pedirlas por
     separado, en paralelo, y guardarlas en cache para la proxima visita.
     """
