@@ -38,6 +38,7 @@ class TestCreacion:
             type=ActivityEventType.BIRDIE,
             occurred_at=datetime(2026, 8, 10),
             payload=payload,
+            source_match_id="match-1",
         )
 
         payload["count"] = 99
@@ -51,6 +52,7 @@ class TestCreacion:
             user_id=user_id,
             type=ActivityEventType.NEW_COURSE,
             occurred_at=datetime(2026, 8, 10),
+            source_match_id="match-1",
         )
 
         assert evento.payload == {}
@@ -61,12 +63,16 @@ class TestCreacion:
                 user_id="no-soy-un-user-id",
                 type=ActivityEventType.BIRDIE,
                 occurred_at=datetime(2026, 8, 10),
+                source_match_id="match-1",
             )
 
     def test_exige_un_tipo_de_evento_conocido(self, user_id):
         with pytest.raises(TypeError, match="type"):
             ActivityEvent.create(
-                user_id=user_id, type="BIRDIE", occurred_at=datetime(2026, 8, 10)
+                user_id=user_id,
+                type="BIRDIE",
+                occurred_at=datetime(2026, 8, 10),
+                source_match_id="match-1",
             )
 
 
@@ -89,10 +95,23 @@ class TestIdentidad:
             type=ActivityEventType.EAGLE_OR_BETTER,
             occurred_at=datetime(2026, 8, 10),
             payload={},
-            source_match_id=None,
+            source_match_id="match-1",
         )
 
         assert evento.id == id_
+
+    def test_exige_la_partida_de_la_que_sale(self, user_id):
+        """
+        Sin partida, la clave unica de la tabla no protege: en Postgres un NULL
+        no iguala a otro, asi que reprocesar publicaria el logro otra vez.
+        """
+        with pytest.raises(ValueError, match="source_match_id is required"):
+            ActivityEvent.create(
+                user_id=user_id,
+                type=ActivityEventType.BIRDIE,
+                occurred_at=datetime(2026, 8, 10),
+                source_match_id="",
+            )
 
     def test_sabe_de_que_partida_viene(self, user_id):
         evento = ActivityEvent.create(

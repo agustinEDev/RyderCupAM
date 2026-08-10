@@ -11,10 +11,18 @@ class ActivityEvent:
     """
     Algo que un jugador ha conseguido y que sus amigos verán.
 
-    **La partida de la que sale se guarda** (`source_match_id`) por dos razones:
-    para poder enlazar al detalle desde el feed, y para no duplicar. Completar
-    una partida dos veces —o reprocesarla— no debe llenar el feed de entradas
-    repetidas, así que la pareja `(source_match_id, type)` es única por jugador.
+    **La partida de la que sale es obligatoria** (`source_match_id`) por dos
+    razones: para poder enlazar al detalle desde el feed, y para no duplicar.
+    Completar una partida dos veces —o reprocesarla— no debe llenar el feed de
+    entradas repetidas, así que la pareja `(source_match_id, type)` es única por
+    jugador.
+
+    Que sea obligatoria no es un detalle: en Postgres un NULL no es igual a otro
+    NULL, así que un evento sin partida se escaparía de esa clave única y podría
+    publicarse tantas veces como se reprocesara. Todos los logros nacen de una
+    vuelta terminada —incluidos `NEW_COURSE`, `FIRST_TOURNAMENT` y
+    `PERSONAL_BEST`, que también salen de una partida concreta— así que exigirla
+    no deja fuera ningún caso real y sí cierra ese hueco.
 
     El evento es inmutable: un logro ocurrió o no ocurrió. Si deja de ser
     publicable (el jugador apaga la publicación, se borra la partida) se borra;
@@ -27,13 +35,15 @@ class ActivityEvent:
         user_id: UserId,
         type: ActivityEventType,
         occurred_at: datetime,
+        source_match_id: str,
         payload: dict | None = None,
-        source_match_id: str | None = None,
     ):
         if not isinstance(user_id, UserId):
             raise TypeError("user_id must be a UserId")
         if not isinstance(type, ActivityEventType):
             raise TypeError("type must be an ActivityEventType")
+        if not source_match_id:
+            raise ValueError("source_match_id is required: every event comes from a round")
 
         self._id = id
         self._user_id = user_id
@@ -50,8 +60,8 @@ class ActivityEvent:
         user_id: UserId,
         type: ActivityEventType,
         occurred_at: datetime,
+        source_match_id: str,
         payload: dict | None = None,
-        source_match_id: str | None = None,
     ) -> "ActivityEvent":
         return cls(
             id=uuid4(),
@@ -89,7 +99,7 @@ class ActivityEvent:
         return dict(self._payload)
 
     @property
-    def source_match_id(self) -> str | None:
+    def source_match_id(self) -> str:
         return self._source_match_id
 
     # === Business Rules ===

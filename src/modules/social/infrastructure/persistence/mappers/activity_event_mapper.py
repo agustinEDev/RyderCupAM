@@ -57,8 +57,10 @@ activity_events_table = Table(
     # vive en JSONB en vez de en columnas: cada tipo lleva lo suyo y añadir uno
     # nuevo no debería exigir una migración
     Column("payload", postgresql.JSONB, nullable=False, server_default="{}"),
-    # Sin FK: la partida puede ser rápida o de torneo, tablas distintas
-    Column("source_match_id", String(36), nullable=True),
+    # Sin FK: la partida puede ser rápida o de torneo, tablas distintas.
+    # NOT NULL a propósito: con NULL, la clave única de abajo dejaría de proteger
+    # (en Postgres un NULL nunca iguala a otro) y reprocesar duplicaría entradas
+    Column("source_match_id", String(36), nullable=False),
     # El feed siempre pregunta lo mismo: los eventos de estos jugadores, del más
     # reciente al más antiguo
     Index("ix_activity_events_user_occurred", "user_id", "occurred_at"),

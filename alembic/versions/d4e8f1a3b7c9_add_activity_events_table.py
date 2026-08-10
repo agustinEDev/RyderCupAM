@@ -14,7 +14,10 @@ Dos detalles del diseño que la tabla refleja:
   (cuántos birdies y en qué hoyos, qué diferencial batió al anterior). Añadir un
   tipo nuevo no debería exigir una migración.
 - La restricción única sobre `(user_id, source_match_id, type)` es lo que impide
-  que reprocesar una partida llene el feed de entradas repetidas.
+  que reprocesar una partida llene el feed de entradas repetidas. `source_match_id`
+  es NOT NULL justamente para que esa restricción sirva: en Postgres un NULL no
+  iguala a otro NULL, así que las filas sin partida se le escaparían todas. Todos
+  los logros nacen de una vuelta terminada, así que no deja fuera ningún caso.
 """
 
 import sqlalchemy as sa
@@ -41,7 +44,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("source_match_id", sa.String(36), nullable=True),
+        sa.Column("source_match_id", sa.String(36), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.UniqueConstraint(
