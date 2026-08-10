@@ -54,6 +54,13 @@ class PlayerProfileResponseDTO(BaseModel):
         default=False,
         description="Si tiene foto propia subida; la imagen se pide al endpoint de avatares",
     )
+    friends_count: int = Field(
+        default=0,
+        description=(
+            "Cuantos amigos tiene. Va en la ficha publica, como el contador de "
+            "seguidores de cualquier perfil: es un numero, no dice quienes son"
+        ),
+    )
     friendship: FriendshipStateDTO = Field(
         description="En que punto esta tu relacion con el, para saber que boton ofrecer"
     )

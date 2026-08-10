@@ -78,7 +78,7 @@ class GetPlayerProfileUseCase:
             }
             handicap = float(user.handicap.value) if user.handicap else None
 
-        relacion = await self._relacion(viewer_id, target_id, propio)
+        relacion, amigos = await self._relacion_y_amigos(viewer_id, target_id, propio)
         puede_ver_todo = propio or relacion.status == FriendshipStatus.ACCEPTED.value
 
         # Fuera de la unidad de trabajo: las estadisticas abren las suyas, y
@@ -87,28 +87,44 @@ class GetPlayerProfileUseCase:
 
         return PlayerProfileResponseDTO(
             **ficha,
+            friends_count=amigos,
             friendship=relacion,
             is_friend=relacion.status == FriendshipStatus.ACCEPTED.value,
             handicap=handicap if puede_ver_todo else None,
             stats=stats,
         )
 
-    async def _relacion(
+    async def _relacion_y_amigos(
         self, viewer_id: UserId, target_id: UserId, propio: bool
-    ) -> FriendshipStateDTO:
-        """En que punto esta la relacion, para que el cliente sepa que ofrecer."""
-        if propio:
-            return FriendshipStateDTO(status=NO_RELATIONSHIP)
+    ) -> tuple[FriendshipStateDTO, int]:
+        """
+        En que punto esta la relacion y cuantos amigos tiene el otro.
 
+        Las dos cosas salen del mismo repositorio, asi que se resuelven en una
+        sola apertura en lugar de dos.
+
+        **El contador va en la ficha publica**, junto al nombre y la foto. Es un
+        numero: dice si alguien esta empezando o lleva tiempo, que es justo lo
+        que ayuda a decidir si mandarle una solicitud, y no dice quienes son sus
+        amigos ni nada de ellos.
+        """
         async with self._social_uow:
+            amigos = await self._social_uow.friendships.count_friends(target_id)
+
+            if propio:
+                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
+
             friendship = await self._social_uow.friendships.find_by_pair(viewer_id, target_id)
 
         if friendship is None:
-            return FriendshipStateDTO(status=NO_RELATIONSHIP)
+            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
 
-        return FriendshipStateDTO(
-            status=self._estado(friendship, viewer_id),
-            friendship_id=str(friendship.id.value),
+        return (
+            FriendshipStateDTO(
+                status=self._estado(friendship, viewer_id),
+                friendship_id=str(friendship.id.value),
+            ),
+            amigos,
         )
 
     @staticmethod

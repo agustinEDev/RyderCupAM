@@ -260,3 +260,72 @@ class TestLoQueDeVerdadNoEsta:
         )
 
         assert "email" not in perfil.model_dump()
+
+
+class TestContadorDeAmigos:
+    async def test_cuenta_los_amigos_del_perfil_no_los_mios(
+        self, social_uow, user_uow, stats
+    ):
+        """
+        Given un jugador con dos amigos / When miro su perfil / Then el contador
+        dice dos, aunque yo no tenga ninguno mas.
+        """
+        ana = await _create_user(user_uow)
+        luis = await _create_user(user_uow)
+        marta = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, luis, ana)
+        await _hacer_amigos(social_uow, luis, marta)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(luis.id.value)
+        )
+
+        assert perfil.friends_count == 2
+
+    async def test_el_contador_se_ve_sin_ser_amigo(self, social_uow, user_uow, stats):
+        """
+        Given un desconocido con amigos / When miro su ficha / Then veo cuantos
+        tiene: es parte de la ficha publica, como el contador de seguidores de
+        cualquier perfil.
+        """
+        ana = await _create_user(user_uow)
+        luis = await _create_user(user_uow)
+        marta = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, luis, marta)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(luis.id.value)
+        )
+
+        assert perfil.is_friend is False
+        assert perfil.friends_count == 1
+
+    async def test_un_jugador_sin_amigos_marca_cero(self, social_uow, user_uow, stats):
+        """Given un recien llegado / When miro su perfil / Then el contador va a cero."""
+        ana = await _create_user(user_uow)
+        solo = await _create_user(user_uow)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(solo.id.value)
+        )
+
+        assert perfil.friends_count == 0
+
+    async def test_las_solicitudes_pendientes_no_cuentan(self, social_uow, user_uow, stats):
+        """
+        Given una solicitud sin aceptar / When miro el perfil / Then no suma:
+        el contador es de amistades hechas, no de invitaciones enviadas.
+        """
+        ana = await _create_user(user_uow)
+        luis = await _create_user(user_uow)
+        pendiente = Friendship.create(
+            id=FriendshipId(uuid4()), requester_id=luis.id, addressee_id=ana.id
+        )
+        async with social_uow:
+            await social_uow.friendships.add(pendiente)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(luis.id.value)
+        )
+
+        assert perfil.friends_count == 0
