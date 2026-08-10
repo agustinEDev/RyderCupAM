@@ -199,6 +199,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.application.ports.round_achievements_publisher_interface import (
+    RoundAchievementsPublisherInterface,
+)
 from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
     AddFriendToQuickMatchUseCase,
 )
@@ -250,6 +253,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.player_differentials_interface import (
+    PlayerDifferentialsInterface,
+)
 from src.modules.social.application.ports.social_email_service_interface import (
     ISocialEmailService,
 )
@@ -257,6 +263,9 @@ from src.modules.social.application.use_cases.block_user_use_case import BlockUs
 from src.modules.social.application.use_cases.list_friends_use_case import ListFriendsUseCase
 from src.modules.social.application.use_cases.list_pending_requests_use_case import (
     ListPendingRequestsUseCase,
+)
+from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
+    PublishRoundAchievementsUseCase,
 )
 from src.modules.social.application.use_cases.remove_friend_use_case import RemoveFriendUseCase
 from src.modules.social.application.use_cases.respond_friend_request_use_case import (
@@ -267,6 +276,12 @@ from src.modules.social.application.use_cases.send_friend_request_use_case impor
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.adapters.player_differentials_adapter import (
+    StatsPlayerDifferentialsAdapter,
+)
+from src.modules.social.infrastructure.adapters.quick_match_achievements_publisher import (
+    QuickMatchAchievementsPublisher,
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
@@ -1296,12 +1311,49 @@ def get_start_quick_match_use_case(
     return StartQuickMatchUseCase(uow, user_uow)
 
 
+def get_player_differentials(
+    stats_use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+) -> PlayerDifferentialsInterface:
+    """Proveedor del puerto de diferenciales que usa el feed de logros."""
+    return StatsPlayerDifferentialsAdapter(stats_use_case)
+
+
+def get_publish_round_achievements_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+) -> PublishRoundAchievementsUseCase:
+    """Proveedor del caso de uso PublishRoundAchievementsUseCase."""
+    return PublishRoundAchievementsUseCase(
+        social_uow=social_uow,
+        quick_match_uow=quick_match_uow,
+        golf_course_uow=golf_course_uow,
+        user_uow=user_uow,
+        differentials=differentials,
+    )
+
+
+def get_round_achievements_publisher(
+    publish_use_case: PublishRoundAchievementsUseCase = Depends(
+        get_publish_round_achievements_use_case
+    ),
+    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+) -> RoundAchievementsPublisherInterface:
+    """Proveedor del adaptador que conecta quick_match con el feed social."""
+    return QuickMatchAchievementsPublisher(publish_use_case, differentials)
+
+
 def get_complete_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    achievements: RoundAchievementsPublisherInterface = Depends(
+        get_round_achievements_publisher
+    ),
 ) -> CompleteQuickMatchUseCase:
     """Proveedor del caso de uso CompleteQuickMatchUseCase."""
-    return CompleteQuickMatchUseCase(uow, user_uow)
+    return CompleteQuickMatchUseCase(uow, user_uow, achievements)
 
 
 def get_cancel_quick_match_use_case(
