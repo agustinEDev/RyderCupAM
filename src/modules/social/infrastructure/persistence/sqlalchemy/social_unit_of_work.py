@@ -6,11 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.social.domain.exceptions.social_violations import (
     DuplicateFriendshipViolation,
 )
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivityEventRepositoryInterface,
+)
 from src.modules.social.domain.repositories.friendship_repository_interface import (
     FriendshipRepositoryInterface,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.infrastructure.persistence.sqlalchemy.activity_event_repository import (
+    SQLAlchemyActivityEventRepository,
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.friendship_repository import (
     SQLAlchemyFriendshipRepository,
@@ -25,10 +31,15 @@ class SQLAlchemySocialUnitOfWork(SocialUnitOfWorkInterface):
     def __init__(self, session: AsyncSession):
         self._session = session
         self._friendships = SQLAlchemyFriendshipRepository(session)
+        self._activity_events = SQLAlchemyActivityEventRepository(session)
 
     @property
     def friendships(self) -> FriendshipRepositoryInterface:
         return self._friendships
+
+    @property
+    def activity_events(self) -> ActivityEventRepositoryInterface:
+        return self._activity_events
 
     async def __aenter__(self):
         return self

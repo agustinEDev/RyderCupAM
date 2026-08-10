@@ -8,6 +8,7 @@ from abc import abstractmethod
 
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
+from .activity_event_repository_interface import ActivityEventRepositoryInterface
 from .friendship_repository_interface import FriendshipRepositoryInterface
 
 
@@ -15,12 +16,18 @@ class SocialUnitOfWorkInterface(UnitOfWorkInterface):
     """
     Interfaz especifica para el Unit of Work del modulo Social.
 
-    Proporciona acceso coordinado al repositorio de amistades, manteniendo
-    consistencia transaccional.
+    Proporciona acceso coordinado a los repositorios de amistades y de eventos
+    de actividad, manteniendo consistencia transaccional.
     """
 
     @property
     @abstractmethod
     def friendships(self) -> FriendshipRepositoryInterface:
         """Acceso al repositorio de amistades."""
+        pass
+
+    @property
+    @abstractmethod
+    def activity_events(self) -> ActivityEventRepositoryInterface:
+        """Acceso al repositorio de eventos de actividad."""
         pass

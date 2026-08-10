@@ -46,6 +46,9 @@ from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapp
 from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (
     start_quick_match_mappers,
 )
+from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
+    start_activity_event_mappers,
+)
 from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
     start_social_mappers,
 )
@@ -139,6 +142,7 @@ def pytest_configure(config):
         start_competition_mappers()  # Competition module
         start_golf_course_mappers()  # Golf Course module
         start_social_mappers()  # Social module
+        start_activity_event_mappers()  # Activity feed (depends on User)
         start_quick_match_mappers()  # QuickMatch module
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
@@ -156,6 +160,7 @@ def pytest_configure(config):
             start_competition_mappers()
             start_golf_course_mappers()
             start_social_mappers()
+            start_activity_event_mappers()
             start_quick_match_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.

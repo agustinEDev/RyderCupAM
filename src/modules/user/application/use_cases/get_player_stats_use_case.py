@@ -29,6 +29,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
@@ -39,11 +40,6 @@ MAX_ROUNDS_AGGREGATED = 100
 # Handicap sin recortar por formato: el allowance reparte ventaja dentro de una
 # partida, y el WHS mide la vuelta contra el campo, no contra los rivales.
 COURSE_HANDICAP_ALLOWANCE = 100
-
-# Media vuelta: los nueve de ida o los nueve de vuelta. Cuenta como vuelta
-# terminada, siempre que la partida esté cerrada, pero sus cifras se llevan a la
-# escala de 18 antes de mezclarlas con las demás.
-HALF_ROUND_HOLES = 9
 
 
 @dataclass(frozen=True)
@@ -426,29 +422,11 @@ class GetPlayerStatsUseCase:
         """
         Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
-        Vale la vuelta entera y vale media: los nueve de ida o los nueve de
-        vuelta, que es como se juega media vuelta de verdad. Lo que no vale es
-        una tarjeta a la que le falten hoyos sueltos, porque eso no es media
-        vuelta sino una vuelta abandonada — y son justo las malas las que se
-        abandonan.
-
-        De ahí que a la media vuelta se le exija tener **exactamente** sus
-        nueve: con diez anotados no hay ni vuelta entera ni mitad limpia.
+        La regla vive en `shared` porque el feed de logros (BE #175) tiene que
+        aplicar exactamente la misma: una tarjeta que no vale para la media
+        tampoco vale para presumir.
         """
-        holes = sorted(course.holes, key=lambda hole: hole.number)
-
-        def all_scored(subset: list) -> bool:
-            return all(hole.number in scores_by_hole for hole in subset)
-
-        if all_scored(holes):
-            return holes
-
-        if len(scores_by_hole) == HALF_ROUND_HOLES:
-            for half in (holes[:HALF_ROUND_HOLES], holes[HALF_ROUND_HOLES:]):
-                if len(half) == HALF_ROUND_HOLES and all_scored(half):
-                    return half
-
-        return None
+        return countable_holes(scores_by_hole, course)
 
     @staticmethod
     def _to_eighteen(value: int, holes_played: int) -> int:

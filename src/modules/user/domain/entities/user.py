@@ -104,6 +104,8 @@ class User:
         locked_until: datetime | None = None,
         is_admin: bool = False,
         is_active: bool = True,
+        feed_last_seen_at=None,
+        share_activity: bool = True,
         gender: Gender | None = None,
         avatar_source: AvatarSource = AvatarSource.NONE,
         avatar_preset_id: int | None = None,
@@ -129,6 +131,8 @@ class User:
         self._locked_until = locked_until
         self._is_admin = is_admin
         self._is_active = is_active
+        self._feed_last_seen_at = feed_last_seen_at
+        self._share_activity = share_activity
         self._gender = gender
         self._avatar_source = avatar_source
         self._avatar_preset_id = avatar_preset_id
@@ -210,6 +214,29 @@ class User:
     @property
     def is_active(self) -> bool:
         return self._is_active
+
+    @property
+    def feed_last_seen_at(self):
+        """Cuándo miró su feed por última vez. None si nunca lo ha abierto."""
+        return self._feed_last_seen_at
+
+    @property
+    def share_activity(self) -> bool:
+        """Si sus logros se publican en el feed de sus amigos."""
+        return self._share_activity
+
+    def mark_feed_as_seen(self, at) -> None:
+        """Deja de avisar de lo publicado hasta esta fecha."""
+        self._feed_last_seen_at = at
+
+    def set_activity_sharing(self, enabled: bool) -> None:
+        """
+        Enciende o apaga la publicación de logros.
+
+        Apagarlo no basta con dejar de generar eventos nuevos: lo ya publicado
+        también debe retirarse, y de eso se encarga el caso de uso.
+        """
+        self._share_activity = enabled
 
     @property
     def gender(self) -> Gender | None:

@@ -18,8 +18,13 @@ from src.config.dependencies import (
     get_remove_friend_use_case,
     get_respond_friend_request_use_case,
     get_send_friend_request_use_case,
+    get_set_activity_sharing_use_case,
 )
 from src.config.rate_limit import limiter
+from src.modules.social.application.dto.activity_sharing_dto import (
+    ActivitySharingResponseDTO,
+    SetActivitySharingRequestDTO,
+)
 from src.modules.social.application.dto.friendship_dto import (
     FriendshipResponseDTO,
     PaginatedFriendshipResponseDTO,
@@ -44,6 +49,9 @@ from src.modules.social.application.use_cases.respond_friend_request_use_case im
 from src.modules.social.application.use_cases.send_friend_request_use_case import (
     SendFriendRequestUseCase,
 )
+from src.modules.social.application.use_cases.set_activity_sharing_use_case import (
+    SetActivitySharingUseCase,
+)
 from src.modules.social.domain.exceptions.social_violations import (
     BlockedUserViolation,
     DuplicateFriendRequestViolation,
@@ -51,6 +59,7 @@ from src.modules.social.domain.exceptions.social_violations import (
     SelfFriendRequestViolation,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.domain.errors.user_errors import UserNotFoundError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -208,3 +217,29 @@ async def list_my_pending_requests(
     limit: int = Query(20, ge=1, le=100),
 ):
     return await use_case.execute(str(current_user.id), direction=direction, page=page, limit=limit)
+
+
+@router.put(
+    "/social/activity-sharing",
+    response_model=ActivitySharingResponseDTO,
+    summary="Turn achievement sharing on or off",
+    description=(
+        "Controls whether the player's achievements are published to their friends' feed. "
+        "Turning it off also removes what was already published; turning it back on does "
+        "not restore it."
+    ),
+)
+async def set_activity_sharing(
+    payload: SetActivitySharingRequestDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SetActivitySharingUseCase = Depends(get_set_activity_sharing_use_case),
+):
+    try:
+        removed = await use_case.execute(str(current_user.id), enabled=payload.enabled)
+
+    except UserNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    return ActivitySharingResponseDTO(
+        share_activity=payload.enabled, removed_events=removed
+    )
