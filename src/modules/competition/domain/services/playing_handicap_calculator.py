@@ -103,24 +103,45 @@ class PlayingHandicapCalculator:
             Playing Handicap redondeado al entero más cercano (>=0), acotado a
             max_playing_handicap si se proporciona
         """
-        # Paso 1: Calcular Course Handicap
-        # CH = HI x (SR / 113) + (CR - Par)
-        slope_factor = Decimal(tee_rating.slope_rating) / Decimal(NEUTRAL_SLOPE)
-        differential = tee_rating.course_rating - Decimal(tee_rating.par)
-        course_handicap = (handicap_index * slope_factor) + differential
-
-        # Paso 2: Aplicar allowance
-        allowance_factor = Decimal(allowance_percentage) / Decimal(100)
-        playing_handicap_raw = course_handicap * allowance_factor
-
-        # Paso 3: Redondear al entero más cercano (0.5 hacia arriba)
-        playing_handicap = int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        playing_handicap = self.calculate_unbounded(
+            handicap_index, tee_rating, allowance_percentage
+        )
 
         # Playing Handicap no puede ser negativo
         result = max(0, playing_handicap)
         if max_playing_handicap is not None:
             result = min(result, max_playing_handicap)
         return result
+
+    def calculate_unbounded(
+        self,
+        handicap_index: Decimal,
+        tee_rating: TeeRating,
+        allowance_percentage: int,
+    ) -> int:
+        """
+        Playing Handicap sin acotar a cero, para jugadores de hándicap plus.
+
+        `calculate()` acota el resultado a >= 0, de modo que un jugador plus no
+        llega a ceder golpes. Eso vale para el flujo de competición, que es
+        donde se usa, pero no para la clasificación Stableford de una partida
+        rápida: ahí un plus sí cede golpes (Regla WHS 8.2), y es lo que el
+        frontend viene calculando y mostrando.
+
+        Se expone como método propio en lugar de cambiar `calculate()` para no
+        alterar el reparto de golpes de las competiciones ya creadas.
+        """
+        # CH = HI x (SR / 113) + (CR - Par)
+        slope_factor = Decimal(tee_rating.slope_rating) / Decimal(NEUTRAL_SLOPE)
+        differential = tee_rating.course_rating - Decimal(tee_rating.par)
+        course_handicap = (handicap_index * slope_factor) + differential
+
+        allowance_factor = Decimal(allowance_percentage) / Decimal(100)
+        playing_handicap_raw = course_handicap * allowance_factor
+
+        # ROUND_HALF_UP de Decimal redondea alejándose del cero (-2.5 -> -3),
+        # que es justo lo que hace `roundHalfAwayFromZero` en el frontend
+        return int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     def calculate_for_singles(
         self,

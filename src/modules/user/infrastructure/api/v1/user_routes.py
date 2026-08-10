@@ -6,6 +6,8 @@ from src.config.dependencies import (
     get_competition_uow,
     get_current_user,
     get_find_user_use_case,
+    get_get_player_stats_use_case,
+    get_get_recent_matches_use_case,
     get_search_users_use_case,
     get_update_profile_use_case,
     get_update_security_use_case,
@@ -15,6 +17,11 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.user.application.dto.player_stats_dto import (
+    PlayerStatsResponseDTO,
+    RecentMatchesResponseDTO,
+)
 from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
     FindUserResponseDTO,
@@ -27,6 +34,12 @@ from src.modules.user.application.dto.user_dto import (
     UserRolesResponseDTO,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
+from src.modules.user.application.use_cases.get_player_stats_use_case import (
+    GetPlayerStatsUseCase,
+)
+from src.modules.user.application.use_cases.get_recent_matches_use_case import (
+    GetRecentMatchesUseCase,
+)
 from src.modules.user.application.use_cases.search_users_use_case import SearchUsersUseCase
 from src.modules.user.application.use_cases.update_profile_use_case import (
     UpdateProfileUseCase,
@@ -310,3 +323,78 @@ async def get_my_roles_in_competition(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {e!s}",
         ) from e
+
+
+@router.get(
+    "/me/stats",
+    response_model=PlayerStatsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Estadísticas del jugador",
+    description="Resumen de rendimiento del usuario actual para el panel.",
+    tags=["Users"],
+)
+async def get_my_stats(
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+):
+    """
+    Resumen agregado del jugador: hándicap, media respecto al par, rondas y
+    torneos.
+
+    Una cuenta sin historial devuelve ceros y `null`, no un 404: el panel de un
+    usuario nuevo es un caso normal, no un error.
+
+    `handicap_trend` va siempre a `null` mientras no exista histórico de
+    hándicap; el campo está para no cambiar el contrato cuando lo haya.
+    """
+    return await use_case.execute(UserId(str(current_user.id)))
+
+
+@router.get(
+    "/me/stats/golf-courses/{golf_course_id}",
+    response_model=PlayerStatsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Estadísticas del jugador en un campo",
+    description="Mismo resumen, restringido a las rondas jugadas en un campo concreto.",
+    tags=["Users"],
+)
+async def get_my_stats_for_golf_course(
+    golf_course_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+):
+    """
+    Desglose por campo.
+
+    Los contadores de torneos vienen a cero: son globales del jugador y
+    repetirlos dentro de un campo daría a entender que jugó ahí esos torneos.
+    """
+    return await use_case.execute(
+        UserId(str(current_user.id)), golf_course_id=GolfCourseId(golf_course_id)
+    )
+
+
+@router.get(
+    "/me/matches",
+    response_model=RecentMatchesResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Historial de partidas del jugador",
+    description="Últimas partidas del usuario, mezclando torneo y partida rápida.",
+    tags=["Users"],
+)
+async def get_my_recent_matches(
+    limit: int = Query(default=10, ge=1, le=50, description="Número de partidas a devolver"),
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetRecentMatchesUseCase = Depends(get_get_recent_matches_use_case),
+):
+    """
+    Historial unificado, de la partida más reciente a la más antigua.
+
+    Partidos de torneo y partidas rápidas conviven en la misma lista, y cada
+    entrada deja en `null` lo que no le aplica: un partido de torneo no tiene
+    `scoring_format`, y una partida libre no tiene `result` de match play.
+
+    Las partidas que el propio jugador ocultó (#127) no aparecen aquí, pero
+    siguen apareciendo en el historial de los demás participantes.
+    """
+    return await use_case.execute(UserId(str(current_user.id)), limit=limit)
