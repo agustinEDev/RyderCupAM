@@ -7,10 +7,25 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 
 # ============================================================================
 # Nested DTOs (Tee, Hole)
 # ============================================================================
+
+
+class HoleDTO(BaseModel):
+    """DTO para representar un hoyo."""
+
+    hole_number: int = Field(..., ge=1, le=18, description="Número de hoyo (1-18)")
+    par: int = Field(..., ge=3, le=6, description="Par del hoyo (3-6)")
+    stroke_index: int = Field(..., ge=1, le=18, description="Índice de dificultad (1-18)")
+    meters: int | None = Field(
+        None, ge=20, le=700, description="Distancia desde esta salida, en metros"
+    )
+
+    class Config:
+        from_attributes = True
 
 
 class TeeDTO(BaseModel):
@@ -20,22 +35,29 @@ class TeeDTO(BaseModel):
         ..., description="Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)"
     )
     tee_gender: str | None = Field(None, description="Género del tee (MALE/FEMALE/null)")
-    identifier: str = Field(
-        ..., description="Identificador libre del campo (Amarillo, Oro, 1, etc.)"
+    color: TeeColor = Field(
+        TeeColor.OTHER,
+        description="Color de las barras. Independiente de la categoría",
     )
-    course_rating: float = Field(..., ge=50.0, le=90.0, description="Course Rating WHS (50-90)")
-    slope_rating: int = Field(..., ge=55, le=155, description="Slope Rating WHS (55-155)")
-
-    class Config:
-        from_attributes = True
-
-
-class HoleDTO(BaseModel):
-    """DTO para representar un hoyo."""
-
-    hole_number: int = Field(..., ge=1, le=18, description="Número de hoyo (1-18)")
-    par: int = Field(..., ge=3, le=5, description="Par del hoyo (3-5)")
-    stroke_index: int = Field(..., ge=1, le=18, description="Índice de dificultad (1-18)")
+    identifier: str | None = Field(
+        None,
+        max_length=50,
+        description="Nombre libre opcional. Obligatorio si el color es OTHER",
+    )
+    # Los rangos son los absolutos de todos los tipos de campo. El rango
+    # estricto que corresponde a cada tipo lo aplica el dominio: acotarlo aquí
+    # impediría dar de alta pitch & putt, que WHS no valora en la misma escala.
+    course_rating: float = Field(..., ge=45.0, le=90.0, description="Course Rating WHS")
+    slope_rating: int = Field(..., ge=40, le=160, description="Slope Rating WHS")
+    holes: list[HoleDTO] | None = Field(
+        None,
+        min_length=18,
+        max_length=18,
+        description=(
+            "Tarjeta propia de esta salida. Si se omite, hereda la del campo. "
+            "Necesaria cuando el par, la dificultad o las distancias cambian entre barras"
+        ),
+    )
 
     class Config:
         from_attributes = True
@@ -54,7 +76,7 @@ class RequestGolfCourseRequestDTO(BaseModel):
         ..., min_length=2, max_length=2, description="Código ISO del país (ES, FR, etc.)"
     )
     course_type: CourseType = Field(..., description="Tipo de campo (STANDARD_18, etc.)")
-    tees: list[TeeDTO] = Field(..., min_length=2, max_length=10, description="2-10 tees")
+    tees: list[TeeDTO] = Field(..., min_length=1, max_length=14, description="1-14 salidas")
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
@@ -189,7 +211,7 @@ class UpdateGolfCourseRequestDTO(BaseModel):
         ..., min_length=2, max_length=2, description="Código ISO del país (ES, FR, etc.)"
     )
     course_type: CourseType = Field(..., description="Tipo de campo (STANDARD_18, etc.)")
-    tees: list[TeeDTO] = Field(..., min_length=2, max_length=10, description="2-10 tees")
+    tees: list[TeeDTO] = Field(..., min_length=1, max_length=14, description="1-14 salidas")
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
