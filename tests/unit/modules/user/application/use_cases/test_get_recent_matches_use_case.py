@@ -285,7 +285,12 @@ class TestFreePlayQuickMatch:
         assert entry.score == "+18"
         assert entry.scoring_format == "MEDAL"
         assert entry.match_format is None
-        assert entry.stableford_points is None
+        # Los puntos se calculan en cualquier formato: son la unica cifra que
+        # compara vueltas entre si, porque 36 es jugar a tu handicap. Un
+        # scratch con bogey en cada hoyo firma 18
+        assert entry.stableford_points == 18
+        assert entry.total_strokes == 90
+        assert entry.holes_played == 18
 
     async def test_stableford_reports_points(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -631,3 +636,59 @@ class TestHiddenMatches:
 
         assert (await use_case.execute(hider.id)).matches == []
         assert len((await use_case.execute(other.id)).matches) == 1
+
+
+@pytest.mark.asyncio
+class TestComparableFigures:
+    """
+    Golpes, hoyos y puntos Stableford en cualquier formato (FE #306).
+
+    El historial mezclaba notaciones que no se pueden comparar entre sí —"1UP"
+    de match play, "+18" de medal, "26 pts" de Stableford— y obligaba a
+    traducir mentalmente antes de saber qué vuelta fue mejor. Los puntos son la
+    vara común: 36 es jugar a tu hándicap, en cualquier campo y formato.
+    """
+
+    async def test_a_match_play_round_also_reports_strokes_and_points(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, "Matchplay", handicap=0)
+        rival = await create_user(user_uow, "Rival", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            player,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(rival.id)],
+            strokes_by_participant_index={0: 5, 1: 6},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+        # Bogey en cada hoyo para un scratch: 90 golpes y 18 puntos
+        assert entry.total_strokes == 90
+        assert entry.holes_played == 18
+        assert entry.stableford_points == 18
+        # El resultado del match play no se pierde, solo deja de ser lo único
+        assert entry.result == "WON"
+
+    async def test_half_a_round_reports_the_holes_it_was_played_over(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Sin este dato, "45 golpes" al lado de "90 golpes" parece un juegazo en
+        vez de media vuelta.
+        """
+        player = await create_user(user_uow, "Halfround", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(qm_uow, course, player, strokes_per_hole=5, holes_played=9)
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+        assert entry.holes_played == 9
+        assert entry.total_strokes == 45
+        assert entry.stableford_points == 9

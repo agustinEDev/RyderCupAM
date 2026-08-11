@@ -148,6 +148,7 @@ async def _played_quick_match(
     strokes_per_hole: int = 4,
     others=(),
     holes_played: int = 18,
+    holes: list[int] | None = None,
     tee_category: TeeCategory | None = None,
     tee_gender: Gender | None = None,
 ):
@@ -180,8 +181,9 @@ async def _played_quick_match(
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
         # Todos firman su vuelta: una tarjeta a medias no computa
+        scored_holes = holes if holes is not None else list(range(1, holes_played + 1))
         for participant in match.participants:
-            for hole_number in range(1, holes_played + 1):
+            for hole_number in scored_holes:
                 await qm_uow.quick_match_hole_scores.add(
                     QuickMatchHoleScore(
                         id=QuickMatchHoleScoreId.generate(),
@@ -388,12 +390,24 @@ class TestRoundsAndAverage:
 
 @pytest.mark.asyncio
 class TestIncompleteQuickMatchCards:
-    """Media vuelta no es una vuelta, tampoco en partida rápida."""
+    """
+    Qué es una vuelta y qué es una tarjeta abandonada.
 
-    async def test_a_partial_card_counts_for_nothing(
+    Cuentan la vuelta entera y las dos mitades limpias —los nueve de ida y los
+    de vuelta—, porque media vuelta es una forma normal de jugar. No cuenta una
+    tarjeta con huecos: eso no es media vuelta, es una vuelta que se dejó a
+    medias, y son justo las malas las que se abandonan.
+    """
+
+    async def test_the_front_nine_count_as_a_round(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        user = await create_user(user_uow, unique_email("partial"), handicap=0)
+        """
+        Nueve hoyos a 5 golpes en un campo de pares 4 son +9, que llevados a la
+        escala de 18 son +18. Sin ese ajuste, jugar media vuelta parecería
+        mejorar el juego.
+        """
+        user = await create_user(user_uow, unique_email("frontnine"), handicap=0)
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=9)
 
@@ -401,8 +415,78 @@ class TestIncompleteQuickMatchCards:
             user.id
         )
 
+        assert stats.rounds_played == 1
+        assert stats.scoring_avg == 18.0
+
+    async def test_the_back_nine_count_too(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Quien juega la vuelta de atrás ha jugado media vuelta igualmente."""
+        user = await create_user(user_uow, unique_email("backnine"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow, course, user, strokes_per_hole=5, holes=list(range(10, 19))
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 1
+        assert stats.scoring_avg == 18.0
+
+    async def test_a_half_round_weighs_the_same_as_a_whole_one(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Una media vuelta a +18 de escala y una entera a +18 dan media de +18: la
+        normalización sirve precisamente para que puedan promediarse.
+        """
+        user = await create_user(user_uow, unique_email("mixed"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=9)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 2
+        assert stats.scoring_avg == 18.0
+
+    async def test_ten_holes_are_neither_a_round_nor_a_clean_half(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("tenholes"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=10)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
+
+    async def test_nine_scattered_holes_are_not_half_a_round(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Nueve hoyos sueltos son nueve hoyos sueltos. Exigir que sean una mitad
+        entera es lo que impide que una vuelta abandonada entre por la puerta
+        que se abrió para media vuelta.
+        """
+        user = await create_user(user_uow, unique_email("scattered"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow, course, user, strokes_per_hole=5, holes=[1, 2, 3, 4, 5, 6, 7, 8, 18]
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
 
     async def test_a_match_still_in_progress_counts_for_nothing(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

@@ -131,11 +131,27 @@ class FindUserResponseDTO(BaseModel):
 
 
 class SearchUsersItemDTO(BaseModel):
-    """Single user result in search autocomplete."""
+    """
+    Un jugador encontrado por su nombre.
+
+    **No lleva correo.** Cualquiera puede buscar por nombre, asi que lo que
+    devuelva esta busqueda es publico entre usuarios registrados: solo nombre,
+    apellidos y foto. Antes devolvia el correo, lo que permitia recolectar
+    direcciones tecleando nombres sueltos.
+
+    La foto es lo que permite distinguir a dos jugadores que se llamen igual,
+    que es el trabajo que hacia el correo.
+    """
 
     user_id: UUID = Field(..., description="ID del usuario.")
-    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
+    first_name: str = Field(default="", description="Nombre, ya separado del apellido.")
+    last_name: str = Field(default="", description="Apellidos, ya separados del nombre.")
+    avatar_source: str = Field(default="", description="De donde sale su foto de perfil.")
+    avatar_preset_id: int | None = Field(default=None, description="Avatar predefinido, si usa uno.")
+    has_avatar_upload: bool = Field(
+        default=False, description="Si tiene foto propia subida."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -197,6 +213,14 @@ class UserResponseDTO(BaseModel):
     )
     avatar_preset_id: int | None = Field(
         None, description="ID del preset activo (1-10), solo si avatar_source=PRESET."
+    )
+    # Feed de actividad (BE #175)
+    share_activity: bool = Field(
+        default=True,
+        description=(
+            "Si los logros del usuario se publican en el feed de sus amigos. "
+            "Se cambia con PUT /social/activity-sharing."
+        ),
     )
 
     # Configuración de Pydantic actualizada para V2

@@ -36,3 +36,28 @@ class IImageProcessor(ABC):
             InvalidAvatarImageError: Si no es una imagen válida/soportada
         """
         pass
+
+    @abstractmethod
+    def process_gallery_image(self, raw_bytes: bytes) -> bytes:
+        """
+        Valida y normaliza una imagen subida a la galería del perfil.
+
+        Se diferencia del avatar en dos cosas, y por eso es un método aparte y no
+        un parámetro de tamaño:
+
+        - **No recorta a cuadrado.** Una foto de una vuelta de golf es casi
+          siempre apaisada, y recortarla al centro se comería medio campo. Se
+          conserva la proporción original y se encaja el lado mayor en el límite.
+        - **Va a 1080 px** en vez de 512: estas fotos se miran, el avatar solo se
+          reconoce.
+
+        Args:
+            raw_bytes: Bytes tal cual los subió el cliente (aún sin validar)
+
+        Returns:
+            bytes: Imagen ya procesada (JPEG)
+
+        Raises:
+            InvalidAvatarImageError: Si no es una imagen válida/soportada
+        """
+        pass

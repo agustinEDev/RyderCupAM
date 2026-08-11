@@ -29,6 +29,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
@@ -61,11 +62,15 @@ class GetPlayerStatsUseCase:
     """
     Agrega el rendimiento de un jugador a partir de los módulos que lo generan.
 
-    Solo cuentan las **vueltas enteras de partidas terminadas**: partida a
-    medias, tarjeta a medias o hoyo sin anotar quedan fuera, tanto de la media
-    como del contador de rondas. Media docena de vueltas comparables valen más
-    que veinte a medio anotar, y un `rounds_played` que incluyera rondas que no
+    Solo cuentan las **vueltas terminadas y sin huecos** de partidas cerradas:
+    vale la vuelta entera y valen los nueve de ida o los de vuelta, pero una
+    tarjeta a la que le faltan hoyos sueltos queda fuera, tanto de la media como
+    del contador de rondas. Media docena de vueltas comparables valen más que
+    veinte a medio anotar, y un `rounds_played` que incluyera rondas que no
     entran en la media daría dos números que no cuadran entre sí.
+
+    Media vuelta se lleva a la escala de 18 antes de mezclarla con el resto: sin
+    eso, jugar nueve hoyos parecería mejorar el juego.
 
     Sobre esas mismas vueltas se calculan los **Score Differentials** del WHS
     (BE #167), que dicen a qué hándicap se jugó cada una. Ahí la exigencia es
@@ -218,12 +223,12 @@ class GetPlayerStatsUseCase:
                     for score in scores
                     if score.participant_id == participant.participant_id
                 }
-                if not self._is_full_scorecard(scores_by_hole, course):
+                played = self._computable_holes(scores_by_hole, course)
+                if played is None:
                     continue
 
                 holes = [
-                    HoleSetup(hole.number, hole.par, hole.stroke_index)
-                    for hole in course.holes
+                    HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
                 ]
                 handicap = self._effective_handicap(participant, profile_handicap)
                 totals = self._calculator.compute_participant_totals(
@@ -240,7 +245,7 @@ class GetPlayerStatsUseCase:
                         # No hay campo de cuándo se jugó: la partida rápida se
                         # crea el mismo día que se juega
                         played_on=match.created_at.date(),
-                        to_par=totals.to_par,
+                        to_par=self._to_eighteen(totals.to_par, len(played)),
                         played_round=self._to_played_round(
                             course=course,
                             holes=holes,
@@ -297,10 +302,17 @@ class GetPlayerStatsUseCase:
                 if to_par is None:
                     continue
 
+                scores_by_hole = {
+                    hole_score.hole_number: hole_score.own_score
+                    for hole_score in hole_scores
+                    if hole_score.own_score is not None
+                }
+                # El diferencial mide los mismos hoyos que la media, no el campo
+                # entero: en media vuelta, los otros nueve no se jugaron
+                played = self._computable_holes(scores_by_hole, course) or []
                 player = self._find_match_player(match, user_id)
                 holes = [
-                    HoleSetup(hole.number, hole.par, hole.stroke_index)
-                    for hole in course.holes
+                    HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
                 ]
                 results.append(
                     _ComputableRound(
@@ -309,11 +321,7 @@ class GetPlayerStatsUseCase:
                         played_round=self._to_played_round(
                             course=course,
                             holes=holes,
-                            scores_by_hole={
-                                hole_score.hole_number: hole_score.own_score
-                                for hole_score in hole_scores
-                                if hole_score.own_score is not None
-                            },
+                            scores_by_hole=scores_by_hole,
                             # El partido guardó el hándicap del jugador cuando
                             # se generó: una vuelta de hace meses se mide con el
                             # hándicap que tenía entonces, no con el de hoy
@@ -357,8 +365,17 @@ class GetPlayerStatsUseCase:
             allowance_percentage=COURSE_HANDICAP_ALLOWANCE,
             cap_at_net_double_bogey=True,
         )
+        # Media vuelta se lleva a 18 duplicando los golpes ajustados, y se mide
+        # contra el rating de 18 tal cual. Es lo mismo que medir los nueve
+        # contra la mitad del rating y luego doblar el diferencial —
+        # `2 x (113/S) x (AGS9 - CR/2)` es `(113/S) x (2·AGS9 - CR)`— pero sin
+        # construir un `TeeRating` con un CR de 35.9 y un par de 36, que su
+        # propia validación rechaza por estar fuera de los límites del WHS.
+        # La aproximación está en dar por hecho que los nueve jugados valen la
+        # mitad del campo; sin ratings de nueve hoyos no hay forma de afinarlo.
         return PlayedRound(
-            adjusted_gross_score=totals.adjusted_gross_strokes, tee_rating=tee_rating
+            adjusted_gross_score=self._to_eighteen(totals.adjusted_gross_strokes, len(holes)),
+            tee_rating=tee_rating,
         )
 
     @staticmethod
@@ -401,14 +418,28 @@ class GetPlayerStatsUseCase:
     # ==================== Lectura de tarjetas ====================
 
     @staticmethod
-    def _is_full_scorecard(scores_by_hole: dict, course) -> bool:
+    def _computable_holes(scores_by_hole: dict, course) -> list | None:
         """
-        La tarjeta está entera cuando ningún hoyo del campo se quedó sin anotar.
+        Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
-        Se compara contra los hoyos que tiene el campo y no contra un 18 fijo:
-        el día que se admitan campos de nueve, la regla sigue siendo la misma.
+        La regla vive en `shared` porque el feed de logros (BE #175) tiene que
+        aplicar exactamente la misma: una tarjeta que no vale para la media
+        tampoco vale para presumir.
         """
-        return all(hole.number in scores_by_hole for hole in course.holes)
+        return countable_holes(scores_by_hole, course)
+
+    @staticmethod
+    def _to_eighteen(value: int, holes_played: int) -> int:
+        """
+        Lleva a la escala de 18 lo que se jugó en media vuelta.
+
+        Sin esto, mezclar un +3 de nueve hoyos con un +6 de dieciocho daría una
+        media que no significa nada, y jugar medias vueltas parecería mejorar el
+        juego. Duplicar es una aproximación —los nueve de ida y los de vuelta no
+        tienen por qué ser igual de difíciles—, pero es la que mantiene todas
+        las vueltas hablando en la misma escala.
+        """
+        return value * 2 if holes_played == HALF_ROUND_HOLES else value
 
     async def _rounds_by_match(self, matches: list) -> dict:
         """
@@ -434,7 +465,7 @@ class GetPlayerStatsUseCase:
 
     def _scorecard_to_par(self, hole_scores: list, course) -> int | None:
         """
-        Neto respecto al par de una tarjeta entera, o None si le falta un hoyo.
+        Neto respecto al par de la tarjeta, o None si no forma una vuelta.
 
         Un hoyo con `own_score` a None no se rellena ni se ignora: invalida la
         vuelta. Lo que decide es la tarjeta, no en qué hoyo se ganó el partido:
@@ -442,24 +473,24 @@ class GetPlayerStatsUseCase:
         si los jugadores siguieron anotando hasta el 18. Lo que deja la ronda
         fuera es dejar de anotar, no cerrar pronto.
         """
-        pars = {hole.number: hole.par for hole in course.holes}
         scored = {
             hole_score.hole_number: hole_score
             for hole_score in hole_scores
             if hole_score.own_score is not None
         }
-        if not all(hole_number in scored for hole_number in pars):
+        played = self._computable_holes(scored, course)
+        if played is None:
             return None
 
         to_par = 0
-        for hole_number, par in pars.items():
-            hole_score = scored[hole_number]
+        for hole in played:
+            hole_score = scored[hole.number]
             computable = self._calculator.adjusted_gross(
-                hole_score.own_score, par, hole_score.strokes_received
+                hole_score.own_score, hole.par, hole_score.strokes_received
             )
-            to_par += computable - hole_score.strokes_received - par
+            to_par += computable - hole_score.strokes_received - hole.par
 
-        return to_par
+        return self._to_eighteen(to_par, len(played))
 
     # ==================== Jugadores y hándicaps ====================
 
