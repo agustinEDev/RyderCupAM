@@ -276,6 +276,20 @@ class TestLoQueDeVerdadNoEsta:
 
         assert perfil.email is None
 
+    async def test_uno_mismo_ve_su_correo(self, social_uow, user_uow, stats):
+        """
+        Given un jugador mirando su propia ficha / When se pide / Then ve su
+        correo. El caso de uso abre lo privado a `propio or ACCEPTED`, y sin
+        esta prueba la rama del dueño quedaba solo cubierta de rebote.
+        """
+        ana = await _create_user(user_uow)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(ana.id.value)
+        )
+
+        assert perfil.email == ana.email.value
+
 
 class TestContadorDeAmigos:
     async def test_cuenta_los_amigos_del_perfil_no_los_mios(

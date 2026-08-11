@@ -37,10 +37,10 @@ class PlayerProfileResponseDTO(BaseModel):
     falta para encontrar a alguien por su nombre y reconocerlo antes de mandarle
     una solicitud, y no dice nada de el que no diga ya la busqueda.
 
-    **Solo los amigos ven lo de detras**: correo, handicap, estadisticas y
-    actividad. Esos campos llegan en None a quien no es amigo, no recortados ni
-    a cero — un cero se leeria como "juega fatal" en lugar de "no puedes ver
-    esto".
+    **Solo el propio jugador y sus amigos ven lo de detras**: correo, handicap,
+    estadisticas y actividad. Esos campos llegan en None a cualquier otro, no
+    recortados ni a cero — un cero se leeria como "juega fatal" en lugar de "no
+    puedes ver esto".
 
     El correo esta entre amigos porque una amistad aceptada aqui es un contacto
     de verdad, y poder escribirle fuera de la aplicacion es parte de eso. Lo que
@@ -74,18 +74,21 @@ class PlayerProfileResponseDTO(BaseModel):
     email: str | None = Field(
         default=None,
         description=(
-            "Solo entre amigos: una amistad aceptada es un contacto de verdad. "
-            "None cuando no lo sois"
+            "Solo uno mismo y sus amigos: una amistad aceptada es un contacto de "
+            "verdad. None para cualquier otro"
         ),
     )
     handicap: float | None = Field(
-        default=None, description="Solo entre amigos. None si no lo sois o si no lo ha fijado"
+        default=None,
+        description=(
+            "Solo uno mismo y sus amigos. None si no lo sois o si no lo ha fijado"
+        ),
     )
     stats: PlayerStatsResponseDTO | None = Field(
         default=None,
         description=(
-            "Solo entre amigos: el mismo resumen que su propio panel (BE #128, #167). "
-            "None cuando no sois amigos"
+            "Solo uno mismo y sus amigos: el mismo resumen que su propio panel "
+            "(BE #128, #167). None para cualquier otro"
         ),
     )
 
