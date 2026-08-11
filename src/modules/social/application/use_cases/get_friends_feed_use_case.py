@@ -179,9 +179,13 @@ class GetFriendsFeedUseCase:
         autores: pintar el feed no debe costar una peticion por entrada. Se
         consulta cada campo una vez aunque salga en varias.
 
-        Un id que ya no existe se omite en lugar de romper la pagina: el feed
-        cuenta un logro, y el logro sigue siendo cierto aunque el campo se haya
-        borrado. La entrada se pinta sin el nombre.
+        Un id que no se puede resolver se omite en lugar de romper la pagina: el
+        feed cuenta un logro, y el logro sigue siendo cierto aunque el campo se
+        haya borrado. La entrada se pinta sin el nombre. Eso vale igual para un
+        campo que ya no existe que para un id ilegible — el `payload` es JSONB y
+        nada garantiza su forma anos despues de haberse escrito, asi que un
+        valor con el que no se puede ni construir un `GolfCourseId` no puede
+        costar la peticion entera.
         """
         ids = {
             evento.payload["golf_course_id"]
@@ -194,7 +198,11 @@ class GetFriendsFeedUseCase:
         campos: dict[str, str] = {}
         async with self._golf_course_uow:
             for course_id in ids:
-                campo = await self._golf_course_uow.golf_courses.find_by_id(GolfCourseId(course_id))
+                try:
+                    identificador = GolfCourseId(course_id)
+                except ValueError:
+                    continue
+                campo = await self._golf_course_uow.golf_courses.find_by_id(identificador)
                 if campo is not None:
                     campos[course_id] = campo.name
         return campos

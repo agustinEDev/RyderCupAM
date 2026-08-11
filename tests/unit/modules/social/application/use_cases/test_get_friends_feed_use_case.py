@@ -506,6 +506,30 @@ class TestElCampo:
         assert len(feed.events) == 1
         assert feed.courses == {}
 
+    async def test_un_id_de_campo_ilegible_no_tumba_la_pagina(
+        self, social_uow, user_uow, golf_course_uow
+    ):
+        """
+        Given un logro cuyo `golf_course_id` no es un UUID / When pido el feed /
+        Then la entrada sale igual, sin nombre.
+
+        El payload es JSONB y nada garantiza su forma: un valor con el que no se
+        puede ni construir un `GolfCourseId` no puede costar la peticion entera.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        await _publica(
+            social_uow, amigo, "match-1", payload={"golf_course_id": "not-a-uuid"}
+        )
+
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(
+            str(yo.id.value)
+        )
+
+        assert len(feed.events) == 1
+        assert feed.courses == {}
+
     async def test_un_logro_sin_campo_no_pide_nombres(self, social_uow, user_uow, golf_course_uow):
         """
         Given un logro sin `golf_course_id` / When pido el feed / Then no viene
