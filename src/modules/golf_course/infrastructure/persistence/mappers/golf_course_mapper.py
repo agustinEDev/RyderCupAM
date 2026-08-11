@@ -278,6 +278,14 @@ def start_golf_course_mappers():
             },
         )
 
+        # Event listener: SQLAlchemy hidrata los objetos sin pasar por
+        # __init__, así que el default_factory de `holes` no llega a
+        # ejecutarse y el atributo no existe en los Tee cargados de BD.
+        @event.listens_for(Tee, "load")
+        def _init_tee_holes(target, _context):
+            if not hasattr(target, "holes"):
+                target.holes = []
+
     # Mapear Hole (value object collection)
     if Hole not in mapper_registry.mappers:
         mapper_registry.map_imperatively(
@@ -288,6 +296,14 @@ def start_golf_course_mappers():
                 "number": golf_course_holes_table.c.hole_number,
             },
         )
+
+        # Mismo motivo que en Tee: al hidratar sin pasar por __init__, los
+        # hoyos cargados de BD se quedan sin el atributo `meters` mientras la
+        # columna no exista, y dataclasses.replace() lo necesita para copiarlos.
+        @event.listens_for(Hole, "load")
+        def _init_hole_meters(target, _context):
+            if not hasattr(target, "meters"):
+                target.meters = None
 
     # Mapear GolfCourse (aggregate root)
     if GolfCourse not in mapper_registry.mappers:
