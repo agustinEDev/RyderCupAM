@@ -245,11 +245,11 @@ class TestLoQueDeVerdadNoEsta:
                 str(ana.id.value), str(luis.id.value)
             )
 
-    async def test_el_perfil_nunca_lleva_el_correo(self, social_uow, user_uow, stats):
+    async def test_entre_amigos_si_se_ve_el_correo(self, social_uow, user_uow, stats):
         """
-        Given dos amigos / When uno mira el perfil del otro / Then no hay correo
-        ni siquiera entre amigos: esto es su perfil de golf, no su ficha de
-        usuario.
+        Given dos amigos / When uno mira el perfil del otro / Then ve su correo:
+        una amistad aceptada es un contacto de verdad, y poder escribirle fuera
+        de la aplicacion es parte de eso.
         """
         ana = await _create_user(user_uow)
         luis = await _create_user(user_uow)
@@ -259,7 +259,36 @@ class TestLoQueDeVerdadNoEsta:
             str(ana.id.value), str(luis.id.value)
         )
 
-        assert "email" not in perfil.model_dump()
+        assert perfil.email == luis.email.value
+
+    async def test_un_desconocido_no_ve_el_correo(self, social_uow, user_uow, stats):
+        """
+        Given dos sin amistad / When uno mira la ficha del otro / Then el correo
+        llega en None. Es lo que impide recolectar direcciones: la busqueda no
+        devuelve ninguna, y aqui hace falta que el otro haya aceptado.
+        """
+        ana = await _create_user(user_uow)
+        luis = await _create_user(user_uow)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(luis.id.value)
+        )
+
+        assert perfil.email is None
+
+    async def test_uno_mismo_ve_su_correo(self, social_uow, user_uow, stats):
+        """
+        Given un jugador mirando su propia ficha / When se pide / Then ve su
+        correo. El caso de uso abre lo privado a `propio or ACCEPTED`, y sin
+        esta prueba la rama del dueño quedaba solo cubierta de rebote.
+        """
+        ana = await _create_user(user_uow)
+
+        perfil = await _use_case(social_uow, user_uow, stats).execute(
+            str(ana.id.value), str(ana.id.value)
+        )
+
+        assert perfil.email == ana.email.value
 
 
 class TestContadorDeAmigos:

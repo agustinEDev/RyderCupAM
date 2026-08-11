@@ -77,6 +77,7 @@ class GetPlayerProfileUseCase:
                 "has_avatar_upload": user.active_avatar_upload_id is not None,
             }
             handicap = float(user.handicap.value) if user.handicap else None
+            email = user.email.value
 
         relacion, amigos = await self._relacion_y_amigos(viewer_id, target_id, propio)
         puede_ver_todo = propio or relacion.status == FriendshipStatus.ACCEPTED.value
@@ -90,6 +91,7 @@ class GetPlayerProfileUseCase:
             friends_count=amigos,
             friendship=relacion,
             is_friend=relacion.status == FriendshipStatus.ACCEPTED.value,
+            email=email if puede_ver_todo else None,
             handicap=handicap if puede_ver_todo else None,
             stats=stats,
         )
