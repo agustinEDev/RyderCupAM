@@ -211,7 +211,7 @@ def test_create_golf_course_duplicate_stroke_indices(valid_tees):
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Stroke indices must be unique"):
+    with pytest.raises(ValueError, match="Stroke indices must be exactly"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
@@ -236,7 +236,7 @@ def test_create_golf_course_invalid_stroke_indices_range(valid_tees):
     ]
 
     # When/Then - La validación de duplicados ocurre antes que la de rango
-    with pytest.raises(ValueError, match="Stroke indices must be unique"):
+    with pytest.raises(ValueError, match="Stroke indices must be exactly"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
@@ -260,7 +260,7 @@ def test_create_golf_course_invalid_par_total_too_low(valid_tees):
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Total par must be between 66 and 76"):
+    with pytest.raises(ValueError, match="Total par for a"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
@@ -284,7 +284,7 @@ def test_create_golf_course_invalid_par_total_too_high(valid_tees):
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Total par must be between 66 and 76"):
+    with pytest.raises(ValueError, match="Total par for a"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
@@ -297,72 +297,58 @@ def test_create_golf_course_invalid_par_total_too_high(valid_tees):
 
 def test_create_golf_course_invalid_tees_count_too_few(valid_holes):
     """
-    GIVEN: Menos de 2 tees
+    GIVEN: Un campo sin ninguna salida
     WHEN: Se intenta crear un GolfCourse
     THEN: Se lanza ValueError
+
+    Una sola salida sí es válida: hay recorridos federados que solo publican
+    una. Lo que no tiene sentido es un campo sin ninguna.
     """
     # Given
-    only_one_tee = [
-        Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
-            identifier="Blanco",
-            course_rating=73.5,
-            slope_rating=135,
-        )
-    ]
+    no_tees: list[Tee] = []
 
     # When/Then
-    with pytest.raises(ValueError, match="Golf course must have between 2 and 10 tees"):
+    with pytest.raises(ValueError, match="Golf course must have between 1 and 14 tees"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
             creator_id=UserId.generate(),
-            tees=only_one_tee,
+            tees=no_tees,
             holes=valid_holes,
         )
 
 
 def test_create_golf_course_invalid_tees_count_too_many(valid_holes):
     """
-    GIVEN: Más de 10 tees
+    GIVEN: Más de 14 salidas
     WHEN: Se intenta crear un GolfCourse
     THEN: Se lanza ValueError
+
+    El máximo es 14 porque es lo que llega a publicar un campo federado. Las
+    salidas llevan identificador propio, así que las 15 son distintas entre sí:
+    lo que falla es el número, no la unicidad.
     """
-    # Given - 5 categories x 2 genders = 10 unique combos + 1 extra = 11 tees
-    category_gender_combos = [
-        (TeeCategory.CHAMPIONSHIP, Gender.MALE),
-        (TeeCategory.CHAMPIONSHIP, Gender.FEMALE),
-        (TeeCategory.AMATEUR, Gender.MALE),
-        (TeeCategory.AMATEUR, Gender.FEMALE),
-        (TeeCategory.SENIOR, Gender.MALE),
-        (TeeCategory.SENIOR, Gender.FEMALE),
-        (TeeCategory.FORWARD, Gender.MALE),
-        (TeeCategory.FORWARD, Gender.FEMALE),
-        (TeeCategory.JUNIOR, Gender.MALE),
-        (TeeCategory.JUNIOR, Gender.FEMALE),
-        (TeeCategory.CHAMPIONSHIP, Gender.MALE),  # Repeated to make 11
-    ]
-    eleven_tees = [
+    # Given - 15 salidas únicas
+    fifteen_tees = [
         Tee(
-            category=cat,
-            gender=gender,
+            category=TeeCategory.AMATEUR,
+            gender=Gender.MALE if i % 2 == 0 else Gender.FEMALE,
             identifier=f"Tee {i}",
             course_rating=70.0,
             slope_rating=120,
         )
-        for i, (cat, gender) in enumerate(category_gender_combos)
+        for i in range(15)
     ]
 
     # When/Then
-    with pytest.raises(ValueError, match="Golf course must have between 2 and 10 tees"):
+    with pytest.raises(ValueError, match="Golf course must have between 1 and 14 tees"):
         GolfCourse.create(
             name="Test Course",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
             creator_id=UserId.generate(),
-            tees=eleven_tees,
+            tees=fifteen_tees,
             holes=valid_holes,
         )
 

@@ -5,6 +5,8 @@ Workflow: PENDING_APPROVAL → APPROVED/REJECTED (inmutable después)
 Ver ADR-032 para detalles del workflow de aprobación.
 """
 
+from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -21,6 +23,38 @@ from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.tee_category import TeeCategory
 from .hole import Hole
 from .tee import Tee
+
+HOLES_PER_ROUND = 18
+
+# Un campo federado puede tener desde una sola salida hasta catorce (el Old
+# Course de Atalaya tiene doce, y hay un recorrido con catorce).
+MIN_TEES = 1
+MAX_TEES = 14
+
+# Rangos por tipo de campo. Los estándar mantienen el rigor de WHS; los cortos
+# usan márgenes más amplios porque el sistema no los valora en la misma escala.
+PAR_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[int, int]] = {
+    CourseType.STANDARD_18: (66, 76),
+    CourseType.EXECUTIVE: (61, 65),
+    CourseType.PITCH_AND_PUTT: (54, 60),
+}
+
+# El techo de slope de los campos estándar se sube a 160 pese a que WHS define
+# 155 como máximo: hay campos federados publicados por encima (el Villa de
+# Madrid, negras de mujeres, está en 157) y rechazarlos por un redondeo ajeno
+# sería perder campos reales. El suelo sí se mantiene estricto, porque es lo
+# que permite detectar erratas de origen.
+SLOPE_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[int, int]] = {
+    CourseType.STANDARD_18: (55, 160),
+    CourseType.EXECUTIVE: (40, 155),
+    CourseType.PITCH_AND_PUTT: (40, 155),
+}
+
+RATING_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[float, float]] = {
+    CourseType.STANDARD_18: (50.0, 90.0),
+    CourseType.EXECUTIVE: (45.0, 90.0),
+    CourseType.PITCH_AND_PUTT: (45.0, 90.0),
+}
 
 
 class GolfCourse:
@@ -106,9 +140,37 @@ class GolfCourse:
         self._is_pending_update = is_pending_update
         self._domain_events: list[DomainEvent] = domain_events or []
 
+        # Reconciliar la tarjeta del campo con la de cada salida antes de validar
+        self._sync_holes_and_tees()
+
         # Validar invariantes
         self._validate_holes()
         self._validate_tees()
+
+    def _sync_holes_and_tees(self) -> None:
+        """
+        Reconcilia la tarjeta de referencia del campo con la de cada salida.
+
+        Un campo puede describirse de dos maneras, y ambas siguen siendo válidas:
+
+        - Con una sola tarjeta para todo el campo (como se creaba hasta ahora):
+          esos hoyos se copian a las salidas que no traigan tarjeta propia.
+        - Con una tarjeta por salida (lo que publica la RFEG): en ese caso la
+          tarjeta de referencia del campo se toma de la primera salida.
+
+        Así los consumidores que solo leen `golf_course.holes` siguen
+        funcionando, y quien necesite la distancia o el índice exactos de una
+        barra concreta los pide a su Tee.
+        """
+        if not self._holes:
+            for tee in self._tees:
+                if tee.holes:
+                    self._holes = [replace(hole) for hole in tee.holes]
+                    break
+
+        for tee in self._tees:
+            if not tee.holes and self._holes:
+                tee.holes = [replace(hole) for hole in self._holes]
 
     @classmethod
     def create(
@@ -498,62 +560,101 @@ class GolfCourse:
 
     def _validate_holes(self) -> None:
         """
-        Valida que haya exactamente 18 hoyos con índices únicos y par válido.
+        Valida la tarjeta de referencia: 18 hoyos, índices únicos y par en rango.
+
+        El rango de par depende del tipo de campo, y se comprueba sobre la
+        tarjeta de referencia y no sobre cada salida: hay recorridos federados
+        donde el par varía entre barras (un hoyo que es par 5 desde las de
+        atrás y par 4 desde las de delante), y exigir el mismo rango a todas
+        dejaría fuera campos perfectamente válidos.
 
         Raises:
             ValueError: Si la validación falla
         """
-        # Debe tener exactamente 18 hoyos
-        if len(self._holes) != 18:  # noqa: PLR2004
-            raise ValueError(f"Golf course must have exactly 18 holes, got {len(self._holes)}")
+        if len(self._holes) != HOLES_PER_ROUND:
+            raise ValueError(
+                f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(self._holes)}"
+            )
 
-        # Stroke indices deben ser únicos (1-18)
         stroke_indices = [h.stroke_index for h in self._holes]
-        if len(stroke_indices) != len(set(stroke_indices)):
-            raise ValueError("Stroke indices must be unique (1-18)")
+        expected_indices = set(range(1, HOLES_PER_ROUND + 1))
+        if set(stroke_indices) != expected_indices or len(stroke_indices) != len(
+            set(stroke_indices)
+        ):
+            raise ValueError(
+                f"Stroke indices must be exactly 1-{HOLES_PER_ROUND} without "
+                f"duplicates, got {sorted(stroke_indices)}"
+            )
 
-        expected_indices = set(range(1, 19))
-        actual_indices = set(stroke_indices)
-        if expected_indices != actual_indices:
-            raise ValueError(f"Stroke indices must be exactly 1-18, got {sorted(actual_indices)}")
-
-        # Par total debe estar entre 66 y 76
+        min_par, max_par = PAR_RANGE_BY_COURSE_TYPE[self._course_type]
         total_par = sum(h.par for h in self._holes)
-        if not (66 <= total_par <= 76):  # noqa: PLR2004
-            raise ValueError(f"Total par must be between 66 and 76, got {total_par}")
+        if not (min_par <= total_par <= max_par):
+            raise ValueError(
+                f"Total par for a {self._course_type} course must be between "
+                f"{min_par} and {max_par}, got {total_par}"
+            )
 
     def _validate_tees(self) -> None:
         """
-        Valida tees: cantidad 2-10, unicidad (category, gender), consistencia gendered.
+        Valida las salidas: cantidad, unicidad por color y género, y ratings.
+
+        La unicidad va por (color, género) y no por (categoría, género): con
+        campos de hasta catorce salidas, varias comparten categoría — un campo
+        puede tener blancas y negras y ambas ser CHAMPIONSHIP. Lo que identifica
+        físicamente una salida es su color.
 
         Raises:
             ValueError: Si la validación falla
         """
-        if not (2 <= len(self._tees) <= 10):  # noqa: PLR2004
-            raise ValueError(f"Golf course must have between 2 and 10 tees, got {len(self._tees)}")
+        if not (MIN_TEES <= len(self._tees) <= MAX_TEES):
+            raise ValueError(
+                f"Golf course must have between {MIN_TEES} and {MAX_TEES} tees, "
+                f"got {len(self._tees)}"
+            )
 
-        # Unicidad: combinación (category, gender) debe ser única
         seen_combos: set[tuple[str, str | None]] = set()
         for tee in self._tees:
-            gender_val = tee.gender.value if tee.gender else None
-            combo = (tee.category.value, gender_val)
+            combo = tee.unique_key
             if combo in seen_combos:
-                raise ValueError(
-                    f"Duplicate tee combination: ({tee.category.value}, {gender_val or 'None'})"
-                )
+                raise ValueError(f"Duplicate tee: {tee.display_name} ({combo[1] or 'no gender'})")
             seen_combos.add(combo)
 
-        # Consistencia: para una misma categoría, no mezclar gendered y non-gendered
-        from collections import defaultdict
-
-        gender_by_category: dict[str, set[str | None]] = defaultdict(set)
+        # Consistencia: para una misma salida, no mezclar con y sin género
+        genders_by_tee: dict[str, set[str | None]] = defaultdict(set)
         for tee in self._tees:
-            gender_val = tee.gender.value if tee.gender else None
-            gender_by_category[tee.category.value].add(gender_val)
+            genders_by_tee[tee.unique_key[0]].add(tee.gender.value if tee.gender else None)
 
-        for cat, genders in gender_by_category.items():
+        for tee_key, genders in genders_by_tee.items():
             if None in genders and len(genders) > 1:
-                raise ValueError(f"Category '{cat}' cannot mix gendered and non-gendered tees")
+                raise ValueError(f"Tee '{tee_key}' cannot mix gendered and non-gendered tees")
+
+        self._validate_tee_ratings()
+
+    def _validate_tee_ratings(self) -> None:
+        """
+        Comprueba que los ratings WHS caen en el rango propio del tipo de campo.
+
+        Los campos estándar mantienen el rigor de WHS. Los cortos (pitch & putt
+        y ejecutivos) usan márgenes más amplios porque el sistema no los valora
+        en la misma escala: hay pitch & putt federados con slope por debajo de
+        55 y course rating por debajo de 50.
+        """
+        min_slope, max_slope = SLOPE_RANGE_BY_COURSE_TYPE[self._course_type]
+        min_rating, max_rating = RATING_RANGE_BY_COURSE_TYPE[self._course_type]
+
+        for tee in self._tees:
+            if not (min_slope <= tee.slope_rating <= max_slope):
+                raise ValueError(
+                    f"Slope rating for a {self._course_type} course must be between "
+                    f"{min_slope} and {max_slope}, got {tee.slope_rating} "
+                    f"on tee {tee.display_name}"
+                )
+            if not (min_rating <= tee.course_rating <= max_rating):
+                raise ValueError(
+                    f"Course rating for a {self._course_type} course must be between "
+                    f"{min_rating} and {max_rating}, got {tee.course_rating} "
+                    f"on tee {tee.display_name}"
+                )
 
     # Domain Events Management
 
