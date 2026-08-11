@@ -130,6 +130,15 @@ class FeedResponseDTO(BaseModel):
     authors: dict[str, FeedAuthorDTO] = Field(
         default_factory=dict, description="Autores de esta pagina, indexados por id"
     )
+    courses: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Nombre de cada campo citado en esta pagina, indexado por id. "
+            "El nombre va aparte y no dentro del `payload` del evento porque el "
+            "payload se escribio al publicar el logro: un campo renombrado dejaria "
+            "el feed contando el nombre viejo para siempre"
+        ),
+    )
     next_cursor: str | None = Field(
         default=None,
         description="Pasalo como `cursor` para la siguiente pagina. None cuando no hay mas",

@@ -1411,9 +1411,10 @@ def get_player_activity_use_case(
 def get_friends_feed_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetFriendsFeedUseCase:
     """Proveedor del caso de uso GetFriendsFeedUseCase."""
-    return GetFriendsFeedUseCase(social_uow, user_uow)
+    return GetFriendsFeedUseCase(social_uow, user_uow, golf_course_uow)
 
 
 def get_mark_feed_as_seen_use_case(
