@@ -48,8 +48,9 @@ class TestPerfil:
         assert datos["id"] == luis["user"]["id"]
         assert datos["first_name"] == "Luis"
         assert "stats" in datos
-        # El perfil de golf no lleva datos de la cuenta
-        assert "email" not in datos
+        # Entre amigos si se ve el correo: una amistad aceptada es un contacto
+        # de verdad, y poder escribirle fuera de la aplicacion es parte de eso
+        assert datos["email"] == luis["user"]["email"]
 
     @pytest.mark.asyncio
     async def test_un_desconocido_ve_la_ficha_pero_no_lo_privado(self, client: AsyncClient):
@@ -74,7 +75,9 @@ class TestPerfil:
         assert datos["friendship"]["status"] == "NONE"
         assert datos["stats"] is None
         assert datos["handicap"] is None
-        assert "email" not in datos
+        # El correo es de los campos privados: llega en None, no ausente
+        assert datos["email"] is None
+        assert luis["user"]["email"] not in respuesta.text
 
     @pytest.mark.asyncio
     async def test_una_cuenta_inventada_si_da_404(self, client: AsyncClient):
