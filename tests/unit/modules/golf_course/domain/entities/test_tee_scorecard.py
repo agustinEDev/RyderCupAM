@@ -159,10 +159,17 @@ def test_tees_can_have_different_pars_and_stroke_indices():
 
     Ocurre en 77 de los 802 recorridos federados españoles.
     """
-    # Given - las blancas tienen un par 5 donde las rojas tienen un par 4
+    # Given - las blancas tienen un par 5 donde las rojas tienen un par 4, y
+    # además los dos primeros hoyos cambian de dificultad entre unas y otras
     pars_white = list(PAR_72)
     pars_red = list(PAR_72)
     pars_red[1] = 4
+
+    red_holes = build_holes(pars_red, meters=300)
+    red_holes[0].stroke_index, red_holes[1].stroke_index = (
+        red_holes[1].stroke_index,
+        red_holes[0].stroke_index,
+    )
 
     white = Tee(
         category=TeeCategory.CHAMPIONSHIP,
@@ -178,16 +185,18 @@ def test_tees_can_have_different_pars_and_stroke_indices():
         color=TeeColor.RED,
         course_rating=70.0,
         slope_rating=120,
-        holes=build_holes(pars_red, meters=300),
+        holes=red_holes,
     )
 
     # When
     course = build_course([white, red])
 
-    # Then
+    # Then - cada salida conserva su par, sus metros y sus índices
     assert course.tees[0].par_total == course.tees[1].par_total + 1
     assert course.tees[0].meters_total == 400 * 18
     assert course.tees[1].meters_total == 300 * 18
+    assert [h.stroke_index for h in course.tees[0].holes[:2]] == [1, 2]
+    assert [h.stroke_index for h in course.tees[1].holes[:2]] == [2, 1]
 
 
 def test_course_holes_are_propagated_to_tees_without_scorecard():
@@ -258,6 +267,80 @@ def test_course_holes_are_derived_from_first_tee_when_absent():
     # Then
     assert len(course.holes) == 18
     assert course.total_par == sum(PAR_72)
+
+
+def test_course_rejects_duplicate_hole_numbers():
+    """
+    GIVEN: Una tarjeta con números de hoyo repetidos pero índices correctos
+    WHEN: Se crea el campo
+    THEN: Se lanza ValueError
+
+    La tarjeta de referencia se copia a las salidas asignando la lista, lo que
+    no pasa por el validador de Tee. Sin esta comprobación, una tarjeta con
+    hoyos repetidos se propagaría a todas las salidas del campo.
+    """
+    # Given - todos los hoyos son el número 1, pero los índices son 1-18
+    holes = [Hole(number=1, par=4, stroke_index=i + 1, meters=350) for i in range(18)]
+
+    # When/Then
+    with pytest.raises(ValueError, match="Hole numbers must be exactly"):
+        build_course(
+            [
+                Tee(
+                    category=TeeCategory.AMATEUR,
+                    gender=Gender.MALE,
+                    color=TeeColor.YELLOW,
+                    course_rating=71.0,
+                    slope_rating=128,
+                ),
+            ],
+            holes=holes,
+        )
+
+
+def test_update_preserves_tee_colors_and_distances():
+    """
+    GIVEN: Un campo con colores y distancias por salida
+    WHEN: Se actualiza
+    THEN: Conserva colores, distancias y tarjetas propias
+
+    Al reconstruir las salidas en update() es fácil perder los campos nuevos, y
+    una salida de color conocido degradada a OTHER sin identificador ni siquiera
+    llegaría a construirse.
+    """
+    # Given
+    white = Tee(
+        category=TeeCategory.CHAMPIONSHIP,
+        gender=Gender.MALE,
+        color=TeeColor.WHITE,
+        course_rating=73.5,
+        slope_rating=135,
+        holes=build_holes(meters=400),
+    )
+    red = Tee(
+        category=TeeCategory.FORWARD,
+        gender=Gender.FEMALE,
+        color=TeeColor.RED,
+        course_rating=70.0,
+        slope_rating=120,
+        holes=build_holes(meters=300),
+    )
+    course = build_course([white, red])
+
+    # When
+    course.update(
+        name="Updated Course",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        tees=[white, red],
+        holes=build_holes(meters=400),
+    )
+
+    # Then
+    assert course.name == "Updated Course"
+    assert [tee.color for tee in course.tees] == [TeeColor.WHITE, TeeColor.RED]
+    assert course.tees[0].meters_total == 400 * 18
+    assert course.tees[1].meters_total == 300 * 18
 
 
 # ============================================================================

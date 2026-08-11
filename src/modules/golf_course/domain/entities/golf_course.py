@@ -378,24 +378,23 @@ class GolfCourse:
             new_tee = TeeEntity(
                 category=tee.category,
                 gender=tee.gender,
+                color=tee.color,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
+                holes=[replace(hole) for hole in tee.holes],
             )
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        from src.modules.golf_course.domain.entities.hole import Hole as HoleEntity
-
         for hole in holes:
-            new_hole = HoleEntity(
-                number=hole.number,
-                par=hole.par,
-                stroke_index=hole.stroke_index,
-            )
-            self._holes.append(new_hole)
+            self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+        # Reconciliar tarjetas antes de validar: si las salidas llegan sin la
+        # suya, heredan la del campo
+        self._sync_holes_and_tees()
 
         # Validar invariantes
         self._validate_holes()
@@ -525,34 +524,29 @@ class GolfCourse:
         # porque los objetos del clone ya tienen golf_course_id asignado
         del self._tees[:]  # Elimina todos los elementos in-place
         for tee in clone._tees:
-            # Crear nuevo Tee con los mismos datos
-            from src.modules.golf_course.domain.entities.tee import Tee
-
+            # Crear nuevo Tee con los mismos datos, incluida su tarjeta
             new_tee = Tee(
                 category=tee.category,
                 gender=tee.gender,
+                color=tee.color,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
+                holes=[replace(hole) for hole in tee.holes],
             )
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
         for hole in clone._holes:
-            # Crear nuevo Hole con los mismos datos
-            from src.modules.golf_course.domain.entities.hole import Hole
-
-            new_hole = Hole(
-                number=hole.number,
-                par=hole.par,
-                stroke_index=hole.stroke_index,
-            )
-            self._holes.append(new_hole)
+            self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Quitar marca de pending update
         self._is_pending_update = False
+
+        # Reconciliar tarjetas antes de validar
+        self._sync_holes_and_tees()
 
         # Validar invariantes
         self._validate_holes()
@@ -576,14 +570,22 @@ class GolfCourse:
                 f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(self._holes)}"
             )
 
-        stroke_indices = [h.stroke_index for h in self._holes]
-        expected_indices = set(range(1, HOLES_PER_ROUND + 1))
-        if set(stroke_indices) != expected_indices or len(stroke_indices) != len(
-            set(stroke_indices)
-        ):
+        # Los números de hoyo también deben ser 1-18 sin repetir. La tarjeta de
+        # referencia se copia a las salidas asignando la lista, lo que no pasa
+        # por el validador de Tee, así que si no se comprueba aquí una tarjeta
+        # con hoyos repetidos acabaría propagándose a todas las salidas.
+        hole_numbers = sorted(h.number for h in self._holes)
+        if hole_numbers != list(range(1, HOLES_PER_ROUND + 1)):
+            raise ValueError(
+                f"Hole numbers must be exactly 1-{HOLES_PER_ROUND} without "
+                f"duplicates, got {hole_numbers}"
+            )
+
+        stroke_indices = sorted(h.stroke_index for h in self._holes)
+        if stroke_indices != list(range(1, HOLES_PER_ROUND + 1)):
             raise ValueError(
                 f"Stroke indices must be exactly 1-{HOLES_PER_ROUND} without "
-                f"duplicates, got {sorted(stroke_indices)}"
+                f"duplicates, got {stroke_indices}"
             )
 
         min_par, max_par = PAR_RANGE_BY_COURSE_TYPE[self._course_type]
