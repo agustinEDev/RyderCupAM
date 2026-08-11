@@ -105,8 +105,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
                 selectinload(Competition._golf_courses)
                 .selectinload(CompetitionGolfCourse.golf_course)
                 .options(
+                    # Los hoyos llegan con las salidas: cuelgan de ellas
                     selectinload(GolfCourse._tees),
-                    selectinload(GolfCourse._holes),
                 )
             )
         )

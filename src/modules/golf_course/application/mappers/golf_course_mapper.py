@@ -8,22 +8,68 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     TeeDTO,
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.shared.domain.value_objects.gender import Gender
 
 
 class GolfCourseMapper:
     """
-    Mapper para convertir GolfCourse entity a Response DTOs.
+    Mapper entre GolfCourse y sus DTOs, en ambos sentidos.
 
     Evita duplicación de código en los use cases.
     """
 
     @staticmethod
-    def to_response_dto(golf_course: GolfCourse) -> GolfCourseResponseDTO:
+    def to_domain_holes(hole_dtos: list[HoleDTO]) -> list[Hole]:
+        """Convierte una tarjeta recibida por la API en hoyos de dominio."""
+        return [
+            Hole(
+                number=hole_dto.hole_number,
+                par=hole_dto.par,
+                stroke_index=hole_dto.stroke_index,
+                meters=hole_dto.meters,
+            )
+            for hole_dto in hole_dtos
+        ]
+
+    @staticmethod
+    def to_domain_tees(tee_dtos: list[TeeDTO]) -> list[Tee]:
+        """
+        Convierte las salidas recibidas por la API en salidas de dominio.
+
+        Una salida puede traer su propia tarjeta o no traerla. Si no la trae,
+        el agregado le copia la del campo al construirse.
+        """
+        return [
+            Tee(
+                category=TeeCategory(tee_dto.tee_category),
+                gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
+                color=tee_dto.color,
+                identifier=tee_dto.identifier,
+                course_rating=tee_dto.course_rating,
+                slope_rating=tee_dto.slope_rating,
+                holes=(
+                    GolfCourseMapper.to_domain_holes(tee_dto.holes) if tee_dto.holes else []
+                ),
+            )
+            for tee_dto in tee_dtos
+        ]
+
+    @staticmethod
+    def to_response_dto(
+        golf_course: GolfCourse, *, include_tee_scorecards: bool = True
+    ) -> GolfCourseResponseDTO:
         """
         Mapea GolfCourse entity a GolfCourseResponseDTO.
 
         Args:
             golf_course: Entidad de dominio
+            include_tee_scorecards: Si es False, las salidas se devuelven sin su
+                tarjeta. Un campo puede tener hasta 14 salidas de 18 hoyos cada
+                una, así que en los listados se omiten para no devolver
+                centenares de hoyos por campo. El detalle sí las incluye.
 
         Returns:
             DTO de respuesta
@@ -38,17 +84,35 @@ class GolfCourseMapper:
                 TeeDTO(
                     tee_category=tee.category.value,
                     tee_gender=tee.gender.value if tee.gender else None,
+                    color=tee.color,
                     identifier=tee.identifier,
                     course_rating=tee.course_rating,
                     slope_rating=tee.slope_rating,
+                    holes=(
+                        [
+                            HoleDTO(
+                                hole_number=hole.number,
+                                par=hole.par,
+                                stroke_index=hole.stroke_index,
+                                meters=hole.meters,
+                            )
+                            for hole in sorted(tee.holes, key=lambda h: h.number)
+                        ]
+                        if include_tee_scorecards and tee.holes
+                        else None
+                    ),
                 )
                 for tee in golf_course.tees
             ],
+            # Tarjeta de referencia del campo, derivada de la primera salida.
+            # Se mantiene para los consumidores que no necesitan el detalle por
+            # barra (estadísticas, emparejamientos, partidas rápidas).
             holes=[
                 HoleDTO(
                     hole_number=hole.number,
                     par=hole.par,
                     stroke_index=hole.stroke_index,
+                    meters=hole.meters,
                 )
                 for hole in golf_course.holes
             ],

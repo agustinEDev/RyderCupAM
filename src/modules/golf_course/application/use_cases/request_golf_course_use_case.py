@@ -8,15 +8,11 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
-from src.modules.golf_course.domain.entities.hole import Hole
-from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-from src.shared.domain.value_objects.gender import Gender
 
 
 class RequestGolfCourseUseCase:
@@ -73,26 +69,10 @@ class RequestGolfCourseUseCase:
                 raise ValueError(f"Country with code '{request.country_code}' not found")
 
             # 3. Crear Tees
-            tees = [
-                Tee(
-                    category=TeeCategory(tee_dto.tee_category),
-                    gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
-                    identifier=tee_dto.identifier,
-                    course_rating=tee_dto.course_rating,
-                    slope_rating=tee_dto.slope_rating,
-                )
-                for tee_dto in request.tees
-            ]
+            tees = GolfCourseMapper.to_domain_tees(request.tees)
 
             # 4. Crear Holes
-            holes = [
-                Hole(
-                    number=hole_dto.hole_number,
-                    par=hole_dto.par,
-                    stroke_index=hole_dto.stroke_index,
-                )
-                for hole_dto in request.holes
-            ]
+            holes = GolfCourseMapper.to_domain_holes(request.holes)
 
             # 5. Crear GolfCourse (estado PENDING_APPROVAL)
             golf_course = GolfCourse.create(

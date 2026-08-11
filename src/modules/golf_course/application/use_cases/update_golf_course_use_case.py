@@ -7,17 +7,13 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     UpdateGolfCourseResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
-from src.modules.golf_course.domain.entities.hole import Hole
-from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-from src.shared.domain.value_objects.gender import Gender
 
 
 class UpdateGolfCourseUseCase:
@@ -63,25 +59,9 @@ class UpdateGolfCourseUseCase:
                 raise ValueError(f"Country with code '{request.country_code}' not found")
 
             # 4. Crear Tees y Holes desde DTOs
-            tees = [
-                Tee(
-                    category=TeeCategory(tee_dto.tee_category),
-                    gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
-                    identifier=tee_dto.identifier,
-                    course_rating=tee_dto.course_rating,
-                    slope_rating=tee_dto.slope_rating,
-                )
-                for tee_dto in request.tees
-            ]
+            tees = GolfCourseMapper.to_domain_tees(request.tees)
 
-            holes = [
-                Hole(
-                    number=hole_dto.hole_number,
-                    par=hole_dto.par,
-                    stroke_index=hole_dto.stroke_index,
-                )
-                for hole_dto in request.holes
-            ]
+            holes = GolfCourseMapper.to_domain_holes(request.holes)
 
             # 5. Delegar decisión de negocio al dominio
             # apply_update retorna None (in-place) o GolfCourse clone (proposal)

@@ -46,7 +46,13 @@ class ListApprovedGolfCoursesUseCase:
             )
 
             # 2. Mapear a Response DTOs
-            response_dtos = [GolfCourseMapper.to_response_dto(gc) for gc in golf_courses]
+            # Sin las tarjetas por salida: un campo puede tener 14 salidas de
+            # 18 hoyos, y un listado las multiplicaría por cada campo. El
+            # detalle de un campo sí las devuelve.
+            response_dtos = [
+                GolfCourseMapper.to_response_dto(gc, include_tee_scorecards=False)
+                for gc in golf_courses
+            ]
 
             return ListApprovedGolfCoursesResponseDTO(
                 golf_courses=response_dtos,
