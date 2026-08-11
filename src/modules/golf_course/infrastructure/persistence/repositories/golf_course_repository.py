@@ -11,7 +11,6 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import I
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
-    golf_course_holes_table,
     golf_course_tees_table,
     golf_courses_table,
 )
@@ -49,20 +48,11 @@ class GolfCourseRepository(IGolfCourseRepository):
             # IMPORTANTE: Solo borrar colecciones si realmente cambiaron.
             # Raw SQL DELETE desincroniza la session identity map, causando que
             # los hijos se pierdan en updates de solo atributos escalares (ej: approve).
+            # Los hoyos cuelgan de las salidas, así que basta con borrar estas:
+            # sus hoyos caen por ON DELETE CASCADE. La tarjeta del campo no se
+            # persiste, es derivada, y por eso no se inspecciona aquí.
             insp = inspect(golf_course)
-            if insp is None:
-                holes_changed = False
-                tees_changed = False
-            else:
-                holes_changed = insp.attrs._holes.history.has_changes()
-                tees_changed = insp.attrs._tees.history.has_changes()
-
-            if holes_changed:
-                await self._session.execute(
-                    delete(golf_course_holes_table).where(
-                        golf_course_holes_table.c.golf_course_id == golf_course._id
-                    )
-                )
+            tees_changed = insp is not None and insp.attrs._tees.history.has_changes()
 
             if tees_changed:
                 await self._session.execute(
@@ -70,8 +60,6 @@ class GolfCourseRepository(IGolfCourseRepository):
                         golf_course_tees_table.c.golf_course_id == golf_course._id
                     )
                 )
-
-            if holes_changed or tees_changed:
                 await self._session.flush()
 
         # Ahora sí, agregar/actualizar el aggregate
@@ -93,7 +81,6 @@ class GolfCourseRepository(IGolfCourseRepository):
             .where(golf_courses_table.c.id == golf_course_id)
             .options(
                 joinedload(GolfCourse._tees),
-                joinedload(GolfCourse._holes),
             )
         )
         result = await self._session.execute(stmt)
@@ -115,7 +102,6 @@ class GolfCourseRepository(IGolfCourseRepository):
             .where(golf_courses_table.c.approval_status == approval_status)
             .options(
                 joinedload(GolfCourse._tees),
-                joinedload(GolfCourse._holes),
             )
             .order_by(golf_courses_table.c.created_at.desc())
         )
@@ -138,7 +124,6 @@ class GolfCourseRepository(IGolfCourseRepository):
             .where(golf_courses_table.c.approval_status == ApprovalStatus.APPROVED)
             .options(
                 joinedload(GolfCourse._tees),
-                joinedload(GolfCourse._holes),
             )
             .order_by(golf_courses_table.c.created_at.desc())
         )
@@ -176,7 +161,6 @@ class GolfCourseRepository(IGolfCourseRepository):
             .where(golf_courses_table.c.creator_id == creator_id)
             .options(
                 joinedload(GolfCourse._tees),
-                joinedload(GolfCourse._holes),
             )
             .order_by(golf_courses_table.c.created_at.desc())
         )

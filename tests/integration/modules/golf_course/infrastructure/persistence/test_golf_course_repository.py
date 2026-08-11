@@ -583,9 +583,14 @@ async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_hole
     )
     assert result_tees.scalar() == 0, "Tees should be cascade deleted"
 
-    # Assert - Cascade delete: Holes eliminados
+    # Assert - Cascade delete: los hoyos cuelgan de las salidas, así que el
+    # borrado tiene que propagarse dos niveles
     result_holes = await db_session.execute(
-        text("SELECT count(*) FROM golf_course_holes WHERE golf_course_id = :gc_id"),
+        text(
+            "SELECT count(*) FROM golf_course_tee_holes th "
+            "JOIN golf_course_tees t ON t.id = th.tee_id "
+            "WHERE t.golf_course_id = :gc_id"
+        ),
         {"gc_id": str(golf_course.id.value)},
     )
     assert result_holes.scalar() == 0, "Holes should be cascade deleted"

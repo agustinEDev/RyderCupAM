@@ -63,18 +63,20 @@ class GolfCourse:
 
     Responsabilidades:
     - Gestionar información del campo (nombre, país, tipo)
-    - Gestionar tees (2-6 salidas con ratings WHS)
-    - Gestionar hoyos (18 hoyos con par y stroke index)
+    - Gestionar salidas (1-14, cada una con sus ratings WHS y su tarjeta)
     - Workflow de aprobación Admin
 
     Business Rules:
-    - Exactamente 18 hoyos
-    - Stroke indices únicos (1-18)
-    - Par total entre 66 y 76
-    - 2-10 tees (5 categorías x 2 géneros max)
-    - Unique (category, gender) combinations
-    - No mezclar gendered/non-gendered tees de la misma categoría
+    - Cada salida tiene sus 18 hoyos, con par, stroke index y distancia propios
+    - Números de hoyo y stroke indices 1-18 sin repetir
+    - Par total, slope y course rating dentro del rango de su tipo de campo
+    - 1-14 salidas, únicas por color (o por identificador si el color es OTHER)
+    - No mezclar salidas con y sin género para un mismo color
     - Estados inmutables: APPROVED/REJECTED
+
+    La tarjeta del campo (`holes`) es derivada: no se persiste, se toma de la
+    primera salida. Existe para los consumidores que no necesitan el detalle
+    por barra.
 
     Example:
         >>> course = GolfCourse.create(
@@ -162,7 +164,7 @@ class GolfCourse:
         funcionando, y quien necesite la distancia o el índice exactos de una
         barra concreta los pide a su Tee.
         """
-        if not self._holes:
+        if not getattr(self, "_holes", None):
             for tee in self._tees:
                 if tee.holes:
                     self._holes = [replace(hole) for hole in tee.holes]
@@ -537,7 +539,7 @@ class GolfCourse:
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        for hole in clone._holes:
+        for hole in clone.holes:
             self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -565,23 +567,24 @@ class GolfCourse:
         Raises:
             ValueError: Si la validación falla
         """
-        if len(self._holes) != HOLES_PER_ROUND:
+        reference_card = self.holes
+        if len(reference_card) != HOLES_PER_ROUND:
             raise ValueError(
-                f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(self._holes)}"
+                f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(reference_card)}"
             )
 
         # Los números de hoyo también deben ser 1-18 sin repetir. La tarjeta de
         # referencia se copia a las salidas asignando la lista, lo que no pasa
         # por el validador de Tee, así que si no se comprueba aquí una tarjeta
         # con hoyos repetidos acabaría propagándose a todas las salidas.
-        hole_numbers = sorted(h.number for h in self._holes)
+        hole_numbers = sorted(h.number for h in reference_card)
         if hole_numbers != list(range(1, HOLES_PER_ROUND + 1)):
             raise ValueError(
                 f"Hole numbers must be exactly 1-{HOLES_PER_ROUND} without "
                 f"duplicates, got {hole_numbers}"
             )
 
-        stroke_indices = sorted(h.stroke_index for h in self._holes)
+        stroke_indices = sorted(h.stroke_index for h in reference_card)
         if stroke_indices != list(range(1, HOLES_PER_ROUND + 1)):
             raise ValueError(
                 f"Stroke indices must be exactly 1-{HOLES_PER_ROUND} without "
@@ -589,7 +592,7 @@ class GolfCourse:
             )
 
         min_par, max_par = PAR_RANGE_BY_COURSE_TYPE[self._course_type]
-        total_par = sum(h.par for h in self._holes)
+        total_par = sum(h.par for h in reference_card)
         if not (min_par <= total_par <= max_par):
             raise ValueError(
                 f"Total par for a {self._course_type} course must be between "
@@ -707,7 +710,23 @@ class GolfCourse:
 
     @property
     def holes(self) -> list[Hole]:
-        return sorted(self._holes, key=lambda h: h.number)
+        """
+        Tarjeta de referencia del campo.
+
+        No se persiste: la tarjeta real vive en cada salida, y esta se deriva
+        de la primera que tenga una. Se calcula al consultarla y no al cargar
+        el agregado porque durante el evento de carga de SQLAlchemy las
+        relaciones eager todavía no están garantizadas.
+        """
+        own_holes = getattr(self, "_holes", None)
+        if own_holes:
+            return sorted(own_holes, key=lambda h: h.number)
+
+        for tee in self._tees:
+            if tee.holes:
+                return sorted((replace(hole) for hole in tee.holes), key=lambda h: h.number)
+
+        return []
 
     @property
     def approval_status(self) -> ApprovalStatus:
@@ -727,8 +746,8 @@ class GolfCourse:
 
     @property
     def total_par(self) -> int:
-        """Retorna el par total del campo."""
-        return sum(h.par for h in self._holes)
+        """Retorna el par total del campo, según su tarjeta de referencia."""
+        return sum(h.par for h in self.holes)
 
     @property
     def original_golf_course_id(self) -> GolfCourseId | None:
