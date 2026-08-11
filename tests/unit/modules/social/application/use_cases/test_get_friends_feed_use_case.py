@@ -11,6 +11,14 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.course_type import CourseType
+from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
+    InMemoryGolfCourseUnitOfWork,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
@@ -25,10 +33,13 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
 CUANDO = datetime(2026, 8, 10, 12, 0)
+PAR = 4
 
 
 @pytest.fixture
@@ -39,6 +50,11 @@ def social_uow():
 @pytest.fixture
 def user_uow():
     return InMemoryUserUnitOfWork()
+
+
+@pytest.fixture
+def golf_course_uow():
+    return InMemoryGolfCourseUnitOfWork()
 
 
 async def _create_user(user_uow, share_activity: bool = True) -> User:
@@ -65,7 +81,13 @@ async def _hacer_amigos(social_uow, a: User, b: User) -> Friendship:
     return friendship
 
 
-async def _publica(social_uow, user: User, match_id: str, cuando: datetime = CUANDO):
+async def _publica(
+    social_uow,
+    user: User,
+    match_id: str,
+    cuando: datetime = CUANDO,
+    payload: dict | None = None,
+):
     async with social_uow:
         await social_uow.activity_events.add_many(
             [
@@ -74,13 +96,47 @@ async def _publica(social_uow, user: User, match_id: str, cuando: datetime = CUA
                     type=ActivityEventType.BIRDIE,
                     occurred_at=cuando,
                     source_match_id=match_id,
+                    payload=payload,
                 )
             ]
         )
 
 
-def _use_case(social_uow, user_uow):
-    return GetFriendsFeedUseCase(social_uow, user_uow)
+async def _create_course(golf_course_uow, creator_id, name: str = "Test Golf Club"):
+    """Campo de par 72: 18 hoyos de par 4."""
+    course = GolfCourse.create(
+        name=name,
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=creator_id,
+        tees=[
+            Tee(
+                category=TeeCategory.AMATEUR,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+            ),
+            Tee(
+                category=TeeCategory.CHAMPIONSHIP,
+                gender=Gender.MALE,
+                identifier="White",
+                course_rating=72.0,
+                slope_rating=130,
+            ),
+        ],
+        holes=[Hole(number=i, par=PAR, stroke_index=i) for i in range(1, 19)],
+    )
+    course.approve()
+    async with golf_course_uow:
+        await golf_course_uow.golf_courses.save(course)
+    return course
+
+
+def _use_case(social_uow, user_uow, golf_course_uow=None):
+    return GetFriendsFeedUseCase(
+        social_uow, user_uow, golf_course_uow or InMemoryGolfCourseUnitOfWork()
+    )
 
 
 class TestQueSeVe:
@@ -382,3 +438,85 @@ class TestCursorManipulado:
         )
 
         assert isinstance(feed.events, list)
+
+
+class TestElCampo:
+    """
+    El nombre del campo donde ocurrio cada logro.
+
+    El `payload` solo guarda el `golf_course_id`, asi que el nombre se resuelve
+    al leer y viaja en un diccionario aparte, igual que los autores.
+    """
+
+    async def test_el_feed_trae_el_nombre_del_campo(self, social_uow, user_uow, golf_course_uow):
+        """
+        Given un logro en un campo / When pido el feed / Then viene como se
+        llama, para no pedirlo entrada por entrada.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        campo = await _create_course(golf_course_uow, amigo.id, name="Real Club de Golf")
+        await _publica(
+            social_uow,
+            amigo,
+            "match-1",
+            payload={"golf_course_id": str(campo.id.value)},
+        )
+
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(str(yo.id.value))
+
+        assert feed.courses == {str(campo.id.value): "Real Club de Golf"}
+
+    async def test_un_campo_citado_dos_veces_viaja_una_sola_vez(
+        self, social_uow, user_uow, golf_course_uow
+    ):
+        """
+        Given dos logros en el mismo campo / When pido el feed / Then el nombre
+        va una vez, no uno por entrada.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        campo = await _create_course(golf_course_uow, amigo.id)
+        payload = {"golf_course_id": str(campo.id.value)}
+        await _publica(social_uow, amigo, "match-1", payload=payload)
+        await _publica(social_uow, amigo, "match-2", payload=payload)
+
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(str(yo.id.value))
+
+        assert len(feed.events) == 2
+        assert len(feed.courses) == 1
+
+    async def test_un_campo_borrado_no_tumba_la_pagina(self, social_uow, user_uow, golf_course_uow):
+        """
+        Given un logro cuyo campo ya no existe / When pido el feed / Then la
+        entrada sigue saliendo, solo que sin nombre.
+
+        El logro sigue siendo cierto aunque el campo se haya borrado; perder el
+        nombre no puede costar la pagina entera.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        await _publica(social_uow, amigo, "match-1", payload={"golf_course_id": str(uuid4())})
+
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(str(yo.id.value))
+
+        assert len(feed.events) == 1
+        assert feed.courses == {}
+
+    async def test_un_logro_sin_campo_no_pide_nombres(self, social_uow, user_uow, golf_course_uow):
+        """
+        Given un logro sin `golf_course_id` / When pido el feed / Then no viene
+        ningun campo.
+        """
+        yo = await _create_user(user_uow)
+        amigo = await _create_user(user_uow)
+        await _hacer_amigos(social_uow, yo, amigo)
+        await _publica(social_uow, amigo, "match-1")
+
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(str(yo.id.value))
+
+        assert len(feed.events) == 1
+        assert feed.courses == {}

@@ -2,6 +2,10 @@
 
 from datetime import datetime
 
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.social.application.dto.profile_dto import (
     ActivityEventDTO,
     FeedAuthorDTO,
@@ -52,9 +56,11 @@ class GetFriendsFeedUseCase:
         self,
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
     ):
         self._social_uow = social_uow
         self._user_uow = user_uow
+        self._golf_course_uow = golf_course_uow
 
     async def execute(
         self, viewer_id_raw: str, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
@@ -93,10 +99,12 @@ class GetFriendsFeedUseCase:
             )
 
         autores = await self._autores(eventos)
+        campos = await self._campos(eventos)
 
         return FeedResponseDTO(
             events=[self._a_dto(e) for e in eventos],
             authors=autores,
+            courses=campos,
             next_cursor=build_cursor(eventos, limit),
             unseen_count=no_vistos,
         )
@@ -162,6 +170,35 @@ class GetFriendsFeedUseCase:
                 )
         return autores
 
+    async def _campos(self, eventos: list[ActivityEvent]) -> dict[str, str]:
+        """
+        Como se llama cada campo citado en esta pagina.
+
+        El `payload` solo guarda el `golf_course_id`, asi que el nombre se
+        resuelve al leer. Va en la respuesta por el mismo motivo que los
+        autores: pintar el feed no debe costar una peticion por entrada. Se
+        consulta cada campo una vez aunque salga en varias.
+
+        Un id que ya no existe se omite en lugar de romper la pagina: el feed
+        cuenta un logro, y el logro sigue siendo cierto aunque el campo se haya
+        borrado. La entrada se pinta sin el nombre.
+        """
+        ids = {
+            evento.payload["golf_course_id"]
+            for evento in eventos
+            if evento.payload.get("golf_course_id")
+        }
+        if not ids:
+            return {}
+
+        campos: dict[str, str] = {}
+        async with self._golf_course_uow:
+            for course_id in ids:
+                campo = await self._golf_course_uow.golf_courses.find_by_id(GolfCourseId(course_id))
+                if campo is not None:
+                    campos[course_id] = campo.name
+        return campos
+
     @staticmethod
     def _a_dto(evento: ActivityEvent) -> ActivityEventDTO:
         return ActivityEventDTO(
@@ -172,4 +209,3 @@ class GetFriendsFeedUseCase:
             payload=evento.payload,
             source_match_id=evento.source_match_id,
         )
-
