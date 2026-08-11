@@ -219,6 +219,22 @@ def downgrade() -> None:
 
     op.execute("DROP INDEX IF EXISTS uq_golf_course_tees_color_gender")
     op.execute("DROP INDEX IF EXISTS uq_golf_course_tees_identifier_gender")
+
+    # Con la unicidad por color, un campo puede tener dos salidas que comparten
+    # categoría y género (blancas y negras, ambas de campeonato masculino). El
+    # esquema anterior no las admite, así que hay que quedarse con una antes de
+    # recrear su índice: de lo contrario CREATE UNIQUE INDEX aborta y el
+    # downgrade falla en cualquier base que haya usado colores.
+    # Se conserva la salida más antigua de cada combinación. Es una pérdida
+    # inevitable: volver al esquema viejo implica que esas salidas no caben.
+    op.execute(
+        "DELETE FROM golf_course_tees t USING golf_course_tees keep "
+        "WHERE t.golf_course_id = keep.golf_course_id "
+        "AND t.tee_category = keep.tee_category "
+        "AND COALESCE(t.tee_gender, 'NONE') = COALESCE(keep.tee_gender, 'NONE') "
+        "AND t.id > keep.id"
+    )
+
     op.execute(
         "CREATE UNIQUE INDEX uq_golf_course_tees_cat_gender "
         "ON golf_course_tees (golf_course_id, tee_category, COALESCE(tee_gender, 'NONE'))"

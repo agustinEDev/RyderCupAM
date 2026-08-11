@@ -569,6 +569,18 @@ async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_hole
     # Verificar que existe
     assert await repository.find_by_id(golf_course.id) is not None
 
+    # Los ids de las salidas hay que capturarlos antes del borrado: después no
+    # hay forma de llegar a sus hoyos para comprobar que también cayeron.
+    tee_ids = list(
+        (
+            await db_session.execute(
+                text("SELECT id FROM golf_course_tees WHERE golf_course_id = :gc_id"),
+                {"gc_id": str(golf_course.id.value)},
+            )
+        ).scalars()
+    )
+    assert tee_ids, "Precondición: el campo debe tener salidas persistidas"
+
     # Act
     await repository.delete(golf_course.id)
     await db_session.commit()
@@ -584,14 +596,12 @@ async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_hole
     assert result_tees.scalar() == 0, "Tees should be cascade deleted"
 
     # Assert - Cascade delete: los hoyos cuelgan de las salidas, así que el
-    # borrado tiene que propagarse dos niveles
+    # borrado tiene que propagarse dos niveles. Se buscan por los ids
+    # capturados antes: un JOIN con las salidas ya borradas daría cero aunque
+    # quedaran hoyos huérfanos.
     result_holes = await db_session.execute(
-        text(
-            "SELECT count(*) FROM golf_course_tee_holes th "
-            "JOIN golf_course_tees t ON t.id = th.tee_id "
-            "WHERE t.golf_course_id = :gc_id"
-        ),
-        {"gc_id": str(golf_course.id.value)},
+        text("SELECT count(*) FROM golf_course_tee_holes WHERE tee_id = ANY(:tee_ids)"),
+        {"tee_ids": tee_ids},
     )
     assert result_holes.scalar() == 0, "Holes should be cascade deleted"
 

@@ -207,11 +207,13 @@ class TestTeeScorecards:
     @pytest.mark.asyncio
     async def test_other_color_without_identifier_is_rejected(self, client: AsyncClient):
         """
-        GIVEN: Una salida de color OTHER sin identificador
+        GIVEN: Una salida sin color ni identificador
         WHEN: Se solicita por la API
-        THEN: Se rechaza con 400
+        THEN: Se rechaza como error de validación (422)
 
-        Sin identificador, dos salidas OTHER serían indistinguibles.
+        Sin identificador, dos salidas OTHER serían indistinguibles. La regla la
+        hace cumplir el dominio; el DTO la comprueba antes para señalar el campo
+        concreto en vez de devolver un rechazo genérico.
         """
         # Given
         user = await create_authenticated_user(
@@ -247,4 +249,5 @@ class TestTeeScorecards:
         )
 
         # Then
-        assert response.status_code == 400, response.text
+        assert response.status_code == 422, response.text
+        assert "identifier" in response.text

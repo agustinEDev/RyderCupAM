@@ -4,7 +4,7 @@ Golf Course DTOs - Request/Response for use cases.
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -58,6 +58,23 @@ class TeeDTO(BaseModel):
             "Necesaria cuando el par, la dificultad o las distancias cambian entre barras"
         ),
     )
+
+    @model_validator(mode="after")
+    def check_color_and_identifier(self) -> "TeeDTO":
+        """
+        Una salida sin color reconocible necesita nombre.
+
+        La regla vive en el dominio, que es quien la hace cumplir. Se comprueba
+        también aquí para que el error salga como un fallo de validación del
+        campo concreto, y no como un rechazo genérico de la petición: omitir
+        ambos valores da OTHER sin identificador, que es la combinación que el
+        agregado no admite.
+        """
+        if self.color is TeeColor.OTHER and not (self.identifier or "").strip():
+            raise ValueError(
+                "identifier is required when color is OTHER (or set an explicit color)"
+            )
+        return self
 
     class Config:
         from_attributes = True
