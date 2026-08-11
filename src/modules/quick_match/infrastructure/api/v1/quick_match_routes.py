@@ -127,14 +127,14 @@ router = APIRouter()
 # ======================================================================================
 
 
-TEE_CATEGORY_PATTERN = "^(CHAMPIONSHIP|AMATEUR|SENIOR|FORWARD|JUNIOR)$"
+TEE_COLOR_PATTERN = "^(RED|YELLOW|BLUE|WHITE|GREEN|ORANGE|BLACK|PINK|GOLD|OTHER)$"
 TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
 
 
-def _require_tee_category_for_gender(tee_category: str | None, tee_gender: str | None) -> None:
-    """A gender alone doesn't identify a course tee — category is required alongside it."""
-    if tee_gender is not None and tee_category is None:
-        raise ValueError("tee_gender requires tee_category to be provided as well.")
+def _require_tee_color_for_gender(tee_color: str | None, tee_gender: str | None) -> None:
+    """A gender alone doesn't identify a course tee — the colour is required alongside it."""
+    if tee_gender is not None and tee_color is None:
+        raise ValueError("tee_gender requires tee_color to be provided as well.")
 
 
 class CreateQuickMatchBody(BaseModel):
@@ -145,7 +145,7 @@ class CreateQuickMatchBody(BaseModel):
     scoring_format: str | None = Field(None, pattern="^(MEDAL|STABLEFORD)$")
     name: str | None = Field(None, max_length=MAX_NAME_LENGTH)
     allowance_percentage: int | None = Field(None, ge=50, le=100)
-    creator_tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    creator_tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
     creator_tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
     @field_validator("name", mode="before")
@@ -160,8 +160,8 @@ class CreateQuickMatchBody(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _tee_gender_requires_category(self) -> "CreateQuickMatchBody":
-        _require_tee_category_for_gender(self.creator_tee_category, self.creator_tee_gender)
+    def _tee_gender_requires_color(self) -> "CreateQuickMatchBody":
+        _require_tee_color_for_gender(self.creator_tee_color, self.creator_tee_gender)
         return self
 
 
@@ -170,12 +170,12 @@ class AddParticipantBody(BaseModel):
 
     friend_user_id: UUID
     team: str | None = Field(None, pattern="^(A|B)$")
-    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
     tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
     @model_validator(mode="after")
-    def _tee_gender_requires_category(self) -> "AddParticipantBody":
-        _require_tee_category_for_gender(self.tee_category, self.tee_gender)
+    def _tee_gender_requires_color(self) -> "AddParticipantBody":
+        _require_tee_color_for_gender(self.tee_color, self.tee_gender)
         return self
 
 
@@ -186,12 +186,12 @@ class AddGuestParticipantBody(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     handicap: float | None = Field(None, ge=-10.0, le=54.0)
     team: str | None = Field(None, pattern="^(A|B)$")
-    tee_category: str | None = Field(None, pattern=TEE_CATEGORY_PATTERN)
+    tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
     tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
     @model_validator(mode="after")
-    def _tee_gender_requires_category(self) -> "AddGuestParticipantBody":
-        _require_tee_category_for_gender(self.tee_category, self.tee_gender)
+    def _tee_gender_requires_color(self) -> "AddGuestParticipantBody":
+        _require_tee_color_for_gender(self.tee_color, self.tee_gender)
         return self
 
 
@@ -247,7 +247,7 @@ async def create_quick_match(
             scoring_format=body.scoring_format,
             name=body.name,
             allowance_percentage=body.allowance_percentage,
-            creator_tee_category=body.creator_tee_category,
+            creator_tee_color=body.creator_tee_color,
             creator_tee_gender=body.creator_tee_gender,
         )
         return await use_case.execute(request_dto)
@@ -281,7 +281,7 @@ async def add_participant(
             requester_id=current_user.id,
             friend_user_id=body.friend_user_id,
             team=body.team,
-            tee_category=body.tee_category,
+            tee_color=body.tee_color,
             tee_gender=body.tee_gender,
         )
         return await use_case.execute(request_dto)
@@ -328,7 +328,7 @@ async def add_guest_participant(
             last_name=body.last_name,
             handicap=body.handicap,
             team=body.team,
-            tee_category=body.tee_category,
+            tee_color=body.tee_color,
             tee_gender=body.tee_gender,
         )
         return await use_case.execute(request_dto)

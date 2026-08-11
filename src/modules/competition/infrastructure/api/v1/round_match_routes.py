@@ -110,7 +110,7 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     NoTeamAssignmentError,
     RoundNotFoundError as GenMatchesRoundNotFoundError,
     RoundNotPendingMatchesError,
-    TeeCategoryNotFoundError,
+    TeeColorNotFoundError,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
@@ -713,7 +713,7 @@ async def generate_matches(
         RoundNotPendingMatchesError,
         NoTeamAssignmentError,
         GenMatchesInsufficientError,
-        TeeCategoryNotFoundError,
+        TeeColorNotFoundError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

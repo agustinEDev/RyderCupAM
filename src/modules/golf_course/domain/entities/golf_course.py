@@ -20,7 +20,7 @@ from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.course_type import CourseType
 from ..value_objects.golf_course_id import GolfCourseId
-from ..value_objects.tee_category import TeeCategory
+from ..value_objects.tee_color import TeeColor
 from .hole import Hole
 from .tee import Tee
 
@@ -378,7 +378,6 @@ class GolfCourse:
 
         for tee in tees:
             new_tee = TeeEntity(
-                category=tee.category,
                 gender=tee.gender,
                 color=tee.color,
                 identifier=tee.identifier,
@@ -528,7 +527,6 @@ class GolfCourse:
         for tee in clone._tees:
             # Crear nuevo Tee con los mismos datos, incluida su tarjeta
             new_tee = Tee(
-                category=tee.category,
                 gender=tee.gender,
                 color=tee.color,
                 identifier=tee.identifier,
@@ -761,6 +759,31 @@ class GolfCourse:
 
     # Metodos de consulta
 
-    def has_tee(self, category: TeeCategory, gender: Gender | None) -> bool:
-        """Retorna True si el campo tiene un tee para esa categoria/genero."""
-        return any(t.category == category and t.gender == gender for t in self._tees)
+    def has_tee(self, color: TeeColor, gender: Gender | None, identifier: str | None = None) -> bool:
+        """
+        Retorna True si el campo tiene esa salida.
+
+        Una salida se identifica por color y género. Cuando el color es OTHER
+        hace falta además el identificador, porque OTHER puede repetirse en un
+        mismo campo (las "Championship" británicas y las combinadas
+        estadounidenses caen ahí).
+        """
+        return any(
+            tee.color == color
+            and tee.gender == gender
+            and (color is not TeeColor.OTHER or tee.identifier == identifier)
+            for tee in self._tees
+        )
+
+    def find_tee(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> Tee | None:
+        """Devuelve la salida que corresponde a ese color y género, si existe."""
+        for tee in self._tees:
+            if (
+                tee.color == color
+                and tee.gender == gender
+                and (color is not TeeColor.OTHER or tee.identifier == identifier)
+            ):
+                return tee
+        return None

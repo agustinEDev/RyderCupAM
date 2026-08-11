@@ -9,7 +9,7 @@ from src.modules.competition.domain.value_objects.marker_assignment import (
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -17,7 +17,7 @@ def _make_player(user_id=None, handicap=10, strokes=()):
     return MatchPlayer.create(
         user_id=user_id or UserId.generate(),
         playing_handicap=handicap,
-        tee_category=TeeCategory.AMATEUR,
+        tee_color=TeeColor.YELLOW,
         strokes_received=list(strokes),
     )
 

@@ -301,21 +301,21 @@ class TestQuickMatchTeeAndAllowance:
             json={
                 "golf_course_id": golf_course_id,
                 "match_format": "SINGLES",
-                "creator_tee_category": "AMATEUR",
+                "creator_tee_color": "YELLOW",
                 "creator_tee_gender": "MALE",
             },
         )
         assert create_response.status_code == 201
         quick_match_id = create_response.json()["id"]
         creator_dto = create_response.json()["participants"][0]
-        assert creator_dto["tee_category"] == "AMATEUR"
+        assert creator_dto["tee_color"] == "YELLOW"
         assert creator_dto["tee_gender"] == "MALE"
 
         add_response = await client.post(
             f"/api/v1/quick-matches/{quick_match_id}/participants",
             json={
                 "friend_user_id": friend["user"]["id"],
-                "tee_category": "CHAMPIONSHIP",
+                "tee_color": "WHITE",
                 "tee_gender": "MALE",
             },
         )
@@ -323,7 +323,7 @@ class TestQuickMatchTeeAndAllowance:
         friend_dto = next(
             p for p in add_response.json()["participants"] if p["user_id"] == friend["user"]["id"]
         )
-        assert friend_dto["tee_category"] == "CHAMPIONSHIP"
+        assert friend_dto["tee_color"] == "WHITE"
         assert friend_dto["tee_gender"] == "MALE"
 
         detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
@@ -333,7 +333,7 @@ class TestQuickMatchTeeAndAllowance:
             for p in detail_response.json()["participants"]
             if p["user_id"] == creator["user"]["id"]
         )
-        assert detail_creator_dto["tee_category"] == "AMATEUR"
+        assert detail_creator_dto["tee_color"] == "YELLOW"
 
     @pytest.mark.asyncio
     async def test_create_with_tee_not_on_course_returns_422(self, client: AsyncClient):
@@ -352,7 +352,7 @@ class TestQuickMatchTeeAndAllowance:
                 "golf_course_id": golf_course_id,
                 "match_format": "SINGLES",
                 # the test golf course fixture only has CHAMPIONSHIP/MALE and AMATEUR/MALE tees
-                "creator_tee_category": "FORWARD",
+                "creator_tee_color": "RED",
                 "creator_tee_gender": "FEMALE",
             },
         )
@@ -384,7 +384,7 @@ class TestQuickMatchTeeAndAllowance:
             f"/api/v1/quick-matches/{quick_match_id}/participants",
             json={
                 "friend_user_id": friend["user"]["id"],
-                "tee_category": "FORWARD",
+                "tee_color": "RED",
                 "tee_gender": "FEMALE",
             },
         )

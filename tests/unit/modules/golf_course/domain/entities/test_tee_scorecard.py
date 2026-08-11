@@ -12,7 +12,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -118,9 +118,8 @@ def test_tee_computes_par_and_meters_totals():
     THEN: Se calculan sumando los hoyos
     """
     tee = Tee(
-        category=TeeCategory.AMATEUR,
-        gender=Gender.MALE,
         color=TeeColor.YELLOW,
+        gender=Gender.MALE,
         course_rating=71.5,
         slope_rating=126,
         holes=build_holes(meters=350),
@@ -140,9 +139,8 @@ def test_tee_meters_total_is_none_when_a_hole_lacks_distance():
     holes[5].meters = None
 
     tee = Tee(
-        category=TeeCategory.AMATEUR,
-        gender=Gender.MALE,
         color=TeeColor.YELLOW,
+        gender=Gender.MALE,
         course_rating=71.5,
         slope_rating=126,
         holes=holes,
@@ -172,17 +170,15 @@ def test_tees_can_have_different_pars_and_stroke_indices():
     )
 
     white = Tee(
-        category=TeeCategory.CHAMPIONSHIP,
-        gender=Gender.MALE,
         color=TeeColor.WHITE,
+        gender=Gender.MALE,
         course_rating=73.5,
         slope_rating=135,
         holes=build_holes(pars_white, meters=400),
     )
     red = Tee(
-        category=TeeCategory.FORWARD,
-        gender=Gender.FEMALE,
         color=TeeColor.RED,
+        gender=Gender.FEMALE,
         course_rating=70.0,
         slope_rating=120,
         holes=red_holes,
@@ -210,16 +206,14 @@ def test_course_holes_are_propagated_to_tees_without_scorecard():
     # Given
     tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
             color=TeeColor.WHITE,
+            gender=Gender.MALE,
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
-            gender=Gender.MALE,
             color=TeeColor.YELLOW,
+            gender=Gender.MALE,
             course_rating=71.0,
             slope_rating=128,
         ),
@@ -244,17 +238,15 @@ def test_course_holes_are_derived_from_first_tee_when_absent():
     # Given
     tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
             color=TeeColor.WHITE,
+            gender=Gender.MALE,
             course_rating=73.5,
             slope_rating=135,
             holes=build_holes(meters=400),
         ),
         Tee(
-            category=TeeCategory.FORWARD,
-            gender=Gender.FEMALE,
             color=TeeColor.RED,
+            gender=Gender.FEMALE,
             course_rating=70.0,
             slope_rating=120,
             holes=build_holes(meters=300),
@@ -287,9 +279,8 @@ def test_course_rejects_duplicate_hole_numbers():
         build_course(
             [
                 Tee(
-                    category=TeeCategory.AMATEUR,
-                    gender=Gender.MALE,
                     color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
                     course_rating=71.0,
                     slope_rating=128,
                 ),
@@ -310,17 +301,15 @@ def test_update_preserves_tee_colors_and_distances():
     """
     # Given
     white = Tee(
-        category=TeeCategory.CHAMPIONSHIP,
-        gender=Gender.MALE,
         color=TeeColor.WHITE,
+        gender=Gender.MALE,
         course_rating=73.5,
         slope_rating=135,
         holes=build_holes(meters=400),
     )
     red = Tee(
-        category=TeeCategory.FORWARD,
-        gender=Gender.FEMALE,
         color=TeeColor.RED,
+        gender=Gender.FEMALE,
         course_rating=70.0,
         slope_rating=120,
         holes=build_holes(meters=300),
@@ -358,16 +347,14 @@ def test_two_tees_can_share_category_with_different_colors():
     """
     tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
             gender=Gender.MALE,
             color=TeeColor.BLACK,
             course_rating=74.5,
             slope_rating=140,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
             color=TeeColor.WHITE,
+            gender=Gender.MALE,
             course_rating=73.5,
             slope_rating=135,
         ),
@@ -386,14 +373,12 @@ def test_duplicate_color_and_gender_is_rejected():
     """
     tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
             color=TeeColor.WHITE,
+            gender=Gender.MALE,
             course_rating=74.5,
             slope_rating=140,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
             gender=Gender.MALE,
             color=TeeColor.WHITE,
             course_rating=73.5,
@@ -415,7 +400,6 @@ def test_tee_with_other_color_requires_identifier():
     """
     with pytest.raises(ValueError, match="must have an identifier"):
         Tee(
-            category=TeeCategory.AMATEUR,
             gender=Gender.MALE,
             color=TeeColor.OTHER,
             course_rating=71.0,
@@ -438,16 +422,14 @@ def test_pitch_and_putt_accepts_low_ratings():
     """
     tees = [
         Tee(
-            category=TeeCategory.AMATEUR,
             gender=Gender.MALE,
             color=TeeColor.GREEN,
             course_rating=46.8,
             slope_rating=47,
         ),
         Tee(
-            category=TeeCategory.FORWARD,
-            gender=Gender.FEMALE,
             color=TeeColor.RED,
+            gender=Gender.FEMALE,
             course_rating=47.8,
             slope_rating=53,
         ),
@@ -473,9 +455,8 @@ def test_tee_rejects_impossible_slope():
     """
     with pytest.raises(ValueError, match="Slope rating must be between 40 and 160"):
         Tee(
-            category=TeeCategory.FORWARD,
-            gender=Gender.MALE,
             color=TeeColor.RED,
+            gender=Gender.MALE,
             course_rating=63.6,
             slope_rating=11,
         )
@@ -493,16 +474,14 @@ def test_standard_course_rejects_pitch_and_putt_slope():
     """
     tees = [
         Tee(
-            category=TeeCategory.FORWARD,
-            gender=Gender.MALE,
             color=TeeColor.RED,
+            gender=Gender.MALE,
             course_rating=63.6,
             slope_rating=45,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
-            gender=Gender.MALE,
             color=TeeColor.YELLOW,
+            gender=Gender.MALE,
             course_rating=69.3,
             slope_rating=121,
         ),
@@ -523,16 +502,14 @@ def test_standard_course_accepts_slope_above_whs_maximum():
     """
     tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
             gender=Gender.FEMALE,
             color=TeeColor.BLACK,
             course_rating=82.6,
             slope_rating=157,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
-            gender=Gender.MALE,
             color=TeeColor.WHITE,
+            gender=Gender.MALE,
             course_rating=74.7,
             slope_rating=143,
         ),
@@ -551,16 +528,14 @@ def test_pitch_and_putt_rejects_standard_par():
     """
     tees = [
         Tee(
-            category=TeeCategory.AMATEUR,
             gender=Gender.MALE,
             color=TeeColor.GREEN,
             course_rating=50.0,
             slope_rating=60,
         ),
         Tee(
-            category=TeeCategory.FORWARD,
-            gender=Gender.FEMALE,
             color=TeeColor.RED,
+            gender=Gender.FEMALE,
             course_rating=52.0,
             slope_rating=62,
         ),

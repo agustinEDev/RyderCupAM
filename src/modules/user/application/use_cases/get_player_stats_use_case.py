@@ -251,7 +251,7 @@ class GetPlayerStatsUseCase:
                             holes=holes,
                             scores_by_hole=scores_by_hole,
                             handicap=handicap,
-                            tee_category=participant.tee_category,
+                            tee_color=participant.tee_color,
                             tee_gender=participant.tee_gender,
                         ),
                     )
@@ -326,7 +326,7 @@ class GetPlayerStatsUseCase:
                             # se generó: una vuelta de hace meses se mide con el
                             # hándicap que tenía entonces, no con el de hoy
                             handicap=self._match_player_handicap(player, profile_handicap),
-                            tee_category=player.tee_category if player else None,
+                            tee_color=player.tee_color if player else None,
                             tee_gender=player.tee_gender if player else None,
                         ),
                     )
@@ -342,7 +342,7 @@ class GetPlayerStatsUseCase:
         holes: list[HoleSetup],
         scores_by_hole: dict,
         handicap: float | None,
-        tee_category,
+        tee_color,
         tee_gender,
     ) -> PlayedRound | None:
         """
@@ -353,7 +353,7 @@ class GetPlayerStatsUseCase:
         media es una métrica de la casa y usa el hándicap con el que se jugó la
         partida; el diferencial pretende ser WHS y el WHS ignora el allowance.
         """
-        tee_rating = self._tee_rating(course, tee_category, tee_gender)
+        tee_rating = self._tee_rating(course, tee_color, tee_gender)
         if tee_rating is None:
             return None
 
@@ -379,7 +379,7 @@ class GetPlayerStatsUseCase:
         )
 
     @staticmethod
-    def _tee_rating(course, tee_category, tee_gender) -> TeeRating | None:
+    def _tee_rating(course, tee_color, tee_gender) -> TeeRating | None:
         """
         Ratings del tee que se jugó, o None si no se puede saber.
 
@@ -392,14 +392,14 @@ class GetPlayerStatsUseCase:
         Course Rating más ancho que el que el sistema acepta para calcular, y
         una estadística no es motivo para tumbar la respuesta entera.
         """
-        if tee_category is None:
+        if tee_color is None:
             return None
 
         tee = next(
             (
                 candidate
                 for candidate in course.tees
-                if candidate.category == tee_category and candidate.gender == tee_gender
+                if candidate.color == tee_color and candidate.gender == tee_gender
             ),
             None,
         )

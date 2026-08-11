@@ -25,7 +25,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
@@ -177,7 +177,7 @@ class ReassignMatchPlayersUseCase:
             total_par = sum(h.par for h in golf_course.holes)
             for tee in golf_course.tees:
                 gender_key = tee.gender.value if tee.gender else None
-                tee_ratings[(tee.category.value, gender_key)] = TeeRating(
+                tee_ratings[(tee.color.value, gender_key)] = TeeRating(
                     course_rating=Decimal(str(tee.course_rating)),
                     slope_rating=tee.slope_rating,
                     par=total_par,
@@ -214,21 +214,21 @@ class ReassignMatchPlayersUseCase:
         enrollment = enrollment_map.get(str(uid_value))
         if not enrollment:
             raise PlayerNotEnrolledError(f"El jugador {uid_value} no tiene inscripción aprobada")
-        tee_category = enrollment.tee_category if enrollment.tee_category else TeeCategory.AMATEUR
+        tee_color = enrollment.tee_color if enrollment.tee_color else TeeColor.YELLOW
         user_gender = user_gender_map.get(str(uid_value))
 
         # Auto-resolve tee: (category, user_gender) → (category, None)
         tee_gender = user_gender
-        tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
+        tee_key = (tee_color.value, tee_gender.value if tee_gender else None)
         if tee_key not in tee_ratings:
-            tee_key = (tee_category.value, None)
+            tee_key = (tee_color.value, None)
             tee_gender = None
 
         if is_scratch:
             return MatchPlayer.create(
                 user_id=uid,
                 playing_handicap=0,
-                tee_category=tee_category,
+                tee_color=tee_color,
                 strokes_received=[],
                 tee_gender=tee_gender,
             )
@@ -247,7 +247,7 @@ class ReassignMatchPlayersUseCase:
                 f"No se encontró tee rating para el jugador {uid_value} "
                 f"(tee_key: {tee_key}) en el campo de golf. "
                 f"Verifique que el campo tiene un tee configurado para "
-                f"categoría={tee_category.value}, género={tee_gender}"
+                f"categoría={tee_color.value}, género={tee_gender}"
             )
         playing_handicap = self._calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap
@@ -258,7 +258,7 @@ class ReassignMatchPlayersUseCase:
         return MatchPlayer.create(
             user_id=uid,
             playing_handicap=playing_handicap,
-            tee_category=tee_category,
+            tee_color=tee_color,
             strokes_received=strokes_received,
             tee_gender=tee_gender,
         )

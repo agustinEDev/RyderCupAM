@@ -16,7 +16,7 @@ from sqlalchemy.types import CHAR
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
@@ -201,7 +201,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         "handicap": number | null,              # solo invitados (opcional)
         "custom_handicap": number | null,       # solo registrados (override, opcional)
         "team": "A" | "B" | null,
-        "tee_category": "AMATEUR" | ... | null,
+        "tee_color": "AMATEUR" | ... | null,
         "tee_gender": "MALE" | "FEMALE" | null
     }
     """
@@ -221,7 +221,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                 "handicap": p.handicap,
                 "custom_handicap": p.custom_handicap,
                 "team": p.team,
-                "tee_category": p.tee_category.value if p.tee_category else None,
+                "tee_color": p.tee_color.value if p.tee_color else None,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
             }
             for p in value
@@ -241,8 +241,8 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                     handicap=p.get("handicap"),
                     custom_handicap=p.get("custom_handicap"),
                     team=p.get("team"),
-                    tee_category=(
-                        TeeCategory(p["tee_category"]) if p.get("tee_category") else None
+                    tee_color=(
+                        TeeColor(p["tee_color"]) if p.get("tee_color") else None
                     ),
                     tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 )

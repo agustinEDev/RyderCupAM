@@ -83,7 +83,7 @@ from src.modules.competition.domain.value_objects.validation_status import Valid
 # Golf Course Entity and Value Object (FK)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 
 # User Value Object (FK)
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -355,7 +355,7 @@ RoundStatusDecorator = _create_enum_decorator(RoundStatus)
 HandicapModeDecorator = _create_enum_decorator(HandicapMode)
 MatchStatusDecorator = _create_enum_decorator(MatchStatus)
 TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
-TeeCategoryDecorator = _create_enum_decorator(TeeCategory)
+TeeColorDecorator = _create_enum_decorator(TeeColor)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
@@ -374,7 +374,7 @@ class MatchPlayersJsonType(TypeDecorator):
     {
         "user_id": "uuid-string",
         "playing_handicap": 12,
-        "tee_category": "AMATEUR",
+        "tee_color": "AMATEUR",
         "tee_gender": "MALE",
         "strokes_received": [1, 3, 5, 7],
         "player_handicap": "14.2"
@@ -394,7 +394,7 @@ class MatchPlayersJsonType(TypeDecorator):
             {
                 "user_id": str(p.user_id.value),
                 "playing_handicap": p.playing_handicap,
-                "tee_category": p.tee_category.value,
+                "tee_color": p.tee_color.value,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
                 "player_handicap": str(p.player_handicap) if p.player_handicap is not None else None,
@@ -411,7 +411,7 @@ class MatchPlayersJsonType(TypeDecorator):
             player = MatchPlayer(
                 user_id=UserId(uuid.UUID(p["user_id"])),
                 playing_handicap=p["playing_handicap"],
-                tee_category=TeeCategory(p["tee_category"]),
+                tee_color=TeeColor(p["tee_color"]),
                 tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 strokes_received=tuple(p["strokes_received"]),
                 player_handicap=Decimal(player_handicap) if player_handicap is not None else None,
@@ -730,7 +730,7 @@ enrollments_table = Table(
     Column("status", String(20), nullable=False),
     Column("team_id", String(10), nullable=True),
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
-    Column("tee_category", TeeCategoryDecorator, nullable=True),
+    Column("tee_color", TeeColorDecorator, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -1009,7 +1009,7 @@ def start_competition_mappers():
                 "_user_id": enrollments_table.c.user_id,
                 "_team_id": enrollments_table.c.team_id,
                 "_custom_handicap": enrollments_table.c.custom_handicap,
-                "_tee_category": enrollments_table.c.tee_category,
+                "_tee_color": enrollments_table.c.tee_color,
                 "_created_at": enrollments_table.c.created_at,
                 "_updated_at": enrollments_table.c.updated_at,
                 # Composite VOs → private attrs

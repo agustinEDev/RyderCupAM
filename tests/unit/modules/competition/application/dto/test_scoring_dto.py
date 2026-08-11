@@ -155,7 +155,7 @@ class TestSubDTOs:
             user_id="u1",
             user_name="Agustin",
             team="A",
-            tee_category="AMATEUR",
+            tee_color="YELLOW",
             playing_handicap=12,
             strokes_received=[1, 3, 5],
         )

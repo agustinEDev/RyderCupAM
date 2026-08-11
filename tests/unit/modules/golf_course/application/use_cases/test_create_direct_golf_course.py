@@ -57,14 +57,14 @@ class TestCreateDirectGolfCourseUseCase:
             course_type=CourseType.STANDARD_18,
             tees=[
                 TeeDTO(
-                    tee_category="CHAMPIONSHIP",
+                    tee_color="WHITE",
                     tee_gender="MALE",
                     identifier="Blanco",
                     course_rating=72.5,
                     slope_rating=130,
                 ),
                 TeeDTO(
-                    tee_category="AMATEUR",
+                    tee_color="YELLOW",
                     tee_gender="MALE",
                     identifier="Amarillo",
                     course_rating=70.0,

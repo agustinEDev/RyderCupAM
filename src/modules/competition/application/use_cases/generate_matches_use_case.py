@@ -32,7 +32,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -53,7 +53,7 @@ class NoTeamAssignmentError(Exception):
     pass
 
 
-class TeeCategoryNotFoundError(Exception):
+class TeeColorNotFoundError(Exception):
     """No se encontró la categoría de tee del jugador en el campo."""
 
     pass
@@ -234,7 +234,7 @@ class GenerateMatchesUseCase:
             for tee in golf_course.tees:
                 total_par = sum(h.par for h in golf_course.holes)
                 gender_key = tee.gender.value if tee.gender else None
-                tee_ratings[(tee.category.value, gender_key)] = TeeRating(
+                tee_ratings[(tee.color.value, gender_key)] = TeeRating(
                     course_rating=Decimal(str(tee.course_rating)),
                     slope_rating=tee.slope_rating,
                     par=total_par,
@@ -506,26 +506,26 @@ class GenerateMatchesUseCase:
         tee_ratings,
         user_handicap_map,
         user_gender_map,
-    ) -> tuple[TeeCategory, Gender | None, TeeRating | None, Decimal]:
+    ) -> tuple[TeeColor, Gender | None, TeeRating | None, Decimal]:
         """
-        Resuelve datos de un jugador: tee category, gender, tee rating e handicap index.
+        Resuelve datos de un jugador: tee colour, gender, tee rating e handicap index.
 
         Returns:
-            (tee_category, tee_gender, tee_rating, handicap_index)
+            (tee_color, tee_gender, tee_rating, handicap_index)
         """
         enrollment = enrollment_map.get(str(user_id.value))
-        tee_category = (
-            enrollment.tee_category
-            if enrollment and enrollment.tee_category
-            else TeeCategory.AMATEUR
+        tee_color = (
+            enrollment.tee_color
+            if enrollment and enrollment.tee_color
+            else TeeColor.YELLOW
         )
         user_gender = user_gender_map.get(str(user_id.value))
 
-        # Auto-resolve tee: (category, user_gender) → (category, None) fallback
+        # Auto-resolve tee: (colour, user_gender) → (colour, None) fallback
         tee_gender = user_gender
-        tee_key = (tee_category.value, tee_gender.value if tee_gender else None)
+        tee_key = (tee_color.value, tee_gender.value if tee_gender else None)
         if tee_key not in tee_ratings:
-            tee_key = (tee_category.value, None)
+            tee_key = (tee_color.value, None)
             tee_gender = None
 
         tee_rating = tee_ratings.get(tee_key)
@@ -538,7 +538,7 @@ class GenerateMatchesUseCase:
         else:
             handicap_index = Decimal("0")
 
-        return tee_category, tee_gender, tee_rating, handicap_index
+        return tee_color, tee_gender, tee_rating, handicap_index
 
     def _build_match_player(
         self,
@@ -554,7 +554,7 @@ class GenerateMatchesUseCase:
         max_playing_handicap=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
-        tee_category, tee_gender, tee_rating, handicap_index = self._resolve_player_data(
+        tee_color, tee_gender, tee_rating, handicap_index = self._resolve_player_data(
             user_id, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
         )
 
@@ -562,15 +562,15 @@ class GenerateMatchesUseCase:
             return MatchPlayer.create(
                 user_id=user_id,
                 playing_handicap=0,
-                tee_category=tee_category,
+                tee_color=tee_color,
                 strokes_received=[],
                 tee_gender=tee_gender,
                 player_handicap=handicap_index,
             )
 
         if not tee_rating:
-            raise TeeCategoryNotFoundError(
-                f"No se encontró tee rating para categoría '{tee_category.value}' "
+            raise TeeColorNotFoundError(
+                f"No se encontró tee rating para categoría '{tee_color.value}' "
                 f"(gender: {tee_gender}) en el campo de golf"
             )
 
@@ -584,7 +584,7 @@ class GenerateMatchesUseCase:
         return MatchPlayer.create(
             user_id=user_id,
             playing_handicap=playing_handicap,
-            tee_category=tee_category,
+            tee_color=tee_color,
             strokes_received=strokes_received,
             tee_gender=tee_gender,
             player_handicap=handicap_index,
@@ -626,7 +626,7 @@ class GenerateMatchesUseCase:
                     MatchPlayer.create(
                         user_id=uid,
                         playing_handicap=0,
-                        tee_category=tee_cat,
+                        tee_color=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
                         player_handicap=hi,
@@ -641,7 +641,7 @@ class GenerateMatchesUseCase:
                     MatchPlayer.create(
                         user_id=uid,
                         playing_handicap=0,
-                        tee_category=tee_cat,
+                        tee_color=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
                         player_handicap=hi,
@@ -650,7 +650,7 @@ class GenerateMatchesUseCase:
             return team_a_players, team_b_players
 
         # 1. Calcular Course Handicaps (100%, sin allowance) para los 4 jugadores
-        player_data: dict[str, tuple[TeeCategory, Gender | None, TeeRating, Decimal]] = {}
+        player_data: dict[str, tuple[TeeColor, Gender | None, TeeRating, Decimal]] = {}
         course_handicaps: list[tuple[str, int]] = []
 
         for uid in all_ids:
@@ -658,7 +658,7 @@ class GenerateMatchesUseCase:
                 uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
             )
             if not tee_rating:
-                raise TeeCategoryNotFoundError(
+                raise TeeColorNotFoundError(
                     f"No se encontró tee rating para categoría '{tee_cat.value}' "
                     f"(gender: {tee_gen}) en el campo de golf"
                 )
@@ -681,7 +681,7 @@ class GenerateMatchesUseCase:
             return MatchPlayer.create(
                 user_id=uid,
                 playing_handicap=ph,
-                tee_category=tee_cat,
+                tee_color=tee_cat,
                 strokes_received=strokes,
                 tee_gender=tee_gen,
                 player_handicap=hi,
@@ -728,7 +728,7 @@ class GenerateMatchesUseCase:
                 MatchPlayer.create(
                     user_id=a_player_id,
                     playing_handicap=0,
-                    tee_category=tee_cat_a,
+                    tee_color=tee_cat_a,
                     strokes_received=[],
                     tee_gender=tee_gen_a,
                     player_handicap=hi_a,
@@ -736,7 +736,7 @@ class GenerateMatchesUseCase:
                 MatchPlayer.create(
                     user_id=b_player_id,
                     playing_handicap=0,
-                    tee_category=tee_cat_b,
+                    tee_color=tee_cat_b,
                     strokes_received=[],
                     tee_gender=tee_gen_b,
                     player_handicap=hi_b,
@@ -744,12 +744,12 @@ class GenerateMatchesUseCase:
             )
 
         if not tee_rating_a:
-            raise TeeCategoryNotFoundError(
+            raise TeeColorNotFoundError(
                 f"No se encontró tee rating para categoría '{tee_cat_a.value}' "
                 f"(gender: {tee_gen_a}) en el campo de golf"
             )
         if not tee_rating_b:
-            raise TeeCategoryNotFoundError(
+            raise TeeColorNotFoundError(
                 f"No se encontró tee rating para categoría '{tee_cat_b.value}' "
                 f"(gender: {tee_gen_b}) en el campo de golf"
             )
@@ -765,7 +765,7 @@ class GenerateMatchesUseCase:
             MatchPlayer.create(
                 user_id=a_player_id,
                 playing_handicap=ph_a,
-                tee_category=tee_cat_a,
+                tee_color=tee_cat_a,
                 strokes_received=strokes_a,
                 tee_gender=tee_gen_a,
                 player_handicap=hi_a,
@@ -773,7 +773,7 @@ class GenerateMatchesUseCase:
             MatchPlayer.create(
                 user_id=b_player_id,
                 playing_handicap=ph_b,
-                tee_category=tee_cat_b,
+                tee_color=tee_cat_b,
                 strokes_received=strokes_b,
                 tee_gender=tee_gen_b,
                 player_handicap=hi_b,
@@ -819,7 +819,7 @@ class GenerateMatchesUseCase:
                     MatchPlayer.create(
                         user_id=uid,
                         playing_handicap=0,
-                        tee_category=tee_cat,
+                        tee_color=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
                         player_handicap=hi,
@@ -834,7 +834,7 @@ class GenerateMatchesUseCase:
                     MatchPlayer.create(
                         user_id=uid,
                         playing_handicap=0,
-                        tee_category=tee_cat,
+                        tee_color=tee_cat,
                         strokes_received=[],
                         tee_gender=tee_gen,
                         player_handicap=hi,
@@ -843,7 +843,7 @@ class GenerateMatchesUseCase:
             return team_a_players, team_b_players
 
         # 1. Calcular Course Handicaps individuales (100%, sin allowance)
-        player_data: dict[str, tuple[TeeCategory, Gender | None, Decimal]] = {}
+        player_data: dict[str, tuple[TeeColor, Gender | None, Decimal]] = {}
         team_a_chs: list[int] = []
         team_b_chs: list[int] = []
 
@@ -852,7 +852,7 @@ class GenerateMatchesUseCase:
                 uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
             )
             if not tee_rating:
-                raise TeeCategoryNotFoundError(
+                raise TeeColorNotFoundError(
                     f"No se encontró tee rating para categoría '{tee_cat.value}' "
                     f"(gender: {tee_gen}) en el campo de golf"
                 )
@@ -880,7 +880,7 @@ class GenerateMatchesUseCase:
                 MatchPlayer.create(
                     user_id=uid,
                     playing_handicap=team_a_ph,
-                    tee_category=tee_cat,
+                    tee_color=tee_cat,
                     strokes_received=team_a_strokes,
                     tee_gender=tee_gen,
                     player_handicap=hi,
@@ -894,7 +894,7 @@ class GenerateMatchesUseCase:
                 MatchPlayer.create(
                     user_id=uid,
                     playing_handicap=team_b_ph,
-                    tee_category=tee_cat,
+                    tee_color=tee_cat,
                     strokes_received=team_b_strokes,
                     tee_gender=tee_gen,
                     player_handicap=hi,

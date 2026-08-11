@@ -836,11 +836,11 @@ class ReorderGolfCourseIdsRequest(BaseModel):
 class TeeResponseDTO(BaseModel):
     """DTO de respuesta para un tee de un campo de golf."""
 
-    category: str = Field(
-        ..., description="Categoría del tee (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)"
-    )
+    color: str = Field(..., description="Color de las barras, que junto al género identifica la salida")
     gender: str | None = Field(None, description="Género del tee (MALE, FEMALE, o null)")
-    identifier: str = Field(..., description="Nombre del tee (ej: 'Championship', 'Blue', 'White')")
+    identifier: str | None = Field(
+        None, description="Nombre libre opcional (ej: 'Championship', 'Gold/White')"
+    )
     course_rating: float = Field(..., description="Course Rating (WHS)")
     slope_rating: int = Field(..., description="Slope Rating (WHS)")
 

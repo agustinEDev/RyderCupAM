@@ -49,7 +49,7 @@ class RequestEnrollmentRequestDTO(BaseModel):
         ..., description="ID de la competición a la que se solicita inscripción."
     )
     user_id: UUID = Field(..., description="ID del usuario que solicita la inscripción.")
-    tee_category: str | None = Field(
+    tee_color: str | None = Field(
         None,
         description="Categoría de tee preferida (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
     )
@@ -87,7 +87,7 @@ class DirectEnrollPlayerRequestDTO(BaseModel):
         le=Decimal("54.0"),
         description="Hándicap personalizado (opcional). Override del hándicap oficial.",
     )
-    tee_category: str | None = Field(
+    tee_color: str | None = Field(
         None,
         description="Categoría de tee asignada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
     )
@@ -292,16 +292,16 @@ class EnrollmentResponseDTO(BaseModel):
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
-    tee_category: str | None = Field(None, description="Categoría de tee elegida por el jugador.")
+    tee_color: str | None = Field(None, description="Categoría de tee elegida por el jugador.")
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
     updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("tee_category", mode="before")
+    @field_validator("tee_color", mode="before")
     @classmethod
-    def convert_tee_category(cls, v):
-        """Convierte TeeCategory enum a string."""
+    def convert_tee_color(cls, v):
+        """Convierte TeeColor enum a string."""
         if hasattr(v, "value"):
             return v.value
         return v

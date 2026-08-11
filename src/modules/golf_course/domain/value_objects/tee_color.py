@@ -1,10 +1,10 @@
 """
 TeeColor Value Object - Color de las barras de salida.
 
-Es independiente de TeeCategory: el color identifica físicamente la salida en
-el campo, mientras que la categoría la clasifica por dificultad. Un mismo color
-puede corresponder a categorías distintas según el campo, y hay campos con
-varias salidas del mismo color en recorridos diferentes.
+El color, junto al género, identifica la salida. No clasifica por dificultad:
+las federaciones no publican categorías, y el reparto de colores varía entre
+campos y entre países (en Pebble Beach el oro es de las más largas; en España
+va a media tabla).
 """
 
 from enum import StrEnum

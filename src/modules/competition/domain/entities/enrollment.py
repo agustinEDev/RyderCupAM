@@ -7,7 +7,7 @@ Esta entidad gestiona el estado de participación de un jugador en un torneo.
 from datetime import datetime
 from decimal import Decimal
 
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 
@@ -50,7 +50,7 @@ class Enrollment:
         status: EnrollmentStatus,
         team_id: str | None = None,
         custom_handicap: Decimal | None = None,
-        tee_category: TeeCategory | None = None,
+        tee_color: TeeColor | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -66,7 +66,7 @@ class Enrollment:
         self._status = status
         self._team_id = team_id
         self._custom_handicap = custom_handicap
-        self._tee_category = tee_category
+        self._tee_color = tee_color
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -77,7 +77,7 @@ class Enrollment:
         id: EnrollmentId,
         competition_id: CompetitionId,
         user_id: UserId,
-        tee_category: TeeCategory | None = None,
+        tee_color: TeeColor | None = None,
     ) -> "Enrollment":
         """Factory method para crear una solicitud de inscripción."""
         enrollment = cls(
@@ -85,7 +85,7 @@ class Enrollment:
             competition_id=competition_id,
             user_id=user_id,
             status=EnrollmentStatus.REQUESTED,
-            tee_category=tee_category,
+            tee_color=tee_color,
         )
 
         event = EnrollmentRequestedEvent(
@@ -116,7 +116,7 @@ class Enrollment:
         competition_id: CompetitionId,
         user_id: UserId,
         custom_handicap: Decimal | None = None,
-        tee_category: TeeCategory | None = None,
+        tee_color: TeeColor | None = None,
     ) -> "Enrollment":
         """Factory method para inscripción directa por el creador."""
         enrollment = cls(
@@ -125,7 +125,7 @@ class Enrollment:
             user_id=user_id,
             status=EnrollmentStatus.APPROVED,
             custom_handicap=custom_handicap,
-            tee_category=tee_category,
+            tee_color=tee_color,
         )
 
         event = EnrollmentApprovedEvent(
@@ -178,8 +178,8 @@ class Enrollment:
         return self._custom_handicap
 
     @property
-    def tee_category(self) -> TeeCategory | None:
-        return self._tee_category
+    def tee_color(self) -> TeeColor | None:
+        return self._tee_color
 
     @property
     def created_at(self) -> datetime:
@@ -315,14 +315,14 @@ class Enrollment:
         self._custom_handicap = None
         self._updated_at = datetime.now()
 
-    def set_tee_category(self, tee_category: TeeCategory) -> None:
+    def set_tee_color(self, tee_color: TeeColor) -> None:
         """Establece o cambia la categoría de tee del jugador."""
-        self._tee_category = tee_category
+        self._tee_color = tee_color
         self._updated_at = datetime.now()
 
     def has_tee_assigned(self) -> bool:
         """Verifica si tiene tee asignado."""
-        return self._tee_category is not None
+        return self._tee_color is not None
 
     # ===========================================
     # DOMAIN EVENTS

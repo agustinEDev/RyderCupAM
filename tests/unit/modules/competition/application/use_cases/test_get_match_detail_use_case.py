@@ -28,7 +28,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -96,14 +96,14 @@ class TestGetMatchDetailUseCase:
         player_a = MatchPlayer.create(
             user_id=user_a_id,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6],
             tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=user_b_id,
             playing_handicap=8,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[1, 3, 5, 7, 9, 11, 13, 15],
             tee_gender=Gender.FEMALE,
         )
@@ -131,7 +131,7 @@ class TestGetMatchDetailUseCase:
         assert len(response.team_a_players) == 1
         assert response.team_a_players[0].user_id == user_a_id.value
         assert response.team_a_players[0].playing_handicap == 12
-        assert response.team_a_players[0].tee_category == "AMATEUR"
+        assert response.team_a_players[0].tee_color == "YELLOW"
         assert response.team_a_players[0].strokes_received == [
             1,
             3,
@@ -151,7 +151,7 @@ class TestGetMatchDetailUseCase:
         assert len(response.team_b_players) == 1
         assert response.team_b_players[0].user_id == user_b_id.value
         assert response.team_b_players[0].playing_handicap == 8
-        assert response.team_b_players[0].tee_category == "AMATEUR"
+        assert response.team_b_players[0].tee_color == "YELLOW"
         assert response.team_b_players[0].strokes_received == [1, 3, 5, 7, 9, 11, 13, 15]
 
         # Assert: contexto de ronda
@@ -205,28 +205,28 @@ class TestGetMatchDetailUseCase:
         player_a1 = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_a2 = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=15,
-            tee_category=TeeCategory.SENIOR,
+            tee_color=TeeColor.BLUE,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_b1 = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=8,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_b2 = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=12,
-            tee_category=TeeCategory.SENIOR,
+            tee_color=TeeColor.BLUE,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )

@@ -16,7 +16,7 @@ from src.modules.golf_course.domain.events.golf_course_requested_event import (
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -31,21 +31,21 @@ def valid_tees():
     """Crea 3 tees válidos para tests."""
     return [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.2,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=75.0,
@@ -332,7 +332,7 @@ def test_create_golf_course_invalid_tees_count_too_many(valid_holes):
     # Given - 15 salidas únicas
     fifteen_tees = [
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE if i % 2 == 0 else Gender.FEMALE,
             identifier=f"Tee {i}",
             course_rating=70.0,
@@ -708,9 +708,9 @@ def test_has_tee_returns_true_for_existing_category_and_gender(valid_tees, valid
         holes=valid_holes,
     )
 
-    assert golf_course.has_tee(TeeCategory.CHAMPIONSHIP, Gender.MALE) is True
-    assert golf_course.has_tee(TeeCategory.AMATEUR, Gender.MALE) is True
-    assert golf_course.has_tee(TeeCategory.CHAMPIONSHIP, Gender.FEMALE) is True
+    assert golf_course.has_tee(TeeColor.WHITE, Gender.MALE) is True
+    assert golf_course.has_tee(TeeColor.YELLOW, Gender.MALE) is True
+    assert golf_course.has_tee(TeeColor.WHITE, Gender.FEMALE) is True
 
 
 def test_has_tee_returns_false_for_missing_gender(valid_tees, valid_holes):
@@ -724,7 +724,7 @@ def test_has_tee_returns_false_for_missing_gender(valid_tees, valid_holes):
     )
 
     # AMATEUR only exists for MALE in valid_tees
-    assert golf_course.has_tee(TeeCategory.AMATEUR, Gender.FEMALE) is False
+    assert golf_course.has_tee(TeeColor.YELLOW, Gender.FEMALE) is False
 
 
 def test_has_tee_returns_false_for_missing_category(valid_tees, valid_holes):
@@ -737,4 +737,4 @@ def test_has_tee_returns_false_for_missing_category(valid_tees, valid_holes):
         holes=valid_holes,
     )
 
-    assert golf_course.has_tee(TeeCategory.JUNIOR, Gender.MALE) is False
+    assert golf_course.has_tee(TeeColor.GREEN, Gender.MALE) is False

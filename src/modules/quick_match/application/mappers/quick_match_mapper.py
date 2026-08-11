@@ -56,7 +56,7 @@ class QuickMatchDTOMapper:
                     handicap=handicap,
                     team=p.team,
                     is_guest=p.is_guest,
-                    tee_category=p.tee_category.value if p.tee_category else None,
+                    tee_color=p.tee_color.value if p.tee_color else None,
                     tee_gender=p.tee_gender.value if p.tee_gender else None,
                 )
             )

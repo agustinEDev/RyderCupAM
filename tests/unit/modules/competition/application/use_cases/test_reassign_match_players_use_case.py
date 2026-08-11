@@ -49,7 +49,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 )
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -145,7 +145,7 @@ class TestReassignMatchPlayersUseCase:
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
                 user_id=player_id,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
             )
             async with uow:
                 await uow.enrollments.add(enrollment)
@@ -197,14 +197,14 @@ class TestReassignMatchPlayersUseCase:
         original_player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         original_player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
@@ -274,14 +274,14 @@ class TestReassignMatchPlayersUseCase:
         player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
@@ -346,14 +346,14 @@ class TestReassignMatchPlayersUseCase:
         player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
@@ -419,14 +419,14 @@ class TestReassignMatchPlayersUseCase:
         original_player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         original_player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
@@ -509,7 +509,7 @@ class TestReassignMatchPlayersUseCase:
                 competition_id=competition.id,
                 user_id=player_id,
                 custom_handicap=Decimal("30"),
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
             )
             async with uow:
                 await uow.enrollments.add(enrollment)
@@ -528,14 +528,14 @@ class TestReassignMatchPlayersUseCase:
         holes = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
         tees = [
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=None,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=113,
             ),
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=None,
                 identifier="Black",
                 course_rating=74.0,
@@ -565,13 +565,13 @@ class TestReassignMatchPlayersUseCase:
         original_player_a = MatchPlayer.create(
             user_id=player1,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
         )
         original_player_b = MatchPlayer.create(
             user_id=player3,
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
         )
         match = Match.create(

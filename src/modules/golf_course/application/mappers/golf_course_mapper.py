@@ -10,7 +10,6 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.shared.domain.value_objects.gender import Gender
 
 
@@ -44,7 +43,6 @@ class GolfCourseMapper:
         """
         return [
             Tee(
-                category=TeeCategory(tee_dto.tee_category),
                 gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
                 color=tee_dto.color,
                 identifier=tee_dto.identifier,
@@ -82,7 +80,6 @@ class GolfCourseMapper:
             creator_id=str(golf_course.creator_id),
             tees=[
                 TeeDTO(
-                    tee_category=tee.category.value,
                     tee_gender=tee.gender.value if tee.gender else None,
                     color=tee.color,
                     identifier=tee.identifier,

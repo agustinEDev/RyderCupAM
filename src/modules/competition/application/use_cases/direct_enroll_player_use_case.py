@@ -10,7 +10,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
-    InvalidTeeCategoryError,
+    InvalidTeeColorError,
     NotCreatorError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -22,7 +22,7 @@ from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -120,18 +120,18 @@ class DirectEnrollPlayerUseCase:
 
             # 5. Crear enrollment con factory method (directamente APPROVED)
             try:
-                tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+                tee_color = TeeColor(request.tee_color) if request.tee_color else None
             except ValueError as e:
-                raise InvalidTeeCategoryError(
-                    f"Valor de tee_category no válido: '{request.tee_category}'. "
-                    f"Valores permitidos: {[c.value for c in TeeCategory]}"
+                raise InvalidTeeColorError(
+                    f"Valor de tee_color no válido: '{request.tee_color}'. "
+                    f"Valores permitidos: {[c.value for c in TeeColor]}"
                 ) from e
             enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
                 user_id=player_id,
                 custom_handicap=request.custom_handicap,
-                tee_category=tee_category,
+                tee_color=tee_color,
             )
 
             # 6. Persistir
