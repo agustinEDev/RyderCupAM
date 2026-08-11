@@ -214,6 +214,14 @@ class UserResponseDTO(BaseModel):
     avatar_preset_id: int | None = Field(
         None, description="ID del preset activo (1-10), solo si avatar_source=PRESET."
     )
+    # Feed de actividad (BE #175)
+    share_activity: bool = Field(
+        default=True,
+        description=(
+            "Si los logros del usuario se publican en el feed de sus amigos. "
+            "Se cambia con PUT /social/activity-sharing."
+        ),
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)

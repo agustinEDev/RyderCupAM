@@ -211,3 +211,43 @@ class TestGetCurrentUserHasPassword:
 
         assert result is not None
         assert result.has_password is True
+
+
+@pytest.mark.asyncio
+class TestGetCurrentUserShareActivity:
+    """
+    Tests para el campo share_activity en la respuesta.
+
+    Es lo único que permite al cliente pintar el interruptor en el estado en el
+    que está. Sin él solo se podría escribir, y una pantalla de ajustes que no
+    sabe lo que tiene guardado acaba apagando lo que el jugador había encendido.
+    """
+
+    async def test_share_activity_true_by_default(self, use_case, normal_user):
+        """
+        Test: share_activity es True para un usuario recién registrado.
+        Given: Usuario que nunca ha tocado el interruptor
+        When: Se obtiene el usuario actual
+        Then: share_activity es True, el valor por defecto de la columna
+        """
+        result = await use_case.execute(str(normal_user.id.value))
+
+        assert result is not None
+        assert result.share_activity is True
+
+    async def test_share_activity_false_after_turning_it_off(self, use_case, uow, normal_user):
+        """
+        Test: share_activity es False cuando el usuario lo apagó.
+        Given: Usuario que apagó la publicación de sus logros
+        When: Se obtiene el usuario actual
+        Then: share_activity es False
+        """
+        async with uow:
+            user = await uow.users.find_by_id(normal_user.id)
+            user.set_activity_sharing(False)
+            await uow.users.save(user)
+
+        result = await use_case.execute(str(normal_user.id.value))
+
+        assert result is not None
+        assert result.share_activity is False
