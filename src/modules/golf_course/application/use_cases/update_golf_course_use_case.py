@@ -72,6 +72,7 @@ class UpdateGolfCourseUseCase:
                 tees=tees,
                 holes=holes,
                 is_admin=is_admin,
+                location=GolfCourseMapper.to_domain_location(request.location),
             )
 
             # 6. Guardar

@@ -169,7 +169,28 @@ golf_courses_table = Table(
         default=False,
         comment="TRUE if this golf course has a pending update clone",
     ),
+    # Ubicación: columnas sueltas y no un Value Object compuesto, porque es
+    # opcional y `composite()` no admite NULL. El VO se recompone en la entidad.
+    # El índice parcial para la búsqueda por cercanía se crea en la migración.
+    Column("latitude", Float, nullable=True, comment="Latitud en grados decimales"),
+    Column("longitude", Float, nullable=True, comment="Longitud en grados decimales"),
+    Column("address", String(300), nullable=True, comment="Dirección postal completa"),
+    Column("city", String(100), nullable=True, comment="Localidad"),
+    Column("province", String(100), nullable=True, comment="Provincia o región"),
     CheckConstraint("LENGTH(name) >= 3", name="ck_golf_courses_name_min_length"),
+    CheckConstraint(
+        "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)",
+        name="ck_golf_courses_latitude_range",
+    ),
+    CheckConstraint(
+        "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)",
+        name="ck_golf_courses_longitude_range",
+    ),
+    # Media coordenada no sitúa nada en un mapa: o van las dos o ninguna.
+    CheckConstraint(
+        "(latitude IS NULL) = (longitude IS NULL)",
+        name="ck_golf_courses_coordinates_together",
+    ),
     CheckConstraint(
         "(approval_status != 'REJECTED') OR (rejection_reason IS NOT NULL)",
         name="ck_golf_courses_rejection_reason_required",
@@ -332,6 +353,12 @@ def start_golf_course_mappers():
                 "_created_at": column_property(golf_courses_table.c.created_at),
                 "_updated_at": column_property(golf_courses_table.c.updated_at),
                 "_is_pending_update": column_property(golf_courses_table.c.is_pending_update),
+                # Ubicación desglosada (ver comentario en la tabla)
+                "_latitude": column_property(golf_courses_table.c.latitude),
+                "_longitude": column_property(golf_courses_table.c.longitude),
+                "_address": column_property(golf_courses_table.c.address),
+                "_city": column_property(golf_courses_table.c.city),
+                "_province": column_property(golf_courses_table.c.province),
                 # One-to-many relationships with tees and holes
                 "_tees": relationship(
                     Tee,

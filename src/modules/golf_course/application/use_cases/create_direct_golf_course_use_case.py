@@ -86,6 +86,7 @@ class CreateDirectGolfCourseUseCase:
                 creator_id=creator_id,
                 tees=tees,
                 holes=holes,
+                location=GolfCourseMapper.to_domain_location(request.location),
             )
 
             # 6. Aprobar inmediatamente (Admin privilege)
