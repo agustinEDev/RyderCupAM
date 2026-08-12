@@ -374,7 +374,7 @@ class MatchPlayersJsonType(TypeDecorator):
     {
         "user_id": "uuid-string",
         "playing_handicap": 12,
-        "tee_color": "AMATEUR",
+        "tee_color": "YELLOW",
         "tee_gender": "MALE",
         "strokes_received": [1, 3, 5, 7],
         "player_handicap": "14.2"

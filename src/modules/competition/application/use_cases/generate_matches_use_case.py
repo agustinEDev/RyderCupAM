@@ -54,7 +54,7 @@ class NoTeamAssignmentError(Exception):
 
 
 class TeeColorNotFoundError(Exception):
-    """No se encontró la categoría de tee del jugador en el campo."""
+    """No se encontró la color de tee del jugador en el campo."""
 
     pass
 

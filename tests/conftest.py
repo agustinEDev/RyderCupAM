@@ -795,7 +795,7 @@ def sample_golf_course_data() -> dict:
         "course_type": "STANDARD_18",
         "tees": [
             {
-                "identifier": "Amarillo",
+                "identifier": "Blanco",
                 "color": "WHITE",
                 "tee_gender": "MALE",
                 "course_rating": 72.5,
@@ -803,7 +803,7 @@ def sample_golf_course_data() -> dict:
                 "par": 72,
             },
             {
-                "identifier": "Blanco",
+                "identifier": "Amarillo",
                 "color": "YELLOW",
                 "tee_gender": "MALE",
                 "course_rating": 70.8,

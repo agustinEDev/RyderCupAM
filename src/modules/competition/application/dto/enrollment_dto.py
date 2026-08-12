@@ -51,7 +51,7 @@ class RequestEnrollmentRequestDTO(BaseModel):
     user_id: UUID = Field(..., description="ID del usuario que solicita la inscripción.")
     tee_color: str | None = Field(
         None,
-        description="Categoría de tee preferida (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
+        description="Color de barras preferido (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
     )
 
 
@@ -89,7 +89,7 @@ class DirectEnrollPlayerRequestDTO(BaseModel):
     )
     tee_color: str | None = Field(
         None,
-        description="Categoría de tee asignada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
+        description="Color de barras asignado (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
     )
 
 

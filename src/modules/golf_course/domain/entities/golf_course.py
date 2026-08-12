@@ -603,8 +603,8 @@ class GolfCourse:
 
         La unicidad va por (color, género) y no por (categoría, género): con
         campos de hasta catorce salidas, varias comparten categoría — un campo
-        puede tener blancas y negras y ambas ser CHAMPIONSHIP. Lo que identifica
-        físicamente una salida es su color.
+        no basta con el nombre que le demos: lo que identifica físicamente una
+        salida es su color.
 
         Raises:
             ValueError: Si la validación falla

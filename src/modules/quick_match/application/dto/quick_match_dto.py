@@ -16,9 +16,15 @@ TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
 
 
 def _require_tee_color_for_gender(tee_color: str | None, tee_gender: str | None) -> None:
-    """A gender alone doesn't identify a course tee — the colour is required alongside it."""
-    if tee_gender is not None and tee_color is None:
-        raise ValueError("tee_gender requires tee_color to be provided as well.")
+    """
+    El color y el género van juntos: son las dos mitades de la misma identidad.
+
+    Ni un color suelto ni un género suelto señalan una salida concreta, así que
+    se rechaza cualquiera de las dos mitades por separado antes de que el caso
+    de uso pregunte al campo si esa salida existe.
+    """
+    if (tee_color is None) != (tee_gender is None):
+        raise ValueError("tee_color and tee_gender must be provided together.")
 
 
 class CreateQuickMatchRequestDTO(BaseModel):

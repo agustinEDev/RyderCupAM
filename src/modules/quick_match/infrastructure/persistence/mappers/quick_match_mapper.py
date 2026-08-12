@@ -201,7 +201,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         "handicap": number | null,              # solo invitados (opcional)
         "custom_handicap": number | null,       # solo registrados (override, opcional)
         "team": "A" | "B" | null,
-        "tee_color": "AMATEUR" | ... | null,
+        "tee_color": "YELLOW" | ... | null,
         "tee_gender": "MALE" | "FEMALE" | null
     }
     """

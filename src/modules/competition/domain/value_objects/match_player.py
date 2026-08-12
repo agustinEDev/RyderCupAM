@@ -22,7 +22,7 @@ class MatchPlayer:
     Contiene la información calculada del jugador para ese partido específico:
     - Su ID de usuario
     - El handicap de juego calculado (Playing Handicap)
-    - La categoría de tee que usa
+    - La color de tee que usa
     - El género del tee seleccionado
     - Los hoyos donde recibe golpes
 
@@ -76,7 +76,7 @@ class MatchPlayer:
         Args:
             user_id: ID del jugador
             playing_handicap: Handicap de juego calculado
-            tee_color: Categoría de tee que usa
+            tee_color: Color de tee que usa
             strokes_received: Lista de hoyos donde recibe golpe
             tee_gender: Género del tee (MALE/FEMALE/None)
             player_handicap: HI del jugador en el momento de generar el partido (snapshot)

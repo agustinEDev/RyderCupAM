@@ -108,7 +108,7 @@ class RequestEnrollmentBody(BaseModel):
 
     tee_color: str | None = Field(
         None,
-        description="Categoría de tee preferida (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
+        description="Color de barras preferido (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
     )
 
 
@@ -215,7 +215,7 @@ async def request_enrollment(
 
     El usuario actual se inscribe en la competición especificada.
     La inscripción queda en estado REQUESTED hasta que el creador la apruebe.
-    Opcionalmente puede indicar su categoría de tee preferida.
+    Opcionalmente puede indicar su color de tee preferida.
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(

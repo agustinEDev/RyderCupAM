@@ -40,7 +40,23 @@ CATEGORY_TO_COLOR = {
     "FORWARD": "RED",
     "JUNIOR": "GREEN",
 }
-COLOR_TO_CATEGORY = {v: k for k, v in CATEGORY_TO_COLOR.items()}
+# La vuelta atras necesita una categoria para CADA color admitido, no solo para
+# los cinco que existian: un campo con barras negras o doradas dejaria valores
+# fuera del enum antiguo y la columna quedaria corrupta. La correspondencia de
+# los cinco colores nuevos es aproximada por definicion, porque la categoria que
+# se recupera nunca existio para ellos.
+COLOR_TO_CATEGORY = {
+    "WHITE": "CHAMPIONSHIP",
+    "YELLOW": "AMATEUR",
+    "BLUE": "SENIOR",
+    "RED": "FORWARD",
+    "GREEN": "JUNIOR",
+    "BLACK": "CHAMPIONSHIP",
+    "GOLD": "SENIOR",
+    "ORANGE": "JUNIOR",
+    "PINK": "FORWARD",
+    "OTHER": "AMATEUR",
+}
 
 # Las salidas elegidas viven también dentro de JSON: los participantes de una
 # partida rápida y los jugadores de cada emparejamiento.
@@ -133,7 +149,9 @@ def downgrade() -> None:
             comment="Categoría normalizada WHS",
         ),
     )
-    for category, color in CATEGORY_TO_COLOR.items():
+    # Recorre los diez colores, no los cinco antiguos: si no, las barras negras,
+    # doradas, naranjas o rosas se quedarian con el valor por defecto.
+    for color, category in COLOR_TO_CATEGORY.items():
         op.execute(
             f"UPDATE golf_course_tees SET tee_category = '{category}'::tee_category_enum "  # noqa: S608
             f"WHERE color = '{color}'"
