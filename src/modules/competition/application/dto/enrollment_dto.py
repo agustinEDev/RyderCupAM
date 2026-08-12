@@ -6,6 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+
+# El patrón sale del enum, no de una lista escrita a mano: añadir un color nuevo
+# no puede dejar la validación de la API por detrás del dominio.
+TEE_COLOR_PATTERN = f"^({'|'.join(TeeColor)})$"
+TEE_COLOR_DESCRIPTION = f"Color de barras ({', '.join(TeeColor)})."
+
 # ======================================================================================
 # Nested DTO para representar datos de usuario
 # ======================================================================================
@@ -51,7 +58,8 @@ class RequestEnrollmentRequestDTO(BaseModel):
     user_id: UUID = Field(..., description="ID del usuario que solicita la inscripción.")
     tee_color: str | None = Field(
         None,
-        description="Color de barras preferido (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
+        pattern=TEE_COLOR_PATTERN,
+        description=f"Preferido. {TEE_COLOR_DESCRIPTION}",
     )
 
 
@@ -89,7 +97,8 @@ class DirectEnrollPlayerRequestDTO(BaseModel):
     )
     tee_color: str | None = Field(
         None,
-        description="Color de barras asignado (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
+        pattern=TEE_COLOR_PATTERN,
+        description=f"Asignado. {TEE_COLOR_DESCRIPTION}",
     )
 
 
@@ -292,7 +301,7 @@ class EnrollmentResponseDTO(BaseModel):
     status: str = Field(..., description="Estado actual (REQUESTED, APPROVED, etc.).")
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
-    tee_color: str | None = Field(None, description="Categoría de tee elegida por el jugador.")
+    tee_color: str | None = Field(None, description="Color de barras elegido por el jugador.")
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
     updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
 

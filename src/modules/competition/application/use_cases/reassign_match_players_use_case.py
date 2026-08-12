@@ -217,7 +217,7 @@ class ReassignMatchPlayersUseCase:
         tee_color = enrollment.tee_color if enrollment.tee_color else TeeColor.YELLOW
         user_gender = user_gender_map.get(str(uid_value))
 
-        # Auto-resolve tee: (category, user_gender) → (category, None)
+        # Auto-resolve tee: (color, user_gender) → (color, None)
         tee_gender = user_gender
         tee_key = (tee_color.value, tee_gender.value if tee_gender else None)
         if tee_key not in tee_ratings:
@@ -247,7 +247,7 @@ class ReassignMatchPlayersUseCase:
                 f"No se encontró tee rating para el jugador {uid_value} "
                 f"(tee_key: {tee_key}) en el campo de golf. "
                 f"Verifique que el campo tiene un tee configurado para "
-                f"categoría={tee_color.value}, género={tee_gender}"
+                f"color={tee_color.value}, género={tee_gender}"
             )
         playing_handicap = self._calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap

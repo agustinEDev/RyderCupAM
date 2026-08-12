@@ -73,13 +73,25 @@ def _rename_json_key(table: str, column: str, old_key: str, new_key: str) -> str
 
     Se reconstruye el array elemento a elemento: PostgreSQL no tiene una
     operación de renombrado de clave en su sitio.
+
+    Los elementos que no llevan la clave se devuelven intactos: añadirles la
+    nueva clave a null cambiaría el JSON de participantes que nunca eligieron
+    salida. Y la reconstrucción va ordenada por la posición original, porque
+    `jsonb_agg` sin `ORDER BY` no garantiza el orden del array resultante y
+    aquí el orden es el de los jugadores de cada equipo.
     """
     return f"""
         UPDATE {table} SET {column} = (
             SELECT COALESCE(jsonb_agg(
-                (elem - '{old_key}') || jsonb_build_object('{new_key}', elem->'{old_key}')
+                CASE
+                    WHEN elem ? '{old_key}'
+                    THEN (elem - '{old_key}')
+                         || jsonb_build_object('{new_key}', elem->'{old_key}')
+                    ELSE elem
+                END
+                ORDER BY ord
             ), '[]'::jsonb)
-            FROM jsonb_array_elements({column}) AS elem
+            FROM jsonb_array_elements({column}) WITH ORDINALITY AS t(elem, ord)
         )
         WHERE {column} IS NOT NULL
           AND jsonb_typeof({column}) = 'array'
@@ -91,7 +103,11 @@ def _rename_json_key(table: str, column: str, old_key: str, new_key: str) -> str
 
 
 def _translate_json_values(table: str, column: str, key: str, mapping: dict[str, str]) -> str:
-    """SQL que traduce los valores de una clave dentro de un array JSON."""
+    """
+    SQL que traduce los valores de una clave dentro de un array JSON.
+
+    Ordenado por la posición original, por lo mismo que `_rename_json_key`.
+    """
     cases = " ".join(f"WHEN '{old}' THEN '{new}'" for old, new in mapping.items())
     return f"""
         UPDATE {table} SET {column} = (
@@ -101,8 +117,9 @@ def _translate_json_values(table: str, column: str, key: str, mapping: dict[str,
                     ELSE elem || jsonb_build_object('{key}',
                         CASE elem->>'{key}' {cases} ELSE elem->>'{key}' END)
                 END
+                ORDER BY ord
             ), '[]'::jsonb)
-            FROM jsonb_array_elements({column}) AS elem
+            FROM jsonb_array_elements({column}) WITH ORDINALITY AS t(elem, ord)
         )
         WHERE {column} IS NOT NULL AND jsonb_typeof({column}) = 'array'
     """  # noqa: S608

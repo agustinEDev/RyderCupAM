@@ -316,7 +316,7 @@ class Enrollment:
         self._updated_at = datetime.now()
 
     def set_tee_color(self, tee_color: TeeColor) -> None:
-        """Establece o cambia la color de tee del jugador."""
+        """Establece o cambia el color de barras del jugador."""
         self._tee_color = tee_color
         self._updated_at = datetime.now()
 

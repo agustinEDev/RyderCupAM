@@ -23,6 +23,8 @@ from src.config.dependencies import (
     get_withdraw_enrollment_use_case,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
+    TEE_COLOR_DESCRIPTION,
+    TEE_COLOR_PATTERN,
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
     DirectEnrollPlayerRequestDTO,
@@ -108,7 +110,8 @@ class RequestEnrollmentBody(BaseModel):
 
     tee_color: str | None = Field(
         None,
-        description="Color de barras preferido (WHITE, YELLOW, BLUE, RED, BLACK, GREEN, ORANGE, PINK, GOLD, OTHER).",
+        pattern=TEE_COLOR_PATTERN,
+        description=f"Preferido. {TEE_COLOR_DESCRIPTION}",
     )
 
 
