@@ -3,7 +3,7 @@
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
     AddGuestParticipantRequestDTO,
     QuickMatchResponseDTO,
@@ -49,7 +49,7 @@ class AddGuestToQuickMatchUseCase:
 
     async def execute(self, request: AddGuestParticipantRequestDTO) -> QuickMatchResponseDTO:
         requester_id = UserId(request.requester_id)
-        tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+        tee_color = TeeColor(request.tee_color) if request.tee_color else None
         tee_gender = Gender(request.tee_gender) if request.tee_gender else None
 
         async with self._uow:
@@ -64,14 +64,14 @@ class AddGuestToQuickMatchUseCase:
                     "Only the quick match creator can add participants."
                 )
 
-            if tee_category is not None:
+            if tee_color is not None:
                 async with self._golf_course_uow:
                     golf_course = await self._golf_course_uow.golf_courses.find_by_id(
                         quick_match.golf_course_id
                     )
-                    if not golf_course or not golf_course.has_tee(tee_category, tee_gender):
+                    if not golf_course or not golf_course.has_tee(tee_color, tee_gender):
                         raise InvalidTeeSelectionError(
-                            f"{tee_category.value} is not a valid tee for this golf course."
+                            f"{tee_color.value} is not a valid tee for this golf course."
                         )
 
             participant = QuickMatchParticipant.for_guest(
@@ -79,7 +79,7 @@ class AddGuestToQuickMatchUseCase:
                 last_name=request.last_name,
                 handicap=request.handicap,
                 team=request.team,
-                tee_category=tee_category,
+                tee_color=tee_color,
                 tee_gender=tee_gender,
             )
             quick_match.add_participant(participant)

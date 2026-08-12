@@ -44,7 +44,7 @@ class GolfCourseRepository(IGolfCourseRepository):
         if is_update:
             # WORKAROUND para bug de SQLAlchemy con cascade="all, delete-orphan"
             # y unique constraints: hacer DELETE explícito ANTES de los INSERTs
-            # para evitar violaciones de UNIQUE(golf_course_id, hole_number/tee_category)
+            # para evitar violaciones de UNIQUE(golf_course_id, color, tee_gender)
             # IMPORTANTE: Solo borrar colecciones si realmente cambiaron.
             # Raw SQL DELETE desincroniza la session identity map, causando que
             # los hijos se pierdan en updates de solo atributos escalares (ej: approve).

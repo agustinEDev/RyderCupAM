@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
@@ -20,14 +20,14 @@ class TestMatchPlayerCreate:
         player = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6],
         )
 
         assert player.user_id == user_id
         assert player.playing_handicap == 12
-        assert player.tee_category == TeeCategory.AMATEUR
+        assert player.tee_color == TeeColor.YELLOW
         assert player.tee_gender == Gender.MALE
         assert len(player.strokes_received) == 12
 
@@ -36,7 +36,7 @@ class TestMatchPlayerCreate:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=0,
-            tee_category=TeeCategory.CHAMPIONSHIP,
+            tee_color=TeeColor.WHITE,
             tee_gender=Gender.MALE,
             strokes_received=[],
         )
@@ -50,7 +50,7 @@ class TestMatchPlayerCreate:
             MatchPlayer.create(
                 user_id=UserId.generate(),
                 playing_handicap=-1,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
                 strokes_received=[],
             )
@@ -61,7 +61,7 @@ class TestMatchPlayerCreate:
             MatchPlayer.create(
                 user_id=UserId.generate(),
                 playing_handicap=5,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
                 strokes_received=[1, 2, 3, 19],  # 19 es inválido
             )
@@ -71,7 +71,7 @@ class TestMatchPlayerCreate:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=23,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3, 3, 5],  # 3 aparece 2 veces (2 strokes en hoyo 3)
         )
@@ -88,7 +88,7 @@ class TestMatchPlayerPlayerHandicap:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
@@ -100,7 +100,7 @@ class TestMatchPlayerPlayerHandicap:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
             player_handicap=Decimal("14.2"),
@@ -117,7 +117,7 @@ class TestMatchPlayerImmutability:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
@@ -134,7 +134,7 @@ class TestMatchPlayerQueryMethods:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=5,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 3, 5, 7, 9],
         )
@@ -148,7 +148,7 @@ class TestMatchPlayerQueryMethods:
         player = MatchPlayer.create(
             user_id=UserId.generate(),
             playing_handicap=5,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 3, 5, 7, 9],
         )
@@ -167,14 +167,14 @@ class TestMatchPlayerEquality:
         player1 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
         player2 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
@@ -188,14 +188,14 @@ class TestMatchPlayerEquality:
         player1 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
         player2 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=15,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
@@ -209,14 +209,14 @@ class TestMatchPlayerEquality:
         player1 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )
         player2 = MatchPlayer.create(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.SENIOR,
+            tee_color=TeeColor.BLUE,
             tee_gender=Gender.MALE,
             strokes_received=[1, 2, 3],
         )

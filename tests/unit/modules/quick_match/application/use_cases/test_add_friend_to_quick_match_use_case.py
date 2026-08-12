@@ -139,13 +139,13 @@ class TestAddFriendToQuickMatchUseCase:
                 quick_match_id=qm.id.value,
                 requester_id=creator.id.value,
                 friend_user_id=friend.id.value,
-                tee_category="AMATEUR",
+                tee_color="YELLOW",
                 tee_gender="MALE",
             )
         )
 
         friend_dto = next(p for p in response.participants if p.user_id == friend.id.value)
-        assert friend_dto.tee_category == "AMATEUR"
+        assert friend_dto.tee_color == "YELLOW"
         assert friend_dto.tee_gender == "MALE"
 
     async def test_add_friend_with_tee_not_on_course_raises(
@@ -164,7 +164,7 @@ class TestAddFriendToQuickMatchUseCase:
                     quick_match_id=qm.id.value,
                     requester_id=creator.id.value,
                     friend_user_id=friend.id.value,
-                    tee_category="AMATEUR",
+                    tee_color="YELLOW",
                     tee_gender="FEMALE",
                 )
             )

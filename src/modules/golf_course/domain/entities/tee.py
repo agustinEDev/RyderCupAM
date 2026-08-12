@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 from src.shared.domain.value_objects.gender import Gender
 
-from ..value_objects.tee_category import TeeCategory
 from ..value_objects.tee_color import TeeColor
 from .hole import Hole
 
@@ -29,10 +28,16 @@ class Tee:
     Cada salida lleva sus propios hoyos porque el par, el índice de dificultad
     y la distancia dependen de la barra desde la que se juega.
 
+    Una salida se identifica por su color y su género. No se clasifica por
+    dificultad: las federaciones no publican tal cosa, y el reparto de colores
+    varía entre campos y entre países. Lo que distingue a una salida de otra es
+    dónde están las barras, y eso es lo que ve el jugador.
+
     Attributes:
-        category: Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)
-        gender: Género del tee (MALE/FEMALE/None). Nullable para todas las categorías.
-        color: Color de las barras. Independiente de la categoría.
+        gender: Género del tee (MALE/FEMALE/None). Nullable.
+        color: Color de las barras. OTHER cubre las salidas cuyo nombre no es un
+            color, como las "Championship" británicas o las combinadas
+            estadounidenses ("Gold/White"), que van con identificador propio.
         slope_rating: Slope Rating WHS (típico 113)
         course_rating: Course Rating WHS (decimal, ej: 71.5)
         holes: Los 18 hoyos tal y como se juegan desde esta salida
@@ -43,7 +48,6 @@ class Tee:
 
     Example:
         >>> tee = Tee(
-        ...     category=TeeCategory.AMATEUR,
         ...     gender=Gender.MALE,
         ...     color=TeeColor.YELLOW,
         ...     slope_rating=126,
@@ -52,7 +56,6 @@ class Tee:
         ... )
     """
 
-    category: TeeCategory
     gender: Gender | None  # MALE, FEMALE, or None (gender-neutral)
     slope_rating: int
     course_rating: float

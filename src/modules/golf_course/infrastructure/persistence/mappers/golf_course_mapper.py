@@ -36,7 +36,6 @@ from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -189,12 +188,6 @@ golf_course_tees_table = Table(
         nullable=False,
     ),
     Column(
-        "tee_category",
-        SQLEnum(TeeCategory, name="tee_category_enum", create_type=False),
-        nullable=False,
-        comment="Categoría normalizada WHS (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)",
-    ),
-    Column(
         "tee_gender",
         GenderType,
         nullable=True,
@@ -307,8 +300,6 @@ def start_golf_course_mappers():
             Tee,
             golf_course_tees_table,
             properties={
-                # Map database column tee_category to entity attribute category
-                "category": golf_course_tees_table.c.tee_category,
                 # Map database column tee_gender to entity attribute gender
                 "gender": golf_course_tees_table.c.tee_gender,
                 "holes": relationship(

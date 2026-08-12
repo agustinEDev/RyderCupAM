@@ -40,7 +40,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
 )
@@ -100,14 +100,14 @@ async def golf_course_id(db_session, player_id) -> object:
         creator_id=player_id,
         tees=[
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
                 slope_rating=125,
             ),
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
@@ -155,7 +155,7 @@ def _player(user_id: UserId) -> MatchPlayer:
     return MatchPlayer(
         user_id=user_id,
         playing_handicap=10,
-        tee_category=TeeCategory.AMATEUR,
+        tee_color=TeeColor.YELLOW,
         tee_gender=Gender.MALE,
         strokes_received=tuple(range(1, 11)),
         player_handicap=Decimal("10.0"),

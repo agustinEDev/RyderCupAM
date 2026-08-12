@@ -23,6 +23,8 @@ from src.config.dependencies import (
     get_withdraw_enrollment_use_case,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
+    TEE_COLOR_DESCRIPTION,
+    TEE_COLOR_PATTERN,
     CancelEnrollmentRequestDTO,
     CancelEnrollmentResponseDTO,
     DirectEnrollPlayerRequestDTO,
@@ -51,7 +53,7 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
     EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     HandicapEditNotAllowedError,
-    InvalidTeeCategoryError,
+    InvalidTeeColorError,
     NotCreatorError as DirectNotCreatorError,
     NotCreatorError as HandicapNotCreatorError,
     NotCreatorError as HandleNotCreatorError,
@@ -106,9 +108,10 @@ router = APIRouter()
 class RequestEnrollmentBody(BaseModel):
     """Body opcional para solicitar inscripción con selección de tee."""
 
-    tee_category: str | None = Field(
+    tee_color: str | None = Field(
         None,
-        description="Categoría de tee preferida (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR).",
+        pattern=TEE_COLOR_PATTERN,
+        description=f"Preferido. {TEE_COLOR_DESCRIPTION}",
     )
 
 
@@ -154,7 +157,7 @@ class EnrollmentDTOMapper:
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
-            tee_category=enrollment.tee_category,
+            tee_color=enrollment.tee_color,
             created_at=enrollment.created_at,
             updated_at=enrollment.updated_at,
         )
@@ -215,13 +218,13 @@ async def request_enrollment(
 
     El usuario actual se inscribe en la competición especificada.
     La inscripción queda en estado REQUESTED hasta que el creador la apruebe.
-    Opcionalmente puede indicar su categoría de tee preferida.
+    Opcionalmente puede indicar su color de tee preferida.
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(
             competition_id=competition_id,
             user_id=current_user.id,
-            tee_category=body.tee_category if body else None,
+            tee_color=body.tee_color if body else None,
         )
         return await use_case.execute(request_dto)
 
@@ -231,7 +234,7 @@ async def request_enrollment(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RequestAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvalidTeeCategoryError as e:
+    except InvalidTeeColorError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
@@ -260,7 +263,7 @@ async def direct_enroll_player(
             competition_id=competition_id,
             user_id=request.user_id,
             custom_handicap=request.custom_handicap,
-            tee_category=request.tee_category,
+            tee_color=request.tee_color,
         )
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
@@ -273,7 +276,7 @@ async def direct_enroll_player(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvalidTeeCategoryError as e:
+    except InvalidTeeColorError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 

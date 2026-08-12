@@ -6,7 +6,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
     CreateQuickMatchRequestDTO,
     QuickMatchResponseDTO,
@@ -45,8 +45,8 @@ class CreateQuickMatchUseCase:
 
     async def execute(self, request: CreateQuickMatchRequestDTO) -> QuickMatchResponseDTO:
         golf_course_id = GolfCourseId(request.golf_course_id)
-        creator_tee_category = (
-            TeeCategory(request.creator_tee_category) if request.creator_tee_category else None
+        creator_tee_color = (
+            TeeColor(request.creator_tee_color) if request.creator_tee_color else None
         )
         creator_tee_gender = Gender(request.creator_tee_gender) if request.creator_tee_gender else None
 
@@ -58,11 +58,11 @@ class CreateQuickMatchUseCase:
                 raise GolfCourseNotApprovedError(
                     f"Golf course '{golf_course.name}' is not approved."
                 )
-            if creator_tee_category is not None and not golf_course.has_tee(
-                creator_tee_category, creator_tee_gender
+            if creator_tee_color is not None and not golf_course.has_tee(
+                creator_tee_color, creator_tee_gender
             ):
                 raise InvalidTeeSelectionError(
-                    f"{creator_tee_category.value} is not a valid tee for this golf course."
+                    f"{creator_tee_color.value} is not a valid tee for this golf course."
                 )
 
         quick_match = QuickMatch.create(
@@ -75,7 +75,7 @@ class CreateQuickMatchUseCase:
             ),
             name=request.name,
             allowance_percentage=request.allowance_percentage,
-            creator_tee_category=creator_tee_category,
+            creator_tee_color=creator_tee_color,
             creator_tee_gender=creator_tee_gender,
         )
 

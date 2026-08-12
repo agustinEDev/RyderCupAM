@@ -54,17 +54,15 @@ class TestTeeScorecards:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "tee_category": "CHAMPIONSHIP",
-                    "tee_gender": "MALE",
                     "color": "WHITE",
+                    "tee_gender": "MALE",
                     "course_rating": 73.5,
                     "slope_rating": 135,
                     "holes": build_holes(meters=400),
                 },
                 {
-                    "tee_category": "FORWARD",
-                    "tee_gender": "FEMALE",
                     "color": "RED",
+                    "tee_gender": "FEMALE",
                     "course_rating": 70.0,
                     "slope_rating": 120,
                     "holes": build_holes(meters=300, shift_index=True),
@@ -121,16 +119,14 @@ class TestTeeScorecards:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "tee_category": "CHAMPIONSHIP",
-                    "tee_gender": "MALE",
                     "color": "WHITE",
+                    "tee_gender": "MALE",
                     "course_rating": 73.5,
                     "slope_rating": 135,
                 },
                 {
-                    "tee_category": "AMATEUR",
-                    "tee_gender": "MALE",
                     "color": "YELLOW",
+                    "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 128,
                 },
@@ -175,16 +171,14 @@ class TestTeeScorecards:
             "course_type": "PITCH_AND_PUTT",
             "tees": [
                 {
-                    "tee_category": "AMATEUR",
                     "tee_gender": "MALE",
                     "color": "GREEN",
                     "course_rating": 46.8,
                     "slope_rating": 47,
                 },
                 {
-                    "tee_category": "FORWARD",
-                    "tee_gender": "FEMALE",
                     "color": "RED",
+                    "tee_gender": "FEMALE",
                     "course_rating": 47.8,
                     "slope_rating": 53,
                 },
@@ -225,15 +219,15 @@ class TestTeeScorecards:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "tee_category": "CHAMPIONSHIP",
+                    # Sin color ni identificador: cae en OTHER, y así sería
+                    # indistinguible de cualquier otra salida sin nombre
                     "tee_gender": "MALE",
                     "course_rating": 73.5,
                     "slope_rating": 135,
                 },
                 {
-                    "tee_category": "AMATEUR",
-                    "tee_gender": "MALE",
                     "color": "YELLOW",
+                    "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 128,
                 },

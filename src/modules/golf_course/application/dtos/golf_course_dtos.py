@@ -31,13 +31,10 @@ class HoleDTO(BaseModel):
 class TeeDTO(BaseModel):
     """DTO para representar un tee (salida)."""
 
-    tee_category: str = Field(
-        ..., description="Categoría normalizada (CHAMPIONSHIP, AMATEUR, SENIOR, FORWARD, JUNIOR)"
-    )
     tee_gender: str | None = Field(None, description="Género del tee (MALE/FEMALE/null)")
     color: TeeColor = Field(
         TeeColor.OTHER,
-        description="Color de las barras. Independiente de la categoría",
+        description="Color de las barras. Junto al género identifica la salida",
     )
     identifier: str | None = Field(
         None,

@@ -30,7 +30,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -93,14 +93,14 @@ class TestUpdateMatchStatusUseCase:
         player_a = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )
         player_b = MatchPlayer.create(
             user_id=UserId(uuid4()),
             playing_handicap=0,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             strokes_received=[],
             tee_gender=Gender.MALE,
         )

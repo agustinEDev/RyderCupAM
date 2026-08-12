@@ -103,13 +103,13 @@ class TestAddGuestToQuickMatchUseCase:
                 requester_id=creator.id.value,
                 first_name="Jane",
                 last_name="Doe",
-                tee_category="AMATEUR",
+                tee_color="YELLOW",
                 tee_gender="MALE",
             )
         )
 
         guest_dto = next(p for p in response.participants if p.is_guest)
-        assert guest_dto.tee_category == "AMATEUR"
+        assert guest_dto.tee_color == "YELLOW"
         assert guest_dto.tee_gender == "MALE"
 
     async def test_add_guest_with_tee_not_on_course_raises(
@@ -127,7 +127,7 @@ class TestAddGuestToQuickMatchUseCase:
                     requester_id=creator.id.value,
                     first_name="Jane",
                     last_name="Doe",
-                    tee_category="AMATEUR",
+                    tee_color="YELLOW",
                     tee_gender="FEMALE",
                 )
             )

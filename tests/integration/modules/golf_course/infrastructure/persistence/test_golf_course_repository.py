@@ -16,7 +16,7 @@ from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
 )
@@ -74,21 +74,21 @@ def valid_tees():
     """Crea 3 tees válidos para tests de integración."""
     return [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.2,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=75.0,
@@ -635,42 +635,42 @@ async def test_repository_handles_multiple_tees(db_session, creator_id, valid_ho
     # Arrange
     all_tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="Negro",
             course_rating=75.0,
             slope_rating=145,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.0,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.SENIOR,
+            color=TeeColor.BLUE,
             gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.0,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.FEMALE,
             identifier="Azul",
             course_rating=76.0,
             slope_rating=142,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=73.5,
             slope_rating=136,
         ),
         Tee(
-            category=TeeCategory.SENIOR,
+            color=TeeColor.BLUE,
             gender=Gender.FEMALE,
             identifier="Verde",
             course_rating=71.5,
@@ -696,7 +696,7 @@ async def test_repository_handles_multiple_tees(db_session, creator_id, valid_ho
     assert retrieved is not None
     assert len(retrieved.tees) == 6
     # Verificar que las combinaciones (categoría, gender) son únicas
-    combos = {(tee.category, tee.gender) for tee in retrieved.tees}
+    combos = {(tee.color, tee.gender) for tee in retrieved.tees}
     assert len(combos) == 6
 
 

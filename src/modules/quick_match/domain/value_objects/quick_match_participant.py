@@ -14,7 +14,7 @@ listar, eliminar y asignar anotador independientemente del tipo.
 
 from dataclasses import dataclass, replace
 
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
@@ -35,8 +35,8 @@ class QuickMatchParticipant:
       `custom_handicap` opcional (override manual).
     - Invitado: `user_id` None, `first_name`/`last_name` obligatorios, `handicap`
       opcional, sin `custom_handicap` (usa `handicap` para lo mismo).
-    - `tee_category`/`tee_gender` identifican el tee elegido para el Playing Handicap
-      (par unico junto con `tee_gender` en el campo de golf, igual que `Enrollment.tee_category`
+    - `tee_color`/`tee_gender` identifican el tee elegido para el Playing Handicap
+      (par unico junto con `tee_gender` en el campo de golf, igual que `Enrollment.tee_color`
       en `competition`); opcionales, sin tee elegido no se calcula Playing Handicap.
     """
 
@@ -46,7 +46,7 @@ class QuickMatchParticipant:
     last_name: str | None
     handicap: float | None
     team: str | None = None
-    tee_category: TeeCategory | None = None
+    tee_color: TeeColor | None = None
     tee_gender: Gender | None = None
     custom_handicap: float | None = None
 
@@ -74,8 +74,8 @@ class QuickMatchParticipant:
         ):
             raise ValueError(f"custom_handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
-        if self.tee_gender is not None and self.tee_category is None:
-            raise ValueError("tee_gender requiere tee_category (un genero solo no identifica un tee).")
+        if self.tee_gender is not None and self.tee_color is None:
+            raise ValueError("tee_gender requiere tee_color (un genero solo no identifica un tee).")
 
     @property
     def is_guest(self) -> bool:
@@ -95,7 +95,7 @@ class QuickMatchParticipant:
         cls,
         user_id: UserId,
         team: str | None = None,
-        tee_category: TeeCategory | None = None,
+        tee_color: TeeColor | None = None,
         tee_gender: Gender | None = None,
     ) -> "QuickMatchParticipant":
         """Crea un participante registrado (identificado por su UserId)."""
@@ -106,7 +106,7 @@ class QuickMatchParticipant:
             last_name=None,
             handicap=None,
             team=team,
-            tee_category=tee_category,
+            tee_color=tee_color,
             tee_gender=tee_gender,
         )
 
@@ -117,7 +117,7 @@ class QuickMatchParticipant:
         last_name: str,
         handicap: float | None = None,
         team: str | None = None,
-        tee_category: TeeCategory | None = None,
+        tee_color: TeeColor | None = None,
         tee_gender: Gender | None = None,
     ) -> "QuickMatchParticipant":
         """Crea un participante invitado (sin cuenta de usuario)."""
@@ -128,7 +128,7 @@ class QuickMatchParticipant:
             last_name=last_name.strip(),
             handicap=handicap,
             team=team,
-            tee_category=tee_category,
+            tee_color=tee_color,
             tee_gender=tee_gender,
         )
 
