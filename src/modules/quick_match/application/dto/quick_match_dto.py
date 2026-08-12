@@ -5,13 +5,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.entities.quick_match import MAX_NAME_LENGTH, MAX_SCORERS
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     MAX_HANDICAP,
     MIN_HANDICAP,
 )
 
-TEE_COLOR_PATTERN = "^(RED|YELLOW|BLUE|WHITE|GREEN|ORANGE|BLACK|PINK|GOLD|OTHER)$"
+# Del enum, no de una lista escrita a mano: añadir un color nuevo no puede
+# dejar la validación de la API por detrás del dominio.
+TEE_COLOR_PATTERN = f"^({'|'.join(TeeColor)})$"
 TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
 
 

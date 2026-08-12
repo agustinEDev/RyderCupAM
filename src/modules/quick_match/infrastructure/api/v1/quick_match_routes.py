@@ -34,6 +34,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     MAX_NAME_LENGTH,
     MAX_SCORERS,
     MIN_HANDICAP,
+    TEE_COLOR_PATTERN,
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
     CreateQuickMatchRequestDTO,
@@ -127,7 +128,6 @@ router = APIRouter()
 # ======================================================================================
 
 
-TEE_COLOR_PATTERN = "^(RED|YELLOW|BLUE|WHITE|GREEN|ORANGE|BLACK|PINK|GOLD|OTHER)$"
 TEE_GENDER_PATTERN = "^(MALE|FEMALE)$"
 
 
