@@ -9,7 +9,7 @@ import argparse
 
 import pytest
 
-from scripts.import_golf_courses import non_negative_int
+from scripts.import_golf_courses import map_all, non_negative_int
 
 
 def test_a_positive_limit_is_accepted():
@@ -55,3 +55,26 @@ def test_a_limit_that_is_not_a_number_is_rejected():
     """
     with pytest.raises(argparse.ArgumentTypeError, match="is not an integer"):
         non_negative_int("todos")
+
+
+def test_a_limit_of_zero_does_not_read_any_club():
+    """
+    GIVEN: Un volcado con un club cuyo recorrido no se puede traducir
+    WHEN: Se traduce con límite cero
+    THEN: No sale nada, ni recorridos ni avisos
+
+    El aviso es la prueba de que ni se ha mirado: sin cortar antes del bucle se
+    traducía el primer club para acabar descartándolo, y su aviso salía en el
+    informe aunque ninguno de sus recorridos entrara dentro del límite.
+    """
+    dataset = {
+        "clubs": [
+            {
+                "rfeg_id": "915",
+                "name": "CLUB DE PRUEBA",
+                "courses": [{"name": "PRUEBA - Vacio", "tees": []}],
+            }
+        ]
+    }
+
+    assert map_all(dataset, 0) == ([], [])

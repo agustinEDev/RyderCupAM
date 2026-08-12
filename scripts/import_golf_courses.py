@@ -51,7 +51,6 @@ from src.modules.golf_course.infrastructure.importers.rfeg_dataset import (
 )
 from src.modules.golf_course.infrastructure.importers.rfeg_mapper import (
     MappedCourse,
-    RfegMappingError,
     map_club_courses,
 )
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
@@ -188,7 +187,14 @@ def map_all(dataset, limit: int | None) -> tuple[list[MappedCourse], list[str]]:
 
     Un recorrido ilegible no detiene la importación: se informa y se sigue, que
     es preferible a dejar 801 campos fuera por culpa de uno.
+
+    El límite de cero corta antes de mirar ningún club: si no, se traduciría el
+    primero para acabar descartándolo, y sus avisos saldrían en el informe sin
+    que ninguno de sus recorridos estuviera dentro del límite.
     """
+    if limit == 0:
+        return [], []
+
     imported_at = datetime.now(UTC).replace(tzinfo=None)
     mapped: list[MappedCourse] = []
     problems: list[str] = []
@@ -196,7 +202,7 @@ def map_all(dataset, limit: int | None) -> tuple[list[MappedCourse], list[str]]:
     for club in clubs_with_courses(dataset):
         try:
             club_courses, club_problems = map_club_courses(club, imported_at)
-        except (RfegMappingError, KeyError, TypeError) as error:
+        except (ValueError, KeyError, TypeError) as error:
             problems.append(f"{club.get('name', '?')}: {error}")
         else:
             mapped.extend(club_courses)

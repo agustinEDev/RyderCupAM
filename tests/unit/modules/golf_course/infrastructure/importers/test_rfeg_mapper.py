@@ -384,6 +384,18 @@ GOOD_COURSE = {
     ],
 }
 BROKEN_COURSE = {"name": "PRUEBA - Vacio", "tees": []}
+INVALID_COURSE = {
+    "name": "PRUEBA - Slope Imposible",
+    "tees": [
+        {
+            "color": "ROJAS",
+            "gender": "F",
+            "course_rating": 71.2,
+            "slope_rating": 9999,
+            "holes": build_card(),
+        }
+    ],
+}
 
 
 def test_a_broken_course_does_not_drag_down_the_rest_of_the_club():
@@ -404,6 +416,28 @@ def test_a_broken_course_does_not_drag_down_the_rest_of_the_club():
     assert len(problems) == 1
     assert "PRUEBA - Vacio" in problems[0]
     assert "has no tees" in problems[0]
+
+
+def test_a_course_the_dtos_reject_does_not_drag_down_the_rest():
+    """
+    GIVEN: Un club con un recorrido de slope imposible y otro correcto
+    WHEN: Se traducen aislando los fallos
+    THEN: Sale el bueno y se informa del que rechazan los DTO
+
+    Los DTO son de Pydantic y su ValidationError es un ValueError, no un
+    RfegMappingError. Sin recogerlo, un solo rating fuera de rango no se
+    llevaba por delante su club: se escapaba hasta arriba y tumbaba la
+    importación entera.
+    """
+    club = build_club(courses=[INVALID_COURSE, GOOD_COURSE])
+
+    mapped, problems = map_club_courses(club, IMPORTED_AT)
+
+    assert len(mapped) == 1
+    assert mapped[0].source_course_name == "PRUEBA - Campo Grande"
+    assert len(problems) == 1
+    assert "PRUEBA - Slope Imposible" in problems[0]
+    assert "slope_rating" in problems[0]
 
 
 def test_the_problem_names_the_club_and_the_course():

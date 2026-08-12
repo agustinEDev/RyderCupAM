@@ -242,6 +242,11 @@ def map_club_courses(
     Lo previo al bucle (los nombres y la ubicación) sí es del club entero y no
     se puede aislar, así que si eso falla la excepción sale hacia fuera.
 
+    Se captura `ValueError` y no solo `RfegMappingError` porque los DTO son de
+    Pydantic y su `ValidationError` es un `ValueError`: un rating fuera de
+    rango tumbaría la importación entera si no se recogiera aquí.
+    `RfegMappingError` también hereda de `ValueError`, así que queda cubierto.
+
     Args:
         club: Club tal como viene en el dataset
         imported_at: Momento de la importación, igual para todo el lote
@@ -259,7 +264,7 @@ def map_club_courses(
     for course, name in zip(courses, names, strict=True):
         try:
             mapped.append(_map_course(club, course, name, location, imported_at))
-        except (RfegMappingError, KeyError, TypeError) as error:
+        except (ValueError, KeyError, TypeError) as error:
             source_name = course.get("name", "?") if isinstance(course, dict) else "?"
             problems.append(f"{club.get('name', '?')} / {source_name}: {error}")
 
