@@ -7,6 +7,9 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     ListApprovedGolfCoursesResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    ApprovedCourseSearch,
+)
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -40,21 +43,29 @@ class ListApprovedGolfCoursesUseCase:
             Response con la lista de campos aprobados
         """
         async with self._uow:
-            # 1. Obtener campos aprobados (con filtro opcional de país)
-            golf_courses = await self._uow.golf_courses.find_approved(
-                country_code=request.country_code
+            # 1. Buscar los campos aprobados que cumplan el filtro
+            page = await self._uow.golf_courses.search_approved(
+                ApprovedCourseSearch(
+                    country_code=request.country_code,
+                    name=request.name,
+                    limit=request.limit,
+                    offset=request.offset,
+                    latitude=request.latitude,
+                    longitude=request.longitude,
+                    radius_km=request.radius_km,
+                )
             )
 
-            # 2. Mapear a Response DTOs
-            # Sin las tarjetas por salida: un campo puede tener 14 salidas de
-            # 18 hoyos, y un listado las multiplicaría por cada campo. El
-            # detalle de un campo sí las devuelve.
-            response_dtos = [
-                GolfCourseMapper.to_response_dto(gc, include_tee_scorecards=False)
-                for gc in golf_courses
+            # 2. Mapear al DTO de listado, que no lleva tarjeta
+            summaries = [
+                GolfCourseMapper.to_summary_dto(
+                    course, distance_km=page.distances_km.get(str(course.id))
+                )
+                for course in page.courses
             ]
 
             return ListApprovedGolfCoursesResponseDTO(
-                golf_courses=response_dtos,
-                count=len(response_dtos),
+                golf_courses=summaries,
+                count=len(summaries),
+                total=page.total,
             )

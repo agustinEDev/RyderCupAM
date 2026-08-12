@@ -1,12 +1,30 @@
 """In-Memory Golf Course Repository para testing."""
 
+import math
+
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    ApprovedCoursePage,
+    ApprovedCourseSearch,
     IGolfCourseRepository,
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+EARTH_RADIUS_KM = 6371.0
+
+
+def _haversine_km(
+    from_latitude: float, from_longitude: float, to_latitude: float, to_longitude: float
+) -> float:
+    """Distancia en kilómetros entre dos puntos, la misma fórmula que el SQL real."""
+    from_latitude_rad = math.radians(from_latitude)
+    to_latitude_rad = math.radians(to_latitude)
+    cosine = math.cos(from_latitude_rad) * math.cos(to_latitude_rad) * math.cos(
+        math.radians(to_longitude) - math.radians(from_longitude)
+    ) + math.sin(from_latitude_rad) * math.sin(to_latitude_rad)
+    return EARTH_RADIUS_KM * math.acos(max(-1.0, min(1.0, cosine)))
 
 
 class InMemoryGolfCourseRepository(IGolfCourseRepository):
@@ -61,20 +79,60 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         """
         return [gc for gc in self._golf_courses.values() if gc.approval_status == approval_status]
 
-    async def find_approved(self, country_code: str | None = None) -> list[GolfCourse]:
+    async def search_approved(self, search: ApprovedCourseSearch) -> ApprovedCoursePage:
         """
-        Busca todos los campos aprobados, opcionalmente filtrados por país.
+        Busca entre los campos aprobados aplicando los filtros que se le pasen.
+
+        Reproduce lo que hace el repositorio real, incluido excluir los campos
+        sin coordenadas cuando se busca por cercanía: si el doble fuera más
+        permisivo, los tests darían por buena una búsqueda que en producción
+        devuelve otra cosa.
 
         Args:
-            country_code: Código ISO del país para filtrar (opcional)
+            search: Criterios de búsqueda
 
         Returns:
-            Lista de campos APPROVED
+            La página pedida, el total que cumple el filtro y las distancias
         """
-        approved = await self.find_by_approval_status(ApprovalStatus.APPROVED)
-        if country_code:
-            return [gc for gc in approved if gc.country_code.value == country_code]
-        return approved
+        courses = await self.find_by_approval_status(ApprovalStatus.APPROVED)
+
+        if search.country_code:
+            courses = [gc for gc in courses if gc.country_code.value == search.country_code]
+
+        if search.name:
+            needle = search.name.casefold()
+            courses = [gc for gc in courses if needle in gc.name.casefold()]
+
+        distances: dict[str, float] = {}
+        if search.has_position:
+            located = []
+            for course in courses:
+                location = course.location
+                if location.latitude is None or location.longitude is None:
+                    continue
+                distance = _haversine_km(
+                    search.latitude, search.longitude, location.latitude, location.longitude
+                )
+                if search.radius_km is not None and distance > search.radius_km:
+                    continue
+                distances[str(course.id)] = round(distance, 3)
+                located.append(course)
+            courses = sorted(located, key=lambda gc: distances[str(gc.id)])
+        else:
+            courses = sorted(courses, key=lambda gc: gc.created_at, reverse=True)
+
+        total = len(courses)
+        page = courses[search.offset :]
+        if search.limit is not None:
+            page = page[: search.limit]
+
+        return ApprovedCoursePage(
+            courses=page,
+            total=total,
+            distances_km={
+                str(gc.id): distances[str(gc.id)] for gc in page if str(gc.id) in distances
+            },
+        )
 
     async def find_pending_approval(self) -> list[GolfCourse]:
         """

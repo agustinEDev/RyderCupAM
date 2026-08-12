@@ -345,6 +345,55 @@ class TestListGolfCourses:
         response = await client.get("/api/v1/golf-courses")
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_listing_reports_count_and_total(self, client: AsyncClient):
+        """El listado devuelve cuántos trae y cuántos hay."""
+        user = await create_authenticated_user(
+            client, "counts@test.com", "CountsPass123!", "Counts", "User"
+        )
+
+        response = await client.get("/api/v1/golf-courses", cookies=user["cookies"])
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == len(data["golf_courses"])
+        assert data["total"] >= data["count"]
+
+    @pytest.mark.asyncio
+    async def test_half_a_coordinate_returns_400(self, client: AsyncClient):
+        """Pedir cercanía con solo la latitud es un error del cliente, no un 500."""
+        user = await create_authenticated_user(
+            client, "halfcoord@test.com", "HalfPass123!", "Half", "Coord"
+        )
+
+        response = await client.get("/api/v1/golf-courses?lat=40.4168", cookies=user["cookies"])
+
+        assert response.status_code == 400
+        assert "together" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_a_radius_without_a_position_returns_400(self, client: AsyncClient):
+        """Un radio sin coordenadas no tiene desde dónde medirse."""
+        user = await create_authenticated_user(
+            client, "radiusonly@test.com", "RadiusPass123!", "Radius", "Only"
+        )
+
+        response = await client.get("/api/v1/golf-courses?radius_km=50", cookies=user["cookies"])
+
+        assert response.status_code == 400
+        assert "requires latitude and longitude" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_an_oversized_limit_is_rejected(self, client: AsyncClient):
+        """El tope del límite lo valida FastAPI antes de llegar al caso de uso."""
+        user = await create_authenticated_user(
+            client, "biglimit@test.com", "BigPass123!", "Big", "Limit"
+        )
+
+        response = await client.get("/api/v1/golf-courses?limit=5000", cookies=user["cookies"])
+
+        assert response.status_code == 422
+
 
 class TestListPendingGolfCourses:
     """Tests para GET /api/v1/golf-courses/admin/pending"""

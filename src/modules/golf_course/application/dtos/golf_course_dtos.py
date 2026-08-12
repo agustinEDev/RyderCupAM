@@ -167,9 +167,42 @@ class GetGolfCourseByIdRequestDTO(BaseModel):
 
 
 class ListApprovedGolfCoursesRequestDTO(BaseModel):
-    """Request para listar campos aprobados (todos los usuarios)."""
+    """
+    Request para listar campos aprobados (todos los usuarios).
+
+    `limit` es opcional a propósito: sin él se devuelven todos, como siempre.
+    Un cliente que no pagine no debe dejar de ver campos por un cambio del
+    servidor. Los que sí paginan lo piden.
+
+    Las coordenadas van juntas o no van: media coordenada no sitúa nada, así
+    que se rechaza en el validador en lugar de ordenar por una distancia falsa.
+    """
 
     country_code: str | None = Field(None, description="Filtrar por código ISO de país")
+    name: str | None = Field(
+        None, min_length=1, max_length=200, description="Filtrar por nombre parcial"
+    )
+    limit: int | None = Field(None, ge=1, le=100, description="Número máximo de campos")
+    offset: int = Field(0, ge=0, description="Campos a saltar")
+    latitude: float | None = Field(None, ge=-90, le=90, description="Latitud del dispositivo")
+    longitude: float | None = Field(None, ge=-180, le=180, description="Longitud del dispositivo")
+    radius_km: float | None = Field(
+        None, gt=0, le=20000, description="Distancia máxima en kilómetros"
+    )
+
+    @model_validator(mode="after")
+    def check_coordinates(self) -> "ListApprovedGolfCoursesRequestDTO":
+        """Comprueba que las coordenadas vienen completas y que el radio tiene desde dónde medir."""
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be provided together")
+        if self.radius_km is not None and self.latitude is None:
+            raise ValueError("radius_km requires latitude and longitude")
+        return self
+
+    @property
+    def has_position(self) -> bool:
+        """True si la petición trae una posición desde la que medir distancias."""
+        return self.latitude is not None and self.longitude is not None
 
 
 class ListPendingGolfCoursesRequestDTO(BaseModel):
@@ -205,6 +238,45 @@ class GolfCourseResponseDTO(BaseModel):
         False, description="TRUE si este campo tiene un clone pendiente de aprobación"
     )
     location: LocationDTO | None = Field(None, description="Ubicación del campo, si se conoce")
+
+    class Config:
+        from_attributes = True
+
+
+class GolfCourseSummaryDTO(BaseModel):
+    """
+    Un campo tal como aparece en un listado.
+
+    Es el mismo campo que `GolfCourseResponseDTO` sin la tarjeta: un listado no
+    la pinta, y con 802 campos son 14.436 hoyos que viajan para nada. Quien
+    necesite la tarjeta pide el campo por su id.
+
+    Las salidas sí se quedan, aunque también pesen: el panel de administración
+    dibuja una insignia por cada una, y el frontend valida sus ratings al
+    construir la entidad, así que recortarlas rompe en vez de degradar.
+    """
+
+    id: str = Field(..., description="ID del campo (UUID)")
+    name: str = Field(..., description="Nombre del campo")
+    country_code: str = Field(..., description="Código ISO del país")
+    course_type: str = Field(..., description="Tipo de campo")
+    creator_id: str = Field(..., description="ID del creador (UUID)")
+    tees: list[TeeDTO] = Field(..., description="Lista de salidas, sin sus tarjetas")
+    approval_status: str = Field(..., description="Estado de aprobación")
+    rejection_reason: str | None = Field(None, description="Razón de rechazo (si aplica)")
+    total_par: int = Field(..., description="Par total del campo")
+    created_at: datetime = Field(..., description="Fecha de creación")
+    updated_at: datetime = Field(..., description="Fecha de última actualización")
+    original_golf_course_id: str | None = Field(
+        None, description="ID del campo original (si este es un clone/update proposal)"
+    )
+    is_pending_update: bool = Field(
+        False, description="TRUE si este campo tiene un clone pendiente de aprobación"
+    )
+    location: LocationDTO | None = Field(None, description="Ubicación del campo, si se conoce")
+    distance_km: float | None = Field(
+        None, description="Distancia a la posición consultada, si se pidió por cercanía"
+    )
 
     class Config:
         from_attributes = True
@@ -247,10 +319,17 @@ class GetGolfCourseByIdResponseDTO(BaseModel):
 
 
 class ListApprovedGolfCoursesResponseDTO(BaseModel):
-    """Response al listar campos aprobados."""
+    """
+    Response al listar campos aprobados.
 
-    golf_courses: list[GolfCourseResponseDTO] = Field(..., description="Lista de campos aprobados")
-    count: int = Field(..., description="Número total de campos")
+    `count` son los campos devueltos y `total` los que cumplen el filtro. Sin
+    paginar coinciden; paginando, `total` es lo que necesita el cliente para
+    saber si hay más. Se mantienen los dos porque `count` ya estaba publicado.
+    """
+
+    golf_courses: list[GolfCourseSummaryDTO] = Field(..., description="Lista de campos aprobados")
+    count: int = Field(..., description="Número de campos devueltos en esta página")
+    total: int = Field(..., description="Número de campos que cumplen el filtro")
 
 
 class ListPendingGolfCoursesResponseDTO(BaseModel):

@@ -13,7 +13,11 @@ from sqlalchemy import text
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    ApprovedCourseSearch,
+)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -387,10 +391,10 @@ async def test_find_by_approval_status_rejected(db_session, creator_id, valid_te
 # ============================================================================
 
 
-async def test_find_approved(db_session, creator_id, valid_tees, valid_holes):
+async def test_search_approved(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Varios campos con diferentes estados
-    WHEN: Se llama a find_approved()
+    WHEN: Se busca sin criterios
     THEN: Se retornan solo los aprobados
     """
     # Arrange
@@ -422,11 +426,215 @@ async def test_find_approved(db_session, creator_id, valid_tees, valid_holes):
     await db_session.commit()
 
     # Act
-    approved = await repository.find_approved()
+    page = await repository.search_approved(ApprovedCourseSearch())
 
     # Assert
-    assert len(approved) == 2
-    assert all(course.approval_status == ApprovalStatus.APPROVED for course in approved)
+    assert len(page.courses) == 2
+    assert page.total == 2
+    assert all(course.approval_status == ApprovalStatus.APPROVED for course in page.courses)
+    assert page.distances_km == {}
+
+
+# ============================================================================
+# Tests: búsqueda, paginación y cercanía
+# ============================================================================
+
+
+# Coordenadas reales, para que las distancias sean comprobables a mano
+MADRID = (40.4168, -3.7038)
+COURSES_BY_CITY = {
+    "Campo de Madrid": (40.45, -3.68),  # a unos 4 km
+    "Campo de Toledo": (39.8628, -4.0273),  # a unos 65 km
+    "Campo de Barcelona": (41.3874, 2.1686),  # a unos 500 km
+}
+
+
+async def _approved_course(repository, creator_id, tees, holes, name, coordinates=None):
+    """Crea y guarda un campo aprobado, opcionalmente situado."""
+    location = (
+        CourseLocation(latitude=coordinates[0], longitude=coordinates[1]) if coordinates else None
+    )
+    golf_course = GolfCourse.create(
+        name=name,
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=creator_id,
+        tees=tees,
+        holes=holes,
+        location=location,
+    )
+    golf_course.approve()
+    await repository.save(golf_course)
+    return golf_course
+
+
+async def test_search_approved_filters_by_partial_name(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Campos con nombres distintos
+    WHEN: Se busca por un trozo del nombre
+    THEN: Solo salen los que lo contienen, sin distinguir mayúsculas
+    """
+    repository = GolfCourseRepository(db_session)
+    for name in ("Real Club de La Moraleja", "Club de Campo", "Golf Santander"):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name)
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch(name="club"))
+
+    assert page.total == 2
+    assert {course.name for course in page.courses} == {
+        "Real Club de La Moraleja",
+        "Club de Campo",
+    }
+
+
+async def test_search_approved_treats_wildcards_as_text(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo cuyo nombre no lleva guion bajo
+    WHEN: Se busca por '_'
+    THEN: No sale
+
+    Sin escapar, '_' es el comodín de un carácter cualquiera en LIKE y esta
+    búsqueda devolvería el catálogo entero.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Club de Campo")
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch(name="_"))
+
+    assert page.total == 0
+    assert page.courses == []
+
+
+async def test_search_approved_paginates_without_losing_tees(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Tres campos aprobados, cada uno con varias salidas
+    WHEN: Se pide una página de dos
+    THEN: Vienen dos campos enteros, y el total sigue siendo tres
+
+    El total es lo que permite al cliente saber que hay más. Y las salidas se
+    comprueban porque un joined load con LIMIT recortaría por filas del join,
+    devolviendo campos a medias en vez de menos campos.
+    """
+    repository = GolfCourseRepository(db_session)
+    for index in range(3):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, f"Campo {index}")
+    await db_session.commit()
+
+    first = await repository.search_approved(ApprovedCourseSearch(limit=2))
+    second = await repository.search_approved(ApprovedCourseSearch(limit=2, offset=2))
+
+    assert len(first.courses) == 2
+    assert len(second.courses) == 1
+    assert first.total == 3
+    assert second.total == 3
+    assert all(len(course.tees) == len(valid_tees) for course in first.courses)
+    ids = {str(course.id) for course in first.courses} | {
+        str(course.id) for course in second.courses
+    }
+    assert len(ids) == 3
+
+
+async def test_search_approved_orders_by_distance(db_session, creator_id, valid_tees, valid_holes):
+    """
+    GIVEN: Tres campos situados a distinta distancia de Madrid
+    WHEN: Se busca desde Madrid
+    THEN: Salen ordenados de más cerca a más lejos, con su distancia
+    """
+    repository = GolfCourseRepository(db_session)
+    for name, coordinates in COURSES_BY_CITY.items():
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name, coordinates)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert [course.name for course in page.courses] == [
+        "Campo de Madrid",
+        "Campo de Toledo",
+        "Campo de Barcelona",
+    ]
+    distances = [page.distances_km[str(course.id)] for course in page.courses]
+    assert distances == sorted(distances)
+    assert distances[0] < 10
+    assert 400 < distances[2] < 600
+
+
+async def test_search_approved_applies_the_radius(db_session, creator_id, valid_tees, valid_holes):
+    """
+    GIVEN: Campos a 4, 65 y 500 km
+    WHEN: Se busca en un radio de 100 km
+    THEN: Solo salen los dos primeros, y el total cuenta solo esos
+    """
+    repository = GolfCourseRepository(db_session)
+    for name, coordinates in COURSES_BY_CITY.items():
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name, coordinates)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1], radius_km=100)
+    )
+
+    assert page.total == 2
+    assert {course.name for course in page.courses} == {"Campo de Madrid", "Campo de Toledo"}
+
+
+async def test_search_approved_leaves_out_courses_without_coordinates(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo situado y otro sin coordenadas
+    WHEN: Se busca por cercanía
+    THEN: Solo sale el situado
+
+    Doce de los 803 campos importados no tienen coordenadas. En una búsqueda
+    por cercanía no hay distancia que enseñar, así que quedan fuera; la
+    búsqueda por nombre sigue siendo su camino.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(
+        repository, creator_id, valid_tees, valid_holes, "Campo situado", (40.45, -3.68)
+    )
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Campo sin sitio")
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert page.total == 1
+    assert page.courses[0].name == "Campo situado"
+
+
+async def test_search_approved_measures_zero_at_the_course_itself(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo y la consulta hecha desde sus mismas coordenadas
+    WHEN: Se busca por cercanía
+    THEN: La distancia es cero y la consulta no falla
+
+    El coseno sale 1.0000000000000002 por redondeo, y acos fuera de rango es un
+    error de dominio en PostgreSQL que tumbaría la consulta entera.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Campo exacto", MADRID)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert page.total == 1
+    assert page.distances_km[str(page.courses[0].id)] == 0.0
 
 
 async def test_find_pending_approval(db_session, creator_id, valid_tees, valid_holes):
