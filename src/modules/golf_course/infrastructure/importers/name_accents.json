@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Tildes que la RFEG pierde en los nombres de recorrido pero conserva en los",
+    "nombres de club, direcciones y provincias del mismo dataset. La tabla se",
+    "obtuvo cruzando ese corpus y se revisó a mano una por una: la sustitución",
+    "CAMBIO -> CAMBIÓ que salía del cruce se descartó, porque venía de 'EL",
+    "PARAÍSO cambio orden hoyos', donde es el sustantivo español.",
+    "Afecta a 97 de los 802 recorridos. Corregir una tilde nueva es añadir una",
+    "línea aquí, sin tocar código.",
+    "Quedan castellanizados a propósito 'Vallés' (no 'Vallès') y 'Moià' sin",
+    "tilde: el corpus no contiene esas formas y no se quiso inventarlas."
+  ],
+  "_stopwords_comment": [
+    "Palabras que nunca se acentúan dentro de un topónimo aunque el corpus",
+    "contenga su forma acentuada, donde es pronombre o verbo. Sin esta lista, el",
+    "cruce 'demuestra' que EL -> ÉL y estropea 55 nombres."
+  ],
+  "_acronyms_comment": [
+    "Siglas y abreviaturas que deben quedarse en mayúsculas. Las que llevan",
+    "punto o & se detectan solas, igual que las que no tienen ninguna vocal;",
+    "esta lista es para el resto, que no se pueden distinguir de una palabra",
+    "corriente por su forma. Salen de recorrer los 802 nombres publicados."
+  ],
+  "acronyms": [
+    "RSHECC", "FGCV", "SOC", "CTO", "ESC", "REC", "PROV", "AESGOLF",
+    "RACE", "PGA", "WHS", "PAR3", "RCI"
+  ],
+  "_lowercase_comment": [
+    "Partículas que van en minúscula dentro de un nombre propio en español,",
+    "salvo cuando abren el nombre."
+  ],
+  "lowercase_particles": ["DE", "DEL", "LA", "LAS", "EL", "LOS", "Y", "DA", "DO"],
+  "stopwords": [
+    "EL", "ESTE", "SI", "TE", "SE", "DE", "MAS", "SOLO", "AUN", "TU", "MI",
+    "TAN", "DEL", "LA", "LO", "LOS", "LAS", "UN", "UNA", "ESTA", "ESA", "AQUEL"
+  ],
+  "accents": {
+    "AGUILON": "AGUILÓN",
+    "ALAMO": "ÁLAMO",
+    "ALHAURIN": "ALHAURÍN",
+    "AMERICAS": "AMÉRICAS",
+    "ANGEL": "ÁNGEL",
+    "ANGELES": "ÁNGELES",
+    "BANUS": "BANÚS",
+    "BARBERAN": "BARBERÁN",
+    "BENALMADENA": "BENALMÁDENA",
+    "COMBINACION": "COMBINACIÓN",
+    "CORDOBA": "CÓRDOBA",
+    "CUELLAR": "CUÉLLAR",
+    "EMPORDA": "EMPORDÁ",
+    "ENCIN": "ENCÍN",
+    "ENVIA": "ENVÍA",
+    "ESCORPION": "ESCORPIÓN",
+    "FORUM": "FÓRUM",
+    "GAUDI": "GAUDÍ",
+    "HERCULES": "HÉRCULES",
+    "JARDIN": "JARDÍN",
+    "JAVEA": "JÁVEA",
+    "JIMENEZ": "JIMÉNEZ",
+    "JOSE": "JOSÉ",
+    "LEON": "LEÓN",
+    "MALAGA": "MÁLAGA",
+    "MARIA": "MARÍA",
+    "MASIA": "MASÍA",
+    "MEDITERRANEO": "MEDITERRÁNEO",
+    "MONTBRU": "MONTBRÚ",
+    "MONTEPRINCIPE": "MONTEPRÍNCIPE",
+    "OLIMPICO": "OLÍMPICO",
+    "PANORAMICA": "PANORÁMICA",
+    "PARAISO": "PARAÍSO",
+    "RAMON": "RAMÓN",
+    "ROVACIAS": "ROVACÍAS",
+    "SEBASTIAN": "SEBASTIÁN",
+    "TECNIFICACION": "TECNIFICACIÓN",
+    "TORREJON": "TORREJÓN",
+    "VALLES": "VALLÉS",
+    "VILLAMARTIN": "VILLAMARTÍN",
+    "VILLARRIN": "VILLARRÍN",
+    "ZAUDIN": "ZAUDÍN"
+  }
+}
