@@ -447,6 +447,10 @@ class GolfCourse:
                 cambia una reimportación: una edición a mano no convierte un
                 campo federado en otra cosa.
             physical_holes: Hoyos sobre el terreno. None conserva los actuales.
+                No existe forma de devolver el dato a «no consta», y es
+                deliberado: una vez se sabe si el campo es de nueve o de
+                dieciocho, el arreglo de una marca errónea es ponerle la
+                correcta, no volver a la ignorancia.
 
         Raises:
             ValueError: Si los datos no son válidos

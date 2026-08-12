@@ -11,6 +11,7 @@ from src.modules.user.application.use_cases.ensure_system_user_use_case import (
     EnsureSystemUserUseCase,
     _generate_unusable_password,
 )
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_repository import (
@@ -125,6 +126,52 @@ async def test_running_it_twice_reuses_the_same_account():
 
     assert first == second
     assert len(await uow.users.find_all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_it_refuses_an_active_account_with_that_email():
+    """
+    GIVEN: Una persona registrada con el correo de la cuenta de sistema
+    WHEN: Se pide asegurar la cuenta
+    THEN: Falla en vez de devolverla
+
+    Seguir adelante ataría los campos importados a una cuenta personal.
+    """
+    uow = FakeUserUnitOfWork()
+    impostor = User.create(
+        first_name="Persona",
+        last_name="Real",
+        email_str=SYSTEM_EMAIL,
+        plain_password="ValidPassword123!",
+    )
+    await uow.users.save(impostor)
+    use_case = EnsureSystemUserUseCase(uow)
+
+    with pytest.raises(ValueError, match="is active"):
+        await use_case.execute(SYSTEM_EMAIL)
+
+
+@pytest.mark.asyncio
+async def test_it_refuses_an_administrator_account_with_that_email():
+    """
+    GIVEN: Una cuenta administradora con el correo de la cuenta de sistema
+    WHEN: Se pide asegurar la cuenta
+    THEN: Falla: la cuenta de sistema no debe tener privilegios
+    """
+    uow = FakeUserUnitOfWork()
+    admin = User.create(
+        first_name="Admin",
+        last_name="Suplantado",
+        email_str=SYSTEM_EMAIL,
+        plain_password="ValidPassword123!",
+        is_admin=True,
+    )
+    admin.deactivate(deactivated_by_user_id=str(admin.id.value))
+    await uow.users.save(admin)
+    use_case = EnsureSystemUserUseCase(uow)
+
+    with pytest.raises(ValueError, match="administrator"):
+        await use_case.execute(SYSTEM_EMAIL)
 
 
 def test_the_generated_password_satisfies_the_policy():

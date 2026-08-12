@@ -81,6 +81,7 @@ class EnsureSystemUserUseCase:
         async with self._uow:
             existing = await self._uow.users.find_by_email(Email(email_str))
             if existing is not None:
+                self._require_system_account(existing, email_str)
                 return self._require_id(existing)
 
             system_user = User.create(
@@ -96,6 +97,35 @@ class EnsureSystemUserUseCase:
             await self._uow.users.save(system_user)
 
             return self._require_id(system_user)
+
+    @staticmethod
+    def _require_system_account(user: User, email_str: str) -> None:
+        """
+        Comprueba que la cuenta encontrada es de verdad la cuenta de sistema.
+
+        Si alguien se registrara con ese correo, o si a la cuenta de sistema se
+        le dieran privilegios, seguir adelante asignaría cientos de campos
+        importados a una cuenta personal o dejaría un administrador que nadie
+        controla. Ante la duda se para: es preferible que la importación falle
+        con un mensaje claro a que ate los datos a la cuenta equivocada.
+
+        Args:
+            user: Cuenta encontrada con ese correo
+            email_str: Correo buscado, para que el error diga cuál
+
+        Raises:
+            ValueError: Si la cuenta está activa o es administradora
+        """
+        if user.is_active:
+            raise ValueError(
+                f"The account for '{email_str}' is active, so it is not the system account. "
+                "Refusing to attribute imported data to it."
+            )
+        if user.is_admin:
+            raise ValueError(
+                f"The account for '{email_str}' is an administrator, so it is not the system "
+                "account. Refusing to attribute imported data to it."
+            )
 
     @staticmethod
     def _require_id(user: User) -> UserId:

@@ -115,6 +115,41 @@ def test_blank_external_id_becomes_none():
     assert provenance.external_id is None
 
 
+def test_a_source_given_as_string_is_converted():
+    """
+    GIVEN: Un origen escrito como cadena, como llegaría de un fichero de datos
+    WHEN: Se construye el Value Object
+    THEN: Queda convertido al enum, no como texto suelto
+    """
+    provenance = CourseProvenance(source="RFEG", imported_at=IMPORTED_AT)
+
+    assert provenance.source is CourseSource.RFEG
+
+
+@pytest.mark.parametrize("invalid_source", ["rfeg", "FPG", "", "MANUAL_2"])
+def test_an_unknown_source_is_rejected(invalid_source):
+    """
+    GIVEN: Un origen que no está en el enum, o el mismo en minúsculas
+    WHEN: Se construye el Value Object
+    THEN: Falla aquí y no al escribir en la columna enum de la base de datos
+
+    Sin esta conversión, un 'rfeg' en minúsculas se colaba: no es igual a
+    MANUAL, así que pasaba por campo importado y reventaba mucho más tarde.
+    """
+    with pytest.raises(ValueError):
+        CourseProvenance(source=invalid_source, imported_at=IMPORTED_AT)
+
+
+def test_a_lowercase_manual_source_does_not_bypass_the_manual_rules():
+    """
+    GIVEN: El origen manual escrito en minúsculas junto a datos de importación
+    WHEN: Se construye el Value Object
+    THEN: Falla, en vez de colarse como si fuera un origen externo
+    """
+    with pytest.raises(ValueError):
+        CourseProvenance(source="manual", external_id="915", imported_at=IMPORTED_AT)
+
+
 def test_external_id_longer_than_limit_is_rejected():
     """
     GIVEN: Un identificador externo de más de 100 caracteres

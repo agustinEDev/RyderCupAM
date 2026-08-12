@@ -33,6 +33,13 @@ class CourseProvenance:
     imported_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        # El dataclass no comprueba los tipos, así que aquí puede llegar una
+        # cadena cruda. Convertirla al enum rechaza un 'rfeg' en minúsculas o un
+        # origen inventado en el sitio donde se entiende el error, en vez de
+        # dejarlo llegar a la columna enum de PostgreSQL o al serializar la
+        # respuesta. De paso, las reglas de abajo comparan contra el enum real.
+        object.__setattr__(self, "source", CourseSource(self.source))
+
         if self.external_id is not None:
             cleaned = self.external_id.strip()
             object.__setattr__(self, "external_id", cleaned or None)
