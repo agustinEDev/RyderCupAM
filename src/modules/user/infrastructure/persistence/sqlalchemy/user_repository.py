@@ -141,7 +141,16 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
-        """Searches users by partial name match using ILIKE. Requires at least 2 characters."""
+        """
+        Searches active users by partial name match using ILIKE.
+
+        Requires at least 2 characters.
+
+        Las cuentas desactivadas se excluyen: cualquiera puede buscar por
+        nombre, así que dejarlas visibles significa exponer a quien pidió
+        desactivarse y permitir solicitudes de amistad que nunca verá. El
+        listado de administración sí las muestra, que es donde tiene sentido.
+        """
         query = query.strip()
         if len(query) < self.MIN_SEARCH_LENGTH:
             return []
@@ -149,13 +158,14 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         statement = (
             select(User)
             .filter(
+                User._is_active.is_(True),
                 or_(
                     func.lower(User._first_name).contains(q, autoescape=True),
                     func.lower(User._last_name).contains(q, autoescape=True),
                     func.lower(User._first_name + " " + User._last_name).contains(
                         q, autoescape=True
                     ),
-                )
+                ),
             )
             .limit(limit)
         )
