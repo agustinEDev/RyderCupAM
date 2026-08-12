@@ -19,6 +19,8 @@ from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
 from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.course_location import CourseLocation
+from ..value_objects.course_provenance import CourseProvenance
+from ..value_objects.course_source import CourseSource
 from ..value_objects.course_type import CourseType
 from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.tee_color import TeeColor
@@ -108,6 +110,8 @@ class GolfCourse:
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
         location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -128,6 +132,9 @@ class GolfCourse:
             original_golf_course_id: Si no es None, este es un clone/update proposal del original
             is_pending_update: TRUE si este campo tiene un clone pendiente de aprobación
             location: Ubicación del campo (opcional)
+            provenance: De dónde salen los datos (manual por defecto)
+            physical_holes: Hoyos que tiene el campo sobre el terreno (9 o 18).
+                None si no consta
             domain_events: Eventos de dominio (opcional)
         """
         self._id = id
@@ -149,6 +156,9 @@ class GolfCourse:
         # compuesto: es opcional, y `composite()` no admite NULL (falla en el
         # constructor del VO al hidratar). El VO se recompone al leer.
         self._set_location(location)
+        self._set_provenance(provenance)
+        self._physical_holes = physical_holes
+        self._validate_physical_holes()
 
         # Reconciliar la tarjeta del campo con la de cada salida antes de validar
         self._sync_holes_and_tees()
@@ -170,6 +180,36 @@ class GolfCourse:
         self._address = location.address
         self._city = location.city
         self._province = location.province
+
+    def _set_provenance(self, provenance: CourseProvenance | None) -> None:
+        """
+        Vuelca la procedencia a los atributos que se persisten, uno por columna.
+
+        Args:
+            provenance: Procedencia a guardar. None deja el campo como manual.
+        """
+        provenance = provenance or CourseProvenance()
+        self._source = provenance.source
+        self._external_id = provenance.external_id
+        self._imported_at = provenance.imported_at
+
+    def _validate_physical_holes(self) -> None:
+        """
+        Comprueba los hoyos físicos.
+
+        Solo 9 o 18: la tarjeta siempre tiene 18 hoyos, así que un recorrido o
+        se juega entero sobre el terreno o es una vuelta de 9 repetida. Un valor
+        distinto sería un error de los datos de origen, no un campo raro.
+
+        Raises:
+            ValueError: Si el valor no es 9 ni 18
+        """
+        if self._physical_holes is None:
+            return
+        if self._physical_holes not in (9, HOLES_PER_ROUND):
+            raise ValueError(
+                f"Physical holes must be 9 or {HOLES_PER_ROUND}, got {self._physical_holes}"
+            )
 
     def _sync_holes_and_tees(self) -> None:
         """
@@ -206,6 +246,8 @@ class GolfCourse:
         tees: list[Tee],
         holes: list[Hole],
         location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse":
         """
         Factory method para crear un nuevo campo de golf.
@@ -220,6 +262,8 @@ class GolfCourse:
             tees: Lista de salidas (2-6)
             holes: Lista de hoyos (18)
             location: Ubicación del campo (opcional)
+            provenance: De dónde salen los datos (manual por defecto)
+            physical_holes: Hoyos sobre el terreno, 9 o 18 (opcional)
 
         Returns:
             GolfCourse: Campo creado en estado PENDING_APPROVAL
@@ -247,6 +291,8 @@ class GolfCourse:
             created_at=now,
             updated_at=now,
             location=location,
+            provenance=provenance,
+            physical_holes=physical_holes,
         )
 
         # Registrar evento de creación
@@ -277,6 +323,8 @@ class GolfCourse:
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
         location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -298,6 +346,8 @@ class GolfCourse:
             original_golf_course_id=original_golf_course_id,
             is_pending_update=is_pending_update,
             location=location,
+            provenance=provenance,
+            physical_holes=physical_holes,
         )
 
     def approve(self) -> None:
@@ -371,6 +421,8 @@ class GolfCourse:
         tees: list[Tee],
         holes: list[Hole],
         location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> None:
         """
         Actualiza los campos del golf course.
@@ -391,6 +443,10 @@ class GolfCourse:
                 de edición, que es anterior) omiten el dato, y tratar esa
                 omisión como un borrado vaciaría las coordenadas de un campo
                 al editarle el nombre.
+            provenance: Nueva procedencia. None conserva la actual. Solo la
+                cambia una reimportación: una edición a mano no convierte un
+                campo federado en otra cosa.
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales.
 
         Raises:
             ValueError: Si los datos no son válidos
@@ -405,6 +461,11 @@ class GolfCourse:
         self._course_type = course_type
         if location is not None:
             self._set_location(location)
+        if provenance is not None:
+            self._set_provenance(provenance)
+        if physical_holes is not None:
+            self._physical_holes = physical_holes
+            self._validate_physical_holes()
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de usar los pasados como parámetro
@@ -446,6 +507,8 @@ class GolfCourse:
         holes: list[Hole],
         is_admin: bool,
         location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse | None":
         """
         Aplica una actualización al campo de golf según las reglas de negocio.
@@ -464,6 +527,8 @@ class GolfCourse:
             holes: Nueva lista de hoyos
             is_admin: Si el usuario es Admin
             location: Nueva ubicación. None conserva la actual (ver update())
+            provenance: Nueva procedencia. None conserva la actual
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales
 
         Returns:
             None si se actualizó in-place, GolfCourse clone si se creó propuesta
@@ -485,6 +550,8 @@ class GolfCourse:
                 tees=tees,
                 holes=holes,
                 location=location,
+                provenance=provenance,
+                physical_holes=physical_holes,
             )
             return None
 
@@ -499,6 +566,10 @@ class GolfCourse:
             tees=tees,
             holes=holes,
             location=location if location is not None else self.location,
+            provenance=provenance if provenance is not None else self.provenance,
+            physical_holes=(
+                physical_holes if physical_holes is not None else self.physical_holes
+            ),
         )
 
         # Reconstruir clone con campos especiales (link al original, status PENDING)
@@ -517,6 +588,8 @@ class GolfCourse:
             original_golf_course_id=self._id,
             is_pending_update=False,
             location=clone.location,
+            provenance=clone.provenance,
+            physical_holes=clone.physical_holes,
         )
 
         # Marcar original como "tiene cambios pendientes"
@@ -563,6 +636,8 @@ class GolfCourse:
         self._country_code = clone._country_code
         self._course_type = clone._course_type
         self._set_location(clone.location)
+        self._set_provenance(clone.provenance)
+        self._physical_holes = clone.physical_holes
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de copiar referencias
@@ -800,6 +875,31 @@ class GolfCourse:
     def is_pending_update(self) -> bool:
         """Retorna TRUE si este campo tiene un clone pendiente de aprobación."""
         return self._is_pending_update
+
+    @property
+    def provenance(self) -> CourseProvenance:
+        """
+        Procedencia de los datos, recompuesta desde las columnas persistidas.
+
+        Se usa getattr porque SQLAlchemy hidrata sin pasar por __init__ y los
+        campos anteriores a esta funcionalidad no tienen los atributos.
+        """
+        return CourseProvenance(
+            source=getattr(self, "_source", None) or CourseSource.MANUAL,
+            external_id=getattr(self, "_external_id", None),
+            imported_at=getattr(self, "_imported_at", None),
+        )
+
+    @property
+    def physical_holes(self) -> int | None:
+        """
+        Hoyos que tiene el campo sobre el terreno, 9 o 18.
+
+        None significa que no consta, que es lo que pasa con los campos dados
+        de alta antes de que existiera el dato: nadie preguntó nunca a quien
+        los creó si el campo era de nueve.
+        """
+        return getattr(self, "_physical_holes", None)
 
     @property
     def location(self) -> CourseLocation:

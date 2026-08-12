@@ -6,6 +6,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     GolfCourseResponseDTO,
     HoleDTO,
     LocationDTO,
+    ProvenanceDTO,
     TeeDTO,
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -159,4 +160,12 @@ class GolfCourseMapper:
                 if not golf_course.location.is_empty
                 else None
             ),
+            # La procedencia siempre viaja: un campo dado de alta a mano tiene
+            # origen MANUAL, que también es información.
+            provenance=ProvenanceDTO(
+                source=golf_course.provenance.source,
+                external_id=golf_course.provenance.external_id,
+                imported_at=golf_course.provenance.imported_at,
+            ),
+            physical_holes=golf_course.physical_holes,
         )

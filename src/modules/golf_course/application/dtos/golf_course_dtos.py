@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.modules.golf_course.domain.value_objects.course_source import CourseSource
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 
@@ -49,6 +50,23 @@ class LocationDTO(BaseModel):
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError("latitude and longitude must be provided together")
         return self
+
+    class Config:
+        from_attributes = True
+
+
+class ProvenanceDTO(BaseModel):
+    """
+    DTO de solo lectura con la procedencia de los datos de un campo.
+
+    No se acepta en las peticiones de alta ni de edición a propósito: la sella
+    el importador, y un cliente no puede declarar que sus datos los avala una
+    federación.
+    """
+
+    source: CourseSource = Field(..., description="Origen de los datos (MANUAL, RFEG, ...)")
+    external_id: str | None = Field(None, description="Identificador en la fuente externa")
+    imported_at: datetime | None = Field(None, description="Cuándo se importó")
 
     class Config:
         from_attributes = True
