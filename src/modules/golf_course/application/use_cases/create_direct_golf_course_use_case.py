@@ -11,6 +11,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.value_objects.course_provenance import CourseProvenance
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 
@@ -51,6 +52,8 @@ class CreateDirectGolfCourseUseCase:
         self,
         request: RequestGolfCourseRequestDTO,
         creator_id: UserId,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> RequestGolfCourseResponseDTO:
         """
         Ejecuta el caso de uso.
@@ -58,6 +61,10 @@ class CreateDirectGolfCourseUseCase:
         Args:
             request: Datos del campo a crear
             creator_id: ID del admin creador
+            provenance: De dónde salen los datos. Va como parámetro y no dentro
+                del DTO porque no es un dato que un cliente pueda declarar: lo
+                sella quien importa. Por defecto, alta manual
+            physical_holes: Hoyos sobre el terreno, 9 o 18 (opcional)
 
         Returns:
             Response con el campo creado (estado APPROVED)
@@ -87,6 +94,8 @@ class CreateDirectGolfCourseUseCase:
                 tees=tees,
                 holes=holes,
                 location=GolfCourseMapper.to_domain_location(request.location),
+                provenance=provenance,
+                physical_holes=physical_holes,
             )
 
             # 6. Aprobar inmediatamente (Admin privilege)

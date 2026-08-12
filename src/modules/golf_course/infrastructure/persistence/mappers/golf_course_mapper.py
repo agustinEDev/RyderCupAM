@@ -20,11 +20,13 @@ from sqlalchemy import (
     Enum as SQLEnum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
     UniqueConstraint,
     event,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import column_property, relationship
@@ -34,6 +36,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_source import CourseSource
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -177,7 +180,57 @@ golf_courses_table = Table(
     Column("address", String(300), nullable=True, comment="Dirección postal completa"),
     Column("city", String(100), nullable=True, comment="Localidad"),
     Column("province", String(100), nullable=True, comment="Provincia o región"),
+    # Procedencia: de dónde salen los datos. Permite reconocer un campo ya
+    # importado sin comparar nombres, que se rompe en cuanto alguien renombra.
+    Column(
+        "source",
+        SQLEnum(CourseSource, name="course_source_enum", create_type=False),
+        nullable=False,
+        server_default=CourseSource.MANUAL.value,
+        comment="Origen de los datos (MANUAL, RFEG, ...)",
+    ),
+    Column(
+        "external_id",
+        String(100),
+        nullable=True,
+        comment="Identificador del campo en la fuente externa, si la fuente publica uno",
+    ),
+    Column(
+        "imported_at",
+        DateTime,
+        nullable=True,
+        comment="Cuándo se importó desde la fuente externa",
+    ),
+    Column(
+        "physical_holes",
+        Integer,
+        nullable=True,
+        comment="Hoyos sobre el terreno (9 o 18). NULL si no consta",
+    ),
     CheckConstraint("LENGTH(name) >= 3", name="ck_golf_courses_name_min_length"),
+    CheckConstraint(
+        "physical_holes IS NULL OR physical_holes IN (9, 18)",
+        name="ck_golf_courses_physical_holes_values",
+    ),
+    # Un campo manual no lo ha importado nadie, así que no puede llevar ni id
+    # externo ni fecha de importación; uno importado sí lleva fecha siempre.
+    CheckConstraint(
+        "(source = 'MANUAL' AND external_id IS NULL AND imported_at IS NULL) "
+        "OR (source <> 'MANUAL' AND imported_at IS NOT NULL)",
+        name="ck_golf_courses_provenance_consistency",
+    ),
+    # Dos campos no pueden ser el mismo recorrido de la misma fuente. Va aquí y
+    # no solo en la migración porque es una regla de corrección, y el esquema
+    # que los tests levantan desde los metadatos tiene que tenerla. Parcial,
+    # porque los campos manuales no llevan id externo y chocarían todos entre
+    # sí en un índice normal.
+    Index(
+        "uq_golf_courses_source_external_id",
+        "source",
+        "external_id",
+        unique=True,
+        postgresql_where=text("external_id IS NOT NULL"),
+    ),
     CheckConstraint(
         "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)",
         name="ck_golf_courses_latitude_range",
@@ -359,6 +412,11 @@ def start_golf_course_mappers():
                 "_address": column_property(golf_courses_table.c.address),
                 "_city": column_property(golf_courses_table.c.city),
                 "_province": column_property(golf_courses_table.c.province),
+                # Procedencia desglosada (ver comentario en la tabla)
+                "_source": column_property(golf_courses_table.c.source),
+                "_external_id": column_property(golf_courses_table.c.external_id),
+                "_imported_at": column_property(golf_courses_table.c.imported_at),
+                "_physical_holes": column_property(golf_courses_table.c.physical_holes),
                 # One-to-many relationships with tees and holes
                 "_tees": relationship(
                     Tee,
