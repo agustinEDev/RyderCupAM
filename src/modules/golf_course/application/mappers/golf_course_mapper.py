@@ -4,6 +4,7 @@ Golf Course Mapper - Mapea entidades de dominio a DTOs.
 
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     GolfCourseResponseDTO,
+    GolfCourseSummaryDTO,
     HoleDTO,
     LocationDTO,
     ProvenanceDTO,
@@ -75,6 +76,62 @@ class GolfCourseMapper:
             address=location_dto.address,
             city=location_dto.city,
             province=location_dto.province,
+        )
+
+    @staticmethod
+    def to_summary_dto(
+        golf_course: GolfCourse, *, distance_km: float | None = None
+    ) -> GolfCourseSummaryDTO:
+        """
+        Mapea GolfCourse entity a GolfCourseSummaryDTO, para los listados.
+
+        Args:
+            golf_course: Entidad de dominio
+            distance_km: Distancia a la posición consultada, si se pidió cercanía
+
+        Returns:
+            DTO de listado, sin tarjeta
+        """
+        return GolfCourseSummaryDTO(
+            id=str(golf_course.id),
+            name=golf_course.name,
+            country_code=str(golf_course.country_code),
+            course_type=golf_course.course_type.value,
+            creator_id=str(golf_course.creator_id),
+            tees=[
+                TeeDTO(
+                    tee_gender=tee.gender.value if tee.gender else None,
+                    color=tee.color,
+                    identifier=tee.identifier,
+                    course_rating=tee.course_rating,
+                    slope_rating=tee.slope_rating,
+                    holes=None,
+                )
+                for tee in golf_course.tees
+            ],
+            approval_status=golf_course.approval_status.value,
+            rejection_reason=golf_course.rejection_reason,
+            total_par=golf_course.total_par,
+            created_at=golf_course.created_at,
+            updated_at=golf_course.updated_at,
+            original_golf_course_id=(
+                str(golf_course.original_golf_course_id)
+                if golf_course.original_golf_course_id
+                else None
+            ),
+            is_pending_update=golf_course.is_pending_update,
+            location=(
+                LocationDTO(
+                    latitude=golf_course.location.latitude,
+                    longitude=golf_course.location.longitude,
+                    address=golf_course.location.address,
+                    city=golf_course.location.city,
+                    province=golf_course.location.province,
+                )
+                if not golf_course.location.is_empty
+                else None
+            ),
+            distance_km=distance_km,
         )
 
     @staticmethod

@@ -3,12 +3,50 @@ IGolfCourseRepository - Interfaz del repositorio de campos de golf.
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.golf_course import GolfCourse
 from ..value_objects.approval_status import ApprovalStatus
 from ..value_objects.golf_course_id import GolfCourseId
+
+
+@dataclass(frozen=True)
+class ApprovedCourseSearch:
+    """
+    Criterios para buscar entre los campos aprobados.
+
+    Van juntos en un objeto y no como siete parámetros sueltos porque casi
+    todos son opcionales y el orden se vuelve imposible de recordar.
+    """
+
+    country_code: str | None = None
+    name: str | None = None
+    limit: int | None = None
+    offset: int = 0
+    latitude: float | None = None
+    longitude: float | None = None
+    radius_km: float | None = None
+
+    @property
+    def has_position(self) -> bool:
+        """True si hay una posición desde la que medir distancias."""
+        return self.latitude is not None and self.longitude is not None
+
+
+@dataclass(frozen=True)
+class ApprovedCoursePage:
+    """
+    Una página de campos aprobados.
+
+    `total` cuenta los que cumplen el filtro, no los devueltos: es lo que
+    necesita el cliente para saber si merece la pena pedir la página siguiente.
+    """
+
+    courses: list[GolfCourse]
+    total: int
+    distances_km: dict[str, float] = field(default_factory=dict)
 
 
 class IGolfCourseRepository(ABC):
@@ -55,15 +93,18 @@ class IGolfCourseRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_approved(self, country_code: str | None = None) -> list[GolfCourse]:
+    async def search_approved(self, search: ApprovedCourseSearch) -> ApprovedCoursePage:
         """
-        Busca todos los campos aprobados, opcionalmente filtrados por país.
+        Busca entre los campos aprobados aplicando los filtros que se le pasen.
+
+        Sin criterios devuelve todos los aprobados, que es lo que hacía el
+        listado antes de tener búsqueda.
 
         Args:
-            country_code: Código ISO del país para filtrar (opcional)
+            search: Criterios de búsqueda
 
         Returns:
-            Lista de campos con status APPROVED
+            La página pedida, el total que cumple el filtro y las distancias
         """
         pass
 
