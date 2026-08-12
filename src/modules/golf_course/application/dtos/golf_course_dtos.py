@@ -28,6 +28,32 @@ class HoleDTO(BaseModel):
         from_attributes = True
 
 
+class LocationDTO(BaseModel):
+    """
+    DTO para la ubicación de un campo.
+
+    Todo es opcional, pero latitud y longitud van juntas: la regla la hace
+    cumplir el dominio, y se comprueba también aquí para que el error salga
+    como fallo de validación del campo concreto.
+    """
+
+    latitude: float | None = Field(None, ge=-90.0, le=90.0, description="Latitud en grados")
+    longitude: float | None = Field(None, ge=-180.0, le=180.0, description="Longitud en grados")
+    address: str | None = Field(None, max_length=300, description="Dirección postal completa")
+    city: str | None = Field(None, max_length=100, description="Localidad")
+    province: str | None = Field(None, max_length=100, description="Provincia o región")
+
+    @model_validator(mode="after")
+    def check_coordinates_together(self) -> "LocationDTO":
+        """Media coordenada no sitúa nada en un mapa."""
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be provided together")
+        return self
+
+    class Config:
+        from_attributes = True
+
+
 class TeeDTO(BaseModel):
     """DTO para representar un tee (salida)."""
 
@@ -94,6 +120,9 @@ class RequestGolfCourseRequestDTO(BaseModel):
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
+    location: LocationDTO | None = Field(
+        None, description="Ubicación del campo. Opcional: sin ella el campo no sale por cercanía"
+    )
 
     # NOTA: Las validaciones de reglas de negocio (stroke_index únicos, hole_numbers, etc.)
     # están en el dominio (GolfCourse._validate_holes), no aquí.
@@ -157,6 +186,7 @@ class GolfCourseResponseDTO(BaseModel):
     is_pending_update: bool = Field(
         False, description="TRUE si este campo tiene un clone pendiente de aprobación"
     )
+    location: LocationDTO | None = Field(None, description="Ubicación del campo, si se conoce")
 
     class Config:
         from_attributes = True
@@ -228,6 +258,19 @@ class UpdateGolfCourseRequestDTO(BaseModel):
     tees: list[TeeDTO] = Field(..., min_length=1, max_length=14, description="1-14 salidas")
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
+    )
+    # La ubicación se reemplaza entera, igual que `tees` y `holes` en esta misma
+    # petición: lo que no venga dentro del objeto queda a null. No es un parcheo
+    # campo a campo, así que un cliente que mande solo la localidad borra las
+    # coordenadas. Omitir el objeto es lo único que conserva lo guardado.
+    location: LocationDTO | None = Field(
+        None,
+        description=(
+            "Nueva ubicación, que REEMPLAZA la actual por completo: los campos "
+            "que no se envíen quedan vacíos. Omitir este objeto conserva la "
+            "ubicación guardada; enviarlo vacío o con todos sus valores a null "
+            "la borra"
+        ),
     )
 
 

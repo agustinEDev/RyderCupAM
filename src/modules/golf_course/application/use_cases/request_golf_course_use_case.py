@@ -82,6 +82,7 @@ class RequestGolfCourseUseCase:
                 creator_id=creator_id,
                 tees=tees,
                 holes=holes,
+                location=GolfCourseMapper.to_domain_location(request.location),
             )
 
             # 6. Persistir

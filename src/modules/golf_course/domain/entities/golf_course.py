@@ -18,6 +18,7 @@ from ..events.golf_course_approved_event import GolfCourseApprovedEvent
 from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
 from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
+from ..value_objects.course_location import CourseLocation
 from ..value_objects.course_type import CourseType
 from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.tee_color import TeeColor
@@ -106,6 +107,7 @@ class GolfCourse:
         updated_at: datetime,
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
+        location: CourseLocation | None = None,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -125,6 +127,7 @@ class GolfCourse:
             updated_at: Fecha de última actualización
             original_golf_course_id: Si no es None, este es un clone/update proposal del original
             is_pending_update: TRUE si este campo tiene un clone pendiente de aprobación
+            location: Ubicación del campo (opcional)
             domain_events: Eventos de dominio (opcional)
         """
         self._id = id
@@ -142,12 +145,31 @@ class GolfCourse:
         self._is_pending_update = is_pending_update
         self._domain_events: list[DomainEvent] = domain_events or []
 
+        # La ubicación se guarda desglosada en escalares, no como Value Object
+        # compuesto: es opcional, y `composite()` no admite NULL (falla en el
+        # constructor del VO al hidratar). El VO se recompone al leer.
+        self._set_location(location)
+
         # Reconciliar la tarjeta del campo con la de cada salida antes de validar
         self._sync_holes_and_tees()
 
         # Validar invariantes
         self._validate_holes()
         self._validate_tees()
+
+    def _set_location(self, location: CourseLocation | None) -> None:
+        """
+        Vuelca la ubicación a los atributos que se persisten, uno por columna.
+
+        Args:
+            location: Ubicación a guardar. None deja el campo sin ubicación.
+        """
+        location = location or CourseLocation()
+        self._latitude = location.latitude
+        self._longitude = location.longitude
+        self._address = location.address
+        self._city = location.city
+        self._province = location.province
 
     def _sync_holes_and_tees(self) -> None:
         """
@@ -183,6 +205,7 @@ class GolfCourse:
         creator_id: UserId,
         tees: list[Tee],
         holes: list[Hole],
+        location: CourseLocation | None = None,
     ) -> "GolfCourse":
         """
         Factory method para crear un nuevo campo de golf.
@@ -196,6 +219,7 @@ class GolfCourse:
             creator_id: Usuario que solicita el campo
             tees: Lista de salidas (2-6)
             holes: Lista de hoyos (18)
+            location: Ubicación del campo (opcional)
 
         Returns:
             GolfCourse: Campo creado en estado PENDING_APPROVAL
@@ -222,6 +246,7 @@ class GolfCourse:
             rejection_reason=None,
             created_at=now,
             updated_at=now,
+            location=location,
         )
 
         # Registrar evento de creación
@@ -251,6 +276,7 @@ class GolfCourse:
         updated_at: datetime,
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
+        location: CourseLocation | None = None,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -271,6 +297,7 @@ class GolfCourse:
             updated_at=updated_at,
             original_golf_course_id=original_golf_course_id,
             is_pending_update=is_pending_update,
+            location=location,
         )
 
     def approve(self) -> None:
@@ -343,6 +370,7 @@ class GolfCourse:
         course_type: CourseType,
         tees: list[Tee],
         holes: list[Hole],
+        location: CourseLocation | None = None,
     ) -> None:
         """
         Actualiza los campos del golf course.
@@ -357,6 +385,12 @@ class GolfCourse:
             course_type: Nuevo tipo de campo
             tees: Nueva lista de tees
             holes: Nueva lista de hoyos
+            location: Nueva ubicación. None **conserva** la actual; para
+                borrarla hay que pasar un CourseLocation() vacío. Se hace así
+                porque los clientes que no conocen la ubicación (el formulario
+                de edición, que es anterior) omiten el dato, y tratar esa
+                omisión como un borrado vaciaría las coordenadas de un campo
+                al editarle el nombre.
 
         Raises:
             ValueError: Si los datos no son válidos
@@ -369,6 +403,8 @@ class GolfCourse:
         self._name = name
         self._country_code = country_code
         self._course_type = course_type
+        if location is not None:
+            self._set_location(location)
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de usar los pasados como parámetro
@@ -409,6 +445,7 @@ class GolfCourse:
         tees: list[Tee],
         holes: list[Hole],
         is_admin: bool,
+        location: CourseLocation | None = None,
     ) -> "GolfCourse | None":
         """
         Aplica una actualización al campo de golf según las reglas de negocio.
@@ -426,6 +463,7 @@ class GolfCourse:
             tees: Nueva lista de tees
             holes: Nueva lista de hoyos
             is_admin: Si el usuario es Admin
+            location: Nueva ubicación. None conserva la actual (ver update())
 
         Returns:
             None si se actualizó in-place, GolfCourse clone si se creó propuesta
@@ -446,10 +484,13 @@ class GolfCourse:
                 course_type=course_type,
                 tees=tees,
                 holes=holes,
+                location=location,
             )
             return None
 
-        # Creator + APPROVED → crear clone como update proposal
+        # Creator + APPROVED → crear clone como update proposal. El clone hereda
+        # la ubicación del original si la edición no trae una nueva, para que
+        # aprobarlo no borre las coordenadas del campo.
         clone = GolfCourse.create(
             name=name,
             country_code=country_code,
@@ -457,6 +498,7 @@ class GolfCourse:
             creator_id=self._creator_id,
             tees=tees,
             holes=holes,
+            location=location if location is not None else self.location,
         )
 
         # Reconstruir clone con campos especiales (link al original, status PENDING)
@@ -474,6 +516,7 @@ class GolfCourse:
             updated_at=clone.updated_at,
             original_golf_course_id=self._id,
             is_pending_update=False,
+            location=clone.location,
         )
 
         # Marcar original como "tiene cambios pendientes"
@@ -519,6 +562,7 @@ class GolfCourse:
         self._name = clone._name
         self._country_code = clone._country_code
         self._course_type = clone._course_type
+        self._set_location(clone.location)
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de copiar referencias
@@ -757,9 +801,29 @@ class GolfCourse:
         """Retorna TRUE si este campo tiene un clone pendiente de aprobación."""
         return self._is_pending_update
 
+    @property
+    def location(self) -> CourseLocation:
+        """
+        Ubicación del campo, recompuesta desde las columnas que se persisten.
+
+        Devuelve siempre un Value Object, vacío si el campo no tiene ubicación,
+        para que quien lo consulte no tenga que comprobar None antes de leer.
+        Se usa getattr porque SQLAlchemy hidrata sin pasar por __init__ y los
+        campos previos a esta funcionalidad no tienen los atributos.
+        """
+        return CourseLocation(
+            latitude=getattr(self, "_latitude", None),
+            longitude=getattr(self, "_longitude", None),
+            address=getattr(self, "_address", None),
+            city=getattr(self, "_city", None),
+            province=getattr(self, "_province", None),
+        )
+
     # Metodos de consulta
 
-    def has_tee(self, color: TeeColor, gender: Gender | None, identifier: str | None = None) -> bool:
+    def has_tee(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> bool:
         """
         Retorna True si el campo tiene esa salida.
 
