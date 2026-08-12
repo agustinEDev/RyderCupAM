@@ -209,6 +209,9 @@ def map_club(club: dict[str, Any], imported_at: datetime) -> list[MappedCourse]:
     Va por club y no por recorrido porque el nombre de uno depende de los
     demás: dos recorridos del mismo club pueden colisionar al abreviarlos.
 
+    Es la variante estricta: el primer recorrido ilegible corta la traducción
+    del club entero. La importación usa map_club_courses, que aísla el fallo.
+
     Args:
         club: Club tal como viene en el dataset
         imported_at: Momento de la importación, igual para todo el lote
@@ -219,43 +222,102 @@ def map_club(club: dict[str, Any], imported_at: datetime) -> list[MappedCourse]:
     Raises:
         RfegMappingError: Si algún recorrido no se puede traducir
     """
-    courses = club.get("courses") or []
-    names = build_club_course_names(club["name"], [course["name"] for course in courses])
-    location = _map_location(club)
+    courses, names, location = _prepare_club(club)
+    return [
+        _map_course(club, course, name, location, imported_at)
+        for course, name in zip(courses, names, strict=True)
+    ]
+
+
+def map_club_courses(
+    club: dict[str, Any], imported_at: datetime
+) -> tuple[list[MappedCourse], list[str]]:
+    """
+    Traduce los recorridos de un club sin que uno ilegible arrastre a los demás.
+
+    A diferencia de map_club, aquí cada recorrido se traduce por separado: si
+    uno falla se anota y se sigue con el resto. Un club con dos recorridos no
+    debe perder el bueno por culpa del malo.
+
+    Lo previo al bucle (los nombres y la ubicación) sí es del club entero y no
+    se puede aislar, así que si eso falla la excepción sale hacia fuera.
+
+    Args:
+        club: Club tal como viene en el dataset
+        imported_at: Momento de la importación, igual para todo el lote
+
+    Returns:
+        Los recorridos traducidos y la descripción de los que no se pudieron
+
+    Raises:
+        RfegMappingError: Si no se puede preparar el club
+    """
+    courses, names, location = _prepare_club(club)
 
     mapped: list[MappedCourse] = []
+    problems: list[str] = []
     for course, name in zip(courses, names, strict=True):
-        source_tees = course.get("tees") or []
-        if not source_tees:
-            raise RfegMappingError(f"Course '{course['name']}' has no tees")
+        try:
+            mapped.append(_map_course(club, course, name, location, imported_at))
+        except (RfegMappingError, KeyError, TypeError) as error:
+            source_name = course.get("name", "?") if isinstance(course, dict) else "?"
+            problems.append(f"{club.get('name', '?')} / {source_name}: {error}")
 
-        tees = [_map_tee(source_tee) for source_tee in source_tees]
-        reference_card = sorted(
-            source_tees[0].get("holes") or [], key=lambda hole: hole["number"]
-        )
-        holes = _map_holes(reference_card)
-        course_type = detect_course_type(sum(hole.par for hole in holes))
+    return mapped, problems
 
-        request = RequestGolfCourseRequestDTO(
-            name=name,
-            country_code=SPAIN,
-            course_type=course_type,
-            tees=tees,
-            holes=holes,
-            location=location,
-        )
-        mapped.append(
-            MappedCourse(
-                request=request,
-                provenance=CourseProvenance(
-                    source=CourseSource.RFEG,
-                    external_id=build_external_id(club, course["name"]),
-                    imported_at=imported_at,
-                ),
-                physical_holes=detect_physical_holes(club, reference_card),
-                club_name=club["name"],
-                source_course_name=course["name"],
-            )
-        )
 
-    return mapped
+def _prepare_club(
+    club: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], LocationDTO | None]:
+    """
+    Resuelve lo que es común a todos los recorridos de un club.
+
+    Los nombres se calculan de golpe porque el de un recorrido depende de los
+    demás: dos del mismo club pueden colisionar al abreviarlos.
+    """
+    courses = club.get("courses") or []
+    names = build_club_course_names(club["name"], [course["name"] for course in courses])
+    return courses, names, _map_location(club)
+
+
+def _map_course(
+    club: dict[str, Any],
+    course: dict[str, Any],
+    name: str,
+    location: LocationDTO | None,
+    imported_at: datetime,
+) -> MappedCourse:
+    """
+    Traduce un único recorrido, con el nombre y la ubicación ya resueltos.
+
+    Raises:
+        RfegMappingError: Si el recorrido no se puede traducir
+    """
+    source_tees = course.get("tees") or []
+    if not source_tees:
+        raise RfegMappingError(f"Course '{course['name']}' has no tees")
+
+    tees = [_map_tee(source_tee) for source_tee in source_tees]
+    reference_card = sorted(source_tees[0].get("holes") or [], key=lambda hole: hole["number"])
+    holes = _map_holes(reference_card)
+    course_type = detect_course_type(sum(hole.par for hole in holes))
+
+    request = RequestGolfCourseRequestDTO(
+        name=name,
+        country_code=SPAIN,
+        course_type=course_type,
+        tees=tees,
+        holes=holes,
+        location=location,
+    )
+    return MappedCourse(
+        request=request,
+        provenance=CourseProvenance(
+            source=CourseSource.RFEG,
+            external_id=build_external_id(club, course["name"]),
+            imported_at=imported_at,
+        ),
+        physical_holes=detect_physical_holes(club, reference_card),
+        club_name=club["name"],
+        source_course_name=course["name"],
+    )

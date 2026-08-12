@@ -97,6 +97,38 @@ def test_a_broken_file_fails_clearly(tmp_path):
         load_dataset(path)
 
 
+def test_a_file_that_is_not_utf8_fails_clearly(tmp_path):
+    """
+    GIVEN: Un fichero con bytes que no son UTF-8 válido
+    WHEN: Se intenta leer
+    THEN: Falla explicando que no se ha podido leer
+
+    UnicodeDecodeError no es ni OSError ni JSONDecodeError, así que sin
+    capturarlo salía en crudo en vez de como error del volcado.
+    """
+    path = tmp_path / "latin1.json"
+    path.write_bytes(b'{"source": "https://rfegolf.es/clubes", "name": "\xf1"}')
+
+    with pytest.raises(RfegDatasetError, match="Could not read"):
+        load_dataset(path)
+
+
+def test_a_compressed_file_that_is_not_utf8_fails_clearly(tmp_path):
+    """
+    GIVEN: Un volcado comprimido cuyo contenido no es UTF-8 válido
+    WHEN: Se intenta leer
+    THEN: Falla explicando que no se ha podido leer
+
+    El camino de gzip decodifica por su cuenta, así que necesita su propia red.
+    """
+    path = tmp_path / "latin1.json.gz"
+    with gzip.open(path, "wb") as handle:
+        handle.write(b'{"source": "https://rfegolf.es/clubes", "name": "\xf1"}')
+
+    with pytest.raises(RfegDatasetError, match="Could not read"):
+        load_dataset(path)
+
+
 def test_a_dataset_from_another_source_is_rejected(tmp_path):
     """
     GIVEN: Un volcado que no viene de la federación española
@@ -145,17 +177,22 @@ def test_the_bundled_dataset_maps_completely():
     """
     GIVEN: El volcado que viaja en el repositorio
     WHEN: Se traducen todos sus clubes
-    THEN: Salen 802 recorridos y ninguno falla
+    THEN: Salen 802 recorridos con 4.304 salidas y 77.472 hoyos, y ninguno falla
 
     Esta es la red que avisaría si alguien sustituye el fichero por otro que el
-    importador no sabe leer, o si un cambio en el mapeo deja campos fuera.
+    importador no sabe leer, o si un cambio en el mapeo deja campos fuera. Los
+    totales de salidas y hoyos son los que anuncia el CHANGELOG: contar solo
+    recorridos no detectaría un volcado que llegara con las tarjetas a medias.
     """
     dataset = load_dataset(DEFAULT_DATASET_PATH)
     clubs = clubs_with_courses(dataset)
 
     mapped = [course for club in clubs for course in map_club(club, IMPORTED_AT)]
+    tees = [tee for course in mapped for tee in course.request.tees]
 
     assert len(mapped) == 802
     assert len({course.provenance.external_id for course in mapped}) == 802
     assert len({course.name for course in mapped}) == 802
     assert all(course.physical_holes in (9, 18) for course in mapped)
+    assert len(tees) == 4304
+    assert sum(len(tee.holes) for tee in tees) == 77472

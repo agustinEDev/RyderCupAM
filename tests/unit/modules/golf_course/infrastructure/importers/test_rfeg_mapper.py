@@ -19,6 +19,7 @@ from src.modules.golf_course.infrastructure.importers.rfeg_mapper import (
     detect_course_type,
     detect_physical_holes,
     map_club,
+    map_club_courses,
 )
 
 IMPORTED_AT = datetime(2026, 8, 12, 12, 0, 0)
@@ -363,3 +364,84 @@ def test_a_short_scorecard_stops():
 
     with pytest.raises(RfegMappingError, match="must have 18 holes"):
         map_club(club, IMPORTED_AT)
+
+
+# ============================================================================
+# Tests: aislar el recorrido que falla
+# ============================================================================
+
+
+GOOD_COURSE = {
+    "name": "PRUEBA - Campo Grande",
+    "tees": [
+        {
+            "color": "AMARILLAS",
+            "gender": "M",
+            "course_rating": 71.2,
+            "slope_rating": 128,
+            "holes": build_card(),
+        }
+    ],
+}
+BROKEN_COURSE = {"name": "PRUEBA - Vacio", "tees": []}
+
+
+def test_a_broken_course_does_not_drag_down_the_rest_of_the_club():
+    """
+    GIVEN: Un club con un recorrido bueno y otro sin salidas
+    WHEN: Se traducen aislando los fallos
+    THEN: Sale el bueno y se informa solo del malo
+
+    Es la diferencia con map_club: un club de dos recorridos no debe perder el
+    que sí se puede importar por culpa del que no.
+    """
+    club = build_club(courses=[GOOD_COURSE, BROKEN_COURSE])
+
+    mapped, problems = map_club_courses(club, IMPORTED_AT)
+
+    assert len(mapped) == 1
+    assert mapped[0].source_course_name == "PRUEBA - Campo Grande"
+    assert len(problems) == 1
+    assert "PRUEBA - Vacio" in problems[0]
+    assert "has no tees" in problems[0]
+
+
+def test_the_problem_names_the_club_and_the_course():
+    """
+    GIVEN: Un club cuyo único recorrido no se puede traducir
+    WHEN: Se traduce aislando los fallos
+    THEN: El aviso nombra al club y al recorrido, para poder localizarlo
+    """
+    club = build_club(courses=[BROKEN_COURSE])
+
+    mapped, problems = map_club_courses(club, IMPORTED_AT)
+
+    assert mapped == []
+    assert problems == [
+        "CLUB DE GOLF DE PRUEBA / PRUEBA - Vacio: Course 'PRUEBA - Vacio' has no tees"
+    ]
+
+
+def test_a_club_without_problems_reports_none():
+    """
+    GIVEN: Un club cuyos recorridos se traducen todos
+    WHEN: Se traduce aislando los fallos
+    THEN: Salen los recorridos y ningún aviso
+    """
+    mapped, problems = map_club_courses(build_club(), IMPORTED_AT)
+
+    assert len(mapped) == 1
+    assert problems == []
+
+
+def test_a_club_that_cannot_be_prepared_still_raises():
+    """
+    GIVEN: Un club con un recorrido sin nombre
+    WHEN: Se traduce aislando los fallos
+    THEN: Falla, porque los nombres se calculan para el club entero
+
+    Aislar por recorrido no puede empezar hasta tener los nombres, que dependen
+    unos de otros. Un fallo ahí sí se lleva el club por delante.
+    """
+    with pytest.raises(KeyError):
+        map_club_courses(build_club(courses=[{"tees": []}]), IMPORTED_AT)

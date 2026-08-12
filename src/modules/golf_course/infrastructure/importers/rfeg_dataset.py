@@ -47,7 +47,7 @@ def load_dataset(path: Path | None = None) -> dict[str, Any]:
                 dataset = json.load(handle)
         else:
             dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RfegDatasetError(f"Could not read the dataset at {dataset_path}: {error}") from error
 
     _validate(dataset, dataset_path)

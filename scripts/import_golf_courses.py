@@ -52,7 +52,7 @@ from src.modules.golf_course.infrastructure.importers.rfeg_dataset import (
 from src.modules.golf_course.infrastructure.importers.rfeg_mapper import (
     MappedCourse,
     RfegMappingError,
-    map_club,
+    map_club_courses,
 )
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
     golf_courses_table,
@@ -75,6 +75,25 @@ from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
 )
 
 SYSTEM_USER_EMAIL = "course.import@rydercupfriends.com"
+
+
+def non_negative_int(value: str) -> int:
+    """
+    Convierte el argumento en un entero que no sea negativo.
+
+    Un límite negativo no se detecta al usarlo: `mapped[:-1]` es una rebanada
+    válida que descarta recorridos en silencio. Mejor rechazarlo al leerlo.
+
+    Raises:
+        argparse.ArgumentTypeError: Si no es un entero o si es negativo
+    """
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{value}' is not an integer") from None
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(f"must not be negative, got {parsed}")
+    return parsed
 
 
 def parse_args() -> argparse.Namespace:
@@ -102,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=non_negative_int,
         default=None,
         help="Procesa solo los primeros N recorridos. Útil para probar",
     )
@@ -176,9 +195,12 @@ def map_all(dataset, limit: int | None) -> tuple[list[MappedCourse], list[str]]:
 
     for club in clubs_with_courses(dataset):
         try:
-            mapped.extend(map_club(club, imported_at))
+            club_courses, club_problems = map_club_courses(club, imported_at)
         except (RfegMappingError, KeyError, TypeError) as error:
             problems.append(f"{club.get('name', '?')}: {error}")
+        else:
+            mapped.extend(club_courses)
+            problems.extend(club_problems)
 
         if limit is not None and len(mapped) >= limit:
             return mapped[:limit], problems
