@@ -259,11 +259,17 @@ class UpdateGolfCourseRequestDTO(BaseModel):
     holes: list[HoleDTO] = Field(
         ..., min_length=18, max_length=18, description="Exactamente 18 hoyos"
     )
+    # La ubicación se reemplaza entera, igual que `tees` y `holes` en esta misma
+    # petición: lo que no venga dentro del objeto queda a null. No es un parcheo
+    # campo a campo, así que un cliente que mande solo la localidad borra las
+    # coordenadas. Omitir el objeto es lo único que conserva lo guardado.
     location: LocationDTO | None = Field(
         None,
         description=(
-            "Nueva ubicación. Omitirla conserva la actual; para borrarla, "
-            "enviar el objeto con todos sus valores a null"
+            "Nueva ubicación, que REEMPLAZA la actual por completo: los campos "
+            "que no se envíen quedan vacíos. Omitir este objeto conserva la "
+            "ubicación guardada; enviarlo vacío o con todos sus valores a null "
+            "la borra"
         ),
     )
 

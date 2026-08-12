@@ -90,11 +90,13 @@ def test_zero_coordinates_are_valid():
     """
     GIVEN: Latitud y longitud a cero (el punto del golfo de Guinea)
     WHEN: Se construye el Value Object
-    THEN: Es válido: cero es una coordenada, no un dato ausente
+    THEN: Es válido y NO se considera vacío: cero es una coordenada, no un dato
+          ausente, y darla por ausente devolvería `location: null` en la API
     """
     location = CourseLocation(latitude=0.0, longitude=0.0)
 
     assert location.has_coordinates is True
+    assert location.is_empty is False
 
 
 # ============================================================================

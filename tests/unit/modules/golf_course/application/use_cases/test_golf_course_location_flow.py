@@ -114,6 +114,24 @@ async def test_create_course_without_location_returns_null(mock_uow):
 
 
 @pytest.mark.asyncio
+async def test_zero_coordinates_are_not_treated_as_missing(mock_uow):
+    """
+    GIVEN: Un campo situado en latitud y longitud cero
+    WHEN: Se ejecuta el caso de uso
+    THEN: La respuesta trae las coordenadas, no location a null
+    """
+    use_case = CreateDirectGolfCourseUseCase(mock_uow)
+
+    response = await use_case.execute(
+        build_request(LocationDTO(latitude=0.0, longitude=0.0)), UserId(str(uuid4()))
+    )
+
+    assert response.golf_course.location is not None
+    assert response.golf_course.location.latitude == 0.0
+    assert response.golf_course.location.longitude == 0.0
+
+
+@pytest.mark.asyncio
 async def test_create_course_with_only_city_returns_it(mock_uow):
     """
     GIVEN: Un alta de campo con localidad pero sin coordenadas

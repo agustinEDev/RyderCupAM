@@ -81,5 +81,14 @@ class CourseLocation:
 
     @property
     def is_empty(self) -> bool:
-        """True si no aporta ningún dato de ubicación."""
-        return not any((self.latitude, self.longitude, self.address, self.city, self.province))
+        """
+        True si no aporta ningún dato de ubicación.
+
+        Se compara contra None y no por veracidad: la latitud y la longitud
+        cero son coordenadas válidas, y darlas por ausentes haría que la API
+        devolviera `location: null` para un campo perfectamente situado.
+        """
+        return all(
+            value is None
+            for value in (self.latitude, self.longitude, self.address, self.city, self.province)
+        )

@@ -158,6 +158,31 @@ def test_update_with_empty_location_clears_it():
     assert course.location.is_empty is True
 
 
+def test_update_with_a_partial_location_replaces_the_whole_object():
+    """
+    GIVEN: Un campo con coordenadas, dirección, localidad y provincia
+    WHEN: Se edita enviando una ubicación con solo la localidad
+    THEN: La ubicación se reemplaza entera y el resto queda vacío
+
+    La ubicación no se parchea campo a campo: se comporta igual que `tees` y
+    `holes` en la misma petición, que también se reemplazan enteros.
+    """
+    course = build_course(location=DERIO)
+
+    course.update(
+        name="Test Course",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        tees=build_tees(),
+        holes=build_holes(),
+        location=CourseLocation(city="MARBELLA"),
+    )
+
+    assert course.location.city == "MARBELLA"
+    assert course.location.has_coordinates is False
+    assert course.location.address is None
+
+
 def test_update_with_new_location_replaces_it():
     """
     GIVEN: Un campo con ubicación
