@@ -211,6 +211,48 @@ class GolfCourse:
                 f"Physical holes must be 9 or {HOLES_PER_ROUND}, got {self._physical_holes}"
             )
 
+    def _tees_keeping_their_scorecards(self, tees: list[Tee]) -> list[Tee]:
+        """
+        Devuelve las salidas de una edición, con la tarjeta que ya tenía cada una.
+
+        Una edición que no trae la tarjeta de una salida no está pidiendo
+        borrarla: normalmente viene de un formulario que solo toca el nombre o
+        los ratings. Sin esto, `_sync_holes_and_tees` le copiaría la tarjeta de
+        referencia del campo, y con ella se irían los metros y el índice propios
+        de esa barra. En los campos federados eso son cinco barras de distinta
+        longitud convertidas en cinco barras idénticas y sin distancias.
+
+        Una salida que sí trae tarjeta la impone, que es como se edita de
+        verdad. Una salida nueva, que no existía, no tiene de dónde heredar y
+        acaba con la del campo, igual que al dar de alta.
+
+        Para reconocerla se usa `Tee.unique_key`, que es la identidad que ya
+        define el dominio y con la que se valida que no haya salidas repetidas.
+        Tener aquí una noción propia de "la misma salida" haría que renombrar
+        una barra amarilla le borrase la tarjeta, cuando para todo lo demás
+        sigue siendo la misma barra.
+
+        Args:
+            tees: Salidas tal como llegan en la edición
+
+        Returns:
+            Las mismas salidas, con la tarjeta anterior donde faltaba
+        """
+        previous_cards = {tee.unique_key: tee.holes for tee in self._tees if tee.holes}
+
+        kept: list[Tee] = []
+        for tee in tees:
+            if tee.holes:
+                kept.append(tee)
+                continue
+            previous_card = previous_cards.get(tee.unique_key)
+            kept.append(
+                replace(tee, holes=[replace(hole) for hole in previous_card])
+                if previous_card
+                else tee
+            )
+        return kept
+
     def _sync_holes_and_tees(self) -> None:
         """
         Reconcilia la tarjeta de referencia del campo con la de cada salida.
@@ -431,6 +473,10 @@ class GolfCourse:
         IMPORTANTE: La lógica de negocio (si crear clone o actualizar directo)
         debe estar en el use case, no aquí.
 
+        Toma las salidas al pie de la letra: una que llegue sin tarjeta acaba
+        con la del campo. Conservar la que ya tenía es cosa de `apply_update`,
+        que es por donde entran las ediciones de verdad.
+
         Args:
             name: Nuevo nombre del campo
             country_code: Nuevo código de país
@@ -544,6 +590,11 @@ class GolfCourse:
             raise ValueError(
                 "Cannot edit a REJECTED golf course. Please create a new request instead."
             )
+
+        # Una edición que no menciona las tarjetas por salida no las está
+        # borrando: se hace aquí, antes de repartir a los dos caminos, para que
+        # tanto la edición directa como el clon de propuesta las conserven
+        tees = self._tees_keeping_their_scorecards(tees)
 
         # Admin o PENDING_APPROVAL → actualización in-place
         if is_admin or self._approval_status == ApprovalStatus.PENDING_APPROVAL:
