@@ -387,7 +387,7 @@ class TestListGolfCourses:
     async def test_an_oversized_limit_is_rejected(self, client: AsyncClient):
         """El tope del límite lo valida FastAPI antes de llegar al caso de uso."""
         user = await create_authenticated_user(
-            client, "biglimit@test.com", "BigPass123!", "Big", "Limit"
+            client, "biglimit@test.com", "BigLimitPass123!", "Big", "Limit"
         )
 
         response = await client.get("/api/v1/golf-courses?limit=5000", cookies=user["cookies"])

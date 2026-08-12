@@ -450,7 +450,13 @@ COURSES_BY_CITY = {
 
 
 async def _approved_course(repository, creator_id, tees, holes, name, coordinates=None):
-    """Crea y guarda un campo aprobado, opcionalmente situado."""
+    """
+    Crea y guarda un campo aprobado, opcionalmente situado.
+
+    Las salidas y los hoyos se copian en cada llamada. Reutilizar las mismas
+    instancias entre campos no da error: SQLAlchemy las reasigna al último
+    padre, y los campos anteriores se quedan sin barras en silencio.
+    """
     location = (
         CourseLocation(latitude=coordinates[0], longitude=coordinates[1]) if coordinates else None
     )
@@ -459,8 +465,19 @@ async def _approved_course(repository, creator_id, tees, holes, name, coordinate
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
         creator_id=creator_id,
-        tees=tees,
-        holes=holes,
+        tees=[
+            Tee(
+                color=tee.color,
+                gender=tee.gender,
+                identifier=tee.identifier,
+                course_rating=tee.course_rating,
+                slope_rating=tee.slope_rating,
+            )
+            for tee in tees
+        ],
+        holes=[
+            Hole(number=hole.number, par=hole.par, stroke_index=hole.stroke_index) for hole in holes
+        ],
         location=location,
     )
     golf_course.approve()
