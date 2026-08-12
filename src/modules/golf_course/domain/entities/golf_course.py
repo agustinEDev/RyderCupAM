@@ -27,19 +27,6 @@ from ..value_objects.tee_color import TeeColor
 from .hole import Hole
 from .tee import Tee
 
-
-def _tee_identity(tee: Tee) -> tuple[TeeColor, Gender | None, str]:
-    """
-    Lo que distingue una salida de otra dentro del mismo campo.
-
-    El identificador entra porque el color por sí solo no basta: un campo puede
-    publicar dos salidas OTHER del mismo género, y se diferencian por el nombre.
-    Se normaliza para que un cambio de capitalización no convierta una salida
-    existente en una nueva.
-    """
-    return (tee.color, tee.gender, (tee.identifier or "").strip().casefold())
-
-
 HOLES_PER_ROUND = 18
 
 # Un campo federado puede tener desde una sola salida hasta catorce (el Old
@@ -239,20 +226,26 @@ class GolfCourse:
         verdad. Una salida nueva, que no existía, no tiene de dónde heredar y
         acaba con la del campo, igual que al dar de alta.
 
+        Para reconocerla se usa `Tee.unique_key`, que es la identidad que ya
+        define el dominio y con la que se valida que no haya salidas repetidas.
+        Tener aquí una noción propia de "la misma salida" haría que renombrar
+        una barra amarilla le borrase la tarjeta, cuando para todo lo demás
+        sigue siendo la misma barra.
+
         Args:
             tees: Salidas tal como llegan en la edición
 
         Returns:
             Las mismas salidas, con la tarjeta anterior donde faltaba
         """
-        previous_cards = {_tee_identity(tee): tee.holes for tee in self._tees if tee.holes}
+        previous_cards = {tee.unique_key: tee.holes for tee in self._tees if tee.holes}
 
         kept: list[Tee] = []
         for tee in tees:
             if tee.holes:
                 kept.append(tee)
                 continue
-            previous_card = previous_cards.get(_tee_identity(tee))
+            previous_card = previous_cards.get(tee.unique_key)
             kept.append(
                 replace(tee, holes=[replace(hole) for hole in previous_card])
                 if previous_card

@@ -264,14 +264,20 @@ def test_the_identifier_tells_two_other_tees_apart():
     assert combinadas.holes[0].meters == 300
 
 
-def test_a_change_of_capitalisation_does_not_lose_the_card():
+def test_renaming_a_coloured_tee_does_not_lose_its_card():
     """
-    GIVEN: Una barra identificada como 'Championship'
-    WHEN: Se edita mandándola como 'championship', sin tarjeta
+    GIVEN: Una barra amarilla masculina llamada 'Amarillo'
+    WHEN: Se edita renombrándola a 'Amarillas', sin tarjeta
     THEN: Conserva la suya
 
-    Si la identidad distinguiera mayúsculas, retocar el nombre de una barra
-    la convertiría en nueva y perdería sus metros.
+    Para una barra con color reconocible, el identificador es decorativo: la
+    identidad la dan el color y el género, que es lo que dice `Tee.unique_key`
+    y con lo que se valida que no haya barras repetidas. Si aquí se usara otra
+    noción de identidad, renombrar una barra le borraría los metros.
+
+    Los 380 metros de la barra no coinciden con los 350 de la tarjeta que manda
+    la edición, a propósito: si coincidieran, la aserción pasaría igual tanto
+    conservando la suya como heredando la del campo, y no probaría nada.
     """
     course = GolfCourse.create(
         name="Club de Prueba",
@@ -279,7 +285,7 @@ def test_a_change_of_capitalisation_does_not_lose_the_card():
         course_type=CourseType.STANDARD_18,
         creator_id=UserId.generate(),
         tees=[
-            build_tee(TeeColor.OTHER, Gender.MALE, meters=350, identifier="Championship"),
+            build_tee(TeeColor.YELLOW, Gender.MALE, meters=380, identifier="Amarillo"),
             build_tee(TeeColor.RED, Gender.FEMALE, meters=290),
         ],
         holes=build_card(500),
@@ -289,13 +295,52 @@ def test_a_change_of_capitalisation_does_not_lose_the_card():
     edit(
         course,
         [
-            build_tee_without_card(TeeColor.OTHER, Gender.MALE, identifier=" championship "),
+            build_tee_without_card(TeeColor.YELLOW, Gender.MALE, identifier="Amarillas"),
             build_tee_without_card(TeeColor.RED, Gender.FEMALE),
         ],
     )
 
-    other = next(tee for tee in course.tees if tee.color is TeeColor.OTHER)
-    assert other.holes[0].meters == 350
+    yellow = next(tee for tee in course.tees if tee.color is TeeColor.YELLOW)
+    assert yellow.identifier == "Amarillas"
+    assert yellow.holes[0].meters == 380
+
+
+def test_two_other_tees_differing_only_in_case_do_not_mix_cards():
+    """
+    GIVEN: Dos barras OTHER llamadas 'Championship' y 'championship'
+    WHEN: Se edita sin mandar tarjetas
+    THEN: Cada una conserva la suya, sin cruzarse
+
+    Para el dominio son dos salidas distintas y la validación las admite. Si
+    aquí se normalizara el identificador, colisionarían en el mismo hueco y una
+    heredaría la tarjeta de la otra, que es peor que perderla: quedaría un dato
+    plausible y equivocado.
+    """
+    course = GolfCourse.create(
+        name="Club de Prueba",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=[
+            build_tee(TeeColor.OTHER, Gender.MALE, meters=350, identifier="Championship"),
+            build_tee(TeeColor.OTHER, Gender.MALE, meters=300, identifier="championship"),
+        ],
+        holes=build_card(350),
+    )
+    course.approve()
+
+    edit(
+        course,
+        [
+            build_tee_without_card(TeeColor.OTHER, Gender.MALE, identifier="Championship"),
+            build_tee_without_card(TeeColor.OTHER, Gender.MALE, identifier="championship"),
+        ],
+    )
+
+    upper = next(tee for tee in course.tees if tee.identifier == "Championship")
+    lower = next(tee for tee in course.tees if tee.identifier == "championship")
+    assert upper.holes[0].meters == 350
+    assert lower.holes[0].meters == 300
 
 
 # ============================================================================
