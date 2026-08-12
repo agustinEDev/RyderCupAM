@@ -40,6 +40,12 @@ def _distance_km(columns, latitude: float, longitude: float):
     completo de la tabla tarda menos que lo que costaría mantener la extensión
     instalada en los tres entornos.
 
+    Se usa el semiverseno y no el teorema del coseno esférico, que sale más
+    corto de escribir, porque el segundo pierde precisión justo en las
+    distancias pequeñas: el coseno de un ángulo diminuto es casi 1 y la resta se
+    come los decimales. Y las distancias pequeñas son exactamente el caso de
+    uso, que es ordenar los campos que tienes al lado.
+
     El seno y el coseno de la latitud consultada se calculan aquí y no en la
     base de datos, porque son constantes para toda la consulta.
     """
@@ -47,14 +53,20 @@ def _distance_km(columns, latitude: float, longitude: float):
     longitude_rad = math.radians(longitude)
     course_latitude_rad = func.radians(columns.latitude)
 
-    cosine = math.cos(latitude_rad) * func.cos(course_latitude_rad) * func.cos(
-        func.radians(columns.longitude) - longitude_rad
-    ) + math.sin(latitude_rad) * func.sin(course_latitude_rad)
+    half_latitude_delta = (course_latitude_rad - latitude_rad) / 2
+    half_longitude_delta = (func.radians(columns.longitude) - longitude_rad) / 2
 
-    # acos fuera de [-1, 1] es un error de dominio en PostgreSQL, y el redondeo
-    # en coma flotante lo alcanza: el campo en el que estás justo encima da
-    # 1.0000000000000002 y reventaría la consulta entera
-    return EARTH_RADIUS_KM * func.acos(func.greatest(-1.0, func.least(1.0, cosine)))
+    # Al cuadrado multiplicando, y no con power(): así la expresión es la misma
+    # en cualquier motor y no depende de qué nombre le dé cada uno a la función
+    chord = func.sin(half_latitude_delta) * func.sin(half_latitude_delta) + math.cos(
+        latitude_rad
+    ) * func.cos(course_latitude_rad) * func.sin(half_longitude_delta) * func.sin(
+        half_longitude_delta
+    )
+
+    # asin fuera de [-1, 1] es un error de dominio en PostgreSQL. Con el
+    # semiverseno solo se rozaría en las antípodas, pero acotar es gratis
+    return 2 * EARTH_RADIUS_KM * func.asin(func.least(1.0, func.sqrt(chord)))
 
 
 class GolfCourseRepository(IGolfCourseRepository):
@@ -185,11 +197,18 @@ class GolfCourseRepository(IGolfCourseRepository):
             select(func.count()).select_from(golf_courses_table).where(*filters)
         )
 
+        # El id desempata siempre: sin un orden total, dos campos con la misma
+        # distancia o la misma fecha pueden salir en distinto orden en cada
+        # consulta, y paginando eso significa ver uno repetido y perder otro.
+        # Los 802 campos importados se dieron de alta en el mismo lote, así que
+        # los empates de created_at no son hipotéticos
         stmt = select(GolfCourse).where(*filters)
         if distance is not None:
-            stmt = stmt.add_columns(distance.label("distance_km")).order_by(distance.asc())
+            stmt = stmt.add_columns(distance.label("distance_km")).order_by(
+                distance.asc(), columns.id.asc()
+            )
         else:
-            stmt = stmt.order_by(columns.created_at.desc())
+            stmt = stmt.order_by(columns.created_at.desc(), columns.id.asc())
 
         # selectinload y no joinedload: el join a las salidas multiplica las
         # filas, así que un LIMIT cortaría por la mitad las salidas de un campo

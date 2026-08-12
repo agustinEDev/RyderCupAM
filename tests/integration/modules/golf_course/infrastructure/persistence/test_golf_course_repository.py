@@ -612,7 +612,7 @@ async def test_search_approved_leaves_out_courses_without_coordinates(
     WHEN: Se busca por cercanía
     THEN: Solo sale el situado
 
-    Doce de los 803 campos importados no tienen coordenadas. En una búsqueda
+    Once de los 802 campos importados no tienen coordenadas. En una búsqueda
     por cercanía no hay distancia que enseñar, así que quedan fuera; la
     búsqueda por nombre sigue siendo su camino.
     """

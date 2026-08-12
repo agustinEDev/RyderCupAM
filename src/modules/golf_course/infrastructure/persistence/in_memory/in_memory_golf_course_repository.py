@@ -11,6 +11,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -18,13 +19,25 @@ EARTH_RADIUS_KM = 6371.0
 def _haversine_km(
     from_latitude: float, from_longitude: float, to_latitude: float, to_longitude: float
 ) -> float:
-    """Distancia en kilómetros entre dos puntos, la misma fórmula que el SQL real."""
+    """
+    Distancia en kilómetros entre dos puntos, la misma fórmula que el SQL real.
+
+    Tiene que dar lo mismo que `_distance_km` del repositorio de verdad: si el
+    doble midiera distinto, los tests darían por bueno un orden que en
+    producción sale en otro sitio.
+    """
     from_latitude_rad = math.radians(from_latitude)
     to_latitude_rad = math.radians(to_latitude)
-    cosine = math.cos(from_latitude_rad) * math.cos(to_latitude_rad) * math.cos(
-        math.radians(to_longitude) - math.radians(from_longitude)
-    ) + math.sin(from_latitude_rad) * math.sin(to_latitude_rad)
-    return EARTH_RADIUS_KM * math.acos(max(-1.0, min(1.0, cosine)))
+    half_latitude_delta = (to_latitude_rad - from_latitude_rad) / 2
+    half_longitude_delta = (math.radians(to_longitude) - math.radians(from_longitude)) / 2
+
+    chord = (
+        math.sin(half_latitude_delta) ** 2
+        + math.cos(from_latitude_rad)
+        * math.cos(to_latitude_rad)
+        * math.sin(half_longitude_delta) ** 2
+    )
+    return 2 * EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(chord)))
 
 
 class InMemoryGolfCourseRepository(IGolfCourseRepository):
@@ -97,7 +110,11 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         courses = await self.find_by_approval_status(ApprovalStatus.APPROVED)
 
         if search.country_code:
-            courses = [gc for gc in courses if gc.country_code.value == search.country_code]
+            # Se normaliza con el value object, como hace el repositorio real:
+            # si aquí bastara con 'es' en minúsculas y allí no, el test pasaría
+            # y la búsqueda de verdad devolvería vacío
+            wanted = CountryCode(search.country_code)
+            courses = [gc for gc in courses if gc.country_code == wanted]
 
         if search.name:
             needle = search.name.casefold()
@@ -117,9 +134,12 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
                     continue
                 distances[str(course.id)] = round(distance, 3)
                 located.append(course)
-            courses = sorted(located, key=lambda gc: distances[str(gc.id)])
+            # El id desempata, igual que en el repositorio real: sin un orden
+            # total, dos campos empatados pueden intercambiarse entre páginas y
+            # el usuario ve uno repetido y se pierde otro
+            courses = sorted(located, key=lambda gc: (distances[str(gc.id)], str(gc.id)))
         else:
-            courses = sorted(courses, key=lambda gc: gc.created_at, reverse=True)
+            courses = sorted(courses, key=lambda gc: (-gc.created_at.timestamp(), str(gc.id)))
 
         total = len(courses)
         page = courses[search.offset :]

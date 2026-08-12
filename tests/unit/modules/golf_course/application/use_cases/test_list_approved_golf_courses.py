@@ -155,6 +155,25 @@ async def test_searching_by_name_ignores_case(uow):
     }
 
 
+@pytest.mark.asyncio
+async def test_the_country_code_is_normalised(uow):
+    """
+    GIVEN: Un campo español
+    WHEN: Se filtra por 'es' en minúsculas
+    THEN: Sale igualmente
+
+    El value object normaliza, y el doble de los tests tiene que hacerlo
+    también: si aquí comparásemos la cadena en crudo, el test pasaría con
+    mayúsculas y la búsqueda real fallaría con minúsculas, o al revés.
+    """
+    await add_course(uow, "Club de Campo")
+    use_case = ListApprovedGolfCoursesUseCase(uow)
+
+    response = await use_case.execute(ListApprovedGolfCoursesRequestDTO(country_code="es"))
+
+    assert response.total == 1
+
+
 # ============================================================================
 # Tests: paginación
 # ============================================================================
@@ -261,7 +280,7 @@ async def test_a_course_without_coordinates_is_left_out_of_a_nearby_search(uow):
     WHEN: Se busca por cercanía
     THEN: Solo sale el situado
 
-    Doce de los 803 campos importados no tienen coordenadas. Ahí no hay
+    Once de los 802 campos importados no tienen coordenadas. Ahí no hay
     distancia que enseñar, así que quedan fuera de este camino; la búsqueda por
     nombre sigue siendo el suyo.
     """
