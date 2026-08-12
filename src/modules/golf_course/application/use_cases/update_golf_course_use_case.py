@@ -11,6 +11,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_provenance import CourseProvenance
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -38,8 +39,22 @@ class UpdateGolfCourseUseCase:
         request: UpdateGolfCourseRequestDTO,
         user_id: UserId,
         is_admin: bool,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> UpdateGolfCourseResponseDTO:
-        """Ejecuta el caso de uso."""
+        """
+        Ejecuta el caso de uso.
+
+        Args:
+            golf_course_id: Campo a actualizar
+            request: Datos nuevos
+            user_id: Quien edita
+            is_admin: Si tiene privilegios de administración
+            provenance: Procedencia nueva. Va como parámetro y no en el DTO
+                porque no es un dato que un cliente pueda declarar: solo lo
+                refresca una reimportación. None conserva la actual
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales
+        """
         async with self._uow:
             # 1. Buscar campo original
             original_course = await self._uow.golf_courses.find_by_id(golf_course_id)
@@ -73,6 +88,8 @@ class UpdateGolfCourseUseCase:
                 holes=holes,
                 is_admin=is_admin,
                 location=GolfCourseMapper.to_domain_location(request.location),
+                provenance=provenance,
+                physical_holes=physical_holes,
             )
 
             # 6. Guardar
