@@ -141,12 +141,17 @@ class UserRepositoryInterface(ABC):
         """
         Searches users whose first_name or last_name partially matches the query (case-insensitive).
 
+        Solo devuelve cuentas activas: esta búsqueda está abierta a cualquier
+        usuario registrado, así que una cuenta desactivada no puede aparecer en
+        ella. Para ver también las desactivadas está el listado de
+        administración, que filtra por `is_active` explícitamente.
+
         Args:
             query (str): Partial name to search for (min 2 characters)
             limit (int): Maximum number of results to return (default: 10)
 
         Returns:
-            list[User]: List of matching users
+            list[User]: List of matching active users
         """
         pass
 
