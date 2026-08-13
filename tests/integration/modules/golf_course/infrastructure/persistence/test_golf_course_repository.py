@@ -507,6 +507,27 @@ async def test_search_approved_filters_by_partial_name(
     }
 
 
+async def test_search_approved_orders_alphabetically(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Campos dados de alta en orden alfabético, como el lote de la RFEG
+    WHEN: Se listan sin posición desde la que medir distancias
+    THEN: Salen de la A a la Z, y no por fecha de alta
+
+    Ordenar por `created_at` descendente devolvía ese lote justo del revés, así
+    que el desplegable empezaba por la Z.
+    """
+    repository = GolfCourseRepository(db_session)
+    for name in ("Alcaidesa", "Mediterráneo", "Zaudín"):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name)
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch())
+
+    assert [course.name for course in page.courses] == ["Alcaidesa", "Mediterráneo", "Zaudín"]
+
+
 async def test_search_approved_treats_wildcards_as_text(
     db_session, creator_id, valid_tees, valid_holes
 ):
