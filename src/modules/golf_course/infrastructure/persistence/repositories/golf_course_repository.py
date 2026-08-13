@@ -198,17 +198,22 @@ class GolfCourseRepository(IGolfCourseRepository):
         )
 
         # El id desempata siempre: sin un orden total, dos campos con la misma
-        # distancia o la misma fecha pueden salir en distinto orden en cada
+        # distancia o el mismo nombre pueden salir en distinto orden en cada
         # consulta, y paginando eso significa ver uno repetido y perder otro.
         # Los 802 campos importados se dieron de alta en el mismo lote, así que
-        # los empates de created_at no son hipotéticos
+        # los empates no son hipotéticos
+        #
+        # Alfabético y no por fecha de alta: quien abre el desplegable busca un
+        # campo que ya tiene en la cabeza, y lo recorre por su nombre. Ordenar
+        # por `created_at` descendente hacía además que el lote de la RFEG,
+        # importado de la A a la Z, saliera justo del revés
         stmt = select(GolfCourse).where(*filters)
         if distance is not None:
             stmt = stmt.add_columns(distance.label("distance_km")).order_by(
                 distance.asc(), columns.id.asc()
             )
         else:
-            stmt = stmt.order_by(columns.created_at.desc(), columns.id.asc())
+            stmt = stmt.order_by(columns.name.asc(), columns.id.asc())
 
         # selectinload y no joinedload: el join a las salidas multiplica las
         # filas, así que un LIMIT cortaría por la mitad las salidas de un campo

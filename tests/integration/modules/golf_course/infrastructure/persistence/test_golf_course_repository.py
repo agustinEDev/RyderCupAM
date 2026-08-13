@@ -507,6 +507,58 @@ async def test_search_approved_filters_by_partial_name(
     }
 
 
+async def test_search_approved_orders_alphabetically(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Campos dados de alta en un orden que no es el alfabético
+    WHEN: Se listan sin posición desde la que medir distancias
+    THEN: Salen de la A a la Z, y no por fecha de alta
+
+    Ordenar por `created_at` descendente devolvía el lote de la RFEG justo del
+    revés, así que el desplegable empezaba por la Z.
+
+    Se dan de alta desordenados a propósito: insertándolos ya ordenados, una
+    consulta que perdiera el ORDER BY pasaría igual, devolviéndolos en el orden
+    en que se escribieron.
+    """
+    repository = GolfCourseRepository(db_session)
+    for name in ("Mediterráneo", "Zaudín", "Alcaidesa"):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name)
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch())
+
+    assert [course.name for course in page.courses] == ["Alcaidesa", "Mediterráneo", "Zaudín"]
+
+
+async def test_search_approved_breaks_name_ties_by_id(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Dos campos aprobados con el mismo nombre
+    WHEN: Se piden de uno en uno, como haría el cliente al paginar
+    THEN: Salen los dos, en orden de id y sin repetirse
+
+    El desempate no es cosmético: sin un orden total, dos campos homónimos
+    pueden salir en distinto orden en cada consulta, y paginando eso significa
+    ver uno repetido y perder el otro. La federación publica recorridos casi
+    homónimos del mismo club, así que los empates no son hipotéticos.
+    """
+    repository = GolfCourseRepository(db_session)
+    for _ in range(2):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, "La Envía")
+    await db_session.commit()
+
+    first = await repository.search_approved(ApprovedCourseSearch(limit=1))
+    second = await repository.search_approved(ApprovedCourseSearch(limit=1, offset=1))
+
+    assert first.total == 2
+    assert [course.name for course in first.courses] == ["La Envía"]
+    assert [course.name for course in second.courses] == ["La Envía"]
+    assert str(first.courses[0].id) < str(second.courses[0].id)
+
+
 async def test_search_approved_treats_wildcards_as_text(
     db_session, creator_id, valid_tees, valid_holes
 ):
