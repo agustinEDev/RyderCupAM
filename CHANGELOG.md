@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-08-13
+
+### Changed
+
+- **Las salidas se identifican por su color, no por una categoría inventada**: las cinco categorías (campeonato, amateur, senior, adelantada, junior) eran cosa nuestra. **Ninguna federación las publica** —comprobado contra los 802 campos federados españoles, donde no aparece el concepto ni una vez, y contra campos reales de Escocia, Inglaterra, Irlanda, Estados Unidos, Francia y Portugal—: todas identifican sus salidas por color o por un nombre propio. Y habían dejado de identificar una salida sin ambigüedad, porque desde que la unicidad pasó a ser el color un campo puede tener la blanca y la negra clasificadas ambas como campeonato masculina.
+
+  El color pasa a ser el identificador en el agregado, la API y la base de datos, con la migración `91fb1f95660b`. Es un **cambio incompatible para quien consuma la API**: donde antes viajaba `tee_category` ahora viaja `color`. Los tres campos de la aplicación se migran por color, y el valor `OTHER` recoge las salidas que no encajan en la paleta.
+
+- **Cada salida lleva su propia tarjeta, con colores y distancias**: hasta ahora la tarjeta era del campo y todas las barras compartían par, índice de dificultad y metros, que es justo lo que distingue a una barra de otra. Ahora los hoyos cuelgan de la salida, en la migración `ba02ec557335`, y el campo conserva una tarjeta de referencia para las altas que no detallen cada barra. Sin esto, los 802 campos federados —con hasta cinco barras cada uno y metrajes muy distintos— se habrían guardado aplanados.
+
 ### Fixed
+
+- **El selector de campos ya no empieza por la Z**: el listado se ordenaba por fecha de alta descendente, y como los 802 campos de la RFEG se importaron de la A a la Z en un único lote, "lo más nuevo primero" los devolvía exactamente del revés. Se ordena por nombre ascendente, que es como se recorre una lista de campos cuando se busca uno que ya se tiene en la cabeza. El identificador sigue desempatando, porque sin un orden total dos campos homónimos —la federación publica varios— pueden salir en distinto orden en cada consulta, y paginando eso significa ver uno repetido y perder otro. El orden por cercanía no cambia.
 
 - **Editar un campo ya no le borra la tarjeta de cada salida** (issue #199): el formulario de edición es anterior a las tarjetas por barra y manda las salidas con sus ratings pero **sin hoyos**. El agregado interpretaba esa omisión como "no tienen tarjeta propia" y les copiaba la de referencia del campo, que además llega sin metros porque el formulario nunca los ha pedido. Resultado: editar el nombre de un campo federado le convertía las cinco barras en cinco barras idénticas y sin distancias, y de paso les igualaba el índice de dificultad, del que depende el reparto de golpes. Con 802 campos recién importados de la RFEG, cualquier retoque desde el panel destruía su geometría en silencio.
 
