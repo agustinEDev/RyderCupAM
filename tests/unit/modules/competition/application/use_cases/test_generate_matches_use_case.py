@@ -18,7 +18,7 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     NoTeamAssignmentError,
     RoundNotFoundError,
     RoundNotPendingMatchesError,
-    TeeCategoryNotFoundError,
+    TeeColorNotFoundError,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -48,7 +48,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -584,7 +584,7 @@ class TestGenerateMatchesUseCase:
 
     def _build_mock_golf_course(
         self,
-        tee_configs: list[tuple[TeeCategory, Gender | None]] | None = None,
+        tee_configs: list[tuple[TeeColor, Gender | None]] | None = None,
     ) -> MagicMock:
         """
         Helper que construye un mock de GolfCourse con tees y 18 holes.
@@ -597,13 +597,13 @@ class TestGenerateMatchesUseCase:
             Mock de GolfCourse con tees y holes configurados.
         """
         if tee_configs is None:
-            tee_configs = [(TeeCategory.AMATEUR, Gender.MALE)]
+            tee_configs = [(TeeColor.YELLOW, Gender.MALE)]
 
         # Crear tees mock
         tees = []
         for cat, gender in tee_configs:
             tee = MagicMock()
-            tee.category = cat
+            tee.color = cat
             tee.gender = gender
             tee.course_rating = Decimal("71.2")
             tee.slope_rating = 128
@@ -661,10 +661,10 @@ class TestGenerateMatchesUseCase:
         competition: Competition,
         team_a_size: int = 2,
         team_b_size: int = 2,
-        tee_category: TeeCategory = TeeCategory.AMATEUR,
+        tee_color: TeeColor = TeeColor.YELLOW,
     ) -> tuple[list[UserId], list[UserId]]:
         """
-        Helper que crea equipos y enrollments con tee_category asignado.
+        Helper que crea equipos y enrollments con tee_color asignado.
 
         Returns:
             Tupla con (team_a_player_ids, team_b_player_ids).
@@ -682,14 +682,14 @@ class TestGenerateMatchesUseCase:
         async with uow:
             await uow.team_assignments.add(team_assignment)
 
-        # Crear enrollments aprobados con tee_category
+        # Crear enrollments aprobados con tee_color
         for uid in team_a + team_b:
             enrollment = Enrollment(
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
                 user_id=uid,
                 status=EnrollmentStatus.APPROVED,
-                tee_category=tee_category,
+                tee_color=tee_color,
             )
             async with uow:
                 await uow.enrollments.add(enrollment)
@@ -718,11 +718,11 @@ class TestGenerateMatchesUseCase:
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
         await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 2, 2, TeeCategory.AMATEUR
+            uow, competition, 2, 2, TeeColor.YELLOW
         )
 
         # Mock golf course con tee AMATEUR + MALE
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # Todos los jugadores con el mismo handicap → diferencial = 0
@@ -781,10 +781,10 @@ class TestGenerateMatchesUseCase:
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
         team_a_ids, team_b_ids = await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 1, 1, TeeCategory.AMATEUR
+            uow, competition, 1, 1, TeeColor.YELLOW
         )
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # A tiene HI=18, B tiene HI=9 → diferencial = 9 golpes para A
@@ -859,10 +859,10 @@ class TestGenerateMatchesUseCase:
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
         team_a_ids, team_b_ids = await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 1, 1, TeeCategory.AMATEUR
+            uow, competition, 1, 1, TeeColor.YELLOW
         )
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # A tiene HI=9, B tiene HI=18 → diferencial = 9 golpes para B
@@ -952,7 +952,7 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_a,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
         )
         enrollment_a.set_custom_handicap(Decimal("10.0"))
         async with uow:
@@ -964,13 +964,13 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_b,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
         )
         async with uow:
             await uow.enrollments.add(enrollment_b)
 
         # Mock golf course
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # Mock user_repo: both users have handicap 15.0, gender MALE
@@ -1009,7 +1009,7 @@ class TestGenerateMatchesUseCase:
         # Player A must have fewer strokes_received than Player B
         assert len(player_a_match.strokes_received) < len(player_b_match.strokes_received)
 
-    async def test_should_raise_tee_category_not_found(
+    async def test_should_raise_tee_color_not_found(
         self,
         uow: InMemoryUnitOfWork,
         creator_id: UserId,
@@ -1018,11 +1018,11 @@ class TestGenerateMatchesUseCase:
         user_repo: AsyncMock,
     ):
         """
-        Verifica que se lanza TeeCategoryNotFoundError cuando el tee del jugador no existe en el campo.
+        Verifica que se lanza TeeColorNotFoundError cuando el tee del jugador no existe en el campo.
 
-        Given: Jugador con tee_category CHAMPIONSHIP pero campo solo tiene AMATEUR tee
+        Given: Jugador con tee_color CHAMPIONSHIP pero campo solo tiene AMATEUR tee
         When: Se generan partidos en modo HANDICAP
-        Then: Se lanza TeeCategoryNotFoundError
+        Then: Se lanza TeeColorNotFoundError
         """
         # Arrange
         competition = await self._create_handicap_competition(uow, creator_id)
@@ -1030,13 +1030,13 @@ class TestGenerateMatchesUseCase:
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
 
-        # Crear equipos con tee_category que NO esta en el campo
+        # Crear equipos con tee_color que NO esta en el campo
         await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 1, 1, TeeCategory.CHAMPIONSHIP
+            uow, competition, 1, 1, TeeColor.WHITE
         )
 
         # Mock golf course con SOLO AMATEUR+MALE (no CHAMPIONSHIP)
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # Mock user_repo
@@ -1051,7 +1051,7 @@ class TestGenerateMatchesUseCase:
         request = GenerateMatchesRequestDTO(round_id=round_entity.id.value)
 
         # Act & Assert
-        with pytest.raises(TeeCategoryNotFoundError):
+        with pytest.raises(TeeColorNotFoundError):
             await use_case.execute(request, creator_id)
 
     async def test_should_raise_when_no_golf_course_in_handicap_mode(
@@ -1127,7 +1127,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         # HI=36 → PH sin cap sería ~36, con cap=5 debe quedar en 5
@@ -1195,7 +1195,7 @@ class TestGenerateMatchesUseCase:
         )
         high_hi_uid = team_a_ids[0]
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1265,7 +1265,7 @@ class TestGenerateMatchesUseCase:
         )
         high_hi_uids = set(team_a_ids)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1315,7 +1315,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1360,7 +1360,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         mock_user = self._build_mock_user(UserId.generate(), 15.0, country_code="ES")
@@ -1426,7 +1426,7 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_a,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
         )
         enrollment_a.set_custom_handicap(Decimal("10.0"))
         enrollment_b = Enrollment(
@@ -1434,13 +1434,13 @@ class TestGenerateMatchesUseCase:
             competition_id=competition.id,
             user_id=player_b,
             status=EnrollmentStatus.APPROVED,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
         )
         async with uow:
             await uow.enrollments.add(enrollment_a)
             await uow.enrollments.add(enrollment_b)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1485,7 +1485,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1529,7 +1529,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1575,7 +1575,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):
@@ -1622,7 +1622,7 @@ class TestGenerateMatchesUseCase:
         )
         await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
 
-        mock_gc = self._build_mock_golf_course([(TeeCategory.AMATEUR, Gender.MALE)])
+        mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
         gc_repo.find_by_id = AsyncMock(return_value=mock_gc)
 
         async def mock_find_user(uid):

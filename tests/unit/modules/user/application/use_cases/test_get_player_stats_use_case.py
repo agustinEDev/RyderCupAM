@@ -31,7 +31,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
@@ -101,14 +101,14 @@ async def create_golf_course(golf_course_uow, creator_id):
     """Campo de par 72: 18 hoyos de par 4, stroke index 1 a 18."""
     tees = [
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Yellow",
             course_rating=70.0,
             slope_rating=125,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="White",
             course_rating=72.0,
@@ -149,7 +149,7 @@ async def _played_quick_match(
     others=(),
     holes_played: int = 18,
     holes: list[int] | None = None,
-    tee_category: TeeCategory | None = None,
+    tee_color: TeeColor | None = None,
     tee_gender: Gender | None = None,
 ):
     """
@@ -159,7 +159,7 @@ async def _played_quick_match(
     `participant_id` se lee de la entidad en vez de construirlo aquí.
     `holes_played` deja la tarjeta a medias.
 
-    Sin `tee_category` la partida no dice desde dónde se jugó, que es el caso
+    Sin `tee_color` la partida no dice desde dónde se jugó, que es el caso
     de las partidas anteriores a que el frontend empezara a exigir el tee: esas
     cuentan para la media pero no generan diferencial.
     """
@@ -168,7 +168,7 @@ async def _played_quick_match(
         creator_id=user.id,
         golf_course_id=golf_course.id,
         scoring_format=ScoringFormat.MEDAL,
-        creator_tee_category=tee_category,
+        creator_tee_color=tee_color,
         creator_tee_gender=tee_gender,
     )
     for participant in others:
@@ -241,7 +241,7 @@ async def _played_competition_match(
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=strokes_received_per_hole * 18,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 19)) * max(strokes_received_per_hole, 1),
         )
@@ -798,7 +798,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=5,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
 
@@ -827,7 +827,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=5,
-            tee_category=TeeCategory.CHAMPIONSHIP,
+            tee_color=TeeColor.WHITE,
             tee_gender=Gender.MALE,
         )
 
@@ -856,7 +856,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=8,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
 
@@ -902,7 +902,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=5,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
         await _played_quick_match(qm_uow, course, player, strokes_per_hole=5)
@@ -926,7 +926,7 @@ class TestScoreDifferentials:
                 course,
                 player,
                 strokes_per_hole=5,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
             )
 
@@ -950,7 +950,7 @@ class TestScoreDifferentials:
                 course,
                 player,
                 strokes_per_hole=5,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
             )
 
@@ -1004,7 +1004,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=6,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
 
@@ -1031,7 +1031,7 @@ class TestScoreDifferentials:
                 course,
                 player,
                 strokes_per_hole=5,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
             )
 
@@ -1074,7 +1074,7 @@ class TestScoreDifferentials:
             course,
             player,
             strokes_per_hole=5,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
         await _played_quick_match(
@@ -1082,7 +1082,7 @@ class TestScoreDifferentials:
             other_course,
             player,
             strokes_per_hole=8,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
         )
 
@@ -1112,7 +1112,7 @@ class TestScoringRecordWindow:
                 course,
                 player,
                 strokes_per_hole=5,
-                tee_category=TeeCategory.AMATEUR,
+                tee_color=TeeColor.YELLOW,
                 tee_gender=Gender.MALE,
             )
 

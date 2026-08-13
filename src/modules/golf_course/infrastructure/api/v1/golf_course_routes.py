@@ -89,6 +89,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/golf-courses")
 
 
+def _first_error_message(error: Exception) -> str:
+    """
+    Saca el mensaje aprovechable de un fallo de validación de Pydantic.
+
+    Un ValidationError se imprime con la clase, el número de errores, la ruta
+    del campo y una URL de documentación. Al cliente le sirve la frase.
+    """
+    errors = getattr(error, "errors", None)
+    if callable(errors):
+        details = errors()
+        if details:
+            message = str(details[0].get("msg", ""))
+            return message.removeprefix("Value error, ") or "Invalid query parameters"
+    return str(error) or "Invalid query parameters"
+
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -213,6 +229,16 @@ async def list_golf_courses(
     country_code: str | None = Query(
         None, description="Filter by country ISO code (e.g., ES, AT, FR)"
     ),
+    name: str | None = Query(None, min_length=1, max_length=200, description="Partial name search"),
+    limit: int | None = Query(None, ge=1, le=100, description="Maximum number of courses"),
+    offset: int = Query(0, ge=0, description="Courses to skip"),
+    lat: float | None = Query(None, ge=-90, le=90, description="Latitude to sort by distance from"),
+    lon: float | None = Query(
+        None, ge=-180, le=180, description="Longitude to sort by distance from"
+    ),
+    radius_km: float | None = Query(
+        None, gt=0, le=20000, description="Only courses within this distance"
+    ),
 ):
     """
     Endpoint: Listar campos de golf con filtros opcionales.
@@ -226,10 +252,15 @@ async def list_golf_courses(
     - approval_status: Filtrar por estado (APPROVED, PENDING_APPROVAL, REJECTED)
       Default: APPROVED
     - country_code: Filtrar por código ISO de país (ej: ES, AT, FR)
+    - name: Buscar por nombre parcial, sin distinguir mayúsculas
+    - limit / offset: Paginación. Sin limit se devuelven todos
+    - lat / lon: Ordena por cercanía a esa posición y devuelve la distancia de
+      cada campo. Los campos sin coordenadas quedan fuera
+    - radius_km: Descarta los que estén más lejos. Requiere lat y lon
 
     **Responses**:
     - 200: Lista de campos
-    - 400: Valor inválido de approval_status
+    - 400: Valor inválido de approval_status o coordenadas incompletas
     - 401: No autenticado
     - 403: Sin permisos para ver estados no-aprobados
     """
@@ -244,9 +275,30 @@ async def list_golf_courses(
 
         # Por defecto, listar solo aprobados (público)
         if approval_status is None or approval_status == "APPROVED":
-            request_dto = ListApprovedGolfCoursesRequestDTO(country_code=country_code)
+            try:
+                request_dto = ListApprovedGolfCoursesRequestDTO(
+                    country_code=country_code,
+                    name=name,
+                    limit=limit,
+                    offset=offset,
+                    latitude=lat,
+                    longitude=lon,
+                    radius_km=radius_km,
+                )
+            except ValueError as error:
+                # Media coordenada, o un radio sin desde dónde medirlo: es un
+                # error del cliente, no un 500
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=_first_error_message(error),
+                ) from None
+
             response = await approved_use_case.execute(request_dto)
-            return {"golf_courses": response.golf_courses}
+            return {
+                "golf_courses": response.golf_courses,
+                "count": response.count,
+                "total": response.total,
+            }
 
         # Otros estados válidos requieren permisos de Admin
         if not current_user.is_admin:

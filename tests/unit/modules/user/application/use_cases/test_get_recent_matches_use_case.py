@@ -32,7 +32,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
@@ -104,14 +104,14 @@ async def create_golf_course(golf_course_uow, creator_id, name: str = "Test Golf
     """Campo de par 72: 18 hoyos de par 4, stroke index 1 a 18."""
     tees = [
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Yellow",
             course_rating=70.0,
             slope_rating=125,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="White",
             course_rating=72.0,
@@ -230,7 +230,7 @@ async def played_competition_match(
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=10,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 11)),
         )

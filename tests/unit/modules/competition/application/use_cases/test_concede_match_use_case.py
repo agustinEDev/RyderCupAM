@@ -20,7 +20,7 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -28,7 +28,7 @@ def _make_player(user_id=None):
     return MatchPlayer.create(
         user_id=user_id or UserId.generate(),
         playing_handicap=10,
-        tee_category=TeeCategory.AMATEUR,
+        tee_color=TeeColor.YELLOW,
         strokes_received=[],
     )
 

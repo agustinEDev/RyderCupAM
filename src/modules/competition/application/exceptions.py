@@ -49,8 +49,8 @@ class InsufficientPlayersError(Exception):
     pass
 
 
-class InvalidTeeCategoryError(ValueError):
-    """El valor de tee_category no es válido."""
+class InvalidTeeColorError(ValueError):
+    """El valor de tee_color no es válido."""
 
     pass
 

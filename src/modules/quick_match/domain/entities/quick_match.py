@@ -10,7 +10,7 @@ from datetime import datetime
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.gender import Gender
@@ -157,7 +157,7 @@ class QuickMatch:
         scoring_format: ScoringFormat | None = None,
         name: str | None = None,
         allowance_percentage: int | None = None,
-        creator_tee_category: TeeCategory | None = None,
+        creator_tee_color: TeeColor | None = None,
         creator_tee_gender: Gender | None = None,
     ) -> "QuickMatch":
         """
@@ -174,7 +174,7 @@ class QuickMatch:
         creator_participant = QuickMatchParticipant.for_user(
             creator_id,
             team=creator_team,
-            tee_category=creator_tee_category,
+            tee_color=creator_tee_color,
             tee_gender=creator_tee_gender,
         )
 

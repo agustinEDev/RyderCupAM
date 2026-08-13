@@ -34,16 +34,16 @@ class TestRequestGolfCourse:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP",
+                    "identifier": "Blanco",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
-                    "identifier": "Blanco",
-                    "tee_category": "AMATEUR",
+                    "identifier": "Amarillo",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
@@ -78,8 +78,8 @@ class TestRequestGolfCourse:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP",
+                    "identifier": "Blanco",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
@@ -105,16 +105,16 @@ class TestRequestGolfCourse:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP",
+                    "identifier": "Blanco",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
-                    "identifier": "Blanco",
-                    "tee_category": "AMATEUR",
+                    "identifier": "Amarillo",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
@@ -145,16 +145,16 @@ class TestRequestGolfCourse:
             "course_type": "STANDARD_18",
             "tees": [
                 {
-                    "identifier": "Amarillo",
-                    "tee_category": "CHAMPIONSHIP",
+                    "identifier": "Blanco",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
                     "par": 72,
                 },
                 {
-                    "identifier": "Blanco",
-                    "tee_category": "AMATEUR",
+                    "identifier": "Amarillo",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.2,
                     "slope_rating": 128,
@@ -344,6 +344,55 @@ class TestListGolfCourses:
         """Listar campos sin autenticación retorna 401."""
         response = await client.get("/api/v1/golf-courses")
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_listing_reports_count_and_total(self, client: AsyncClient):
+        """El listado devuelve cuántos trae y cuántos hay."""
+        user = await create_authenticated_user(
+            client, "counts@test.com", "CountsPass123!", "Counts", "User"
+        )
+
+        response = await client.get("/api/v1/golf-courses", cookies=user["cookies"])
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == len(data["golf_courses"])
+        assert data["total"] >= data["count"]
+
+    @pytest.mark.asyncio
+    async def test_half_a_coordinate_returns_400(self, client: AsyncClient):
+        """Pedir cercanía con solo la latitud es un error del cliente, no un 500."""
+        user = await create_authenticated_user(
+            client, "halfcoord@test.com", "HalfPass123!", "Half", "Coord"
+        )
+
+        response = await client.get("/api/v1/golf-courses?lat=40.4168", cookies=user["cookies"])
+
+        assert response.status_code == 400
+        assert "together" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_a_radius_without_a_position_returns_400(self, client: AsyncClient):
+        """Un radio sin coordenadas no tiene desde dónde medirse."""
+        user = await create_authenticated_user(
+            client, "radiusonly@test.com", "RadiusPass123!", "Radius", "Only"
+        )
+
+        response = await client.get("/api/v1/golf-courses?radius_km=50", cookies=user["cookies"])
+
+        assert response.status_code == 400
+        assert "requires latitude and longitude" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_an_oversized_limit_is_rejected(self, client: AsyncClient):
+        """El tope del límite lo valida FastAPI antes de llegar al caso de uso."""
+        user = await create_authenticated_user(
+            client, "biglimit@test.com", "BigLimitPass123!", "Big", "Limit"
+        )
+
+        response = await client.get("/api/v1/golf-courses?limit=5000", cookies=user["cookies"])
+
+        assert response.status_code == 422
 
 
 class TestListPendingGolfCourses:
@@ -612,7 +661,7 @@ class TestCreateDirectGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanco",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 135,
@@ -620,7 +669,7 @@ class TestCreateDirectGolfCourse:
                 },
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 130,
@@ -657,7 +706,7 @@ class TestCreateDirectGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanco",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 135,
@@ -665,7 +714,7 @@ class TestCreateDirectGolfCourse:
                 },
                 {
                     "identifier": "Amarillo",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 130,
@@ -725,7 +774,7 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Blanc",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 74.0,
                     "slope_rating": 138,
@@ -733,7 +782,7 @@ class TestUpdateGolfCourse:
                 },
                 {
                     "identifier": "Jaune",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 133,
@@ -799,7 +848,7 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Bianco",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 73.5,
                     "slope_rating": 136,
@@ -807,7 +856,7 @@ class TestUpdateGolfCourse:
                 },
                 {
                     "identifier": "Giallo",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 71.5,
                     "slope_rating": 131,
@@ -854,7 +903,7 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Branco",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.8,
                     "slope_rating": 134,
@@ -862,7 +911,7 @@ class TestUpdateGolfCourse:
                 },
                 {
                     "identifier": "Amarelo",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.8,
                     "slope_rating": 129,
@@ -905,7 +954,7 @@ class TestUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
@@ -913,7 +962,7 @@ class TestUpdateGolfCourse:
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,
@@ -975,7 +1024,7 @@ class TestApproveUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Weiß",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 74.5,
                     "slope_rating": 140,
@@ -983,7 +1032,7 @@ class TestApproveUpdateGolfCourse:
                 },
                 {
                     "identifier": "Gelb",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 72.5,
                     "slope_rating": 135,
@@ -1054,7 +1103,7 @@ class TestApproveUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
@@ -1062,7 +1111,7 @@ class TestApproveUpdateGolfCourse:
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,
@@ -1135,7 +1184,7 @@ class TestRejectUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "Wit",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 73.0,
                     "slope_rating": 133,
@@ -1143,7 +1192,7 @@ class TestRejectUpdateGolfCourse:
                 },
                 {
                     "identifier": "Geel",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 71.0,
                     "slope_rating": 128,
@@ -1215,7 +1264,7 @@ class TestRejectUpdateGolfCourse:
             "tees": [
                 {
                     "identifier": "White",
-                    "tee_category": "CHAMPIONSHIP",
+                    "color": "WHITE",
                     "tee_gender": "MALE",
                     "course_rating": 72.0,
                     "slope_rating": 130,
@@ -1223,7 +1272,7 @@ class TestRejectUpdateGolfCourse:
                 },
                 {
                     "identifier": "Yellow",
-                    "tee_category": "AMATEUR",
+                    "color": "YELLOW",
                     "tee_gender": "MALE",
                     "course_rating": 70.0,
                     "slope_rating": 125,

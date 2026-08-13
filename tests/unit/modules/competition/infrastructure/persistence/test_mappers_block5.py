@@ -26,7 +26,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
     UserIdsJsonType,
     _create_enum_decorator,
 )
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
@@ -163,11 +163,11 @@ class TestEnumDecorators:
             deserialized = decorator.process_result_value(serialized, None)
             assert deserialized == mode
 
-    def test_tee_category_roundtrip(self):
-        """TeeCategory se serializa/deserializa correctamente."""
-        DecoratorClass = _create_enum_decorator(TeeCategory)
+    def test_tee_color_roundtrip(self):
+        """TeeColor se serializa/deserializa correctamente."""
+        DecoratorClass = _create_enum_decorator(TeeColor)
         decorator = DecoratorClass()
-        for cat in TeeCategory:
+        for cat in TeeColor:
             serialized = decorator.process_bind_param(cat, None)
             deserialized = decorator.process_result_value(serialized, None)
             assert deserialized == cat
@@ -200,14 +200,14 @@ class TestMatchPlayersJsonType:
         self.player_1 = MatchPlayer(
             user_id=self.user_id_1,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=(1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6),
         )
         self.player_2 = MatchPlayer(
             user_id=self.user_id_2,
             playing_handicap=8,
-            tee_category=TeeCategory.CHAMPIONSHIP,
+            tee_color=TeeColor.WHITE,
             tee_gender=Gender.FEMALE,
             strokes_received=(1, 3, 5, 7, 9, 11, 13, 15),
         )
@@ -221,7 +221,7 @@ class TestMatchPlayersJsonType:
         assert len(result) == 2
         assert result[0]["user_id"] == str(self.user_id_1.value)
         assert result[0]["playing_handicap"] == 12
-        assert result[0]["tee_category"] == "AMATEUR"
+        assert result[0]["tee_color"] == "YELLOW"
         assert result[0]["tee_gender"] == "MALE"
         assert result[0]["strokes_received"] == [1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6]
 
@@ -231,7 +231,7 @@ class TestMatchPlayersJsonType:
             {
                 "user_id": str(self.user_id_1.value),
                 "playing_handicap": 12,
-                "tee_category": "AMATEUR",
+                "tee_color": "YELLOW",
                 "tee_gender": "MALE",
                 "strokes_received": [1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6],
             },
@@ -244,7 +244,7 @@ class TestMatchPlayersJsonType:
         assert isinstance(player, MatchPlayer)
         assert player.user_id == self.user_id_1
         assert player.playing_handicap == 12
-        assert player.tee_category == TeeCategory.AMATEUR
+        assert player.tee_color == TeeColor.YELLOW
         assert player.tee_gender == Gender.MALE
         assert player.strokes_received == (1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6)
 
@@ -272,7 +272,7 @@ class TestMatchPlayersJsonType:
         player = MatchPlayer(
             user_id=self.user_id_1,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=(1, 3),
             player_handicap=Decimal("14.2"),
@@ -291,7 +291,7 @@ class TestMatchPlayersJsonType:
             {
                 "user_id": str(self.user_id_1.value),
                 "playing_handicap": 12,
-                "tee_category": "AMATEUR",
+                "tee_color": "YELLOW",
                 "tee_gender": "MALE",
                 "strokes_received": [1, 3],
                 "player_handicap": "14.2",
@@ -306,7 +306,7 @@ class TestMatchPlayersJsonType:
             {
                 "user_id": str(self.user_id_1.value),
                 "playing_handicap": 12,
-                "tee_category": "AMATEUR",
+                "tee_color": "YELLOW",
                 "tee_gender": "MALE",
                 "strokes_received": [1, 3],
             },
@@ -319,7 +319,7 @@ class TestMatchPlayersJsonType:
         player = MatchPlayer(
             user_id=self.user_id_1,
             playing_handicap=12,
-            tee_category=TeeCategory.AMATEUR,
+            tee_color=TeeColor.YELLOW,
             tee_gender=Gender.MALE,
             strokes_received=(1, 3),
             player_handicap=Decimal("14.2"),

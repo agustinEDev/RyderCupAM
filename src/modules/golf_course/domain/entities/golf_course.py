@@ -5,6 +5,8 @@ Workflow: PENDING_APPROVAL → APPROVED/REJECTED (inmutable después)
 Ver ADR-032 para detalles del workflow de aprobación.
 """
 
+from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -16,11 +18,46 @@ from ..events.golf_course_approved_event import GolfCourseApprovedEvent
 from ..events.golf_course_rejected_event import GolfCourseRejectedEvent
 from ..events.golf_course_requested_event import GolfCourseRequestedEvent
 from ..value_objects.approval_status import ApprovalStatus
+from ..value_objects.course_location import CourseLocation
+from ..value_objects.course_provenance import CourseProvenance
+from ..value_objects.course_source import CourseSource
 from ..value_objects.course_type import CourseType
 from ..value_objects.golf_course_id import GolfCourseId
-from ..value_objects.tee_category import TeeCategory
+from ..value_objects.tee_color import TeeColor
 from .hole import Hole
 from .tee import Tee
+
+HOLES_PER_ROUND = 18
+
+# Un campo federado puede tener desde una sola salida hasta catorce (el Old
+# Course de Atalaya tiene doce, y hay un recorrido con catorce).
+MIN_TEES = 1
+MAX_TEES = 14
+
+# Rangos por tipo de campo. Los estándar mantienen el rigor de WHS; los cortos
+# usan márgenes más amplios porque el sistema no los valora en la misma escala.
+PAR_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[int, int]] = {
+    CourseType.STANDARD_18: (66, 76),
+    CourseType.EXECUTIVE: (61, 65),
+    CourseType.PITCH_AND_PUTT: (54, 60),
+}
+
+# El techo de slope de los campos estándar se sube a 160 pese a que WHS define
+# 155 como máximo: hay campos federados publicados por encima (el Villa de
+# Madrid, negras de mujeres, está en 157) y rechazarlos por un redondeo ajeno
+# sería perder campos reales. El suelo sí se mantiene estricto, porque es lo
+# que permite detectar erratas de origen.
+SLOPE_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[int, int]] = {
+    CourseType.STANDARD_18: (55, 160),
+    CourseType.EXECUTIVE: (40, 155),
+    CourseType.PITCH_AND_PUTT: (40, 155),
+}
+
+RATING_RANGE_BY_COURSE_TYPE: dict[CourseType, tuple[float, float]] = {
+    CourseType.STANDARD_18: (50.0, 90.0),
+    CourseType.EXECUTIVE: (45.0, 90.0),
+    CourseType.PITCH_AND_PUTT: (45.0, 90.0),
+}
 
 
 class GolfCourse:
@@ -29,18 +66,20 @@ class GolfCourse:
 
     Responsabilidades:
     - Gestionar información del campo (nombre, país, tipo)
-    - Gestionar tees (2-6 salidas con ratings WHS)
-    - Gestionar hoyos (18 hoyos con par y stroke index)
+    - Gestionar salidas (1-14, cada una con sus ratings WHS y su tarjeta)
     - Workflow de aprobación Admin
 
     Business Rules:
-    - Exactamente 18 hoyos
-    - Stroke indices únicos (1-18)
-    - Par total entre 66 y 76
-    - 2-10 tees (5 categorías x 2 géneros max)
-    - Unique (category, gender) combinations
-    - No mezclar gendered/non-gendered tees de la misma categoría
+    - Cada salida tiene sus 18 hoyos, con par, stroke index y distancia propios
+    - Números de hoyo y stroke indices 1-18 sin repetir
+    - Par total, slope y course rating dentro del rango de su tipo de campo
+    - 1-14 salidas, únicas por color (o por identificador si el color es OTHER)
+    - No mezclar salidas con y sin género para un mismo color
     - Estados inmutables: APPROVED/REJECTED
+
+    La tarjeta del campo (`holes`) es derivada: no se persiste, se toma de la
+    primera salida. Existe para los consumidores que no necesitan el detalle
+    por barra.
 
     Example:
         >>> course = GolfCourse.create(
@@ -70,6 +109,9 @@ class GolfCourse:
         updated_at: datetime,
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
+        location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -89,6 +131,10 @@ class GolfCourse:
             updated_at: Fecha de última actualización
             original_golf_course_id: Si no es None, este es un clone/update proposal del original
             is_pending_update: TRUE si este campo tiene un clone pendiente de aprobación
+            location: Ubicación del campo (opcional)
+            provenance: De dónde salen los datos (manual por defecto)
+            physical_holes: Hoyos que tiene el campo sobre el terreno (9 o 18).
+                None si no consta
             domain_events: Eventos de dominio (opcional)
         """
         self._id = id
@@ -106,9 +152,131 @@ class GolfCourse:
         self._is_pending_update = is_pending_update
         self._domain_events: list[DomainEvent] = domain_events or []
 
+        # La ubicación se guarda desglosada en escalares, no como Value Object
+        # compuesto: es opcional, y `composite()` no admite NULL (falla en el
+        # constructor del VO al hidratar). El VO se recompone al leer.
+        self._set_location(location)
+        self._set_provenance(provenance)
+        self._physical_holes = physical_holes
+        self._validate_physical_holes()
+
+        # Reconciliar la tarjeta del campo con la de cada salida antes de validar
+        self._sync_holes_and_tees()
+
         # Validar invariantes
         self._validate_holes()
         self._validate_tees()
+
+    def _set_location(self, location: CourseLocation | None) -> None:
+        """
+        Vuelca la ubicación a los atributos que se persisten, uno por columna.
+
+        Args:
+            location: Ubicación a guardar. None deja el campo sin ubicación.
+        """
+        location = location or CourseLocation()
+        self._latitude = location.latitude
+        self._longitude = location.longitude
+        self._address = location.address
+        self._city = location.city
+        self._province = location.province
+
+    def _set_provenance(self, provenance: CourseProvenance | None) -> None:
+        """
+        Vuelca la procedencia a los atributos que se persisten, uno por columna.
+
+        Args:
+            provenance: Procedencia a guardar. None deja el campo como manual.
+        """
+        provenance = provenance or CourseProvenance()
+        self._source = provenance.source
+        self._external_id = provenance.external_id
+        self._imported_at = provenance.imported_at
+
+    def _validate_physical_holes(self) -> None:
+        """
+        Comprueba los hoyos físicos.
+
+        Solo 9 o 18: la tarjeta siempre tiene 18 hoyos, así que un recorrido o
+        se juega entero sobre el terreno o es una vuelta de 9 repetida. Un valor
+        distinto sería un error de los datos de origen, no un campo raro.
+
+        Raises:
+            ValueError: Si el valor no es 9 ni 18
+        """
+        if self._physical_holes is None:
+            return
+        if self._physical_holes not in (9, HOLES_PER_ROUND):
+            raise ValueError(
+                f"Physical holes must be 9 or {HOLES_PER_ROUND}, got {self._physical_holes}"
+            )
+
+    def _tees_keeping_their_scorecards(self, tees: list[Tee]) -> list[Tee]:
+        """
+        Devuelve las salidas de una edición, con la tarjeta que ya tenía cada una.
+
+        Una edición que no trae la tarjeta de una salida no está pidiendo
+        borrarla: normalmente viene de un formulario que solo toca el nombre o
+        los ratings. Sin esto, `_sync_holes_and_tees` le copiaría la tarjeta de
+        referencia del campo, y con ella se irían los metros y el índice propios
+        de esa barra. En los campos federados eso son cinco barras de distinta
+        longitud convertidas en cinco barras idénticas y sin distancias.
+
+        Una salida que sí trae tarjeta la impone, que es como se edita de
+        verdad. Una salida nueva, que no existía, no tiene de dónde heredar y
+        acaba con la del campo, igual que al dar de alta.
+
+        Para reconocerla se usa `Tee.unique_key`, que es la identidad que ya
+        define el dominio y con la que se valida que no haya salidas repetidas.
+        Tener aquí una noción propia de "la misma salida" haría que renombrar
+        una barra amarilla le borrase la tarjeta, cuando para todo lo demás
+        sigue siendo la misma barra.
+
+        Args:
+            tees: Salidas tal como llegan en la edición
+
+        Returns:
+            Las mismas salidas, con la tarjeta anterior donde faltaba
+        """
+        previous_cards = {tee.unique_key: tee.holes for tee in self._tees if tee.holes}
+
+        kept: list[Tee] = []
+        for tee in tees:
+            if tee.holes:
+                kept.append(tee)
+                continue
+            previous_card = previous_cards.get(tee.unique_key)
+            kept.append(
+                replace(tee, holes=[replace(hole) for hole in previous_card])
+                if previous_card
+                else tee
+            )
+        return kept
+
+    def _sync_holes_and_tees(self) -> None:
+        """
+        Reconcilia la tarjeta de referencia del campo con la de cada salida.
+
+        Un campo puede describirse de dos maneras, y ambas siguen siendo válidas:
+
+        - Con una sola tarjeta para todo el campo (como se creaba hasta ahora):
+          esos hoyos se copian a las salidas que no traigan tarjeta propia.
+        - Con una tarjeta por salida (lo que publica la RFEG): en ese caso la
+          tarjeta de referencia del campo se toma de la primera salida.
+
+        Así los consumidores que solo leen `golf_course.holes` siguen
+        funcionando, y quien necesite la distancia o el índice exactos de una
+        barra concreta los pide a su Tee.
+        """
+        if not getattr(self, "_holes", None):
+            for tee in self._tees:
+                if tee.holes:
+                    self._holes = [replace(hole) for hole in tee.holes]
+                    break
+
+        for tee in self._tees:
+            if not tee.holes and self._holes:
+                tee.holes = [replace(hole) for hole in self._holes]
 
     @classmethod
     def create(
@@ -119,6 +287,9 @@ class GolfCourse:
         creator_id: UserId,
         tees: list[Tee],
         holes: list[Hole],
+        location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse":
         """
         Factory method para crear un nuevo campo de golf.
@@ -132,6 +303,9 @@ class GolfCourse:
             creator_id: Usuario que solicita el campo
             tees: Lista de salidas (2-6)
             holes: Lista de hoyos (18)
+            location: Ubicación del campo (opcional)
+            provenance: De dónde salen los datos (manual por defecto)
+            physical_holes: Hoyos sobre el terreno, 9 o 18 (opcional)
 
         Returns:
             GolfCourse: Campo creado en estado PENDING_APPROVAL
@@ -158,6 +332,9 @@ class GolfCourse:
             rejection_reason=None,
             created_at=now,
             updated_at=now,
+            location=location,
+            provenance=provenance,
+            physical_holes=physical_holes,
         )
 
         # Registrar evento de creación
@@ -187,6 +364,9 @@ class GolfCourse:
         updated_at: datetime,
         original_golf_course_id: GolfCourseId | None = None,
         is_pending_update: bool = False,
+        location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -207,6 +387,9 @@ class GolfCourse:
             updated_at=updated_at,
             original_golf_course_id=original_golf_course_id,
             is_pending_update=is_pending_update,
+            location=location,
+            provenance=provenance,
+            physical_holes=physical_holes,
         )
 
     def approve(self) -> None:
@@ -279,6 +462,9 @@ class GolfCourse:
         course_type: CourseType,
         tees: list[Tee],
         holes: list[Hole],
+        location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> None:
         """
         Actualiza los campos del golf course.
@@ -287,12 +473,30 @@ class GolfCourse:
         IMPORTANTE: La lógica de negocio (si crear clone o actualizar directo)
         debe estar en el use case, no aquí.
 
+        Toma las salidas al pie de la letra: una que llegue sin tarjeta acaba
+        con la del campo. Conservar la que ya tenía es cosa de `apply_update`,
+        que es por donde entran las ediciones de verdad.
+
         Args:
             name: Nuevo nombre del campo
             country_code: Nuevo código de país
             course_type: Nuevo tipo de campo
             tees: Nueva lista de tees
             holes: Nueva lista de hoyos
+            location: Nueva ubicación. None **conserva** la actual; para
+                borrarla hay que pasar un CourseLocation() vacío. Se hace así
+                porque los clientes que no conocen la ubicación (el formulario
+                de edición, que es anterior) omiten el dato, y tratar esa
+                omisión como un borrado vaciaría las coordenadas de un campo
+                al editarle el nombre.
+            provenance: Nueva procedencia. None conserva la actual. Solo la
+                cambia una reimportación: una edición a mano no convierte un
+                campo federado en otra cosa.
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales.
+                No existe forma de devolver el dato a «no consta», y es
+                deliberado: una vez se sabe si el campo es de nueve o de
+                dieciocho, el arreglo de una marca errónea es ponerle la
+                correcta, no volver a la ignorancia.
 
         Raises:
             ValueError: Si los datos no son válidos
@@ -305,6 +509,13 @@ class GolfCourse:
         self._name = name
         self._country_code = country_code
         self._course_type = course_type
+        if location is not None:
+            self._set_location(location)
+        if provenance is not None:
+            self._set_provenance(provenance)
+        if physical_holes is not None:
+            self._physical_holes = physical_holes
+            self._validate_physical_holes()
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de usar los pasados como parámetro
@@ -314,26 +525,24 @@ class GolfCourse:
 
         for tee in tees:
             new_tee = TeeEntity(
-                category=tee.category,
                 gender=tee.gender,
+                color=tee.color,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
+                holes=[replace(hole) for hole in tee.holes],
             )
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        from src.modules.golf_course.domain.entities.hole import Hole as HoleEntity
-
         for hole in holes:
-            new_hole = HoleEntity(
-                number=hole.number,
-                par=hole.par,
-                stroke_index=hole.stroke_index,
-            )
-            self._holes.append(new_hole)
+            self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+        # Reconciliar tarjetas antes de validar: si las salidas llegan sin la
+        # suya, heredan la del campo
+        self._sync_holes_and_tees()
 
         # Validar invariantes
         self._validate_holes()
@@ -347,6 +556,9 @@ class GolfCourse:
         tees: list[Tee],
         holes: list[Hole],
         is_admin: bool,
+        location: CourseLocation | None = None,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> "GolfCourse | None":
         """
         Aplica una actualización al campo de golf según las reglas de negocio.
@@ -364,6 +576,9 @@ class GolfCourse:
             tees: Nueva lista de tees
             holes: Nueva lista de hoyos
             is_admin: Si el usuario es Admin
+            location: Nueva ubicación. None conserva la actual (ver update())
+            provenance: Nueva procedencia. None conserva la actual
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales
 
         Returns:
             None si se actualizó in-place, GolfCourse clone si se creó propuesta
@@ -376,6 +591,11 @@ class GolfCourse:
                 "Cannot edit a REJECTED golf course. Please create a new request instead."
             )
 
+        # Una edición que no menciona las tarjetas por salida no las está
+        # borrando: se hace aquí, antes de repartir a los dos caminos, para que
+        # tanto la edición directa como el clon de propuesta las conserven
+        tees = self._tees_keeping_their_scorecards(tees)
+
         # Admin o PENDING_APPROVAL → actualización in-place
         if is_admin or self._approval_status == ApprovalStatus.PENDING_APPROVAL:
             self.update(
@@ -384,10 +604,15 @@ class GolfCourse:
                 course_type=course_type,
                 tees=tees,
                 holes=holes,
+                location=location,
+                provenance=provenance,
+                physical_holes=physical_holes,
             )
             return None
 
-        # Creator + APPROVED → crear clone como update proposal
+        # Creator + APPROVED → crear clone como update proposal. El clone hereda
+        # la ubicación del original si la edición no trae una nueva, para que
+        # aprobarlo no borre las coordenadas del campo.
         clone = GolfCourse.create(
             name=name,
             country_code=country_code,
@@ -395,6 +620,11 @@ class GolfCourse:
             creator_id=self._creator_id,
             tees=tees,
             holes=holes,
+            location=location if location is not None else self.location,
+            provenance=provenance if provenance is not None else self.provenance,
+            physical_holes=(
+                physical_holes if physical_holes is not None else self.physical_holes
+            ),
         )
 
         # Reconstruir clone con campos especiales (link al original, status PENDING)
@@ -412,6 +642,9 @@ class GolfCourse:
             updated_at=clone.updated_at,
             original_golf_course_id=self._id,
             is_pending_update=False,
+            location=clone.location,
+            provenance=clone.provenance,
+            physical_holes=clone.physical_holes,
         )
 
         # Marcar original como "tiene cambios pendientes"
@@ -457,40 +690,37 @@ class GolfCourse:
         self._name = clone._name
         self._country_code = clone._country_code
         self._course_type = clone._course_type
+        self._set_location(clone.location)
+        self._set_provenance(clone.provenance)
+        self._physical_holes = clone.physical_holes
 
         # Actualizar colecciones rastreadas por SQLAlchemy
         # IMPORTANTE: Creamos NUEVOS objetos en lugar de copiar referencias
         # porque los objetos del clone ya tienen golf_course_id asignado
         del self._tees[:]  # Elimina todos los elementos in-place
         for tee in clone._tees:
-            # Crear nuevo Tee con los mismos datos
-            from src.modules.golf_course.domain.entities.tee import Tee
-
+            # Crear nuevo Tee con los mismos datos, incluida su tarjeta
             new_tee = Tee(
-                category=tee.category,
                 gender=tee.gender,
+                color=tee.color,
                 identifier=tee.identifier,
                 course_rating=tee.course_rating,
                 slope_rating=tee.slope_rating,
+                holes=[replace(hole) for hole in tee.holes],
             )
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        for hole in clone._holes:
-            # Crear nuevo Hole con los mismos datos
-            from src.modules.golf_course.domain.entities.hole import Hole
-
-            new_hole = Hole(
-                number=hole.number,
-                par=hole.par,
-                stroke_index=hole.stroke_index,
-            )
-            self._holes.append(new_hole)
+        for hole in clone.holes:
+            self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
         # Quitar marca de pending update
         self._is_pending_update = False
+
+        # Reconciliar tarjetas antes de validar
+        self._sync_holes_and_tees()
 
         # Validar invariantes
         self._validate_holes()
@@ -498,62 +728,110 @@ class GolfCourse:
 
     def _validate_holes(self) -> None:
         """
-        Valida que haya exactamente 18 hoyos con índices únicos y par válido.
+        Valida la tarjeta de referencia: 18 hoyos, índices únicos y par en rango.
+
+        El rango de par depende del tipo de campo, y se comprueba sobre la
+        tarjeta de referencia y no sobre cada salida: hay recorridos federados
+        donde el par varía entre barras (un hoyo que es par 5 desde las de
+        atrás y par 4 desde las de delante), y exigir el mismo rango a todas
+        dejaría fuera campos perfectamente válidos.
 
         Raises:
             ValueError: Si la validación falla
         """
-        # Debe tener exactamente 18 hoyos
-        if len(self._holes) != 18:  # noqa: PLR2004
-            raise ValueError(f"Golf course must have exactly 18 holes, got {len(self._holes)}")
+        reference_card = self.holes
+        if len(reference_card) != HOLES_PER_ROUND:
+            raise ValueError(
+                f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(reference_card)}"
+            )
 
-        # Stroke indices deben ser únicos (1-18)
-        stroke_indices = [h.stroke_index for h in self._holes]
-        if len(stroke_indices) != len(set(stroke_indices)):
-            raise ValueError("Stroke indices must be unique (1-18)")
+        # Los números de hoyo también deben ser 1-18 sin repetir. La tarjeta de
+        # referencia se copia a las salidas asignando la lista, lo que no pasa
+        # por el validador de Tee, así que si no se comprueba aquí una tarjeta
+        # con hoyos repetidos acabaría propagándose a todas las salidas.
+        hole_numbers = sorted(h.number for h in reference_card)
+        if hole_numbers != list(range(1, HOLES_PER_ROUND + 1)):
+            raise ValueError(
+                f"Hole numbers must be exactly 1-{HOLES_PER_ROUND} without "
+                f"duplicates, got {hole_numbers}"
+            )
 
-        expected_indices = set(range(1, 19))
-        actual_indices = set(stroke_indices)
-        if expected_indices != actual_indices:
-            raise ValueError(f"Stroke indices must be exactly 1-18, got {sorted(actual_indices)}")
+        stroke_indices = sorted(h.stroke_index for h in reference_card)
+        if stroke_indices != list(range(1, HOLES_PER_ROUND + 1)):
+            raise ValueError(
+                f"Stroke indices must be exactly 1-{HOLES_PER_ROUND} without "
+                f"duplicates, got {stroke_indices}"
+            )
 
-        # Par total debe estar entre 66 y 76
-        total_par = sum(h.par for h in self._holes)
-        if not (66 <= total_par <= 76):  # noqa: PLR2004
-            raise ValueError(f"Total par must be between 66 and 76, got {total_par}")
+        min_par, max_par = PAR_RANGE_BY_COURSE_TYPE[self._course_type]
+        total_par = sum(h.par for h in reference_card)
+        if not (min_par <= total_par <= max_par):
+            raise ValueError(
+                f"Total par for a {self._course_type} course must be between "
+                f"{min_par} and {max_par}, got {total_par}"
+            )
 
     def _validate_tees(self) -> None:
         """
-        Valida tees: cantidad 2-10, unicidad (category, gender), consistencia gendered.
+        Valida las salidas: cantidad, unicidad por color y género, y ratings.
+
+        La unicidad va por (color, género) y no por (categoría, género): con
+        campos de hasta catorce salidas, varias comparten categoría — un campo
+        no basta con el nombre que le demos: lo que identifica físicamente una
+        salida es su color.
 
         Raises:
             ValueError: Si la validación falla
         """
-        if not (2 <= len(self._tees) <= 10):  # noqa: PLR2004
-            raise ValueError(f"Golf course must have between 2 and 10 tees, got {len(self._tees)}")
+        if not (MIN_TEES <= len(self._tees) <= MAX_TEES):
+            raise ValueError(
+                f"Golf course must have between {MIN_TEES} and {MAX_TEES} tees, "
+                f"got {len(self._tees)}"
+            )
 
-        # Unicidad: combinación (category, gender) debe ser única
         seen_combos: set[tuple[str, str | None]] = set()
         for tee in self._tees:
-            gender_val = tee.gender.value if tee.gender else None
-            combo = (tee.category.value, gender_val)
+            combo = tee.unique_key
             if combo in seen_combos:
-                raise ValueError(
-                    f"Duplicate tee combination: ({tee.category.value}, {gender_val or 'None'})"
-                )
+                raise ValueError(f"Duplicate tee: {tee.display_name} ({combo[1] or 'no gender'})")
             seen_combos.add(combo)
 
-        # Consistencia: para una misma categoría, no mezclar gendered y non-gendered
-        from collections import defaultdict
-
-        gender_by_category: dict[str, set[str | None]] = defaultdict(set)
+        # Consistencia: para una misma salida, no mezclar con y sin género
+        genders_by_tee: dict[str, set[str | None]] = defaultdict(set)
         for tee in self._tees:
-            gender_val = tee.gender.value if tee.gender else None
-            gender_by_category[tee.category.value].add(gender_val)
+            genders_by_tee[tee.unique_key[0]].add(tee.gender.value if tee.gender else None)
 
-        for cat, genders in gender_by_category.items():
+        for tee_key, genders in genders_by_tee.items():
             if None in genders and len(genders) > 1:
-                raise ValueError(f"Category '{cat}' cannot mix gendered and non-gendered tees")
+                raise ValueError(f"Tee '{tee_key}' cannot mix gendered and non-gendered tees")
+
+        self._validate_tee_ratings()
+
+    def _validate_tee_ratings(self) -> None:
+        """
+        Comprueba que los ratings WHS caen en el rango propio del tipo de campo.
+
+        Los campos estándar mantienen el rigor de WHS. Los cortos (pitch & putt
+        y ejecutivos) usan márgenes más amplios porque el sistema no los valora
+        en la misma escala: hay pitch & putt federados con slope por debajo de
+        55 y course rating por debajo de 50.
+        """
+        min_slope, max_slope = SLOPE_RANGE_BY_COURSE_TYPE[self._course_type]
+        min_rating, max_rating = RATING_RANGE_BY_COURSE_TYPE[self._course_type]
+
+        for tee in self._tees:
+            if not (min_slope <= tee.slope_rating <= max_slope):
+                raise ValueError(
+                    f"Slope rating for a {self._course_type} course must be between "
+                    f"{min_slope} and {max_slope}, got {tee.slope_rating} "
+                    f"on tee {tee.display_name}"
+                )
+            if not (min_rating <= tee.course_rating <= max_rating):
+                raise ValueError(
+                    f"Course rating for a {self._course_type} course must be between "
+                    f"{min_rating} and {max_rating}, got {tee.course_rating} "
+                    f"on tee {tee.display_name}"
+                )
 
     # Domain Events Management
 
@@ -604,7 +882,23 @@ class GolfCourse:
 
     @property
     def holes(self) -> list[Hole]:
-        return sorted(self._holes, key=lambda h: h.number)
+        """
+        Tarjeta de referencia del campo.
+
+        No se persiste: la tarjeta real vive en cada salida, y esta se deriva
+        de la primera que tenga una. Se calcula al consultarla y no al cargar
+        el agregado porque durante el evento de carga de SQLAlchemy las
+        relaciones eager todavía no están garantizadas.
+        """
+        own_holes = getattr(self, "_holes", None)
+        if own_holes:
+            return sorted(own_holes, key=lambda h: h.number)
+
+        for tee in self._tees:
+            if tee.holes:
+                return sorted((replace(hole) for hole in tee.holes), key=lambda h: h.number)
+
+        return []
 
     @property
     def approval_status(self) -> ApprovalStatus:
@@ -624,8 +918,8 @@ class GolfCourse:
 
     @property
     def total_par(self) -> int:
-        """Retorna el par total del campo."""
-        return sum(h.par for h in self._holes)
+        """Retorna el par total del campo, según su tarjeta de referencia."""
+        return sum(h.par for h in self.holes)
 
     @property
     def original_golf_course_id(self) -> GolfCourseId | None:
@@ -637,8 +931,78 @@ class GolfCourse:
         """Retorna TRUE si este campo tiene un clone pendiente de aprobación."""
         return self._is_pending_update
 
+    @property
+    def provenance(self) -> CourseProvenance:
+        """
+        Procedencia de los datos, recompuesta desde las columnas persistidas.
+
+        Se usa getattr porque SQLAlchemy hidrata sin pasar por __init__ y los
+        campos anteriores a esta funcionalidad no tienen los atributos.
+        """
+        return CourseProvenance(
+            source=getattr(self, "_source", None) or CourseSource.MANUAL,
+            external_id=getattr(self, "_external_id", None),
+            imported_at=getattr(self, "_imported_at", None),
+        )
+
+    @property
+    def physical_holes(self) -> int | None:
+        """
+        Hoyos que tiene el campo sobre el terreno, 9 o 18.
+
+        None significa que no consta, que es lo que pasa con los campos dados
+        de alta antes de que existiera el dato: nadie preguntó nunca a quien
+        los creó si el campo era de nueve.
+        """
+        return getattr(self, "_physical_holes", None)
+
+    @property
+    def location(self) -> CourseLocation:
+        """
+        Ubicación del campo, recompuesta desde las columnas que se persisten.
+
+        Devuelve siempre un Value Object, vacío si el campo no tiene ubicación,
+        para que quien lo consulte no tenga que comprobar None antes de leer.
+        Se usa getattr porque SQLAlchemy hidrata sin pasar por __init__ y los
+        campos previos a esta funcionalidad no tienen los atributos.
+        """
+        return CourseLocation(
+            latitude=getattr(self, "_latitude", None),
+            longitude=getattr(self, "_longitude", None),
+            address=getattr(self, "_address", None),
+            city=getattr(self, "_city", None),
+            province=getattr(self, "_province", None),
+        )
+
     # Metodos de consulta
 
-    def has_tee(self, category: TeeCategory, gender: Gender | None) -> bool:
-        """Retorna True si el campo tiene un tee para esa categoria/genero."""
-        return any(t.category == category and t.gender == gender for t in self._tees)
+    def has_tee(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> bool:
+        """
+        Retorna True si el campo tiene esa salida.
+
+        Una salida se identifica por color y género. Cuando el color es OTHER
+        hace falta además el identificador, porque OTHER puede repetirse en un
+        mismo campo (las "Championship" británicas y las combinadas
+        estadounidenses caen ahí).
+        """
+        return any(
+            tee.color == color
+            and tee.gender == gender
+            and (color is not TeeColor.OTHER or tee.identifier == identifier)
+            for tee in self._tees
+        )
+
+    def find_tee(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> Tee | None:
+        """Devuelve la salida que corresponde a ese color y género, si existe."""
+        for tee in self._tees:
+            if (
+                tee.color == color
+                and tee.gender == gender
+                and (color is not TeeColor.OTHER or tee.identifier == identifier)
+            ):
+                return tee
+        return None

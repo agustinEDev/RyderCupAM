@@ -7,7 +7,7 @@ NO es una entidad (no tiene identidad propia), es un Value Object embebido en Ma
 from dataclasses import dataclass
 from decimal import Decimal
 
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
@@ -22,7 +22,7 @@ class MatchPlayer:
     Contiene la información calculada del jugador para ese partido específico:
     - Su ID de usuario
     - El handicap de juego calculado (Playing Handicap)
-    - La categoría de tee que usa
+    - La color de tee que usa
     - El género del tee seleccionado
     - Los hoyos donde recibe golpes
 
@@ -35,7 +35,7 @@ class MatchPlayer:
         >>> player = MatchPlayer(
         ...     user_id=UserId.generate(),
         ...     playing_handicap=12,
-        ...     tee_category=TeeCategory.AMATEUR,
+        ...     tee_color=TeeColor.YELLOW,
         ...     tee_gender=Gender.MALE,
         ...     strokes_received=(1, 3, 5, 7, 9, 11, 13, 15, 17, 2, 4, 6)
         ... )
@@ -43,7 +43,7 @@ class MatchPlayer:
 
     user_id: UserId
     playing_handicap: int
-    tee_category: TeeCategory
+    tee_color: TeeColor
     tee_gender: Gender | None  # Gender del tee usado (MALE/FEMALE/None)
     strokes_received: tuple[
         int, ...
@@ -65,7 +65,7 @@ class MatchPlayer:
         cls,
         user_id: UserId,
         playing_handicap: int,
-        tee_category: TeeCategory,
+        tee_color: TeeColor,
         strokes_received: list[int] | tuple[int, ...],
         tee_gender: Gender | None = None,
         player_handicap: Decimal | None = None,
@@ -76,7 +76,7 @@ class MatchPlayer:
         Args:
             user_id: ID del jugador
             playing_handicap: Handicap de juego calculado
-            tee_category: Categoría de tee que usa
+            tee_color: Color de tee que usa
             strokes_received: Lista de hoyos donde recibe golpe
             tee_gender: Género del tee (MALE/FEMALE/None)
             player_handicap: HI del jugador en el momento de generar el partido (snapshot)
@@ -87,7 +87,7 @@ class MatchPlayer:
         return cls(
             user_id=user_id,
             playing_handicap=playing_handicap,
-            tee_category=tee_category,
+            tee_color=tee_color,
             tee_gender=tee_gender,
             strokes_received=tuple(strokes_received),
             player_handicap=player_handicap,

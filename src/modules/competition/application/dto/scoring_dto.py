@@ -43,7 +43,7 @@ class ScoringPlayerDTO(BaseModel):
     user_id: str
     user_name: str
     team: str
-    tee_category: str
+    tee_color: str
     playing_handicap: int
     strokes_received: list[int]
 

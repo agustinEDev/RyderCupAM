@@ -143,7 +143,7 @@ class GetScoringViewUseCase:
                 user_id=str(p.user_id),
                 user_name=user_names.get(p.user_id, ""),
                 team=match.get_player_team(p.user_id) or "",
-                tee_category=p.tee_category.value,
+                tee_color=p.tee_color.value,
                 playing_handicap=p.playing_handicap,
                 strokes_received=list(p.strokes_received),
             )

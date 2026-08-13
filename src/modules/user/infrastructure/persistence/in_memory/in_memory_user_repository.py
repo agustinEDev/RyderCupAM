@@ -114,12 +114,19 @@ class InMemoryUserRepository(UserRepositoryInterface):
     MIN_SEARCH_LENGTH = 2
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
-        """Searches users by partial name match. Requires at least 2 characters."""
+        """
+        Searches active users by partial name match.
+
+        Requires at least 2 characters. Excluye las cuentas desactivadas, igual
+        que el repositorio real.
+        """
         query_lower = query.lower().strip()
         if len(query_lower) < self.MIN_SEARCH_LENGTH:
             return []
         results = []
         for user in self._users.values():
+            if not user.is_active:
+                continue
             full_name = f"{user.first_name} {user.last_name}".lower()
             if (
                 query_lower in full_name

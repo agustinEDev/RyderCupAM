@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
@@ -38,18 +38,18 @@ class TestQuickMatchParticipantForUser:
 
     def test_for_user_defaults_to_no_tee_selected(self):
         p = QuickMatchParticipant.for_user(UserId(uuid4()))
-        assert p.tee_category is None
+        assert p.tee_color is None
         assert p.tee_gender is None
 
     def test_for_user_accepts_tee_selection(self):
         p = QuickMatchParticipant.for_user(
-            UserId(uuid4()), tee_category=TeeCategory.AMATEUR, tee_gender=Gender.MALE
+            UserId(uuid4()), tee_color=TeeColor.YELLOW, tee_gender=Gender.MALE
         )
-        assert p.tee_category == TeeCategory.AMATEUR
+        assert p.tee_color == TeeColor.YELLOW
         assert p.tee_gender == Gender.MALE
 
-    def test_for_user_rejects_tee_gender_without_tee_category(self):
-        with pytest.raises(ValueError, match="tee_gender requiere tee_category"):
+    def test_for_user_rejects_tee_gender_without_tee_color(self):
+        with pytest.raises(ValueError, match="tee_gender requiere tee_color"):
             QuickMatchParticipant.for_user(UserId(uuid4()), tee_gender=Gender.MALE)
 
     def test_for_user_defaults_to_no_custom_handicap(self):
@@ -103,10 +103,10 @@ class TestQuickMatchParticipantForGuest:
         p = QuickMatchParticipant.for_guest(
             first_name="Jane",
             last_name="Doe",
-            tee_category=TeeCategory.FORWARD,
+            tee_color=TeeColor.RED,
             tee_gender=Gender.FEMALE,
         )
-        assert p.tee_category == TeeCategory.FORWARD
+        assert p.tee_color == TeeColor.RED
         assert p.tee_gender == Gender.FEMALE
 
     def test_guest_rejects_custom_handicap(self):

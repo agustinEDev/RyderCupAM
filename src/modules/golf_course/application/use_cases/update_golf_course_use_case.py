@@ -7,17 +7,14 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     UpdateGolfCourseResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
-from src.modules.golf_course.domain.entities.hole import Hole
-from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_provenance import CourseProvenance
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
-from src.shared.domain.value_objects.gender import Gender
 
 
 class UpdateGolfCourseUseCase:
@@ -42,8 +39,22 @@ class UpdateGolfCourseUseCase:
         request: UpdateGolfCourseRequestDTO,
         user_id: UserId,
         is_admin: bool,
+        provenance: CourseProvenance | None = None,
+        physical_holes: int | None = None,
     ) -> UpdateGolfCourseResponseDTO:
-        """Ejecuta el caso de uso."""
+        """
+        Ejecuta el caso de uso.
+
+        Args:
+            golf_course_id: Campo a actualizar
+            request: Datos nuevos
+            user_id: Quien edita
+            is_admin: Si tiene privilegios de administración
+            provenance: Procedencia nueva. Va como parámetro y no en el DTO
+                porque no es un dato que un cliente pueda declarar: solo lo
+                refresca una reimportación. None conserva la actual
+            physical_holes: Hoyos sobre el terreno. None conserva los actuales
+        """
         async with self._uow:
             # 1. Buscar campo original
             original_course = await self._uow.golf_courses.find_by_id(golf_course_id)
@@ -63,25 +74,9 @@ class UpdateGolfCourseUseCase:
                 raise ValueError(f"Country with code '{request.country_code}' not found")
 
             # 4. Crear Tees y Holes desde DTOs
-            tees = [
-                Tee(
-                    category=TeeCategory(tee_dto.tee_category),
-                    gender=Gender(tee_dto.tee_gender) if tee_dto.tee_gender else None,
-                    identifier=tee_dto.identifier,
-                    course_rating=tee_dto.course_rating,
-                    slope_rating=tee_dto.slope_rating,
-                )
-                for tee_dto in request.tees
-            ]
+            tees = GolfCourseMapper.to_domain_tees(request.tees)
 
-            holes = [
-                Hole(
-                    number=hole_dto.hole_number,
-                    par=hole_dto.par,
-                    stroke_index=hole_dto.stroke_index,
-                )
-                for hole_dto in request.holes
-            ]
+            holes = GolfCourseMapper.to_domain_holes(request.holes)
 
             # 5. Delegar decisión de negocio al dominio
             # apply_update retorna None (in-place) o GolfCourse clone (proposal)
@@ -92,6 +87,9 @@ class UpdateGolfCourseUseCase:
                 tees=tees,
                 holes=holes,
                 is_admin=is_admin,
+                location=GolfCourseMapper.to_domain_location(request.location),
+                provenance=provenance,
+                physical_holes=physical_holes,
             )
 
             # 6. Guardar

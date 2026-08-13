@@ -244,7 +244,7 @@ async def list_competition_golf_courses(
                             approval_status=golf_course.approval_status.value,
                             tees=[
                                 TeeResponseDTO(
-                                    category=tee.category.value,
+                                    color=tee.color.value,
                                     gender=tee.gender.value if tee.gender else None,
                                     identifier=tee.identifier,
                                     course_rating=float(tee.course_rating),

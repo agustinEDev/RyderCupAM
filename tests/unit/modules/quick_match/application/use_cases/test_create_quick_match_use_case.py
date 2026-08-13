@@ -8,7 +8,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import CreateQuickMatchRequestDTO
 from src.modules.quick_match.application.exceptions import (
     GolfCourseNotApprovedError,
@@ -71,12 +71,12 @@ class TestCreateQuickMatchUseCase:
                 creator_id=creator.id.value,
                 golf_course_id=golf_course.id.value,
                 match_format="SINGLES",
-                creator_tee_category="AMATEUR",
+                creator_tee_color="YELLOW",
                 creator_tee_gender="MALE",
             )
         )
 
-        assert response.participants[0].tee_category == "AMATEUR"
+        assert response.participants[0].tee_color == "YELLOW"
         assert response.participants[0].tee_gender == "MALE"
 
     async def test_create_with_creator_tee_not_on_course_raises(
@@ -92,7 +92,7 @@ class TestCreateQuickMatchUseCase:
                     creator_id=creator.id.value,
                     golf_course_id=golf_course.id.value,
                     match_format="SINGLES",
-                    creator_tee_category="AMATEUR",
+                    creator_tee_color="YELLOW",
                     creator_tee_gender="FEMALE",
                 )
             )
@@ -115,14 +115,14 @@ class TestCreateQuickMatchUseCase:
         holes = [Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)]
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,

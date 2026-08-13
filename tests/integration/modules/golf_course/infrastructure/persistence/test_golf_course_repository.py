@@ -13,10 +13,14 @@ from sqlalchemy import text
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    ApprovedCourseSearch,
+)
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
 )
@@ -74,21 +78,21 @@ def valid_tees():
     """Crea 3 tees válidos para tests de integración."""
     return [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.5,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.2,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=75.0,
@@ -387,10 +391,10 @@ async def test_find_by_approval_status_rejected(db_session, creator_id, valid_te
 # ============================================================================
 
 
-async def test_find_approved(db_session, creator_id, valid_tees, valid_holes):
+async def test_search_approved(db_session, creator_id, valid_tees, valid_holes):
     """
     GIVEN: Varios campos con diferentes estados
-    WHEN: Se llama a find_approved()
+    WHEN: Se busca sin criterios
     THEN: Se retornan solo los aprobados
     """
     # Arrange
@@ -422,11 +426,284 @@ async def test_find_approved(db_session, creator_id, valid_tees, valid_holes):
     await db_session.commit()
 
     # Act
-    approved = await repository.find_approved()
+    page = await repository.search_approved(ApprovedCourseSearch())
 
     # Assert
-    assert len(approved) == 2
-    assert all(course.approval_status == ApprovalStatus.APPROVED for course in approved)
+    assert len(page.courses) == 2
+    assert page.total == 2
+    assert all(course.approval_status == ApprovalStatus.APPROVED for course in page.courses)
+    assert page.distances_km == {}
+
+
+# ============================================================================
+# Tests: búsqueda, paginación y cercanía
+# ============================================================================
+
+
+# Coordenadas reales, para que las distancias sean comprobables a mano
+MADRID = (40.4168, -3.7038)
+COURSES_BY_CITY = {
+    "Campo de Madrid": (40.45, -3.68),  # a unos 4 km
+    "Campo de Toledo": (39.8628, -4.0273),  # a unos 65 km
+    "Campo de Barcelona": (41.3874, 2.1686),  # a unos 500 km
+}
+
+
+async def _approved_course(repository, creator_id, tees, holes, name, coordinates=None):
+    """
+    Crea y guarda un campo aprobado, opcionalmente situado.
+
+    Las salidas y los hoyos se copian en cada llamada. Reutilizar las mismas
+    instancias entre campos no da error: SQLAlchemy las reasigna al último
+    padre, y los campos anteriores se quedan sin barras en silencio.
+    """
+    location = (
+        CourseLocation(latitude=coordinates[0], longitude=coordinates[1]) if coordinates else None
+    )
+    golf_course = GolfCourse.create(
+        name=name,
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=creator_id,
+        tees=[
+            Tee(
+                color=tee.color,
+                gender=tee.gender,
+                identifier=tee.identifier,
+                course_rating=tee.course_rating,
+                slope_rating=tee.slope_rating,
+            )
+            for tee in tees
+        ],
+        holes=[
+            Hole(number=hole.number, par=hole.par, stroke_index=hole.stroke_index) for hole in holes
+        ],
+        location=location,
+    )
+    golf_course.approve()
+    await repository.save(golf_course)
+    return golf_course
+
+
+async def test_search_approved_filters_by_partial_name(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Campos con nombres distintos
+    WHEN: Se busca por un trozo del nombre
+    THEN: Solo salen los que lo contienen, sin distinguir mayúsculas
+    """
+    repository = GolfCourseRepository(db_session)
+    for name in ("Real Club de La Moraleja", "Club de Campo", "Golf Santander"):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name)
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch(name="club"))
+
+    assert page.total == 2
+    assert {course.name for course in page.courses} == {
+        "Real Club de La Moraleja",
+        "Club de Campo",
+    }
+
+
+async def test_search_approved_orders_alphabetically(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Campos dados de alta en un orden que no es el alfabético
+    WHEN: Se listan sin posición desde la que medir distancias
+    THEN: Salen de la A a la Z, y no por fecha de alta
+
+    Ordenar por `created_at` descendente devolvía el lote de la RFEG justo del
+    revés, así que el desplegable empezaba por la Z.
+
+    Se dan de alta desordenados a propósito: insertándolos ya ordenados, una
+    consulta que perdiera el ORDER BY pasaría igual, devolviéndolos en el orden
+    en que se escribieron.
+    """
+    repository = GolfCourseRepository(db_session)
+    for name in ("Mediterráneo", "Zaudín", "Alcaidesa"):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name)
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch())
+
+    assert [course.name for course in page.courses] == ["Alcaidesa", "Mediterráneo", "Zaudín"]
+
+
+async def test_search_approved_breaks_name_ties_by_id(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Dos campos aprobados con el mismo nombre
+    WHEN: Se piden de uno en uno, como haría el cliente al paginar
+    THEN: Salen los dos, en orden de id y sin repetirse
+
+    El desempate no es cosmético: sin un orden total, dos campos homónimos
+    pueden salir en distinto orden en cada consulta, y paginando eso significa
+    ver uno repetido y perder el otro. La federación publica recorridos casi
+    homónimos del mismo club, así que los empates no son hipotéticos.
+    """
+    repository = GolfCourseRepository(db_session)
+    for _ in range(2):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, "La Envía")
+    await db_session.commit()
+
+    first = await repository.search_approved(ApprovedCourseSearch(limit=1))
+    second = await repository.search_approved(ApprovedCourseSearch(limit=1, offset=1))
+
+    assert first.total == 2
+    assert [course.name for course in first.courses] == ["La Envía"]
+    assert [course.name for course in second.courses] == ["La Envía"]
+    assert str(first.courses[0].id) < str(second.courses[0].id)
+
+
+async def test_search_approved_treats_wildcards_as_text(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo cuyo nombre no lleva guion bajo
+    WHEN: Se busca por '_'
+    THEN: No sale
+
+    Sin escapar, '_' es el comodín de un carácter cualquiera en LIKE y esta
+    búsqueda devolvería el catálogo entero.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Club de Campo")
+    await db_session.commit()
+
+    page = await repository.search_approved(ApprovedCourseSearch(name="_"))
+
+    assert page.total == 0
+    assert page.courses == []
+
+
+async def test_search_approved_paginates_without_losing_tees(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Tres campos aprobados, cada uno con varias salidas
+    WHEN: Se pide una página de dos
+    THEN: Vienen dos campos enteros, y el total sigue siendo tres
+
+    El total es lo que permite al cliente saber que hay más. Y las salidas se
+    comprueban porque un joined load con LIMIT recortaría por filas del join,
+    devolviendo campos a medias en vez de menos campos.
+    """
+    repository = GolfCourseRepository(db_session)
+    for index in range(3):
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, f"Campo {index}")
+    await db_session.commit()
+
+    first = await repository.search_approved(ApprovedCourseSearch(limit=2))
+    second = await repository.search_approved(ApprovedCourseSearch(limit=2, offset=2))
+
+    assert len(first.courses) == 2
+    assert len(second.courses) == 1
+    assert first.total == 3
+    assert second.total == 3
+    assert all(len(course.tees) == len(valid_tees) for course in first.courses)
+    ids = {str(course.id) for course in first.courses} | {
+        str(course.id) for course in second.courses
+    }
+    assert len(ids) == 3
+
+
+async def test_search_approved_orders_by_distance(db_session, creator_id, valid_tees, valid_holes):
+    """
+    GIVEN: Tres campos situados a distinta distancia de Madrid
+    WHEN: Se busca desde Madrid
+    THEN: Salen ordenados de más cerca a más lejos, con su distancia
+    """
+    repository = GolfCourseRepository(db_session)
+    for name, coordinates in COURSES_BY_CITY.items():
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name, coordinates)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert [course.name for course in page.courses] == [
+        "Campo de Madrid",
+        "Campo de Toledo",
+        "Campo de Barcelona",
+    ]
+    distances = [page.distances_km[str(course.id)] for course in page.courses]
+    assert distances == sorted(distances)
+    assert distances[0] < 10
+    assert 400 < distances[2] < 600
+
+
+async def test_search_approved_applies_the_radius(db_session, creator_id, valid_tees, valid_holes):
+    """
+    GIVEN: Campos a 4, 65 y 500 km
+    WHEN: Se busca en un radio de 100 km
+    THEN: Solo salen los dos primeros, y el total cuenta solo esos
+    """
+    repository = GolfCourseRepository(db_session)
+    for name, coordinates in COURSES_BY_CITY.items():
+        await _approved_course(repository, creator_id, valid_tees, valid_holes, name, coordinates)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1], radius_km=100)
+    )
+
+    assert page.total == 2
+    assert {course.name for course in page.courses} == {"Campo de Madrid", "Campo de Toledo"}
+
+
+async def test_search_approved_leaves_out_courses_without_coordinates(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo situado y otro sin coordenadas
+    WHEN: Se busca por cercanía
+    THEN: Solo sale el situado
+
+    Once de los 802 campos importados no tienen coordenadas. En una búsqueda
+    por cercanía no hay distancia que enseñar, así que quedan fuera; la
+    búsqueda por nombre sigue siendo su camino.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(
+        repository, creator_id, valid_tees, valid_holes, "Campo situado", (40.45, -3.68)
+    )
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Campo sin sitio")
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert page.total == 1
+    assert page.courses[0].name == "Campo situado"
+
+
+async def test_search_approved_measures_zero_at_the_course_itself(
+    db_session, creator_id, valid_tees, valid_holes
+):
+    """
+    GIVEN: Un campo y la consulta hecha desde sus mismas coordenadas
+    WHEN: Se busca por cercanía
+    THEN: La distancia es cero y la consulta no falla
+
+    El coseno sale 1.0000000000000002 por redondeo, y acos fuera de rango es un
+    error de dominio en PostgreSQL que tumbaría la consulta entera.
+    """
+    repository = GolfCourseRepository(db_session)
+    await _approved_course(repository, creator_id, valid_tees, valid_holes, "Campo exacto", MADRID)
+    await db_session.commit()
+
+    page = await repository.search_approved(
+        ApprovedCourseSearch(latitude=MADRID[0], longitude=MADRID[1])
+    )
+
+    assert page.total == 1
+    assert page.distances_km[str(page.courses[0].id)] == 0.0
 
 
 async def test_find_pending_approval(db_session, creator_id, valid_tees, valid_holes):
@@ -569,6 +846,18 @@ async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_hole
     # Verificar que existe
     assert await repository.find_by_id(golf_course.id) is not None
 
+    # Los ids de las salidas hay que capturarlos antes del borrado: después no
+    # hay forma de llegar a sus hoyos para comprobar que también cayeron.
+    tee_ids = list(
+        (
+            await db_session.execute(
+                text("SELECT id FROM golf_course_tees WHERE golf_course_id = :gc_id"),
+                {"gc_id": str(golf_course.id.value)},
+            )
+        ).scalars()
+    )
+    assert tee_ids, "Precondición: el campo debe tener salidas persistidas"
+
     # Act
     await repository.delete(golf_course.id)
     await db_session.commit()
@@ -583,10 +872,13 @@ async def test_delete_golf_course(db_session, creator_id, valid_tees, valid_hole
     )
     assert result_tees.scalar() == 0, "Tees should be cascade deleted"
 
-    # Assert - Cascade delete: Holes eliminados
+    # Assert - Cascade delete: los hoyos cuelgan de las salidas, así que el
+    # borrado tiene que propagarse dos niveles. Se buscan por los ids
+    # capturados antes: un JOIN con las salidas ya borradas daría cero aunque
+    # quedaran hoyos huérfanos.
     result_holes = await db_session.execute(
-        text("SELECT count(*) FROM golf_course_holes WHERE golf_course_id = :gc_id"),
-        {"gc_id": str(golf_course.id.value)},
+        text("SELECT count(*) FROM golf_course_tee_holes WHERE tee_id = ANY(:tee_ids)"),
+        {"tee_ids": tee_ids},
     )
     assert result_holes.scalar() == 0, "Holes should be cascade deleted"
 
@@ -620,42 +912,42 @@ async def test_repository_handles_multiple_tees(db_session, creator_id, valid_ho
     # Arrange
     all_tees = [
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.MALE,
             identifier="Negro",
             course_rating=75.0,
             slope_rating=145,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.MALE,
             identifier="Blanco",
             course_rating=73.0,
             slope_rating=135,
         ),
         Tee(
-            category=TeeCategory.SENIOR,
+            color=TeeColor.BLUE,
             gender=Gender.MALE,
             identifier="Amarillo",
             course_rating=71.0,
             slope_rating=128,
         ),
         Tee(
-            category=TeeCategory.CHAMPIONSHIP,
+            color=TeeColor.WHITE,
             gender=Gender.FEMALE,
             identifier="Azul",
             course_rating=76.0,
             slope_rating=142,
         ),
         Tee(
-            category=TeeCategory.AMATEUR,
+            color=TeeColor.YELLOW,
             gender=Gender.FEMALE,
             identifier="Rojo",
             course_rating=73.5,
             slope_rating=136,
         ),
         Tee(
-            category=TeeCategory.SENIOR,
+            color=TeeColor.BLUE,
             gender=Gender.FEMALE,
             identifier="Verde",
             course_rating=71.5,
@@ -681,7 +973,7 @@ async def test_repository_handles_multiple_tees(db_session, creator_id, valid_ho
     assert retrieved is not None
     assert len(retrieved.tees) == 6
     # Verificar que las combinaciones (categoría, gender) son únicas
-    combos = {(tee.category, tee.gender) for tee in retrieved.tees}
+    combos = {(tee.color, tee.gender) for tee in retrieved.tees}
     assert len(combos) == 6
 
 

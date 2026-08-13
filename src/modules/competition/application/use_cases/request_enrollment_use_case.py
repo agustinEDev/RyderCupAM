@@ -10,7 +10,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
-    InvalidTeeCategoryError,
+    InvalidTeeColorError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -23,7 +23,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -125,17 +125,17 @@ class RequestEnrollmentUseCase:
 
             # 4. Crear enrollment con factory method
             try:
-                tee_category = TeeCategory(request.tee_category) if request.tee_category else None
+                tee_color = TeeColor(request.tee_color) if request.tee_color else None
             except ValueError as e:
-                raise InvalidTeeCategoryError(
-                    f"Valor de tee_category no válido: '{request.tee_category}'. "
-                    f"Valores permitidos: {[c.value for c in TeeCategory]}"
+                raise InvalidTeeColorError(
+                    f"Valor de tee_color no válido: '{request.tee_color}'. "
+                    f"Valores permitidos: {[c.value for c in TeeColor]}"
                 ) from e
             enrollment = Enrollment.request(
                 id=EnrollmentId.generate(),
                 competition_id=competition_id,
                 user_id=user_id,
-                tee_category=tee_category,
+                tee_color=tee_color,
             )
 
             # 5. Persistir

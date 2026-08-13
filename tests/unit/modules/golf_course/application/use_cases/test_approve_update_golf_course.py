@@ -18,7 +18,7 @@ from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
-from src.modules.golf_course.domain.value_objects.tee_category import TeeCategory
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -56,14 +56,14 @@ class TestApproveUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees_original = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,
@@ -87,14 +87,14 @@ class TestApproveUpdateGolfCourseUseCase:
         # Clone PENDING con cambios
         tees_clone = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=Gender.MALE,
                 identifier="Blue",
                 course_rating=74.0,
                 slope_rating=135,
             ),
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=Gender.MALE,
                 identifier="Red",
                 course_rating=72.0,
@@ -212,14 +212,14 @@ class TestApproveUpdateGolfCourseUseCase:
         creator_id = UserId(str(uuid4()))
         tees = [
             Tee(
-                category=TeeCategory.CHAMPIONSHIP,
+                color=TeeColor.WHITE,
                 gender=Gender.MALE,
                 identifier="White",
                 course_rating=72.0,
                 slope_rating=130,
             ),
             Tee(
-                category=TeeCategory.AMATEUR,
+                color=TeeColor.YELLOW,
                 gender=Gender.MALE,
                 identifier="Yellow",
                 course_rating=70.0,

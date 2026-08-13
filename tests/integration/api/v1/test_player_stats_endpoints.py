@@ -35,7 +35,7 @@ async def _played_medal_match(
     player: dict,
     golf_course_id: str,
     strokes_per_hole: int = 5,
-    tee_category: str | None = None,
+    tee_color: str | None = None,
     tee_gender: str | None = None,
 ) -> str:
     """
@@ -46,8 +46,8 @@ async def _played_medal_match(
     """
     set_auth_cookies(client, player["cookies"])
     payload: dict = {"golf_course_id": golf_course_id, "scoring_format": "MEDAL"}
-    if tee_category is not None:
-        payload["creator_tee_category"] = tee_category
+    if tee_color is not None:
+        payload["creator_tee_color"] = tee_color
         payload["creator_tee_gender"] = tee_gender
     create_response = await client.post("/api/v1/quick-matches", json=payload)
     assert create_response.status_code == 201, create_response.text
@@ -276,7 +276,7 @@ class TestScoreDifferentials:
         )
         course_id = await _approved_golf_course(client, admin, player)
         await _played_medal_match(
-            client, player, course_id, tee_category="AMATEUR", tee_gender="MALE"
+            client, player, course_id, tee_color="YELLOW", tee_gender="MALE"
         )
 
         set_auth_cookies(client, player["cookies"])
@@ -331,7 +331,7 @@ class TestScoreDifferentials:
         course_id = await _approved_golf_course(client, admin, player)
         for _ in range(3):
             await _played_medal_match(
-                client, player, course_id, tee_category="AMATEUR", tee_gender="MALE"
+                client, player, course_id, tee_color="YELLOW", tee_gender="MALE"
             )
 
         set_auth_cookies(client, player["cookies"])
