@@ -7,11 +7,14 @@ hace la traduccion, una sola vez, para los dos consumidores que la necesitan
 (el detalle de la partida y el historial de partidas recientes).
 """
 
+import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
 from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,16 @@ class StrokeContextBuilder:
         par_by_hole = {hole.number: hole.par for hole in holes}
         course_par = sum(par_by_hole.values())
 
+        if not holes:
+            # Sin tarjeta no hay stroke index con el que repartir, asi que la
+            # partida acaba jugandose a bruto — que es justo el fallo que este
+            # reparto arregla. Degradar en silencio aqui seria indistinguible del
+            # exito, y con 800 campos importados conviene poder contarlo.
+            logger.warning(
+                "Golf course %s has no holes: quick match strokes cannot be allocated",
+                golf_course.id,
+            )
+
         holes_by_stroke_index = [
             hole.number for hole in sorted(holes, key=lambda h: h.stroke_index)
         ]
@@ -59,10 +72,17 @@ class StrokeContextBuilder:
                     slope_rating=tee.slope_rating,
                     par=par,
                 )
-            except ValueError:
+            except ValueError as exc:
                 # Un tee con ratings fuera del rango WHS (dato importado suelto)
                 # no debe tumbar la partida entera: se omite y quien juegue desde
                 # el cae en el fallback del Handicap Index.
+                logger.warning(
+                    "Skipping tee %s (%s) of golf course %s: %s",
+                    tee.color.value,
+                    gender,
+                    golf_course.id,
+                    exc,
+                )
                 continue
             tee_ratings[(tee.color.value, gender)] = rating
 

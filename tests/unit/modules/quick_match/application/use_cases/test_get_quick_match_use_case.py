@@ -285,7 +285,7 @@ class TestStandingAppliesHandicap:
         assert detail.standing is not None
         assert detail.standing.leading_team is None
         assert detail.play_mode == "SCRATCH"
-        assert all(ps.strokes_received == [] for ps in detail.participant_strokes)
+        assert all(ps.strokes_by_hole == {} for ps in detail.participant_strokes)
 
     async def test_detail_exposes_the_strokes_used_to_decide_the_holes(
         self, qm_uow, user_uow, golf_course_uow
@@ -307,7 +307,7 @@ class TestStandingAppliesHandicap:
         other_strokes = by_participant[other.id.value]
 
         # Reparto diferencial: solo recibe el de mas handicap
-        assert creator_strokes.strokes_received == []
-        assert len(other_strokes.strokes_received) > 0
+        assert creator_strokes.strokes_by_hole == {}
+        assert other_strokes.strokes_by_hole
         # Y recibe en los hoyos mas dificiles: el campo de prueba tiene SI = numero de hoyo
-        assert min(other_strokes.strokes_received) == 1
+        assert min(other_strokes.strokes_by_hole) == 1

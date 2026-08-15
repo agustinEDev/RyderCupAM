@@ -112,7 +112,7 @@ class GetQuickMatchUseCase:
                 ParticipantStrokesDTO(
                     participant_id=ps.participant_id.value,
                     playing_handicap=ps.playing_handicap,
-                    strokes_received=list(ps.strokes_received),
+                    strokes_by_hole=dict(ps.strokes_by_hole),
                 )
                 for ps in strokes_by_participant.values()
             ],
@@ -124,10 +124,20 @@ class GetQuickMatchUseCase:
         """
         Reparte los golpes de handicap de la partida.
 
+        En una partida scratch se sale sin tocar la base de datos: nadie recibe
+        golpes, asi que cargar el campo seria trabajo tirado. Importa porque el
+        detalle se pide cada 10 segundos mientras se juega.
+
         Si el campo no se puede cargar se devuelve un reparto vacio en vez de
         fallar: perder los puntitos de la tarjeta es mucho menos grave que dejar
         la partida inaccesible mientras se esta jugando.
         """
+        if not quick_match.uses_handicap():
+            return {
+                p.participant_id: ParticipantStrokes(p.participant_id, 0, {})
+                for p in quick_match.participants
+            }
+
         async with self._golf_course_uow:
             golf_course = await self._golf_course_uow.golf_courses.find_by_id(
                 quick_match.golf_course_id
@@ -135,7 +145,7 @@ class GetQuickMatchUseCase:
 
         if golf_course is None:
             return {
-                p.participant_id: ParticipantStrokes(p.participant_id, 0, ())
+                p.participant_id: ParticipantStrokes(p.participant_id, 0, {})
                 for p in quick_match.participants
             }
 

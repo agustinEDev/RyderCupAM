@@ -87,9 +87,9 @@ class TestSinglesMeisRegression:
         assert result[rival.participant_id].playing_handicap == 27
 
         # Pero el reparto es diferencial: el de menos PH juega off scratch
-        assert result[me.participant_id].strokes_received == ()
+        assert result[me.participant_id].strokes_by_hole == {}
         # 27 - 23 = 4 golpes, en los hoyos de SI 1, 2, 3 y 4 -> hoyos 2, 11, 7 y 17
-        assert sorted(result[rival.participant_id].strokes_received) == [2, 7, 11, 17]
+        assert sorted(result[rival.participant_id].strokes_by_hole) == [2, 7, 11, 17]
 
     def test_lower_handicap_never_receives_more_than_the_higher_one(self, service):
         """
@@ -125,8 +125,8 @@ class TestSinglesMeisRegression:
         assert result[rival.participant_id].playing_handicap == 27
 
         # Uno de los dos recibe; el otro, nada. Nunca los dos.
-        assert result[rival.participant_id].strokes_received == ()
-        assert len(result[me.participant_id].strokes_received) == 4
+        assert result[rival.participant_id].strokes_by_hole == {}
+        assert result[me.participant_id].total_strokes == 4
 
 
 class TestScratch:
@@ -150,7 +150,7 @@ class TestScratch:
             play_mode=PlayMode.SCRATCH,
         )
 
-        assert all(ps.strokes_received == () for ps in result.values())
+        assert all(ps.strokes_by_hole == {} for ps in result.values())
         assert all(ps.playing_handicap == 0 for ps in result.values())
 
 
@@ -172,8 +172,8 @@ class TestFreePlay:
         )
 
         # 23 y 27 golpes repartidos: los dos reciben, no hay diferencial
-        assert len(result[a.participant_id].strokes_received) == 23
-        assert len(result[b.participant_id].strokes_received) == 27
+        assert result[a.participant_id].total_strokes == 23
+        assert result[b.participant_id].total_strokes == 27
 
     def test_allowance_reduces_the_playing_handicap(self, service):
         a = _guest("A", 18.0, TeeColor.YELLOW, Gender.MALE)
@@ -211,7 +211,7 @@ class TestFallbacks:
 
         assert result[b.participant_id].playing_handicap == 0
         # A tiene PH 23 frente a 0: recibe la diferencia entera
-        assert len(result[a.participant_id].strokes_received) == 23
+        assert result[a.participant_id].total_strokes == 23
 
     def test_unknown_tee_falls_back_to_the_handicap_index(self, service):
         """Sin barra valorada se usa el propio HI, en vez de tratarlo como scratch."""
@@ -233,7 +233,7 @@ class TestFallbacks:
 
         assert result[a.participant_id].playing_handicap == 18
         assert result[b.participant_id].playing_handicap == 21
-        assert len(result[b.participant_id].strokes_received) == 3
+        assert result[b.participant_id].total_strokes == 3
 
     def test_incomplete_singles_roster_gives_nobody_strokes(self, service):
         a = _guest("A", 18.0, TeeColor.YELLOW, Gender.MALE)
@@ -248,7 +248,7 @@ class TestFallbacks:
             play_mode=PlayMode.HANDICAP,
         )
 
-        assert result[a.participant_id].strokes_received == ()
+        assert result[a.participant_id].strokes_by_hole == {}
 
 
 class TestFoursomes:
@@ -276,16 +276,16 @@ class TestFoursomes:
         )
 
         assert (
-            result[a1.participant_id].strokes_received
-            == result[a2.participant_id].strokes_received
+            result[a1.participant_id].strokes_by_hole
+            == result[a2.participant_id].strokes_by_hole
         )
         assert (
-            result[b1.participant_id].strokes_received
-            == result[b2.participant_id].strokes_received
+            result[b1.participant_id].strokes_by_hole
+            == result[b2.participant_id].strokes_by_hole
         )
         # Solo recibe el equipo de mayor CH promedio
-        assert result[a1.participant_id].strokes_received == ()
-        assert len(result[b1.participant_id].strokes_received) > 0
+        assert result[a1.participant_id].strokes_by_hole == {}
+        assert result[b1.participant_id].total_strokes > 0
 
 
 class TestFourball:
@@ -309,9 +309,9 @@ class TestFourball:
             play_mode=PlayMode.HANDICAP,
         )
 
-        assert result[players[0].participant_id].strokes_received == ()
+        assert result[players[0].participant_id].strokes_by_hole == {}
         # Y el resto recibe en orden creciente de handicap
-        counts = [len(result[p.participant_id].strokes_received) for p in players]
+        counts = [result[p.participant_id].total_strokes for p in players]
         assert counts == sorted(counts)
 
 
@@ -355,3 +355,115 @@ class TestParticipantStrokes:
         )
 
         assert result[a.participant_id].net_score(1, 1) == 0
+
+
+class TestPlusHandicap:
+    """
+    Handicap plus: el jugador CEDE golpes al campo (Regla WHS 8.2).
+
+    No habia ni un test de esto, y por eso paso desapercibido que el reparto
+    acotaba el Playing Handicap a cero: la tarjeta daba cero golpes y la
+    clasificacion seguia descontandolos, dos totales distintos en la misma
+    pantalla para el mismo jugador.
+    """
+
+    def test_plus_handicap_gives_strokes_back_in_free_play(self, service):
+        """
+        Given un jugador de handicap plus en partido libre
+        When se reparte el handicap
+        Then su Playing Handicap es negativo y cede golpes, no recibe
+        """
+        a = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = service.allocate(
+            participants=[a],
+            handicaps={a.participant_id: Decimal("-2.0")},
+            # Campo neutro (slope 113, CR = par) para que el PH sea el HI exacto
+            tee_ratings={
+                ("YELLOW", "MALE"): TeeRating(
+                    course_rating=Decimal("72.0"), slope_rating=113, par=72
+                )
+            },
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        strokes = result[a.participant_id]
+        assert strokes.playing_handicap == -2
+        assert strokes.total_strokes == -2
+        # Se ceden desde el hoyo mas facil hacia atras: SI 18 y 17
+        assert strokes.strokes_by_hole == {18: -1, 17: -1}
+
+    def test_giving_back_a_stroke_raises_the_net_score(self, service):
+        a = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = service.allocate(
+            participants=[a],
+            handicaps={a.participant_id: Decimal("-2.0")},
+            tee_ratings={
+                ("YELLOW", "MALE"): TeeRating(
+                    course_rating=Decimal("72.0"), slope_rating=113, par=72
+                )
+            },
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        strokes = result[a.participant_id]
+        assert strokes.net_score(18, 4) == 5  # cede golpe: su neto empeora
+        assert strokes.net_score(1, 4) == 4  # aqui no cede nada
+
+    def test_match_play_still_clamps_each_playing_handicap_at_zero(self, service):
+        """
+        Given un plus contra un handicap alto en match play
+        When se reparte
+        Then el plus juega off scratch y el rival recibe la diferencia completa
+
+        En match play la ventaja la recoge la diferencia entre los dos Playing
+        Handicaps, y el WHS acota cada uno a cero antes de restarlos: nadie cede
+        golpes al campo, se los da al rival.
+        """
+        plus = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
+        high = _guest("High", 20.0, TeeColor.YELLOW, Gender.MALE)
+        neutral = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+        result = service.allocate(
+            participants=[plus, high],
+            handicaps={
+                plus.participant_id: Decimal("-2.0"),
+                high.participant_id: Decimal("20.0"),
+            },
+            tee_ratings={("YELLOW", "MALE"): neutral},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=MatchFormat.SINGLES,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        assert result[plus.participant_id].playing_handicap == 0
+        assert result[high.participant_id].playing_handicap == 20
+        assert result[plus.participant_id].strokes_by_hole == {}
+        assert result[high.participant_id].total_strokes == 20
+
+
+class TestAllocateByHole:
+    """El reparto con signo, aislado."""
+
+    def test_wraps_around_past_eighteen(self, service):
+        allocation = service.allocate_by_hole(23, _holes_by_stroke_index())
+
+        assert allocation[1] == 2  # SI 1
+        assert allocation[5] == 2  # SI 5
+        assert allocation[6] == 1  # SI 6
+        assert allocation[18] == 1  # SI 18
+        assert sum(allocation.values()) == 23
+
+    def test_zero_allocates_nothing(self, service):
+        assert service.allocate_by_hole(0, _holes_by_stroke_index()) == {}
+
+    def test_no_holes_allocates_nothing(self, service):
+        assert service.allocate_by_hole(10, []) == {}

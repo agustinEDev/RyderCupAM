@@ -235,8 +235,9 @@ class ParticipantStrokesDTO(BaseModel):
 
     participant_id: UUID
     playing_handicap: int
-    # Numeros de hoyo, con repeticion si recibe mas de un golpe en el mismo
-    strokes_received: list[int] = Field(default_factory=list)
+    # Numero de hoyo -> golpes en ese hoyo, CON SIGNO (negativo si los cede, que
+    # es lo que hace un handicap plus). Solo los hoyos con golpe.
+    strokes_by_hole: dict[int, int] = Field(default_factory=dict)
 
 
 class QuickMatchDetailResponseDTO(QuickMatchResponseDTO):

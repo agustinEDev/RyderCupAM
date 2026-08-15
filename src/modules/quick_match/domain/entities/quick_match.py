@@ -296,13 +296,7 @@ class QuickMatch:
         return self._play_mode
 
     def uses_handicap(self) -> bool:
-        """
-        Si esta partida reparte golpes de handicap.
-
-        Se consulta desde el reparto de golpes y desde el calculo del resultado,
-        que son dos sitios distintos: una partida SCRATCH no debe pintar puntos en
-        la tarjeta *ni* restar nada al bruto.
-        """
+        """Si esta partida reparte golpes de handicap (SCRATCH no reparte nada)."""
         return self._play_mode.allows_handicap()
 
     def get_effective_allowance(self) -> int:

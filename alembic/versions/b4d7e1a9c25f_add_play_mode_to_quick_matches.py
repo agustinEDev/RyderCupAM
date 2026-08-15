@@ -7,11 +7,16 @@ Las filas existentes NO se rellenan todas igual, y es deliberado: se les asigna
 el modo que reproduce lo que la aplicacion venia mostrando, para no reescribir
 el resultado de partidas ya jugadas.
 
-- Partidas de match play (match_format IS NOT NULL): el resultado se venia
-  calculando con los golpes brutos, sin aplicar handicap. Eso es exactamente
-  SCRATCH, asi que se quedan en SCRATCH y su resultado no se mueve.
-- Partido libre (scoring_format IS NOT NULL): la clasificacion ya se calculaba
-  neta, aplicando el Playing Handicap de cada uno. Eso es HANDICAP.
+- Match play YA TERMINADO o cancelado (match_format IS NOT NULL y status en
+  COMPLETED/CANCELLED): el resultado se venia calculando con los golpes brutos,
+  sin aplicar handicap. Eso es exactamente SCRATCH, asi que se quedan en SCRATCH
+  y su resultado guardado no se mueve.
+- Todo lo demas, HANDICAP. Esto incluye el partido libre (su clasificacion ya se
+  calculaba neta) y, sobre todo, las partidas de match play que en el momento del
+  despliegue esten PENDING o IN_PROGRESS: esas todavia se van a jugar, no hay
+  resultado que preservar, y sus jugadores las montaron dando por hecho que
+  habria handicap. Dejarlas en SCRATCH seria un cambio silencioso e irreversible,
+  porque no existe ningun endpoint que cambie `play_mode` despues de crear.
 
 Las partidas nuevas nacen en HANDICAP salvo que el creador elija scratch.
 
@@ -40,7 +45,8 @@ def upgrade() -> None:
         """
         UPDATE quick_matches
         SET play_mode = CASE
-            WHEN match_format IS NOT NULL THEN 'SCRATCH'
+            WHEN match_format IS NOT NULL
+                 AND status IN ('COMPLETED', 'CANCELLED') THEN 'SCRATCH'
             ELSE 'HANDICAP'
         END
         WHERE play_mode IS NULL
