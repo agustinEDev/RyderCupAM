@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -171,6 +172,28 @@ class MatchFormatType(sqlalchemy.types.TypeDecorator[MatchFormat]):
         return MatchFormat(value)
 
 
+class PlayModeType(sqlalchemy.types.TypeDecorator[PlayMode]):
+    """
+    TypeDecorator local para PlayMode (VO compartido con `competition`).
+
+    Como MatchFormatType: se comparte el Value Object, no el decorator, para no
+    acoplar la persistencia de los dos modulos.
+    """
+
+    impl = String(20)
+    cache_ok = True
+
+    def process_bind_param(self, value: PlayMode | None, dialect: Any) -> str | None:
+        if value is None:
+            return None
+        return value.value
+
+    def process_result_value(self, value: str | None, dialect: Any) -> PlayMode | None:
+        if value is None:
+            return None
+        return PlayMode(value)
+
+
 class ScoringFormatType(sqlalchemy.types.TypeDecorator[ScoringFormat]):
     """TypeDecorator para ScoringFormat (VO local a quick_match, formato de partido libre)."""
 
@@ -297,6 +320,7 @@ quick_matches_table = Table(
     Column("status", QuickMatchStatusType, nullable=False),
     Column("name", String(100), nullable=True),
     Column("allowance_percentage", Integer, nullable=True),
+    Column("play_mode", PlayModeType, nullable=False, default=PlayMode.HANDICAP),
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
     Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("hidden_by_participant_ids", ScorerIdsJsonType, nullable=False, default=list),
@@ -352,6 +376,7 @@ def start_quick_match_mappers() -> None:
                 "_status": quick_matches_table.c.status,
                 "_name": quick_matches_table.c.name,
                 "_allowance_percentage": quick_matches_table.c.allowance_percentage,
+                "_play_mode": quick_matches_table.c.play_mode,
                 "_participants": quick_matches_table.c.participants,
                 "_scorer_ids": quick_matches_table.c.scorer_ids,
                 "_hidden_by_participant_ids": quick_matches_table.c.hidden_by_participant_ids,

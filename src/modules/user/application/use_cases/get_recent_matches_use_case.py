@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import date as date_type
+from decimal import Decimal
 
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -14,6 +15,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.quick_match.application.services.stroke_context_builder import (
+    StrokeContextBuilder,
+)
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -21,6 +25,9 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 from src.modules.quick_match.domain.services.stableford_calculator import (
     HoleSetup,
     StablefordCalculator,
+)
+from src.modules.quick_match.domain.services.stroke_allocation_service import (
+    StrokeAllocationService,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
@@ -94,6 +101,7 @@ class GetRecentMatchesUseCase:
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         stableford_calculator: StablefordCalculator | None = None,
         scoring_service: ScoringService | None = None,
+        stroke_allocation_service: StrokeAllocationService | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
@@ -101,6 +109,9 @@ class GetRecentMatchesUseCase:
         self._golf_course_uow = golf_course_uow
         self._calculator = stableford_calculator or StablefordCalculator()
         self._scoring_service = scoring_service or ScoringService()
+        self._stroke_allocation_service = (
+            stroke_allocation_service or StrokeAllocationService()
+        )
 
     async def execute(
         self, user_id: UserId, limit: int = DEFAULT_LIMIT
@@ -284,7 +295,7 @@ class GetRecentMatchesUseCase:
         totals = self._participant_totals(raw, course, profile_handicap)
 
         if match.match_format is not None:
-            result, score = self._quick_match_play_outcome(raw)
+            result, score = self._quick_match_play_outcome(raw, course, users_by_id)
         elif totals is not None:
             if match.scoring_format == ScoringFormat.STABLEFORD:
                 score = f"{totals.stableford_points} pts"
@@ -355,7 +366,51 @@ class GetRecentMatchesUseCase:
 
     # ==================== Cálculo ====================
 
-    def _quick_match_play_outcome(self, raw: _QuickMatchRaw) -> tuple[str | None, str | None]:
+    def _quick_match_strokes(
+        self,
+        raw: _QuickMatchRaw,
+        course: GolfCourse | None,
+        users_by_id: dict[UserId, User],
+    ) -> dict:
+        """
+        Reparto de golpes de una partida rápida del historial.
+
+        Sin el campo (borrado, o no cargado) se devuelve un reparto vacío: el
+        resultado sale a bruto, que es peor que nada pero mejor que no poder
+        mostrar el historial.
+        """
+        if course is None:
+            return {}
+
+        context = StrokeContextBuilder.build(course)
+        handicaps = {}
+        for participant in raw.match.participants:
+            if participant.is_guest:
+                value = participant.handicap
+            elif participant.custom_handicap is not None:
+                value = participant.custom_handicap
+            else:
+                user = users_by_id.get(participant.user_id)
+                value = user.handicap.value if user and user.handicap else None
+            handicaps[participant.participant_id] = None if value is None else Decimal(str(value))
+
+        return self._stroke_allocation_service.allocate(
+            participants=raw.match.participants,
+            handicaps=handicaps,
+            tee_ratings=context.tee_ratings,
+            holes_by_stroke_index=context.holes_by_stroke_index,
+            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
+            match_format=raw.match.match_format,
+            allowance_percentage=raw.match.get_effective_allowance(),
+            play_mode=raw.match.play_mode,
+        )
+
+    def _quick_match_play_outcome(
+        self,
+        raw: _QuickMatchRaw,
+        course: GolfCourse | None,
+        users_by_id: dict[UserId, User],
+    ) -> tuple[str | None, str | None]:
         """
         Cómo quedó una partida rápida por equipos, desde el lado del jugador.
 
@@ -363,11 +418,17 @@ class GetRecentMatchesUseCase:
         con el mismo motor que usa el detalle de la partida. Solo cuentan los
         hoyos donde anotaron los dos bandos, porque un hoyo a medias no se puede
         adjudicar.
+
+        Los golpes se reparten con el mismo servicio que el detalle: si aquí se
+        compararan los brutos, el historial contaría una película distinta de la
+        que muestra la partida abierta.
         """
         rosters = raw.match.team_rosters()
         if rosters is None:
             return None, None
         team_a_ids, team_b_ids = rosters
+
+        strokes_by_participant = self._quick_match_strokes(raw, course, users_by_id)
 
         hole_results = []
         for hole_number in range(1, TOTAL_HOLES + 1):
@@ -378,10 +439,17 @@ class GetRecentMatchesUseCase:
             }
             if not all(pid in scores for pid in team_a_ids | team_b_ids):
                 continue
+
+            def net(pid, hole=hole_number, values=scores):
+                allocation = strokes_by_participant.get(pid)
+                if allocation is None:
+                    return values[pid]
+                return allocation.net_score(hole, values[pid])
+
             hole_results.append(
                 self._scoring_service.calculate_hole_winner(
-                    [scores[pid] for pid in team_a_ids],
-                    [scores[pid] for pid in team_b_ids],
+                    [net(pid) for pid in team_a_ids],
+                    [net(pid) for pid in team_b_ids],
                     raw.match.match_format,
                 )
             )
@@ -424,8 +492,16 @@ class GetRecentMatchesUseCase:
             return None
 
         holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in course.holes]
+        # En una partida scratch nadie recibe golpes, tampoco para los puntos
+        # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
+        # bruto se apuntaba como si le hubieran dado golpes.
+        handicap = (
+            self._effective_handicap(raw.participant, profile_handicap)
+            if raw.match.uses_handicap()
+            else None
+        )
         return self._calculator.compute_participant_totals(
-            handicap=self._effective_handicap(raw.participant, profile_handicap),
+            handicap=handicap,
             holes=holes,
             scores_by_hole=scores_by_hole,
             allowance_percentage=raw.match.get_effective_allowance(),

@@ -108,11 +108,27 @@ class Match:
         if match_number < 1:
             raise ValueError(f"match_number must be >= 1, got {match_number}")
 
-        # Calcular handicap combinado de cada equipo
-        team_a_handicap = sum(p.playing_handicap for p in team_a_players)
-        team_b_handicap = sum(p.playing_handicap for p in team_b_players)
+        # Golpes de ventaja: se cuentan los que de verdad se reparten en la
+        # vuelta, no se suman los playing_handicap.
+        #
+        # Sumarlos daba el DOBLE en foursomes: los dos jugadores del equipo
+        # llevan el mismo handicap de equipo (comparten bola, ver
+        # `_build_foursomes_match_players`), asi que la suma lo contaba dos
+        # veces y la tarjeta pintaba 14 donde el equipo recibia 7. En fourball
+        # la suma de diferenciales individuales tampoco significaba nada.
+        #
+        # `strokes_received` ya lleva un hoyo por golpe recibido, asi que el
+        # maximo del equipo es la ventaja real en SINGLES (solo recibe uno) y en
+        # FOURSOMES (los dos reciben lo mismo).
+        #
+        # En FOURBALL sigue siendo una aproximacion, y no por este calculo: ahi
+        # cada jugador recibe lo suyo y no existe un "golpes de ventaja del
+        # equipo". Este numero es el del jugador que mas recibe de cada bando, y
+        # se queda como resumen; el reparto de verdad esta en el
+        # `strokes_received` de cada uno, que es lo que decide los hoyos.
+        team_a_handicap = max((len(p.strokes_received) for p in team_a_players), default=0)
+        team_b_handicap = max((len(p.strokes_received) for p in team_b_players), default=0)
 
-        # Determinar golpes de ventaja
         handicap_diff = abs(team_a_handicap - team_b_handicap)
         if team_a_handicap > team_b_handicap:
             strokes_given_to_team = "A"

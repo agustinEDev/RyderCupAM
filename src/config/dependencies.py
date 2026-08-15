@@ -1547,9 +1547,12 @@ def get_get_quick_match_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
-    return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service)
+    return GetQuickMatchUseCase(
+        uow, user_uow, scoring_service, coverage_service, golf_course_uow
+    )
 
 
 def get_list_my_quick_matches_use_case(

@@ -186,6 +186,27 @@ class Round:
         self._status = RoundStatus.SCHEDULED
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def reopen_for_regeneration(self) -> None:
+        """
+        Devuelve la ronda a PENDING_MATCHES para poder regenerar sus partidos.
+        Transición: SCHEDULED → PENDING_MATCHES
+
+        Existe para una sola cosa: recalcular el reparto de golpes de rondas que
+        ya tenían partidos generados pero que aún no se han empezado, cuando el
+        cálculo del hándicap se corrige. El reparto se persiste al generar, así
+        que un fallo de cálculo se queda congelado en la base de datos y no se
+        arregla solo al desplegar.
+
+        Solo desde SCHEDULED: en cuanto una ronda arranca hay resultados, y
+        cambiarle los golpes reescribiría hoyos ya jugados.
+        """
+        if self._status != RoundStatus.SCHEDULED:
+            raise ValueError(
+                f"Cannot reopen a round in status {self._status}. Expected SCHEDULED"
+            )
+        self._status = RoundStatus.PENDING_MATCHES
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     def start(self) -> None:
         """
         Inicia la sesión (al menos un partido comenzó).
