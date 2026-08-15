@@ -34,6 +34,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
@@ -95,8 +96,22 @@ class GenerateMatchesUseCase:
         self._handicap_service = handicap_service
 
     async def execute(
-        self, request: GenerateMatchesRequestDTO, user_id: UserId, is_admin: bool = False
+        self,
+        request: GenerateMatchesRequestDTO,
+        user_id: UserId,
+        is_admin: bool = False,
+        allow_regeneration: bool = False,
     ) -> GenerateMatchesResponseDTO:
+        """
+        Args:
+            allow_regeneration: Admite una ronda ya en SCHEDULED y la reabre
+                DENTRO de esta misma transaccion. Lo usa
+                `scripts/regenerate_scheduled_round_strokes.py` para recalcular
+                el reparto de golpes de rondas ya montadas. Reabrirla fuera
+                dejaria la ronda en PENDING_MATCHES con los partidos viejos si
+                la generacion fallara, y las pasadas siguientes la saltarian por
+                no estar ya en SCHEDULED.
+        """
         async with self._uow:
             # 1. Buscar la ronda
             round_id = RoundId(request.round_id)
@@ -121,6 +136,11 @@ class GenerateMatchesUseCase:
                 )
 
             # 5. Verificar ronda PENDING_MATCHES
+            if allow_regeneration and round_entity.status == RoundStatus.SCHEDULED:
+                # La misma transaccion que borra y recrea los partidos: si algo
+                # falla despues, la ronda vuelve sola a SCHEDULED al deshacerse.
+                round_entity.reopen_for_regeneration()
+
             if not round_entity.can_generate_matches():
                 raise RoundNotPendingMatchesError(
                     f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
@@ -554,6 +574,25 @@ class GenerateMatchesUseCase:
 
         return tee_color, tee_gender, tee_rating, handicap_index
 
+    @classmethod
+    def _team_holes(cls, team_ids, player_data, holes_by_tee, default):
+        """
+        Orden de dificultad de un equipo de FOURSOMES.
+
+        Comparten bola, asi que el golpe es del equipo y no puede caer en dos
+        hoyos segun quien golpee: hace falta UNA tarjeta. Si los dos juegan la
+        misma barra, la suya; si no, la del campo, que es lo unico neutral.
+        """
+        tees = {
+            (player_data[str(uid.value)][0], player_data[str(uid.value)][1])
+            for uid in team_ids
+            if str(uid.value) in player_data
+        }
+        if len(tees) != 1:
+            return default
+        tee_color, tee_gender = next(iter(tees))
+        return cls._holes_for_tee(tee_color, tee_gender, holes_by_tee, default)
+
     @staticmethod
     def _holes_for_tee(tee_color, tee_gender, holes_by_tee, default):
         """
@@ -908,9 +947,16 @@ class GenerateMatchesUseCase:
             team_a_chs, team_b_chs, allowance, max_playing_handicap
         )
 
-        # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola)
-        team_a_strokes = calculator.compute_strokes_received(team_a_ph, holes_by_stroke_index)
-        team_b_strokes = calculator.compute_strokes_received(team_b_ph, holes_by_stroke_index)
+        # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola),
+        #    y por tanto un solo orden de dificultad. Se usa el de la barra del
+        #    equipo cuando los dos juegan la misma; si juegan barras distintas no
+        #    hay una tarjeta que sea "la del equipo" y se cae a la del campo.
+        team_a_strokes = calculator.compute_strokes_received(
+            team_a_ph, self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index)
+        )
+        team_b_strokes = calculator.compute_strokes_received(
+            team_b_ph, self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index)
+        )
 
         team_a_players = []
         for uid in team_a_ids:

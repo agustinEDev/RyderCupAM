@@ -173,7 +173,12 @@ class TestRoundStatusTransitions:
 
     @pytest.mark.parametrize(
         "status",
-        [RoundStatus.IN_PROGRESS, RoundStatus.COMPLETED, RoundStatus.PENDING_TEAMS],
+        [
+            RoundStatus.PENDING_MATCHES,
+            RoundStatus.IN_PROGRESS,
+            RoundStatus.COMPLETED,
+            RoundStatus.PENDING_TEAMS,
+        ],
     )
     def test_reopen_for_regeneration_rejects_any_other_status(self, status):
         """

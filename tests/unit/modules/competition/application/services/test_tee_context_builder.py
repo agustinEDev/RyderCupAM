@@ -109,3 +109,32 @@ class TestPerTeePar:
 
         assert context.tee_ratings[("YELLOW", "MALE")].par == 72
         assert context.tee_ratings[("RED", "FEMALE")].par == 70
+
+
+class TestFoursomesTeamCard:
+    """
+    En golpe alterno el equipo comparte bola, asi que comparte UNA tarjeta.
+
+    CodeRabbit lo señalo en la PR #208: el reparto de foursomes seguia usando la
+    tarjeta de referencia del campo aunque el equipo entero jugase otra barra.
+    """
+
+    def test_a_team_on_a_single_tee_uses_that_tees_card(self):
+        forward = _card(list(range(1, 19)))
+        backward = _card(list(range(18, 0, -1)))
+        course = _course(
+            [
+                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
+                    slope_rating=140, holes=forward),
+                Tee(color=TeeColor.RED, gender=Gender.FEMALE, course_rating=71.0,
+                    slope_rating=130, holes=backward),
+            ],
+            holes=forward,
+        )
+
+        context = TeeContextBuilder.build(course)
+
+        # Un equipo entero desde rojas reparte con el orden de rojas, no con el
+        # del campo (que es el de amarillas, la primera barra)
+        assert context.holes_for(TeeColor.RED, Gender.FEMALE)[0] == 18
+        assert context.holes_by_stroke_index[0] == 1

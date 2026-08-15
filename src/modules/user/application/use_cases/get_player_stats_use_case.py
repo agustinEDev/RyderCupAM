@@ -230,18 +230,18 @@ class GetPlayerStatsUseCase:
                 holes = [
                     HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
                 ]
-                # Una partida scratch se jugó a bruto: la media de la casa usa
-                # el hándicap con el que se jugó, y ahí no hubo ninguno.
-                # (El diferencial WHS de más abajo no se toca: ignora el
-                # allowance por diseño y el hándicap solo le sirve para el tope
-                # de doble bogey neto.)
-                handicap = (
-                    self._effective_handicap(participant, profile_handicap)
-                    if match.uses_handicap()
-                    else None
-                )
+                # Son DOS hándicaps distintos y no se pueden compartir:
+                #
+                # - La media de la casa usa el hándicap con el que se jugó, y en
+                #   una partida scratch no hubo ninguno.
+                # - El diferencial WHS de más abajo usa siempre el efectivo,
+                #   scratch o no: ahí el hándicap solo sirve para el tope de
+                #   doble bogey neto del Adjusted Gross Score, que es parte de
+                #   la fórmula WHS y no depende de cómo se jugara la partida.
+                effective_handicap = self._effective_handicap(participant, profile_handicap)
+                scoring_handicap = effective_handicap if match.uses_handicap() else None
                 totals = self._calculator.compute_participant_totals(
-                    handicap=handicap,
+                    handicap=scoring_handicap,
                     holes=holes,
                     scores_by_hole=scores_by_hole,
                     allowance_percentage=match.get_effective_allowance(),
@@ -259,7 +259,7 @@ class GetPlayerStatsUseCase:
                             course=course,
                             holes=holes,
                             scores_by_hole=scores_by_hole,
-                            handicap=handicap,
+                            handicap=effective_handicap,
                             tee_color=participant.tee_color,
                             tee_gender=participant.tee_gender,
                         ),

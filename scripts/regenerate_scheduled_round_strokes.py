@@ -85,8 +85,17 @@ async def main(dry_run: bool) -> int:
             user_repository=SQLAlchemyUnitOfWork(session).users,
         )
 
-        async with uow:
-            competitions = await uow.competitions.find_all(limit=COMPETITIONS_PAGE, offset=0)
+        competitions = []
+        offset = 0
+        while True:
+            async with uow:
+                page = await uow.competitions.find_all(limit=COMPETITIONS_PAGE, offset=offset)
+            if not page:
+                break
+            competitions.extend(page)
+            offset += COMPETITIONS_PAGE
+
+        print(f"Competiciones: {len(competitions)}")
 
         for competition in competitions:
             if competition.play_mode != PlayMode.HANDICAP:
@@ -124,10 +133,11 @@ async def main(dry_run: bool) -> int:
                     continue
 
                 try:
-                    async with uow:
-                        round_entity.reopen_for_regeneration()
-                        await uow.rounds.update(round_entity)
-
+                    # `allow_regeneration` reabre la ronda DENTRO de la misma
+                    # transaccion que borra y recrea los partidos. Hacerlo aqui
+                    # fuera la dejaria en PENDING_MATCHES con los partidos
+                    # viejos si la generacion fallara, y las pasadas siguientes
+                    # la saltarian por no estar ya en SCHEDULED.
                     await use_case.execute(
                         GenerateMatchesRequestDTO(
                             round_id=round_entity.id.value,
@@ -135,12 +145,13 @@ async def main(dry_run: bool) -> int:
                         ),
                         user_id=competition.creator_id,
                         is_admin=True,
+                        allow_regeneration=True,
                     )
                     regenerated_rounds += 1
                     regenerated_matches += len(pairings)
                 except Exception as exc:  # se informa y se sigue con las demas
                     skipped += 1
-                    print(f"    ERROR, ronda sin tocar: {exc}")
+                    print(f"    ERROR, la ronda se queda como estaba: {exc}")
 
     print(
         f"\n{'(dry-run) ' if dry_run else ''}"
