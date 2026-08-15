@@ -1,0 +1,73 @@
+"""
+StrokeContextBuilder - Traduce un GolfCourse a lo que necesita el reparto de golpes.
+
+Vive en la capa de aplicacion a proposito: `StrokeAllocationService` es dominio
+puro de `quick_match` y no debe conocer las entidades de `golf_course`. Aqui se
+hace la traduccion, una sola vez, para los dos consumidores que la necesitan
+(el detalle de la partida y el historial de partidas recientes).
+"""
+
+from dataclasses import dataclass
+from decimal import Decimal
+
+from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+
+
+@dataclass(frozen=True)
+class StrokeContext:
+    """Datos del campo ya resueltos para repartir golpes."""
+
+    tee_ratings: dict[tuple[str, str | None], TeeRating]
+    holes_by_stroke_index: list[int]
+    par_by_hole: dict[int, int]
+
+    @property
+    def course_par(self) -> int:
+        return sum(self.par_by_hole.values())
+
+
+class StrokeContextBuilder:
+    """Construye el StrokeContext de un campo."""
+
+    @staticmethod
+    def build(golf_course: GolfCourse) -> StrokeContext:
+        """
+        Args:
+            golf_course: Campo donde se juega la partida
+
+        Returns:
+            StrokeContext con los ratings por (color, genero), el orden de hoyos
+            por stroke index y el par de cada hoyo.
+        """
+        holes = sorted(golf_course.holes, key=lambda h: h.number)
+        par_by_hole = {hole.number: hole.par for hole in holes}
+        course_par = sum(par_by_hole.values())
+
+        holes_by_stroke_index = [
+            hole.number for hole in sorted(holes, key=lambda h: h.stroke_index)
+        ]
+
+        tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
+        for tee in golf_course.tees:
+            gender = tee.gender.value if tee.gender else None
+            # El par del tee cuando trae tarjeta propia; si no, el del campo.
+            par = tee.par_total if tee.holes else course_par
+            try:
+                rating = TeeRating(
+                    course_rating=Decimal(str(tee.course_rating)),
+                    slope_rating=tee.slope_rating,
+                    par=par,
+                )
+            except ValueError:
+                # Un tee con ratings fuera del rango WHS (dato importado suelto)
+                # no debe tumbar la partida entera: se omite y quien juegue desde
+                # el cae en el fallback del Handicap Index.
+                continue
+            tee_ratings[(tee.color.value, gender)] = rating
+
+        return StrokeContext(
+            tee_ratings=tee_ratings,
+            holes_by_stroke_index=holes_by_stroke_index,
+            par_by_hole=par_by_hole,
+        )

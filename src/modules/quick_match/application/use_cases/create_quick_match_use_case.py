@@ -1,6 +1,7 @@
 """Caso de Uso: Crear una Partida Rapida."""
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -75,6 +76,7 @@ class CreateQuickMatchUseCase:
             ),
             name=request.name,
             allowance_percentage=request.allowance_percentage,
+            play_mode=PlayMode(request.play_mode),
             creator_tee_color=creator_tee_color,
             creator_tee_gender=creator_tee_gender,
         )

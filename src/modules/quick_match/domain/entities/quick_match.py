@@ -9,6 +9,7 @@ competition por composicion, no por herencia ni acoplamiento de persistencia.
 from datetime import datetime
 
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -84,6 +85,7 @@ class QuickMatch:
         name: str | None = None,
         scoring_format: ScoringFormat | None = None,
         allowance_percentage: int | None = None,
+        play_mode: PlayMode = PlayMode.HANDICAP,
         scorer_ids: list[ParticipantId] | None = None,
         hidden_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
@@ -98,6 +100,7 @@ class QuickMatch:
         self._match_format = match_format
         self._scoring_format = scoring_format
         self._allowance_percentage = allowance_percentage
+        self._play_mode = play_mode
         self._status = status
         self._participants = list(participants)
         self._name = self._validate_name(name)
@@ -157,6 +160,7 @@ class QuickMatch:
         scoring_format: ScoringFormat | None = None,
         name: str | None = None,
         allowance_percentage: int | None = None,
+        play_mode: PlayMode = PlayMode.HANDICAP,
         creator_tee_color: TeeColor | None = None,
         creator_tee_gender: Gender | None = None,
     ) -> "QuickMatch":
@@ -167,6 +171,10 @@ class QuickMatch:
         (partido libre, todos contra todos) debe indicarse. allowance_percentage
         personalizado debe ser 50-100 en incrementos de 5; si se omite, se usa el
         default WHS del formato (ver get_effective_allowance()).
+
+        play_mode decide si se aplican handicaps: SCRATCH juega a golpes brutos
+        (nadie recibe golpes, en cualquier formato) y HANDICAP —el default— aplica
+        el reparto WHS. Es el mismo Value Object que usa `Competition.play_mode`.
         """
         now = datetime.now()
         uses_teams = match_format is not None and match_format != MatchFormat.SINGLES
@@ -185,6 +193,7 @@ class QuickMatch:
             match_format=match_format,
             scoring_format=scoring_format,
             allowance_percentage=allowance_percentage,
+            play_mode=play_mode,
             status=QuickMatchStatus.PENDING,
             participants=[creator_participant],
             name=name,
@@ -223,6 +232,7 @@ class QuickMatch:
         name: str | None = None,
         scoring_format: ScoringFormat | None = None,
         allowance_percentage: int | None = None,
+        play_mode: PlayMode = PlayMode.HANDICAP,
         scorer_ids: list[ParticipantId] | None = None,
         hidden_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
@@ -236,6 +246,7 @@ class QuickMatch:
             match_format=match_format,
             scoring_format=scoring_format,
             allowance_percentage=allowance_percentage,
+            play_mode=play_mode,
             status=status,
             participants=participants,
             name=name,
@@ -278,6 +289,21 @@ class QuickMatch:
     def allowance_percentage(self) -> int | None:
         """Allowance personalizado (50-100); None si se usa el default WHS del formato."""
         return self._allowance_percentage
+
+    @property
+    def play_mode(self) -> PlayMode:
+        """SCRATCH (golpes brutos) o HANDICAP (reparto WHS). Default HANDICAP."""
+        return self._play_mode
+
+    def uses_handicap(self) -> bool:
+        """
+        Si esta partida reparte golpes de handicap.
+
+        Se consulta desde el reparto de golpes y desde el calculo del resultado,
+        que son dos sitios distintos: una partida SCRATCH no debe pintar puntos en
+        la tarjeta *ni* restar nada al bruto.
+        """
+        return self._play_mode.allows_handicap()
 
     def get_effective_allowance(self) -> int:
         """

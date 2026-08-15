@@ -73,6 +73,7 @@ class QuickMatchDTOMapper:
             name=quick_match.name,
             allowance_percentage=quick_match.allowance_percentage,
             effective_allowance=quick_match.get_effective_allowance(),
+            play_mode=quick_match.play_mode.value,
             participants=participants_dto,
             scorer_ids=[sid.value for sid in quick_match.scorer_ids],
             created_at=quick_match.created_at,

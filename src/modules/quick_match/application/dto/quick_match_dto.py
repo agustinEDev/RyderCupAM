@@ -43,6 +43,14 @@ class CreateQuickMatchRequestDTO(BaseModel):
     allowance_percentage: int | None = Field(
         None, ge=50, le=100, description="Allowance WHS personalizado (50-100, incrementos de 5)."
     )
+    play_mode: str = Field(
+        "HANDICAP",
+        pattern="^(SCRATCH|HANDICAP)$",
+        description=(
+            "SCRATCH juega a golpes brutos y nadie recibe golpes; HANDICAP aplica "
+            "el reparto WHS. Se omite para el comportamiento habitual (HANDICAP)."
+        ),
+    )
     creator_tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
     creator_tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
@@ -173,6 +181,7 @@ class QuickMatchResponseDTO(BaseModel):
     name: str | None = None
     allowance_percentage: int | None = None
     effective_allowance: int
+    play_mode: str = "HANDICAP"
     participants: list[QuickMatchParticipantDTO]
     scorer_ids: list[UUID]
     created_at: datetime
@@ -215,9 +224,25 @@ class ScoringAssignmentDTO(BaseModel):
     covered_participant_ids: list[UUID]
 
 
+class ParticipantStrokesDTO(BaseModel):
+    """
+    Golpes que recibe un participante, ya resueltos por el backend.
+
+    Se expone para que la tarjeta pinte exactamente los mismos golpes que se han
+    usado para decidir cada hoyo. El frontend conserva su propio calculo para
+    poder anotar sin conexion, pero mientras haya red este es el dato bueno.
+    """
+
+    participant_id: UUID
+    playing_handicap: int
+    # Numeros de hoyo, con repeticion si recibe mas de un golpe en el mismo
+    strokes_received: list[int] = Field(default_factory=list)
+
+
 class QuickMatchDetailResponseDTO(QuickMatchResponseDTO):
     """DTO de detalle: partida + scores + standing + reparto de anotacion."""
 
     hole_scores: list[HoleScoreResponseDTO]
     standing: QuickMatchStandingResponseDTO | None = None
     scoring_assignments: list[ScoringAssignmentDTO] = Field(default_factory=list)
+    participant_strokes: list[ParticipantStrokesDTO] = Field(default_factory=list)
