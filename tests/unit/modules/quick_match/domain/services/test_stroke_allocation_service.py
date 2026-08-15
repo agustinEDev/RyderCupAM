@@ -467,3 +467,169 @@ class TestAllocateByHole:
 
     def test_no_holes_allocates_nothing(self, service):
         assert service.allocate_by_hole(10, []) == {}
+
+
+class TestReviewFindings:
+    """
+    Casos que el code review destapó y que no tenían ni un test.
+
+    Todos comparten el mismo patrón: el reparto salía silenciosamente distinto
+    del que espera el WHS o del que calcula el frontend, sin que nada fallase.
+    """
+
+    def test_falls_back_to_a_genderless_tee(self, service):
+        """
+        Given un campo dado de alta a mano, con la salida sin genero
+        When un participante la elige (el DTO le obliga a mandar color y genero)
+        Then se encuentra igual, en vez de caer al Handicap Index
+
+        Sin la reserva a (color, None) la busqueda no acertaba nunca: un 18.0
+        salia con 18 golpes en vez de 23. Cinco de diferencia, en silencio.
+        """
+        a = _guest("A", 18.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = service.allocate(
+            participants=[a],
+            handicaps={a.participant_id: Decimal("18.0")},
+            tee_ratings={("YELLOW", None): MEIS_AMARILLAS_M},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        assert result[a.participant_id].playing_handicap == 23
+
+    def test_allocates_on_the_holes_of_the_tee_being_played(self, service):
+        """
+        Given dos barras del mismo campo con stroke index distintos
+        When cada jugador juega la suya
+        Then cada uno recibe en los hoyos de SU barra
+
+        Pasa en 56 de los 800 campos federados importados. `golf_course.holes`
+        es solo la tarjeta de la primera barra, asi que sin esto el que juega la
+        otra recibia los golpes en los hoyos equivocados.
+        """
+        her = _guest("Ella", 20.0, TeeColor.YELLOW, Gender.FEMALE)
+
+        # Su barra tiene el orden invertido respecto al del campo
+        reversed_order = list(range(18, 0, -1))
+
+        result = service.allocate(
+            participants=[her],
+            handicaps={her.participant_id: Decimal("20.0")},
+            tee_ratings={("YELLOW", "FEMALE"): MEIS_AMARILLAS_M},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+            holes_by_stroke_index_by_tee={("YELLOW", "FEMALE"): reversed_order},
+        )
+
+        strokes = result[her.participant_id]
+        # PH 25: dos golpes en los 7 mas dificiles de SU barra, que son el 18..12
+        assert strokes.strokes_on_hole(18) == 2
+        assert strokes.strokes_on_hole(1) == 1
+
+    def test_allowance_also_applies_without_a_usable_tee(self, service):
+        """
+        Given un participante sin barra valorable en un partido libre al 95%
+        When se calcula su reparto
+        Then el allowance se le aplica igual
+
+        Antes jugaba al 100% de su handicap mientras el resto de la partida
+        jugaba al 95%: salia ganando por no tener datos.
+        """
+        a = _guest("A", 20.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = service.allocate(
+            participants=[a],
+            handicaps={a.participant_id: Decimal("20.0")},
+            tee_ratings={},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=95,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        # 20 x 0.95 = 19, no 20
+        assert result[a.participant_id].playing_handicap == 19
+
+    def test_rounds_half_away_from_zero_like_the_rest_of_the_calculation(self, service):
+        """
+        Given un Handicap Index acabado en .5 y sin barra valorable
+        When se redondea
+        Then se aleja del cero, como `PlayingHandicapCalculator` y el frontend
+
+        `Decimal.to_integral_value()` redondea al par por defecto: 20.5 -> 20.
+        El resto del calculo usa ROUND_HALF_UP, asi que partia el empate para el
+        lado contrario justo en los handicaps acabados en .5.
+        """
+        a = _guest("A", 20.5, TeeColor.YELLOW, Gender.MALE)
+
+        result = service.allocate(
+            participants=[a],
+            handicaps={a.participant_id: Decimal("20.5")},
+            tee_ratings={},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=None,
+            allowance_percentage=100,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        assert result[a.participant_id].playing_handicap == 21
+
+    def test_fourball_shows_the_playing_handicap_not_the_difference(self, service):
+        """
+        Given un fourball
+        When se reparte
+        Then cada uno conserva SU handicap de juego, aunque reciba la diferencia
+
+        Guardar el diferencial ahi hacia que la tarjeta dijese "Hcp de juego 14
+        - recibe 14 golpes": el mismo numero dos veces, y ninguno era su
+        handicap de juego.
+        """
+        players = [
+            _guest("A1", 5.0, TeeColor.YELLOW, Gender.MALE, team="A"),
+            _guest("A2", 15.0, TeeColor.YELLOW, Gender.MALE, team="A"),
+            _guest("B1", 20.0, TeeColor.YELLOW, Gender.MALE, team="B"),
+            _guest("B2", 25.0, TeeColor.YELLOW, Gender.MALE, team="B"),
+        ]
+
+        result = service.allocate(
+            participants=players,
+            handicaps={
+                p.participant_id: Decimal(str(hi))
+                for p, hi in zip(players, [5, 15, 20, 25], strict=True)
+            },
+            tee_ratings={("YELLOW", "MALE"): MEIS_AMARILLAS_M},
+            holes_by_stroke_index=_holes_by_stroke_index(),
+            match_format=MatchFormat.FOURBALL,
+            allowance_percentage=90,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        best = result[players[0].participant_id]
+        worst = result[players[3].participant_id]
+        # El mejor juega off scratch pero conserva su handicap de juego
+        assert best.total_strokes == 0
+        assert best.playing_handicap > 0
+        # Y el peor recibe menos golpes de los que dice su handicap de juego
+        assert worst.playing_handicap > worst.total_strokes
+
+    def test_an_unknown_match_format_fails_loudly(self, service):
+        """Un formato nuevo sin reparto propio no debe caer en el de golpe alterno."""
+
+        class FakeFormat:
+            value = "SCRAMBLE"
+
+        with pytest.raises(ValueError, match="No stroke allocation defined"):
+            service.allocate(
+                participants=[],
+                handicaps={},
+                tee_ratings={},
+                holes_by_stroke_index=_holes_by_stroke_index(),
+                match_format=FakeFormat(),
+                allowance_percentage=100,
+                play_mode=PlayMode.HANDICAP,
+            )

@@ -230,7 +230,16 @@ class GetPlayerStatsUseCase:
                 holes = [
                     HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
                 ]
-                handicap = self._effective_handicap(participant, profile_handicap)
+                # Una partida scratch se jugó a bruto: la media de la casa usa
+                # el hándicap con el que se jugó, y ahí no hubo ninguno.
+                # (El diferencial WHS de más abajo no se toca: ignora el
+                # allowance por diseño y el hándicap solo le sirve para el tope
+                # de doble bogey neto.)
+                handicap = (
+                    self._effective_handicap(participant, profile_handicap)
+                    if match.uses_handicap()
+                    else None
+                )
                 totals = self._calculator.compute_participant_totals(
                     handicap=handicap,
                     holes=holes,

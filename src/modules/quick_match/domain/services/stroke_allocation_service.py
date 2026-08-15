@@ -23,7 +23,7 @@ El reparto depende del formato, siguiendo el WHS igual que `competition`:
 """
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from src.modules.competition.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
@@ -86,6 +86,7 @@ class StrokeAllocationService:
         match_format: MatchFormat | None,
         allowance_percentage: int,
         play_mode: PlayMode,
+        holes_by_stroke_index_by_tee: dict[tuple[str, str | None], list[int]] | None = None,
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Calcula el reparto de golpes de todos los participantes.
@@ -95,7 +96,10 @@ class StrokeAllocationService:
             handicaps: Handicap Index ya resuelto por participante (custom_handicap,
                 handicap manual del invitado o el del perfil). None si no se conoce.
             tee_ratings: Ratings por (color, genero); el genero va como str o None
-            holes_by_stroke_index: Numeros de hoyo ordenados por stroke index
+            holes_by_stroke_index: Numeros de hoyo ordenados por stroke index (por defecto)
+            holes_by_stroke_index_by_tee: Orden propio de cada barra, cuando el campo
+                lo trae. En un campo federado el stroke index puede cambiar de una
+                barra a otra, y los golpes van en los hoyos de la barra que se juega
             match_format: SINGLES/FOURBALL/FOURSOMES, o None en partido libre
             allowance_percentage: Allowance efectivo de la partida (50-100)
             play_mode: SCRATCH no reparte nada; HANDICAP aplica el reparto WHS
@@ -107,31 +111,60 @@ class StrokeAllocationService:
         if play_mode == PlayMode.SCRATCH:
             return {p.participant_id: self._no_strokes(p.participant_id) for p in participants}
 
+        # Se pasa como argumento en lugar de guardarlo en el objeto: el servicio
+        # se inyecta como singleton y tiene que seguir siendo puro.
+        by_tee = holes_by_stroke_index_by_tee or {}
+
         if match_format is None:
             return self._allocate_free_play(
-                participants, handicaps, tee_ratings, holes_by_stroke_index, allowance_percentage
+                participants,
+                handicaps,
+                tee_ratings,
+                holes_by_stroke_index,
+                allowance_percentage,
+                by_tee,
             )
 
         if match_format == MatchFormat.SINGLES:
             return self._allocate_singles(
-                participants, handicaps, tee_ratings, holes_by_stroke_index, allowance_percentage
+                participants,
+                handicaps,
+                tee_ratings,
+                holes_by_stroke_index,
+                allowance_percentage,
+                by_tee,
             )
 
         if match_format == MatchFormat.FOURBALL:
             return self._allocate_fourball(
-                participants, handicaps, tee_ratings, holes_by_stroke_index, allowance_percentage
+                participants,
+                handicaps,
+                tee_ratings,
+                holes_by_stroke_index,
+                allowance_percentage,
+                by_tee,
             )
 
-        return self._allocate_foursomes(
-            participants, handicaps, tee_ratings, holes_by_stroke_index, allowance_percentage
-        )
+        if match_format == MatchFormat.FOURSOMES:
+            return self._allocate_foursomes(
+                participants,
+                handicaps,
+                tee_ratings,
+                holes_by_stroke_index,
+                allowance_percentage,
+                by_tee,
+            )
+
+        # Un formato nuevo tiene que traer su reparto: caer aqui por descarte le
+        # daria en silencio el de golpe alterno, que casi seguro no es el suyo.
+        raise ValueError(f"No stroke allocation defined for match format {match_format}")
 
     # ===========================================
     # Reparto por formato
     # ===========================================
 
     def _allocate_free_play(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance
+        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Cada uno contra el campo: su Playing Handicap individual, entero.
@@ -145,11 +178,13 @@ class StrokeAllocationService:
             ph = self._playing_handicap(
                 p, handicaps, tee_ratings, allowance, allow_negative=True
             )
-            result[p.participant_id] = self._build(p.participant_id, ph, holes_by_stroke_index)
+            result[p.participant_id] = self._build(
+                p.participant_id, ph, self._holes_for(p, holes_by_stroke_index, by_tee)
+            )
         return result
 
     def _allocate_singles(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance
+        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         Metodo diferencial WHS: solo el de mayor PH recibe, y recibe la diferencia.
@@ -168,20 +203,22 @@ class StrokeAllocationService:
         # El PH que se guarda es el individual, para poder mostrarlo; el reparto
         # es la diferencia, y solo la recibe uno de los dos.
         return {
-            a.participant_id: ParticipantStrokes(
+            a.participant_id: self._build(
                 a.participant_id,
-                ph_a,
-                self.allocate_by_hole(max(0, difference), holes_by_stroke_index),
+                max(0, difference),
+                self._holes_for(a, holes_by_stroke_index, by_tee),
+                display_handicap=ph_a,
             ),
-            b.participant_id: ParticipantStrokes(
+            b.participant_id: self._build(
                 b.participant_id,
-                ph_b,
-                self.allocate_by_hole(max(0, -difference), holes_by_stroke_index),
+                max(0, -difference),
+                self._holes_for(b, holes_by_stroke_index, by_tee),
+                display_handicap=ph_b,
             ),
         }
 
     def _allocate_fourball(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance
+        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """Diferencias respecto al menor Course Handicap de los cuatro, con allowance."""
         course_handicaps = [
@@ -194,12 +231,20 @@ class StrokeAllocationService:
 
         result = {}
         for p in participants:
-            ph = differential_phs[str(p.participant_id.value)]
-            result[p.participant_id] = self._build(p.participant_id, ph, holes_by_stroke_index)
+            allocated = differential_phs[str(p.participant_id.value)]
+            # Se guarda el Playing Handicap del jugador, no la diferencia. Si no,
+            # la tarjeta enseña "Hcp de juego 14 - recibe 14 golpes": el mismo
+            # numero dos veces, y ninguno es su handicap de juego.
+            result[p.participant_id] = self._build(
+                p.participant_id,
+                allocated,
+                self._holes_for(p, holes_by_stroke_index, by_tee),
+                display_handicap=self._playing_handicap(p, handicaps, tee_ratings, allowance),
+            )
         return result
 
     def _allocate_foursomes(
-        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance
+        self, participants, handicaps, tee_ratings, holes_by_stroke_index, allowance, by_tee
     ) -> dict[ParticipantId, ParticipantStrokes]:
         """
         A nivel de equipo: allowance sobre la diferencia de promedios de Course Handicap.
@@ -221,14 +266,20 @@ class StrokeAllocationService:
         )
 
         result = {}
-        for p in team_a:
-            result[p.participant_id] = self._build(
-                p.participant_id, team_a_ph, holes_by_stroke_index
-            )
-        for p in team_b:
-            result[p.participant_id] = self._build(
-                p.participant_id, team_b_ph, holes_by_stroke_index
-            )
+        for team, allocated in ((team_a, team_a_ph), (team_b, team_b_ph)):
+            # Golpe alterno: una sola bola, asi que un solo orden de dificultad
+            # para los dos. Se usa el del campo aunque cada uno juegue una barra
+            # distinta, porque el golpe es del equipo y no puede caer en dos
+            # hoyos segun quien golpee.
+            for p in team:
+                result[p.participant_id] = self._build(
+                    p.participant_id,
+                    allocated,
+                    holes_by_stroke_index,
+                    display_handicap=self._playing_handicap(
+                        p, handicaps, tee_ratings, allowance
+                    ),
+                )
         return result
 
     # ===========================================
@@ -261,7 +312,10 @@ class StrokeAllocationService:
 
         tee_rating = self._tee_rating_for(participant, tee_ratings)
         if tee_rating is None:
-            rounded = int(hi.to_integral_value())
+            # El allowance se aplica igual: sin el, quien no tiene barra
+            # valorable jugaria al 100% de su handicap mientras el resto de la
+            # partida juega al 95%, y saldria ganando por no tener datos.
+            rounded = self._round_half_up(hi * Decimal(allowance) / Decimal(100))
             return rounded if allow_negative else max(0, rounded)
 
         if allow_negative:
@@ -281,7 +335,7 @@ class StrokeAllocationService:
 
         tee_rating = self._tee_rating_for(participant, tee_ratings)
         if tee_rating is None:
-            return max(0, int(hi.to_integral_value()))
+            return max(0, self._round_half_up(hi))
 
         return self._calculator.calculate_course_handicap(hi, tee_rating)
 
@@ -296,20 +350,69 @@ class StrokeAllocationService:
         El genero forma parte de la clave, no es un detalle decorativo: un campo
         federado valora la misma barra por separado para cada genero y la
         diferencia de CR/SR entre ambas vale varios golpes.
+
+        Pero un campo dado de alta a mano puede tener la salida sin genero, y el
+        participante siempre manda color y genero juntos (lo exige el DTO). Sin
+        la reserva a `(color, None)` esa busqueda no acertaria nunca y el jugador
+        caeria al Handicap Index: cinco golpes de diferencia, en silencio. Es la
+        misma reserva que hace `generate_matches_use_case` en competition.
         """
         if participant.tee_color is None:
             return None
+
+        color = participant.tee_color.value
         gender = participant.tee_gender.value if participant.tee_gender else None
-        return tee_ratings.get((participant.tee_color.value, gender))
+        return tee_ratings.get((color, gender)) or tee_ratings.get((color, None))
+
+    @staticmethod
+    def _holes_for(
+        participant: QuickMatchParticipant,
+        default: list[int],
+        by_tee: dict[tuple[str, str | None], list[int]],
+    ) -> list[int]:
+        """
+        Orden de dificultad de la barra que juega el participante.
+
+        Cae al del campo cuando la barra no trae tarjeta propia. Misma reserva de
+        genero que `_tee_rating_for`, para que las dos resuelvan la misma barra.
+        """
+        if participant.tee_color is None:
+            return default
+        color = participant.tee_color.value
+        gender = participant.tee_gender.value if participant.tee_gender else None
+        return by_tee.get((color, gender)) or by_tee.get((color, None)) or default
 
     def _build(
-        self, participant_id: ParticipantId, playing_handicap: int, holes_by_stroke_index: list[int]
+        self,
+        participant_id: ParticipantId,
+        allocated: int,
+        holes_by_stroke_index: list[int],
+        display_handicap: int | None = None,
     ) -> ParticipantStrokes:
+        """
+        Args:
+            allocated: Golpes a repartir (la diferencia, en los formatos por equipos)
+            display_handicap: Playing Handicap del jugador, para mostrar. En match
+                play NO coincide con `allocated`: uno es con lo que juega y el otro
+                lo que recibe.
+        """
         return ParticipantStrokes(
             participant_id,
-            playing_handicap,
-            self.allocate_by_hole(playing_handicap, holes_by_stroke_index),
+            allocated if display_handicap is None else display_handicap,
+            self.allocate_by_hole(allocated, holes_by_stroke_index),
         )
+
+    @staticmethod
+    def _round_half_up(value: Decimal) -> int:
+        """
+        Redondea alejandose del cero, como `PlayingHandicapCalculator`.
+
+        `Decimal.to_integral_value()` usa ROUND_HALF_EVEN por defecto: 20.5 -> 20
+        y 21.5 -> 22. Todo el resto del calculo de handicap usa ROUND_HALF_UP, y
+        el frontend tambien, asi que dejarlo al default partia el empate para el
+        lado contrario en los handicaps acabados en .5, que son de lo mas comun.
+        """
+        return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     @staticmethod
     def allocate_by_hole(playing_handicap: int, holes_by_stroke_index: list[int]) -> dict[int, int]:

@@ -8,13 +8,27 @@ hace la traduccion, una sola vez, para los dos consumidores que la necesitan
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 
 logger = logging.getLogger(__name__)
+
+# Campos por los que ya se ha avisado en este proceso. El detalle de la partida
+# se pide cada 10 segundos mientras se juega, asi que avisar en cada llamada
+# llenaria el log con la misma linea durante toda la vuelta. Interesa enterarse
+# del campo mal valorado, no contarlo 24 veces por minuto.
+_reported_courses: set[str] = set()
+
+
+def _report_once(course_id, message: str, *args) -> None:
+    key = str(course_id)
+    if key in _reported_courses:
+        return
+    _reported_courses.add(key)
+    logger.warning(message, *args)
 
 
 @dataclass(frozen=True)
@@ -24,6 +38,14 @@ class StrokeContext:
     tee_ratings: dict[tuple[str, str | None], TeeRating]
     holes_by_stroke_index: list[int]
     par_by_hole: dict[int, int]
+    # Orden de dificultad propio de cada barra. `golf_course.holes` es solo la
+    # tarjeta de la PRIMERA barra (ver `GolfCourse._sync_holes_and_tees`), y el
+    # importador de la RFEG guarda una tarjeta por barra: en 56 de los 800
+    # campos federados el stroke index cambia de una a otra. Repartir con el
+    # orden de otra barra pone los golpes en los hoyos equivocados.
+    holes_by_stroke_index_by_tee: dict[tuple[str, str | None], list[int]] = field(
+        default_factory=dict
+    )
 
     @property
     def course_par(self) -> int:
@@ -52,7 +74,8 @@ class StrokeContextBuilder:
             # partida acaba jugandose a bruto — que es justo el fallo que este
             # reparto arregla. Degradar en silencio aqui seria indistinguible del
             # exito, y con 800 campos importados conviene poder contarlo.
-            logger.warning(
+            _report_once(
+                golf_course.id,
                 "Golf course %s has no holes: quick match strokes cannot be allocated",
                 golf_course.id,
             )
@@ -62,8 +85,13 @@ class StrokeContextBuilder:
         ]
 
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
+        holes_by_tee: dict[tuple[str, str | None], list[int]] = {}
         for tee in golf_course.tees:
             gender = tee.gender.value if tee.gender else None
+            if tee.holes:
+                holes_by_tee[(tee.color.value, gender)] = [
+                    hole.number for hole in sorted(tee.holes, key=lambda h: h.stroke_index)
+                ]
             # El par del tee cuando trae tarjeta propia; si no, el del campo.
             par = tee.par_total if tee.holes else course_par
             try:
@@ -76,8 +104,10 @@ class StrokeContextBuilder:
                 # Un tee con ratings fuera del rango WHS (dato importado suelto)
                 # no debe tumbar la partida entera: se omite y quien juegue desde
                 # el cae en el fallback del Handicap Index.
-                logger.warning(
-                    "Skipping tee %s (%s) of golf course %s: %s",
+                _report_once(
+                    golf_course.id,
+                    "Skipping tee %s (%s) of golf course %s: %s. "
+                    "Players on it fall back to their Handicap Index.",
                     tee.color.value,
                     gender,
                     golf_course.id,
@@ -90,4 +120,5 @@ class StrokeContextBuilder:
             tee_ratings=tee_ratings,
             holes_by_stroke_index=holes_by_stroke_index,
             par_by_hole=par_by_hole,
+            holes_by_stroke_index_by_tee=holes_by_tee,
         )

@@ -399,6 +399,7 @@ class GetRecentMatchesUseCase:
             handicaps=handicaps,
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
+            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
             match_format=raw.match.match_format,
             allowance_percentage=raw.match.get_effective_allowance(),
             play_mode=raw.match.play_mode,
@@ -491,8 +492,16 @@ class GetRecentMatchesUseCase:
             return None
 
         holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in course.holes]
+        # En una partida scratch nadie recibe golpes, tampoco para los puntos
+        # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
+        # bruto se apuntaba como si le hubieran dado golpes.
+        handicap = (
+            self._effective_handicap(raw.participant, profile_handicap)
+            if raw.match.uses_handicap()
+            else None
+        )
         return self._calculator.compute_participant_totals(
-            handicap=self._effective_handicap(raw.participant, profile_handicap),
+            handicap=handicap,
             holes=holes,
             scores_by_hole=scores_by_hole,
             allowance_percentage=raw.match.get_effective_allowance(),

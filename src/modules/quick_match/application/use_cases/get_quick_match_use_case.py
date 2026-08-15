@@ -155,6 +155,7 @@ class GetQuickMatchUseCase:
             handicaps=self._resolve_handicaps(quick_match, users_by_id),
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
+            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
             match_format=quick_match.match_format,
             allowance_percentage=quick_match.get_effective_allowance(),
             play_mode=quick_match.play_mode,
