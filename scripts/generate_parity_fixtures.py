@@ -9,7 +9,7 @@ backend de verdad.
 
 Uso (desde la raiz del repositorio):
     source .venv/bin/activate
-    python scripts/generate_parity_fixtures.py
+    PYTHONPATH=. python scripts/generate_parity_fixtures.py
 
 Escribe el JSON en el repositorio del frontend, donde lo lee
 `MatchPlayStrokeAllocator.parity.test.js`. Si ese test falla despues de tocar el
@@ -18,7 +18,6 @@ vuelva a cuadrar. No al reves.
 """
 
 import json
-import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -236,7 +235,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # Se ejecuta como script suelto, no como modulo: sin esto `src` no se
-    # encuentra salvo que se exporte PYTHONPATH a mano
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     main()

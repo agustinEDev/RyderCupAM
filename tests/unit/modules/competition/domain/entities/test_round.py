@@ -141,6 +141,50 @@ class TestRoundStatusTransitions:
 
         assert round.status == RoundStatus.SCHEDULED
 
+    def _scheduled_round(self, status=None):
+        return Round.reconstruct(
+            id=RoundId.generate(),
+            competition_id=CompetitionId.generate(),
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2026, 3, 15),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+            status=status or RoundStatus.SCHEDULED,
+            handicap_mode=HandicapMode.MATCH_PLAY,
+            allowance_percentage=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+    def test_reopen_for_regeneration_from_scheduled(self):
+        """
+        SCHEDULED → PENDING_MATCHES.
+
+        Es la puerta para recalcular el reparto de golpes de una ronda ya
+        montada: el reparto se persiste al generar, así que corregir el cálculo
+        no basta para arreglar las que ya existen.
+        """
+        round = self._scheduled_round()
+
+        round.reopen_for_regeneration()
+
+        assert round.status == RoundStatus.PENDING_MATCHES
+        assert round.can_generate_matches()
+
+    @pytest.mark.parametrize(
+        "status",
+        [RoundStatus.IN_PROGRESS, RoundStatus.COMPLETED, RoundStatus.PENDING_TEAMS],
+    )
+    def test_reopen_for_regeneration_rejects_any_other_status(self, status):
+        """
+        Una ronda empezada no se reabre: ya hay resultados y cambiarle los
+        golpes reescribiría hoyos jugados.
+        """
+        round = self._scheduled_round(status=status)
+
+        with pytest.raises(ValueError, match="Expected SCHEDULED"):
+            round.reopen_for_regeneration()
+
     def test_start_from_scheduled(self):
         """SCHEDULED → IN_PROGRESS."""
         round = Round.reconstruct(
