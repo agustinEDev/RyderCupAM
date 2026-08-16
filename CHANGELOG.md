@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-08-16
+
+### Fixed
+
+- **El match play de las partidas rápidas se decidía a golpes brutos**: `_compute_standing` pasaba el resultado tal cual a `calculate_hole_winner`, cuya firma pide netos, así que un 1 contra 1 entre un 18.0 y un 20.7 se resolvía como si los dos jugaran scratch. `GetRecentMatchesUseCase` tenía su propia copia del mismo fallo, de modo que el historial y el detalle podían discrepar sobre quién había ganado. Salió de una partida real en Golf de Meis.
+
+- **La tarjeta repartía el hándicap de juego entero a cada jugador**, que es el método del stroke play. En match play el WHS da solo la **diferencia**, al de más hándicap, en los hoyos de menor índice de dificultad. Los totales se parecían, pero los golpes caían en hoyos distintos: justo donde se deciden los hoyos ajustados. El nuevo `StrokeAllocationService` resuelve los golpes de cada participante para todos los formatos —individual, fourball y foursomes por diferencia, partido libre por hándicap entero, nada en scratch— y la tarjeta y el resultado por fin salen del mismo cálculo. El detalle expone `participant_strokes` para que el cliente dibuje lo que de verdad decidió cada hoyo.
+
+- **En las competiciones los golpes se repartían contra la tarjeta del campo, que es la de la primera salida**: cada barra puede llevar la suya, y **56 de los 802 campos federados** tienen un índice de dificultad que cambia de una barra a otra. Además cada salida se valoraba contra el par del campo en vez del suyo propio, lo que desplaza `CR - par` y con él el hándicap de campo; **25 de esos 802** tienen un par distinto entre barras. Un 10% está expuesto a al menos uno de los dos. `GenerateMatchesUseCase` y `ReassignMatchPlayersUseCase` tenían cada uno su copia de la traducción y ambas arrastraban los dos defectos, así que ahora comparten un `TeeContextBuilder`.
+
+- **El hándicap de equipo de un foursomes salía doblado**: `Match.create` sumaba el `playing_handicap` de los dos miembros, que en foursomes ya es el del equipo, así que un equipo con 7 golpes se mostraba con 14. El campo no alimenta ningún cálculo —solo lo leen la tarjeta y el detalle del partido—, de modo que ningún resultado llegó a ser incorrecto por esto.
+
+### Added
+
+- **Modo scratch en las partidas rápidas**: `play_mode` reutiliza el objeto de valor `PlayMode` que ya usaban las competiciones. Nadie recibe golpes y los hoyos se deciden a bruto. El partido libre también lo respeta. Por defecto `HANDICAP`, así que un cliente que omita el campo se comporta exactamente igual que antes.
+
+- **Arnés de paridad con el frontend** (`scripts/generate_parity_fixtures.py`): ejecuta el `StrokeAllocationService` real sobre 12 escenarios y vuelca entradas y resultados a un JSON que consume el test del cliente. La duplicación del cálculo entre backend y frontend no se puede retirar —sin ella no hay anotación sin conexión—, así que esta es la única garantía de que los dos no se separen. **Cazó tres divergencias vivas** en cuanto se ejecutó, ninguna visible para los tests escritos a mano de cada lado.
+
+- **Regenerador de las rondas ya programadas** (`scripts/regenerate_scheduled_round_strokes.py`): los partidos de competición se generan una vez y se **persisten**, así que un reparto mal calculado se queda congelado y no se corrige al desplegar. El script recalcula las rondas en `SCHEDULED` conservando emparejamientos y numeración, reabriéndolas y volviendo a generar con los mismos cruces para que el reparto salga del código corregido sin duplicar lógica. Tiene `--dry-run`, y conviene usarlo: borra y recrea filas de `matches`.
+
+### Changed
+
+- **Migración `b4d7e1a9c25f`**, que rellena el `play_mode` de las partidas existentes conservando lo que la aplicación venía enseñando en vez de reescribir partidas terminadas: el match play **completado o cancelado** pasa a `SCRATCH`, porque se resolvió a bruto y su resultado guardado no se mueve; todo lo demás pasa a `HANDICAP`, incluido el match play aún pendiente o en curso, que no tiene resultado que preservar y cuyos jugadores lo montaron contando con los hándicaps.
+
 ## [2.8.0] - 2026-08-13
 
 ### Changed
