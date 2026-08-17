@@ -11,6 +11,9 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.tee_context_builder import (
+    TeeContextBuilder,
+)
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -108,6 +111,7 @@ class ReassignMatchPlayersUseCase:
                 holes_by_stroke_index,
                 user_handicap_map,
                 user_gender_map,
+                holes_by_tee,
             ) = await self._build_handicap_data(round_entity, is_scratch, all_player_ids)
 
             # 7. Construir nuevos MatchPlayers
@@ -122,6 +126,7 @@ class ReassignMatchPlayersUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     competition.max_playing_handicap,
+                    holes_by_tee,
                 )
                 for uid in request.team_a_player_ids
             ]
@@ -136,6 +141,7 @@ class ReassignMatchPlayersUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     competition.max_playing_handicap,
+                    holes_by_tee,
                 )
                 for uid in request.team_b_player_ids
             ]
@@ -164,6 +170,7 @@ class ReassignMatchPlayersUseCase:
         """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
+        holes_by_tee: dict[tuple[str, str | None], list[int]] = {}
         user_handicap_map: dict[str, Decimal] = {}
         user_gender_map: dict[str, Gender | None] = {}
 
@@ -174,17 +181,10 @@ class ReassignMatchPlayersUseCase:
                     "Se requiere un campo de golf para el modo HANDICAP. "
                     "Asocie un campo de golf aprobado a la competición."
                 )
-            total_par = sum(h.par for h in golf_course.holes)
-            for tee in golf_course.tees:
-                gender_key = tee.gender.value if tee.gender else None
-                tee_ratings[(tee.color.value, gender_key)] = TeeRating(
-                    course_rating=Decimal(str(tee.course_rating)),
-                    slope_rating=tee.slope_rating,
-                    par=total_par,
-                )
-            holes_by_stroke_index = [
-                h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
-            ]
+            context = TeeContextBuilder.build(golf_course)
+            tee_ratings = context.tee_ratings
+            holes_by_stroke_index = context.holes_by_stroke_index
+            holes_by_tee = context.holes_by_tee
 
             users = await asyncio.gather(
                 *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
@@ -195,7 +195,22 @@ class ReassignMatchPlayersUseCase:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
 
-        return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
+        return (
+            tee_ratings,
+            holes_by_stroke_index,
+            user_handicap_map,
+            user_gender_map,
+            holes_by_tee,
+        )
+
+    @staticmethod
+    def _holes_for_tee(tee_color, tee_gender, holes_by_tee, default):
+        """Orden de dificultad de la barra que juega el jugador (ver TeeContext)."""
+        if not holes_by_tee or tee_color is None:
+            return default
+        color = tee_color.value
+        gender = tee_gender.value if tee_gender else None
+        return holes_by_tee.get((color, gender)) or holes_by_tee.get((color, None)) or default
 
     def _build_match_player(
         self,
@@ -208,6 +223,7 @@ class ReassignMatchPlayersUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         uid = UserId(uid_value)
@@ -253,7 +269,8 @@ class ReassignMatchPlayersUseCase:
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
         strokes_received = self._calculator.compute_strokes_received(
-            playing_handicap, holes_by_stroke_index
+            playing_handicap,
+            self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
         )
         return MatchPlayer.create(
             user_id=uid,

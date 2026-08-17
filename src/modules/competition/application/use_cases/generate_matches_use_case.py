@@ -16,6 +16,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.tee_context_builder import (
+    TeeContextBuilder,
+)
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -31,6 +34,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
@@ -92,8 +96,22 @@ class GenerateMatchesUseCase:
         self._handicap_service = handicap_service
 
     async def execute(
-        self, request: GenerateMatchesRequestDTO, user_id: UserId, is_admin: bool = False
+        self,
+        request: GenerateMatchesRequestDTO,
+        user_id: UserId,
+        is_admin: bool = False,
+        allow_regeneration: bool = False,
     ) -> GenerateMatchesResponseDTO:
+        """
+        Args:
+            allow_regeneration: Admite una ronda ya en SCHEDULED y la reabre
+                DENTRO de esta misma transaccion. Lo usa
+                `scripts/regenerate_scheduled_round_strokes.py` para recalcular
+                el reparto de golpes de rondas ya montadas. Reabrirla fuera
+                dejaria la ronda en PENDING_MATCHES con los partidos viejos si
+                la generacion fallara, y las pasadas siguientes la saltarian por
+                no estar ya en SCHEDULED.
+        """
         async with self._uow:
             # 1. Buscar la ronda
             round_id = RoundId(request.round_id)
@@ -118,6 +136,11 @@ class GenerateMatchesUseCase:
                 )
 
             # 5. Verificar ronda PENDING_MATCHES
+            if allow_regeneration and round_entity.status == RoundStatus.SCHEDULED:
+                # La misma transaccion que borra y recrea los partidos: si algo
+                # falla despues, la ronda vuelve sola a SCHEDULED al deshacerse.
+                round_entity.reopen_for_regeneration()
+
             if not round_entity.can_generate_matches():
                 raise RoundNotPendingMatchesError(
                     f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
@@ -154,6 +177,7 @@ class GenerateMatchesUseCase:
                 holes_by_stroke_index,
                 user_handicap_map,
                 user_gender_map,
+                holes_by_tee,
             ) = await self._build_handicap_data(
                 golf_course,
                 is_scratch,
@@ -189,6 +213,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
             else:
                 matches_created = await self._generate_auto(
@@ -205,6 +230,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
 
             # 13. Transicionar ronda
@@ -221,6 +247,7 @@ class GenerateMatchesUseCase:
         """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
+        holes_by_tee: dict[tuple[str, str | None], list[int]] = {}
         user_handicap_map: dict[str, Decimal] = {}
         user_gender_map: dict[str, Gender | None] = {}
 
@@ -231,17 +258,10 @@ class GenerateMatchesUseCase:
             )
 
         if golf_course and not is_scratch:
-            for tee in golf_course.tees:
-                total_par = sum(h.par for h in golf_course.holes)
-                gender_key = tee.gender.value if tee.gender else None
-                tee_ratings[(tee.color.value, gender_key)] = TeeRating(
-                    course_rating=Decimal(str(tee.course_rating)),
-                    slope_rating=tee.slope_rating,
-                    par=total_par,
-                )
-            holes_by_stroke_index = [
-                h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
-            ]
+            context = TeeContextBuilder.build(golf_course)
+            tee_ratings = context.tee_ratings
+            holes_by_stroke_index = context.holes_by_stroke_index
+            holes_by_tee = context.holes_by_tee
 
         if not is_scratch:
             all_player_ids = list(team_assignment.team_a_player_ids) + list(
@@ -262,7 +282,13 @@ class GenerateMatchesUseCase:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
 
-        return tee_ratings, holes_by_stroke_index, user_handicap_map, user_gender_map
+        return (
+            tee_ratings,
+            holes_by_stroke_index,
+            user_handicap_map,
+            user_gender_map,
+            holes_by_tee,
+        )
 
     async def _maybe_refresh_rfeg_handicap(self, user) -> None:
         """
@@ -322,6 +348,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ):
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
@@ -356,6 +383,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
                 team_a_match_players = [a_player]
                 team_b_match_players = [b_player]
@@ -372,6 +400,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
             elif match_format == MatchFormat.FOURSOMES:
                 team_a_match_players, team_b_match_players = self._build_foursomes_match_players(
@@ -386,6 +415,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
             else:
                 raise ValueError(f"Formato de partido no soportado: {match_format.value}")
@@ -418,6 +448,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ):
         """Genera partidos según emparejamientos manuales."""
         # Validar que todos los jugadores estén inscritos (APPROVED)
@@ -448,6 +479,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
             elif match_format == MatchFormat.FOURSOMES:
                 team_a_match_players, team_b_match_players = self._build_foursomes_match_players(
@@ -462,6 +494,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
             elif match_format == MatchFormat.SINGLES:
                 # SINGLES: método diferencial WHS (solo el jugador con mayor PH recibe golpes)
@@ -477,6 +510,7 @@ class GenerateMatchesUseCase:
                     holes_by_stroke_index,
                     user_gender_map,
                     max_playing_handicap,
+                    holes_by_tee,
                 )
                 team_a_match_players = [a_player]
                 team_b_match_players = [b_player]
@@ -540,6 +574,40 @@ class GenerateMatchesUseCase:
 
         return tee_color, tee_gender, tee_rating, handicap_index
 
+    @classmethod
+    def _team_holes(cls, team_ids, player_data, holes_by_tee, default):
+        """
+        Orden de dificultad de un equipo de FOURSOMES.
+
+        Comparten bola, asi que el golpe es del equipo y no puede caer en dos
+        hoyos segun quien golpee: hace falta UNA tarjeta. Si los dos juegan la
+        misma barra, la suya; si no, la del campo, que es lo unico neutral.
+        """
+        tees = {
+            (player_data[str(uid.value)][0], player_data[str(uid.value)][1])
+            for uid in team_ids
+            if str(uid.value) in player_data
+        }
+        if len(tees) != 1:
+            return default
+        tee_color, tee_gender = next(iter(tees))
+        return cls._holes_for_tee(tee_color, tee_gender, holes_by_tee, default)
+
+    @staticmethod
+    def _holes_for_tee(tee_color, tee_gender, holes_by_tee, default):
+        """
+        Orden de dificultad de la barra que juega el jugador.
+
+        Cae al del campo cuando la barra no trae tarjeta propia. Misma reserva de
+        genero que `_resolve_player_data`, para que las dos resuelvan la misma
+        barra.
+        """
+        if not holes_by_tee or tee_color is None:
+            return default
+        color = tee_color.value
+        gender = tee_gender.value if tee_gender else None
+        return holes_by_tee.get((color, gender)) or holes_by_tee.get((color, None)) or default
+
     def _build_match_player(
         self,
         user_id,
@@ -552,6 +620,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ) -> MatchPlayer:
         """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
         tee_color, tee_gender, tee_rating, handicap_index = self._resolve_player_data(
@@ -578,7 +647,8 @@ class GenerateMatchesUseCase:
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
         strokes_received = calculator.compute_strokes_received(
-            playing_handicap, holes_by_stroke_index
+            playing_handicap,
+            self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
         )
 
         return MatchPlayer.create(
@@ -603,6 +673,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURBALL usando el método diferencial WHS.
@@ -677,7 +748,9 @@ class GenerateMatchesUseCase:
             uid_str = str(uid.value)
             tee_color, tee_gen, _, hi = player_data[uid_str]
             ph = differential_phs[uid_str]
-            strokes = calculator.compute_strokes_received(ph, holes_by_stroke_index)
+            strokes = calculator.compute_strokes_received(
+                ph, self._holes_for_tee(tee_color, tee_gen, holes_by_tee, holes_by_stroke_index)
+            )
             return MatchPlayer.create(
                 user_id=uid,
                 playing_handicap=ph,
@@ -704,6 +777,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ) -> tuple["MatchPlayer", "MatchPlayer"]:
         """
         Construye MatchPlayers para SINGLES usando el método diferencial WHS.
@@ -757,9 +831,12 @@ class GenerateMatchesUseCase:
         ph_a = calculator.calculate(hi_a, tee_rating_a, allowance, max_playing_handicap)
         ph_b = calculator.calculate(hi_b, tee_rating_b, allowance, max_playing_handicap)
 
-        strokes_a, strokes_b = calculator.calculate_singles_differential(
-            ph_a, ph_b, holes_by_stroke_index
-        )
+        # Cada uno recibe en los hoyos de SU barra: solo uno de los dos recibe,
+        # asi que no hay conflicto entre dos ordenes distintos.
+        holes_a = self._holes_for_tee(tee_color_a, tee_gen_a, holes_by_tee, holes_by_stroke_index)
+        holes_b = self._holes_for_tee(tee_color_b, tee_gen_b, holes_by_tee, holes_by_stroke_index)
+        strokes_a, _ = calculator.calculate_singles_differential(ph_a, ph_b, holes_a)
+        _, strokes_b = calculator.calculate_singles_differential(ph_a, ph_b, holes_b)
 
         return (
             MatchPlayer.create(
@@ -793,6 +870,7 @@ class GenerateMatchesUseCase:
         holes_by_stroke_index,
         user_gender_map,
         max_playing_handicap=None,
+        holes_by_tee=None,
     ) -> tuple[list[MatchPlayer], list[MatchPlayer]]:
         """
         Construye MatchPlayers para FOURSOMES usando el método diferencial WHS.
@@ -869,9 +947,16 @@ class GenerateMatchesUseCase:
             team_a_chs, team_b_chs, allowance, max_playing_handicap
         )
 
-        # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola)
-        team_a_strokes = calculator.compute_strokes_received(team_a_ph, holes_by_stroke_index)
-        team_b_strokes = calculator.compute_strokes_received(team_b_ph, holes_by_stroke_index)
+        # 3. Ambos jugadores del equipo comparten los mismos strokes (una bola),
+        #    y por tanto un solo orden de dificultad. Se usa el de la barra del
+        #    equipo cuando los dos juegan la misma; si juegan barras distintas no
+        #    hay una tarjeta que sea "la del equipo" y se cae a la del campo.
+        team_a_strokes = calculator.compute_strokes_received(
+            team_a_ph, self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index)
+        )
+        team_b_strokes = calculator.compute_strokes_received(
+            team_b_ph, self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index)
+        )
 
         team_a_players = []
         for uid in team_a_ids:

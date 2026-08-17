@@ -151,6 +151,7 @@ class CreateQuickMatchBody(BaseModel):
     scoring_format: str | None = Field(None, pattern="^(MEDAL|STABLEFORD)$")
     name: str | None = Field(None, max_length=MAX_NAME_LENGTH)
     allowance_percentage: int | None = Field(None, ge=50, le=100)
+    play_mode: str = Field("HANDICAP", pattern="^(SCRATCH|HANDICAP)$")
     creator_tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
     creator_tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
 
@@ -253,6 +254,7 @@ async def create_quick_match(
             scoring_format=body.scoring_format,
             name=body.name,
             allowance_percentage=body.allowance_percentage,
+            play_mode=body.play_mode,
             creator_tee_color=body.creator_tee_color,
             creator_tee_gender=body.creator_tee_gender,
         )
