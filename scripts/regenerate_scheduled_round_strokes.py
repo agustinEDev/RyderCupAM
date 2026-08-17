@@ -60,17 +60,47 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    start_mappers as start_competition_mappers,
+)
+from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
+    start_golf_course_mappers,
+)
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
+    start_mappers as start_user_mappers,
+)
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
+)
+from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
+    start_mappers as start_country_mappers,
 )
 
 COMPETITIONS_PAGE = 200
 
 
+def start_mappers() -> None:
+    """Registra el mapeo imperativo de las entidades que toca este script.
+
+    Fuera de la aplicacion nadie lo hace por nosotros: `main.py` lo ejecuta en
+    el lifespan y `alembic/env.py` en el suyo, asi que un script suelto se
+    queda con las entidades sin mapear y la primera consulta revienta con
+    `ArgumentError: ... got <class Competition>`.
+
+    El orden importa: GolfCourse antes que Competition, que la referencia.
+    """
+    start_user_mappers()
+    start_country_mappers()
+    start_golf_course_mappers()
+    start_competition_mappers()
+
+
 async def main(dry_run: bool) -> int:
+    start_mappers()
+
     regenerated_rounds = 0
     regenerated_matches = 0
     skipped = 0

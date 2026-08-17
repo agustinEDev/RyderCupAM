@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **En las competiciones los golpes se repartían contra la tarjeta del campo, que es la de la primera salida**: cada barra puede llevar la suya, y **56 de los 802 campos federados** tienen un índice de dificultad que cambia de una barra a otra. Además cada salida se valoraba contra el par del campo en vez del suyo propio, lo que desplaza `CR - par` y con él el hándicap de campo; **25 de esos 802** tienen un par distinto entre barras. Un 10% está expuesto a al menos uno de los dos. `GenerateMatchesUseCase` y `ReassignMatchPlayersUseCase` tenían cada uno su copia de la traducción y ambas arrastraban los dos defectos, así que ahora comparten un `TeeContextBuilder`.
 
+- **El regenerador de rondas programadas no llegaba a arrancar**: `scripts/regenerate_scheduled_round_strokes.py` moría en su primera consulta con `ArgumentError: ... got <class Competition>`. Fuera de la aplicación nadie registra el mapeo imperativo de las entidades —`main.py` lo hace en el lifespan y `alembic/env.py` en el suyo—, así que las consultas del script salían contra entidades de dominio sin mapear. No lo vio ninguna suite porque `conftest.py` deja los mappers puestos antes de cualquier test, y el script nunca se había ejecutado contra una base de datos. Verificado con `--dry-run` contra el clúster local.
+
 - **El hándicap de equipo de un foursomes salía doblado**: `Match.create` sumaba el `playing_handicap` de los dos miembros, que en foursomes ya es el del equipo, así que un equipo con 7 golpes se mostraba con 14. El campo no alimenta ningún cálculo —solo lo leen la tarjeta y el detalle del partido—, de modo que ningún resultado llegó a ser incorrecto por esto.
 
 ### Added
