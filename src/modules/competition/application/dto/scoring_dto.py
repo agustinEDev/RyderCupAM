@@ -46,14 +46,20 @@ class ScoringPlayerDTO(BaseModel):
     tee_color: str
     playing_handicap: int
     strokes_received: list[int]
+    # El par, el índice y los metros son de la barra de cada jugador, no del
+    # campo: en 56 de los 800 campos federados el índice cambia de una barra a
+    # otra y en 25 el par. Se manda resuelto para que el cliente no tenga que
+    # volver a resolverlo — y no lo resuelva de otra manera.
+    hole_card: list["HoleInfoDTO"] = []
 
 
 class HoleInfoDTO(BaseModel):
-    """Info de un hoyo."""
+    """Info de un hoyo, tal y como se juega desde una salida concreta."""
 
     hole_number: int
     par: int
     stroke_index: int
+    meters: int | None = None
 
 
 class PlayerHoleScoreDTO(BaseModel):
@@ -118,6 +124,10 @@ class ScoringViewResponseDTO(BaseModel):
     team_b_name: str
     marker_assignments: list[MarkerAssignmentResponseDTO]
     players: list[ScoringPlayerDTO]
+    # Tarjeta de referencia del campo (la de la primera salida con tarjeta).
+    # Sirve para saber qué hoyos se juegan; lo que se pinta y con lo que se
+    # puntúa a un jugador es su `hole_card`. Se retira cuando el cliente deje
+    # de leerla.
     holes: list[HoleInfoDTO]
     scores: list[HoleScoreEntryDTO]
     match_standing: MatchStandingDTO

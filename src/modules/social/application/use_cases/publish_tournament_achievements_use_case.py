@@ -220,7 +220,22 @@ class PublishTournamentAchievementsUseCase:
             for hole_score in hole_scores
             if hole_score.own_score is not None
         }
-        jugados = countable_holes(scores_by_hole, course)
+        # El par y el índice son de la barra que juega: un birdie se mide
+        # contra el par de su tarjeta, no contra el del campo
+        jugador = next(
+            (
+                player
+                for player in (*partido.team_a_players, *partido.team_b_players)
+                if player.user_id == user_id
+            ),
+            None,
+        )
+        jugados = countable_holes(
+            scores_by_hole,
+            course.hole_card_for(jugador.tee_color, jugador.tee_gender)
+            if jugador is not None
+            else course.reference_card,
+        )
         if jugados is None:
             return None
 

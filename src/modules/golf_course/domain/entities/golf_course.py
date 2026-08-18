@@ -264,7 +264,7 @@ class GolfCourse:
         - Con una tarjeta por salida (lo que publica la RFEG): en ese caso la
           tarjeta de referencia del campo se toma de la primera salida.
 
-        Así los consumidores que solo leen `golf_course.holes` siguen
+        Así los consumidores que solo leen la tarjeta de referencia siguen
         funcionando, y quien necesite la distancia o el índice exactos de una
         barra concreta los pide a su Tee.
         """
@@ -635,7 +635,7 @@ class GolfCourse:
             course_type=clone.course_type,
             creator_id=clone.creator_id,
             tees=clone.tees,
-            holes=clone.holes,
+            holes=clone.reference_card,
             approval_status=ApprovalStatus.PENDING_APPROVAL,
             rejection_reason=None,
             created_at=clone.created_at,
@@ -711,7 +711,7 @@ class GolfCourse:
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        for hole in clone.holes:
+        for hole in clone.reference_card:
             self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -739,7 +739,7 @@ class GolfCourse:
         Raises:
             ValueError: Si la validación falla
         """
-        reference_card = self.holes
+        reference_card = self.reference_card
         if len(reference_card) != HOLES_PER_ROUND:
             raise ValueError(
                 f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(reference_card)}"
@@ -881,7 +881,7 @@ class GolfCourse:
         return self._tees.copy()
 
     @property
-    def holes(self) -> list[Hole]:
+    def reference_card(self) -> list[Hole]:
         """
         Tarjeta de referencia del campo.
 
@@ -919,7 +919,7 @@ class GolfCourse:
     @property
     def total_par(self) -> int:
         """Retorna el par total del campo, según su tarjeta de referencia."""
-        return sum(h.par for h in self.holes)
+        return sum(h.par for h in self.reference_card)
 
     @property
     def original_golf_course_id(self) -> GolfCourseId | None:
@@ -1006,3 +1006,39 @@ class GolfCourse:
             ):
                 return tee
         return None
+
+    def tee_for(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> Tee | None:
+        """
+        Salida desde la que juega quien eligió ese color y ese género.
+
+        `find_tee` busca una salida exacta; esta reserva a la salida sin género
+        cuando el campo no las distingue. Un campo dado de alta a mano suele
+        tener una sola barra amarilla, mientras que el jugador siempre manda
+        color y género juntos: sin la reserva no se encontraría ninguna.
+        """
+        return self.find_tee(color, gender, identifier) or self.find_tee(
+            color, None, identifier
+        )
+
+    def hole_card_for(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> list[Hole]:
+        """
+        Tarjeta tal y como se juega desde esa salida: su par, su stroke index y
+        sus metros.
+
+        El par y el índice son de la salida, no del campo. `holes` es solo la
+        tarjeta derivada de la primera que tenga una, y de los 800 campos
+        federados con más de una barra con tarjeta, 56 cambian de stroke index
+        entre ellas y 25 de par. Repartir golpes o puntuar con la tarjeta de
+        referencia aplica a quien juega otra salida un par y un orden que no
+        son los suyos.
+
+        Cae a la tarjeta de referencia cuando la salida no trae la suya, que es
+        como quedan las salidas dadas de alta a mano: es lo único que hay, y sin
+        par ni índice no se puede ni puntuar ni repartir.
+        """
+        tee = self.tee_for(color, gender, identifier)
+        return list(tee.holes) if tee and tee.holes else self.reference_card

@@ -258,7 +258,7 @@ async def list_competition_golf_courses(
                                     par=hole.par,
                                     stroke_index=hole.stroke_index,
                                 )
-                                for hole in (golf_course.holes or [])
+                                for hole in (golf_course.reference_card or [])
                             ],
                         ),
                     )

@@ -116,7 +116,7 @@ def test_create_golf_course_success(valid_tees, valid_holes):
     assert golf_course.course_type == course_type
     assert golf_course.creator_id == creator_id
     assert len(golf_course.tees) == 3
-    assert len(golf_course.holes) == 18
+    assert len(golf_course.reference_card) == 18
     assert golf_course.approval_status == ApprovalStatus.PENDING_APPROVAL
     assert golf_course.rejection_reason is None
     assert golf_course.total_par == 72  # sum of pars
@@ -686,7 +686,7 @@ def test_golf_course_holes_property_returns_copy(valid_tees, valid_holes):
     )
 
     # When
-    holes_copy = golf_course.holes
+    holes_copy = golf_course.reference_card
 
     # Then
     assert holes_copy is not golf_course._holes  # Es una copia

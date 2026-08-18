@@ -190,7 +190,7 @@ class GolfCourseMapper:
                     stroke_index=hole.stroke_index,
                     meters=hole.meters,
                 )
-                for hole in golf_course.holes
+                for hole in golf_course.reference_card
             ],
             approval_status=golf_course.approval_status.value,
             rejection_reason=golf_course.rejection_reason,

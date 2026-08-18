@@ -128,7 +128,7 @@ class TestRejectUpdateGolfCourseUseCase:
             course_type=clone.course_type,
             creator_id=clone.creator_id,
             tees=clone.tees,
-            holes=clone.holes,
+            holes=clone.reference_card,
             approval_status=ApprovalStatus.PENDING_APPROVAL,
             rejection_reason=None,
             created_at=clone.created_at,

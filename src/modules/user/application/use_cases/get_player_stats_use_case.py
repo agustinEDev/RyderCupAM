@@ -223,7 +223,9 @@ class GetPlayerStatsUseCase:
                     for score in scores
                     if score.participant_id == participant.participant_id
                 }
-                played = self._computable_holes(scores_by_hole, course)
+                played = self._computable_holes(
+                    scores_by_hole, self._hole_card(course, participant)
+                )
                 if played is None:
                     continue
 
@@ -307,7 +309,9 @@ class GetPlayerStatsUseCase:
                     continue
 
                 hole_scores = scorecards.get(match.id, [])
-                to_par = self._scorecard_to_par(hole_scores, course)
+                player = self._find_match_player(match, user_id)
+                hole_card = self._hole_card(course, player)
+                to_par = self._scorecard_to_par(hole_scores, hole_card)
                 if to_par is None:
                     continue
 
@@ -318,8 +322,7 @@ class GetPlayerStatsUseCase:
                 }
                 # El diferencial mide los mismos hoyos que la media, no el campo
                 # entero: en media vuelta, los otros nueve no se jugaron
-                played = self._computable_holes(scores_by_hole, course) or []
-                player = self._find_match_player(match, user_id)
+                played = self._computable_holes(scores_by_hole, hole_card) or []
                 holes = [
                     HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
                 ]
@@ -419,7 +422,7 @@ class GetPlayerStatsUseCase:
             return TeeRating(
                 course_rating=Decimal(str(tee.course_rating)),
                 slope_rating=tee.slope_rating,
-                par=sum(hole.par for hole in course.holes),
+                par=sum(hole.par for hole in course.reference_card),
             )
         except ValueError:
             return None
@@ -427,7 +430,7 @@ class GetPlayerStatsUseCase:
     # ==================== Lectura de tarjetas ====================
 
     @staticmethod
-    def _computable_holes(scores_by_hole: dict, course) -> list | None:
+    def _computable_holes(scores_by_hole: dict, hole_card: list) -> list | None:
         """
         Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
@@ -435,7 +438,7 @@ class GetPlayerStatsUseCase:
         aplicar exactamente la misma: una tarjeta que no vale para la media
         tampoco vale para presumir.
         """
-        return countable_holes(scores_by_hole, course)
+        return countable_holes(scores_by_hole, hole_card)
 
     @staticmethod
     def _to_eighteen(value: int, holes_played: int) -> int:
@@ -472,7 +475,7 @@ class GetPlayerStatsUseCase:
         round_ = rounds_by_match.get(match.id)
         return round_.golf_course_id if round_ is not None else None
 
-    def _scorecard_to_par(self, hole_scores: list, course) -> int | None:
+    def _scorecard_to_par(self, hole_scores: list, hole_card: list) -> int | None:
         """
         Neto respecto al par de la tarjeta, o None si no forma una vuelta.
 
@@ -487,7 +490,7 @@ class GetPlayerStatsUseCase:
             for hole_score in hole_scores
             if hole_score.own_score is not None
         }
-        played = self._computable_holes(scored, course)
+        played = self._computable_holes(scored, hole_card)
         if played is None:
             return None
 
@@ -502,6 +505,24 @@ class GetPlayerStatsUseCase:
         return self._to_eighteen(to_par, len(played))
 
     # ==================== Jugadores y hándicaps ====================
+
+    @staticmethod
+    def _hole_card(course, player) -> list:
+        """
+        Tarjeta de la barra que juega ese jugador.
+
+        El par y el índice son de la barra: puntuar con la tarjeta de referencia
+        del campo mide a quien no juega la primera contra un par que no es el
+        suyo. Sin campo o sin barra elegida cae a la de referencia, que es lo
+        único que hay.
+        """
+        if course is None:
+            return []
+        if player is None:
+            # El jugador puede no aparecer en el partido; el resto del cálculo
+            # ya lo contempla y sigue con lo que haya.
+            return course.reference_card
+        return course.hole_card_for(player.tee_color, player.tee_gender)
 
     @staticmethod
     def _find_participant(match, user_id: UserId):
