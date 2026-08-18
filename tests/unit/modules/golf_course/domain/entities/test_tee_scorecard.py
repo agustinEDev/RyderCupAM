@@ -749,3 +749,16 @@ class TestHoleCardFor:
 
         assert card[0].par == 5
         assert card[0].meters == 400
+
+    def test_sin_barra_elegida_devuelve_la_tarjeta_de_referencia(self) -> None:
+        """
+        `QuickMatchParticipant.tee_color` es opcional: una partida creada antes
+        de que el frontend exigiera la barra no dice desde dónde se jugó. Sin
+        color no hay barra que resolver y queda la tarjeta del campo, que es lo
+        único que hay — pero conviene fijarlo, porque hoy sale de que ningún
+        `tee.color` iguala a `None` y no de una decisión escrita.
+        """
+        course = self._course_with_two_cards()
+
+        assert course.hole_card_for(None, None) == course.reference_card
+        assert course.hole_card_for(None, Gender.MALE) == course.reference_card
