@@ -222,14 +222,7 @@ class PublishTournamentAchievementsUseCase:
         }
         # El par y el índice son de la barra que juega: un birdie se mide
         # contra el par de su tarjeta, no contra el del campo
-        jugador = next(
-            (
-                player
-                for player in (*partido.team_a_players, *partido.team_b_players)
-                if player.user_id == user_id
-            ),
-            None,
-        )
+        jugador = partido.find_player(user_id)
         jugados = countable_holes(
             scores_by_hole,
             course.hole_card_for(jugador.tee_color, jugador.tee_gender)

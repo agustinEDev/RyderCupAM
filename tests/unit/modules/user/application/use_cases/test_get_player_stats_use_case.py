@@ -1233,3 +1233,64 @@ class TestParPorBarra:
         )
 
         assert stats.best_differential == 1.7
+
+    @pytest.mark.asyncio
+    async def test_una_barra_con_par_fuera_de_rango_no_borra_la_vuelta(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        `TeeRating` rechaza el par fuera de 66-76, y valorar la barra por su
+        propio par metió ese rechazo donde antes no llegaba: la vuelta se
+        quedaba sin rating, sin diferencial y desaparecía de las estadísticas.
+        Un dato suelto del importador no puede borrar una vuelta que sí se
+        jugó, así que se valora contra el par del campo.
+        """
+        user = await create_user(user_uow, unique_email("short"), handicap=10)
+        referencia = [Hole(number=i, par=4 if i <= 13 else 3, stroke_index=i) for i in range(1, 19)]
+        roja = [Hole(number=i, par=4 if i <= 11 else 3, stroke_index=i) for i in range(1, 19)]
+        assert sum(h.par for h in roja) == 65  # fuera del rango WHS, a propósito
+
+        course = GolfCourse.create(
+            name="Short Course",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=user.id,
+            tees=[
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    identifier="Yellow",
+                    course_rating=67.0,
+                    slope_rating=113,
+                    holes=referencia,
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    identifier="Red",
+                    course_rating=66.0,
+                    slope_rating=110,
+                    holes=roja,
+                ),
+            ],
+            holes=referencia,
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            strokes_per_hole=4,
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_with_differential == 1
+        assert stats.best_differential is not None

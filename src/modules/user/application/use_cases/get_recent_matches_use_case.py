@@ -344,14 +344,7 @@ class GetRecentMatchesUseCase:
         ]
         opponents = [self._user_name(player.user_id, users_by_id) for player in rival_team]
         # El par y el indice son de la barra de quien juega, no del campo
-        own_player = next(
-            (
-                player
-                for player in (*match.team_a_players, *match.team_b_players)
-                if player.user_id == user_id
-            ),
-            None,
-        )
+        own_player = match.find_player(user_id)
         hole_card = (
             []
             if course is None

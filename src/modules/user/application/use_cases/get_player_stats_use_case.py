@@ -418,20 +418,31 @@ class GetPlayerStatsUseCase:
         if tee is None:
             return None
 
+        course_rating = Decimal(str(tee.course_rating))
+        course_par = sum(hole.par for hole in course.reference_card)
         try:
             return TeeRating(
-                course_rating=Decimal(str(tee.course_rating)),
+                course_rating=course_rating,
                 slope_rating=tee.slope_rating,
                 # El par es el de la barra: entra en el Course Handicap como
                 # (CR - Par), así que con la tarjeta de referencia el jugador de
                 # otra barra sale con una base de golpes que no es la suya, y
                 # con ella el tope de doble bogey neto y el diferencial.
-                par=tee.par_total if tee.holes else sum(
-                    hole.par for hole in course.reference_card
-                ),
+                par=tee.par_total if tee.holes else course_par,
             )
-        except ValueError:
-            return None
+        except (ValueError, TypeError):
+            # Una barra con el par fuera del rango WHS es un dato suelto del
+            # importador, no una vuelta que no se jugó: se valora contra el par
+            # del campo en vez de perder la vuelta y con ella el diferencial.
+            # Mismo criterio que `TeeContextBuilder._rating_for`.
+            try:
+                return TeeRating(
+                    course_rating=course_rating,
+                    slope_rating=tee.slope_rating,
+                    par=course_par,
+                )
+            except (ValueError, TypeError):
+                return None
 
     # ==================== Lectura de tarjetas ====================
 
@@ -540,14 +551,7 @@ class GetPlayerStatsUseCase:
     @staticmethod
     def _find_match_player(match, user_id: UserId):
         """El jugador dentro del partido, mire en el equipo que mire."""
-        return next(
-            (
-                player
-                for player in (*match.team_a_players, *match.team_b_players)
-                if player.user_id == user_id
-            ),
-            None,
-        )
+        return match.find_player(user_id)
 
     @staticmethod
     def _effective_handicap(participant, profile_handicap: float | None) -> float | None:

@@ -1057,4 +1057,16 @@ class GolfCourse:
         par ni índice no se puede ni puntuar ni repartir.
         """
         tee = self.tee_for(color, gender, identifier)
-        return list(tee.holes) if tee and tee.holes else self.reference_card
+        if tee is not None and tee.holes:
+            return list(tee.holes)
+
+        # La barra existe pero no trae tarjeta: antes que la del campo va la de
+        # la salida sin género de ese color, que es de donde el reparto saca el
+        # orden de dificultad (`TeeContext.holes_for`). Si aquí se cayera antes,
+        # al jugador se le repartirían los golpes con una tarjeta y se le
+        # puntuaría con otra.
+        fallback = self.find_tee(color, None, identifier)
+        if fallback is not None and fallback.holes:
+            return list(fallback.holes)
+
+        return self.reference_card
