@@ -1025,18 +1025,33 @@ class GolfCourse:
         veces traen tarjeta propia. Es el mismo criterio con el que los context
         builders reparten los golpes, que indexan por `(color, género)`.
         Mientras un campo pueda tener dos salidas OTHER del mismo género (#190)
-        no hay forma de distinguirlas aquí, y se coge la primera — que es lo que
-        ya hacía el reparto.
+        no hay forma de distinguirlas aquí, y se coge **la última**, que es la
+        que resuelve el reparto: `TeeContextBuilder` y `StrokeContextBuilder`
+        van indexando por `(color, género)` dentro de un bucle, así que una
+        salida repetida sobrescribe a la anterior. Coger aquí la primera hacía
+        que a ese jugador se le repartieran los golpes con una barra y se le
+        puntuara con otra, que es la fractura que esta resolución existe para
+        cerrar.
         """
         if identifier is not None:
             exact = self.find_tee(color, gender, identifier)
             if exact is not None:
                 return exact
 
-        same_color = [tee for tee in self._tees if tee.color == color]
-        return next((tee for tee in same_color if tee.gender == gender), None) or next(
-            (tee for tee in same_color if tee.gender is None), None
-        )
+        return self._last_tee(color, gender) or self._last_tee(color, None)
+
+    def _last_tee(self, color: TeeColor, gender: Gender | None) -> Tee | None:
+        """
+        Última salida de ese color y género, sin mirar el identificador.
+
+        Ignorar el identificador es deliberado: el jugador nunca lo manda. La
+        última, y no la primera, para coincidir con los context builders.
+        """
+        found = None
+        for tee in self._tees:
+            if tee.color == color and tee.gender == gender:
+                found = tee
+        return found
 
     def hole_card_for(
         self, color: TeeColor, gender: Gender | None, identifier: str | None = None
@@ -1062,10 +1077,15 @@ class GolfCourse:
 
         # La barra existe pero no trae tarjeta: antes que la del campo va la de
         # la salida sin género de ese color, que es de donde el reparto saca el
-        # orden de dificultad (`TeeContext.holes_for`). Si aquí se cayera antes,
-        # al jugador se le repartirían los golpes con una tarjeta y se le
-        # puntuaría con otra.
-        fallback = self.find_tee(color, None, identifier)
+        # orden de dificultad (`TeeContext.holes_for`). Hoy no se llega aquí
+        # —`_sync_holes_and_tees` copia la tarjeta del campo a toda salida que
+        # no traiga la suya—, así que esto es una red por si esa copia deja de
+        # hacerse, no un camino vivo. Se busca con el mismo
+        # escaneo que `tee_for` y no con `find_tee`, que exige que el
+        # identificador coincida: pasándole `None` se saltaba precisamente la
+        # salida sin género que sí tiene identificador y tarjeta, y el jugador
+        # caía a la tarjeta del campo mientras el reparto usaba la de la barra.
+        fallback = self._last_tee(color, None)
         if fallback is not None and fallback.holes:
             return list(fallback.holes)
 

@@ -671,3 +671,81 @@ class TestHoleCardFor:
 
         assert card[0].par == 5
         assert card[0].meters == 400
+
+    def test_con_dos_salidas_other_coge_la_misma_que_el_reparto(self) -> None:
+        """
+        Dos salidas OTHER del mismo género son legales: `unique_key` las separa
+        por identificador (#190). Los context builders indexan por
+        `(color, género)` dentro de un bucle, así que se quedan con la última;
+        coger aquí la primera repartía los golpes con una barra y puntuaba con
+        la otra.
+        """
+        champ_pars = list(PAR_72)
+        champ_pars[0] = 5
+        combi_pars = list(PAR_72)
+        combi_pars[1] = 3
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(champ_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinadas",
+                    course_rating=71.0,
+                    slope_rating=125,
+                    holes=build_holes(combi_pars, meters=330),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert course.tee_for(TeeColor.OTHER, Gender.MALE).identifier == "Combinadas"
+        assert card[1].par == 3
+        assert card[0].meters == 330
+
+    def test_resuelve_una_salida_sin_genero_con_identificador(self) -> None:
+        """
+        El jugador manda color y género; la salida puede no tener género y sí
+        identificador, que es como quedan las OTHER. `find_tee` exige que el
+        identificador coincida, así que buscar por ahí se la saltaba y el
+        jugador acababa contra la tarjeta del campo.
+
+        Nota: esto cubre la reserva de `tee_for`, no la caída de
+        `hole_card_for` a la salida sin género. Esa segunda es defensiva y hoy
+        no se puede alcanzar: `_sync_holes_and_tees` copia la tarjeta del campo
+        a toda salida que no traiga la suya, así que ninguna se queda sin ella.
+        """
+        sin_genero_pars = list(PAR_72)
+        sin_genero_pars[0] = 5
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=None,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(sin_genero_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(meters=350),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert card[0].par == 5
+        assert card[0].meters == 400
