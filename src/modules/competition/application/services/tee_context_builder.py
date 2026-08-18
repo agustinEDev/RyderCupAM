@@ -27,7 +27,7 @@ class TeeContext:
 
     tee_ratings: dict[tuple[str, str | None], TeeRating]
     holes_by_stroke_index: list[int]
-    # Orden propio de cada barra. `golf_course.holes` es solo la tarjeta de la
+    # Orden propio de cada barra. `golf_course.reference_card` es solo la tarjeta de la
     # PRIMERA barra (ver `GolfCourse._sync_holes_and_tees`), y el importador de
     # la RFEG guarda una por barra: de los 800 campos federados con mas de una
     # barra con tarjeta, 56 tienen stroke index distinto entre ellas y 25 par
@@ -59,9 +59,9 @@ class TeeContextBuilder:
 
     @staticmethod
     def build(golf_course: GolfCourse) -> TeeContext:
-        course_par = sum(h.par for h in golf_course.holes)
+        course_par = sum(h.par for h in golf_course.reference_card)
         holes_by_stroke_index = [
-            h.number for h in sorted(golf_course.holes, key=lambda h: h.stroke_index)
+            h.number for h in sorted(golf_course.reference_card, key=lambda h: h.stroke_index)
         ]
 
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}

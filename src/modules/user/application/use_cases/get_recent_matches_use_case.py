@@ -343,7 +343,16 @@ class GetRecentMatchesUseCase:
             if player.user_id != user_id
         ]
         opponents = [self._user_name(player.user_id, users_by_id) for player in rival_team]
-        total_strokes, holes_played, points = self._scorecard_totals(raw, course)
+        # El par y el indice son de la barra de quien juega, no del campo
+        own_player = match.find_player(user_id)
+        hole_card = (
+            []
+            if course is None
+            else course.hole_card_for(own_player.tee_color, own_player.tee_gender)
+            if own_player is not None
+            else course.reference_card
+        )
+        total_strokes, holes_played, points = self._scorecard_totals(raw, hole_card)
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -491,7 +500,12 @@ class GetRecentMatchesUseCase:
         if not scores_by_hole:
             return None
 
-        holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in course.holes]
+        holes = [
+            HoleSetup(hole.number, hole.par, hole.stroke_index)
+            for hole in course.hole_card_for(
+                raw.participant.tee_color, raw.participant.tee_gender
+            )
+        ]
         # En una partida scratch nadie recibe golpes, tampoco para los puntos
         # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
         # bruto se apuntaba como si le hubieran dado golpes.
@@ -507,7 +521,7 @@ class GetRecentMatchesUseCase:
             allowance_percentage=raw.match.get_effective_allowance(),
         )
 
-    def _scorecard_totals(self, raw: _CompetitionMatchRaw, course) -> tuple:
+    def _scorecard_totals(self, raw: _CompetitionMatchRaw, hole_card: list) -> tuple:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
@@ -517,10 +531,10 @@ class GetRecentMatchesUseCase:
         el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
         cifras que enseñar.
         """
-        if course is None:
+        if not hole_card:
             return None, None, None
 
-        pars = {hole.number: hole.par for hole in course.holes}
+        pars = {hole.number: hole.par for hole in hole_card}
         scored = [
             hole_score
             for hole_score in raw.hole_scores

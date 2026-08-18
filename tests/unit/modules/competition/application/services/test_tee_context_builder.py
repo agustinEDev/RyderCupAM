@@ -2,7 +2,7 @@
 Tests del TeeContextBuilder.
 
 Los dos fallos que motivaron este servicio venian de valorar todas las barras
-contra la tarjeta de referencia del campo: `golf_course.holes` es solo la de la
+contra la tarjeta de referencia del campo: `golf_course.reference_card` es solo la de la
 PRIMERA barra. De los 800 campos federados importados con mas de una barra con
 tarjeta, 25 tienen par distinto entre barras y 56 stroke index distinto.
 """

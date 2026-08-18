@@ -264,7 +264,7 @@ class GolfCourse:
         - Con una tarjeta por salida (lo que publica la RFEG): en ese caso la
           tarjeta de referencia del campo se toma de la primera salida.
 
-        Así los consumidores que solo leen `golf_course.holes` siguen
+        Así los consumidores que solo leen la tarjeta de referencia siguen
         funcionando, y quien necesite la distancia o el índice exactos de una
         barra concreta los pide a su Tee.
         """
@@ -635,7 +635,7 @@ class GolfCourse:
             course_type=clone.course_type,
             creator_id=clone.creator_id,
             tees=clone.tees,
-            holes=clone.holes,
+            holes=clone.reference_card,
             approval_status=ApprovalStatus.PENDING_APPROVAL,
             rejection_reason=None,
             created_at=clone.created_at,
@@ -711,7 +711,7 @@ class GolfCourse:
             self._tees.append(new_tee)
 
         del self._holes[:]  # Elimina todos los elementos in-place
-        for hole in clone.holes:
+        for hole in clone.reference_card:
             self._holes.append(replace(hole))
 
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -739,7 +739,7 @@ class GolfCourse:
         Raises:
             ValueError: Si la validación falla
         """
-        reference_card = self.holes
+        reference_card = self.reference_card
         if len(reference_card) != HOLES_PER_ROUND:
             raise ValueError(
                 f"Golf course must have exactly {HOLES_PER_ROUND} holes, got {len(reference_card)}"
@@ -881,7 +881,7 @@ class GolfCourse:
         return self._tees.copy()
 
     @property
-    def holes(self) -> list[Hole]:
+    def reference_card(self) -> list[Hole]:
         """
         Tarjeta de referencia del campo.
 
@@ -919,7 +919,7 @@ class GolfCourse:
     @property
     def total_par(self) -> int:
         """Retorna el par total del campo, según su tarjeta de referencia."""
-        return sum(h.par for h in self.holes)
+        return sum(h.par for h in self.reference_card)
 
     @property
     def original_golf_course_id(self) -> GolfCourseId | None:
@@ -1006,3 +1006,87 @@ class GolfCourse:
             ):
                 return tee
         return None
+
+    def tee_for(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> Tee | None:
+        """
+        Salida desde la que juega quien eligió ese color y ese género.
+
+        `find_tee` busca una salida exacta; esta reserva a la salida sin género
+        cuando el campo no las distingue. Un campo dado de alta a mano suele
+        tener una sola barra amarilla, mientras que el jugador siempre manda
+        color y género juntos: sin la reserva no se encontraría ninguna.
+
+        Con color OTHER se resuelve igual, por color y género, y no por
+        identificador: ni `MatchPlayer` ni `QuickMatchParticipant` guardan el
+        identificador de la salida, así que exigirlo dejaba sin resolver
+        precisamente a las "Championship" y las combinadas, que son las que más
+        veces traen tarjeta propia. Es el mismo criterio con el que los context
+        builders reparten los golpes, que indexan por `(color, género)`.
+        Mientras un campo pueda tener dos salidas OTHER del mismo género (#190)
+        no hay forma de distinguirlas aquí, y se coge **la última**, que es la
+        que resuelve el reparto: `TeeContextBuilder` y `StrokeContextBuilder`
+        van indexando por `(color, género)` dentro de un bucle, así que una
+        salida repetida sobrescribe a la anterior. Coger aquí la primera hacía
+        que a ese jugador se le repartieran los golpes con una barra y se le
+        puntuara con otra, que es la fractura que esta resolución existe para
+        cerrar.
+        """
+        if identifier is not None:
+            exact = self.find_tee(color, gender, identifier)
+            if exact is not None:
+                return exact
+
+        return self._last_tee(color, gender) or self._last_tee(color, None)
+
+    def _last_tee(self, color: TeeColor, gender: Gender | None) -> Tee | None:
+        """
+        Última salida de ese color y género, sin mirar el identificador.
+
+        Ignorar el identificador es deliberado: el jugador nunca lo manda. La
+        última, y no la primera, para coincidir con los context builders.
+        """
+        found = None
+        for tee in self._tees:
+            if tee.color == color and tee.gender == gender:
+                found = tee
+        return found
+
+    def hole_card_for(
+        self, color: TeeColor, gender: Gender | None, identifier: str | None = None
+    ) -> list[Hole]:
+        """
+        Tarjeta tal y como se juega desde esa salida: su par, su stroke index y
+        sus metros.
+
+        El par y el índice son de la salida, no del campo. `holes` es solo la
+        tarjeta derivada de la primera que tenga una, y de los 800 campos
+        federados con más de una barra con tarjeta, 56 cambian de stroke index
+        entre ellas y 25 de par. Repartir golpes o puntuar con la tarjeta de
+        referencia aplica a quien juega otra salida un par y un orden que no
+        son los suyos.
+
+        Cae a la tarjeta de referencia cuando la salida no trae la suya, que es
+        como quedan las salidas dadas de alta a mano: es lo único que hay, y sin
+        par ni índice no se puede ni puntuar ni repartir.
+        """
+        tee = self.tee_for(color, gender, identifier)
+        if tee is not None and tee.holes:
+            return list(tee.holes)
+
+        # La barra existe pero no trae tarjeta: antes que la del campo va la de
+        # la salida sin género de ese color, que es de donde el reparto saca el
+        # orden de dificultad (`TeeContext.holes_for`). Hoy no se llega aquí
+        # —`_sync_holes_and_tees` copia la tarjeta del campo a toda salida que
+        # no traiga la suya—, así que esto es una red por si esa copia deja de
+        # hacerse, no un camino vivo. Se busca con el mismo
+        # escaneo que `tee_for` y no con `find_tee`, que exige que el
+        # identificador coincida: pasándole `None` se saltaba precisamente la
+        # salida sin género que sí tiene identificador y tarjeta, y el jugador
+        # caía a la tarjeta del campo mientras el reparto usaba la de la barra.
+        fallback = self._last_tee(color, None)
+        if fallback is not None and fallback.holes:
+            return list(fallback.holes)
+
+        return self.reference_card

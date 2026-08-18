@@ -312,7 +312,7 @@ golf_course_tees_table = Table(
 
 # Los hoyos cuelgan de la salida, no del campo: el par, el índice de dificultad
 # y la distancia dependen de la barra desde la que se juega. La tarjeta del
-# campo (GolfCourse.holes) es derivada, se reconstruye desde la primera salida
+# campo (GolfCourse.reference_card) es derivada: se reconstruye desde la primera salida
 # al cargar el agregado.
 golf_course_tee_holes_table = Table(
     "golf_course_tee_holes",

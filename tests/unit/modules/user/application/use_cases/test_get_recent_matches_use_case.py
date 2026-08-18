@@ -152,6 +152,8 @@ async def played_quick_match(
     strokes_by_participant_index: dict[int, int] | None = None,
     strokes_per_hole: int = 4,
     holes_played: int = 18,
+    creator_tee_color: TeeColor | None = None,
+    creator_tee_gender: Gender | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -167,6 +169,8 @@ async def played_quick_match(
         golf_course_id=golf_course.id,
         match_format=match_format,
         scoring_format=scoring_format,
+        creator_tee_color=creator_tee_color,
+        creator_tee_gender=creator_tee_gender,
     )
     for participant in others:
         match.add_participant(participant)
@@ -692,3 +696,79 @@ class TestComparableFigures:
         assert entry.holes_played == 9
         assert entry.total_strokes == 45
         assert entry.stableford_points == 9
+
+
+class TestParPorBarra:
+    """
+    Los puntos se cuentan contra el par de la barra que se juega.
+
+    `reference_card` es la tarjeta derivada de la primera salida. En 25 de los
+    800 campos federados el par cambia de una barra a otra —normalmente el hoyo
+    que las mujeres juegan como par 5 y los hombres como par 4—, así que
+    puntuar a todos contra la de referencia le cuenta a quien juega otra barra
+    un birdie como par.
+    """
+
+    @staticmethod
+    async def _course_with_longer_red(golf_course_uow, creator_id):
+        """Rojas juegan par 5 los hoyos 1 y 2; la tarjeta del campo, par 4."""
+        red_holes = [
+            Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i) for i in HOLES
+        ]
+        tees = [
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+                holes=[Hole(number=i, par=4, stroke_index=i) for i in HOLES],
+            ),
+            Tee(
+                color=TeeColor.RED,
+                gender=Gender.FEMALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+                holes=red_holes,
+            ),
+        ]
+        course = GolfCourse.create(
+            name="Two Cards Club",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=tees,
+            holes=[Hole(number=i, par=4, stroke_index=i) for i in HOLES],
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+        return course
+
+    @pytest.mark.asyncio
+    async def test_los_puntos_salen_contra_el_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Scratch de rojas firmando 4 en todos los hoyos.
+
+        Contra su tarjeta son dos birdies (hoyos 1 y 2, par 5) y dieciséis
+        pares: 3 + 3 + 16 x 2 = 38 puntos. Contra la del campo serían 36, que es
+        lo que salía antes.
+        """
+        user = await create_user(user_uow, "Roja", handicap=0)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            user,
+            scoring_format=ScoringFormat.STABLEFORD,
+            strokes_per_hole=4,
+            creator_tee_color=TeeColor.RED,
+            creator_tee_gender=Gender.FEMALE,
+        )
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+
+        assert feed.matches[0].stableford_points == 38
