@@ -72,6 +72,7 @@ class SubmitProxyHoleScoreUseCase:
                 participants=quick_match.participants,
                 scorer_ids=quick_match.scorer_ids,
                 creator_participant_id=quick_match.creator_participant_id,
+                match_format=quick_match.match_format,
             )
             if target_participant_id not in assignments.get(scorer_participant_id, []):
                 raise NotAssignedScorerViolation(

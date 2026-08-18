@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.quick_match.domain.services.scoring_coverage_service import (
     ScoringCoverageService,
 )
@@ -97,3 +98,106 @@ class TestScoringCoverageService:
         )
 
         assert assignments[creator.participant_id] == [creator.participant_id]
+
+
+def _registered_on(team):
+    return QuickMatchParticipant.for_user(UserId(uuid4()), team=team)
+
+
+def _guest_on(team):
+    return QuickMatchParticipant.for_guest(first_name="Guest", last_name="Player", team=team)
+
+
+class TestFoursomesSideMarksSide:
+    """
+    En foursomes el bando juega UNA bola, asi que solo hay dos tarjetas que
+    llevar: marca la pareja rival, no cada jugador por su cuenta.
+    """
+
+    def setup_method(self):
+        self.service = ScoringCoverageService()
+
+    def test_each_scorer_marks_the_rival_pair(self):
+        me = _registered_on("A")
+        partner = _registered_on("A")
+        rival_one = _registered_on("B")
+        rival_two = _guest_on("B")
+        participants = [me, partner, rival_one, rival_two]
+
+        assignments = self.service.compute_assignments(
+            participants=participants,
+            scorer_ids=[me.participant_id, rival_one.participant_id],
+            creator_participant_id=me.participant_id,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        # Cada uno lleva la tarjeta de la pareja de enfrente, entera.
+        assert set(assignments[me.participant_id]) == {
+            rival_one.participant_id,
+            rival_two.participant_id,
+        }
+        assert set(assignments[rival_one.participant_id]) == {
+            me.participant_id,
+            partner.participant_id,
+        }
+
+    def test_the_only_scorer_also_carries_its_own_ball(self):
+        me = _registered_on("A")
+        partner = _guest_on("A")
+        rival_one = _guest_on("B")
+        rival_two = _guest_on("B")
+        participants = [me, partner, rival_one, rival_two]
+
+        assignments = self.service.compute_assignments(
+            participants=participants,
+            scorer_ids=[me.participant_id],
+            creator_participant_id=me.participant_id,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        # Sin nadie enfrente que la lleve, su propia bola se quedaria sin tarjeta.
+        assert set(assignments[me.participant_id]) == {p.participant_id for p in participants}
+
+    def test_a_partner_is_never_split_between_scorers(self):
+        me = _registered_on("A")
+        partner = _registered_on("A")
+        rival_one = _registered_on("B")
+        rival_two = _guest_on("B")
+
+        assignments = self.service.compute_assignments(
+            participants=[me, partner, rival_one, rival_two],
+            scorer_ids=[me.participant_id, partner.participant_id],
+            creator_participant_id=me.participant_id,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        # Los dos del mismo bando llevan la MISMA tarjeta rival: la pareja no se
+        # reparte jugador a jugador.
+        rival_pair = {rival_one.participant_id, rival_two.participant_id}
+        assert set(assignments[me.participant_id]) >= rival_pair
+        assert set(assignments[partner.participant_id]) >= rival_pair
+
+    def test_fourball_still_splits_player_by_player(self):
+        me = _registered_on("A")
+        partner = _registered_on("A")
+        rival_one = _guest_on("B")
+        rival_two = _guest_on("B")
+
+        assignments = self.service.compute_assignments(
+            participants=[me, partner, rival_one, rival_two],
+            scorer_ids=[me.participant_id, partner.participant_id],
+            creator_participant_id=me.participant_id,
+            match_format=MatchFormat.FOURBALL,
+        )
+
+        # Cada uno juega su bola: el reparto uniforme sigue teniendo sentido y
+        # cada anotador se cubre a si mismo.
+        assert me.participant_id in assignments[me.participant_id]
+        assert partner.participant_id in assignments[partner.participant_id]
+        covered = set(assignments[me.participant_id]) | set(assignments[partner.participant_id])
+        assert covered == {
+            me.participant_id,
+            partner.participant_id,
+            rival_one.participant_id,
+            rival_two.participant_id,
+        }
