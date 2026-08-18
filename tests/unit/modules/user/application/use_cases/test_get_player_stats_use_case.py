@@ -1125,3 +1125,76 @@ class TestScoringRecordWindow:
         assert stats.rounds_with_differential == 21
         assert len(stats.differentials) == 20
         assert min(stats.differentials) == stats.best_differential
+
+
+class TestParPorBarra:
+    """
+    La media se mide contra el par de la barra jugada.
+
+    En 25 de los 800 campos federados el par cambia de una barra a otra. Medir
+    a todos contra la tarjeta de referencia le cuenta a quien juega otra barra
+    una vuelta mejor o peor de la que hizo.
+    """
+
+    @staticmethod
+    async def _course_with_longer_red(golf_course_uow, creator_id):
+        """Rojas juegan par 5 los hoyos 1 y 2 (par 74); el campo, par 72."""
+        tees = [
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+                holes=[Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)],
+            ),
+            Tee(
+                color=TeeColor.RED,
+                gender=Gender.FEMALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+                holes=[
+                    Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i)
+                    for i in range(1, 19)
+                ],
+            ),
+        ]
+        course = GolfCourse.create(
+            name="Two Cards Club",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=tees,
+            holes=[Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)],
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+        return course
+
+    @pytest.mark.asyncio
+    async def test_la_media_va_contra_el_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Scratch de rojas (par 74) firmando 4 en todos los hoyos: 72 golpes,
+        dos bajo su par. Contra la tarjeta del campo (par 72) daría 0, que es
+        lo que salía antes.
+        """
+        user = await create_user(user_uow, unique_email("red"), handicap=0)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            strokes_per_hole=4,
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.scoring_avg == -2.0
