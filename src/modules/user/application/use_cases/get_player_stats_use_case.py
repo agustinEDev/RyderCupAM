@@ -422,7 +422,13 @@ class GetPlayerStatsUseCase:
             return TeeRating(
                 course_rating=Decimal(str(tee.course_rating)),
                 slope_rating=tee.slope_rating,
-                par=sum(hole.par for hole in course.reference_card),
+                # El par es el de la barra: entra en el Course Handicap como
+                # (CR - Par), así que con la tarjeta de referencia el jugador de
+                # otra barra sale con una base de golpes que no es la suya, y
+                # con ella el tope de doble bogey neto y el diferencial.
+                par=tee.par_total if tee.holes else sum(
+                    hole.par for hole in course.reference_card
+                ),
             )
         except ValueError:
             return None

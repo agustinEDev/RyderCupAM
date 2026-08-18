@@ -635,3 +635,39 @@ class TestHoleCardFor:
 
         assert male[0].meters == 350
         assert female[0].meters == 300
+
+    def test_resuelve_una_salida_other_sin_su_identificador(self) -> None:
+        """
+        Las "Championship" y las combinadas se guardan como OTHER, y son de las
+        que más veces traen tarjeta propia. Ni `MatchPlayer` ni
+        `QuickMatchParticipant` guardan el identificador de la salida, así que
+        exigirlo aquí las dejaba sin resolver: al jugador se le repartían los
+        golpes con su barra —los context builders indexan por (color, género)—
+        y se le puntuaba con la tarjeta de referencia.
+        """
+        champ_pars = list(PAR_72)
+        champ_pars[0] = 5
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(champ_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(meters=350),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert card[0].par == 5
+        assert card[0].meters == 400

@@ -151,6 +151,7 @@ async def _played_quick_match(
     holes: list[int] | None = None,
     tee_color: TeeColor | None = None,
     tee_gender: Gender | None = None,
+    scores_by_hole: dict[int, int] | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -190,7 +191,7 @@ async def _played_quick_match(
                         quick_match_id=match.id,
                         hole_number=hole_number,
                         participant_id=participant.participant_id,
-                        score=strokes_per_hole,
+                        score=(scores_by_hole or {}).get(hole_number, strokes_per_hole),
                         recorded_by_participant_id=creator_participant_id,
                     )
                 )
@@ -1198,3 +1199,37 @@ class TestParPorBarra:
         )
 
         assert stats.scoring_avg == -2.0
+
+    @pytest.mark.asyncio
+    async def test_la_base_de_golpes_sale_del_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El par entra en el Course Handicap como `(CR - Par)`, así que con el par
+        del campo el jugador de otra barra recibe golpes de más y su tope de
+        doble bogey neto sube: el diferencial sale mejor de lo que jugó.
+
+        Índice 10 desde rojas (par 74, CR 72, SR 130): 10 x 130/113 - 2 = 9.5,
+        que redondea a 10 golpes. Con el par del campo serían 11.5 -> 12, dos
+        golpes de más, y el desastre del hoyo con índice 11 se topa un golpe más
+        arriba.
+        """
+        user = await create_user(user_uow, unique_email("base"), handicap=10)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), 4)
+        tarjeta[11] = 9  # el hoyo de stroke index 11, donde cambia el reparto
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            holes=list(range(1, 19)),
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+            scores_by_hole=tarjeta,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.best_differential == 1.7

@@ -1017,9 +1017,25 @@ class GolfCourse:
         cuando el campo no las distingue. Un campo dado de alta a mano suele
         tener una sola barra amarilla, mientras que el jugador siempre manda
         color y género juntos: sin la reserva no se encontraría ninguna.
+
+        Con color OTHER se resuelve igual, por color y género, y no por
+        identificador: ni `MatchPlayer` ni `QuickMatchParticipant` guardan el
+        identificador de la salida, así que exigirlo dejaba sin resolver
+        precisamente a las "Championship" y las combinadas, que son las que más
+        veces traen tarjeta propia. Es el mismo criterio con el que los context
+        builders reparten los golpes, que indexan por `(color, género)`.
+        Mientras un campo pueda tener dos salidas OTHER del mismo género (#190)
+        no hay forma de distinguirlas aquí, y se coge la primera — que es lo que
+        ya hacía el reparto.
         """
-        return self.find_tee(color, gender, identifier) or self.find_tee(
-            color, None, identifier
+        if identifier is not None:
+            exact = self.find_tee(color, gender, identifier)
+            if exact is not None:
+                return exact
+
+        same_color = [tee for tee in self._tees if tee.color == color]
+        return next((tee for tee in same_color if tee.gender == gender), None) or next(
+            (tee for tee in same_color if tee.gender is None), None
         )
 
     def hole_card_for(
