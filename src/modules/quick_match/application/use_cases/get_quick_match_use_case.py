@@ -3,7 +3,6 @@
 from decimal import Decimal
 
 from src.modules.competition.domain.services.scoring_service import ScoringService
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -24,6 +23,9 @@ from src.modules.quick_match.application.services.stroke_context_builder import 
 )
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.services.hole_completion_service import (
+    hole_is_complete,
 )
 from src.modules.quick_match.domain.services.scoring_coverage_service import (
     ScoringCoverageService,
@@ -232,9 +234,7 @@ class GetQuickMatchUseCase:
             scores = scores_by_hole.get(hole_number)
             if not scores:
                 continue
-            if not self._hole_is_complete(
-                scores, team_a_ids, team_b_ids, quick_match.match_format
-            ):
+            if not hole_is_complete(scores, team_a_ids, team_b_ids, quick_match.match_format):
                 continue
 
             # `calculate_hole_winner` compara scores NETOS. Pasarle el bruto hacia
@@ -267,40 +267,6 @@ class GetQuickMatchUseCase:
             holes_remaining=standing["holes_remaining"],
             is_decided=self._scoring_service.is_match_decided(standing),
         )
-
-    @staticmethod
-    def _hole_is_complete(
-        scores: dict[ParticipantId, int],
-        team_a_ids: set[ParticipantId],
-        team_b_ids: set[ParticipantId],
-        match_format: MatchFormat,
-    ) -> bool:
-        """
-        Un hoyo cuenta para el resultado cuando cada bando ha entregado su bola.
-
-        FOURSOMES se juega a golpes alternos con UNA bola por bando, y la anota
-        cualquiera de los dos companeros. Exigir los cuatro scores —que es lo
-        correcto en FOURBALL, donde cada bando juega dos bolas y la mejor puede
-        cambiar con la que falte— dejaba sin puntuar cualquier tarjeta llevada
-        como se juega: el partido entero se quedaba sin un solo hoyo valido.
-
-        `ScoringService._best_ball` ya resolvia este caso —ignora los None y se
-        queda con el unico score que hay—, asi que el supuesto de las cuatro
-        bolas vivia solo en este filtro.
-
-        Ojo con esa ultima parte: `_best_ball` no mira el formato, devuelve el
-        MENOR de los scores que reciba. En foursomes hay uno solo porque la bola
-        del bando se guarda a nombre de un unico participante —el primero del
-        bando, lo anote quien lo anote—, no porque el motor sepa que el bando
-        juega una bola. Si algun dia llegaran dos filas del mismo bando con
-        golpes distintos, ganaria la menor en silencio en vez de la ultima
-        anotada.
-        """
-        if match_format == MatchFormat.FOURSOMES:
-            return any(pid in scores for pid in team_a_ids) and any(
-                pid in scores for pid in team_b_ids
-            )
-        return all(pid in scores for pid in team_a_ids | team_b_ids)
 
     @staticmethod
     def _net(

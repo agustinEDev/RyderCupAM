@@ -114,13 +114,20 @@ class RecentMatchDTO(BaseModel):
     stableford_points: int | None = Field(
         default=None,
         description=(
-            "Puntos Stableford de la vuelta, **calculados en cualquier formato**: "
-            "36 puntos es jugar a tu hándicap, así que es la única cifra que "
-            "compara vueltas de medal, Stableford y match play entre sí."
+            "Puntos Stableford de la vuelta: 36 puntos es jugar a tu hándicap, "
+            "así que es la única cifra que compara vueltas de medal, Stableford "
+            "y match play entre sí. Se calcula en todos los formatos **menos "
+            "foursomes**, donde la pareja juega una bola y no hay vuelta propia "
+            "que puntuar: ahí siempre es None."
         ),
     )
     total_strokes: int | None = Field(
-        default=None, description="Golpes brutos de los hoyos anotados"
+        default=None,
+        description=(
+            "Golpes brutos de los hoyos anotados. En **foursomes** son los del "
+            "BANDO —una bola por hoyo, la anote quien la anote— y los mismos "
+            "para los dos de la pareja, no los del jugador por su cuenta."
+        ),
     )
     holes_played: int | None = Field(
         default=None, description="Cuántos hoyos se anotaron: 18 en vuelta entera, 9 en media"
