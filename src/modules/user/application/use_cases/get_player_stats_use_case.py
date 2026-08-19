@@ -12,6 +12,7 @@ from src.modules.competition.domain.services.score_differential_calculator impor
     PlayedRound,
     ScoreDifferentialCalculator,
 )
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -195,6 +196,14 @@ class GetPlayerStatsUseCase:
         `list_for_user` ya descarta las que el propio usuario ocultó (#127), y
         lo hace por participante: una partida que A ocultó sigue contando para
         B. Esa regla se hereda tal cual en lugar de reimplementarse aquí.
+
+        FOURSOMES se queda fuera: la pareja juega UNA bola a golpes alternos,
+        así que ninguno de los dos ha jugado esa vuelta entera y no dice a qué
+        nivel juega ninguno. Además la bola se guarda a nombre de un solo
+        participante, así que contarla metía una vuelta de 18 hoyos —con el
+        hándicap individual de ese— en la media y en el diferencial WHS de uno
+        de los compañeros, mientras la del otro se caía por vacía: dos
+        estadísticas distintas de una sola bola compartida.
         """
         results: list[_ComputableRound] = []
 
@@ -205,6 +214,9 @@ class GetPlayerStatsUseCase:
 
             for match in matches:
                 if golf_course_id is not None and match.golf_course_id != golf_course_id:
+                    continue
+
+                if match.match_format == MatchFormat.FOURSOMES:
                     continue
 
                 participant = self._find_participant(match, user_id)
@@ -281,9 +293,12 @@ class GetPlayerStatsUseCase:
         """
         Vueltas de torneo computables del jugador.
 
-        El formato del partido da igual: en match play también firmas una
-        tarjeta con tus golpes, y esa tarjeta dice a qué nivel jugaste tan bien
-        como la de una vuelta de medal. Solo entran las que estén enteras.
+        En match play también firmas una tarjeta con tus golpes, y esa tarjeta
+        dice a qué nivel jugaste tan bien como la de una vuelta de medal. La
+        excepción es FOURSOMES: ahí la pareja juega UNA bola a golpes alternos,
+        la tarjeta no son los golpes de ninguno de los dos por separado y no
+        entra ni en la media ni en el diferencial WHS. Solo entran las que estén
+        enteras.
 
         Se usa `own_score`, no el `net_score` de la entidad: ese solo se calcula
         cuando el marcador ha validado el hoyo, así que media tarjeta legítima
@@ -299,6 +314,8 @@ class GetPlayerStatsUseCase:
                 round_ = rounds_by_match.get(match.id)
                 course_id = self._match_course(match, rounds_by_match)
                 if round_ is None or course_id is None:
+                    continue
+                if round_.match_format == MatchFormat.FOURSOMES:
                     continue
                 if course_id not in courses:
                     courses[course_id] = await self._golf_course_uow.golf_courses.find_by_id(

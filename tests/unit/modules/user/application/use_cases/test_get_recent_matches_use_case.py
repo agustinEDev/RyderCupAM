@@ -152,6 +152,7 @@ async def played_quick_match(
     strokes_by_participant_index: dict[int, int] | None = None,
     strokes_per_hole: int = 4,
     holes_played: int = 18,
+    scoring_participant_indexes: set[int] | None = None,
     creator_tee_color: TeeColor | None = None,
     creator_tee_gender: Gender | None = None,
 ):
@@ -162,6 +163,8 @@ async def played_quick_match(
     participante por su posición en el roster (0 = creador); sin él todos
     firman los mismos. `holes_played` deja la vuelta a medias, que es como
     acaba un match play que se cierra antes del 18.
+    `scoring_participant_indexes` limita quién tiene golpes anotados: en
+    foursomes el bando entrega UNA bola, así que solo hay dos tarjetas.
     """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
@@ -182,6 +185,8 @@ async def played_quick_match(
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
         for index, participant_id in enumerate(participant_ids):
+            if scoring_participant_indexes is not None and index not in scoring_participant_indexes:
+                continue
             strokes = (strokes_by_participant_index or {}).get(index, strokes_per_hole)
             for hole_number in range(1, holes_played + 1):
                 await qm_uow.quick_match_hole_scores.add(
@@ -403,6 +408,184 @@ class TestTeamQuickMatch:
         assert won.result == "WON"
         assert lost.result == "LOST"
         assert won.score == lost.score == "18UP"
+
+    async def test_a_foursomes_match_is_decided_with_one_ball_per_side(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        FOURSOMES: el bando juega UNA bola, así que solo hay dos tarjetas. El
+        historial exigía las cuatro —una copia a mano de la regla que el detalle
+        de la partida ya había arreglado— y dejaba TODAS las partidas de este
+        formato sin resultado, mientras la partida abierta sí las puntuaba.
+        """
+        creator = await create_user(user_uow, "Foursomes", handicap=0)
+        partner = await create_user(user_uow, "Partner", handicap=0)
+        rival_one = await create_user(user_uow, "RivalOne", handicap=0)
+        rival_two = await create_user(user_uow, "RivalTwo", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            # Una bola por bando: la del creador y la del primer rival.
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        won = (await use_case.execute(creator.id)).matches[0]
+        lost = (await use_case.execute(rival_one.id)).matches[0]
+
+        assert won.result == "WON"
+        assert lost.result == "LOST"
+        assert won.score == lost.score == "18UP"
+
+    async def test_the_partner_ball_counts_for_the_side_in_the_history(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La bola del bando la anota cualquiera de los dos: aquí, el compañero."""
+        creator = await create_user(user_uow, "Silent", handicap=0)
+        partner = await create_user(user_uow, "Striker", handicap=0)
+        rival_one = await create_user(user_uow, "RivalA", handicap=0)
+        rival_two = await create_user(user_uow, "RivalB", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={1, 3},
+            strokes_by_participant_index={1: 4, 3: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        assert (await use_case.execute(creator.id)).matches[0].result == "WON"
+
+    async def test_both_partners_see_the_side_strokes_in_foursomes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        En foursomes no hay vuelta propia —la pareja juega una bola— pero sí los
+        golpes del bando, y los mismos para los dos. Leyendo solo lo anotado a
+        nombre de cada uno, el que llevaba la fila salía con una vuelta entera y
+        su compañero sin nada, en el mismo partido.
+        """
+        creator = await create_user(user_uow, "Holder", handicap=0)
+        partner = await create_user(user_uow, "Mate", handicap=0)
+        rival_one = await create_user(user_uow, "Rival", handicap=0)
+        rival_two = await create_user(user_uow, "Guest", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        holder = (await use_case.execute(creator.id)).matches[0]
+        mate = (await use_case.execute(partner.id)).matches[0]
+
+        assert holder.total_strokes == mate.total_strokes == 72
+        assert holder.holes_played == mate.holes_played == 18
+        # Sin vuelta propia: los puntos Stableford medirían una que no existe.
+        assert holder.stableford_points is None
+        assert mate.stableford_points is None
+
+    async def test_the_side_strokes_never_add_both_partners(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Comparten bola: sumar las dos filas doblaría la vuelta del bando. Y con
+        dos que no coinciden se toma la misma que decide el hoyo —la menor—, o
+        la partida saldría con unos golpes que no explican su resultado.
+        """
+        creator = await create_user(user_uow, "Both", handicap=0)
+        partner = await create_user(user_uow, "Twice", handicap=0)
+        rival_one = await create_user(user_uow, "Other", handicap=0)
+        rival_two = await create_user(user_uow, "More", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            # Los dos del bando A con fila y sin coincidir, como dejaría un
+            # cliente antiguo: 5 a nombre del creador, 4 a nombre del compañero.
+            scoring_participant_indexes={0, 1, 2},
+            strokes_by_participant_index={0: 5, 1: 4, 2: 6},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        entry = (await use_case.execute(creator.id)).matches[0]
+        # 4 por hoyo, no 9 (las dos sumadas) ni 5 (la del primero del bando).
+        assert entry.total_strokes == 72
+        # Y esos golpes son los que ganaron el partido.
+        assert entry.result == "WON"
+
+    async def test_fourball_still_needs_every_ball_in_the_history(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        FOURBALL juega dos bolas por bando y la mejor puede cambiar con la que
+        falte: un hoyo a medias sigue sin poder adjudicarse.
+        """
+        creator = await create_user(user_uow, "Fourball", handicap=0)
+        partner = await create_user(user_uow, "Mate", handicap=0)
+        rival_one = await create_user(user_uow, "Opp1", handicap=0)
+        rival_two = await create_user(user_uow, "Opp2", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        entry = (await use_case.execute(creator.id)).matches[0]
+        assert entry.result is None
+        assert entry.score is None
 
     async def test_a_match_closed_early_reports_the_holes_that_were_left(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

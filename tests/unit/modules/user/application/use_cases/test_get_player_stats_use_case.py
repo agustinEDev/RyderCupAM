@@ -152,6 +152,7 @@ async def _played_quick_match(
     tee_color: TeeColor | None = None,
     tee_gender: Gender | None = None,
     scores_by_hole: dict[int, int] | None = None,
+    match_format: MatchFormat | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -168,7 +169,8 @@ async def _played_quick_match(
         id=QuickMatchId.generate(),
         creator_id=user.id,
         golf_course_id=golf_course.id,
-        scoring_format=ScoringFormat.MEDAL,
+        match_format=match_format,
+        scoring_format=None if match_format else ScoringFormat.MEDAL,
         creator_tee_color=tee_color,
         creator_tee_gender=tee_gender,
     )
@@ -212,6 +214,7 @@ async def _played_competition_match(
     unscored_holes: list[int] | None = None,
     decided_early: bool = False,
     round_date: date = date(2026, 6, 1),
+    match_format: MatchFormat = MatchFormat.SINGLES,
 ):
     """
     Un partido de torneo terminado con la tarjeta del jugador anotada.
@@ -235,7 +238,7 @@ async def _played_competition_match(
         golf_course_id=golf_course.id,
         round_date=round_date,
         session_type=SessionType.MORNING,
-        match_format=MatchFormat.SINGLES,
+        match_format=match_format,
     )
 
     def match_player(user_id):
@@ -387,6 +390,79 @@ class TestRoundsAndAverage:
         )
 
         assert stats.scoring_avg == 0.0
+
+
+@pytest.mark.asyncio
+class TestFoursomesIsNotAPersonalRound:
+    """
+    En foursomes la pareja juega UNA bola a golpes alternos: ninguno de los dos
+    ha jugado esa vuelta entera, así que no dice a qué nivel juega ninguno y no
+    entra ni en la media ni en el diferencial WHS.
+    """
+
+    async def test_a_foursomes_quick_match_does_not_count_as_a_round(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("fours"), handicap=0)
+        partner = await create_user(user_uow, unique_email("mate"), handicap=0)
+        rival_one = await create_user(user_uow, unique_email("riv1"), handicap=0)
+        rival_two = await create_user(user_uow, unique_email("riv2"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
+
+    async def test_a_singles_quick_match_still_counts(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La exclusión es de foursomes, no de las partidas por equipos."""
+        user = await create_user(user_uow, unique_email("single"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 1
+
+    async def test_a_foursomes_tournament_match_does_not_count_either(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """En torneo la bola alterna es la misma: la tarjeta no es de nadie."""
+        player = await create_user(user_uow, unique_email("tfours"), handicap=0)
+        rival = await create_user(user_uow, unique_email("trival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 0
 
 
 @pytest.mark.asyncio
