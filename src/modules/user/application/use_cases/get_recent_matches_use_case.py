@@ -516,10 +516,12 @@ class GetRecentMatchesUseCase:
         """
         Golpes brutos y hoyos del BANDO en foursomes: una bola por hoyo.
 
-        Se toma la del primer participante del bando que la tenga —el mismo
-        criterio que usa el frontend, que guarda la bola a nombre del primero—
-        y nunca se suman los dos: comparten bola, así que sumarlas doblaría la
-        vuelta.
+        Normalmente hay una sola: el frontend guarda la bola a nombre del primer
+        jugador del bando, la anote quien la anote. Si llegan dos se toma la
+        MENOR, que es la que usa `ScoringService._best_ball` para adjudicar el
+        hoyo: contar aquí una y adjudicar con la otra dejaría la partida con
+        unos golpes que no explican su resultado. Lo que nunca se hace es
+        sumarlas, porque comparten bola y eso doblaría la vuelta.
 
         Devuelve None si no hay bandos resolubles o el bando no anotó nada.
         """
