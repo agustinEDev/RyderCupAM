@@ -311,3 +311,129 @@ class TestStandingAppliesHandicap:
         assert other_strokes.strokes_by_hole
         # Y recibe en los hoyos mas dificiles: el campo de prueba tiene SI = numero de hoyo
         assert min(other_strokes.strokes_by_hole) == 1
+
+
+async def _create_team_match(qm_uow, match_format, creator_id, partner_id, rival_ids):
+    """Partida 2v2 en marcha: el creador queda en el bando A y anota para todos."""
+    qm = QuickMatch.create(
+        id=QuickMatchId.generate(),
+        creator_id=creator_id,
+        golf_course_id=GolfCourseId(uuid4()),
+        match_format=match_format,
+    )
+    qm.add_participant(QuickMatchParticipant.for_user(partner_id, team="A"))
+    for rival_id in rival_ids:
+        qm.add_participant(QuickMatchParticipant.for_user(rival_id, team="B"))
+    qm.start([qm.creator_participant_id])
+    async with qm_uow:
+        await qm_uow.quick_matches.add(qm)
+    return qm
+
+
+async def _score(qm_uow, qm, scorer_id, player_id, hole_number, score):
+    """Anota un golpe: propio si el jugador es el anotador, delegado si no."""
+    if player_id == scorer_id:
+        await SubmitQuickMatchHoleScoreUseCase(qm_uow).execute(
+            SubmitHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                player_user_id=player_id.value,
+                hole_number=hole_number,
+                score=score,
+            )
+        )
+        return
+    await SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService()).execute(
+        SubmitProxyHoleScoreRequestDTO(
+            quick_match_id=qm.id.value,
+            scorer_user_id=scorer_id.value,
+            target_participant_id=player_id.value,
+            hole_number=hole_number,
+            score=score,
+        )
+    )
+
+
+class TestFoursomesScoresOneBallPerSide:
+    """
+    FOURSOMES se juega a golpes alternos con UNA bola por bando.
+
+    El filtro del standing exigia los cuatro scores por hoyo, asi que una tarjeta
+    llevada como se juega —cada hoyo anotado por quien golpeo— no puntuaba ni un
+    solo hoyo y el partido se quedaba sin resultado.
+    """
+
+    async def _players(self, user_uow, tag):
+        return [
+            await create_user(user_uow, unique_email(f"{tag}-{i}")) for i in range(4)
+        ]
+
+    async def test_hole_counts_with_one_score_per_side(self, qm_uow, user_uow, golf_course_uow):
+        creator, partner, rival_a, rival_b = await self._players(user_uow, "foursomes-ok")
+        qm = await _create_team_match(
+            qm_uow, MatchFormat.FOURSOMES, creator.id, partner.id, [rival_a.id, rival_b.id]
+        )
+
+        # Una bola por bando: la del bando A la anota el creador, la del B un rival.
+        await _score(qm_uow, qm, creator.id, creator.id, 1, 4)
+        await _score(qm_uow, qm, creator.id, rival_a.id, 1, 5)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.standing is not None
+        assert detail.standing.holes_played == 1
+        assert detail.standing.leading_team == "A"
+        assert detail.standing.status == "1UP"
+
+    async def test_the_partner_may_be_the_one_who_enters_it(self, qm_uow, user_uow, golf_course_uow):
+        creator, partner, rival_a, rival_b = await self._players(user_uow, "foursomes-partner")
+        qm = await _create_team_match(
+            qm_uow, MatchFormat.FOURSOMES, creator.id, partner.id, [rival_a.id, rival_b.id]
+        )
+
+        # La bola del bando A entra a nombre del companero, no del creador: el
+        # golpe es del bando y lo anota cualquiera de los dos.
+        await _score(qm_uow, qm, creator.id, partner.id, 1, 4)
+        await _score(qm_uow, qm, creator.id, rival_b.id, 1, 6)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.standing is not None
+        assert detail.standing.holes_played == 1
+        assert detail.standing.leading_team == "A"
+
+    async def test_hole_still_needs_both_sides(self, qm_uow, user_uow, golf_course_uow):
+        creator, partner, rival_a, rival_b = await self._players(user_uow, "foursomes-half")
+        qm = await _create_team_match(
+            qm_uow, MatchFormat.FOURSOMES, creator.id, partner.id, [rival_a.id, rival_b.id]
+        )
+
+        # Solo el bando A ha entregado: no hay hoyo que comparar.
+        await _score(qm_uow, qm, creator.id, creator.id, 1, 4)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.standing is None
+
+    async def test_fourball_still_requires_every_player(self, qm_uow, user_uow, golf_course_uow):
+        creator, partner, rival_a, rival_b = await self._players(user_uow, "fourball-strict")
+        qm = await _create_team_match(
+            qm_uow, MatchFormat.FOURBALL, creator.id, partner.id, [rival_a.id, rival_b.id]
+        )
+
+        # FOURBALL si tiene dos bolas por bando: con una sin anotar, la mejor del
+        # bando aun puede cambiar, asi que el hoyo no cuenta.
+        await _score(qm_uow, qm, creator.id, creator.id, 1, 4)
+        await _score(qm_uow, qm, creator.id, rival_a.id, 1, 5)
+        await _score(qm_uow, qm, creator.id, rival_b.id, 1, 6)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.standing is None
