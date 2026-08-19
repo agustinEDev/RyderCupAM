@@ -108,21 +108,22 @@ def _guest_on(team):
     return QuickMatchParticipant.for_guest(first_name="Guest", last_name="Player", team=team)
 
 
-class TestFoursomesSideMarksSide:
+class TestFoursomesScoresCrossed:
     """
-    En foursomes el bando juega UNA bola, asi que solo hay dos tarjetas que
-    llevar: marca la pareja rival, no cada jugador por su cuenta.
+    En foursomes el bando juega UNA bola, asi que solo hay dos tarjetas y se
+    anotan cruzadas, como en un 1 vs 1: cada anotador apunta las dos.
     """
 
     def setup_method(self):
         self.service = ScoringCoverageService()
 
-    def test_each_scorer_marks_the_rival_pair(self):
+    def test_each_scorer_covers_the_four_participants(self):
         me = _registered_on("A")
         partner = _registered_on("A")
         rival_one = _registered_on("B")
         rival_two = _guest_on("B")
         participants = [me, partner, rival_one, rival_two]
+        everyone = {p.participant_id for p in participants}
 
         assignments = self.service.compute_assignments(
             participants=participants,
@@ -131,17 +132,11 @@ class TestFoursomesSideMarksSide:
             match_format=MatchFormat.FOURSOMES,
         )
 
-        # Cada uno lleva la tarjeta de la pareja de enfrente, entera.
-        assert set(assignments[me.participant_id]) == {
-            rival_one.participant_id,
-            rival_two.participant_id,
-        }
-        assert set(assignments[rival_one.participant_id]) == {
-            me.participant_id,
-            partner.participant_id,
-        }
+        # Cada uno anota los golpes de su bando y marca los del contrario.
+        assert set(assignments[me.participant_id]) == everyone
+        assert set(assignments[rival_one.participant_id]) == everyone
 
-    def test_the_only_scorer_also_carries_its_own_ball(self):
+    def test_the_only_scorer_carries_both_balls(self):
         me = _registered_on("A")
         partner = _guest_on("A")
         rival_one = _guest_on("B")
@@ -155,27 +150,51 @@ class TestFoursomesSideMarksSide:
             match_format=MatchFormat.FOURSOMES,
         )
 
-        # Sin nadie enfrente que la lleve, su propia bola se quedaria sin tarjeta.
+        # Sin nadie enfrente, lleva las dos tarjetas: ninguna bola se queda sin
+        # quien pueda anotarla.
         assert set(assignments[me.participant_id]) == {p.participant_id for p in participants}
 
-    def test_a_partner_is_never_split_between_scorers(self):
+    def test_a_scorer_covers_its_own_ball_even_with_a_rival_scorer(self):
+        """
+        La regresion que motiva el cruce: con anotador enfrente, el propio bando
+        se quedaba sin nadie que pudiera anotarlo si ese rival no abria la app.
+        """
         me = _registered_on("A")
-        partner = _registered_on("A")
+        partner = _guest_on("A")
         rival_one = _registered_on("B")
         rival_two = _guest_on("B")
 
         assignments = self.service.compute_assignments(
             participants=[me, partner, rival_one, rival_two],
-            scorer_ids=[me.participant_id, partner.participant_id],
+            scorer_ids=[me.participant_id, rival_one.participant_id],
             creator_participant_id=me.participant_id,
             match_format=MatchFormat.FOURSOMES,
         )
 
-        # Los dos del mismo bando llevan la MISMA tarjeta rival: la pareja no se
-        # reparte jugador a jugador.
-        rival_pair = {rival_one.participant_id, rival_two.participant_id}
-        assert set(assignments[me.participant_id]) >= rival_pair
-        assert set(assignments[partner.participant_id]) >= rival_pair
+        assert me.participant_id in assignments[me.participant_id]
+        assert partner.participant_id in assignments[me.participant_id]
+
+    def test_two_scorers_on_the_same_side_both_carry_everything(self):
+        me = _registered_on("A")
+        partner = _registered_on("A")
+        rival_one = _registered_on("B")
+        rival_two = _guest_on("B")
+        participants = [me, partner, rival_one, rival_two]
+        everyone = {p.participant_id for p in participants}
+
+        # Con anotador tambien enfrente: el caso que el test anterior no llegaba
+        # a ejercitar, porque sin rival anotador caia en la rama de respaldo.
+        assignments = self.service.compute_assignments(
+            participants=participants,
+            scorer_ids=[me.participant_id, partner.participant_id, rival_one.participant_id],
+            creator_participant_id=me.participant_id,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        # Una pareja no se reparte jugador a jugador: los tres llevan lo mismo.
+        assert set(assignments[me.participant_id]) == everyone
+        assert set(assignments[partner.participant_id]) == everyone
+        assert set(assignments[rival_one.participant_id]) == everyone
 
     def test_fourball_still_splits_player_by_player(self):
         me = _registered_on("A")

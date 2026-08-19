@@ -284,9 +284,17 @@ class GetQuickMatchUseCase:
         cambiar con la que falte— dejaba sin puntuar cualquier tarjeta llevada
         como se juega: el partido entero se quedaba sin un solo hoyo valido.
 
-        `ScoringService._best_ball` ya resolvia este caso —ignora los None y en
-        FOURSOMES toma el unico score—, asi que el supuesto de las cuatro bolas
-        vivia solo en este filtro.
+        `ScoringService._best_ball` ya resolvia este caso —ignora los None y se
+        queda con el unico score que hay—, asi que el supuesto de las cuatro
+        bolas vivia solo en este filtro.
+
+        Ojo con esa ultima parte: `_best_ball` no mira el formato, devuelve el
+        MENOR de los scores que reciba. En foursomes hay uno solo porque la bola
+        del bando se guarda a nombre de un unico participante —el primero del
+        bando, lo anote quien lo anote—, no porque el motor sepa que el bando
+        juega una bola. Si algun dia llegaran dos filas del mismo bando con
+        golpes distintos, ganaria la menor en silencio en vez de la ultima
+        anotada.
         """
         if match_format == MatchFormat.FOURSOMES:
             return any(pid in scores for pid in team_a_ids) and any(
