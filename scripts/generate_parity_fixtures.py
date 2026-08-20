@@ -48,6 +48,10 @@ OUTPUT = (
 MEIS_STROKE_INDEX = [7, 1, 13, 5, 15, 9, 3, 11, 17, 16, 2, 14, 12, 8, 18, 6, 4, 10]
 MEIS_PAR = [4, 5, 4, 4, 3, 4, 5, 4, 3, 3, 4, 5, 4, 4, 3, 4, 5, 4]
 
+# Un pitch & putt federado: 18 hoyos que suman par 58
+SHORT_PAR = [3] * 14 + [4] * 4
+SHORT_STROKE_INDEX = list(range(1, 19))
+
 TEES = {
     ("YELLOW", "MALE"): TeeRating(course_rating=Decimal("73.1"), slope_rating=140, par=72),
     ("YELLOW", "FEMALE"): TeeRating(course_rating=Decimal("79.4"), slope_rating=147, par=72),
@@ -83,7 +87,23 @@ def _order(stroke_index_by_hole: list[int]) -> list[int]:
     return sorted(range(1, 19), key=lambda hole: stroke_index_by_hole[hole - 1])
 
 
-def run(name, players, match_format, allowance, play_mode, tees=None, by_tee=None) -> None:
+def run(
+    name,
+    players,
+    match_format,
+    allowance,
+    play_mode,
+    tees=None,
+    by_tee=None,
+    pars=None,
+    stroke_index=None,
+) -> None:
+    # El par y el indice son del campo del escenario, no siempre los de Meis: un
+    # pitch & putt tiene par 58, y el cliente deriva el par sumando los hoyos que
+    # le llegan aqui. Emitir el par 72 de Meis junto a un TeeRating de par 58
+    # compararia dos campos distintos y la paridad no probaria nada.
+    pars = MEIS_PAR if pars is None else pars
+    stroke_index = MEIS_STROKE_INDEX if stroke_index is None else stroke_index
     tees = TEES if tees is None else tees
     result = service.allocate(
         participants=players,
@@ -92,7 +112,7 @@ def run(name, players, match_format, allowance, play_mode, tees=None, by_tee=Non
             for p in players
         },
         tee_ratings=tees,
-        holes_by_stroke_index=_order(MEIS_STROKE_INDEX),
+        holes_by_stroke_index=_order(stroke_index),
         match_format=match_format,
         allowance_percentage=allowance,
         play_mode=play_mode,
@@ -105,7 +125,7 @@ def run(name, players, match_format, allowance, play_mode, tees=None, by_tee=Non
             "allowancePercentage": allowance,
             "playMode": play_mode.value,
             "holes": [
-                {"holeNumber": i + 1, "par": MEIS_PAR[i], "strokeIndex": MEIS_STROKE_INDEX[i]}
+                {"holeNumber": i + 1, "par": pars[i], "strokeIndex": stroke_index[i]}
                 for i in range(18)
             ],
             "tees": [
@@ -212,6 +232,28 @@ def main() -> None:
         100,
         handicap,
         by_tee={("YELLOW", "FEMALE"): list(range(18, 0, -1))},
+    )
+    # Pitch & putt federado: par 58, CR 54.9, SR 91. Hasta RyderCupAm#206 estos
+    # campos no se podian valorar y los dos lados jugaban con el Handicap Index
+    # a pelo, asi que la paridad no cubria ninguna barra corta. Es justo donde
+    # los dos calculos se pueden separar, porque el cliente deriva el par de los
+    # hoyos y el backend lo lleva en el TeeRating.
+    run(
+        "campo corto",
+        [
+            guest("x", 18.0, TeeColor.ORANGE, male),
+            guest("y", 30.0, TeeColor.ORANGE, male),
+        ],
+        MatchFormat.SINGLES,
+        100,
+        handicap,
+        tees={
+            ("ORANGE", "MALE"): TeeRating(
+                course_rating=Decimal("54.9"), slope_rating=91, par=58
+            )
+        },
+        pars=SHORT_PAR,
+        stroke_index=SHORT_STROKE_INDEX,
     )
     run(
         "sin handicap",

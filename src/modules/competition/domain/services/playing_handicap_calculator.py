@@ -21,13 +21,28 @@ from src.modules.competition.domain.value_objects.handicap_mode import HandicapM
 # Slope Rating neutral (valor estándar del sistema WHS)
 NEUTRAL_SLOPE = 113
 
-# Límites válidos para ratings de tees según WHS
-MIN_COURSE_RATING = 55
-MAX_COURSE_RATING = 85
-MIN_SLOPE_RATING = 55
-MAX_SLOPE_RATING = 155
-MIN_PAR = 66
-MAX_PAR = 76
+# Rangos absolutos, unión de los de todos los tipos de campo: aquí solo se
+# descarta lo que no puede ser válido en ninguno. Son los mismos que valida la
+# entidad `Tee` (golf_course), y el rango estricto que corresponde a cada tipo
+# lo comprueba `GolfCourse._validate_tee_ratings`, que es quien conoce el
+# `course_type`. Este dominio no puede conocerlo sin depender de `golf_course`.
+#
+# Antes eran los de un campo de 18 hoyos (CR 55-85, SR 55-155, par 66-76) y no
+# los de todos los tipos, así que rechazaban lo que la propia entidad `Tee`
+# admite: en el catálogo federado hay 468 salidas en 227 campos con CR por
+# debajo de 55, y 642 con par por debajo de 66 —los pitch & putt y los
+# ejecutivos, que el sistema no valora en la misma escala—. Un campo entero se
+# quedaba sin poder alojar competición, y en partida rápida sus jugadores
+# jugaban con el Handicap Index a pelo: un 18 recibía 18 golpes donde le tocan
+# 11. Ver RyderCupAm#206 y RyderCupAm#219.
+MIN_COURSE_RATING = 45
+MAX_COURSE_RATING = 90
+MIN_SLOPE_RATING = 40
+MAX_SLOPE_RATING = 160
+# El catálogo federado va de 54 (pitch & putt) a 74; el margen deja sitio a un
+# recorrido más corto sin llegar a admitir un par imposible.
+MIN_PAR = 50
+MAX_PAR = 80
 
 
 @dataclass(frozen=True)

@@ -70,7 +70,12 @@ class TeeContextBuilder:
         for tee in golf_course.tees:
             gender = tee.gender.value if tee.gender else None
             tee_key = (tee.color.value, gender)
-            tee_ratings[tee_key] = TeeContextBuilder._rating_for(tee, course_par, golf_course)
+            # La barra que no se puede valorar se queda FUERA del diccionario en
+            # vez de tumbar la construccion entera: quien la juegue jugara con su
+            # Handicap Index, y el resto del campo sigue funcionando. Ver #219.
+            rating = TeeContextBuilder._rating_for(tee, course_par, golf_course)
+            if rating is not None:
+                tee_ratings[tee_key] = rating
 
             card = TeeContextBuilder._card_for(tee)
             if card:
@@ -83,13 +88,21 @@ class TeeContextBuilder:
         )
 
     @staticmethod
-    def _rating_for(tee, course_par: int, golf_course: GolfCourse) -> TeeRating:
+    def _rating_for(tee, course_par: int, golf_course: GolfCourse) -> TeeRating | None:
         """
         Valoracion de una barra, contra SU par cuando trae tarjeta propia.
 
-        Si ese par no sirve —se sale del rango WHS, o la tarjeta viene
-        malformada— se cae al del campo, que es lo que se venia usando, en vez de
-        dejar la ronda sin poder generar partidos.
+        Si ese par no sirve —se sale del rango, o la tarjeta viene malformada—
+        se cae al del campo, que es lo que se venia usando.
+
+        Y si con el par del campo tampoco vale, devuelve None: la barra se queda
+        fuera del contexto y quien la juegue jugara con su Handicap Index, igual
+        que en partida rapida. Antes ese segundo intento repetia el mismo
+        `course_rating` y el mismo `slope_rating`, asi que cuando lo que se salia
+        de rango era el rating y no el par, la reserva lanzaba igual que el
+        primer intento: el ValueError subia hasta la API y la ronda se quedaba
+        sin poder generar partidos —justo lo que esta reserva existe para
+        evitar—. Ver RyderCupAm#219.
         """
         course_rating = Decimal(str(tee.course_rating))
         try:
@@ -99,16 +112,25 @@ class TeeContextBuilder:
                 par=tee.par_total if tee.holes else course_par,
             )
         except (ValueError, TypeError):
-            logger.debug(
-                "Tee %s of golf course %s has an unusable par; rating it against the course par",
-                tee.color.value,
-                golf_course.id,
-            )
+            pass
+
+        try:
             return TeeRating(
                 course_rating=course_rating,
                 slope_rating=tee.slope_rating,
                 par=course_par,
             )
+        except (ValueError, TypeError):
+            # Aviso, no debug: generar partidos es puntual —no como el detalle
+            # de una partida rapida, que se pide cada 10 segundos— y con 800
+            # campos importados interesa saber cual se quedo sin valorar.
+            logger.warning(
+                "Golf course %s has a tee (%s) that cannot be rated: "
+                "its players will play off their Handicap Index",
+                golf_course.id,
+                tee.color.value,
+            )
+            return None
 
     @staticmethod
     def _card_for(tee) -> list[int]:
