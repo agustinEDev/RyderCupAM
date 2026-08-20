@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -152,6 +153,9 @@ async def played_quick_match(
     strokes_by_participant_index: dict[int, int] | None = None,
     strokes_per_hole: int = 4,
     holes_played: int = 18,
+    scoring_participant_indexes: set[int] | None = None,
+    creator_tee_color: TeeColor | None = None,
+    creator_tee_gender: Gender | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -160,6 +164,8 @@ async def played_quick_match(
     participante por su posición en el roster (0 = creador); sin él todos
     firman los mismos. `holes_played` deja la vuelta a medias, que es como
     acaba un match play que se cierra antes del 18.
+    `scoring_participant_indexes` limita quién tiene golpes anotados: en
+    foursomes el bando entrega UNA bola, así que solo hay dos tarjetas.
     """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
@@ -167,6 +173,8 @@ async def played_quick_match(
         golf_course_id=golf_course.id,
         match_format=match_format,
         scoring_format=scoring_format,
+        creator_tee_color=creator_tee_color,
+        creator_tee_gender=creator_tee_gender,
     )
     for participant in others:
         match.add_participant(participant)
@@ -178,6 +186,8 @@ async def played_quick_match(
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
         for index, participant_id in enumerate(participant_ids):
+            if scoring_participant_indexes is not None and index not in scoring_participant_indexes:
+                continue
             strokes = (strokes_by_participant_index or {}).get(index, strokes_per_hole)
             for hole_number in range(1, holes_played + 1):
                 await qm_uow.quick_match_hole_scores.add(
@@ -204,8 +214,15 @@ async def played_competition_match(
     round_date: date,
     result: dict,
     match_format: MatchFormat = MatchFormat.SINGLES,
+    own_scores_by_user_id: dict | None = None,
 ):
-    """Un partido de torneo terminado, con su ronda y su competición."""
+    """
+    Un partido de torneo terminado, con su ronda y su competición.
+
+    `own_scores_by_user_id` siembra la tarjeta de cada jugador —un golpe por
+    hoyo, empezando por el 1—. Sin ella el partido guarda quién ganó pero no
+    cómo jugó nadie, que es justo lo que hace falta para mirar los puntos.
+    """
     creator_id = team_a_user_ids[0]
     competition = Competition.create(
         id=CompetitionId(uuid4()),
@@ -244,10 +261,26 @@ async def played_competition_match(
     match.start()
     match.complete(result)
 
+    hole_scores = []
+    for user_id, own_scores in (own_scores_by_user_id or {}).items():
+        team = "A" if user_id in team_a_user_ids else "B"
+        for hole_number, own_score in enumerate(own_scores, start=1):
+            hole_score = HoleScore.create(
+                match_id=match.id,
+                hole_number=hole_number,
+                player_user_id=user_id,
+                team=team,
+                strokes_received=0,
+            )
+            hole_score.set_own_score(own_score)
+            hole_scores.append(hole_score)
+
     async with competition_uow:
         await competition_uow.competitions.add(competition)
         await competition_uow.rounds.add(round_)
         await competition_uow.matches.add(match)
+        if hole_scores:
+            await competition_uow.hole_scores.add_many(hole_scores)
         await competition_uow.commit()
 
     return match
@@ -400,6 +433,184 @@ class TestTeamQuickMatch:
         assert lost.result == "LOST"
         assert won.score == lost.score == "18UP"
 
+    async def test_a_foursomes_match_is_decided_with_one_ball_per_side(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        FOURSOMES: el bando juega UNA bola, así que solo hay dos tarjetas. El
+        historial exigía las cuatro —una copia a mano de la regla que el detalle
+        de la partida ya había arreglado— y dejaba TODAS las partidas de este
+        formato sin resultado, mientras la partida abierta sí las puntuaba.
+        """
+        creator = await create_user(user_uow, "Foursomes", handicap=0)
+        partner = await create_user(user_uow, "Partner", handicap=0)
+        rival_one = await create_user(user_uow, "RivalOne", handicap=0)
+        rival_two = await create_user(user_uow, "RivalTwo", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            # Una bola por bando: la del creador y la del primer rival.
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        won = (await use_case.execute(creator.id)).matches[0]
+        lost = (await use_case.execute(rival_one.id)).matches[0]
+
+        assert won.result == "WON"
+        assert lost.result == "LOST"
+        assert won.score == lost.score == "18UP"
+
+    async def test_the_partner_ball_counts_for_the_side_in_the_history(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La bola del bando la anota cualquiera de los dos: aquí, el compañero."""
+        creator = await create_user(user_uow, "Silent", handicap=0)
+        partner = await create_user(user_uow, "Striker", handicap=0)
+        rival_one = await create_user(user_uow, "RivalA", handicap=0)
+        rival_two = await create_user(user_uow, "RivalB", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={1, 3},
+            strokes_by_participant_index={1: 4, 3: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        assert (await use_case.execute(creator.id)).matches[0].result == "WON"
+
+    async def test_both_partners_see_the_side_strokes_in_foursomes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        En foursomes no hay vuelta propia —la pareja juega una bola— pero sí los
+        golpes del bando, y los mismos para los dos. Leyendo solo lo anotado a
+        nombre de cada uno, el que llevaba la fila salía con una vuelta entera y
+        su compañero sin nada, en el mismo partido.
+        """
+        creator = await create_user(user_uow, "Holder", handicap=0)
+        partner = await create_user(user_uow, "Mate", handicap=0)
+        rival_one = await create_user(user_uow, "Rival", handicap=0)
+        rival_two = await create_user(user_uow, "Guest", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        holder = (await use_case.execute(creator.id)).matches[0]
+        mate = (await use_case.execute(partner.id)).matches[0]
+
+        assert holder.total_strokes == mate.total_strokes == 72
+        assert holder.holes_played == mate.holes_played == 18
+        # Sin vuelta propia: los puntos Stableford medirían una que no existe.
+        assert holder.stableford_points is None
+        assert mate.stableford_points is None
+
+    async def test_the_side_strokes_never_add_both_partners(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Comparten bola: sumar las dos filas doblaría la vuelta del bando. Y con
+        dos que no coinciden se toma la misma que decide el hoyo —la menor—, o
+        la partida saldría con unos golpes que no explican su resultado.
+        """
+        creator = await create_user(user_uow, "Both", handicap=0)
+        partner = await create_user(user_uow, "Twice", handicap=0)
+        rival_one = await create_user(user_uow, "Other", handicap=0)
+        rival_two = await create_user(user_uow, "More", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            # Los dos del bando A con fila y sin coincidir, como dejaría un
+            # cliente antiguo: 5 a nombre del creador, 4 a nombre del compañero.
+            scoring_participant_indexes={0, 1, 2},
+            strokes_by_participant_index={0: 5, 1: 4, 2: 6},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        entry = (await use_case.execute(creator.id)).matches[0]
+        # 4 por hoyo, no 9 (las dos sumadas) ni 5 (la del primero del bando).
+        assert entry.total_strokes == 72
+        # Y esos golpes son los que ganaron el partido.
+        assert entry.result == "WON"
+
+    async def test_fourball_still_needs_every_ball_in_the_history(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        FOURBALL juega dos bolas por bando y la mejor puede cambiar con la que
+        falte: un hoyo a medias sigue sin poder adjudicarse.
+        """
+        creator = await create_user(user_uow, "Fourball", handicap=0)
+        partner = await create_user(user_uow, "Mate", handicap=0)
+        rival_one = await create_user(user_uow, "Opp1", handicap=0)
+        rival_two = await create_user(user_uow, "Opp2", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        entry = (await use_case.execute(creator.id)).matches[0]
+        assert entry.result is None
+        assert entry.score is None
+
     async def test_a_match_closed_early_reports_the_holes_that_were_left(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
@@ -525,6 +736,72 @@ class TestCompetitionMatch:
 
         assert feed.matches[0].scoring_format is None
         assert feed.matches[0].stableford_points is None
+
+    async def test_a_scored_tournament_card_carries_its_stableford_points(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Con tarjeta anotada sí hay puntos: nueve pares en un campo de par 4 son
+        18 puntos. Fija el caso normal contra el que se recorta FOURSOMES.
+        """
+        player = await create_user(user_uow, "Home")
+        rival = await create_user(user_uow, "Away")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "A", "score": "2UP"},
+            own_scores_by_user_id={player.id: [4] * 9},
+        )
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].stableford_points == 18
+        assert feed.matches[0].total_strokes == 36
+        assert feed.matches[0].holes_played == 9
+
+    async def test_a_foursomes_card_has_no_stableford_points(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        La pareja juega UNA bola, así que la tarjeta no es la vuelta de ninguno
+        de los dos y no lleva puntos —los golpes del bando sí se enseñan—. La
+        regla ya estaba en la partida rápida y el torneo se la había saltado:
+        el mismo partido salía con 18 puntos para cada compañero.
+        """
+        player = await create_user(user_uow, "Home")
+        partner = await create_user(user_uow, "Partner")
+        rival_one = await create_user(user_uow, "Rivalone")
+        rival_two = await create_user(user_uow, "Rivaltwo")
+        course = await create_golf_course(golf_course_uow, player.id)
+        # La bola del bando se guarda igual a nombre de los dos compañeros
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id, partner.id],
+            team_b_user_ids=[rival_one.id, rival_two.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "A", "score": "2UP"},
+            match_format=MatchFormat.FOURSOMES,
+            own_scores_by_user_id={player.id: [4] * 9, partner.id: [4] * 9},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        scorer = (await use_case.execute(player.id)).matches[0]
+        companion = (await use_case.execute(partner.id)).matches[0]
+
+        assert scorer.stableford_points is None
+        assert companion.stableford_points is None
+        # Los golpes del bando sí, y los mismos para los dos
+        assert scorer.total_strokes == companion.total_strokes == 36
+        assert scorer.holes_played == companion.holes_played == 9
+        assert scorer.score == companion.score == "2UP"
 
     async def test_separates_partners_from_opponents_in_fourball(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -692,3 +969,79 @@ class TestComparableFigures:
         assert entry.holes_played == 9
         assert entry.total_strokes == 45
         assert entry.stableford_points == 9
+
+
+class TestParPorBarra:
+    """
+    Los puntos se cuentan contra el par de la barra que se juega.
+
+    `reference_card` es la tarjeta derivada de la primera salida. En 25 de los
+    800 campos federados el par cambia de una barra a otra —normalmente el hoyo
+    que las mujeres juegan como par 5 y los hombres como par 4—, así que
+    puntuar a todos contra la de referencia le cuenta a quien juega otra barra
+    un birdie como par.
+    """
+
+    @staticmethod
+    async def _course_with_longer_red(golf_course_uow, creator_id):
+        """Rojas juegan par 5 los hoyos 1 y 2; la tarjeta del campo, par 4."""
+        red_holes = [
+            Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i) for i in HOLES
+        ]
+        tees = [
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+                holes=[Hole(number=i, par=4, stroke_index=i) for i in HOLES],
+            ),
+            Tee(
+                color=TeeColor.RED,
+                gender=Gender.FEMALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+                holes=red_holes,
+            ),
+        ]
+        course = GolfCourse.create(
+            name="Two Cards Club",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=tees,
+            holes=[Hole(number=i, par=4, stroke_index=i) for i in HOLES],
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+        return course
+
+    @pytest.mark.asyncio
+    async def test_los_puntos_salen_contra_el_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Scratch de rojas firmando 4 en todos los hoyos.
+
+        Contra su tarjeta son dos birdies (hoyos 1 y 2, par 5) y dieciséis
+        pares: 3 + 3 + 16 x 2 = 38 puntos. Contra la del campo serían 36, que es
+        lo que salía antes.
+        """
+        user = await create_user(user_uow, "Roja", handicap=0)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            user,
+            scoring_format=ScoringFormat.STABLEFORD,
+            strokes_per_hole=4,
+            creator_tee_color=TeeColor.RED,
+            creator_tee_gender=Gender.FEMALE,
+        )
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+
+        assert feed.matches[0].stableford_points == 38

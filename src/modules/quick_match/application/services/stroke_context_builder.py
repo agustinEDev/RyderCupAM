@@ -38,7 +38,7 @@ class StrokeContext:
     tee_ratings: dict[tuple[str, str | None], TeeRating]
     holes_by_stroke_index: list[int]
     par_by_hole: dict[int, int]
-    # Orden de dificultad propio de cada barra. `golf_course.holes` es solo la
+    # Orden de dificultad propio de cada barra. `golf_course.reference_card` es solo la
     # tarjeta de la PRIMERA barra (ver `GolfCourse._sync_holes_and_tees`), y el
     # importador de la RFEG guarda una tarjeta por barra: en 56 de los 800
     # campos federados el stroke index cambia de una a otra. Repartir con el
@@ -65,7 +65,7 @@ class StrokeContextBuilder:
             StrokeContext con los ratings por (color, genero), el orden de hoyos
             por stroke index y el par de cada hoyo.
         """
-        holes = sorted(golf_course.holes, key=lambda h: h.number)
+        holes = sorted(golf_course.reference_card, key=lambda h: h.number)
         par_by_hole = {hole.number: hole.par for hole in holes}
         course_par = sum(par_by_hole.values())
 

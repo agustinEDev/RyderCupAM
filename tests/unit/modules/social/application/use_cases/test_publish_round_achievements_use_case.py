@@ -165,6 +165,8 @@ async def _played_match(
     scores_by_hole: dict | None = None,
     others=(),
     complete: bool = True,
+    tee_color: TeeColor = TeeColor.YELLOW,
+    tee_gender: Gender = Gender.MALE,
 ):
     """Una partida rapida terminada con la vuelta anotada."""
     match = QuickMatch.create(
@@ -172,8 +174,8 @@ async def _played_match(
         creator_id=user.id,
         golf_course_id=course.id,
         scoring_format=ScoringFormat.MEDAL,
-        creator_tee_color=TeeColor.YELLOW,
-        creator_tee_gender=Gender.MALE,
+        creator_tee_color=tee_color,
+        creator_tee_gender=tee_gender,
     )
     for participant in others:
         match.add_participant(participant)
@@ -520,3 +522,77 @@ class TestIdempotencia:
 
         eventos = await _feed_de(social_uow, user)
         assert len(eventos) == 2  # BIRDIE + NEW_COURSE, una sola vez cada uno
+
+
+class TestParPorBarra:
+    """
+    Un birdie se mide contra el par de la barra que se juega.
+
+    En 25 de los 800 campos federados el par cambia entre barras. Con la
+    tarjeta de referencia, a quien juega otra barra se le cuenta como par lo
+    que fue birdie — y al revés.
+    """
+
+    @staticmethod
+    async def _course_with_longer_red(golf_course_uow, creator_id):
+        """El hoyo 1 es par 5 desde rojas y par 4 en la tarjeta del campo."""
+        course = GolfCourse.create(
+            name="Two Cards Club",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=[
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    identifier="Yellow",
+                    course_rating=70.0,
+                    slope_rating=125,
+                    holes=[Hole(number=i, par=PAR, stroke_index=i) for i in range(1, 19)],
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    identifier="Red",
+                    course_rating=72.0,
+                    slope_rating=130,
+                    holes=[
+                        Hole(number=i, par=PAR + 1 if i == 1 else PAR, stroke_index=i)
+                        for i in range(1, 19)
+                    ],
+                ),
+            ],
+            holes=[Hole(number=i, par=PAR, stroke_index=i) for i in range(1, 19)],
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+        return course
+
+    async def test_el_birdie_se_mide_contra_el_par_de_su_barra(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Un 4 en el hoyo 1 es birdie desde rojas (par 5) y solo par desde la
+        tarjeta del campo, que es contra la que se medía antes.
+        """
+        user = await _create_user(user_uow)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), PAR)
+        match = await _played_match(
+            qm_uow,
+            course,
+            user,
+            scores_by_hole=tarjeta,
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+        )
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value)
+        )
+
+        eventos = await _feed_de(social_uow, user)
+        birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
+        assert len(birdies) == 1
+        assert birdies[0].payload["holes"] == [1]

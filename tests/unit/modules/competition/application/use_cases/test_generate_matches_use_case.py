@@ -621,7 +621,7 @@ class TestGenerateMatchesUseCase:
 
         golf_course = MagicMock()
         golf_course.tees = tees
-        golf_course.holes = holes
+        golf_course.reference_card = holes
 
         return golf_course
 

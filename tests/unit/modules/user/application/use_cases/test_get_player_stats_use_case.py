@@ -151,6 +151,8 @@ async def _played_quick_match(
     holes: list[int] | None = None,
     tee_color: TeeColor | None = None,
     tee_gender: Gender | None = None,
+    scores_by_hole: dict[int, int] | None = None,
+    match_format: MatchFormat | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -167,7 +169,8 @@ async def _played_quick_match(
         id=QuickMatchId.generate(),
         creator_id=user.id,
         golf_course_id=golf_course.id,
-        scoring_format=ScoringFormat.MEDAL,
+        match_format=match_format,
+        scoring_format=None if match_format else ScoringFormat.MEDAL,
         creator_tee_color=tee_color,
         creator_tee_gender=tee_gender,
     )
@@ -190,7 +193,7 @@ async def _played_quick_match(
                         quick_match_id=match.id,
                         hole_number=hole_number,
                         participant_id=participant.participant_id,
-                        score=strokes_per_hole,
+                        score=(scores_by_hole or {}).get(hole_number, strokes_per_hole),
                         recorded_by_participant_id=creator_participant_id,
                     )
                 )
@@ -211,6 +214,7 @@ async def _played_competition_match(
     unscored_holes: list[int] | None = None,
     decided_early: bool = False,
     round_date: date = date(2026, 6, 1),
+    match_format: MatchFormat = MatchFormat.SINGLES,
 ):
     """
     Un partido de torneo terminado con la tarjeta del jugador anotada.
@@ -234,7 +238,7 @@ async def _played_competition_match(
         golf_course_id=golf_course.id,
         round_date=round_date,
         session_type=SessionType.MORNING,
-        match_format=MatchFormat.SINGLES,
+        match_format=match_format,
     )
 
     def match_player(user_id):
@@ -386,6 +390,79 @@ class TestRoundsAndAverage:
         )
 
         assert stats.scoring_avg == 0.0
+
+
+@pytest.mark.asyncio
+class TestFoursomesIsNotAPersonalRound:
+    """
+    En foursomes la pareja juega UNA bola a golpes alternos: ninguno de los dos
+    ha jugado esa vuelta entera, así que no dice a qué nivel juega ninguno y no
+    entra ni en la media ni en el diferencial WHS.
+    """
+
+    async def test_a_foursomes_quick_match_does_not_count_as_a_round(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("fours"), handicap=0)
+        partner = await create_user(user_uow, unique_email("mate"), handicap=0)
+        rival_one = await create_user(user_uow, unique_email("riv1"), handicap=0)
+        rival_two = await create_user(user_uow, unique_email("riv2"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
+
+    async def test_a_singles_quick_match_still_counts(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La exclusión es de foursomes, no de las partidas por equipos."""
+        user = await create_user(user_uow, unique_email("single"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 1
+
+    async def test_a_foursomes_tournament_match_does_not_count_either(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """En torneo la bola alterna es la misma: la tarjeta no es de nadie."""
+        player = await create_user(user_uow, unique_email("tfours"), handicap=0)
+        rival = await create_user(user_uow, unique_email("trival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            match_format=MatchFormat.FOURSOMES,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.rounds_played == 0
 
 
 @pytest.mark.asyncio
@@ -1125,3 +1202,171 @@ class TestScoringRecordWindow:
         assert stats.rounds_with_differential == 21
         assert len(stats.differentials) == 20
         assert min(stats.differentials) == stats.best_differential
+
+
+class TestParPorBarra:
+    """
+    La media se mide contra el par de la barra jugada.
+
+    En 25 de los 800 campos federados el par cambia de una barra a otra. Medir
+    a todos contra la tarjeta de referencia le cuenta a quien juega otra barra
+    una vuelta mejor o peor de la que hizo.
+    """
+
+    @staticmethod
+    async def _course_with_longer_red(golf_course_uow, creator_id):
+        """Rojas juegan par 5 los hoyos 1 y 2 (par 74); el campo, par 72."""
+        tees = [
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+                holes=[Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)],
+            ),
+            Tee(
+                color=TeeColor.RED,
+                gender=Gender.FEMALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+                holes=[
+                    Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i)
+                    for i in range(1, 19)
+                ],
+            ),
+        ]
+        course = GolfCourse.create(
+            name="Two Cards Club",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=creator_id,
+            tees=tees,
+            holes=[Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)],
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+        return course
+
+    @pytest.mark.asyncio
+    async def test_la_media_va_contra_el_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Scratch de rojas (par 74) firmando 4 en todos los hoyos: 72 golpes,
+        dos bajo su par. Contra la tarjeta del campo (par 72) daría 0, que es
+        lo que salía antes.
+        """
+        user = await create_user(user_uow, unique_email("red"), handicap=0)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            strokes_per_hole=4,
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.scoring_avg == -2.0
+
+    @pytest.mark.asyncio
+    async def test_la_base_de_golpes_sale_del_par_de_su_barra(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El par entra en el Course Handicap como `(CR - Par)`, así que con el par
+        del campo el jugador de otra barra recibe golpes de más y su tope de
+        doble bogey neto sube: el diferencial sale mejor de lo que jugó.
+
+        Índice 10 desde rojas (par 74, CR 72, SR 130): 10 x 130/113 - 2 = 9.5,
+        que redondea a 10 golpes. Con el par del campo serían 11.5 -> 12, dos
+        golpes de más, y el desastre del hoyo con índice 11 se topa un golpe más
+        arriba.
+        """
+        user = await create_user(user_uow, unique_email("base"), handicap=10)
+        course = await self._course_with_longer_red(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), 4)
+        tarjeta[11] = 9  # el hoyo de stroke index 11, donde cambia el reparto
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            holes=list(range(1, 19)),
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+            scores_by_hole=tarjeta,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.best_differential == 1.7
+
+    @pytest.mark.asyncio
+    async def test_una_barra_con_par_fuera_de_rango_no_borra_la_vuelta(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        `TeeRating` rechaza el par fuera de 66-76, y valorar la barra por su
+        propio par metió ese rechazo donde antes no llegaba: la vuelta se
+        quedaba sin rating, sin diferencial y desaparecía de las estadísticas.
+        Un dato suelto del importador no puede borrar una vuelta que sí se
+        jugó, así que se valora contra el par del campo.
+        """
+        user = await create_user(user_uow, unique_email("short"), handicap=10)
+        referencia = [Hole(number=i, par=4 if i <= 13 else 3, stroke_index=i) for i in range(1, 19)]
+        roja = [Hole(number=i, par=4 if i <= 11 else 3, stroke_index=i) for i in range(1, 19)]
+        assert sum(h.par for h in roja) == 65  # fuera del rango WHS, a propósito
+
+        course = GolfCourse.create(
+            name="Short Course",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=user.id,
+            tees=[
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    identifier="Yellow",
+                    course_rating=67.0,
+                    slope_rating=113,
+                    holes=referencia,
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    identifier="Red",
+                    course_rating=66.0,
+                    slope_rating=110,
+                    holes=roja,
+                ),
+            ],
+            holes=referencia,
+        )
+        course.approve()
+        async with golf_course_uow:
+            await golf_course_uow.golf_courses.save(course)
+
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            strokes_per_hole=4,
+            tee_color=TeeColor.RED,
+            tee_gender=Gender.FEMALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_with_differential == 1
+        assert stats.best_differential is not None

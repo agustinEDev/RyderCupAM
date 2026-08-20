@@ -2,10 +2,13 @@
 Tests del TeeContextBuilder.
 
 Los dos fallos que motivaron este servicio venian de valorar todas las barras
-contra la tarjeta de referencia del campo: `golf_course.holes` es solo la de la
+contra la tarjeta de referencia del campo: `golf_course.reference_card` es solo la de la
 PRIMERA barra. De los 800 campos federados importados con mas de una barra con
 tarjeta, 25 tienen par distinto entre barras y 56 stroke index distinto.
 """
+
+import logging
+from decimal import Decimal
 
 from src.modules.competition.application.services.tee_context_builder import TeeContextBuilder
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -138,3 +141,86 @@ class TestFoursomesTeamCard:
         # del campo (que es el de amarillas, la primera barra)
         assert context.holes_for(TeeColor.RED, Gender.FEMALE)[0] == 18
         assert context.holes_by_stroke_index[0] == 1
+
+
+class TestUnratableTee:
+    """
+    Una barra que no se puede valorar no debe tumbar la construccion del
+    contexto: antes el ValueError subia hasta la API y la ronda se quedaba sin
+    poder generar partidos, con un 500. Ver RyderCupAm#219.
+    """
+
+    def test_a_pitch_and_putt_tee_is_now_rated(self):
+        """
+        Given un pitch & putt federado (par 58, CR 54.9, SR 91)
+        When se construye el contexto
+        Then su barra se valora, en vez de quedarse fuera
+        """
+        par_58 = _card(list(range(1, 19)), pars=[3] * 14 + [4] * 4)
+        course = GolfCourse.create(
+            name="Corto",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.PITCH_AND_PUTT,
+            creator_id=UserId.generate(),
+            tees=[
+                Tee(color=TeeColor.ORANGE, gender=Gender.MALE, course_rating=54.9,
+                    slope_rating=91, holes=par_58),
+            ],
+            holes=par_58,
+        )
+        course.approve()
+
+        context = TeeContextBuilder.build(course)
+
+        assert context.tee_ratings[("ORANGE", "MALE")].par == 58
+        assert context.tee_ratings[("ORANGE", "MALE")].course_rating == Decimal("54.9")
+
+    def test_an_unratable_tee_is_left_out_instead_of_raising(self):
+        """
+        Given una barra cuyo rating no cabe ni en el rango mas ancho
+        When se construye el contexto
+        Then esa barra se queda fuera y las demas siguen valoradas
+
+        El caso no se da con el catalogo federado —que entra entero en los
+        rangos—, pero la reserva tiene que existir: es la que antes lanzaba dos
+        veces el mismo error y acababa en un 500.
+        """
+        course = _course(
+            [
+                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
+                    slope_rating=140),
+                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0,
+                    slope_rating=130),
+            ]
+        )
+        # Se fuerza sobre la entidad ya construida: `Tee` no deja crear una
+        # barra asi, y es justo lo que hace que este camino sea una reserva
+        object.__setattr__(course.tees[0], "course_rating", 30.0)
+
+        context = TeeContextBuilder.build(course)
+
+        assert ("YELLOW", "MALE") not in context.tee_ratings
+        assert ("WHITE", "MALE") in context.tee_ratings
+    def test_the_warning_says_the_round_cannot_be_generated(self, caplog):
+        """
+        El aviso decia que los jugadores de esa barra jugarian con su Handicap
+        Index, que es lo que pasa en partida rapida y NO aqui. Se corrigio el
+        docstring y el aviso de al lado se quedo diciendolo. Ver RyderCupAm#219.
+        """
+        course = _course(
+            [
+                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
+                    slope_rating=140),
+                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0,
+                    slope_rating=130),
+            ]
+        )
+        object.__setattr__(course.tees[0], "course_rating", 30.0)
+
+        with caplog.at_level(logging.WARNING):
+            TeeContextBuilder.build(course)
+
+        assert "cannot be rated" in caplog.text
+        assert "will not be able to have their round generated" in caplog.text
+        # Lo que NO debe decir: eso es lo que hace partida rapida, no esta
+        assert "Handicap Index" not in caplog.text

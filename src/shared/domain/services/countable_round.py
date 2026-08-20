@@ -12,7 +12,7 @@ la media del jugador, tampoco lo es para presumir de ella delante de sus amigos.
 HALF_ROUND_HOLES = 9
 
 
-def countable_holes(scores_by_hole: dict, course) -> list | None:
+def countable_holes(scores_by_hole: dict, hole_card: list) -> list | None:
     """
     Los hoyos que forman una vuelta computable, o None si no forman ninguna.
 
@@ -23,8 +23,13 @@ def countable_holes(scores_by_hole: dict, course) -> list | None:
 
     De ahí que a la media vuelta se le exija tener **exactamente** sus nueve: con
     diez anotados no hay ni vuelta entera ni mitad limpia.
+
+    Recibe la tarjeta ya resuelta y no el campo: el par y el índice son de la
+    barra que juega cada uno, y quien llama es el único que sabe cuál es. Sacar
+    aquí la tarjeta de referencia le colaba la de otra barra a quien no juega la
+    primera.
     """
-    holes = sorted(course.holes, key=lambda hole: hole.number)
+    holes = sorted(hole_card, key=lambda hole: hole.number)
     # Sin hoyos no hay vuelta que contar. Hay que decirlo explícitamente porque
     # `all()` sobre una lista vacía es cierto, así que un campo sin hoyos
     # devolvería `[]` — que no es `None` y pasaría por vuelta válida de cero

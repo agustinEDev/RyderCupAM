@@ -10,6 +10,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -21,6 +22,9 @@ from src.modules.quick_match.application.services.stroke_context_builder import 
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.services.hole_completion_service import (
+    hole_is_complete,
 )
 from src.modules.quick_match.domain.services.stableford_calculator import (
     HoleSetup,
@@ -293,6 +297,15 @@ class GetRecentMatchesUseCase:
         # Stableford son la única cifra que compara vueltas entre sí, porque 36
         # puntos es jugar a tu hándicap en cualquier campo y cualquier formato
         totals = self._participant_totals(raw, course, profile_handicap)
+        # En foursomes no hay vuelta propia que enseñar —la pareja juega una
+        # bola— pero sí los golpes brutos del bando, y los mismos para los dos.
+        # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
+        # salía con una vuelta entera de 72 golpes y su compañero sin nada.
+        side_strokes = (
+            self._foursomes_side_strokes(raw)
+            if raw.match.match_format == MatchFormat.FOURSOMES
+            else None
+        )
 
         if match.match_format is not None:
             result, score = self._quick_match_play_outcome(raw, course, users_by_id)
@@ -314,9 +327,15 @@ class GetRecentMatchesUseCase:
             tournament_name=None,
             result=result,
             score=score,
-            stableford_points=totals.stableford_points if totals else None,
-            total_strokes=totals.total_strokes if totals else None,
-            holes_played=totals.holes_played if totals else None,
+            stableford_points=None if side_strokes else (
+                totals.stableford_points if totals else None
+            ),
+            total_strokes=side_strokes[0] if side_strokes else (
+                totals.total_strokes if totals else None
+            ),
+            holes_played=side_strokes[1] if side_strokes else (
+                totals.holes_played if totals else None
+            ),
             partners=partners,
             opponents=opponents,
         )
@@ -343,7 +362,22 @@ class GetRecentMatchesUseCase:
             if player.user_id != user_id
         ]
         opponents = [self._user_name(player.user_id, users_by_id) for player in rival_team]
-        total_strokes, holes_played, points = self._scorecard_totals(raw, course)
+        # El par y el indice son de la barra de quien juega, no del campo
+        own_player = match.find_player(user_id)
+        hole_card = (
+            []
+            if course is None
+            else course.hole_card_for(own_player.tee_color, own_player.tee_gender)
+            if own_player is not None
+            else course.reference_card
+        )
+        total_strokes, holes_played, points = self._scorecard_totals(raw, hole_card)
+        # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
+        # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
+        # Los golpes del bando sí se enseñan, y son los mismos para los dos
+        # compañeros. Es la misma regla que en partida rápida, donde vive en
+        # `_to_quick_match_dto`: aquí se había quedado sin aplicar.
+        is_foursomes = raw.round_.match_format == MatchFormat.FOURSOMES
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -357,7 +391,7 @@ class GetRecentMatchesUseCase:
             tournament_name=raw.tournament_name,
             result=self._result_for_team(match.get_winner(), "A" if in_team_a else "B"),
             score=match.result.get("score") if match.result else None,
-            stableford_points=points,
+            stableford_points=None if is_foursomes else points,
             total_strokes=total_strokes,
             holes_played=holes_played,
             partners=partners,
@@ -417,7 +451,10 @@ class GetRecentMatchesUseCase:
         El resultado no está guardado en ningún sitio: se recalcula hoyo a hoyo
         con el mismo motor que usa el detalle de la partida. Solo cuentan los
         hoyos donde anotaron los dos bandos, porque un hoyo a medias no se puede
-        adjudicar.
+        adjudicar, y con la misma regla que el detalle —`hole_is_complete`— y no
+        con una copia: escrita aquí a mano, exigía los cuatro scores y dejaba el
+        historial sin resultado en todas las partidas de foursomes mientras la
+        partida abierta ya las puntuaba.
 
         Los golpes se reparten con el mismo servicio que el detalle: si aquí se
         compararan los brutos, el historial contaría una película distinta de la
@@ -437,7 +474,9 @@ class GetRecentMatchesUseCase:
                 for participant_id, holes in raw.scores_by_participant.items()
                 if hole_number in holes
             }
-            if not all(pid in scores for pid in team_a_ids | team_b_ids):
+            if not hole_is_complete(
+                scores, team_a_ids, team_b_ids, raw.match.match_format
+            ):
                 continue
 
             def net(pid, hole=hole_number, values=scores):
@@ -446,10 +485,12 @@ class GetRecentMatchesUseCase:
                     return values[pid]
                 return allocation.net_score(hole, values[pid])
 
+            # Solo los que anotaron: en foursomes el bando entrega UNA bola, asi
+            # que el companero no tiene score y `values[pid]` reventaria.
             hole_results.append(
                 self._scoring_service.calculate_hole_winner(
-                    [net(pid) for pid in team_a_ids],
-                    [net(pid) for pid in team_b_ids],
+                    [net(pid) for pid in team_a_ids if pid in scores],
+                    [net(pid) for pid in team_b_ids if pid in scores],
                     raw.match.match_format,
                 )
             )
@@ -477,6 +518,50 @@ class GetRecentMatchesUseCase:
             standing["status"],
         )
 
+    def _foursomes_side_strokes(self, raw: _QuickMatchRaw) -> tuple[int, int] | None:
+        """
+        Golpes brutos y hoyos del BANDO en foursomes: una bola por hoyo.
+
+        Normalmente hay una sola: el frontend guarda la bola a nombre del primer
+        jugador del bando, la anote quien la anote. Si llegan dos se toma la
+        MENOR, que es la que usa `ScoringService._best_ball` para adjudicar el
+        hoyo: contar aquí una y adjudicar con la otra dejaría la partida con
+        unos golpes que no explican su resultado. Lo que nunca se hace es
+        sumarlas, porque comparten bola y eso doblaría la vuelta.
+
+        Devuelve None si no hay bandos resolubles o el bando no anotó nada.
+        """
+        rosters = raw.match.team_rosters()
+        if rosters is None:
+            return None
+
+        team_a_ids, team_b_ids = rosters
+        my_side = team_a_ids if raw.participant.participant_id in team_a_ids else team_b_ids
+        side_in_order = [
+            p.participant_id for p in raw.match.participants if p.participant_id in my_side
+        ]
+
+        total_strokes = 0
+        holes_played = 0
+        for hole_number in range(1, TOTAL_HOLES + 1):
+            scores = [
+                score
+                for participant_id in side_in_order
+                if (score := raw.scores_by_participant.get(participant_id, {}).get(hole_number))
+                is not None
+            ]
+            if not scores:
+                continue
+            # El menor, que es lo que hace `ScoringService._best_ball` al decidir
+            # el hoyo. Normalmente solo hay uno —la bola se guarda a nombre del
+            # primero del bando—, pero si llegan dos que no coinciden, contar
+            # aquí uno y adjudicar el hoyo con el otro dejaría la misma partida
+            # con unos golpes que no explican su resultado.
+            total_strokes += min(scores)
+            holes_played += 1
+
+        return (total_strokes, holes_played) if holes_played else None
+
     def _participant_totals(
         self,
         raw: _QuickMatchRaw,
@@ -491,7 +576,12 @@ class GetRecentMatchesUseCase:
         if not scores_by_hole:
             return None
 
-        holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in course.holes]
+        holes = [
+            HoleSetup(hole.number, hole.par, hole.stroke_index)
+            for hole in course.hole_card_for(
+                raw.participant.tee_color, raw.participant.tee_gender
+            )
+        ]
         # En una partida scratch nadie recibe golpes, tampoco para los puntos
         # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
         # bruto se apuntaba como si le hubieran dado golpes.
@@ -507,7 +597,7 @@ class GetRecentMatchesUseCase:
             allowance_percentage=raw.match.get_effective_allowance(),
         )
 
-    def _scorecard_totals(self, raw: _CompetitionMatchRaw, course) -> tuple:
+    def _scorecard_totals(self, raw: _CompetitionMatchRaw, hole_card: list) -> tuple:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
@@ -517,10 +607,10 @@ class GetRecentMatchesUseCase:
         el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
         cifras que enseñar.
         """
-        if course is None:
+        if not hole_card:
             return None, None, None
 
-        pars = {hole.number: hole.par for hole in course.holes}
+        pars = {hole.number: hole.par for hole in hole_card}
         scored = [
             hole_score
             for hole_score in raw.hole_scores

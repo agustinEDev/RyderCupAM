@@ -232,7 +232,7 @@ def test_course_holes_are_derived_from_first_tee_when_absent():
     WHEN: Se crea sin tarjeta de campo
     THEN: La tarjeta de referencia sale de la primera salida
 
-    Así los consumidores que leen golf_course.holes siguen funcionando.
+    Así los consumidores que leen golf_course.reference_card siguen funcionando.
     """
     # Given
     tees = [
@@ -256,7 +256,7 @@ def test_course_holes_are_derived_from_first_tee_when_absent():
     course = build_course(tees, holes=[])
 
     # Then
-    assert len(course.holes) == 18
+    assert len(course.reference_card) == 18
     assert course.total_par == sum(PAR_72)
 
 
@@ -542,3 +542,223 @@ def test_pitch_and_putt_rejects_standard_par():
 
     with pytest.raises(ValueError, match="Total par for a PITCH_AND_PUTT"):
         build_course(tees, course_type=CourseType.PITCH_AND_PUTT)
+
+
+class TestHoleCardFor:
+    """
+    Tarjeta que juega cada salida.
+
+    El par, el índice y los metros son de la barra: `reference_card` es solo la
+    derivada de la primera que tenga tarjeta. Resolver la barra estaba copiado
+    en los dos context builders y en el frontend; vive aquí para que haya una
+    sola respuesta a "qué tarjeta juega este jugador".
+    """
+
+    @staticmethod
+    def _course_with_two_cards() -> GolfCourse:
+        """Amarillas y rojas con par e índice distintos en el hoyo 1."""
+        yellow_pars = list(PAR_72)
+        red_pars = list(PAR_72)
+        red_pars[0] = 5  # el 1 juega par 5 desde rojas y par 4 desde amarillas
+        return build_course(
+            [
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(yellow_pars, meters=350),
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    course_rating=73.0,
+                    slope_rating=131,
+                    holes=build_holes(red_pars, meters=300),
+                ),
+            ]
+        )
+
+    def test_devuelve_la_tarjeta_de_esa_salida(self) -> None:
+        course = self._course_with_two_cards()
+
+        yellow = course.hole_card_for(TeeColor.YELLOW, Gender.MALE)
+        red = course.hole_card_for(TeeColor.RED, Gender.FEMALE)
+
+        assert yellow[0].par == 4
+        assert red[0].par == 5
+        assert yellow[0].meters == 350
+        assert red[0].meters == 300
+
+    def test_reserva_a_la_salida_sin_genero(self) -> None:
+        """
+        El jugador siempre manda color y género; un campo dado de alta a mano
+        puede tener la barra sin género. Sin la reserva no se encontraría.
+        """
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=None,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(meters=333),
+                ),
+                Tee(color=TeeColor.RED, gender=None, course_rating=70.0, slope_rating=120),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.YELLOW, Gender.MALE)
+
+        assert card[0].meters == 333
+
+    def test_cae_a_la_tarjeta_de_referencia_si_la_salida_no_trae_la_suya(self) -> None:
+        course = self._course_with_two_cards()
+
+        card = course.hole_card_for(TeeColor.BLUE, Gender.MALE)
+
+        assert [hole.par for hole in card] == [hole.par for hole in course.reference_card]
+
+    def test_el_genero_exacto_gana_a_la_reserva(self) -> None:
+        """
+        Con la barra valorada por género, cada jugador juega la suya.
+
+        El dominio prohíbe que un mismo color tenga a la vez salida con género y
+        sin él (`cannot mix gendered and non-gendered tees`), así que la reserva
+        de `tee_for` solo entra cuando el campo no distingue género en absoluto:
+        no puede tapar la salida propia de nadie.
+        """
+        course = self._course_with_two_cards()
+
+        male = course.hole_card_for(TeeColor.YELLOW, Gender.MALE)
+        female = course.hole_card_for(TeeColor.RED, Gender.FEMALE)
+
+        assert male[0].meters == 350
+        assert female[0].meters == 300
+
+    def test_resuelve_una_salida_other_sin_su_identificador(self) -> None:
+        """
+        Las "Championship" y las combinadas se guardan como OTHER, y son de las
+        que más veces traen tarjeta propia. Ni `MatchPlayer` ni
+        `QuickMatchParticipant` guardan el identificador de la salida, así que
+        exigirlo aquí las dejaba sin resolver: al jugador se le repartían los
+        golpes con su barra —los context builders indexan por (color, género)—
+        y se le puntuaba con la tarjeta de referencia.
+        """
+        champ_pars = list(PAR_72)
+        champ_pars[0] = 5
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(champ_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(meters=350),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert card[0].par == 5
+        assert card[0].meters == 400
+
+    def test_con_dos_salidas_other_coge_la_misma_que_el_reparto(self) -> None:
+        """
+        Dos salidas OTHER del mismo género son legales: `unique_key` las separa
+        por identificador (#190). Los context builders indexan por
+        `(color, género)` dentro de un bucle, así que se quedan con la última;
+        coger aquí la primera repartía los golpes con una barra y puntuaba con
+        la otra.
+        """
+        champ_pars = list(PAR_72)
+        champ_pars[0] = 5
+        combi_pars = list(PAR_72)
+        combi_pars[1] = 3
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(champ_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinadas",
+                    course_rating=71.0,
+                    slope_rating=125,
+                    holes=build_holes(combi_pars, meters=330),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert course.tee_for(TeeColor.OTHER, Gender.MALE).identifier == "Combinadas"
+        assert card[1].par == 3
+        assert card[0].meters == 330
+
+    def test_resuelve_una_salida_sin_genero_con_identificador(self) -> None:
+        """
+        El jugador manda color y género; la salida puede no tener género y sí
+        identificador, que es como quedan las OTHER. `find_tee` exige que el
+        identificador coincida, así que buscar por ahí se la saltaba y el
+        jugador acababa contra la tarjeta del campo.
+
+        Nota: esto cubre la reserva de `tee_for`, no la caída de
+        `hole_card_for` a la salida sin género. Esa segunda es defensiva y hoy
+        no se puede alcanzar: `_sync_holes_and_tees` copia la tarjeta del campo
+        a toda salida que no traiga la suya, así que ninguna se queda sin ella.
+        """
+        sin_genero_pars = list(PAR_72)
+        sin_genero_pars[0] = 5
+        course = build_course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=None,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=140,
+                    holes=build_holes(sin_genero_pars, meters=400),
+                ),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=71.0,
+                    slope_rating=128,
+                    holes=build_holes(meters=350),
+                ),
+            ]
+        )
+
+        card = course.hole_card_for(TeeColor.OTHER, Gender.MALE)
+
+        assert card[0].par == 5
+        assert card[0].meters == 400
+
+    def test_sin_barra_elegida_devuelve_la_tarjeta_de_referencia(self) -> None:
+        """
+        `QuickMatchParticipant.tee_color` es opcional: una partida creada antes
+        de que el frontend exigiera la barra no dice desde dónde se jugó. Sin
+        color no hay barra que resolver y queda la tarjeta del campo, que es lo
+        único que hay — pero conviene fijarlo, porque hoy sale de que ningún
+        `tee.color` iguala a `None` y no de una decisión escrita.
+        """
+        course = self._course_with_two_cards()
+
+        assert course.hole_card_for(None, None) == course.reference_card
+        assert course.hole_card_for(None, Gender.MALE) == course.reference_card

@@ -24,6 +24,9 @@ from src.modules.quick_match.application.services.stroke_context_builder import 
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
+from src.modules.quick_match.domain.services.hole_completion_service import (
+    hole_is_complete,
+)
 from src.modules.quick_match.domain.services.scoring_coverage_service import (
     ScoringCoverageService,
 )
@@ -189,6 +192,7 @@ class GetQuickMatchUseCase:
             participants=quick_match.participants,
             scorer_ids=quick_match.scorer_ids,
             creator_participant_id=quick_match.creator_participant_id,
+            match_format=quick_match.match_format,
         )
 
         result = []
@@ -230,7 +234,7 @@ class GetQuickMatchUseCase:
             scores = scores_by_hole.get(hole_number)
             if not scores:
                 continue
-            if not all(pid in scores for pid in team_a_ids | team_b_ids):
+            if not hole_is_complete(scores, team_a_ids, team_b_ids, quick_match.match_format):
                 continue
 
             # `calculate_hole_winner` compara scores NETOS. Pasarle el bruto hacia
@@ -239,10 +243,12 @@ class GetQuickMatchUseCase:
             team_a_scores = [
                 self._net(scores[pid], pid, hole_number, strokes_by_participant)
                 for pid in team_a_ids
+                if pid in scores
             ]
             team_b_scores = [
                 self._net(scores[pid], pid, hole_number, strokes_by_participant)
                 for pid in team_b_ids
+                if pid in scores
             ]
             hole_results.append(
                 self._scoring_service.calculate_hole_winner(

@@ -164,6 +164,8 @@ async def _completed_tournament(
     matches: int = 1,
     round_date: date = ROUND_DATE,
     complete: bool = True,
+    tee_color: TeeColor = TeeColor.YELLOW,
+    tee_gender: Gender = Gender.MALE,
 ):
     """Un torneo terminado con la tarjeta del jugador anotada en cada partido."""
     competition = Competition.create(
@@ -194,8 +196,8 @@ async def _completed_tournament(
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=0,
-            tee_color=TeeColor.YELLOW,
-            tee_gender=Gender.MALE,
+            tee_color=tee_color,
+            tee_gender=tee_gender,
             # Scratch: no recibe golpe en ningun hoyo
             strokes_received=(),
         )
@@ -415,3 +417,65 @@ async def test_un_torneo_que_no_existe_no_rompe(
     ).execute(str(uuid4()))
 
     assert publicados == 0
+
+
+async def test_el_birdie_de_torneo_se_mide_contra_el_par_de_su_barra(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """
+    Un 4 en el hoyo 1 es birdie desde rojas (par 5) y solo par en la tarjeta
+    del campo, que es contra la que se medía antes. En 25 de los 800 campos
+    federados el par cambia de una barra a otra.
+    """
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = GolfCourse.create(
+        name="Two Cards Club",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=player.id,
+        tees=[
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=70.0,
+                slope_rating=125,
+                holes=[Hole(number=i, par=PAR, stroke_index=i) for i in range(1, 19)],
+            ),
+            Tee(
+                color=TeeColor.RED,
+                gender=Gender.FEMALE,
+                identifier="Red",
+                course_rating=72.0,
+                slope_rating=130,
+                holes=[
+                    Hole(number=i, par=PAR + 1 if i == 1 else PAR, stroke_index=i)
+                    for i in range(1, 19)
+                ],
+            ),
+        ],
+        holes=[Hole(number=i, par=PAR, stroke_index=i) for i in range(1, 19)],
+    )
+    course.approve()
+    async with golf_course_uow:
+        await golf_course_uow.golf_courses.save(course)
+
+    competition, _ = await _completed_tournament(
+        competition_uow,
+        course,
+        player,
+        rival,
+        scores_by_hole=dict.fromkeys(range(1, 19), PAR),
+        tee_color=TeeColor.RED,
+        tee_gender=Gender.FEMALE,
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    eventos = await _feed_de(social_uow, player)
+    birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
+    assert len(birdies) == 1
+    assert birdies[0].payload["holes"] == [1]

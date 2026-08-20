@@ -166,7 +166,7 @@ async def test_save_and_find_by_id(db_session, creator_id, valid_tees, valid_hol
     assert retrieved.approval_status == ApprovalStatus.PENDING_APPROVAL
     assert retrieved.rejection_reason is None
     assert len(retrieved.tees) == 3
-    assert len(retrieved.holes) == 18
+    assert len(retrieved.reference_card) == 18
     assert retrieved.total_par == 72
 
 
@@ -1004,6 +1004,6 @@ async def test_repository_preserves_hole_order(db_session, creator_id, valid_tee
     # Assert
     retrieved = await repository.find_by_id(golf_course.id)
     assert retrieved is not None
-    assert len(retrieved.holes) == 18
-    hole_numbers = [hole.number for hole in retrieved.holes]
+    assert len(retrieved.reference_card) == 18
+    hole_numbers = [hole.number for hole in retrieved.reference_card]
     assert hole_numbers == list(range(1, 19))  # Orden preservado 1-18

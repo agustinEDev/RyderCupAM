@@ -32,6 +32,19 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
+def _hole_card_dto(holes) -> list[HoleInfoDTO]:
+    """Traduce una tarjeta de dominio a DTO, ordenada por número de hoyo."""
+    return [
+        HoleInfoDTO(
+            hole_number=hole.number,
+            par=hole.par,
+            stroke_index=hole.stroke_index,
+            meters=hole.meters,
+        )
+        for hole in sorted(holes, key=lambda hole: hole.number)
+    ]
+
+
 class GetScoringViewUseCase:
     """Obtiene la vista completa de scoring para un partido."""
 
@@ -68,18 +81,12 @@ class GetScoringViewUseCase:
             # Cargar golf course para obtener holes y nombre
             golf_course_name = ""
             holes_dto: list[HoleInfoDTO] = []
+            golf_course = None
             if self._gc_repo:
                 golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
                 if golf_course:
                     golf_course_name = golf_course.name
-                    holes_dto = [
-                        HoleInfoDTO(
-                            hole_number=h.number,
-                            par=h.par,
-                            stroke_index=h.stroke_index,
-                        )
-                        for h in sorted(golf_course.holes, key=lambda h: h.number)
-                    ]
+                    holes_dto = _hole_card_dto(golf_course.reference_card)
 
             round_info = RoundInfoDTO(
                 id=str(round_entity.id),
@@ -89,7 +96,7 @@ class GetScoringViewUseCase:
             )
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
-            players_dto = self._build_players(match, user_names)
+            players_dto = self._build_players(match, user_names, golf_course)
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
             standing = self._scoring_service.calculate_match_standing(hole_results_list)
@@ -136,8 +143,14 @@ class GetScoringViewUseCase:
             for ma in match.marker_assignments
         ]
 
-    def _build_players(self, match, user_names):
-        """Construye DTOs de jugadores."""
+    def _build_players(self, match, user_names, golf_course=None):
+        """
+        Construye DTOs de jugadores, cada uno con la tarjeta de su barra.
+
+        Sin campo cargado se quedan sin tarjeta: el cliente ya tiene que
+        aguantar esa vista sin hoyos, que es lo que pasa cuando el repositorio
+        de campos no está disponible.
+        """
         return [
             ScoringPlayerDTO(
                 user_id=str(p.user_id),
@@ -146,6 +159,11 @@ class GetScoringViewUseCase:
                 tee_color=p.tee_color.value,
                 playing_handicap=p.playing_handicap,
                 strokes_received=list(p.strokes_received),
+                hole_card=(
+                    _hole_card_dto(golf_course.hole_card_for(p.tee_color, p.tee_gender))
+                    if golf_course
+                    else []
+                ),
             )
             for p in (*match.team_a_players, *match.team_b_players)
         ]

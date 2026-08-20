@@ -506,7 +506,7 @@ class TestReviewFindings:
         When cada jugador juega la suya
         Then cada uno recibe en los hoyos de SU barra
 
-        Pasa en 56 de los 800 campos federados importados. `golf_course.holes`
+        Pasa en 56 de los 800 campos federados importados. `golf_course.reference_card`
         es solo la tarjeta de la primera barra, asi que sin esto el que juega la
         otra recibia los golpes en los hoyos equivocados.
         """

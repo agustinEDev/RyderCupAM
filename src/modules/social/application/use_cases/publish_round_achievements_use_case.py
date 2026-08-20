@@ -190,7 +190,12 @@ class PublishRoundAchievementsUseCase:
                     for score in scores
                     if score.participant_id == participant.participant_id
                 }
-                jugados = countable_holes(scores_by_hole, course)
+                # El par y el índice son de la barra que juega: un birdie se
+                # mide contra el par de su tarjeta, no contra el del campo
+                jugados = countable_holes(
+                    scores_by_hole,
+                    course.hole_card_for(participant.tee_color, participant.tee_gender),
+                )
                 if jugados is None:
                     # Tarjeta incompleta: si no vale para la media, no vale para
                     # presumir (BE #173)
