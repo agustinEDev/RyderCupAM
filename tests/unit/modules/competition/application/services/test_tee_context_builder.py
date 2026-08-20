@@ -140,6 +140,8 @@ class TestFoursomesTeamCard:
         # del campo (que es el de amarillas, la primera barra)
         assert context.holes_for(TeeColor.RED, Gender.FEMALE)[0] == 18
         assert context.holes_by_stroke_index[0] == 1
+
+
 class TestUnratableTee:
     """
     Una barra que no se puede valorar no debe tumbar la construccion del
