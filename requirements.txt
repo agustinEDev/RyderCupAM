@@ -184,6 +184,12 @@ python-multipart==0.0.32
 # comprimir a JPEG) antes de guardar la foto de avatar subida por el usuario en BD
 Pillow==12.3.0
 
+# pillow-heif - Lector de HEIC/HEIF para Pillow, que no lo trae. Es el formato en
+# el que un iPhone guarda TODAS las fotos de su fototeca, así que sin esto la
+# única forma de poner un avatar desde un iPhone era hacer una foto nueva: la
+# cámara del navegador entrega JPEG y la fototeca entrega HEIC (BE #232)
+pillow-heif==1.5.0
+
 
 # ================================
 # TESTING Y DESARROLLO

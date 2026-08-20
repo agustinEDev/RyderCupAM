@@ -190,7 +190,7 @@ async def set_avatar_preset(
     status_code=status.HTTP_201_CREATED,
     summary="Upload a new avatar photo",
     description=(
-        "Uploads a new photo to use as avatar (max 10MB, JPEG/PNG/WEBP). "
+        "Uploads a new photo to use as avatar (max 10MB, HEIC/JPEG/PNG/WEBP). "
         "The server resizes/compresses it to 512x512 JPEG before storing. "
         "Rate limited to 10 per hour. Keeps a history of up to 5 uploads per user "
         "(oldest is pruned automatically)."

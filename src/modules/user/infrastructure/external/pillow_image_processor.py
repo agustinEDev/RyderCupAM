@@ -8,12 +8,21 @@ redimensiona y comprime la imagen de avatar antes de guardarla en BD.
 import io
 
 from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.domain.errors.user_errors import InvalidAvatarImageError
 
-# Formatos de imagen de entrada aceptados (Pillow los normaliza todos a JPEG de salida)
-ALLOWED_INPUT_FORMATS = {"JPEG", "PNG", "WEBP"}
+# Pillow no lee HEIC por su cuenta. Se registra al importar el módulo, una sola
+# vez, para que `Image.open` lo reconozca igual que a los demás formatos.
+register_heif_opener()
+
+# Formatos de imagen de entrada aceptados (Pillow los normaliza todos a JPEG de salida).
+# HEIF es el formato en el que un iPhone guarda las fotos de su fototeca: sin él, la
+# única forma de poner avatar desde un iPhone era hacer una foto nueva, porque la
+# cámara del navegador entrega JPEG y la fototeca entrega el HEIC original (BE #232).
+# Ojo, Pillow lo identifica como "HEIF", no como "HEIC".
+ALLOWED_INPUT_FORMATS = {"HEIF", "JPEG", "PNG", "WEBP"}
 
 # Dimensión final (cuadrada) del avatar
 AVATAR_TARGET_SIZE = 512
@@ -115,7 +124,9 @@ class PillowImageProcessor(IImageProcessor):
             raise InvalidAvatarImageError("El archivo subido no es una imagen válida") from exc
 
         # Corrige la orientación según el tag EXIF antes de nada más: si no, las
-        # fotos tomadas en vertical con el móvil se guardarían giradas.
+        # fotos tomadas en vertical con el móvil se guardarían giradas. Un HEIC
+        # no pasa por aquí dos veces: pillow-heif ya lo entrega girado y con el
+        # tag puesto a 1, así que `exif_transpose` lo deja como está.
         transposed = ImageOps.exif_transpose(image)
         if transposed is not None:
             image = transposed

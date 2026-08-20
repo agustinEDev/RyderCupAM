@@ -81,7 +81,7 @@ PHOTO_CACHE_CONTROL = "private, max-age=31536000, immutable"
 @limiter.limit("30/hour")
 async def upload_my_photo(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
-    file: UploadFile = File(..., description="Image file (JPEG, PNG or WEBP)"),
+    file: UploadFile = File(..., description="Image file (HEIC, JPEG, PNG or WEBP)"),
     caption: str | None = Form(None, max_length=280),
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UploadProfilePhotoUseCase = Depends(get_upload_profile_photo_use_case),
