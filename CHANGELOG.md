@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.10.2] - 2026-08-20
+
+### Fixed
+
+- **Una foto de la fototeca de un iPhone se rechazaba como «no es una imagen válida».** Un iPhone guarda **todas** las fotos de su galería en HEIC, y Pillow no lee ese formato por su cuenta, así que `Image.open` fallaba antes incluso de llegar a la comprobación de formato. Hacer una foto nueva sí funcionaba —la cámara del navegador entrega JPEG—, de modo que la única manera de ponerse avatar desde un iPhone era hacerse una foto en ese momento, nunca usar una que ya se tuviera. `pillow-heif` registra el lector y HEIF entra en los formatos admitidos; el resto del procesado no cambia, porque ya reconvertía a JPEG cualquier cosa que entrara. Dos detalles que salieron al probarlo y que quedan fijados por tests: Pillow identifica un HEIC como **«HEIF»**, así que poner «HEIC» en la lista no habría servido de nada, y pillow-heif **ya consume la orientación EXIF** —entrega la imagen girada y con el tag a 1—, así que no hay doble rotación; si eso cambiara, las fotos verticales saldrían tumbadas. La subida de foto de perfil comparte el mismo procesador, así que también queda arreglada. Verificado contra el clúster: un HEIC de 1200x900 con orientación 6 sube con 201 y se guarda como JPEG de 512x512. Reportado desde producción. Cierra la issue #232.
+
 ## [2.10.1] - 2026-08-20
 
 ### Fixed
