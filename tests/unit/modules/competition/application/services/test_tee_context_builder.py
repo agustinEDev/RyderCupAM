@@ -7,6 +7,7 @@ PRIMERA barra. De los 800 campos federados importados con mas de una barra con
 tarjeta, 25 tienen par distinto entre barras y 56 stroke index distinto.
 """
 
+import logging
 from decimal import Decimal
 
 from src.modules.competition.application.services.tee_context_builder import TeeContextBuilder
@@ -200,3 +201,26 @@ class TestUnratableTee:
 
         assert ("YELLOW", "MALE") not in context.tee_ratings
         assert ("WHITE", "MALE") in context.tee_ratings
+    def test_the_warning_says_the_round_cannot_be_generated(self, caplog):
+        """
+        El aviso decia que los jugadores de esa barra jugarian con su Handicap
+        Index, que es lo que pasa en partida rapida y NO aqui. Se corrigio el
+        docstring y el aviso de al lado se quedo diciendolo. Ver RyderCupAm#219.
+        """
+        course = _course(
+            [
+                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
+                    slope_rating=140),
+                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0,
+                    slope_rating=130),
+            ]
+        )
+        object.__setattr__(course.tees[0], "course_rating", 30.0)
+
+        with caplog.at_level(logging.WARNING):
+            TeeContextBuilder.build(course)
+
+        assert "cannot be rated" in caplog.text
+        assert "will not be able to have their round generated" in caplog.text
+        # Lo que NO debe decir: eso es lo que hace partida rapida, no esta
+        assert "Handicap Index" not in caplog.text
