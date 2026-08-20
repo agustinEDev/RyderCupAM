@@ -89,11 +89,13 @@ class GoogleOAuthService(IGoogleOAuthService):
                 if not google_user_id or not email:
                     raise ValueError("Google user info is missing required fields (sub, email)")
 
+                first_name, last_name = self._resolve_names(userinfo, email)
+
                 return GoogleUserInfo(
                     google_user_id=google_user_id,
                     email=email,
-                    first_name=userinfo.get("given_name", ""),
-                    last_name=userinfo.get("family_name", ""),
+                    first_name=first_name,
+                    last_name=last_name,
                     email_verified=bool(userinfo.get("email_verified", False)),
                     picture_url=userinfo.get("picture"),
                 )
@@ -102,3 +104,39 @@ class GoogleOAuthService(IGoogleOAuthService):
         except (httpx.RequestError, httpx.TimeoutException) as exc:
             logger.warning(f"Google OAuth network error: {exc}")
             raise ValueError(f"Failed to communicate with Google OAuth service: {exc}") from exc
+
+    @staticmethod
+    def _resolve_names(userinfo: dict, email: str) -> tuple[str, str]:
+        """
+        Nombre y apellido de un perfil de Google, que no siempre los trae.
+
+        Google manda `given_name` y `family_name` solo cuando la cuenta tiene
+        el nombre estructurado. Una cuenta con un solo nombre manda `name` y
+        nada más, y antes eso se guardaba como cadena vacía: el registro se
+        cerraba con el nombre en blanco y el cliente rechazaba la respuesta al
+        pintarla, así que la cuenta quedaba creada y **sin poder entrar nunca**
+        —el siguiente intento la encuentra por su cuenta de Google y devuelve
+        el mismo nombre vacío—.
+
+        Se cae primero a `name`, partiéndolo en nombre y apellidos, y en último
+        término a la parte local del email: un dato real del usuario, no uno
+        inventado, y que además va a corregir en el acto, porque un registro
+        nuevo aterriza en «completar perfil».
+        """
+        given = (userinfo.get("given_name") or "").strip()
+        family = (userinfo.get("family_name") or "").strip()
+        if given and family:
+            return given, family
+
+        # "Ada Lovelace King" → nombre "Ada", apellidos "Lovelace King"
+        full_name_parts = (userinfo.get("name") or "").split()
+        if not given and full_name_parts:
+            given = full_name_parts[0]
+        if not family and len(full_name_parts) > 1:
+            family = " ".join(full_name_parts[1:])
+
+        # El email ya viene validado como no vacío, pero un local vacío
+        # ("@dominio") dejaría el mismo hueco que se está cerrando
+        fallback = email.split("@", 1)[0].strip() or "Usuario"
+        return given or fallback, family or fallback
+
