@@ -95,9 +95,18 @@ class TeeContextBuilder:
         Si ese par no sirve —se sale del rango, o la tarjeta viene malformada—
         se cae al del campo, que es lo que se venia usando.
 
-        Y si con el par del campo tampoco vale, devuelve None: la barra se queda
-        fuera del contexto y quien la juegue jugara con su Handicap Index, igual
-        que en partida rapida. Antes ese segundo intento repetia el mismo
+        Y si con el par del campo tampoco vale, devuelve None y la barra se
+        queda fuera del contexto.
+
+        OJO con lo que eso significa AQUI: en partida rapida la barra que falta
+        degrada al Handicap Index, pero en competicion no. Los llamantes
+        (`generate_matches_use_case`, `reassign_match_players_use_case`) tratan
+        la ausencia como `TeeColorNotFoundError`, asi que un jugador inscrito en
+        una barra sin valorar sigue sin poder generar la ronda: lo que cambia es
+        que ahora es un 400 con un mensaje, y no un 500. Llevar la degradacion a
+        competicion es otro cambio, y toca los cinco puntos que hoy lanzan.
+
+        Antes ese segundo intento repetia el mismo
         `course_rating` y el mismo `slope_rating`, asi que cuando lo que se salia
         de rango era el rating y no el par, la reserva lanzaba igual que el
         primer intento: el ValueError subia hasta la API y la ronda se quedaba
@@ -112,7 +121,16 @@ class TeeContextBuilder:
                 par=tee.par_total if tee.holes else course_par,
             )
         except (ValueError, TypeError):
-            pass
+            # Este es el camino COMUN —25 de los 800 campos importados cambian
+            # de par entre barras—, y tomarlo cambia el course handicap de quien
+            # juegue esa barra. Se sigue anotando: dejarlo en un `pass` mudo
+            # escondia el unico rastro de que un jugador no se valoro contra su
+            # propio par.
+            logger.debug(
+                "Tee %s of golf course %s has an unusable par; rating it against the course par",
+                tee.color.value,
+                golf_course.id,
+            )
 
         try:
             return TeeRating(
