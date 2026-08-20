@@ -372,6 +372,12 @@ class GetRecentMatchesUseCase:
             else course.reference_card
         )
         total_strokes, holes_played, points = self._scorecard_totals(raw, hole_card)
+        # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
+        # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
+        # Los golpes del bando sí se enseñan, y son los mismos para los dos
+        # compañeros. Es la misma regla que en partida rápida, donde vive en
+        # `_to_quick_match_dto`: aquí se había quedado sin aplicar.
+        is_foursomes = raw.round_.match_format == MatchFormat.FOURSOMES
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -385,7 +391,7 @@ class GetRecentMatchesUseCase:
             tournament_name=raw.tournament_name,
             result=self._result_for_team(match.get_winner(), "A" if in_team_a else "B"),
             score=match.result.get("score") if match.result else None,
-            stableford_points=points,
+            stableford_points=None if is_foursomes else points,
             total_strokes=total_strokes,
             holes_played=holes_played,
             partners=partners,
