@@ -70,7 +70,12 @@ class TeeContextBuilder:
         for tee in golf_course.tees:
             gender = tee.gender.value if tee.gender else None
             tee_key = (tee.color.value, gender)
-            tee_ratings[tee_key] = TeeContextBuilder._rating_for(tee, course_par, golf_course)
+            # La barra que no se puede valorar se queda FUERA del diccionario en
+            # vez de tumbar la construccion entera: quien la juegue jugara con su
+            # Handicap Index, y el resto del campo sigue funcionando. Ver #219.
+            rating = TeeContextBuilder._rating_for(tee, course_par, golf_course)
+            if rating is not None:
+                tee_ratings[tee_key] = rating
 
             card = TeeContextBuilder._card_for(tee)
             if card:
@@ -83,32 +88,84 @@ class TeeContextBuilder:
         )
 
     @staticmethod
-    def _rating_for(tee, course_par: int, golf_course: GolfCourse) -> TeeRating:
+    def _rating_for(tee, course_par: int, golf_course: GolfCourse) -> TeeRating | None:
         """
         Valoracion de una barra, contra SU par cuando trae tarjeta propia.
 
-        Si ese par no sirve —se sale del rango WHS, o la tarjeta viene
-        malformada— se cae al del campo, que es lo que se venia usando, en vez de
-        dejar la ronda sin poder generar partidos.
+        Si ese par no sirve —se sale del rango, o la tarjeta viene malformada—
+        se cae al del campo, que es lo que se venia usando.
+
+        Y si con el par del campo tampoco vale, devuelve None y la barra se
+        queda fuera del contexto.
+
+        OJO con lo que eso significa AQUI: en partida rapida la barra que falta
+        degrada al Handicap Index, pero en competicion no. Los llamantes
+        (`generate_matches_use_case`, `reassign_match_players_use_case`) tratan
+        la ausencia como `TeeColorNotFoundError`, asi que un jugador inscrito en
+        una barra sin valorar sigue sin poder generar la ronda: lo que cambia es
+        que ahora es un 400 con un mensaje, y no un 500. Llevar la degradacion a
+        competicion es otro cambio, y toca los cinco puntos que hoy lanzan.
+
+        Antes ese segundo intento repetia el mismo
+        `course_rating` y el mismo `slope_rating`, asi que cuando lo que se salia
+        de rango era el rating y no el par, la reserva lanzaba igual que el
+        primer intento: el ValueError subia hasta la API y la ronda se quedaba
+        sin poder generar partidos —justo lo que esta reserva existe para
+        evitar—. Ver RyderCupAm#219.
         """
         course_rating = Decimal(str(tee.course_rating))
-        try:
-            return TeeRating(
-                course_rating=course_rating,
-                slope_rating=tee.slope_rating,
-                par=tee.par_total if tee.holes else course_par,
-            )
-        except (ValueError, TypeError):
-            logger.debug(
-                "Tee %s of golf course %s has an unusable par; rating it against the course par",
-                tee.color.value,
-                golf_course.id,
-            )
-            return TeeRating(
-                course_rating=course_rating,
-                slope_rating=tee.slope_rating,
-                par=course_par,
-            )
+        own_par = tee.par_total if tee.holes else course_par
+
+        def _rating(par: int) -> TeeRating | None:
+            try:
+                return TeeRating(
+                    course_rating=course_rating,
+                    slope_rating=tee.slope_rating,
+                    par=par,
+                )
+            except (ValueError, TypeError):
+                return None
+
+        rating = _rating(own_par)
+        if rating is not None:
+            return rating
+
+        # Se reintenta solo si el par del campo es OTRO: con el mismo par el
+        # segundo intento es identico al primero, y lo que falla entonces es el
+        # rating, no el par.
+        if own_par != course_par:
+            rating = _rating(course_par)
+            if rating is not None:
+                # Camino COMUN —25 de los 800 campos importados cambian de par
+                # entre barras—, y tomarlo cambia el course handicap de quien
+                # juegue esa barra: se deja rastro. Se anota AQUI y no antes de
+                # reintentar, porque hasta ahora no se sabia en que acababa.
+                logger.debug(
+                    "Tee %s of golf course %s could not be rated against its own par (%s); "
+                    "using the course par (%s) instead",
+                    tee.color.value,
+                    golf_course.id,
+                    own_par,
+                    course_par,
+                )
+                return rating
+
+        # Aviso, no debug: generar partidos es puntual —no como el detalle de
+        # una partida rapida, que se pide cada 10 segundos— y con 800 campos
+        # importados interesa saber cual se quedo sin valorar. El mensaje dice lo
+        # que pasa AQUI: en competicion la barra ausente no degrada al Handicap
+        # Index, la ronda no se puede generar para quien la juegue.
+        logger.warning(
+            "Golf course %s has a tee (%s, CR %s, SR %s, par %s) that cannot be rated: "
+            "it is left out of the context, and a player enrolled on it will not be able "
+            "to have their round generated",
+            golf_course.id,
+            tee.color.value,
+            course_rating,
+            tee.slope_rating,
+            own_par,
+        )
+        return None
 
     @staticmethod
     def _card_for(tee) -> list[int]:

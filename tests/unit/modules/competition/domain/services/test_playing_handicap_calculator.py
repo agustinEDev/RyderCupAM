@@ -28,34 +28,52 @@ class TestTeeRating:
         assert rating.par == 72
 
     def test_course_rating_below_min_raises(self):
-        """Error si course_rating < 55."""
+        """Error si course_rating < 45."""
         with pytest.raises(ValueError, match="course_rating must be between"):
-            TeeRating(course_rating=Decimal("54.0"), slope_rating=113, par=72)
+            TeeRating(course_rating=Decimal("44.0"), slope_rating=113, par=72)
 
     def test_course_rating_above_max_raises(self):
-        """Error si course_rating > 85."""
+        """Error si course_rating > 90."""
         with pytest.raises(ValueError, match="course_rating must be between"):
-            TeeRating(course_rating=Decimal("86.0"), slope_rating=113, par=72)
+            TeeRating(course_rating=Decimal("91.0"), slope_rating=113, par=72)
 
     def test_slope_rating_below_min_raises(self):
-        """Error si slope_rating < 55."""
+        """Error si slope_rating < 40."""
         with pytest.raises(ValueError, match="slope_rating must be between"):
-            TeeRating(course_rating=Decimal("72.0"), slope_rating=54, par=72)
+            TeeRating(course_rating=Decimal("72.0"), slope_rating=39, par=72)
 
     def test_slope_rating_above_max_raises(self):
-        """Error si slope_rating > 155."""
+        """Error si slope_rating > 160."""
         with pytest.raises(ValueError, match="slope_rating must be between"):
-            TeeRating(course_rating=Decimal("72.0"), slope_rating=156, par=72)
+            TeeRating(course_rating=Decimal("72.0"), slope_rating=161, par=72)
 
     def test_par_below_min_raises(self):
-        """Error si par < 66."""
+        """Error si par < 50."""
         with pytest.raises(ValueError, match="par must be between"):
-            TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=65)
+            TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=49)
 
     def test_par_above_max_raises(self):
-        """Error si par > 76."""
+        """Error si par > 80."""
         with pytest.raises(ValueError, match="par must be between"):
-            TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=77)
+            TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=81)
+
+    def test_admite_un_pitch_and_putt_federado(self):
+        """
+        Los rangos son la union de todos los tipos de campo, no los de un 18
+        hoyos: con los de antes (CR 55-85, par 66-76) un pitch & putt federado
+        no se podia valorar, y sus jugadores acababan jugando con el Handicap
+        Index a pelo —o, en competicion, sin poder generar los partidos—.
+        Datos reales de Son Parc naranjas. Ver RyderCupAm#206 y RyderCupAm#219.
+        """
+        rating = TeeRating(course_rating=Decimal("54.9"), slope_rating=91, par=58)
+
+        assert rating.course_rating == Decimal("54.9")
+        assert rating.par == 58
+
+    def test_admite_los_extremos_del_catalogo_federado(self):
+        """El catalogo va de CR 46.5 a 84.7 y de SR 46 a 157: todo debe entrar."""
+        TeeRating(course_rating=Decimal("46.5"), slope_rating=46, par=54)
+        TeeRating(course_rating=Decimal("84.7"), slope_rating=157, par=74)
 
     def test_tee_rating_is_frozen(self):
         """TeeRating es inmutable."""
