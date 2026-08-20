@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-08-20
+
+### Fixed
+
+- **Una cuenta de Google sin apellido se registraba sin nombre y no podía entrar nunca más.** Google manda `given_name` y `family_name` solo cuando la cuenta tiene el nombre estructurado; una con un solo nombre manda `name` y nada más, y el resto se guardaba como cadena vacía. Nada lo frenaba después: `User.create_from_oauth` no comprueba que el nombre no esté en blanco y `UserResponseDTO` los declara `str`, tipo que Pydantic rellena con `""` sin protestar. La API respondía 200 con el nombre vacío y era el cliente el que rechazaba la respuesta al pintarla. Lo grave no era el error: el registro se cierra **antes** de responder, así que la cuenta quedaba creada en blanco y el siguiente intento la encontraba por su cuenta de Google y devolvía el mismo nombre vacío —mismo error, para siempre, y sin poder registrarse por email porque la dirección ya estaba cogida—. El nombre se deriva ahora de `name`, partiéndolo en nombre y apellidos, y en último término de la parte local del email: un dato real del usuario, que además corrige en el acto porque un registro nuevo aterriza en «completar perfil». Ninguna combinación puede devolver un campo vacío. Reportado desde producción. Cierra la issue #227.
+
 ## [2.10.0] - 2026-08-20
 
 ### Fixed
