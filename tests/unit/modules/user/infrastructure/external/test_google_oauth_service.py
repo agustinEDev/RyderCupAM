@@ -157,7 +157,14 @@ class TestGoogleOAuthService:
     async def test_exchange_code_handles_missing_optional_fields(
         self, mock_client_class, service, mock_token_response
     ):
-        """Debe manejar campos opcionales ausentes (given_name, family_name, picture)."""
+        """
+        Sin nombre en el perfil, el nombre sale del email y NUNCA vacío.
+
+        Este test afirmaba que el nombre y el apellido quedaban en `""`, y con
+        eso daba por bueno el defecto: el registro se cerraba con el nombre en
+        blanco, el cliente rechazaba la respuesta al pintarla y la cuenta
+        quedaba creada sin poder entrar nunca. Ver la issue #227.
+        """
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_token_response
 
@@ -178,8 +185,8 @@ class TestGoogleOAuthService:
 
         assert result.google_user_id == "google-minimal"
         assert result.email == "minimal@gmail.com"
-        assert result.first_name == ""
-        assert result.last_name == ""
+        assert result.first_name == "minimal"
+        assert result.last_name == "minimal"
         assert result.picture_url is None
 
     @patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
@@ -206,3 +213,56 @@ class TestGoogleOAuthService:
         get_call_args = mock_client.get.call_args
         assert get_call_args[0][0] == GOOGLE_USERINFO_URL
         assert "Bearer ya29.test-access-token" in str(get_call_args)
+
+
+class TestResolveNames:
+    """
+    De dónde sale el nombre cuando Google no lo manda entero (issue #227).
+
+    Google solo manda `given_name` y `family_name` con el nombre estructurado.
+    Lo que se guardaba antes en su lugar —cadena vacía— dejaba la cuenta creada
+    y sin poder entrar nunca, porque el cliente exige los dos campos.
+    """
+
+    def test_uses_the_structured_name_when_google_sends_it(self):
+        assert GoogleOAuthService._resolve_names(
+            {"given_name": "Ada", "family_name": "Lovelace"}, "ada@example.com"
+        ) == ("Ada", "Lovelace")
+
+    def test_splits_the_full_name_when_the_structured_one_is_missing(self):
+        """El primer término es el nombre y el resto los apellidos."""
+        assert GoogleOAuthService._resolve_names(
+            {"name": "Ada Lovelace King"}, "ada@example.com"
+        ) == ("Ada", "Lovelace King")
+
+    def test_falls_back_to_the_email_for_the_surname_of_a_single_name_account(self):
+        """El caso real del reporte: cuenta con un solo nombre y sin apellido."""
+        assert GoogleOAuthService._resolve_names(
+            {"given_name": "Ada", "name": "Ada"}, "lovelace@example.com"
+        ) == ("Ada", "lovelace")
+
+    def test_falls_back_to_the_email_when_there_is_no_name_at_all(self):
+        assert GoogleOAuthService._resolve_names({}, "ada.lovelace@example.com") == (
+            "ada.lovelace",
+            "ada.lovelace",
+        )
+
+    def test_never_returns_an_empty_field(self):
+        """
+        Un email sin parte local dejaría el mismo hueco que se está cerrando.
+        Ninguna combinación puede devolver una cadena vacía: es lo único que
+        el cliente no acepta.
+        """
+        for userinfo, email in [
+            ({}, "@example.com"),
+            ({"given_name": "   ", "family_name": "   "}, "@example.com"),
+            ({"name": "   "}, "@example.com"),
+        ]:
+            first_name, last_name = GoogleOAuthService._resolve_names(userinfo, email)
+            assert first_name and last_name, (userinfo, email)
+
+    def test_ignores_blank_padding_around_the_names(self):
+        assert GoogleOAuthService._resolve_names(
+            {"given_name": "  Ada  ", "family_name": "  Lovelace  "}, "ada@example.com"
+        ) == ("Ada", "Lovelace")
+
