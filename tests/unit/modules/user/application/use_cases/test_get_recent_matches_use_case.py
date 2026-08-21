@@ -540,6 +540,84 @@ class TestTeamQuickMatch:
         assert holder.stableford_points is None
         assert mate.stableford_points is None
 
+    async def test_a_picked_up_hole_counts_in_the_side_strokes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un foursomes en el que el bando recogio la bola en todos los hoyos
+        When se lee el historial
+        Then el bando suma su doble bogey bruto por hoyo, y los 18 cuentan
+
+        Un hoyo recogido esta JUGADO —el resultado del partido lo cuenta como
+        cualquier otro—, asi que dejarlo fuera del total daba unos golpes de
+        menos hoyos de los que el propio partido dice que se jugaron. El campo
+        de pruebas es todo par 4, asi que cada raya vale 6.
+        """
+        creator = await create_user(user_uow, "Picked", handicap=0)
+        partner = await create_user(user_uow, "Up", handicap=0)
+        rival_one = await create_user(user_uow, "Foe", handicap=0)
+        rival_two = await create_user(user_uow, "Mate", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: None, 2: 5},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        holder = (await use_case.execute(creator.id)).matches[0]
+        mate = (await use_case.execute(partner.id)).matches[0]
+
+        assert holder.total_strokes == mate.total_strokes == 18 * 6
+        assert holder.holes_played == mate.holes_played == 18
+
+    async def test_a_number_beats_a_picked_up_hole_in_the_side_strokes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un hoyo del bando con raya en una fila y golpes en la otra
+        When se suman los golpes del bando
+        Then manda el numero
+
+        Es con el numero con el que `_best_ball` adjudica el hoyo, asi que
+        contar aqui la raya dejaria unos golpes que no explican el resultado.
+        """
+        creator = await create_user(user_uow, "Dash", handicap=0)
+        partner = await create_user(user_uow, "Number", handicap=0)
+        rival_one = await create_user(user_uow, "Rival", handicap=0)
+        rival_two = await create_user(user_uow, "Other", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 1, 2},
+            strokes_by_participant_index={0: None, 1: 4, 2: 6},
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        holder = (await use_case.execute(creator.id)).matches[0]
+
+        assert holder.total_strokes == 18 * 4
+
     async def test_the_side_strokes_never_add_both_partners(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):

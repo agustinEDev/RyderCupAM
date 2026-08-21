@@ -27,6 +27,7 @@ from src.modules.quick_match.domain.services.hole_completion_service import (
     hole_is_complete,
 )
 from src.modules.quick_match.domain.services.stableford_calculator import (
+    NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
     StablefordCalculator,
 )
@@ -302,7 +303,7 @@ class GetRecentMatchesUseCase:
         # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
         # salía con una vuelta entera de 72 golpes y su compañero sin nada.
         side_strokes = (
-            self._foursomes_side_strokes(raw)
+            self._foursomes_side_strokes(raw, course)
             if raw.match.match_format == MatchFormat.FOURSOMES
             else None
         )
@@ -524,7 +525,9 @@ class GetRecentMatchesUseCase:
             standing["status"],
         )
 
-    def _foursomes_side_strokes(self, raw: _QuickMatchRaw) -> tuple[int, int] | None:
+    def _foursomes_side_strokes(
+        self, raw: _QuickMatchRaw, course: GolfCourse | None
+    ) -> tuple[int, int] | None:
         """
         Golpes brutos y hoyos del BANDO en foursomes: una bola por hoyo.
 
@@ -534,6 +537,12 @@ class GetRecentMatchesUseCase:
         hoyo: contar aquí una y adjudicar con la otra dejaría la partida con
         unos golpes que no explican su resultado. Lo que nunca se hace es
         sumarlas, porque comparten bola y eso doblaría la vuelta.
+
+        Un hoyo RECOGIDO cuenta: está jugado, y lo decide el resultado del
+        partido igual que cualquier otro. Vale doble bogey BRUTO —`par + 2`, sin
+        golpes recibidos—, porque esta cifra es bruta y meterle un hoyo neto
+        dentro mezclaría dos escalas en el mismo número. Dejarlo fuera daba un
+        total de menos hoyos de los que el partido dice que se jugaron.
 
         Devuelve None si no hay bandos resolubles o el bando no anotó nada.
         """
@@ -546,32 +555,66 @@ class GetRecentMatchesUseCase:
         side_in_order = [
             p.participant_id for p in raw.match.participants if p.participant_id in my_side
         ]
+        par_by_hole = self._side_pars(raw, course, side_in_order)
 
         total_strokes = 0
         holes_played = 0
         for hole_number in range(1, TOTAL_HOLES + 1):
-            # El None deja fuera tanto el hoyo sin anotar como la raya, y aqui
-            # las dos cosas valen lo mismo: un hoyo recogido no tiene golpes que
-            # sumar al total del bando. El resultado del partido no depende de
-            # esto —lo decide `calculate_hole_winner`, que si ve la raya—, solo
-            # los golpes que se ensenan al lado.
-            scores = [
-                score
+            # La CLAVE, no el valor: la raya está presente con valor None y es un
+            # hoyo jugado, mientras que un hoyo sin anotar no tiene entrada.
+            anotaciones = [
+                raw.scores_by_participant[participant_id][hole_number]
                 for participant_id in side_in_order
-                if (score := raw.scores_by_participant.get(participant_id, {}).get(hole_number))
-                is not None
+                if hole_number in raw.scores_by_participant.get(participant_id, {})
             ]
-            if not scores:
+            if not anotaciones:
                 continue
-            # El menor, que es lo que hace `ScoringService._best_ball` al decidir
-            # el hoyo. Normalmente solo hay uno —la bola se guarda a nombre del
-            # primero del bando—, pero si llegan dos que no coinciden, contar
-            # aquí uno y adjudicar el hoyo con el otro dejaría la misma partida
-            # con unos golpes que no explican su resultado.
-            total_strokes += min(scores)
+
+            # El menor de los números, que es lo que hace `ScoringService._best_ball`
+            # al decidir el hoyo. Normalmente solo hay uno —la bola se guarda a
+            # nombre del primero del bando—, pero si llegan dos que no coinciden,
+            # contar aquí uno y adjudicar el hoyo con el otro dejaría la misma
+            # partida con unos golpes que no explican su resultado.
+            numeros = [score for score in anotaciones if score is not None]
+            if numeros:
+                total_strokes += min(numeros)
+                holes_played += 1
+                continue
+
+            # Solo rayas: el bando recogió. Sin el par del hoyo no hay con qué
+            # contarlo, y antes que inventar un número se deja fuera.
+            par = par_by_hole.get(hole_number)
+            if par is None:
+                continue
+            total_strokes += par + NET_DOUBLE_BOGEY_OVER_PAR
             holes_played += 1
 
         return (total_strokes, holes_played) if holes_played else None
+
+    @staticmethod
+    def _side_pars(
+        raw: _QuickMatchRaw, course: GolfCourse | None, side_in_order: list
+    ) -> dict[int, int]:
+        """
+        El par de cada hoyo para la barra del bando, o vacío si no se sabe.
+
+        La barra es la del primer jugador del bando, que es a cuyo nombre se
+        guarda la bola: el par sale de SU tarjeta, no del campo, porque en 25 de
+        los 800 campos federados cambia entre barras.
+        """
+        if course is None or not side_in_order:
+            return {}
+
+        titular = next(
+            (p for p in raw.match.participants if p.participant_id == side_in_order[0]), None
+        )
+        if titular is None:
+            return {}
+
+        return {
+            hole.number: hole.par
+            for hole in course.hole_card_for(titular.tee_color, titular.tee_gender)
+        }
 
     def _participant_totals(
         self,

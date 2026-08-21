@@ -42,11 +42,25 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Las rayas no caben en el esquema viejo. Volver atras las BORRA, y el hoyo
-    # pasa de "recogido" a "sin anotar": es la unica lectura que el esquema
-    # anterior sabe representar, y es preferible a que el downgrade reviente
-    # contra el NOT NULL con la tabla ya poblada.
-    op.execute("DELETE FROM quick_match_hole_scores WHERE score IS NULL")
+    # Las rayas no caben en el esquema viejo, y volver atras solo puede
+    # perderlas: un hoyo "recogido" pasaria a "sin anotar", que es lo unico que
+    # el esquema anterior sabe representar. Antes que borrar tarjetas ya
+    # jugadas en silencio, el downgrade se planta y obliga a decidir a mano.
+    #
+    # Sin rayas guardadas —el caso normal, un rollback inmediato— no hay nada
+    # que perder y el downgrade sigue adelante.
+    hay_rayas = (
+        op.get_bind()
+        .execute(sa.text("SELECT EXISTS (SELECT 1 FROM quick_match_hole_scores WHERE score IS NULL)"))
+        .scalar_one()
+    )
+    if hay_rayas:
+        raise RuntimeError(
+            "Cannot downgrade: there are recorded picked-up holes (score IS NULL) "
+            "that the previous schema cannot represent. Export or delete them "
+            "explicitly before rolling back."
+        )
+
     op.alter_column(
         "quick_match_hole_scores",
         "score",
