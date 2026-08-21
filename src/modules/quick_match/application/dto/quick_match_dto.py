@@ -138,12 +138,18 @@ class StartQuickMatchRequestDTO(BaseModel):
 
 
 class SubmitHoleScoreRequestDTO(BaseModel):
-    """DTO para registrar/actualizar el score propio de un hoyo (solo anotadores)."""
+    """
+    DTO para registrar/actualizar el score propio de un hoyo (solo anotadores).
+
+    `score` nulo es la raya: el hoyo queda anotado como recogido. El campo sigue
+    siendo obligatorio en el body —`Field(...)`—, asi que omitirlo no es lo
+    mismo que mandarlo nulo y no se puede borrar un score por descuido.
+    """
 
     quick_match_id: UUID
     player_user_id: UUID
     hole_number: int = Field(..., ge=1, le=18)
-    score: int = Field(..., ge=1, le=15)
+    score: int | None = Field(..., ge=1, le=15)
 
 
 class SubmitProxyHoleScoreRequestDTO(BaseModel):
@@ -153,7 +159,7 @@ class SubmitProxyHoleScoreRequestDTO(BaseModel):
     scorer_user_id: UUID
     target_participant_id: UUID
     hole_number: int = Field(..., ge=1, le=18)
-    score: int = Field(..., ge=1, le=15)
+    score: int | None = Field(..., ge=1, le=15)
 
 
 class QuickMatchParticipantDTO(BaseModel):
@@ -198,11 +204,11 @@ class PaginatedQuickMatchResponseDTO(BaseModel):
 
 
 class HoleScoreResponseDTO(BaseModel):
-    """DTO de un score de hoyo registrado."""
+    """DTO de un score de hoyo registrado. `score` nulo es la raya."""
 
     hole_number: int
     participant_id: UUID
-    score: int
+    score: int | None
     recorded_by_participant_id: UUID
 
 

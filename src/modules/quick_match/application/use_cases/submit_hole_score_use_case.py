@@ -11,6 +11,7 @@ from src.modules.quick_match.application.exceptions import (
 )
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
+    InvalidHoleScoreViolation,
     InvalidQuickMatchStatusViolation,
 )
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
@@ -62,6 +63,12 @@ class SubmitQuickMatchHoleScoreUseCase:
                 raise NotAScorerError(
                     "Only a configured scorer can self-report a hole score. "
                     "Ask a scorer to record it for you."
+                )
+
+            if request.score is None and not quick_match.allows_picked_up_holes():
+                raise InvalidHoleScoreViolation(
+                    "A picked-up hole cannot be recorded in a Medal match: "
+                    "stroke play requires holing out on every hole."
                 )
 
             existing = await self._uow.quick_match_hole_scores.find_by_match_hole_and_participant(

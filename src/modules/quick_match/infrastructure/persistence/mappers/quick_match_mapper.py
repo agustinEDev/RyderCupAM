@@ -350,7 +350,9 @@ quick_match_hole_scores_table = Table(
     Column("hole_number", Integer, nullable=False),
     # participant_id NO tiene FK a `users`: puede ser un invitado sin cuenta.
     Column("participant_id", ParticipantIdType, nullable=False),
-    Column("score", Integer, nullable=False),
+    # Nulo es la raya: hoyo acabado sin numero porque el jugador recogio. No
+    # tener fila es otra cosa —hoyo sin anotar—, y las dos se distinguen.
+    Column("score", Integer, nullable=True),
     Column("recorded_by_participant_id", ParticipantIdType, nullable=False),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
