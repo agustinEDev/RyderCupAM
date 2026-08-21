@@ -27,7 +27,13 @@ class QuickMatchHoleScore:
 
     Invariantes:
     - hole_number entre 1 y 18
-    - score entre 1 y 15 (mismo rango que HoleScore en competition)
+    - score entre 1 y 15 (mismo rango que HoleScore en competition), o None
+
+    `score` nulo es la RAYA: el jugador recogio la bola y el hoyo se da por
+    acabado sin numero. No es lo mismo que no tener fila —eso es un hoyo que
+    falta por jugar—, y de esa diferencia dependen la clasificacion en vivo y
+    poder dar la partida por terminada. Mismo criterio que `HoleScore.own_score`
+    en competition, que ya admitia nulo.
     """
 
     def __init__(
@@ -36,7 +42,7 @@ class QuickMatchHoleScore:
         quick_match_id: QuickMatchId,
         hole_number: int,
         participant_id: ParticipantId,
-        score: int,
+        score: int | None,
         recorded_by_participant_id: ParticipantId,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -61,7 +67,10 @@ class QuickMatchHoleScore:
             )
 
     @staticmethod
-    def _validate_score(score: int) -> None:
+    def _validate_score(score: int | None) -> None:
+        # None es la raya (bola recogida), no un score fuera de rango
+        if score is None:
+            return
         if not (MIN_SCORE <= score <= MAX_SCORE):
             raise InvalidHoleScoreViolation(f"score debe estar entre {MIN_SCORE} y {MAX_SCORE}.")
 
@@ -76,7 +85,7 @@ class QuickMatchHoleScore:
         quick_match_id: QuickMatchId,
         hole_number: int,
         participant_id: ParticipantId,
-        score: int,
+        score: int | None,
         recorded_by_participant_id: ParticipantId,
     ) -> "QuickMatchHoleScore":
         now = datetime.now()
@@ -98,7 +107,7 @@ class QuickMatchHoleScore:
         quick_match_id: QuickMatchId,
         hole_number: int,
         participant_id: ParticipantId,
-        score: int,
+        score: int | None,
         recorded_by_participant_id: ParticipantId,
         created_at: datetime,
         updated_at: datetime,
@@ -135,7 +144,7 @@ class QuickMatchHoleScore:
         return self._participant_id
 
     @property
-    def score(self) -> int:
+    def score(self) -> int | None:
         return self._score
 
     @property
@@ -154,8 +163,8 @@ class QuickMatchHoleScore:
     # METODOS DE COMANDO
     # ===========================================
 
-    def update_score(self, score: int, recorded_by_participant_id: ParticipantId) -> None:
-        """Actualiza el score (upsert desde el use case)."""
+    def update_score(self, score: int | None, recorded_by_participant_id: ParticipantId) -> None:
+        """Actualiza el score, o lo deja en raya con None (upsert desde el use case)."""
         self._validate_score(score)
         self._score = score
         self._recorded_by_participant_id = recorded_by_participant_id

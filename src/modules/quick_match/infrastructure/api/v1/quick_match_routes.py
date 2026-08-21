@@ -222,9 +222,15 @@ class StartQuickMatchBody(BaseModel):
 
 
 class SubmitHoleScoreBody(BaseModel):
-    """Body para registrar el score propio de un hoyo."""
+    """
+    Body para registrar el score de un hoyo.
 
-    score: int = Field(..., ge=1, le=15)
+    `score: null` es la raya (bola recogida): el hoyo queda anotado sin numero,
+    que no es lo mismo que dejarlo sin anotar. Sigue siendo obligatorio estar
+    presente en el body, para que omitirlo no borre un score ya puesto.
+    """
+
+    score: int | None = Field(..., ge=1, le=15)
 
 
 # ======================================================================================

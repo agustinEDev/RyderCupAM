@@ -212,6 +212,7 @@ async def _played_competition_match(
     strokes_received_per_hole: int = 0,
     holes_played: int = 18,
     unscored_holes: list[int] | None = None,
+    picked_up_holes: list[int] | None = None,
     decided_early: bool = False,
     round_date: date = date(2026, 6, 1),
     match_format: MatchFormat = MatchFormat.SINGLES,
@@ -222,6 +223,8 @@ async def _played_competition_match(
     `strokes_per_hole=None` deja la tarjeta entera sin anotar; `holes_played`
     la corta antes del 18 (partido cerrado antes de tiempo) y `unscored_holes`
     deja huecos sueltos, que es como queda un hoyo concedido en match play.
+    `picked_up_holes` los deja ANOTADOS y sin número, que es la raya: el
+    jugador recogió la bola, y eso es un hoyo jugado, no un hueco.
     """
     competition = Competition.create(
         id=CompetitionId(uuid4()),
@@ -274,7 +277,9 @@ async def _played_competition_match(
                 team="A",
                 strokes_received=strokes_received_per_hole,
             )
-            if strokes_per_hole is not None and hole_number not in (unscored_holes or []):
+            if hole_number in (picked_up_holes or []):
+                hole_score.set_own_score(None)
+            elif strokes_per_hole is not None and hole_number not in (unscored_holes or []):
                 hole_score.set_own_score(strokes_per_hole)
             await competition_uow.hole_scores.add(hole_score)
         await competition_uow.commit()
@@ -736,6 +741,64 @@ class TestCompetitionScorecards:
 
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
+
+    async def test_a_picked_up_hole_does_not_invalidate_the_card(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given una vuelta de competicion con un hoyo recogido
+        When se calculan las estadisticas
+        Then la vuelta computa, con ese hoyo a doble bogey neto
+
+        Es la diferencia con el hoyo SIN anotar de arriba: recoger es acabar el
+        hoyo sin numero, y el WHS (Regla 3.1) manda anotarlo como doble bogey
+        neto. Antes se filtraba por si habia numero, asi que la raya invalidaba
+        la vuelta entera — y la misma vuelta contaba para la media si se jugaba
+        en partida rapida y no si se jugaba en competicion.
+        """
+        player = await create_user(user_uow, unique_email("pickedup"), handicap=0)
+        rival = await create_user(user_uow, unique_email("rival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow, course, player, rival, strokes_per_hole=5, picked_up_holes=[7]
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        # Campo de par 4: 17 bogeys (+1 cada uno) y el hoyo recogido a doble
+        # bogey neto (+2)
+        assert stats.rounds_played == 1
+        assert stats.scoring_avg == 19
+
+    async def test_a_picked_up_hole_counts_the_same_as_a_double_bogey(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given la misma vuelta con el hoyo 7 recogido o firmado con un 6
+        When se comparan las medias
+        Then salen iguales: recoger vale lo que un doble bogey, ni mas ni menos
+        """
+        recoge = await create_user(user_uow, unique_email("dash"), handicap=0)
+        firma = await create_user(user_uow, unique_email("six"), handicap=0)
+        rival = await create_user(user_uow, unique_email("rival"), handicap=0)
+        course = await create_golf_course(golf_course_uow, recoge.id)
+        await _played_competition_match(
+            competition_uow, course, recoge, rival, strokes_per_hole=5, picked_up_holes=[7]
+        )
+        await _played_competition_match(
+            competition_uow, course, firma, rival, strokes_per_hole=5
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+        con_raya = await use_case.execute(recoge.id)
+        sin_raya = await use_case.execute(firma.id)
+
+        # La vuelta sin raya son 18 bogeys (+18); la de la raya cambia ese hoyo
+        # por un doble bogey (+2 en vez de +1)
+        assert sin_raya.scoring_avg == 18
+        assert con_raya.scoring_avg == sin_raya.scoring_avg + 1
 
     async def test_a_match_without_a_single_hole_scored_does_not_count(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

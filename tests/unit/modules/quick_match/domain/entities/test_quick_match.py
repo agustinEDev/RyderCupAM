@@ -659,3 +659,42 @@ class TestQuickMatchAllowance:
     def test_rejects_allowance_out_of_range(self):
         with pytest.raises(InvalidAllowanceViolation):
             _make_quick_match(allowance_percentage=45)
+
+
+class TestAllowsPickedUpHoles:
+    """
+    Donde vale la raya y donde no.
+
+    En Medal no se puede recoger: el stroke play exige embocar en todos los
+    hoyos y quien no lo hace no entrega tarjeta. En Stableford y en match play
+    si, que es donde recoger forma parte del juego.
+    """
+
+    def _free_play(self, scoring_format):
+        return QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=UserId.generate(),
+            golf_course_id=GolfCourseId(uuid4()),
+            scoring_format=scoring_format,
+        )
+
+    def test_medal_does_not_allow_a_raya(self):
+        assert self._free_play(ScoringFormat.MEDAL).allows_picked_up_holes() is False
+
+    def test_stableford_allows_a_raya(self):
+        assert self._free_play(ScoringFormat.STABLEFORD).allows_picked_up_holes() is True
+
+    @pytest.mark.parametrize(
+        "match_format",
+        [MatchFormat.SINGLES, MatchFormat.FOURBALL, MatchFormat.FOURSOMES],
+    )
+    def test_match_play_allows_a_raya(self, match_format):
+        """Recoger en match play es conceder el hoyo, que es jugada legitima."""
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=UserId.generate(),
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=match_format,
+        )
+
+        assert qm.allows_picked_up_holes() is True

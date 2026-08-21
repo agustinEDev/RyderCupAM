@@ -299,6 +299,19 @@ class QuickMatch:
         """Si esta partida reparte golpes de handicap (SCRATCH no reparte nada)."""
         return self._play_mode.allows_handicap()
 
+    def allows_picked_up_holes(self) -> bool:
+        """
+        Si en esta partida se puede anotar una raya (hoyo recogido sin acabar).
+
+        En MEDAL no: el stroke play exige embocar en todos los hoyos, y quien no
+        lo hace no entrega tarjeta. Anotar ahi una raya seria dar por buena una
+        vuelta que en un torneo no existe.
+
+        En Stableford si —recoger cuando ya no se puntua es lo normal, y vale
+        cero puntos— y en match play tambien, donde recoger es conceder el hoyo.
+        """
+        return self._scoring_format != ScoringFormat.MEDAL
+
     def get_effective_allowance(self) -> int:
         """
         Porcentaje de allowance efectivo para el Playing Handicap.

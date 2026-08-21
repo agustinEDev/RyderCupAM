@@ -11,6 +11,7 @@ from src.modules.quick_match.application.exceptions import (
 )
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
+    InvalidHoleScoreViolation,
     InvalidQuickMatchStatusViolation,
     NotAssignedScorerViolation,
 )
@@ -77,6 +78,12 @@ class SubmitProxyHoleScoreUseCase:
             if target_participant_id not in assignments.get(scorer_participant_id, []):
                 raise NotAssignedScorerViolation(
                     f"{target_participant_id} is not assigned to this scorer."
+                )
+
+            if request.score is None and not quick_match.allows_picked_up_holes():
+                raise InvalidHoleScoreViolation(
+                    "A picked-up hole cannot be recorded in a Medal match: "
+                    "stroke play requires holing out on every hole."
                 )
 
             existing = await self._uow.quick_match_hole_scores.find_by_match_hole_and_participant(

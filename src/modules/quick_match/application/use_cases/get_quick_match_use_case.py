@@ -270,11 +270,22 @@ class GetQuickMatchUseCase:
 
     @staticmethod
     def _net(
-        gross_score: int,
+        gross_score: int | None,
         participant_id: ParticipantId,
         hole_number: int,
         strokes_by_participant: dict[ParticipantId, ParticipantStrokes],
-    ) -> int:
+    ) -> int | None:
+        """
+        Score neto del hoyo, o None si el jugador recogio la bola.
+
+        La raya se propaga tal cual en vez de convertirse en un numero: asi
+        `ScoringService.calculate_hole_winner` la ve como bando sin bola y le
+        da el hoyo al rival, que es la regla de match play. Ese servicio ya
+        trabaja con `list[int | None]` porque competicion lo necesitaba, asi
+        que aqui no hay nada que anadirle.
+        """
+        if gross_score is None:
+            return None
         strokes = strokes_by_participant.get(participant_id)
         if strokes is None:
             return gross_score

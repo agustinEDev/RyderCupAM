@@ -433,6 +433,79 @@ class TestQuickMatchFreePlayFlow:
         assert len(detail["hole_scores"]) == 1
 
 
+class TestQuickMatchPickedUpHole:
+    """
+    La raya de punta a punta: el frontend manda `score: null` y el endpoint la
+    acepta en Stableford y la rechaza en Medal.
+
+    Nace de un defecto de produccion: la columna era NOT NULL y el body exigia
+    un entero, asi que el boton "Raya" —el mismo que ya funcionaba en
+    competicion— devolvia un 422 que la pantalla ensenaba como "Ese resultado
+    no es valido".
+    """
+
+    async def _start_free_play(self, client: AsyncClient, prefix: str, scoring_format: str):
+        admin = await create_admin_user(
+            client, f"qm_admin_{prefix}@test.com", "P@ssw0rd123!", "Admin", "Raya"
+        )
+        creator = await create_authenticated_user(
+            client, f"qm_creator_{prefix}@test.com", "P@ssw0rd123!", "Creator", "Raya"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "scoring_format": scoring_format},
+        )
+        assert create_response.status_code == 201, create_response.text
+        quick_match_id = create_response.json()["id"]
+        creator_participant_id = create_response.json()["participants"][0]["participant_id"]
+
+        start_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator_participant_id]},
+        )
+        assert start_response.status_code == 200, start_response.text
+        return quick_match_id
+
+    @pytest.mark.asyncio
+    async def test_stableford_accepts_a_null_score(self, client: AsyncClient):
+        quick_match_id = await self._start_free_play(client, "raya_ok", "STABLEFORD")
+
+        score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": None}
+        )
+
+        assert score_response.status_code == 200, score_response.text
+        assert score_response.json()["score"] is None
+
+        detail = (await client.get(f"/api/v1/quick-matches/{quick_match_id}")).json()
+        assert len(detail["hole_scores"]) == 1
+        assert detail["hole_scores"][0]["score"] is None
+
+    @pytest.mark.asyncio
+    async def test_medal_rejects_a_null_score(self, client: AsyncClient):
+        quick_match_id = await self._start_free_play(client, "raya_medal", "MEDAL")
+
+        score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": None}
+        )
+
+        assert score_response.status_code == 400, score_response.text
+
+    @pytest.mark.asyncio
+    async def test_the_score_field_is_still_required(self, client: AsyncClient):
+        """Mandar la raya es explicito; omitir el campo sigue siendo un error."""
+        quick_match_id = await self._start_free_play(client, "raya_missing", "STABLEFORD")
+
+        score_response = await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={}
+        )
+
+        assert score_response.status_code == 422, score_response.text
+
+
 class TestQuickMatchFullFlow:
     """Flujo completo: crear, añadir amigo, iniciar, registrar scores, ver detalle."""
 
