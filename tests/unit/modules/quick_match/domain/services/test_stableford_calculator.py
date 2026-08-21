@@ -344,11 +344,12 @@ class TestParityWithTheFrontend:
     @pytest.mark.parametrize(
         ("handicap", "points", "gross", "net", "to_par"),
         [
-            # El hoyo 1 es par 4 y su score real era 5. Con raya pasa a valer su
-            # doble bogey neto: 6 a scratch (un golpe mas que lo jugado, y un
-            # punto menos), y 7 con 12.4, que recibe un golpe ahi.
+            # El hoyo 1 es par 4 y su score real era 5. Con raya pasa a valer un
+            # doble bogey: 6 de BRUTO en los dos casos —el bruto no depende del
+            # reparto— y doble bogey NETO en lo que puntua, que es lo que le
+            # quita el punto que el 5 daba.
             (0, 19, 89, 89, 17),
-            (12.4, 30, 90, 78, 6),
+            (12.4, 30, 89, 78, 6),
         ],
     )
     def test_a_picked_up_hole_matches_the_frontend_too(
@@ -431,24 +432,29 @@ class TestPickedUpHole:
         assert totals.total_strokes == 6
         assert totals.net_strokes == 6
 
-    def test_the_charge_grows_with_the_strokes_received(self):
+    def test_the_gross_charge_does_not_depend_on_the_strokes_received(self):
         """
-        Given un jugador que recibe un golpe en ese hoyo
-        When recoge la bola
-        Then el hoyo le cuesta un golpe mas de bruto, y sigue valiendo cero neto
+        Given la misma raya con y sin golpes recibidos
+        When se miran los golpes brutos
+        Then valen lo mismo: el bruto es un dato objetivo
 
-        Es la misma cuenta que `adjusted_gross`: recoger vale exactamente lo
-        mismo que hacer un desastre topado.
+        El neto si baja con los golpes —de ahi que siga siendo doble bogey neto
+        y cero puntos—, pero el total de golpes no puede moverse con el
+        allowance: la misma vuelta llegaba a dar 89 o 90 segun con que reparto
+        se mirara.
         """
         calculator = StablefordCalculator()
 
-        totals = calculator.compute_participant_totals(
+        scratch = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: None}
+        )
+        con_golpe = calculator.compute_participant_totals(
             handicap=18, holes=_course(), scores_by_hole={1: None}
         )
 
-        assert totals.total_strokes == 7
-        assert totals.net_strokes == 6
-        assert totals.stableford_points == 0
+        assert scratch.total_strokes == con_golpe.total_strokes == 6
+        assert scratch.net_strokes == con_golpe.net_strokes == 6
+        assert con_golpe.stableford_points == 0
 
     def test_a_missing_hole_still_does_not_count(self):
         """

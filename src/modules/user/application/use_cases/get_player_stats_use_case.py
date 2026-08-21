@@ -338,10 +338,14 @@ class GetPlayerStatsUseCase:
                 if to_par is None:
                     continue
 
+                # Por `own_submitted`, no por si hay número: la raya (hoyo
+                # recogido) está anotada y sin número, y el calculador la cuenta
+                # como doble bogey. Filtrándola, un solo hoyo recogido dejaba
+                # la vuelta entera fuera de la media y del diferencial.
                 scores_by_hole = {
                     hole_score.hole_number: hole_score.own_score
                     for hole_score in hole_scores
-                    if hole_score.own_score is not None
+                    if hole_score.own_submitted
                 }
                 # El diferencial mide los mismos hoyos que la media, no el campo
                 # entero: en media vuelta, los otros nueve no se jugaron
@@ -519,16 +523,25 @@ class GetPlayerStatsUseCase:
         """
         Neto respecto al par de la tarjeta, o None si no forma una vuelta.
 
-        Un hoyo con `own_score` a None no se rellena ni se ignora: invalida la
-        vuelta. Lo que decide es la tarjeta, no en qué hoyo se ganó el partido:
-        un match play resuelto en el 15 cuenta igual que cualquier otra vuelta
-        si los jugadores siguieron anotando hasta el 18. Lo que deja la ronda
-        fuera es dejar de anotar, no cerrar pronto.
+        Lo que decide es la tarjeta, no en qué hoyo se ganó el partido: un match
+        play resuelto en el 15 cuenta igual que cualquier otra vuelta si los
+        jugadores siguieron anotando hasta el 18. Lo que deja la ronda fuera es
+        dejar de anotar, no cerrar pronto.
+
+        Un hoyo RECOGIDO —anotado (`own_submitted`) y sin número— es un hoyo
+        jugado, no un hueco: cuenta como doble bogey neto, que es lo que el WHS
+        (Regla 3.1) manda anotar en un hoyo no terminado. Antes invalidaba la
+        vuelta entera, y eso dejaba a la misma vuelta contando para la media si
+        se jugaba en partida rápida y fuera si se jugaba en competición.
+
+        De ahí que lo anotado se mire por `own_submitted` y no por si hay
+        número: sin número está la raya y está el hoyo que nadie tocó, y
+        significan lo contrario.
         """
         scored = {
             hole_score.hole_number: hole_score
             for hole_score in hole_scores
-            if hole_score.own_score is not None
+            if hole_score.own_submitted
         }
         played = self._computable_holes(scored, hole_card)
         if played is None:
@@ -537,9 +550,14 @@ class GetPlayerStatsUseCase:
         to_par = 0
         for hole in played:
             hole_score = scored[hole.number]
-            computable = self._calculator.adjusted_gross(
-                hole_score.own_score, hole.par, hole_score.strokes_received
-            )
+            if hole_score.own_score is None:
+                computable = self._calculator.net_double_bogey(
+                    hole.par, hole_score.strokes_received
+                )
+            else:
+                computable = self._calculator.adjusted_gross(
+                    hole_score.own_score, hole.par, hole_score.strokes_received
+                )
             to_par += computable - hole_score.strokes_received - hole.par
 
         return self._to_eighteen(to_par, len(played))
