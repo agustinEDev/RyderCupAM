@@ -26,6 +26,8 @@ from ..events.quick_match_participant_handicap_updated_event import (
 )
 from ..events.quick_match_participant_removed_event import QuickMatchParticipantRemovedEvent
 from ..events.quick_match_started_event import QuickMatchStartedEvent
+from ..events.quick_match_stats_excluded_event import QuickMatchStatsExcludedEvent
+from ..events.quick_match_stats_included_event import QuickMatchStatsIncludedEvent
 from ..events.quick_match_unhidden_event import QuickMatchUnhiddenEvent
 from ..exceptions.quick_match_violations import (
     CreatorCannotBeRemovedViolation,
@@ -88,6 +90,7 @@ class QuickMatch:
         play_mode: PlayMode = PlayMode.HANDICAP,
         scorer_ids: list[ParticipantId] | None = None,
         hidden_by_participant_ids: list[ParticipantId] | None = None,
+        stats_excluded_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -107,6 +110,9 @@ class QuickMatch:
         self._scorer_ids = list(scorer_ids) if scorer_ids else []
         self._hidden_by_participant_ids = (
             list(hidden_by_participant_ids) if hidden_by_participant_ids else []
+        )
+        self._stats_excluded_by_participant_ids = (
+            list(stats_excluded_by_participant_ids) if stats_excluded_by_participant_ids else []
         )
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -353,6 +359,17 @@ class QuickMatch:
         return list(self._hidden_by_participant_ids)
 
     @property
+    def stats_excluded_by_participant_ids(self) -> list[ParticipantId]:
+        """
+        Participantes que han dejado esta partida fuera de SUS estadisticas.
+
+        Distinto de `hidden_by_participant_ids`: la partida se sigue viendo en
+        su historial, solo que no cuenta. Antes las dos cosas eran una sola
+        marca y el mismo boton hacia ambas (BE #242).
+        """
+        return list(self._stats_excluded_by_participant_ids)
+
+    @property
     def created_at(self) -> datetime:
         return self._created_at
 
@@ -378,6 +395,9 @@ class QuickMatch:
 
     def is_hidden_for(self, participant_id: ParticipantId) -> bool:
         return participant_id in self._hidden_by_participant_ids
+
+    def is_stats_excluded_for(self, participant_id: ParticipantId) -> bool:
+        return participant_id in self._stats_excluded_by_participant_ids
 
     def capacity(self) -> int:
         """Numero maximo de jugadores admitidos por el formato."""
@@ -585,6 +605,73 @@ class QuickMatch:
 
         self.add_domain_event(
             QuickMatchUnhiddenEvent(
+                quick_match_id=str(self._id), participant_id=str(participant_id)
+            )
+        )
+
+    def exclude_from_stats_for(self, participant_id: ParticipantId) -> None:
+        """
+        Deja la partida fuera de las estadisticas de un participante, sin
+        sacarla de su historial: la sigue viendo, atenuada, y puede volver
+        atras cuando quiera (BE #242).
+
+        Solo en partidas TERMINADAS. Una que aun se esta jugando todavia no
+        cuenta en ninguna estadistica, asi que la marca no diria nada: seria
+        una promesa sobre el futuro que ni la pantalla ni el calculo miran.
+
+        Es personal: no afecta a los demas participantes ni borra nada.
+        Idempotente.
+        """
+        if not self.is_participant(participant_id):
+            raise NotQuickMatchParticipantViolation(
+                f"{participant_id} is not a participant of this quick match."
+            )
+
+        if self._status != QuickMatchStatus.COMPLETED:
+            raise InvalidQuickMatchStatusViolation(
+                "Only a completed quick match can be left out of the statistics "
+                f"(this one is {self._status.value})."
+            )
+
+        if participant_id in self._stats_excluded_by_participant_ids:
+            return
+
+        self._stats_excluded_by_participant_ids = [
+            *self._stats_excluded_by_participant_ids,
+            participant_id,
+        ]
+        self._updated_at = datetime.now()
+
+        self.add_domain_event(
+            QuickMatchStatsExcludedEvent(
+                quick_match_id=str(self._id), participant_id=str(participant_id)
+            )
+        )
+
+    def include_in_stats_for(self, participant_id: ParticipantId) -> None:
+        """
+        Contrario de exclude_from_stats_for. Idempotente.
+
+        Aqui NO se exige que la partida este terminada, al reves que al
+        excluir: quitar una marca es siempre seguro, y la migracion que separo
+        las dos marcas pudo dejar alguna en una partida sin terminar. Exigirlo
+        dejaria esa marca sin forma de quitarse.
+        """
+        if not self.is_participant(participant_id):
+            raise NotQuickMatchParticipantViolation(
+                f"{participant_id} is not a participant of this quick match."
+            )
+
+        if participant_id not in self._stats_excluded_by_participant_ids:
+            return
+
+        self._stats_excluded_by_participant_ids = [
+            pid for pid in self._stats_excluded_by_participant_ids if pid != participant_id
+        ]
+        self._updated_at = datetime.now()
+
+        self.add_domain_event(
+            QuickMatchStatsIncludedEvent(
                 quick_match_id=str(self._id), participant_id=str(participant_id)
             )
         )

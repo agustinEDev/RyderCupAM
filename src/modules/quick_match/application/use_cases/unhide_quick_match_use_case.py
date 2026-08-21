@@ -38,4 +38,6 @@ class UnhideQuickMatchUseCase:
             quick_match.unhide_for(requester_participant_id)
             await self._uow.quick_matches.update(quick_match)
 
-        return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
+        return await QuickMatchDTOMapper.to_response_dto(
+            quick_match, self._user_uow, requester_id=requester_id
+        )

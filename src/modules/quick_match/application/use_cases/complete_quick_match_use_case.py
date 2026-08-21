@@ -77,7 +77,9 @@ class CompleteQuickMatchUseCase:
 
         await self._publicar_logros(quick_match_id_raw, marca_previa)
 
-        return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
+        return await QuickMatchDTOMapper.to_response_dto(
+            quick_match, self._user_uow, requester_id=requester_id
+        )
 
     async def _marca_previa(self, jugadores: list[UserId]) -> dict[str, float | None]:
         """El mejor diferencial de cada jugador con cuenta, antes de cerrar."""

@@ -994,6 +994,72 @@ class TestHiddenMatches:
 
 
 @pytest.mark.asyncio
+class TestMatchesLeftOutOfStats:
+    """
+    El ojo (BE #242): fuera de las estadisticas, pero DENTRO del historial.
+
+    Justo lo contrario que ocultar. Si esta lista se limitara a no enseñarlas,
+    el resumen de arriba diria cero vueltas y debajo no habria nada que
+    explicara por que; y si las enseñara sin marca, la contradiccion seria peor
+    todavia: una vuelta a la vista que el resumen no cuenta.
+    """
+
+    async def test_the_match_stays_in_the_feed_flagged(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, "Excluder", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await played_quick_match(qm_uow, course, player)
+
+        async with qm_uow:
+            stored = await qm_uow.quick_matches.find_by_id(match.id)
+            stored.exclude_from_stats_for(stored.participants[0].participant_id)
+            await qm_uow.quick_matches.update(stored)
+            await qm_uow.commit()
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert len(feed.matches) == 1
+        assert feed.matches[0].excluded_from_stats is True
+
+    async def test_a_match_that_counts_is_not_flagged(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, "Counter", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(qm_uow, course, player)
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].excluded_from_stats is False
+
+    async def test_the_flag_is_personal(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        excluder = await create_user(user_uow, "Excluder", handicap=0)
+        other = await create_user(user_uow, "Other", handicap=0)
+        course = await create_golf_course(golf_course_uow, excluder.id)
+        match = await played_quick_match(
+            qm_uow, course, excluder, others=[QuickMatchParticipant.for_user(other.id)]
+        )
+
+        async with qm_uow:
+            stored = await qm_uow.quick_matches.find_by_id(match.id)
+            stored.exclude_from_stats_for(stored.participants[0].participant_id)
+            await qm_uow.quick_matches.update(stored)
+            await qm_uow.commit()
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        assert (await use_case.execute(excluder.id)).matches[0].excluded_from_stats is True
+        assert (await use_case.execute(other.id)).matches[0].excluded_from_stats is False
+
+
+@pytest.mark.asyncio
 class TestComparableFigures:
     """
     Golpes, hoyos y puntos Stableford en cualquier formato (FE #306).

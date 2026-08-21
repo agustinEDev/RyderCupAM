@@ -134,6 +134,17 @@ class RecentMatchDTO(BaseModel):
     )
     partners: list[str] = Field(default_factory=list)
     opponents: list[str] = Field(default_factory=list)
+    excluded_from_stats: bool = Field(
+        default=False,
+        description=(
+            "True si el jugador ha dejado esta partida fuera de sus estadisticas. "
+            "El historial la sigue enseñando —por eso viaja aqui la marca— pero el "
+            "resumen de arriba no la cuenta: sin este campo, la pantalla enseñaria "
+            "una vuelta que el resumen ignora y las dos cifras se contradirian sin "
+            "explicacion. Los partidos de torneo son siempre False: la marca es solo "
+            "de partidas rapidas."
+        ),
+    )
 
 
 class RecentMatchesResponseDTO(BaseModel):

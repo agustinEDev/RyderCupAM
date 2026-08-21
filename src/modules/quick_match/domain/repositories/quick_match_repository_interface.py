@@ -48,6 +48,19 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def list_for_stats(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        limit: int | None = None,
+    ) -> list[QuickMatch]:
+        """
+        Partidas que cuentan en las estadisticas del usuario: descarta tanto las
+        que oculto de su historial como las que dejo fuera de sus estadisticas.
+        """
+        pass
+
+    @abstractmethod
     async def count_for_user(
         self, user_id: UserId, status: QuickMatchStatus | None = None
     ) -> int:

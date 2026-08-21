@@ -277,8 +277,8 @@ class ScorerIdsJsonType(sqlalchemy.types.TypeDecorator[list]):
     """
     TypeDecorator para serializar list[ParticipantId] a/desde JSONB.
 
-    Generico: se reutiliza tanto para `scorer_ids` como para
-    `hidden_by_participant_ids` (misma forma, listas de ParticipantId).
+    Generico: se reutiliza para `scorer_ids`, `hidden_by_participant_ids` y
+    `stats_excluded_by_participant_ids` (misma forma, listas de ParticipantId).
     """
 
     impl = JSONB
@@ -324,6 +324,10 @@ quick_matches_table = Table(
     Column("participants", QuickMatchParticipantsJsonType, nullable=False),
     Column("scorer_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("hidden_by_participant_ids", ScorerIdsJsonType, nullable=False, default=list),
+    # Quien deja la partida fuera de SUS estadisticas sin sacarla del historial:
+    # la sigue viendo, marcada, y puede volver atras. Antes esto y ocultarla
+    # eran la misma marca y el mismo boton (BE #242).
+    Column("stats_excluded_by_participant_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
     CheckConstraint(
@@ -382,6 +386,9 @@ def start_quick_match_mappers() -> None:
                 "_participants": quick_matches_table.c.participants,
                 "_scorer_ids": quick_matches_table.c.scorer_ids,
                 "_hidden_by_participant_ids": quick_matches_table.c.hidden_by_participant_ids,
+                "_stats_excluded_by_participant_ids": (
+                    quick_matches_table.c.stats_excluded_by_participant_ids
+                ),
                 "_created_at": quick_matches_table.c.created_at,
                 "_updated_at": quick_matches_table.c.updated_at,
             },

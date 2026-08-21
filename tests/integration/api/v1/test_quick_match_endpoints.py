@@ -1125,3 +1125,145 @@ class TestQuickMatchHideFromHistory:
         )
 
         assert response.status_code == 404
+
+
+class TestQuickMatchStatsExclusion:
+    """
+    Tests para POST/DELETE /api/v1/quick-matches/{id}/stats-exclusion (BE #242).
+
+    El ojo: la partida deja de contar en las estadisticas de quien lo pulsa,
+    pero SIGUE en su historial. Es la otra mitad de la separacion que hizo la
+    papelera (`/hide`) exclusivamente "quitar de mi lista".
+    """
+
+    async def _create_completed_match(
+        self, client: AsyncClient, suffix: str
+    ) -> tuple[dict, dict, str]:
+        admin = await create_admin_user(
+            client, f"qm_admin_stats{suffix}@test.com", "P@ssw0rd123!", "Admin", "Stats"
+        )
+        creator = await create_authenticated_user(
+            client, f"qm_creator_stats{suffix}@test.com", "P@ssw0rd123!", "Creator", "Stats"
+        )
+        friend = await create_authenticated_user(
+            client, f"qm_friend_stats{suffix}@test.com", "P@ssw0rd123!", "Friend", "Stats"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={"friend_user_id": friend["user"]["id"]},
+        )
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator["user"]["id"], friend["user"]["id"]]},
+        )
+        await client.post(f"/api/v1/quick-matches/{quick_match_id}/complete")
+
+        return creator, friend, quick_match_id
+
+    @pytest.mark.asyncio
+    async def test_excluded_match_stays_in_my_list_flagged(self, client: AsyncClient):
+        """La diferencia con la papelera: sigue estando, marcada."""
+        creator, _friend, quick_match_id = await self._create_completed_match(client, "1")
+
+        set_auth_cookies(client, creator["cookies"])
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        assert response.status_code == 200, response.text
+        assert response.json()["excluded_from_stats"] is True
+
+        my_matches = await client.get("/api/v1/quick-matches/me")
+        listed = {m["id"]: m for m in my_matches.json()["quick_matches"]}
+        assert quick_match_id in listed
+        assert listed[quick_match_id]["excluded_from_stats"] is True
+
+    @pytest.mark.asyncio
+    async def test_the_flag_belongs_to_whoever_asks(self, client: AsyncClient):
+        """El otro participante ve la misma partida sin marcar."""
+        creator, friend, quick_match_id = await self._create_completed_match(client, "2")
+
+        set_auth_cookies(client, creator["cookies"])
+        await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        set_auth_cookies(client, friend["cookies"])
+        friend_matches = await client.get("/api/v1/quick-matches/me")
+        listed = {m["id"]: m for m in friend_matches.json()["quick_matches"]}
+        assert listed[quick_match_id]["excluded_from_stats"] is False
+
+    @pytest.mark.asyncio
+    async def test_delete_brings_it_back_into_the_stats(self, client: AsyncClient):
+        creator, _friend, quick_match_id = await self._create_completed_match(client, "3")
+
+        set_auth_cookies(client, creator["cookies"])
+        await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+        response = await client.delete(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        assert response.status_code == 200, response.text
+        assert response.json()["excluded_from_stats"] is False
+
+    @pytest.mark.asyncio
+    async def test_excluding_a_match_in_progress_returns_409(self, client: AsyncClient):
+        """Una partida a medias todavia no cuenta en ninguna estadistica."""
+        admin = await create_admin_user(
+            client, "qm_admin_stats4@test.com", "P@ssw0rd123!", "Admin", "Stats"
+        )
+        creator = await create_authenticated_user(
+            client, "qm_creator_stats4@test.com", "P@ssw0rd123!", "Creator", "Stats"
+        )
+        friend = await create_authenticated_user(
+            client, "qm_friend_stats4@test.com", "P@ssw0rd123!", "Friend", "Stats"
+        )
+        golf_course_id = await _create_approved_golf_course(client, admin, creator)
+        await _make_friends(client, creator, friend)
+
+        set_auth_cookies(client, creator["cookies"])
+        create_response = await client.post(
+            "/api/v1/quick-matches",
+            json={"golf_course_id": golf_course_id, "match_format": "SINGLES"},
+        )
+        quick_match_id = create_response.json()["id"]
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/participants",
+            json={"friend_user_id": friend["user"]["id"]},
+        )
+        await client.post(
+            f"/api/v1/quick-matches/{quick_match_id}/start",
+            json={"scorer_ids": [creator["user"]["id"], friend["user"]["id"]]},
+        )
+
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        assert response.status_code == 409, response.text
+
+    @pytest.mark.asyncio
+    async def test_a_stranger_gets_404(self, client: AsyncClient):
+        """
+        Ni toca la partida ni se entera de que existe: se responde lo mismo que
+        para un id inventado, igual que hace la papelera.
+        """
+        _creator, _friend, quick_match_id = await self._create_completed_match(client, "5")
+        outsider = await create_authenticated_user(
+            client, "qm_outsider_stats5@test.com", "P@ssw0rd123!", "Outsider", "Stats"
+        )
+
+        set_auth_cookies(client, outsider["cookies"])
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication(self, client: AsyncClient):
+        _creator, _friend, quick_match_id = await self._create_completed_match(client, "6")
+
+        client.cookies.clear()
+        response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/stats-exclusion")
+
+        assert response.status_code == 401
