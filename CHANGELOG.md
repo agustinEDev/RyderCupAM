@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-08-21
+
+### Added
+
+- **Una partida rápida ya admite la raya**: el hoyo que se acaba sin número porque el jugador recoge la bola. Hasta ahora no cabía en el modelo —la columna era `NOT NULL` y el cuerpo de la petición exigía un entero—, así que el botón que el cliente lleva ofreciendo desde siempre recibía un **422** y la pantalla enseñaba «Ese resultado no es válido». El módulo de competición sí lo aceptaba (`own_score: int | None`), de modo que el mismo botón funcionaba en una pantalla y no en la otra. Reportado desde producción.
+
+  Una raya es un hoyo **anotado**, no un hoyo pendiente. Esa diferencia —fila con `score` nulo frente a no tener fila— es de la que dependen la clasificación en vivo y poder dar la partida por terminada, así que el cálculo distingue ahora por la presencia del hoyo y no por si trae número: los dos casos son nulos y significan lo contrario. Cómo cuenta:
+
+  - **Stableford y golpes**: doble bogey neto (`par + 2 + golpes recibidos`), que es lo que la Regla 3.1 del WHS manda anotar en un hoyo sin terminar. Salen exactamente los cero puntos que vale recoger.
+  - **Match play**: el nulo llega hasta `calculate_hole_winner`, que lee un bando sin bola y da el hoyo al rival, que es la regla del juego.
+  - **Medal**: no se admite. El stroke play exige embocar en todos los hoyos, así que se rechaza con un **400**.
+  - **Logros**: el hoyo se juzga como un doble bogey a secas. De un doble bogey no sale ningún logro, de modo que la raya no inventa nada y el birdie de otro hoyo de la misma vuelta se sigue pudiendo presumir.
+
+  La migración `d3c7a5f18e42` quita el `NOT NULL` de `quick_match_hole_scores.score`. Es instantánea, no reescribe la tabla y es **compatible hacia atrás**: la API anterior nunca escribe nulos. El `CHECK` no se toca, porque en SQL un `CHECK` sobre `NULL` evalúa a `NULL` y no se considera violado, así que los scores que sí son número siguen acotados a 1..15. La vuelta atrás **se planta** si hay rayas guardadas en vez de borrarlas: convertir un hoyo cerrado en un hoyo sin anotar, en silencio y sobre tarjetas ya jugadas, es peor que obligar a decidirlo a mano.
+
+### Fixed
+
+- **Una vuelta de competición con un hoyo recogido se caía entera de las estadísticas.** La media y el diferencial WHS filtraban por si había número, así que una sola raya invalidaba la tarjeta completa — mientras que la misma vuelta jugada como partida rápida sí contaba. No era deuda del pasado: las vueltas futuras iban a seguir contándose distinto según dónde se jugaran. Ahora las dos siguen la misma regla, con el hoyo recogido a doble bogey neto. Lo anotado se distingue por `own_submitted` y no por si hay número, porque un hoyo recogido y un hoyo que nadie tocó llegan los dos sin score y significan lo contrario: el que nadie tocó sigue invalidando la tarjeta, que es un hueco y no un hoyo terminado. **Recalcula medias y diferenciales de vueltas ya jugadas**, que es el precio de tener una sola regla.
+
+- **En foursomes, el hoyo que el bando recogía desaparecía del total de golpes del historial**, aunque el partido lo contara para decidir el resultado: la tarjeta salía con menos hoyos de los que el propio partido decía que se habían jugado. Cuenta como doble bogey **bruto** (`par + 2`, sin golpes recibidos), porque esa cifra es bruta y meterle un hoyo neto dentro mezclaría dos escalas en el mismo número. El par sale de la tarjeta del primer jugador del bando —a cuyo nombre se guarda la bola—, no del campo, porque en 25 de los 800 campos federados el par cambia entre barras.
+
 ## [2.10.2] - 2026-08-20
 
 ### Fixed
