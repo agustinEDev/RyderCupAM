@@ -137,6 +137,90 @@ class TestGetQuickMatchUseCase:
         assert detail.standing.leading_team == "A"
         assert detail.standing.status == "1UP"
 
+    async def test_a_raya_loses_the_hole_in_match_play(self, qm_uow, user_uow, golf_course_uow):
+        """
+        Given un hoyo en el que un jugador recoge la bola y el rival la entrega
+        When se calcula el standing
+        Then el hoyo es del rival
+
+        Es la regla de match play: quien no acaba el hoyo lo pierde. La raya se
+        propaga como None hasta `calculate_hole_winner`, que ya sabe leer un
+        bando sin bola porque competicion lo necesitaba.
+        """
+        creator = await create_user(user_uow, "raya-standing@test.com")
+        other = await create_user(user_uow, "raya-standing2@test.com")
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+
+        submit_uc = SubmitQuickMatchHoleScoreUseCase(qm_uow)
+        await submit_uc.execute(
+            SubmitHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                player_user_id=creator.id.value,
+                hole_number=1,
+                score=None,
+            )
+        )
+        proxy_uc = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
+        await proxy_uc.execute(
+            SubmitProxyHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                scorer_user_id=creator.id.value,
+                target_participant_id=other.id.value,
+                hole_number=1,
+                score=7,
+            )
+        )
+
+        get_uc = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        )
+        detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.hole_scores[0].score is None
+        assert detail.standing is not None
+        assert detail.standing.holes_played == 1
+        assert detail.standing.leading_team == "B"
+        assert detail.standing.status == "1UP"
+
+    async def test_two_rayas_halve_the_hole(self, qm_uow, user_uow, golf_course_uow):
+        """
+        Given un hoyo que recogen los dos
+        When se calcula el standing
+        Then el hoyo queda empatado, no sin jugar
+        """
+        creator = await create_user(user_uow, "raya-halved@test.com")
+        other = await create_user(user_uow, "raya-halved2@test.com")
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+
+        submit_uc = SubmitQuickMatchHoleScoreUseCase(qm_uow)
+        await submit_uc.execute(
+            SubmitHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                player_user_id=creator.id.value,
+                hole_number=1,
+                score=None,
+            )
+        )
+        proxy_uc = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
+        await proxy_uc.execute(
+            SubmitProxyHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                scorer_user_id=creator.id.value,
+                target_participant_id=other.id.value,
+                hole_number=1,
+                score=None,
+            )
+        )
+
+        get_uc = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        )
+        detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.standing is not None
+        assert detail.standing.holes_played == 1
+        assert detail.standing.leading_team is None
+
     async def test_registered_participant_handicap_comes_from_user_profile(self, qm_uow, user_uow, golf_course_uow):
         creator = await create_user(user_uow, "creator-hcp@test.com", handicap=12.4)
         other = await create_user(user_uow, "other-hcp@test.com", handicap=None)

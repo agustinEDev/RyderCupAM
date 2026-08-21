@@ -480,6 +480,12 @@ class GetRecentMatchesUseCase:
                 continue
 
             def net(pid, hole=hole_number, values=scores):
+                # La raya (score nulo) se propaga: `calculate_hole_winner` la lee
+                # como bando que no entrego bola y le da el hoyo al rival, que es
+                # la regla de match play. Convertirla en un numero aqui la haria
+                # competir por el hoyo.
+                if values[pid] is None:
+                    return None
                 allocation = strokes_by_participant.get(pid)
                 if allocation is None:
                     return values[pid]
@@ -544,6 +550,11 @@ class GetRecentMatchesUseCase:
         total_strokes = 0
         holes_played = 0
         for hole_number in range(1, TOTAL_HOLES + 1):
+            # El None deja fuera tanto el hoyo sin anotar como la raya, y aqui
+            # las dos cosas valen lo mismo: un hoyo recogido no tiene golpes que
+            # sumar al total del bando. El resultado del partido no depende de
+            # esto —lo decide `calculate_hole_winner`, que si ve la raya—, solo
+            # los golpes que se ensenan al lado.
             scores = [
                 score
                 for participant_id in side_in_order

@@ -128,11 +128,23 @@ class StablefordCalculator:
         return max(0, 2 - (net_score - par))
 
     @staticmethod
+    def net_double_bogey(par: int, strokes_received: int) -> int:
+        """
+        Golpes de un hoyo no terminado: `par + 2 + golpes recibidos`.
+
+        Es lo que el WHS (Regla 3.1) manda anotar cuando el jugador recoge la
+        bola, y coincide con el tope de `adjusted_gross`: recoger vale
+        exactamente lo mismo que hacer un desastre topado.
+        """
+        return par + NET_DOUBLE_BOGEY_OVER_PAR + strokes_received
+
+    @staticmethod
     def adjusted_gross(gross_score: int, par: int, strokes_received: int) -> int:
         """
         Golpes del hoyo topados en el net double bogey (Regla WHS 3.1).
 
-        Máximo computable: doble bogey neto, o sea `par + 2 + golpes recibidos`.
+        Máximo computable: doble bogey neto, o sea `par + 2 + golpes recibidos`
+        (`net_double_bogey`).
         Sin ese tope, un hoyo desastroso mueve la media de una temporada entera,
         que es justo lo que la regla existe para evitar.
 
@@ -145,7 +157,7 @@ class StablefordCalculator:
         self,
         handicap: float | None,
         holes: list[HoleSetup],
-        scores_by_hole: dict[int, int],
+        scores_by_hole: dict[int, int | None],
         tee_rating: TeeRating | None = None,
         allowance_percentage: int = 100,
         cap_at_net_double_bogey: bool = False,
@@ -154,7 +166,16 @@ class StablefordCalculator:
         Agrega puntos y golpes de un participante sobre los hoyos anotados.
 
         Los hoyos sin score no cuentan: una partida a medias puntúa por lo
-        jugado, no por lo que falta.
+        jugado, no por lo que falta. Lo que sí cuenta es la RAYA —la clave
+        presente con valor None—, que es un hoyo acabado sin número porque el
+        jugador recogió la bola: se computa como doble bogey neto, que es lo que
+        el WHS (Regla 3.1) manda anotar en un hoyo no terminado. En Stableford
+        eso da exactamente los cero puntos que vale recoger, y en el resultado
+        contra el par deja una cifra defendible en vez de un hoyo regalado.
+
+        De ahí que el hoyo sin anotar se distinga por la AUSENCIA de la clave y
+        no por `get(...) is None`: los dos casos son None y significan cosas
+        contrarias.
 
         `cap_at_net_double_bogey` topa cada hoyo en el máximo que el WHS deja
         computar para hándicap. Va apagado por defecto porque el detalle de la
@@ -176,11 +197,17 @@ class StablefordCalculator:
         adjusted_gross_strokes = 0
 
         for hole in holes:
-            score = scores_by_hole.get(hole.hole_number)
-            if score is None:
+            if hole.hole_number not in scores_by_hole:
                 continue
+            score = scores_by_hole[hole.hole_number]
 
             strokes_received = self.allocate_strokes(strokes_basis, hole.stroke_index)
+            # La raya no trae golpes que sumar, así que se cuenta con los que el
+            # WHS le asigna: doble bogey neto. `hole_points` ya devuelve cero
+            # para None, y un doble bogey neto vale cero, así que las dos vías
+            # dan lo mismo sin tener que tocarla.
+            if score is None:
+                score = self.net_double_bogey(hole.par, strokes_received)
             stableford_points += self.hole_points(score, hole.par, strokes_received)
             total_strokes += score
             adjusted = self.adjusted_gross(score, hole.par, strokes_received)

@@ -340,3 +340,149 @@ class TestParityWithTheFrontend:
         assert totals.total_strokes == gross
         assert totals.net_strokes == net
         assert totals.to_par == to_par
+
+    @pytest.mark.parametrize(
+        ("handicap", "points", "gross", "net", "to_par"),
+        [
+            # El hoyo 1 es par 4 y su score real era 5. Con raya pasa a valer su
+            # doble bogey neto: 6 a scratch (un golpe mas que lo jugado, y un
+            # punto menos), y 7 con 12.4, que recibe un golpe ahi.
+            (0, 19, 89, 89, 17),
+            (12.4, 30, 90, 78, 6),
+        ],
+    )
+    def test_a_picked_up_hole_matches_the_frontend_too(
+        self, handicap, points, gross, net, to_par
+    ):
+        """
+        La raya es la parte mas facil de que los dos motores se separen: no hay
+        numero anotado del que tirar, asi que cada lado tiene que inventar el
+        mismo. Los valores salen de la misma vuelta de arriba con el hoyo 1
+        recogido.
+        """
+        calculator = StablefordCalculator()
+        scores: dict[int, int | None] = dict(self.SCORES)
+        scores[1] = None
+
+        totals = calculator.compute_participant_totals(
+            handicap=handicap, holes=self._holes(), scores_by_hole=scores
+        )
+
+        assert totals.stableford_points == points
+        assert totals.total_strokes == gross
+        assert totals.net_strokes == net
+        assert totals.to_par == to_par
+
+
+class TestPickedUpHole:
+    """
+    La raya: el jugador recogio la bola y el hoyo se acabo sin numero.
+
+    Se computa como doble bogey neto (Regla WHS 3.1), que es lo que manda
+    anotar un hoyo no terminado. La distincion que sostiene todo esto es entre
+    la clave AUSENTE —hoyo por jugar, no cuenta— y la clave presente con valor
+    None —hoyo jugado y recogido, cuenta y vale cero puntos—.
+    """
+
+    def test_a_raya_counts_as_a_played_hole(self):
+        """
+        Given un hoyo anotado con raya
+        When se agregan los totales
+        Then el hoyo cuenta como jugado, con su par
+        """
+        calculator = StablefordCalculator()
+
+        totals = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: 4, 2: None}
+        )
+
+        assert totals.holes_played == 2
+        assert totals.par_played == 8
+
+    def test_a_raya_is_worth_no_points(self):
+        """
+        Given un hoyo recogido
+        When se cuentan los puntos
+        Then aporta cero, que es lo que vale recoger en Stableford
+        """
+        calculator = StablefordCalculator()
+
+        con_raya = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: 4, 2: None}
+        )
+        solo_el_bueno = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: 4}
+        )
+
+        assert con_raya.stableford_points == solo_el_bueno.stableford_points
+
+    def test_a_raya_is_charged_as_net_double_bogey(self):
+        """
+        Given un par 4 recogido sin recibir golpes
+        When se suman los golpes
+        Then cuenta 6, el doble bogey neto, y no cero
+        """
+        calculator = StablefordCalculator()
+
+        totals = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: None}
+        )
+
+        assert totals.total_strokes == 6
+        assert totals.net_strokes == 6
+
+    def test_the_charge_grows_with_the_strokes_received(self):
+        """
+        Given un jugador que recibe un golpe en ese hoyo
+        When recoge la bola
+        Then el hoyo le cuesta un golpe mas de bruto, y sigue valiendo cero neto
+
+        Es la misma cuenta que `adjusted_gross`: recoger vale exactamente lo
+        mismo que hacer un desastre topado.
+        """
+        calculator = StablefordCalculator()
+
+        totals = calculator.compute_participant_totals(
+            handicap=18, holes=_course(), scores_by_hole={1: None}
+        )
+
+        assert totals.total_strokes == 7
+        assert totals.net_strokes == 6
+        assert totals.stableford_points == 0
+
+    def test_a_missing_hole_still_does_not_count(self):
+        """
+        Given una tarjeta a la que le falta el hoyo 2
+        When se agregan los totales
+        Then ese hoyo no cuenta, a diferencia de uno con raya
+
+        Es la trampa del cambio: `scores_by_hole.get(2)` devuelve None en los
+        dos casos y significan lo contrario.
+        """
+        calculator = StablefordCalculator()
+
+        totals = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole={1: 4}
+        )
+
+        assert totals.holes_played == 1
+        assert totals.par_played == 4
+
+    def test_a_raya_feeds_the_adjusted_gross_score(self):
+        """
+        Given una vuelta con un hoyo recogido
+        When se calcula el Adjusted Gross Score del WHS
+        Then el hoyo entra topado en su doble bogey neto
+
+        Sin esto la vuelta con raya daria un diferencial mejor de lo jugado,
+        que es justo lo que la Regla 3.1 evita.
+        """
+        calculator = StablefordCalculator()
+        scores: dict[int, int | None] = dict.fromkeys(range(1, 19), 4)
+        scores[1] = None
+
+        totals = calculator.compute_participant_totals(
+            handicap=0, holes=_course(), scores_by_hole=scores, cap_at_net_double_bogey=True
+        )
+
+        assert totals.adjusted_gross_strokes == 4 * 17 + 6

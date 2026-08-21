@@ -38,6 +38,11 @@ from src.shared.domain.services.countable_round import countable_holes
 # con más historia que esto ya no estrena nada que importe recordar.
 MAX_HISTORY_LOOKUP = 200
 
+# Golpes sobre el par con los que se anota un hoyo que no se termino (la raya):
+# doble bogey, el mismo criterio que el `NET_DOUBLE_BOGEY_OVER_PAR` del
+# StablefordCalculator, aqui a bruto porque el detector juzga contra el par
+DOUBLE_BOGEY_OVER_PAR = 2
+
 
 @dataclass(frozen=True)
 class _RoundToJudge:
@@ -211,7 +216,19 @@ class PublishRoundAchievementsUseCase:
                             PlayedHole(
                                 number=hole.number,
                                 par=hole.par,
-                                strokes=scores_by_hole[hole.number],
+                                # La raya (score nulo: el jugador recogio) va
+                                # como doble bogey, que es lo que se anota en un
+                                # hoyo no terminado. Aqui se mide a bruto contra
+                                # el par, sin golpes recibidos, porque eso es lo
+                                # que juzga el detector. Ningun logro sale de un
+                                # doble bogey, asi que la raya no inventa nada
+                                # — y el birdie de otro hoyo de la misma vuelta
+                                # se sigue pudiendo presumir.
+                                strokes=(
+                                    scores_by_hole[hole.number]
+                                    if scores_by_hole[hole.number] is not None
+                                    else hole.par + DOUBLE_BOGEY_OVER_PAR
+                                ),
                             )
                             for hole in jugados
                         ],

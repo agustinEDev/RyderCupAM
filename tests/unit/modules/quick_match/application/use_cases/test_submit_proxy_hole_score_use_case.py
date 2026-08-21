@@ -18,6 +18,7 @@ from src.modules.quick_match.application.use_cases.submit_proxy_hole_score_use_c
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.exceptions.quick_match_violations import (
+    InvalidHoleScoreViolation,
     NotAssignedScorerViolation,
 )
 from src.modules.quick_match.domain.services.scoring_coverage_service import (
@@ -27,6 +28,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio
@@ -143,5 +145,69 @@ class TestSubmitProxyHoleScoreUseCase:
                     target_participant_id=not_assigned_to_other.participant_id.value,
                     hole_number=1,
                     score=5,
+                )
+            )
+
+
+class TestSubmitProxyHoleScorePickedUp:
+    async def test_scorer_can_record_a_raya_for_someone_else(self, qm_uow, user_uow):
+        """
+        Given un invitado que recoge la bola
+        When su anotador lo registra con score nulo
+        Then queda anotado como raya
+
+        Quien recoge la bola suele ser justo el invitado al que anota otro, asi
+        que el camino delegado importa tanto como el propio.
+        """
+        creator = await create_user(user_uow, "raya-proxy@test.com")
+        qm, guest = await _create_in_progress_match_with_guest(qm_uow, creator.id)
+
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
+        response = await use_case.execute(
+            SubmitProxyHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                scorer_user_id=creator.id.value,
+                target_participant_id=guest.participant_id.value,
+                hole_number=1,
+                score=None,
+            )
+        )
+
+        assert response.score is None
+        assert response.participant_id == guest.participant_id.value
+
+
+class TestMedalRejectsPickedUpHolesByProxy:
+    async def test_a_raya_by_proxy_is_rejected_in_medal(self, qm_uow, user_uow):
+        """
+        Given una partida libre en Medal con un invitado
+        When su anotador intenta ponerle raya
+        Then se rechaza igual que si se la pusiera a si mismo
+
+        La regla es de la partida, no de quien anota: dejarla solo en el camino
+        propio la dejaria abierta justo por donde mas se usa.
+        """
+        creator = await create_user(user_uow, "medal-proxy-raya@test.com")
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=creator.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            scoring_format=ScoringFormat.MEDAL,
+        )
+        guest = QuickMatchParticipant.for_guest(first_name="Guest", last_name="Medal")
+        qm.add_participant(guest)
+        qm.start([qm.creator_participant_id])
+        async with qm_uow:
+            await qm_uow.quick_matches.add(qm)
+
+        use_case = SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService())
+        with pytest.raises(InvalidHoleScoreViolation):
+            await use_case.execute(
+                SubmitProxyHoleScoreRequestDTO(
+                    quick_match_id=qm.id.value,
+                    scorer_user_id=creator.id.value,
+                    target_participant_id=guest.participant_id.value,
+                    hole_number=1,
+                    score=None,
                 )
             )

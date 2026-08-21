@@ -230,6 +230,12 @@ class GetPlayerStatsUseCase:
                 scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(
                     match.id
                 )
+                # El score nulo (la raya: hoyo recogido) NO se filtra, a
+                # diferencia del camino de competicion de mas abajo: en partida
+                # rapida es un hoyo jugado, y el calculador lo computa como
+                # doble bogey neto, que es lo que el WHS manda anotar en un hoyo
+                # sin terminar. Filtrarlo aqui haria que la vuelta entera dejase
+                # de ser computable por un hoyo que si se jugo.
                 scores_by_hole = {
                     score.hole_number: score.score
                     for score in scores
