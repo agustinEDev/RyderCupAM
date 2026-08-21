@@ -5,6 +5,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickMatchResponseDTO,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -20,6 +21,8 @@ class QuickMatchDTOMapper:
         quick_match: QuickMatch,
         user_uow: UserUnitOfWorkInterface,
         users_by_id: dict[UserId, User] | None = None,
+        *,
+        requester_id: UserId,
     ) -> QuickMatchResponseDTO:
         """
         Convierte una QuickMatch a su DTO de respuesta.
@@ -28,6 +31,13 @@ class QuickMatchDTOMapper:
         p.ej. al listar varias partidas), se evita una query por participante.
         Los invitados (`is_guest=True`) no tienen `user_id` y se resuelven
         directamente desde sus datos manuales, sin tocar `users_by_id`.
+
+        `requester_id` resuelve `excluded_from_stats`, que es una marca POR
+        USUARIO: sin saber quien pregunta no hay respuesta posible. Es
+        obligatorio y va como keyword a proposito. Con un valor por defecto,
+        olvidarlo devolvia "esta partida cuenta" para una que no cuenta —una
+        respuesta equivocada en silencio, que el cliente cachea y pinta— en vez
+        de un error al arrancar.
         """
         if users_by_id is None:
             registered_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
@@ -76,6 +86,9 @@ class QuickMatchDTOMapper:
             play_mode=quick_match.play_mode.value,
             participants=participants_dto,
             scorer_ids=[sid.value for sid in quick_match.scorer_ids],
+            excluded_from_stats=quick_match.is_stats_excluded_for(
+                ParticipantId(requester_id.value)
+            ),
             created_at=quick_match.created_at,
             updated_at=quick_match.updated_at,
         )

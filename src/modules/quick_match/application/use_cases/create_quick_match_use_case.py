@@ -84,4 +84,6 @@ class CreateQuickMatchUseCase:
         async with self._uow:
             await self._uow.quick_matches.add(quick_match)
 
-        return await QuickMatchDTOMapper.to_response_dto(quick_match, self._user_uow)
+        return await QuickMatchDTOMapper.to_response_dto(
+            quick_match, self._user_uow, requester_id=UserId(request.creator_id)
+        )

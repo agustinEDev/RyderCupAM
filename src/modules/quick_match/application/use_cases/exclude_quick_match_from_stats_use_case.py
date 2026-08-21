@@ -1,13 +1,10 @@
-"""Caso de Uso: Editar el handicap de un participante antes de iniciar la partida."""
+"""Caso de Uso: dejar una partida rapida fuera de las estadisticas propias."""
 
 from src.modules.quick_match.application.dto.quick_match_dto import (
+    HideQuickMatchRequestDTO,
     QuickMatchResponseDTO,
-    SetParticipantHandicapRequestDTO,
 )
-from src.modules.quick_match.application.exceptions import (
-    NotQuickMatchCreatorError,
-    QuickMatchNotFoundError,
-)
+from src.modules.quick_match.application.exceptions import QuickMatchNotFoundError
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -20,22 +17,24 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class SetParticipantHandicapUseCase:
+class ExcludeQuickMatchFromStatsUseCase:
     """
-    Edita el handicap de un participante (manual para invitados, override para
-    registrados) mientras la partida esta PENDING — pensado para el resumen
-    previo a `start()`.
+    Marca una partida para que no cuente en las estadisticas del solicitante.
 
-    Solo el creador puede editarlo.
+    A diferencia de ocultarla, la partida SIGUE en su historial: se enseña
+    marcada y la marca se puede quitar. Es self-scoped como ocultar: cualquier
+    participante puede hacerlo para si mismo y no afecta al resto.
+
+    Solo en partidas terminadas; la entidad lo exige y la ruta lo traduce a 409.
     """
 
     def __init__(self, uow: QuickMatchUnitOfWorkInterface, user_uow: UserUnitOfWorkInterface):
         self._uow = uow
         self._user_uow = user_uow
 
-    async def execute(self, request: SetParticipantHandicapRequestDTO) -> QuickMatchResponseDTO:
+    async def execute(self, request: HideQuickMatchRequestDTO) -> QuickMatchResponseDTO:
         requester_id = UserId(request.requester_id)
-        target_participant_id = ParticipantId(request.target_participant_id)
+        requester_participant_id = ParticipantId(requester_id.value)
 
         async with self._uow:
             quick_match = await self._uow.quick_matches.find_by_id_for_update(
@@ -44,12 +43,7 @@ class SetParticipantHandicapUseCase:
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {request.quick_match_id}")
 
-            if quick_match.creator_id != requester_id:
-                raise NotQuickMatchCreatorError(
-                    "Only the quick match creator can edit a participant's handicap."
-                )
-
-            quick_match.set_participant_handicap(target_participant_id, request.handicap)
+            quick_match.exclude_from_stats_for(requester_participant_id)
             await self._uow.quick_matches.update(quick_match)
 
         return await QuickMatchDTOMapper.to_response_dto(

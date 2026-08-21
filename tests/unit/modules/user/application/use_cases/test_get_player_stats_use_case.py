@@ -911,6 +911,81 @@ class TestHiddenMatches:
         assert (await use_case.execute(other.id)).rounds_played == 1
 
 
+@pytest.mark.asyncio
+class TestMatchesLeftOutOfStats:
+    """
+    El ojo (BE #242): la partida sigue en el historial pero no cuenta aqui.
+
+    Estas pruebas son la red del cambio que separo ocultar de excluir. Antes,
+    las estadisticas se apoyaban en que el listado del historial ya descartaba
+    lo oculto; al hacer que ese listado devuelva las excluidas —para poder
+    pintarlas marcadas— bastaba con no tocar nada mas para que volvieran a
+    contar en la media, sin que fallara ni un test ni saltara ningun error.
+    """
+
+    async def test_a_match_left_out_by_the_caller_does_not_count_for_them(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("excluder"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        match = await _played_quick_match(qm_uow, course, user)
+
+        async with qm_uow:
+            stored = await qm_uow.quick_matches.find_by_id(match.id)
+            stored.exclude_from_stats_for(stored.participants[0].participant_id)
+            await qm_uow.quick_matches.update(stored)
+            await qm_uow.commit()
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert stats.rounds_played == 0
+        assert stats.scoring_avg is None
+        assert stats.best_differential is None
+
+    async def test_the_match_is_still_in_the_history(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La diferencia con ocultar: no cuenta, pero se sigue viendo."""
+        user = await create_user(user_uow, unique_email("excluder"), handicap=0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        match = await _played_quick_match(qm_uow, course, user)
+
+        async with qm_uow:
+            stored = await qm_uow.quick_matches.find_by_id(match.id)
+            stored.exclude_from_stats_for(stored.participants[0].participant_id)
+            await qm_uow.quick_matches.update(stored)
+            await qm_uow.commit()
+
+            listed = await qm_uow.quick_matches.list_for_user(user.id)
+
+        assert [m.id for m in listed] == [match.id]
+
+    async def test_it_still_counts_for_the_other_participant(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Es una marca personal: nadie puede alterar las estadisticas ajenas."""
+        excluder = await create_user(user_uow, unique_email("excluder"), handicap=0)
+        other = await create_user(user_uow, unique_email("other"), handicap=0)
+        course = await create_golf_course(golf_course_uow, excluder.id)
+        other_participant = QuickMatchParticipant.for_user(other.id)
+        match = await _played_quick_match(
+            qm_uow, course, excluder, others=[other_participant]
+        )
+
+        async with qm_uow:
+            stored = await qm_uow.quick_matches.find_by_id(match.id)
+            stored.exclude_from_stats_for(stored.participants[0].participant_id)
+            await qm_uow.quick_matches.update(stored)
+            await qm_uow.commit()
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        assert (await use_case.execute(excluder.id)).rounds_played == 0
+        assert (await use_case.execute(other.id)).rounds_played == 1
+
+
 class TestScoreDifferentials:
     """
     Score Differentials y el índice estimado (BE #167).

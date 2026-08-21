@@ -89,7 +89,10 @@ class GetQuickMatchUseCase:
                     users_by_id[user_id] = user
 
         base_dto = await QuickMatchDTOMapper.to_response_dto(
-            quick_match, self._user_uow, users_by_id=users_by_id
+            quick_match,
+            self._user_uow,
+            users_by_id=users_by_id,
+            requester_id=UserId(current_user_id_raw),
         )
 
         hole_scores_dto = [

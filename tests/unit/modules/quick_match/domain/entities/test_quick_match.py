@@ -31,6 +31,12 @@ from src.modules.quick_match.domain.events.quick_match_participant_removed_event
 from src.modules.quick_match.domain.events.quick_match_started_event import (
     QuickMatchStartedEvent,
 )
+from src.modules.quick_match.domain.events.quick_match_stats_excluded_event import (
+    QuickMatchStatsExcludedEvent,
+)
+from src.modules.quick_match.domain.events.quick_match_stats_included_event import (
+    QuickMatchStatsIncludedEvent,
+)
 from src.modules.quick_match.domain.events.quick_match_unhidden_event import (
     QuickMatchUnhiddenEvent,
 )
@@ -272,6 +278,140 @@ class TestQuickMatchRemoveParticipant:
         qm.start([qm.creator_participant_id])
         with pytest.raises(InvalidQuickMatchStatusViolation):
             qm.remove_participant(other.participant_id)
+
+
+def _completed_quick_match():
+    """Partida terminada con dos jugadores: el estado que exige el ojo."""
+    qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+    other = _registered()
+    qm.add_participant(other)
+    qm.start([qm.creator_participant_id])
+    qm.complete()
+    return qm, other
+
+
+class TestQuickMatchStatsExclusion:
+    """
+    El ojo: la partida no cuenta en MIS estadisticas pero sigue en mi historial.
+
+    Es otra marca distinta de ocultar, que si la saca de la lista y es
+    definitiva. Antes las dos cosas eran una sola (BE #242).
+    """
+
+    def test_exclude_from_stats_succeeds_on_a_completed_match(self):
+        qm, _ = _completed_quick_match()
+        qm.clear_domain_events()
+
+        qm.exclude_from_stats_for(qm.creator_participant_id)
+
+        assert qm.is_stats_excluded_for(qm.creator_participant_id)
+        events = qm.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], QuickMatchStatsExcludedEvent)
+
+    def test_exclude_from_stats_does_not_hide_the_match(self):
+        """Lo que distingue esta marca de ocultar: la partida se sigue viendo."""
+        qm, _ = _completed_quick_match()
+
+        qm.exclude_from_stats_for(qm.creator_participant_id)
+
+        assert not qm.is_hidden_for(qm.creator_participant_id)
+
+    def test_exclude_from_stats_is_personal(self):
+        """Una partida que A excluye sigue contando para B."""
+        qm, other = _completed_quick_match()
+
+        qm.exclude_from_stats_for(other.participant_id)
+
+        assert qm.is_stats_excluded_for(other.participant_id)
+        assert not qm.is_stats_excluded_for(qm.creator_participant_id)
+
+    def test_exclude_from_stats_requires_a_completed_match(self):
+        """
+        Una partida a medias todavia no cuenta en ninguna estadistica, asi que
+        la marca no diria nada: seria una promesa sobre el futuro.
+        """
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        qm.add_participant(_registered())
+        qm.start([qm.creator_participant_id])
+
+        with pytest.raises(InvalidQuickMatchStatusViolation):
+            qm.exclude_from_stats_for(qm.creator_participant_id)
+
+    def test_exclude_from_stats_for_non_participant_raises(self):
+        qm, _ = _completed_quick_match()
+        with pytest.raises(NotQuickMatchParticipantViolation):
+            qm.exclude_from_stats_for(ParticipantId.generate())
+
+    def test_exclude_from_stats_is_idempotent(self):
+        qm, _ = _completed_quick_match()
+        qm.exclude_from_stats_for(qm.creator_participant_id)
+        qm.clear_domain_events()
+
+        qm.exclude_from_stats_for(qm.creator_participant_id)
+
+        assert qm.is_stats_excluded_for(qm.creator_participant_id)
+        assert qm.get_domain_events() == []
+
+    def test_include_in_stats_reverses_the_exclusion(self):
+        qm, _ = _completed_quick_match()
+        qm.exclude_from_stats_for(qm.creator_participant_id)
+        qm.clear_domain_events()
+
+        qm.include_in_stats_for(qm.creator_participant_id)
+
+        assert not qm.is_stats_excluded_for(qm.creator_participant_id)
+        events = qm.get_domain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], QuickMatchStatsIncludedEvent)
+
+    def test_include_in_stats_does_not_require_a_completed_match(self):
+        """
+        Quitar la marca siempre es seguro, y la migracion que separo ocultar de
+        excluir pudo dejar alguna en una partida sin terminar: exigir COMPLETED
+        aqui la dejaria sin forma de quitarse.
+        """
+        # Se construye la entidad con la marca puesta y la partida sin
+        # terminar, que es justo la fila que puede dejar la migracion: la
+        # marca vieja se traspaso sin mirar el estado.
+        creator = _registered()
+        qm = QuickMatch(
+            id=QuickMatchId.generate(),
+            creator_id=UserId(creator.participant_id.value),
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+            status=QuickMatchStatus.IN_PROGRESS,
+            participants=[creator],
+            stats_excluded_by_participant_ids=[creator.participant_id],
+        )
+        assert qm.is_stats_excluded_for(creator.participant_id)
+
+        qm.include_in_stats_for(creator.participant_id)
+
+        assert not qm.is_stats_excluded_for(creator.participant_id)
+
+    def test_include_in_stats_for_non_participant_raises(self):
+        qm, _ = _completed_quick_match()
+        with pytest.raises(NotQuickMatchParticipantViolation):
+            qm.include_in_stats_for(ParticipantId.generate())
+
+    def test_include_in_stats_is_idempotent(self):
+        qm, _ = _completed_quick_match()
+        qm.clear_domain_events()
+
+        qm.include_in_stats_for(qm.creator_participant_id)
+
+        assert not qm.is_stats_excluded_for(qm.creator_participant_id)
+        assert qm.get_domain_events() == []
+
+    def test_hiding_and_excluding_are_independent_marks(self):
+        """La prueba de que se han separado de verdad."""
+        qm, _ = _completed_quick_match()
+
+        qm.hide_for(qm.creator_participant_id)
+
+        assert qm.is_hidden_for(qm.creator_participant_id)
+        assert not qm.is_stats_excluded_for(qm.creator_participant_id)
 
 
 class TestQuickMatchHideForHistory:

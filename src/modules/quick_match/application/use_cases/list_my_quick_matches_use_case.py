@@ -45,7 +45,9 @@ class ListMyQuickMatchesUseCase:
             }
 
         items = [
-            await QuickMatchDTOMapper.to_response_dto(qm, self._user_uow, users_by_id=users_by_id)
+            await QuickMatchDTOMapper.to_response_dto(
+                qm, self._user_uow, users_by_id=users_by_id, requester_id=user_id
+            )
             for qm in quick_matches
         ]
 

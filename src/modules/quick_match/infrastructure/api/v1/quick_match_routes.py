@@ -18,8 +18,10 @@ from src.config.dependencies import (
     get_complete_quick_match_use_case,
     get_create_quick_match_use_case,
     get_current_user,
+    get_exclude_quick_match_from_stats_use_case,
     get_get_quick_match_use_case,
     get_hide_quick_match_use_case,
+    get_include_quick_match_in_stats_use_case,
     get_list_my_quick_matches_use_case,
     get_remove_quick_match_participant_use_case,
     get_set_quick_match_participant_handicap_use_case,
@@ -77,11 +79,17 @@ from src.modules.quick_match.application.use_cases.complete_quick_match_use_case
 from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
     CreateQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.exclude_quick_match_from_stats_use_case import (
+    ExcludeQuickMatchFromStatsUseCase,
+)
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
 from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
     HideQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.include_quick_match_in_stats_use_case import (
+    IncludeQuickMatchInStatsUseCase,
 )
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
@@ -432,6 +440,71 @@ async def unhide_quick_match(
     quick_match_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UnhideQuickMatchUseCase = Depends(get_unhide_quick_match_use_case),
+):
+    try:
+        request_dto = HideQuickMatchRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post(
+    "/quick-matches/{quick_match_id}/stats-exclusion",
+    response_model=QuickMatchResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Leave this match out of my statistics",
+    description=(
+        "The match stops counting towards the caller's statistics but STAYS in their "
+        "history, flagged, and the flag can be lifted again (DELETE on the same path). "
+        "Different from hiding it, which removes it from the list for good. "
+        "Self-scoped: any participant can flag it for themselves and it does not affect "
+        "the others. Only on a completed match; anything else returns 409. Idempotent."
+    ),
+    tags=["Quick Matches"],
+)
+async def exclude_quick_match_from_stats(
+    quick_match_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ExcludeQuickMatchFromStatsUseCase = Depends(
+        get_exclude_quick_match_from_stats_use_case
+    ),
+):
+    try:
+        request_dto = HideQuickMatchRequestDTO(
+            quick_match_id=quick_match_id,
+            requester_id=current_user.id,
+        )
+        return await use_case.execute(request_dto)
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotQuickMatchParticipantViolation as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except InvalidQuickMatchStatusViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.delete(
+    "/quick-matches/{quick_match_id}/stats-exclusion",
+    response_model=QuickMatchResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Count this match towards my statistics again",
+    description=(
+        "Reverses the exclusion: the match counts again for the caller. Idempotent, and "
+        "allowed in any status — lifting a flag is always safe."
+    ),
+    tags=["Quick Matches"],
+)
+async def include_quick_match_in_stats(
+    quick_match_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: IncludeQuickMatchInStatsUseCase = Depends(get_include_quick_match_in_stats_use_case),
 ):
     try:
         request_dto = HideQuickMatchRequestDTO(

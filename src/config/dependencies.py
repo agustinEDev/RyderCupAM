@@ -220,11 +220,17 @@ from src.modules.quick_match.application.use_cases.complete_quick_match_use_case
 from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
     CreateQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.exclude_quick_match_from_stats_use_case import (
+    ExcludeQuickMatchFromStatsUseCase,
+)
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
 from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
     HideQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.include_quick_match_in_stats_use_case import (
+    IncludeQuickMatchInStatsUseCase,
 )
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
@@ -1335,6 +1341,22 @@ def get_unhide_quick_match_use_case(
 ) -> UnhideQuickMatchUseCase:
     """Proveedor del caso de uso UnhideQuickMatchUseCase."""
     return UnhideQuickMatchUseCase(uow, user_uow)
+
+
+def get_exclude_quick_match_from_stats_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ExcludeQuickMatchFromStatsUseCase:
+    """Proveedor del caso de uso ExcludeQuickMatchFromStatsUseCase."""
+    return ExcludeQuickMatchFromStatsUseCase(uow, user_uow)
+
+
+def get_include_quick_match_in_stats_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> IncludeQuickMatchInStatsUseCase:
+    """Proveedor del caso de uso IncludeQuickMatchInStatsUseCase."""
+    return IncludeQuickMatchInStatsUseCase(uow, user_uow)
 
 
 def get_set_quick_match_participant_handicap_use_case(
