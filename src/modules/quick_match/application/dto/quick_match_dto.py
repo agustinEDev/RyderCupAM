@@ -190,6 +190,14 @@ class QuickMatchResponseDTO(BaseModel):
     play_mode: str = "HANDICAP"
     participants: list[QuickMatchParticipantDTO]
     scorer_ids: list[UUID]
+    excluded_from_stats: bool = Field(
+        default=False,
+        description=(
+            "True si QUIEN PREGUNTA ha dejado esta partida fuera de sus estadisticas. "
+            "La partida se sigue viendo en su historial, marcada. Es por usuario: "
+            "la misma partida puede contar para un participante y no para otro."
+        ),
+    )
     created_at: datetime
     updated_at: datetime
 

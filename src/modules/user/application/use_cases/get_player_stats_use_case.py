@@ -193,9 +193,14 @@ class GetPlayerStatsUseCase:
         medias no se puede comparar con una completa, y con el campo borrado no
         hay ni pares contra los que medirla.
 
-        `list_for_user` ya descarta las que el propio usuario ocultó (#127), y
-        lo hace por participante: una partida que A ocultó sigue contando para
-        B. Esa regla se hereda tal cual en lugar de reimplementarse aquí.
+        `list_for_stats` descarta dos cosas distintas, ambas por participante
+        —una partida que A excluyó sigue contando para B—: las que el usuario
+        ocultó de su historial (#127) y las que dejó fuera de sus estadísticas
+        con el ojo (BE #242). Esas reglas se heredan del repositorio en vez de
+        reimplementarse aquí, y por eso esto NO puede volver a `list_for_user`:
+        ese método sí devuelve las excluidas, porque el historial las enseña
+        marcadas, y usarlo aquí las metería otra vez en la media sin que nada
+        fallara.
 
         FOURSOMES se queda fuera: la pareja juega UNA bola a golpes alternos,
         así que ninguno de los dos ha jugado esa vuelta entera y no dice a qué
@@ -208,7 +213,7 @@ class GetPlayerStatsUseCase:
         results: list[_ComputableRound] = []
 
         async with self._quick_match_uow, self._golf_course_uow:
-            matches = await self._quick_match_uow.quick_matches.list_for_user(
+            matches = await self._quick_match_uow.quick_matches.list_for_stats(
                 user_id, status=QuickMatchStatus.COMPLETED, limit=MAX_ROUNDS_AGGREGATED
             )
 

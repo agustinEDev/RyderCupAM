@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-08-22
+
+### Added
+
+- **Ocultar una partida rápida y dejarla fuera de tus estadísticas dejan de ser lo mismo.** `hidden_by_participant_ids` hacía las dos cosas a la vez: la partida desaparecía del historial **y** dejaba de contar, con un único botón, sin aviso y sin vuelta atrás desde la aplicación. Lo destapó un usuario que ocultó una partida y se quedó sin manera de recuperarla. Ahora son dos marcas independientes:
+
+  - `hidden_by_participant_ids` — igual que antes: fuera de mi lista, definitivo.
+  - `stats_excluded_by_participant_ids` — nueva: no cuenta en mis estadísticas, pero la partida **sigue en la lista** y la marca se puede quitar.
+
+  ```
+  POST   /api/v1/quick-matches/{id}/stats-exclusion
+  DELETE /api/v1/quick-matches/{id}/stats-exclusion
+  ```
+
+  Solo se puede marcar una partida **terminada** (**409** en otro caso): una que sigue en juego no cuenta todavía en ningún sitio. Quitar la marca no exige estado alguno, porque la migración puede dejarla puesta sobre una partida sin terminar. El par de endpoints es propio del que pide, como el de ocultar: el usuario sale del JWT y nunca del cuerpo, y a un desconocido se le responde **404** en vez de 403 para no confirmarle que la partida existe.
+
+  La migración `f1a4c86d2e59` añade la columna y **traspasa las filas existentes de la marca vieja a la nueva**, no al revés. Quien pulsó aquella papelera no pudo pedir nada permanente —no había aviso ni forma de deshacerlo—, y lo único que aquella acción quería con seguridad es que la partida no contara, que es justo la marca nueva y esa sí se puede levantar. **Consecuencia visible al desplegar: las partidas ocultadas hasta hoy reaparecen en el historial, marcadas como que no cuentan.** Sus estadísticas no cambian. La vuelta atrás junta las dos marcas en una, así que una partida marcada con el ojo después del despliegue quedaría oculta —exactamente lo que esa marca promete que no pasa—; queda escrito en la propia migración.
+
+### Changed
+
+- **Las estadísticas dejan de apoyarse en el filtro del historial.** Se calculaban sobre `list_for_user`, que descartaba las ocultas; esa lista tiene que devolver ahora las excluidas —para eso se quedan a la vista—, así que seguir compartiendo consulta habría hecho contar en silencio partidas que el usuario dejó fuera. El cálculo usa `list_for_stats`, una consulta propia que descarta **las dos** marcas y no acepta un tope por defecto, porque un límite invisible recortaría la media de alguien sin que nada lo dijera.
+
+  Que la papelera siga sacando de las estadísticas además de sacar de la lista **es deliberado**: una partida que has quitado de tu historial no debería seguir moviendo tu media. El aviso de la papelera lo dice con todas las letras antes de confirmar.
+
 ## [2.11.0] - 2026-08-21
 
 ### Added

@@ -54,6 +54,17 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             cast([str(user_id.value)], JSONB)
         )
 
+    def _counts_for_stats_filter(self, user_id: UserId):
+        """
+        Excluye las que el usuario ha dejado fuera de sus estadisticas.
+
+        Es una marca DISTINTA de ocultar: estas si salen en el historial, solo
+        que no cuentan (ver exclude_from_stats_for()).
+        """
+        return ~quick_matches_table.c.stats_excluded_by_participant_ids.op("@>")(
+            cast([str(user_id.value)], JSONB)
+        )
+
     async def list_for_user(
         self,
         user_id: UserId,
@@ -72,6 +83,48 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             .limit(limit)
             .offset(offset)
         )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_for_stats(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        limit: int | None = None,
+    ) -> list[QuickMatch]:
+        """
+        Partidas que SI cuentan en las estadisticas del usuario.
+
+        Metodo propio y no un parametro de `list_for_user` a proposito: las dos
+        consultas responden a preguntas distintas —«que enseno en su historial»
+        frente a «que entra en sus numeros»— y separarlas evita el fallo que
+        tuvo esto antes de existir la marca nueva, cuando las estadisticas se
+        apoyaban en el filtro del historial y bastaba con relajarlo para que
+        empezaran a contar partidas que el usuario habia excluido, en silencio.
+
+        `limit` sin valor trae el historial entero: quien calcula decide
+        cuantas vueltas agrega, y un tope por defecto aqui recortaria la media
+        de alguien sin que nada lo dijera.
+
+        Descarta LAS DOS marcas a proposito, y eso significa que la papelera
+        sigue sacando de las estadisticas ademas de sacar de la lista. La
+        separacion de BE #242 es de una sola direccion: el ojo no oculta, pero
+        ocultar si deja de contar. Es defendible —una partida que has quitado de
+        tu historial no deberia seguir moviendo tu media—, pero es una decision,
+        no un descuido, y el aviso de la papelera en la aplicacion lo dice con
+        todas las letras antes de confirmar.
+        """
+        conditions = [
+            self._participant_filter(user_id),
+            self._not_hidden_filter(user_id),
+            self._counts_for_stats_filter(user_id),
+        ]
+        if status is not None:
+            conditions.append(QuickMatch._status == status)
+
+        stmt = select(QuickMatch).where(and_(*conditions)).order_by(QuickMatch._created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 

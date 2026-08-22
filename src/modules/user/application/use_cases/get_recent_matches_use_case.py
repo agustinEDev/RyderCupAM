@@ -34,6 +34,7 @@ from src.modules.quick_match.domain.services.stableford_calculator import (
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
 )
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
@@ -137,7 +138,7 @@ class GetRecentMatchesUseCase:
         profile_handicap = float(player.handicap.value) if player and player.handicap else None
 
         entries = [
-            self._to_quick_match_dto(raw, users_by_id, courses_by_id, profile_handicap)
+            self._to_quick_match_dto(raw, users_by_id, courses_by_id, profile_handicap, user_id)
             for raw in quick_raws
         ] + [
             self._to_competition_match_dto(raw, user_id, users_by_id, courses_by_id)
@@ -156,6 +157,12 @@ class GetRecentMatchesUseCase:
 
         `list_for_user` ya descarta las que este jugador ocultó (#127), y solo
         para él: una partida que A ocultó sigue en el historial de B.
+
+        Aquí NO se usa `list_for_stats`, al revés que el resumen: esta lista es
+        el historial y tiene que enseñar también las que el jugador dejó fuera
+        de sus estadísticas (BE #242). Viajan con `excluded_from_stats` puesto
+        para que la pantalla las marque; si no, el resumen diría cero vueltas
+        mientras justo debajo se lista una, sin nada que explique la diferencia.
         """
         raws: list[_QuickMatchRaw] = []
 
@@ -286,6 +293,7 @@ class GetRecentMatchesUseCase:
         users_by_id: dict[UserId, User],
         courses_by_id: dict[GolfCourseId, GolfCourse],
         profile_handicap: float | None,
+        user_id: UserId,
     ) -> RecentMatchDTO:
         match = raw.match
         course = courses_by_id.get(match.golf_course_id)
@@ -318,6 +326,7 @@ class GetRecentMatchesUseCase:
 
         return RecentMatchDTO(
             id=str(match.id.value),
+            excluded_from_stats=match.is_stats_excluded_for(ParticipantId(user_id.value)),
             # Una partida rápida no guarda cuándo se jugó, solo cuándo se creó:
             # se juegan del tirón, así que la fecha de creación es la del juego
             date=match.created_at.date(),

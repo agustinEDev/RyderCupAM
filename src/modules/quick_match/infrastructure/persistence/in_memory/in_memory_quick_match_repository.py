@@ -39,6 +39,33 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
             and (status is None or qm.status == status)
         )
 
+    async def list_for_stats(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        limit: int | None = None,
+    ) -> list[QuickMatch]:
+        """
+        Las que cuentan: ni ocultas del historial ni excluidas de estadisticas.
+
+        Se apoya en `_matches_user` en vez de repetir su condicion: si cambia la
+        regla de "oculta", esto la hereda. Reescrita a mano, la copia vieja se
+        quedaria aqui y los tests unitarios —que corren contra este repositorio—
+        seguirian en verde mientras el SQL dice otra cosa.
+        """
+        participant_id = ParticipantId(user_id.value)
+        results = sorted(
+            [
+                qm
+                for qm in self._quick_matches.values()
+                if self._matches_user(qm, user_id, status)
+                and not qm.is_stats_excluded_for(participant_id)
+            ],
+            key=lambda qm: qm.created_at,
+            reverse=True,
+        )
+        return results[:limit] if limit is not None else results
+
     async def list_for_user(
         self,
         user_id: UserId,
