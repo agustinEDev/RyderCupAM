@@ -405,9 +405,11 @@ class UpdateProfileRequestDTO(BaseModel):
     )
     alias: str | None = Field(
         None,
+        max_length=FieldLimits.ALIAS_MAX_LENGTH,
         description=(
             "Nuevo alias público. Enviar cadena vacía lo borra y devuelve al "
-            "usuario a su nombre real. Omitir el campo lo deja como está."
+            "usuario a su nombre real. Omitir el campo —o mandarlo a null— lo "
+            "deja como está."
         ),
     )
 
@@ -426,19 +428,21 @@ class UpdateProfileRequestDTO(BaseModel):
         if v.strip() == "":
             return ""
 
-        sanitized = sanitize_html(v)
-        if not sanitized:
-            raise ValueError("alias no puede estar vacío")
+        # El formato se valida ANTES de sanear, y sobre lo que la persona
+        # escribió. Al revés, `Chuchi & Co` salía de `sanitize_html` como
+        # `Chuchi &amp; Co` y se rechazaba con un «no puede contener HTML» que
+        # no era verdad: lo que sobra ahí es el `&`, y eso ya lo dice el
+        # mensaje de los caracteres permitidos
+        validated = AliasValidator.validate(v, field_name="alias")
 
-        # Al contrario que en el nombre, aquí NO vale con sanear y seguir. El
-        # alias es único y es lo que otra gente teclea para encontrarte: si
-        # `Chu<b>chi` se guardara en silencio como `Chuchi`, quien lo pidió
-        # acabaría con un alias que no es el que escribió. Si el saneado ha
-        # cambiado algo, se dice
-        if sanitized != " ".join(v.split()):
+        # Cinturón: la lista de caracteres permitidos ya deja fuera `<`, `>` y
+        # `&`, así que esto no deberia disparar nunca. Si algun dia se ampliara
+        # esa lista, mejor un rechazo que guardar en silencio algo distinto de
+        # lo que se pidió: el alias es único y es lo que otros teclean
+        if sanitize_html(validated) != validated:
             raise ValueError("alias no puede contener HTML")
 
-        return AliasValidator.validate(sanitized, field_name="alias")
+        return validated
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -459,8 +463,13 @@ class UpdateProfileRequestDTO(BaseModel):
         """Valida que se proporcione al menos un campo."""
         # El alias se mira por si VINO en la petición, no por su valor: mandar
         # `alias: ""` es una petición legítima —«quítame el alias»— y con la
-        # comprobación por valor se leía como «no has mandado nada»
-        alias_provided = "alias" in self.model_fields_set
+        # comprobación por valor se leía como «no has mandado nada».
+        #
+        # `null` NO cuenta, igual que en el resto de campos de este endpoint,
+        # donde `"last_name": null` significa «no lo toques». Sin esto,
+        # `{"alias": null}` a secas pasaba el DTO y reventaba mas adentro, en
+        # la entidad, con un 400 y un mensaje en ingles
+        alias_provided = "alias" in self.model_fields_set and self.alias is not None
         if (
             not self.first_name
             and not self.last_name

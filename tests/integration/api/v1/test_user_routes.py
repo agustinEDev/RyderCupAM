@@ -459,6 +459,42 @@ class TestUserRoutes:
             )
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, invalid
 
+    async def test_update_profile_rejects_a_null_alias_on_its_own(self, client: AsyncClient):
+        """
+        `{"alias": null}` a secas es «no mandas nada», y lo para el DTO.
+
+        Debe salir como 422 con el mensaje del propio DTO, no como un 400 en
+        inglés desde la entidad.
+        """
+        auth_data = await create_authenticated_user(
+            client, "alias11.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": None},
+            headers={"Authorization": f"Bearer {auth_data['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_update_profile_null_alias_does_not_clear_it(self, client: AsyncClient):
+        """Con otro campo al lado, el alias a null se queda como estaba."""
+        auth_data = await create_authenticated_user(
+            client, "alias12.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Intacto"}, headers=headers)
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "Agus", "alias": None},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] == "Intacto"
+
     async def test_update_profile_normalises_spaces_in_the_alias(self, client: AsyncClient):
         """Los espacios de los bordes se quitan y los internos se colapsan."""
         auth_data = await create_authenticated_user(

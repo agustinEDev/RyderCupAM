@@ -292,6 +292,26 @@ class TestUpdateProfileAlias:
 
         assert response.user.alias == "Chuchi"
 
+    async def test_a_null_alias_does_not_clear_an_existing_one(
+        self, uow, country_repository, existing_user
+    ):
+        """
+        `null` no borra el alias; para eso está la cadena vacía.
+
+        Un formulario que mande el perfil entero con el alias a null no puede
+        dejar sin apodo a quien solo quería cambiarse el nombre.
+        """
+        use_case = UpdateProfileUseCase(uow, country_repository)
+        user_id = str(existing_user.id.value)
+        await use_case.execute(user_id, UpdateProfileRequestDTO(alias="Chuchi"))
+
+        response = await use_case.execute(
+            user_id, UpdateProfileRequestDTO(first_name="Johnny", alias=None)
+        )
+
+        assert response.user.alias == "Chuchi"
+        assert response.user.first_name == "Johnny"
+
     async def test_translates_the_unique_index_violation_into_a_conflict(
         self, uow, country_repository, existing_user
     ):
@@ -343,3 +363,58 @@ class TestUpdateProfileAlias:
         uow.commit = commit_failing
         with pytest.raises(IntegrityError):
             await use_case.execute(user_id, UpdateProfileRequestDTO(alias="Chuchi"))
+
+
+class TestUpdateProfileAliasRequestDTO:
+    """
+    Tests del DTO de entrada para el alias (BE #239).
+
+    Aquí se decide qué llega al caso de uso y qué se rechaza antes.
+    """
+
+    def test_empty_string_is_kept_as_the_clear_request(self):
+        """
+        La cadena vacía no se valida: es «quítame el alias» y llega tal cual
+        para que la entidad la traduzca a NULL.
+        """
+        assert UpdateProfileRequestDTO(alias="").alias == ""
+
+    def test_null_alias_alone_is_rejected_by_the_dto(self):
+        """
+        `{"alias": null}` a secas es «no me mandas nada».
+
+        `null` significa "no lo toques" en todos los campos de este endpoint
+        —`{"last_name": null}` ya funcionaba así—, así que el alias no puede
+        ser la excepción. Y tiene que pararlo el DTO: dejándolo pasar reventaba
+        más adentro, en la entidad, con un 400 y un mensaje en inglés.
+        """
+        with pytest.raises(ValidationError, match="al menos"):
+            UpdateProfileRequestDTO(alias=None)
+
+    def test_null_alias_next_to_another_field_is_accepted_as_untouched(self):
+        """Mandar el alias a null junto a otro campo no es un error."""
+        request = UpdateProfileRequestDTO(first_name="Jane", alias=None)
+
+        assert request.alias is None
+
+    def test_a_forbidden_sign_is_reported_as_such_not_as_html(self):
+        """
+        El mensaje dice la verdad para el caso que lo provoca.
+
+        Validar después de sanear hacía que `Chuchi & Co` —donde el `&` se
+        escapa a `&amp;`— se rechazara con un «no puede contener HTML» que no
+        era cierto: lo que sobra es el `&`, y eso ya lo dice el mensaje de los
+        caracteres permitidos.
+        """
+        with pytest.raises(ValidationError, match="solo puede contener"):
+            UpdateProfileRequestDTO(alias="Chuchi & Co")
+
+    def test_an_oversized_alias_is_stopped_by_the_field_limit(self):
+        """
+        Un alias larguísimo lo para el límite del campo, antes de sanearlo.
+
+        Sin `max_length` en el Field, una cadena de megabytes se paseaba por
+        los tres regex de `sanitize_html` antes de que nadie la rechazara.
+        """
+        with pytest.raises(ValidationError):
+            UpdateProfileRequestDTO(alias="a" * 5000)
