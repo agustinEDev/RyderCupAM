@@ -45,17 +45,28 @@ class User:
     y participar en torneos Ryder Cup.
     """
 
-    def _validate_profile_update(self, first_name, last_name, country_code_str, gender_str=None):
-        if first_name is None and last_name is None and country_code_str is None and gender_str is None:
+    def _validate_profile_update(
+        self, first_name, last_name, country_code_str, gender_str=None, alias=None
+    ):
+        if (
+            first_name is None
+            and last_name is None
+            and country_code_str is None
+            and gender_str is None
+            and alias is None
+        ):
             raise ValueError(
-                "At least one field (first_name, last_name, country_code, or gender) must be provided"
+                "At least one field (first_name, last_name, country_code, gender or alias) "
+                "must be provided"
             )
         if first_name is not None and first_name.strip() == "":
             raise ValueError("first_name cannot be empty")
         if last_name is not None and last_name.strip() == "":
             raise ValueError("last_name cannot be empty")
 
-    def _detect_profile_changes(self, first_name, last_name, country_code_str, gender_str=None):
+    def _detect_profile_changes(
+        self, first_name, last_name, country_code_str, gender_str=None, alias=None
+    ):
         old_first_name = self.first_name
         old_last_name = self.last_name
         old_country_code = self.country_code
@@ -72,16 +83,28 @@ class User:
         if gender_str is not None:
             new_gender = Gender(gender_str) if gender_str else None
             gender_changed = new_gender != old_gender
+        # Mismo convenio que country_code y gender: `None` es "no lo han
+        # mandado" y la cadena vacía es "quítamelo". Sin esa distinción no
+        # habría forma de volver al nombre real una vez puesto un alias
+        old_alias = self.alias
+        new_alias = old_alias
+        alias_changed = False
+        if alias is not None:
+            new_alias = alias or None
+            alias_changed = new_alias != old_alias
         return (
             first_name_changed,
             last_name_changed,
             country_code_changed,
             gender_changed,
+            alias_changed,
             new_country_code,
             new_gender,
+            new_alias,
             old_first_name,
             old_last_name,
             old_country_code,
+            old_alias,
         )
 
     def __init__(
@@ -91,6 +114,7 @@ class User:
         password: Password | None,
         first_name: str,
         last_name: str,
+        alias: str | None = None,
         handicap: Handicap | None = None,
         handicap_updated_at: datetime | None = None,
         created_at: datetime | None = None,
@@ -118,6 +142,7 @@ class User:
         self._password = password
         self._first_name = first_name
         self._last_name = last_name
+        self._alias = alias
         self._handicap = handicap
         self._handicap_updated_at = handicap_updated_at
         self._created_at = created_at or datetime.now()
@@ -162,6 +187,11 @@ class User:
     @property
     def last_name(self) -> str:
         return self._last_name
+
+    @property
+    def alias(self) -> str | None:
+        """El apodo público, o None si esta persona no ha puesto ninguno."""
+        return self._alias
 
     @property
     def handicap(self) -> Handicap | None:
@@ -291,8 +321,27 @@ class User:
         self._updated_at = datetime.now()
 
     def get_full_name(self) -> str:
-        """Devuelve el nombre completo del usuario."""
+        """
+        Devuelve el nombre LEGAL del usuario.
+
+        No mira el alias a propósito: la búsqueda de hándicap en la RFEG y los
+        correos transaccionales van por aquí, y la federación busca por el
+        nombre con el que uno está federado. Para enseñar a alguien por
+        pantalla, `display_name`.
+        """
         return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def display_name(self) -> str:
+        """
+        El nombre con el que la aplicación pinta a esta persona: su alias si
+        lo tiene, y si no su nombre completo.
+
+        Este es el ÚNICO sitio donde vive ese fallback. El backend lo resuelve
+        y lo manda ya resuelto para que el frontend no reparta `alias || nombre`
+        por cada pantalla.
+        """
+        return self._alias or self.get_full_name()
 
     def has_valid_email(self) -> bool:
         """Verifica si el usuario tiene un email válido."""
@@ -590,26 +639,41 @@ class User:
         last_name: str | None = None,
         country_code_str: str | None = None,
         gender: str | None = None,
+        alias: str | None = None,
     ) -> None:
         """
-        Actualiza la información personal del usuario (nombre, apellidos, país y género).
+        Actualiza la información personal del usuario (nombre, apellidos, país,
+        género y alias).
         Solo emite evento si al menos uno de los campos cambió.
         El evento ahora incluye el cambio de country_code (old/new) si aplica.
+
+        El alias sigue el convenio de country_code y gender: `None` significa
+        "no se ha enviado" y la cadena vacía "quítamelo", que devuelve al
+        usuario a su nombre real.
         """
-        self._validate_profile_update(first_name, last_name, country_code_str, gender)
+        self._validate_profile_update(first_name, last_name, country_code_str, gender, alias)
         (
             first_name_changed,
             last_name_changed,
             country_code_changed,
             gender_changed,
+            alias_changed,
             new_country_code,
             new_gender,
+            new_alias,
             old_first_name,
             old_last_name,
             _old_country_code,
-        ) = self._detect_profile_changes(first_name, last_name, country_code_str, gender)
+            old_alias,
+        ) = self._detect_profile_changes(first_name, last_name, country_code_str, gender, alias)
 
-        if not first_name_changed and not last_name_changed and not country_code_changed and not gender_changed:
+        if (
+            not first_name_changed
+            and not last_name_changed
+            and not country_code_changed
+            and not gender_changed
+            and not alias_changed
+        ):
             return
 
         if first_name_changed:
@@ -620,6 +684,8 @@ class User:
             self._country_code = new_country_code
         if gender_changed:
             self._gender = new_gender
+        if alias_changed:
+            self._alias = new_alias
 
         self._updated_at = datetime.now()
 
@@ -630,6 +696,8 @@ class User:
                 new_first_name=first_name if first_name_changed else None,
                 old_last_name=old_last_name if last_name_changed else None,
                 new_last_name=last_name if last_name_changed else None,
+                old_alias=old_alias if alias_changed else None,
+                new_alias=new_alias if alias_changed else None,
                 updated_at=self.updated_at,
             )
         )

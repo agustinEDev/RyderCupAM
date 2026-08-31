@@ -37,6 +37,12 @@ class FieldLimits:
     NAME_MIN_LENGTH = 2  # "Li" es un nombre válido corto
     NAME_MAX_LENGTH = 100  # Cubre nombres largos internacionales
 
+    # Alias (apodo público, opcional)
+    # El mínimo NO es cosmético: el autocompletado exige 2 caracteres para
+    # disparar la búsqueda, así que un alias de uno solo sería inencontrable
+    ALIAS_MIN_LENGTH = 2
+    ALIAS_MAX_LENGTH = 20  # Cabe en una tarjeta de resultados sin truncarse
+
     # Full Name (para búsquedas)
     FULL_NAME_MIN_LENGTH = 3  # "A B" mínimo
     FULL_NAME_MAX_LENGTH = 200  # first + last + espacio
