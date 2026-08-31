@@ -63,12 +63,10 @@ class ListPendingRequestsUseCase:
         async with self._user_uow:
             requester = await self._user_uow.users.find_by_id(friendship.requester_id)
             addressee = await self._user_uow.users.find_by_id(friendship.addressee_id)
-            requester_name = (
-                f"{requester.first_name} {requester.last_name}" if requester else "Unknown"
-            )
-            addressee_name = (
-                f"{addressee.first_name} {addressee.last_name}" if addressee else "Unknown"
-            )
+            # `display_name`: el alias de quien lo tenga, y si no su nombre
+            # completo (BE #239). Estos dos campos son «nombre para enseñar»
+            requester_name = requester.display_name if requester else "Unknown"
+            addressee_name = addressee.display_name if addressee else "Unknown"
 
         return FriendshipResponseDTO(
             id=friendship.id.value,

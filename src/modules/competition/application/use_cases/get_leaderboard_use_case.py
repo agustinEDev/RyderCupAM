@@ -216,12 +216,17 @@ class GetLeaderboardUseCase:
         return self._scoring_service.format_decided_result(hole_results)
 
     async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
-        """Resuelve user_id → 'first_name last_name' en una sola consulta."""
+        """
+        Resuelve user_id → el nombre con el que se pinta a esa persona.
+
+        `display_name`, no el nombre legal: el alias de quien lo tenga (BE
+        #239). La clasificación es de las pantallas donde más se lee un nombre.
+        """
         if not user_ids:
             return {}
         users = await self._user_repo.find_by_ids(user_ids)
         names: dict[UserId, str] = {
-            user.id: f"{user.first_name} {user.last_name}" for user in users if user.id is not None
+            user.id: user.display_name for user in users if user.id is not None
         }
         for uid in user_ids:
             if uid not in names:

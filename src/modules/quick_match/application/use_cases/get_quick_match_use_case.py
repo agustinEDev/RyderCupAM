@@ -202,7 +202,9 @@ class GetQuickMatchUseCase:
         for scorer_id, covered_ids in assignments.items():
             scorer = quick_match.find_participant(scorer_id)
             user = users_by_id.get(scorer.user_id) if scorer else None
-            scorer_name = f"{user.first_name} {user.last_name}" if user else "Unknown"
+            # `display_name`: el alias de quien lo tenga, y si no su nombre
+            # completo (BE #239). Este campo ya era «nombre para enseñar»
+            scorer_name = user.display_name if user else "Unknown"
             result.append(
                 ScoringAssignmentDTO(
                     scorer_participant_id=scorer_id.value,
