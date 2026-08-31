@@ -159,7 +159,7 @@ class UserRepositoryInterface(ABC):
     @abstractmethod
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
         """
-        Searches users whose first_name or last_name partially matches the query (case-insensitive).
+        Searches users whose first_name, last_name or alias partially matches the query (case-insensitive).
 
         Solo devuelve cuentas activas: esta búsqueda está abierta a cualquier
         usuario registrado, así que una cuenta desactivada no puede aparecer en
@@ -222,7 +222,7 @@ class UserRepositoryInterface(ABC):
             limit (int): Número máximo de usuarios a retornar (default: 100)
             offset (int): Número de usuarios a saltar (default: 0)
             search (str | None): Si se indica, filtra por coincidencia parcial
-                (case-insensitive) en nombre, apellidos o email
+                (case-insensitive) en nombre, apellidos, alias o email
             is_admin (bool | None): Si se indica, filtra por rol (admin/jugador)
             is_active (bool | None): Si se indica, filtra por cuentas activas/desactivadas
             email_verified (bool | None): Si se indica, filtra por email verificado o no

@@ -61,6 +61,7 @@ class AdminUpdateUserUseCase:
             id=user.id.value,
             first_name=user.first_name,
             last_name=user.last_name,
+            alias=user.alias,
             email=str(user.email),
             handicap=float(user.handicap) if user.handicap is not None else None,
             is_admin=user.is_admin,

@@ -65,11 +65,13 @@ class InMemoryUserRepository(UserRepositoryInterface):
         q = search.strip().lower()
         full_name = f"{user.first_name} {user.last_name}".lower()
         email = str(user.email).lower() if user.email else ""
+        alias = user.alias.lower() if user.alias else ""
         return (
             q in user.first_name.lower()
             or q in user.last_name.lower()
             or q in full_name
             or q in email
+            or (bool(alias) and q in alias)
         )
 
     def _matches_filters(
@@ -142,10 +144,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
         """
-        Searches active users by partial name match.
+        Searches active users by partial name or alias match.
 
         Requires at least 2 characters. Excluye las cuentas desactivadas, igual
-        que el repositorio real.
+        que el repositorio real, y busca en el alias por la misma razon.
         """
         query_lower = query.lower().strip()
         if len(query_lower) < self.MIN_SEARCH_LENGTH:
@@ -155,10 +157,12 @@ class InMemoryUserRepository(UserRepositoryInterface):
             if not user.is_active:
                 continue
             full_name = f"{user.first_name} {user.last_name}".lower()
+            alias = user.alias.lower() if user.alias else ""
             if (
                 query_lower in full_name
                 or query_lower in user.first_name.lower()
                 or query_lower in user.last_name.lower()
+                or (bool(alias) and query_lower in alias)
             ):
                 results.append(user)
                 if len(results) >= limit:

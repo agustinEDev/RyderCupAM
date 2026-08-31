@@ -306,7 +306,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
         Implementa búsqueda case-insensitive con ILIKE:
         - search_name: Busca en competition.name
-        - search_creator: Busca en creator.first_name OR creator.last_name
+        - search_creator: Busca en creator.first_name OR creator.last_name OR creator.alias
 
         Args:
             search_name: Texto a buscar en nombre de competición
@@ -336,12 +336,29 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         if search_name:
             conditions.append(Competition._name_value.ilike(f"%{search_name}%"))
 
-        # Filtro: search_creator (búsqueda en first_name OR last_name)
+        # Filtro: search_creator (búsqueda en first_name OR last_name OR alias)
+        #
+        # El texto va SIN `strip()` a propósito: con `search_creator="  "` la
+        # condición de arriba es cierta —no es cadena vacía— y recortarlo
+        # dejaría un `contains("")`, que casa con TODO. Es decir, buscar dos
+        # espacios devolvería la lista entera en vez de nada. Tal cual llega,
+        # se busca «  » y no casa nada, que es lo que hacía antes.
+        #
+        # Las tres ramas usan `LOWER(...).contains(..., autoescape=True)` y no
+        # `ilike(f"%{x}%")`: aquel interpolaba el texto tecleado dentro del
+        # patrón, así que un `%` devolvía todas las competiciones y un `_`
+        # casaba con cualquier carácter. Las dos primeras venían ya así y se
+        # arreglan aquí en vez de añadir una tercera con el mismo fallo.
+        #
+        # Para las cuentas sin alias, LOWER(NULL) es NULL: no casan por esa
+        # rama, pero siguen entrando por las otras dos.
         if search_creator:
+            creator_query = search_creator.lower()
             conditions.append(
                 or_(
-                    User._first_name.ilike(f"%{search_creator}%"),
-                    User._last_name.ilike(f"%{search_creator}%"),
+                    func.lower(User._first_name).contains(creator_query, autoescape=True),
+                    func.lower(User._last_name).contains(creator_query, autoescape=True),
+                    func.lower(User._alias).contains(creator_query, autoescape=True),
                 )
             )
 

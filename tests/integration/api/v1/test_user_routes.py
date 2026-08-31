@@ -319,6 +319,85 @@ class TestUserRoutes:
         assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     # ========================================================================
+    # Tests del autocompletado por alias (BE #239)
+    # ========================================================================
+
+    async def test_autocomplete_finds_a_user_by_their_alias(self, client: AsyncClient):
+        """El autocompletado encuentra por alias, no solo por nombre."""
+        owner = await create_authenticated_user(
+            client, "auto1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "auto2.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Chuchi"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        users = response.json()["users"]
+        assert [u["alias"] for u in users] == ["Chuchi"]
+        assert users[0]["full_name"] == "Agustin Estevez"
+
+    async def test_autocomplete_carries_a_null_alias_when_there_is_none(
+        self, client: AsyncClient
+    ):
+        """Quien no tiene alias sale igual, con el campo a null."""
+        await create_authenticated_user(
+            client, "auto3.test@example.com", "s3cur3P@ssw0rd!", "Ana", "Buscable"
+        )
+        searcher = await create_authenticated_user(
+            client, "auto4.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Buscable"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        users = response.json()["users"]
+        assert len(users) == 1
+        assert users[0]["alias"] is None
+
+    async def test_autocomplete_does_not_leak_the_email(self, client: AsyncClient):
+        """
+        El alias no amplía lo que esta búsqueda expone.
+
+        Sigue sin llevar correo, que es lo que se retiró para que no se
+        pudieran recolectar direcciones tecleando nombres sueltos.
+        """
+        owner = await create_authenticated_user(
+            client, "auto5.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Discreto"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "auto6.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Discreto"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "email" not in response.json()["users"][0]
+
+    # ========================================================================
     # Tests del alias (BE #239)
     # ========================================================================
 

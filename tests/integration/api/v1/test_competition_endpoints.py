@@ -181,6 +181,188 @@ class TestListCompetitions:
         assert data[0]["status"] == "ACTIVE"
 
     @pytest.mark.asyncio
+    async def test_list_competitions_filter_by_creator_alias(self, client: AsyncClient):
+        """
+        Buscar por el creador encuentra también por su alias (BE #239).
+
+        Quien organiza aparece por su apodo en el resto de la aplicación, así
+        que buscarlo por el nombre que se ve en pantalla tiene que funcionar.
+        """
+        user = await create_authenticated_user(
+            client, "organizador@test.com", "P@ssw0rd123!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            cookies=user["cookies"],
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        # El nombre se guarda normalizado —«del» sale como «Del»—, así que lo
+        # que se espera sale de la respuesta y no del literal que se envía
+        creada = await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo del Chuchi",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        # Una segunda competición de OTRO creador con OTRO alias. Sin ella el
+        # test pasaría aunque la búsqueda devolviera todo, que es justo el
+        # fallo que puede tener esta rama
+        otro = await create_authenticated_user(
+            client, "otroorganizador@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Anita"},
+            cookies=otro["cookies"],
+        )
+        await create_competition(
+            client,
+            otro["cookies"],
+            {
+                "name": "Torneo de Anita",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=Chuchi", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [c["name"] for c in data] == [creada["name"]]
+
+    async def test_list_competitions_by_creator_ignores_a_blank_search(
+        self, client: AsyncClient
+    ):
+        """
+        Buscar por espacios no devuelve la lista entera.
+
+        `LOWER(alias) LIKE '%%'` casa con cualquier alias, así que recortar el
+        texto antes de buscarlo convertía «  » en «devuélvemelo todo». El texto
+        va tal cual, y dos espacios no casan con nada.
+        """
+        user = await create_authenticated_user(
+            client, "blanco@test.com", "P@ssw0rd123!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            cookies=user["cookies"],
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo que no debe salir",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=%20%20", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_list_competitions_by_creator_does_not_treat_a_percent_as_a_wildcard(
+        self, client: AsyncClient
+    ):
+        """
+        Un `%` tecleado se busca como carácter, no como comodín.
+
+        Interpolando el texto dentro del patrón —`ILIKE f"%{x}%"`— buscar `%`
+        devolvía todas las competiciones.
+        """
+        user = await create_authenticated_user(
+            client, "comodin@test.com", "P@ssw0rd123!", "Agustin", "Estevez"
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo tampoco visible",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=%25", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_list_competitions_by_creator_still_finds_a_real_name(
+        self, client: AsyncClient
+    ):
+        """
+        La rama nueva del OR no puede tapar la búsqueda de siempre.
+
+        Quien no tiene alias —LOWER(NULL)— tiene que seguir apareciendo al
+        buscarlo por su nombre real.
+        """
+        user = await create_authenticated_user(
+            client, "sinapodo@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        creada = await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo de Ana",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=Garcia", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [c["name"] for c in data] == [creada["name"]]
+
     async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
         """Filtrar competiciones por nombre de búsqueda."""
         user = await create_authenticated_user(

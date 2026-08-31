@@ -258,7 +258,7 @@ class CompetitionRepositoryInterface(ABC):
 
         Args:
             search_name: Búsqueda parcial case-insensitive en nombre de competición
-            search_creator: Búsqueda parcial case-insensitive en nombre del creador (first_name o last_name)
+            search_creator: Búsqueda parcial case-insensitive en nombre del creador (first_name, last_name o alias)
             status: Filtrar por estado específico
             creator_id: Filtrar por creador específico
             limit: Número máximo de resultados (default: 100)
