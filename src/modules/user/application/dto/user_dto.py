@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from src.shared.application.validation import (
+    AliasValidator,
     FieldLimits,
     NameValidator,
     sanitize_html,
@@ -179,6 +180,13 @@ class UserResponseDTO(BaseModel):
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
+    alias: str | None = Field(
+        None,
+        description=(
+            "Apodo público con el que la aplicación muestra a este usuario. "
+            "Null si no ha puesto ninguno, y entonces se muestra su nombre real."
+        ),
+    )
     country_code: str | None = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
     handicap: float | None = Field(None, description="Handicap de golf del usuario.")
     handicap_updated_at: datetime | None = Field(
@@ -395,6 +403,42 @@ class UpdateProfileRequestDTO(BaseModel):
         pattern="^(MALE|FEMALE)$",
         description="Nuevo género del usuario (MALE/FEMALE). Opcional.",
     )
+    alias: str | None = Field(
+        None,
+        description=(
+            "Nuevo alias público. Enviar cadena vacía lo borra y devuelve al "
+            "usuario a su nombre real. Omitir el campo lo deja como está."
+        ),
+    )
+
+    @field_validator("alias")
+    @classmethod
+    def sanitize_and_validate_alias(cls, v: str | None) -> str | None:
+        """
+        Sanitiza y valida el alias.
+
+        La cadena vacía NO se valida: es la forma de pedir que se borre, y se
+        deja pasar tal cual para que la entidad la traduzca a NULL.
+        """
+        if v is None:
+            return None
+
+        if v.strip() == "":
+            return ""
+
+        sanitized = sanitize_html(v)
+        if not sanitized:
+            raise ValueError("alias no puede estar vacío")
+
+        # Al contrario que en el nombre, aquí NO vale con sanear y seguir. El
+        # alias es único y es lo que otra gente teclea para encontrarte: si
+        # `Chu<b>chi` se guardara en silencio como `Chuchi`, quien lo pidió
+        # acabaría con un alias que no es el que escribió. Si el saneado ha
+        # cambiado algo, se dice
+        if sanitized != " ".join(v.split()):
+            raise ValueError("alias no puede contener HTML")
+
+        return AliasValidator.validate(sanitized, field_name="alias")
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -413,9 +457,20 @@ class UpdateProfileRequestDTO(BaseModel):
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo."""
-        if not self.first_name and not self.last_name and not self.country_code and not self.gender:
+        # El alias se mira por si VINO en la petición, no por su valor: mandar
+        # `alias: ""` es una petición legítima —«quítame el alias»— y con la
+        # comprobación por valor se leía como «no has mandado nada»
+        alias_provided = "alias" in self.model_fields_set
+        if (
+            not self.first_name
+            and not self.last_name
+            and not self.country_code
+            and not self.gender
+            and not alias_provided
+        ):
             raise ValueError(
-                "Debe proporcionar al menos 'first_name', 'last_name', 'country_code' o 'gender'."
+                "Debe proporcionar al menos 'first_name', 'last_name', 'country_code', "
+                "'gender' o 'alias'."
             )
 
 
