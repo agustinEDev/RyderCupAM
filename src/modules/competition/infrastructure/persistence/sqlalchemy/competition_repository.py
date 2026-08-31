@@ -306,7 +306,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
 
         Implementa búsqueda case-insensitive con ILIKE:
         - search_name: Busca en competition.name
-        - search_creator: Busca en creator.first_name OR creator.last_name
+        - search_creator: Busca en creator.first_name OR creator.last_name OR creator.alias
 
         Args:
             search_name: Texto a buscar en nombre de competición
@@ -336,12 +336,23 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         if search_name:
             conditions.append(Competition._name_value.ilike(f"%{search_name}%"))
 
-        # Filtro: search_creator (búsqueda en first_name OR last_name)
+        # Filtro: search_creator (búsqueda en first_name OR last_name OR alias)
         if search_creator:
             conditions.append(
                 or_(
                     User._first_name.ilike(f"%{search_creator}%"),
                     User._last_name.ilike(f"%{search_creator}%"),
+                    # El alias también (BE #239): quien organiza aparece por su
+                    # apodo en el resto de la aplicación, así que buscarlo por
+                    # el nombre que se ve en pantalla tiene que funcionar.
+                    # Con `LOWER(...).contains(...)` y no con `ilike(f"%{x}%")`
+                    # como sus vecinas: aquel interpola el texto tal cual, así
+                    # que un `%` o un `_` tecleados actúan de comodín. Para las
+                    # cuentas sin alias, LOWER(NULL) es NULL y siguen entrando
+                    # por las otras dos ramas del OR
+                    func.lower(User._alias).contains(
+                        search_creator.strip().lower(), autoescape=True
+                    ),
                 )
             )
 

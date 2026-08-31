@@ -181,6 +181,83 @@ class TestListCompetitions:
         assert data[0]["status"] == "ACTIVE"
 
     @pytest.mark.asyncio
+    async def test_list_competitions_filter_by_creator_alias(self, client: AsyncClient):
+        """
+        Buscar por el creador encuentra también por su alias (BE #239).
+
+        Quien organiza aparece por su apodo en el resto de la aplicación, así
+        que buscarlo por el nombre que se ve en pantalla tiene que funcionar.
+        """
+        user = await create_authenticated_user(
+            client, "organizador@test.com", "P@ssw0rd123!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            cookies=user["cookies"],
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo del Chuchi",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=Chuchi", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [c["name"] for c in data] == ["Torneo del Chuchi"]
+
+    async def test_list_competitions_by_creator_still_finds_a_real_name(
+        self, client: AsyncClient
+    ):
+        """
+        La rama nueva del OR no puede tapar la búsqueda de siempre.
+
+        Quien no tiene alias —LOWER(NULL)— tiene que seguir apareciendo al
+        buscarlo por su nombre real.
+        """
+        user = await create_authenticated_user(
+            client, "sinapodo@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+
+        start = date.today() + timedelta(days=30)
+        end = start + timedelta(days=3)
+        await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": "Torneo de Ana",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "max_players": 24,
+                "team_assignment": "MANUAL",
+            },
+        )
+
+        response = await client.get(
+            "/api/v1/competitions?search_creator=Garcia", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [c["name"] for c in data] == ["Torneo de Ana"]
+
     async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
         """Filtrar competiciones por nombre de búsqueda."""
         user = await create_authenticated_user(
