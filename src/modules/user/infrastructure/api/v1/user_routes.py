@@ -81,7 +81,7 @@ router = APIRouter()
     response_model=SearchUsersResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Autocompletar busqueda de usuarios",
-    description="Busca usuarios por nombre parcial para autocompletado.",
+    description="Busca usuarios por nombre o alias parcial para autocompletado.",
     tags=["Users"],
 )
 async def search_users_autocomplete(
@@ -91,7 +91,9 @@ async def search_users_autocomplete(
 ):
     """
     Endpoint de autocompletado para buscar usuarios por nombre parcial.
-    Devuelve hasta 10 resultados que coincidan parcialmente con el nombre o apellido.
+    Devuelve hasta 10 resultados que coincidan parcialmente con el nombre, el
+    apellido o el alias. Cada resultado lleva el alias junto al nombre real:
+    es lo que permite distinguir a dos jugadores parecidos.
     """
     return await use_case.execute(query)
 

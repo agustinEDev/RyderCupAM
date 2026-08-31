@@ -137,8 +137,10 @@ class SearchUsersItemDTO(BaseModel):
 
     **No lleva correo.** Cualquiera puede buscar por nombre, asi que lo que
     devuelva esta busqueda es publico entre usuarios registrados: solo nombre,
-    apellidos y foto. Antes devolvia el correo, lo que permitia recolectar
-    direcciones tecleando nombres sueltos.
+    apellidos, alias y foto. Antes devolvia el correo, lo que permitia
+    recolectar direcciones tecleando nombres sueltos. El alias no amplia esa
+    exposicion: es publico por diseño, porque es lo que otros teclean para
+    encontrarte.
 
     La foto es lo que permite distinguir a dos jugadores que se llamen igual,
     que es el trabajo que hacia el correo.
@@ -148,6 +150,14 @@ class SearchUsersItemDTO(BaseModel):
     full_name: str = Field(..., description="Nombre completo del usuario.")
     first_name: str = Field(default="", description="Nombre, ya separado del apellido.")
     last_name: str = Field(default="", description="Apellidos, ya separados del nombre.")
+    alias: str | None = Field(
+        default=None,
+        description=(
+            "Apodo público, si tiene. Se puede buscar por él, así que aquí se "
+            "devuelve junto al nombre real: es lo que permite saber cuál de los "
+            "dos 'Chuchi' que salen es el que se buscaba."
+        ),
+    )
     avatar_source: str = Field(default="", description="De donde sale su foto de perfil.")
     avatar_preset_id: int | None = Field(default=None, description="Avatar predefinido, si usa uno.")
     has_avatar_upload: bool = Field(
