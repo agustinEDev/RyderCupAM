@@ -121,6 +121,26 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_alias(self, alias: str) -> User | None:
+        """
+        Busca un usuario por su alias, ignorando mayúsculas.
+
+        Es la consulta con la que se comprueba si un alias está libre antes de
+        guardarlo. No sustituye al índice único de la base de datos: entre esta
+        consulta y el commit cabe otra petición pidiendo el mismo alias.
+
+        Args:
+            alias (str): El alias a buscar
+
+        Returns:
+            Optional[User]: El usuario que lo tiene, o None si está libre
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def find_by_full_name(self, full_name: str) -> User | None:
         """
         Busca un usuario por su nombre completo (first_name + last_name).

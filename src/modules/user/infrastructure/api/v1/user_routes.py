@@ -48,6 +48,7 @@ from src.modules.user.application.use_cases.update_security_use_case import (
     UpdateSecurityUseCase,
 )
 from src.modules.user.domain.errors.user_errors import (
+    AliasAlreadyTakenError,
     DuplicateEmailError,
     InvalidCredentialsError,
     UserNotFoundError,
@@ -148,8 +149,14 @@ async def find_user(
     response_model=UpdateProfileResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar perfil del usuario",
-    description="Actualiza la información personal del usuario autenticado (nombre, apellidos y/o país).",
+    description=(
+        "Actualiza la información personal del usuario autenticado: nombre, apellidos, "
+        "país, género y/o alias. Devuelve 409 si el alias pedido ya lo tiene otra persona."
+    ),
     tags=["Users"],
+    responses={
+        status.HTTP_409_CONFLICT: {"description": "El alias ya está en uso por otro usuario."},
+    },
 )
 async def update_profile(
     request: UpdateProfileRequestDTO,
@@ -163,8 +170,11 @@ async def update_profile(
     - Nombre (first_name)
     - Apellidos (last_name)
     - Código de país (country_code) - ISO 3166-1 alpha-2
+    - Género (gender)
+    - Alias (alias) - apodo público, único entre todos los usuarios
 
     Al menos uno de los campos debe ser proporcionado.
+    Enviar `alias` como cadena vacía lo borra y devuelve al usuario a su nombre real.
     NO requiere contraseña actual (solo autenticación JWT).
     """
     try:
@@ -176,6 +186,13 @@ async def update_profile(
     except UserNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except AliasAlreadyTakenError as e:
+        # 409 y no 400: la petición es correcta, lo que pasa es que otra
+        # persona llegó antes. El mensaje va tal cual al campo del formulario
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         ) from e
     except ValueError as e:

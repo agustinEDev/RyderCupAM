@@ -65,6 +65,18 @@ class DuplicateEmailError(UserDomainError):
     pass
 
 
+class AliasAlreadyTakenError(UserDomainError):
+    """
+    Excepción lanzada cuando el alias pedido ya lo tiene otra persona.
+
+    La comparación ignora mayúsculas: "chuchi" y "Chuchi" son el mismo alias.
+    Llega a la API como un 409 con un mensaje que el frontend enseña tal cual
+    junto al campo.
+    """
+
+    pass
+
+
 class InvalidCredentialsError(UserDomainError):
     """
     Excepción lanzada cuando las credenciales proporcionadas son inválidas.

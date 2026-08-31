@@ -1,4 +1,5 @@
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -15,6 +16,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
         self._users: dict[UserId, User] = {}
 
     async def save(self, user: User) -> None:
+        self._guard_alias_is_free(user)
         self._users[user.id] = user
 
     async def find_by_id(self, user_id: UserId) -> User | None:
@@ -32,6 +34,30 @@ class InMemoryUserRepository(UserRepositoryInterface):
             if user.email == email:
                 return user
         return None
+
+    async def find_by_alias(self, alias: str) -> User | None:
+        normalized = alias.strip().lower()
+        if not normalized:
+            return None
+        for user in self._users.values():
+            if user.alias and user.alias.lower() == normalized:
+                return user
+        return None
+
+    def _guard_alias_is_free(self, user: User) -> None:
+        """
+        Impone la misma unicidad que el índice de la base de datos.
+
+        Sin esto, un caso de uso podría guardar dos veces el mismo alias en los
+        tests unitarios y pasar, contradiciendo lo que hace el repositorio real
+        en producción.
+        """
+        if not user.alias:
+            return
+        alias_lower = user.alias.lower()
+        for other in self._users.values():
+            if other.id != user.id and other.alias and other.alias.lower() == alias_lower:
+                raise AliasAlreadyTakenError(f"El alias '{user.alias}' ya está en uso.")
 
     def _matches_search(self, user: User, search: str | None) -> bool:
         if not search or not search.strip():
@@ -101,6 +127,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def update(self, user: User) -> None:
         if user.id in self._users:
+            self._guard_alias_is_free(user)
             self._users[user.id] = user
 
     async def find_by_full_name(self, full_name: str) -> User | None:

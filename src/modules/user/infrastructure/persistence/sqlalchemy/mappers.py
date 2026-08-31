@@ -7,9 +7,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
+    func,
     inspect,
 )
 from sqlalchemy.exc import NoInspectionAvailable
@@ -147,6 +149,8 @@ users_table = Table(
     Column("id", UserIdDecorator, primary_key=True),
     Column("first_name", String(50), nullable=False),
     Column("last_name", String(50), nullable=False),
+    # Apodo publico, opcional. Su unicidad es un indice aparte, justo debajo
+    Column("alias", String(20), nullable=True),
     Column("email", String(255), nullable=False, unique=True),
     Column("password", String(255), nullable=True),  # Nullable for OAuth-only users
     Column("handicap", HandicapDecorator, nullable=True),
@@ -197,6 +201,21 @@ users_table = Table(
 )
 
 
+# Unicidad del alias ignorando mayusculas. Va en los METADATOS y no solo en la
+# migracion a proposito: el esquema de los tests se construye con
+# `metadata.create_all`, asi que un indice que viviera solo en la migracion no
+# existiria en ningun test y la suite entera daria por buena una duplicidad que
+# en produccion revienta. Es funcional —sobre LOWER(alias)— y parcial —solo
+# donde hay alias—: en Postgres los NULL no chocan entre si, asi que indexarlos
+# no aportaria nada
+Index(
+    "ix_users_alias_lower",
+    func.lower(users_table.c.alias),
+    unique=True,
+    postgresql_where=users_table.c.alias.isnot(None),
+)
+
+
 def start_mappers():
     """
     Inicia el mapeo entre las entidades de dominio y las tablas de la base de datos.
@@ -216,6 +235,7 @@ def start_mappers():
                 "_id": users_table.c.id,
                 "_first_name": users_table.c.first_name,
                 "_last_name": users_table.c.last_name,
+                "_alias": users_table.c.alias,
                 "_handicap": users_table.c.handicap,
                 "_handicap_updated_at": users_table.c.handicap_updated_at,
                 "_created_at": users_table.c.created_at,
