@@ -199,7 +199,9 @@ class TestListCompetitions:
 
         start = date.today() + timedelta(days=30)
         end = start + timedelta(days=3)
-        await create_competition(
+        # El nombre se guarda normalizado —«del» sale como «Del»—, así que lo
+        # que se espera sale de la respuesta y no del literal que se envía
+        creada = await create_competition(
             client,
             user["cookies"],
             {
@@ -244,7 +246,7 @@ class TestListCompetitions:
 
         assert response.status_code == 200
         data = response.json()
-        assert [c["name"] for c in data] == ["Torneo del Chuchi"]
+        assert [c["name"] for c in data] == [creada["name"]]
 
     async def test_list_competitions_by_creator_ignores_a_blank_search(
         self, client: AsyncClient
@@ -339,7 +341,7 @@ class TestListCompetitions:
 
         start = date.today() + timedelta(days=30)
         end = start + timedelta(days=3)
-        await create_competition(
+        creada = await create_competition(
             client,
             user["cookies"],
             {
@@ -359,7 +361,7 @@ class TestListCompetitions:
 
         assert response.status_code == 200
         data = response.json()
-        assert [c["name"] for c in data] == ["Torneo de Ana"]
+        assert [c["name"] for c in data] == [creada["name"]]
 
     async def test_list_competitions_filter_by_search_name(self, client: AsyncClient):
         """Filtrar competiciones por nombre de búsqueda."""
