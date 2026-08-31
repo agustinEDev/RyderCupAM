@@ -188,6 +188,7 @@ class EnrollmentDTOMapper:
                 id=user.id.value,
                 first_name=user.first_name,
                 last_name=user.last_name,
+                display_name=user.display_name,
                 email=str(user.email),
                 handicap=user.handicap.value if user.handicap else None,
                 country_code=user.country_code.value if user.country_code else None,

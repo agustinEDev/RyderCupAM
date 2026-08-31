@@ -126,6 +126,13 @@ class FindUserResponseDTO(BaseModel):
     user_id: UUID = Field(..., description="ID único del usuario encontrado.")
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
+    display_name: str = Field(
+        default="",
+        description=(
+            "Nombre con el que se debe mostrar a esta persona: su alias si "
+            "tiene, y si no su nombre completo."
+        ),
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
@@ -156,6 +163,15 @@ class SearchUsersItemDTO(BaseModel):
             "Apodo público, si tiene. Se puede buscar por él, así que aquí se "
             "devuelve junto al nombre real: es lo que permite saber cuál de los "
             "dos 'Chuchi' que salen es el que se buscaba."
+        ),
+    )
+    display_name: str = Field(
+        default="",
+        description=(
+            "Nombre con el que se debe mostrar a esta persona. Aquí conviven "
+            "los tres a propósito: `display_name` para pintar, `alias` y "
+            "`full_name` porque esta pantalla es la única que enseña los dos, "
+            "para distinguir a dos jugadores parecidos."
         ),
     )
     avatar_source: str = Field(default="", description="De donde sale su foto de perfil.")
@@ -195,6 +211,14 @@ class UserResponseDTO(BaseModel):
         description=(
             "Apodo público con el que la aplicación muestra a este usuario. "
             "Null si no ha puesto ninguno, y entonces se muestra su nombre real."
+        ),
+    )
+    display_name: str = Field(
+        default="",
+        description=(
+            "El nombre ya resuelto: el alias si lo hay, y si no el nombre "
+            "completo. Es lo que hay que pintar, para no repetir ese `or` en "
+            "cada pantalla."
         ),
     )
     country_code: str | None = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
