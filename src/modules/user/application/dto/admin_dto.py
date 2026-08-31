@@ -10,7 +10,7 @@ class AdminListUsersRequestDTO(BaseModel):
     """DTO de entrada para listar usuarios (admin)."""
 
     search: str | None = Field(
-        default=None, description="Filtro por nombre, apellidos o email (opcional)."
+        default=None, description="Filtro por nombre, apellidos, alias o email (opcional)."
     )
     is_admin: bool | None = Field(
         default=None, description="Filtra por rol: True=admins, False=jugadores."
@@ -31,6 +31,11 @@ class AdminUserSummaryDTO(BaseModel):
     id: UUID
     first_name: str
     last_name: str
+    # El alias va JUNTO al nombre real, no en su lugar: quien administra
+    # necesita saber de quien es la cuenta. Pero el listado ya se puede
+    # buscar por alias (BE #239), y sin este campo una busqueda por apodo
+    # devolvia filas donde nada de lo que se ve contiene lo que se busco
+    alias: str | None = None
     email: EmailStr
     handicap: float | None = None
     is_admin: bool
