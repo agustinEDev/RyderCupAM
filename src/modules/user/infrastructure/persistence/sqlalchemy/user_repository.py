@@ -115,6 +115,20 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """
         self._session.add(user)
 
+    async def find_by_alias(self, alias: str) -> User | None:
+        """
+        Busca un usuario por alias, ignorando mayúsculas.
+
+        `LOWER(alias) = LOWER(:alias)` es exactamente la expresión del índice
+        único `ix_users_alias_lower`, así que esta consulta lo usa.
+        """
+        normalized = alias.strip()
+        if not normalized:
+            return None
+        statement = select(User).filter(func.lower(User._alias) == normalized.lower())
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def find_by_full_name(self, full_name: str) -> User | None:
         """Busca un usuario por su nombre completo."""
         # Separar el nombre completo en palabras para buscar
