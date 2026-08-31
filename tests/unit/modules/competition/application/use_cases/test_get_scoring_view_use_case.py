@@ -185,3 +185,38 @@ class TestHoleCardPerPlayer:
 
         assert view.holes == []
         assert all(p.hole_card == [] for p in view.players)
+
+
+class TestScoringViewPaintsTheDisplayName:
+    """
+    La vista de anotación pinta `display_name`, no el nombre legal (BE #239).
+
+    Es la pantalla donde más se lee un nombre —quién anota a quién—, y el
+    campo ya era «nombre para enseñar», así que lo único que cambia es de
+    dónde sale.
+    """
+
+    @pytest.fixture
+    def user_repo_con_alias(self):
+        """Un repositorio donde `display_name` NO coincide con nombre+apellido."""
+
+        def _make(uid):
+            user = MagicMock()
+            user.first_name = "Nombre"
+            user.last_name = "Legal"
+            user.display_name = "Chuchi"
+            return user
+
+        repo = AsyncMock()
+        repo.find_by_id = AsyncMock(side_effect=_make)
+        return repo
+
+    @pytest.mark.asyncio
+    async def test_players_are_named_by_their_display_name(self, uow, user_repo_con_alias):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        uc = GetScoringViewUseCase(uow, user_repo_con_alias, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert {p.user_name for p in view.players} == {"Chuchi"}
+        assert "Nombre Legal" not in {p.user_name for p in view.players}
