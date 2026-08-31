@@ -89,7 +89,7 @@ class SendInvitationByEmailUseCase:
 
                 if invitee_user:
                     invitee_user_id = invitee_user.id
-                    invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
+                    invitee_name = invitee_user.display_name
 
                     # 5a. No self-invitation
                     if inviter_id == invitee_user_id:
@@ -131,10 +131,10 @@ class SendInvitationByEmailUseCase:
 
         # 9. Retornar DTO enriquecido
         async with self._user_uow:
+            # `display_name` (BE #239), tambien en el correo: ver el comentario
+            # gemelo en send_invitation_by_user_id_use_case
             inviter_user = await self._user_uow.users.find_by_id(inviter_id)
-            inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
-            )
+            inviter_name = inviter_user.display_name if inviter_user else "Unknown"
 
         # 10. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
         if self._email_service:

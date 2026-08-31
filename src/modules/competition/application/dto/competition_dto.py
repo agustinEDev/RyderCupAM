@@ -41,7 +41,7 @@ class CreatorDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del creador")
     last_name: str = Field(..., description="Apellido del creador")
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar al creador: su alias si tiene, "
             "y si no su nombre completo. Es lo que hay que pintar; first_name "

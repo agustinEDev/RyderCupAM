@@ -127,7 +127,7 @@ class FindUserResponseDTO(BaseModel):
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar a esta persona: su alias si "
             "tiene, y si no su nombre completo."
@@ -166,7 +166,7 @@ class SearchUsersItemDTO(BaseModel):
         ),
     )
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar a esta persona. Aquí conviven "
             "los tres a propósito: `display_name` para pintar, `alias` y "
@@ -214,7 +214,7 @@ class UserResponseDTO(BaseModel):
         ),
     )
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "El nombre ya resuelto: el alias si lo hay, y si no el nombre "
             "completo. Es lo que hay que pintar, para no repetir ese `or` en "

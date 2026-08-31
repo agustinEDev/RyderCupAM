@@ -35,7 +35,7 @@ class EnrolledUserDTO(BaseModel):
     first_name: str = Field(..., description="Nombre del usuario")
     last_name: str = Field(..., description="Apellido del usuario")
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar a este jugador: su alias si "
             "tiene, y si no su nombre completo."

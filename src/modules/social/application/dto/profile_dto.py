@@ -53,7 +53,7 @@ class PlayerProfileResponseDTO(BaseModel):
     first_name: str
     last_name: str
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar a esta persona: su alias si "
             "tiene, y si no su nombre completo."
@@ -121,7 +121,7 @@ class FeedAuthorDTO(BaseModel):
     first_name: str
     last_name: str
     display_name: str = Field(
-        default="",
+        ...,
         description=(
             "Nombre con el que se debe mostrar a esta persona: su alias si "
             "tiene, y si no su nombre completo."
