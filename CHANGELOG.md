@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-09-01
+
+### Added
+
+- **El alias: cada jugador puede elegir con qué nombre se le ve.** Quien pone un alias deja de aparecer por su nombre legal en toda la aplicación — en el saludo, en las búsquedas, en las partidas y en las clasificaciones. Quien no pone ninguno no nota nada.
+
+  - **Es único entre todos los usuarios, ignorando mayúsculas**, y es una decisión de producto, no un detalle técnico: dos cuentas llamadas «Chuchi» harían el alias inútil para encontrar gente y trivial hacerse pasar por otro. Lo garantiza un índice funcional y parcial —`UNIQUE (LOWER(alias)) WHERE alias IS NOT NULL`— además de una comprobación previa, porque entre esa comprobación y el commit cabe otra petición pidiendo el mismo alias.
+  - 2 a 20 caracteres, letras con acentos, dígitos, espacio y `. _ -`. El mínimo no es cosmético: el autocompletado necesita dos caracteres para dispararse, así que un alias de uno solo sería inencontrable.
+
+  ```
+  PATCH  /api/v1/users/profile     { "alias": "Chuchi" }   -> 200
+                                   { "alias": "" }         -> 200, lo borra
+                                   { "alias": "Chuchi" }   -> 409 si es de otro
+                                   { "alias": "C" }        -> 422
+  ```
+
+  Enviar el alias como cadena vacía lo borra y devuelve al nombre real; omitirlo —o mandarlo a `null`— lo deja como estaba, que es lo que ya significaba `null` en el resto de campos de este endpoint.
+
+- **Se puede buscar por alias.** Las cuatro consultas que buscan usuarios por nombre lo miran también: el autocompletado público, el listado de administración, el buscador de creador de competición y el repositorio en memoria que usan los tests. Sin esto, ponerse un apodo te volvía invisible para quien solo te conoce por él.
+
+- **`display_name` en las respuestas.** El servidor resuelve una sola vez «alias si lo hay, nombre completo si no» y manda el resultado, para que cada pantalla del cliente no repita ese `or` por su cuenta. Va en el usuario propio, la búsqueda, el creador de una competición, los inscritos, los perfiles de jugador y los autores del feed.
+
+- **El listado de administración enseña el alias junto al nombre legal**, nunca en su lugar: quien administra necesita saber de quién es la cuenta, pero ese listado ya se puede buscar por alias y sin el campo una búsqueda por apodo devolvía filas donde no aparecía por ningún lado lo que se había escrito.
+
+### Fixed
+
+- **El buscador de creador de competición devolvía la lista entera al buscar espacios en blanco**, y trataba lo tecleado como patrón: un `%` devolvía todas las competiciones y un `_` casaba con cualquier carácter. Las tres ramas de esa búsqueda escapan ahora lo que se escribe.
+
+### Notes
+
+- **La federación y los correos de cuenta siguen usando el nombre legal**, y hay tests que lo vigilan en las dos direcciones. La RFEG tiene fichada a la gente por el nombre con el que está federada: si esa consulta pasara a usar el alias, quien tuviera uno dejaría de encontrar su hándicap en silencio.
+- Migración `c8e1d5b73f92`. La columna es nueva y opcional y los campos de respuesta son añadidos, así que **el frontend anterior sigue funcionando** con este backend: no hay ventana peligrosa entre los dos despliegues. El índice se crea sobre cero filas el día del despliegue, porque todavía nadie tiene alias.
+
 ## [2.12.0] - 2026-08-22
 
 ### Added
