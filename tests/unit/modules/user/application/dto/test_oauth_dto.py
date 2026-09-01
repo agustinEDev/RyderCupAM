@@ -68,6 +68,7 @@ class TestGoogleLoginResponseDTO:
             email="test@example.com",
             first_name="John",
             last_name="Doe",
+            display_name="John Doe",
             email_verified=True,
             created_at=datetime.now(),
             updated_at=datetime.now(),

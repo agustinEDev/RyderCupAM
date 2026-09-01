@@ -184,3 +184,58 @@ class TestListMyInvitationsUseCase:
 
         # Debe ser 1, no 2 (deduplicado)
         assert result.total_count == 1
+
+    # ------------------------------------------------------------------
+    # El alias de quien invita (BE #239). La misma invitación se lee en dos
+    # pantallas —«Mis invitaciones» y la lista de la competición—, así que las
+    # dos tienen que decir el mismo nombre o la misma persona sale de dos
+    # maneras en el mismo flujo.
+    # ------------------------------------------------------------------
+
+    async def test_the_inviter_is_shown_by_their_alias(self, comp_uow, user_uow):
+        creator = await self._create_user(
+            user_uow, email="alias_creator@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Chuchi")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(
+            user_uow, email="alias_invitee@test.com", first_name="Ana", last_name="Garcia"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        await self._add_invitation(
+            comp_uow,
+            created.id,
+            creator.id,
+            "alias_invitee@test.com",
+            invitee_user_id=invitee.id,
+        )
+
+        result = await ListMyInvitationsUseCase(comp_uow, user_uow).execute(
+            user_id=str(invitee.id.value)
+        )
+
+        assert result.invitations[0].inviter_name == "Chuchi"
+        assert result.invitations[0].invitee_name == "Ana Garcia"
+
+    async def test_an_inviter_without_an_alias_keeps_their_name(self, comp_uow, user_uow):
+        creator = await self._create_user(
+            user_uow, email="plain_creator@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        invitee = await self._create_user(
+            user_uow, email="plain_invitee@test.com", first_name="Ana", last_name="Garcia"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        await self._add_invitation(
+            comp_uow,
+            created.id,
+            creator.id,
+            "plain_invitee@test.com",
+            invitee_user_id=invitee.id,
+        )
+
+        result = await ListMyInvitationsUseCase(comp_uow, user_uow).execute(
+            user_id=str(invitee.id.value)
+        )
+
+        assert result.invitations[0].inviter_name == "Agustin Estevez"

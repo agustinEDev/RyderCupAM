@@ -402,3 +402,46 @@ class TestRequestPasswordResetSecurityFeatures:
             # Token debe ser diferente al primero
             assert saved_user.password_reset_token != first_token
             assert saved_user.password_reset_token is not None
+
+
+class TestPasswordResetEmailIgnoresTheAlias:
+    """
+    Los correos de la cuenta van con el nombre LEGAL, no con el alias.
+
+    Hablan de la cuenta —verificarla, recuperar la contraseña—, así que se
+    dirigen a quien es su titular. El alias es para la pantalla.
+    """
+
+    async def test_the_email_greets_the_legal_name_not_the_alias(self, sample_user_data):
+        """
+        Given: Un usuario con alias
+        When: Pide recuperar la contraseña
+        Then: El correo lleva su nombre completo, y no el alias
+        """
+        uow = InMemoryUnitOfWork()
+        email_service = AsyncMock()
+        email_service.send_password_reset_email = AsyncMock(return_value=True)
+        use_case = RequestPasswordResetUseCase(uow, email_service)
+
+        user = User.create(
+            first_name=sample_user_data["name"],
+            last_name=sample_user_data["surname"],
+            email_str=sample_user_data["email"],
+            plain_password="CurrentPassword123!",
+        )
+        user.update_profile(alias="Chuchi")
+        async with uow:
+            await uow.users.save(user)
+
+        await use_case.execute(
+            RequestPasswordResetRequestDTO(
+                email=sample_user_data["email"],
+                ip_address="192.168.1.100",
+                user_agent="Mozilla/5.0 (Test Browser)",
+            )
+        )
+
+        call_args = email_service.send_password_reset_email.call_args
+        assert call_args.kwargs["user_name"] == user.get_full_name()
+        assert call_args.kwargs["user_name"] != "Chuchi"
+        assert user.display_name == "Chuchi"

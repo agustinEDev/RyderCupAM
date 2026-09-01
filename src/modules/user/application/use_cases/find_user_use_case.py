@@ -63,4 +63,5 @@ class FindUserUseCase:
                 user_id=user.id.value,
                 email=user.email.value,
                 full_name=user.get_full_name(),
+                display_name=user.display_name,
             )

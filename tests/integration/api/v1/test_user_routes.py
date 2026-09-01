@@ -319,6 +319,76 @@ class TestUserRoutes:
         assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     # ========================================================================
+    # Tests de display_name (BE #239)
+    # ========================================================================
+
+    async def test_current_user_carries_the_resolved_display_name(self, client: AsyncClient):
+        """
+        `GET /users/me` devuelve el nombre ya resuelto.
+
+        El backend resuelve el «alias o nombre» una vez, para que el frontend
+        no reparta ese `or` por cada pantalla.
+        """
+        auth_data = await create_authenticated_user(
+            client, "display1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+
+        sin_alias = await client.get("/api/v1/auth/current-user", headers=headers)
+        await client.patch("/api/v1/users/profile", json={"alias": "Chuchi"}, headers=headers)
+        con_alias = await client.get("/api/v1/auth/current-user", headers=headers)
+
+        assert sin_alias.status_code == status.HTTP_200_OK
+        assert sin_alias.json()["display_name"] == "Agustin Estevez"
+        assert con_alias.json()["display_name"] == "Chuchi"
+        # El nombre real sigue viajando: hay pantallas que lo necesitan, y el
+        # frontend desplegado hoy solo sabe leer esto
+        assert con_alias.json()["first_name"] == "Agustin"
+        assert con_alias.json()["last_name"] == "Estevez"
+
+    async def test_display_name_goes_back_to_the_real_name_when_the_alias_is_cleared(
+        self, client: AsyncClient
+    ):
+        """Quitar el alias devuelve el nombre completo a `display_name`."""
+        auth_data = await create_authenticated_user(
+            client, "display2.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Fugaz"}, headers=headers)
+
+        respuesta = await client.patch(
+            "/api/v1/users/profile", json={"alias": ""}, headers=headers
+        )
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        assert respuesta.json()["user"]["display_name"] == "Agustin Estevez"
+
+    async def test_autocomplete_carries_the_display_name(self, client: AsyncClient):
+        """El autocompletado lleva el nombre resuelto además del alias."""
+        owner = await create_authenticated_user(
+            client, "display3.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Resuelto"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "display4.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Resuelto"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        encontrado = response.json()["users"][0]
+        assert encontrado["display_name"] == "Resuelto"
+        assert encontrado["full_name"] == "Agustin Estevez"
+
+    # ========================================================================
     # Tests del autocompletado por alias (BE #239)
     # ========================================================================
 

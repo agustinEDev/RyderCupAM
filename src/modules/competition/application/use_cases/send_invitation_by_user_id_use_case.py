@@ -84,7 +84,7 @@ class SendInvitationByUserIdUseCase:
                 if not invitee_user:
                     raise InviteeNotFoundError(f"User not found: {request.invitee_user_id}")
                 invitee_email = str(invitee_user.email)
-                invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
+                invitee_name = invitee_user.display_name
 
             # 5. No self-invitation
             if inviter_id == invitee_user_id:
@@ -126,10 +126,12 @@ class SendInvitationByUserIdUseCase:
         # 10. Retornar DTO enriquecido
         # Obtener inviter_name
         async with self._user_uow:
+            # `display_name` (BE #239), tambien en el correo: es un aviso de
+            # que alguien te ha invitado, y a ese alguien lo reconoces por como
+            # aparece en la aplicacion. Los de cuenta —verificar el correo,
+            # recuperar la contraseña— siguen con el nombre legal
             inviter_user = await self._user_uow.users.find_by_id(inviter_id)
-            inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
-            )
+            inviter_name = inviter_user.display_name if inviter_user else "Unknown"
 
         # 11. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
         if self._email_service:

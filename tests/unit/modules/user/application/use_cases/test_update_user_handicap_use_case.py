@@ -8,6 +8,7 @@ from src.modules.user.application.use_cases.update_user_handicap_use_case import
     UpdateUserHandicapUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.external.mock_handicap_service import (
     MockHandicapService,
@@ -234,3 +235,61 @@ class TestUpdateMultipleHandicapsUseCase:
         assert stats["not_found"] == 0
         assert stats["no_handicap_found"] == 0
         assert stats["errors"] == 0
+
+
+class TestHandicapLookupIgnoresTheAlias:
+    """
+    La búsqueda en la RFEG va por el nombre LEGAL, nunca por el alias.
+
+    La federación tiene fichada a la gente por el nombre con el que está
+    federada. Si esta consulta pasara a usar `display_name`, quien tuviera
+    alias dejaría de encontrar su hándicap **en silencio**: no hay error, solo
+    un «no encontrado» que parece un problema de la RFEG.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_federation_is_asked_for_the_legal_name(self):
+        """
+        Given: Un usuario con alias, y una RFEG que solo conoce su nombre legal
+        When: Se actualiza su hándicap
+        Then: Lo encuentra — o sea, se preguntó por el nombre legal
+        """
+        uow = InMemoryUnitOfWork()
+        user = User.create("Rafael", "Nadal Parera", "rafa.alias@test.com", "P@ssw0rd123!")
+        user.update_profile(alias="Rafa")
+        await uow.users.save(user)
+        await uow.commit()
+
+        # `default=None`: si preguntara por el alias, no encontraría nada
+        handicap_service = MockHandicapService(
+            handicaps={"Rafael Nadal Parera": 2.5}, default=None
+        )
+        use_case = UpdateUserHandicapUseCase(uow, handicap_service)
+
+        result = await use_case.execute(user.id)
+
+        assert result is not None
+        assert result.handicap == pytest.approx(2.5)
+
+    @pytest.mark.asyncio
+    async def test_asking_for_the_alias_would_find_nothing(self):
+        """
+        El contrapunto del test anterior, para que no pase por casualidad.
+
+        Given: Una RFEG que solo conoce el ALIAS
+        When: Se actualiza el hándicap de ese usuario
+        Then: No lo encuentra, porque se pregunta por el nombre legal
+        """
+        uow = InMemoryUnitOfWork()
+        user = User.create("Rafael", "Nadal Parera", "rafa.alias2@test.com", "P@ssw0rd123!")
+        user.update_profile(alias="Rafa")
+        await uow.users.save(user)
+        await uow.commit()
+
+        handicap_service = MockHandicapService(handicaps={"Rafa": 2.5}, default=None)
+        use_case = UpdateUserHandicapUseCase(uow, handicap_service)
+
+        with pytest.raises(HandicapNotFoundError) as exc_info:
+            await use_case.execute(user.id)
+
+        assert "Rafael Nadal Parera" in str(exc_info.value)

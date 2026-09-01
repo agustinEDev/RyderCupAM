@@ -147,16 +147,17 @@ class RespondToInvitationUseCase:
     ) -> RespondInvitationResponseDTO:
         """Construye el DTO de respuesta enriquecido con nombres."""
         async with self._user_uow:
+            # `display_name` (BE #239): esta respuesta se pinta encima de la
+            # lista que ya enseñaba el alias. Con el nombre legal aqui, aceptar
+            # una invitacion de «Chuchi» cambiaba el nombre en la pantalla
             inviter_user = await self._user_uow.users.find_by_id(invitation.inviter_id)
-            inviter_name = (
-                f"{inviter_user.first_name} {inviter_user.last_name}" if inviter_user else "Unknown"
-            )
+            inviter_name = inviter_user.display_name if inviter_user else "Unknown"
 
             invitee_name = None
             if invitation.invitee_user_id:
                 invitee_user = await self._user_uow.users.find_by_id(invitation.invitee_user_id)
                 if invitee_user:
-                    invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
+                    invitee_name = invitee_user.display_name
 
         # Solo buscar competition si no fue pasado (path DECLINE)
         if not competition_name:

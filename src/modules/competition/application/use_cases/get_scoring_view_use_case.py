@@ -272,12 +272,16 @@ class GetScoringViewUseCase:
         )
 
     async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
-        """Resuelve user_id → 'first_name last_name'."""
+        """
+        Resuelve user_id → el nombre con el que se pinta a esa persona.
+
+        `display_name`, no el nombre legal: es el alias de quien lo tenga y el
+        nombre completo de quien no (BE #239). Los campos de esta vista
+        —`user_name`, `scorer_name`, `marks_name`— ya eran «nombre para
+        enseñar», así que no hace falta un campo nuevo: cambia lo que llevan.
+        """
         names = {}
         for uid in user_ids:
             user = await self._user_repo.find_by_id(uid)
-            if user:
-                names[uid] = f"{user.first_name} {user.last_name}"
-            else:
-                names[uid] = ""
+            names[uid] = user.display_name if user else ""
         return names

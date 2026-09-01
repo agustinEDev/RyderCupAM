@@ -744,8 +744,9 @@ class GetRecentMatchesUseCase:
 
     @staticmethod
     def _user_name(user_id: UserId, users_by_id: dict[UserId, User]) -> str:
+        """El nombre con el que se pinta a alguien: su alias si tiene (BE #239)."""
         user = users_by_id.get(user_id)
-        return f"{user.first_name} {user.last_name}" if user else "Unknown"
+        return user.display_name if user else "Unknown"
 
     @classmethod
     def _participant_name(
