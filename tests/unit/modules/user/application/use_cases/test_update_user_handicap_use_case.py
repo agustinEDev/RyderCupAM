@@ -8,6 +8,7 @@ from src.modules.user.application.use_cases.update_user_handicap_use_case import
     UpdateUserHandicapUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.errors.handicap_errors import HandicapNotFoundError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.external.mock_handicap_service import (
     MockHandicapService,
@@ -288,7 +289,7 @@ class TestHandicapLookupIgnoresTheAlias:
         handicap_service = MockHandicapService(handicaps={"Rafa": 2.5}, default=None)
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(HandicapNotFoundError) as exc_info:
             await use_case.execute(user.id)
 
         assert "Rafael Nadal Parera" in str(exc_info.value)
