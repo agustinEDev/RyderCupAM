@@ -51,11 +51,15 @@ class QuickMatchDTOMapper:
         participants_dto = []
         for p in quick_match.participants:
             if p.is_guest:
+                # Un invitado no tiene cuenta, así que tampoco alias: se queda
+                # con el nombre que tecleó quien lo añadió (BE #239)
                 name = f"{p.first_name} {p.last_name}"
                 handicap = p.handicap
             else:
                 user = users_by_id.get(p.user_id)
-                name = f"{user.first_name} {user.last_name}" if user else "Unknown"
+                # `display_name`: su alias si lo tiene, y si no su nombre
+                # completo. Este campo ya era «nombre para enseñar»
+                name = user.display_name if user else "Unknown"
                 profile_handicap = user.handicap.value if user and user.handicap else None
                 handicap = p.custom_handicap if p.custom_handicap is not None else profile_handicap
             participants_dto.append(

@@ -12,6 +12,8 @@ OWASP Coverage:
 import re
 from typing import Any, ClassVar
 
+from src.shared.application.validation.field_limits import FieldLimits
+
 
 class EmailValidator:
     """
@@ -230,6 +232,84 @@ class NameValidator:
         # Validar que no sea solo espacios/guiones
         if not any(c.isalpha() for c in normalized):
             raise ValueError(f"{field_name} debe contener al menos una letra")
+
+        return normalized
+
+
+class AliasValidator:
+    """
+    Validador del alias público del usuario.
+
+    El alias sustituye al nombre real en toda la aplicación, así que es lo
+    que otra gente teclea para encontrarte. De ahí las reglas:
+
+    - 2 a 20 caracteres.
+    - Letras (con acentos), dígitos, espacio y `.`, `_`, `-`.
+    - Ni emoji ni HTML.
+    - Se guarda tal y como se escribe; la unicidad la decide la base de
+      datos ignorando mayúsculas.
+    """
+
+    # NO se usa el rango `À-ÿ` de NameValidator: incluye los signos de
+    # multiplicar (U+00D7) y dividir (U+00F7), que no son letras. Aquí se
+    # saltan los dos a propósito en vez de heredar el fallo
+    ALIAS_REGEX = re.compile(r"^[a-zA-Z0-9À-ÖØ-öø-ÿ._\- ]+$")
+
+    # Los límites viven en FieldLimits, que es de donde los leen también los
+    # DTO: dos copias del número acabarían discrepando
+    MIN_LENGTH: ClassVar[int] = FieldLimits.ALIAS_MIN_LENGTH
+    MAX_LENGTH: ClassVar[int] = FieldLimits.ALIAS_MAX_LENGTH
+
+    @classmethod
+    def validate(cls, alias: str, field_name: str = "alias") -> str:
+        """
+        Valida y normaliza un alias.
+
+        Args:
+            alias: Alias a validar
+            field_name: Nombre del campo (para mensajes de error)
+
+        Returns:
+            Alias normalizado: sin espacios en los bordes y sin espacios
+            internos repetidos
+
+        Raises:
+            ValueError: Si el alias no cumple las reglas
+
+        Examples:
+            >>> AliasValidator.validate("Chuchi")
+            "Chuchi"
+
+            >>> AliasValidator.validate("  Chu  chi  ")
+            "Chu chi"
+
+            >>> AliasValidator.validate("C")
+            # ValueError: alias debe tener al menos 2 caracteres
+        """
+        if not alias:
+            raise ValueError(f"{field_name} no puede estar vacío")
+
+        # Normalizar: bordes fuera y espacios internos repetidos a uno solo.
+        # Sin esto, "Chu  chi" y "Chu chi" serían aliases distintos y el
+        # índice único no los vería como el mismo
+        normalized = " ".join(alias.split())
+
+        if len(normalized) < cls.MIN_LENGTH:
+            raise ValueError(f"{field_name} debe tener al menos {cls.MIN_LENGTH} caracteres")
+
+        if len(normalized) > cls.MAX_LENGTH:
+            raise ValueError(f"{field_name} no puede exceder {cls.MAX_LENGTH} caracteres")
+
+        if not cls.ALIAS_REGEX.match(normalized):
+            raise ValueError(
+                f"{field_name} solo puede contener letras, números, espacios y los signos "
+                f". _ -"
+            )
+
+        # Un alias de solo signos —"...", "-_-"— no identifica a nadie y no
+        # se puede buscar por él
+        if not any(c.isalnum() for c in normalized):
+            raise ValueError(f"{field_name} debe contener al menos una letra o un número")
 
         return normalized
 

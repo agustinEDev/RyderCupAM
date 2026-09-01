@@ -25,6 +25,8 @@ class UserProfileUpdatedEvent(DomainEvent):
         new_first_name: Nuevo nombre (puede ser None si no cambió)
         old_last_name: Apellido anterior (puede ser None si no cambió)
         new_last_name: Nuevo apellido (puede ser None si no cambió)
+        old_alias: Alias anterior (None si no cambió, y también si no tenía)
+        new_alias: Nuevo alias (None si no cambió, y también si lo ha quitado)
         updated_at: Timestamp de la actualización
     """
 
@@ -39,6 +41,8 @@ class UserProfileUpdatedEvent(DomainEvent):
     new_last_name: str | None = None
     old_country_code: str | None = None
     new_country_code: str | None = None
+    old_alias: str | None = None
+    new_alias: str | None = None
 
     @property
     def aggregate_id(self) -> str:
@@ -54,6 +58,11 @@ class UserProfileUpdatedEvent(DomainEvent):
     def has_last_name_change(self) -> bool:
         """Verifica si el apellido cambió."""
         return self.old_last_name != self.new_last_name
+
+    @property
+    def has_alias_change(self) -> bool:
+        """Verifica si el alias cambió."""
+        return self.old_alias != self.new_alias
 
     def to_dict(self) -> dict:
         """
@@ -74,6 +83,11 @@ class UserProfileUpdatedEvent(DomainEvent):
                         "old": self.old_last_name,
                         "new": self.new_last_name,
                         "changed": self.has_last_name_change,
+                    },
+                    "alias": {
+                        "old": self.old_alias,
+                        "new": self.new_alias,
+                        "changed": self.has_alias_change,
                     },
                 },
                 "updated_at": self.updated_at.isoformat(),

@@ -86,12 +86,16 @@ class SendFriendRequestUseCase:
         async with self._user_uow:
             requester = await self._user_uow.users.find_by_id(friendship.requester_id)
             addressee = await self._user_uow.users.find_by_id(friendship.addressee_id)
-            requester_name = (
-                f"{requester.first_name} {requester.last_name}" if requester else "Unknown"
-            )
-            addressee_name = (
-                f"{addressee.first_name} {addressee.last_name}" if addressee else "Unknown"
-            )
+            # `display_name`: el alias de quien lo tenga, y si no su nombre
+            # completo (BE #239).
+            #
+            # Tambien en el correo de aviso, al contrario que los de
+            # verificacion o reseteo de contraseña: aquellos hablan de la
+            # cuenta y necesitan el nombre legal, este es la aplicacion
+            # contandote que alguien te ha escrito, y a ese alguien lo
+            # reconoces por como aparece en la aplicacion
+            requester_name = requester.display_name if requester else "Unknown"
+            addressee_name = addressee.display_name if addressee else "Unknown"
 
         # Enviar email de notificacion (fuera de la transaccion, no bloquea la creacion)
         if self._email_service and addressee and addressee.email:

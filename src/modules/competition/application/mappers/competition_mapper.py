@@ -241,6 +241,7 @@ class CompetitionDTOMapper:
             id=creator.id.value,
             first_name=creator.first_name,
             last_name=creator.last_name,
+            display_name=creator.display_name,
             email=str(creator.email) if include_email else None,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),

@@ -87,3 +87,75 @@ async def test_the_limit_counts_only_visible_accounts():
     results = await repository.search_by_partial_name("Compartido", limit=2)
 
     assert visible.id in {found.id for found in results}
+
+
+@pytest.mark.asyncio
+async def test_search_finds_a_user_by_their_alias():
+    """
+    GIVEN: Una cuenta cuyo alias no se parece a su nombre
+    WHEN: Se busca por el alias
+    THEN: Aparece — sin esto, ponerse un apodo te haría invisible para quien
+          solo te conoce por él
+    """
+    repository = InMemoryUserRepository()
+    user = build_user("Agustin", "Estevez", "agustin@example.com")
+    user.update_profile(alias="Chuchi")
+    await repository.save(user)
+
+    results = await repository.search_by_partial_name("Chuchi")
+
+    assert [found.id for found in results] == [user.id]
+
+
+@pytest.mark.asyncio
+async def test_search_by_alias_matches_a_fragment_and_ignores_case():
+    """
+    GIVEN: Una cuenta con alias "Chuchi"
+    WHEN: Se busca "chu"
+    THEN: Aparece, igual que ocurre con el nombre
+    """
+    repository = InMemoryUserRepository()
+    user = build_user("Agustin", "Estevez", "agustin2@example.com")
+    user.update_profile(alias="Chuchi")
+    await repository.save(user)
+
+    results = await repository.search_by_partial_name("chu")
+
+    assert [found.id for found in results] == [user.id]
+
+
+@pytest.mark.asyncio
+async def test_search_by_alias_still_excludes_deactivated_accounts():
+    """
+    GIVEN: Una cuenta desactivada cuyo alias casa con la búsqueda
+    WHEN: Se busca por ese alias
+    THEN: No aparece — el alias no es una puerta trasera a la regla de
+          visibilidad que protege a quien pidió desactivarse
+    """
+    repository = InMemoryUserRepository()
+    active = build_user("Alicia", "Activa", "alicia2@example.com")
+    deactivated = build_user("Alberto", "Inactivo", "alberto2@example.com")
+    deactivated.update_profile(alias="Escondido")
+    deactivated.deactivate(deactivated_by_user_id=str(active.id.value))
+    await repository.save(active)
+    await repository.save(deactivated)
+
+    results = await repository.search_by_partial_name("Escondido")
+
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_search_still_finds_users_without_an_alias():
+    """
+    GIVEN: Una cuenta sin alias
+    WHEN: Se busca por su apellido
+    THEN: Sigue apareciendo — la rama nueva del OR no puede tapar a nadie
+    """
+    repository = InMemoryUserRepository()
+    user = build_user("Ana", "Sinalias", "ana@example.com")
+    await repository.save(user)
+
+    results = await repository.search_by_partial_name("Sinalias")
+
+    assert [found.id for found in results] == [user.id]

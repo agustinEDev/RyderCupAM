@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from src.shared.application.validation import (
+    AliasValidator,
     FieldLimits,
     NameValidator,
     sanitize_html,
@@ -125,6 +126,13 @@ class FindUserResponseDTO(BaseModel):
     user_id: UUID = Field(..., description="ID único del usuario encontrado.")
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     full_name: str = Field(..., description="Nombre completo del usuario.")
+    display_name: str = Field(
+        ...,
+        description=(
+            "Nombre con el que se debe mostrar a esta persona: su alias si "
+            "tiene, y si no su nombre completo."
+        ),
+    )
 
     # Configuración de Pydantic actualizada para V2
     model_config = ConfigDict(from_attributes=True)
@@ -136,8 +144,10 @@ class SearchUsersItemDTO(BaseModel):
 
     **No lleva correo.** Cualquiera puede buscar por nombre, asi que lo que
     devuelva esta busqueda es publico entre usuarios registrados: solo nombre,
-    apellidos y foto. Antes devolvia el correo, lo que permitia recolectar
-    direcciones tecleando nombres sueltos.
+    apellidos, alias y foto. Antes devolvia el correo, lo que permitia
+    recolectar direcciones tecleando nombres sueltos. El alias no amplia esa
+    exposicion: es publico por diseño, porque es lo que otros teclean para
+    encontrarte.
 
     La foto es lo que permite distinguir a dos jugadores que se llamen igual,
     que es el trabajo que hacia el correo.
@@ -147,6 +157,23 @@ class SearchUsersItemDTO(BaseModel):
     full_name: str = Field(..., description="Nombre completo del usuario.")
     first_name: str = Field(default="", description="Nombre, ya separado del apellido.")
     last_name: str = Field(default="", description="Apellidos, ya separados del nombre.")
+    alias: str | None = Field(
+        default=None,
+        description=(
+            "Apodo público, si tiene. Se puede buscar por él, así que aquí se "
+            "devuelve junto al nombre real: es lo que permite saber cuál de los "
+            "dos 'Chuchi' que salen es el que se buscaba."
+        ),
+    )
+    display_name: str = Field(
+        ...,
+        description=(
+            "Nombre con el que se debe mostrar a esta persona. Aquí conviven "
+            "los tres a propósito: `display_name` para pintar, `alias` y "
+            "`full_name` porque esta pantalla es la única que enseña los dos, "
+            "para distinguir a dos jugadores parecidos."
+        ),
+    )
     avatar_source: str = Field(default="", description="De donde sale su foto de perfil.")
     avatar_preset_id: int | None = Field(default=None, description="Avatar predefinido, si usa uno.")
     has_avatar_upload: bool = Field(
@@ -179,6 +206,21 @@ class UserResponseDTO(BaseModel):
     email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
     first_name: str = Field(..., description="Nombre del usuario.")
     last_name: str = Field(..., description="Apellido del usuario.")
+    alias: str | None = Field(
+        None,
+        description=(
+            "Apodo público con el que la aplicación muestra a este usuario. "
+            "Null si no ha puesto ninguno, y entonces se muestra su nombre real."
+        ),
+    )
+    display_name: str = Field(
+        ...,
+        description=(
+            "El nombre ya resuelto: el alias si lo hay, y si no el nombre "
+            "completo. Es lo que hay que pintar, para no repetir ese `or` en "
+            "cada pantalla."
+        ),
+    )
     country_code: str | None = Field(None, description="Código ISO del país (2 letras, ej: 'ES').")
     handicap: float | None = Field(None, description="Handicap de golf del usuario.")
     handicap_updated_at: datetime | None = Field(
@@ -395,6 +437,46 @@ class UpdateProfileRequestDTO(BaseModel):
         pattern="^(MALE|FEMALE)$",
         description="Nuevo género del usuario (MALE/FEMALE). Opcional.",
     )
+    alias: str | None = Field(
+        None,
+        max_length=FieldLimits.ALIAS_MAX_LENGTH,
+        description=(
+            "Nuevo alias público. Enviar cadena vacía lo borra y devuelve al "
+            "usuario a su nombre real. Omitir el campo —o mandarlo a null— lo "
+            "deja como está."
+        ),
+    )
+
+    @field_validator("alias")
+    @classmethod
+    def sanitize_and_validate_alias(cls, v: str | None) -> str | None:
+        """
+        Sanitiza y valida el alias.
+
+        La cadena vacía NO se valida: es la forma de pedir que se borre, y se
+        deja pasar tal cual para que la entidad la traduzca a NULL.
+        """
+        if v is None:
+            return None
+
+        if v.strip() == "":
+            return ""
+
+        # El formato se valida ANTES de sanear, y sobre lo que la persona
+        # escribió. Al revés, `Chuchi & Co` salía de `sanitize_html` como
+        # `Chuchi &amp; Co` y se rechazaba con un «no puede contener HTML» que
+        # no era verdad: lo que sobra ahí es el `&`, y eso ya lo dice el
+        # mensaje de los caracteres permitidos
+        validated = AliasValidator.validate(v, field_name="alias")
+
+        # Cinturón: la lista de caracteres permitidos ya deja fuera `<`, `>` y
+        # `&`, así que esto no deberia disparar nunca. Si algun dia se ampliara
+        # esa lista, mejor un rechazo que guardar en silencio algo distinto de
+        # lo que se pidió: el alias es único y es lo que otros teclean
+        if sanitize_html(validated) != validated:
+            raise ValueError("alias no puede contener HTML")
+
+        return validated
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -413,9 +495,25 @@ class UpdateProfileRequestDTO(BaseModel):
 
     def model_post_init(self, __context) -> None:
         """Valida que se proporcione al menos un campo."""
-        if not self.first_name and not self.last_name and not self.country_code and not self.gender:
+        # El alias se mira por si VINO en la petición, no por su valor: mandar
+        # `alias: ""` es una petición legítima —«quítame el alias»— y con la
+        # comprobación por valor se leía como «no has mandado nada».
+        #
+        # `null` NO cuenta, igual que en el resto de campos de este endpoint,
+        # donde `"last_name": null` significa «no lo toques». Sin esto,
+        # `{"alias": null}` a secas pasaba el DTO y reventaba mas adentro, en
+        # la entidad, con un 400 y un mensaje en ingles
+        alias_provided = "alias" in self.model_fields_set and self.alias is not None
+        if (
+            not self.first_name
+            and not self.last_name
+            and not self.country_code
+            and not self.gender
+            and not alias_provided
+        ):
             raise ValueError(
-                "Debe proporcionar al menos 'first_name', 'last_name', 'country_code' o 'gender'."
+                "Debe proporcionar al menos 'first_name', 'last_name', 'country_code', "
+                "'gender' o 'alias'."
             )
 
 

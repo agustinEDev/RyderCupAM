@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
@@ -124,3 +125,206 @@ async def test_search_by_partial_name_finds_a_reactivated_account(db_session):
     results = await repository.search_by_partial_name("Reactivado")
 
     assert user.id in {found.id for found in results}
+
+
+async def test_the_database_refuses_two_users_with_the_same_alias(db_session):
+    """
+    La unicidad del alias la impone la BASE DE DATOS, no solo el caso de uso.
+
+    El índice `ix_users_alias_lower` se declara en los metadatos y no solo en
+    la migración, así que existe también en el esquema de los tests: si algún
+    día desapareciera la comprobación previa del caso de uso, este test se
+    pondría en rojo en vez de dejar pasar dos aliases iguales hasta producción.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    first = User.create(
+        first_name="Ana",
+        last_name="Garcia",
+        email_str="alias.uno@example.com",
+        plain_password="ValidPassword123!",
+    )
+    first.update_profile(alias="Chuchi")
+    await repository.save(first)
+    await db_session.commit()
+
+    second = User.create(
+        first_name="Agustin",
+        last_name="Estevez",
+        email_str="alias.dos@example.com",
+        plain_password="ValidPassword123!",
+    )
+    second.update_profile(alias="Chuchi")
+    await repository.save(second)
+
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+
+
+async def test_the_unique_alias_ignores_case(db_session):
+    """
+    "chuchi" y "Chuchi" son el mismo alias para la base de datos.
+
+    Es la mitad de la decisión de producto: dos cuentas llamadas igual harían
+    inútil el alias para encontrar gente. Lo resuelve el índice funcional sobre
+    LOWER(alias), no una comparación en Python.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    first = User.create(
+        first_name="Ana",
+        last_name="Garcia",
+        email_str="alias.tres@example.com",
+        plain_password="ValidPassword123!",
+    )
+    first.update_profile(alias="Chuchi")
+    await repository.save(first)
+    await db_session.commit()
+
+    second = User.create(
+        first_name="Agustin",
+        last_name="Estevez",
+        email_str="alias.cuatro@example.com",
+        plain_password="ValidPassword123!",
+    )
+    second.update_profile(alias="chuchi")
+    await repository.save(second)
+
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+
+
+async def test_users_without_an_alias_do_not_collide(db_session):
+    """
+    El índice es parcial: las filas sin alias no entran, así que cualquier
+    número de cuentas puede convivir sin apodo. Es el caso de TODAS las
+    existentes el día del despliegue.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    for i in range(3):
+        user = User.create(
+            first_name="Sin",
+            last_name="Alias",
+            email_str=f"alias.libre{i}@example.com",
+            plain_password="ValidPassword123!",
+        )
+        await repository.save(user)
+    await db_session.commit()
+
+    assert await repository.find_by_alias("Chuchi") is None
+
+
+async def test_find_by_alias_ignores_case(db_session):
+    """`find_by_alias` encuentra el alias sea cual sea la caja que se teclee."""
+    repository = SQLAlchemyUserRepository(db_session)
+    user = User.create(
+        first_name="Ana",
+        last_name="Garcia",
+        email_str="alias.cinco@example.com",
+        plain_password="ValidPassword123!",
+    )
+    user.update_profile(alias="Chuchi")
+    await repository.save(user)
+    await db_session.commit()
+
+    found = await repository.find_by_alias("cHuChI")
+
+    assert found is not None
+    assert found.id == user.id
+
+
+async def test_search_by_partial_name_finds_a_user_by_alias(db_session):
+    """
+    El autocompletado encuentra por alias, por fragmento y sin distinguir
+    mayúsculas.
+
+    Es lo que hace útil el apodo: quien solo te conoce por él teclea eso.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    user = User.create(
+        first_name="Agustin",
+        last_name="Estevez",
+        email_str="busca.alias@example.com",
+        plain_password="ValidPassword123!",
+    )
+    user.update_profile(alias="Chuchi")
+    await repository.save(user)
+    await db_session.commit()
+
+    por_entero = await repository.search_by_partial_name("Chuchi")
+    por_fragmento = await repository.search_by_partial_name("chu")
+
+    assert [u.id for u in por_entero] == [user.id]
+    assert [u.id for u in por_fragmento] == [user.id]
+
+
+async def test_search_by_alias_does_not_resurface_deactivated_accounts(db_session):
+    """
+    El alias no es una puerta trasera a la regla de visibilidad.
+
+    Una cuenta desactivada no aparece en el autocompletado, y buscar por su
+    alias no puede saltarse eso: protege a quien pidió desactivarse.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    active = User.create(
+        first_name="Alicia",
+        last_name="Activa",
+        email_str="alias.activa@example.com",
+        plain_password="ValidPassword123!",
+    )
+    hidden = User.create(
+        first_name="Alberto",
+        last_name="Inactivo",
+        email_str="alias.inactivo@example.com",
+        plain_password="ValidPassword123!",
+    )
+    hidden.update_profile(alias="Escondido")
+    hidden.deactivate(deactivated_by_user_id=str(active.id.value))
+    await repository.save(active)
+    await repository.save(hidden)
+    await db_session.commit()
+
+    results = await repository.search_by_partial_name("Escondido")
+
+    assert results == []
+
+
+async def test_search_still_finds_accounts_without_an_alias(db_session):
+    """
+    La rama nueva del OR no puede tapar a nadie: LOWER(NULL) es NULL, así que
+    quien no tiene apodo sigue apareciendo por su nombre.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    user = User.create(
+        first_name="Ana",
+        last_name="Sinapodo",
+        email_str="sin.apodo@example.com",
+        plain_password="ValidPassword123!",
+    )
+    await repository.save(user)
+    await db_session.commit()
+
+    results = await repository.search_by_partial_name("Sinapodo")
+
+    assert [u.id for u in results] == [user.id]
+
+
+async def test_admin_listing_matches_the_alias_too(db_session):
+    """
+    El listado de administración busca también por alias.
+
+    Ahí se sigue viendo el nombre legal —quien administra necesita saber de
+    quién es la cuenta—, pero si busca por el apodo tiene que encontrarla.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    user = User.create(
+        first_name="Agustin",
+        last_name="Estevez",
+        email_str="admin.busca@example.com",
+        plain_password="ValidPassword123!",
+    )
+    user.update_profile(alias="Chuchi")
+    await repository.save(user)
+    await db_session.commit()
+
+    results = await repository.find_all(search="Chuchi")
+
+    assert [u.id for u in results] == [user.id]

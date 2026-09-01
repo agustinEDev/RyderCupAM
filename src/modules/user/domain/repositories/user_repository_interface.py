@@ -121,6 +121,26 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_alias(self, alias: str) -> User | None:
+        """
+        Busca un usuario por su alias, ignorando mayúsculas.
+
+        Es la consulta con la que se comprueba si un alias está libre antes de
+        guardarlo. No sustituye al índice único de la base de datos: entre esta
+        consulta y el commit cabe otra petición pidiendo el mismo alias.
+
+        Args:
+            alias (str): El alias a buscar
+
+        Returns:
+            Optional[User]: El usuario que lo tiene, o None si está libre
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def find_by_full_name(self, full_name: str) -> User | None:
         """
         Busca un usuario por su nombre completo (first_name + last_name).
@@ -139,7 +159,7 @@ class UserRepositoryInterface(ABC):
     @abstractmethod
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
         """
-        Searches users whose first_name or last_name partially matches the query (case-insensitive).
+        Searches users whose first_name, last_name or alias partially matches the query (case-insensitive).
 
         Solo devuelve cuentas activas: esta búsqueda está abierta a cualquier
         usuario registrado, así que una cuenta desactivada no puede aparecer en
@@ -202,7 +222,7 @@ class UserRepositoryInterface(ABC):
             limit (int): Número máximo de usuarios a retornar (default: 100)
             offset (int): Número de usuarios a saltar (default: 0)
             search (str | None): Si se indica, filtra por coincidencia parcial
-                (case-insensitive) en nombre, apellidos o email
+                (case-insensitive) en nombre, apellidos, alias o email
             is_admin (bool | None): Si se indica, filtra por rol (admin/jugador)
             is_active (bool | None): Si se indica, filtra por cuentas activas/desactivadas
             email_verified (bool | None): Si se indica, filtra por email verificado o no

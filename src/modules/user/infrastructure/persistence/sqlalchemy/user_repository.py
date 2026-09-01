@@ -62,6 +62,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
             func.lower(User._last_name).contains(q, autoescape=True),
             func.lower(User._first_name + " " + User._last_name).contains(q, autoescape=True),
             func.lower(User._email_value).contains(q, autoescape=True),
+            # El alias tambien: quien administra ve el nombre legal, pero si
+            # busca por el apodo que le han dado tiene que encontrar la cuenta.
+            # LOWER(NULL) es NULL, asi que las cuentas sin alias no se pierden:
+            # siguen entrando por cualquiera de las otras ramas del OR
+            func.lower(User._alias).contains(q, autoescape=True),
         )
 
     def _build_filters(
@@ -115,6 +120,20 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         """
         self._session.add(user)
 
+    async def find_by_alias(self, alias: str) -> User | None:
+        """
+        Busca un usuario por alias, ignorando mayúsculas.
+
+        `LOWER(alias) = LOWER(:alias)` es exactamente la expresión del índice
+        único `ix_users_alias_lower`, así que esta consulta lo usa.
+        """
+        normalized = alias.strip()
+        if not normalized:
+            return None
+        statement = select(User).filter(func.lower(User._alias) == normalized.lower())
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def find_by_full_name(self, full_name: str) -> User | None:
         """Busca un usuario por su nombre completo."""
         # Separar el nombre completo en palabras para buscar
@@ -142,9 +161,11 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
         """
-        Searches active users by partial name match using ILIKE.
+        Searches active users by partial name or alias match using ILIKE.
 
-        Requires at least 2 characters.
+        Requires at least 2 characters. El alias entra en la busqueda porque es
+        justo lo que otra gente teclea para encontrarte: sin esto, ponerse un
+        apodo te hacia invisible para quien solo lo conoce por el.
 
         Las cuentas desactivadas se excluyen: cualquiera puede buscar por
         nombre, así que dejarlas visibles significa exponer a quien pidió
@@ -165,6 +186,7 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
                     func.lower(User._first_name + " " + User._last_name).contains(
                         q, autoescape=True
                     ),
+                    func.lower(User._alias).contains(q, autoescape=True),
                 ),
             )
             .limit(limit)

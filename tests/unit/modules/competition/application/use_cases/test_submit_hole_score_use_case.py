@@ -86,6 +86,9 @@ def user_repo():
         user = MagicMock()
         user.first_name = "Player"
         user.last_name = str(uid)[:8]
+        # La vista de anotación pinta `display_name` (BE #239): sin esto el
+        # mock devuelve otro MagicMock y el DTO lo rechaza por no ser texto
+        user.display_name = f"Player {str(uid)[:8]}"
         return user
 
     repo = AsyncMock()

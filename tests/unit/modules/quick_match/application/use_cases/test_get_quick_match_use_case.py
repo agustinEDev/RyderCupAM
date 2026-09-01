@@ -521,3 +521,75 @@ class TestFoursomesScoresOneBallPerSide:
         ).execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.standing is None
+
+
+class TestQuickMatchShowsTheAlias:
+    """
+    Los nombres de una partida rápida se pintan con `display_name` (BE #239).
+
+    Es donde más se leen: la lista de participantes, quién anota a quién y la
+    tarjeta. Si aquí saliera el nombre legal, el alias no serviría de nada.
+    """
+
+    async def test_a_participant_is_shown_by_their_alias(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        creator = await create_user(user_uow, unique_email("alias"))
+        other = await create_user(user_uow, unique_email("alias"))
+        async with user_uow:
+            other.update_profile(alias="Chuchi")
+            await user_uow.users.save(other)
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        )
+        detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
+
+        nombres = {p.name for p in detail.participants}
+        assert "Chuchi" in nombres
+        assert "Test User" in nombres  # el que no tiene alias, con su nombre
+
+    async def test_the_scorer_is_named_by_their_alias(self, qm_uow, user_uow, golf_course_uow):
+        creator = await create_user(user_uow, unique_email("alias"))
+        other = await create_user(user_uow, unique_email("alias"))
+        async with user_uow:
+            creator.update_profile(alias="Anotador")
+            await user_uow.users.save(creator)
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        )
+        detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
+
+        assert detail.scoring_assignments[0].scorer_name == "Anotador"
+
+    async def test_a_guest_keeps_the_name_that_was_typed(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        """
+        Un invitado no tiene cuenta, así que tampoco alias.
+
+        El punto gemelo de esta regla: si el `else` del mapper hubiera
+        arrastrado al `if`, el invitado se habría quedado sin nombre.
+        """
+        creator = await create_user(user_uow, unique_email("alias"))
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=creator.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        qm.add_participant(
+            QuickMatchParticipant.for_guest(first_name="Jane", last_name="Doe", handicap=18.0)
+        )
+        async with qm_uow:
+            await qm_uow.quick_matches.add(qm)
+
+        use_case = GetQuickMatchUseCase(
+            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+        )
+        detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
+
+        assert "Jane Doe" in {p.name for p in detail.participants}

@@ -72,6 +72,7 @@ class GetPlayerProfileUseCase:
                 "id": str(user.id.value),
                 "first_name": user.first_name,
                 "last_name": user.last_name,
+                "display_name": user.display_name,
                 "avatar_source": user.avatar_source.value,
                 "avatar_preset_id": user.avatar_preset_id,
                 "has_avatar_upload": user.active_avatar_upload_id is not None,

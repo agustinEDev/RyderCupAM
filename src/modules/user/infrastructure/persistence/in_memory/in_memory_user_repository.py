@@ -1,4 +1,5 @@
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.errors.user_errors import AliasAlreadyTakenError
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -15,6 +16,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
         self._users: dict[UserId, User] = {}
 
     async def save(self, user: User) -> None:
+        self._guard_alias_is_free(user)
         self._users[user.id] = user
 
     async def find_by_id(self, user_id: UserId) -> User | None:
@@ -33,17 +35,43 @@ class InMemoryUserRepository(UserRepositoryInterface):
                 return user
         return None
 
+    async def find_by_alias(self, alias: str) -> User | None:
+        normalized = alias.strip().lower()
+        if not normalized:
+            return None
+        for user in self._users.values():
+            if user.alias and user.alias.lower() == normalized:
+                return user
+        return None
+
+    def _guard_alias_is_free(self, user: User) -> None:
+        """
+        Impone la misma unicidad que el índice de la base de datos.
+
+        Sin esto, un caso de uso podría guardar dos veces el mismo alias en los
+        tests unitarios y pasar, contradiciendo lo que hace el repositorio real
+        en producción.
+        """
+        if not user.alias:
+            return
+        alias_lower = user.alias.lower()
+        for other in self._users.values():
+            if other.id != user.id and other.alias and other.alias.lower() == alias_lower:
+                raise AliasAlreadyTakenError(f"El alias '{user.alias}' ya está en uso.")
+
     def _matches_search(self, user: User, search: str | None) -> bool:
         if not search or not search.strip():
             return True
         q = search.strip().lower()
         full_name = f"{user.first_name} {user.last_name}".lower()
         email = str(user.email).lower() if user.email else ""
+        alias = user.alias.lower() if user.alias else ""
         return (
             q in user.first_name.lower()
             or q in user.last_name.lower()
             or q in full_name
             or q in email
+            or (bool(alias) and q in alias)
         )
 
     def _matches_filters(
@@ -101,6 +129,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def update(self, user: User) -> None:
         if user.id in self._users:
+            self._guard_alias_is_free(user)
             self._users[user.id] = user
 
     async def find_by_full_name(self, full_name: str) -> User | None:
@@ -115,10 +144,10 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
         """
-        Searches active users by partial name match.
+        Searches active users by partial name or alias match.
 
         Requires at least 2 characters. Excluye las cuentas desactivadas, igual
-        que el repositorio real.
+        que el repositorio real, y busca en el alias por la misma razon.
         """
         query_lower = query.lower().strip()
         if len(query_lower) < self.MIN_SEARCH_LENGTH:
@@ -128,10 +157,12 @@ class InMemoryUserRepository(UserRepositoryInterface):
             if not user.is_active:
                 continue
             full_name = f"{user.first_name} {user.last_name}".lower()
+            alias = user.alias.lower() if user.alias else ""
             if (
                 query_lower in full_name
                 or query_lower in user.first_name.lower()
                 or query_lower in user.last_name.lower()
+                or (bool(alias) and query_lower in alias)
             ):
                 results.append(user)
                 if len(results) >= limit:

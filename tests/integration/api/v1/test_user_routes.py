@@ -319,6 +319,347 @@ class TestUserRoutes:
         assert update_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     # ========================================================================
+    # Tests de display_name (BE #239)
+    # ========================================================================
+
+    async def test_current_user_carries_the_resolved_display_name(self, client: AsyncClient):
+        """
+        `GET /users/me` devuelve el nombre ya resuelto.
+
+        El backend resuelve el «alias o nombre» una vez, para que el frontend
+        no reparta ese `or` por cada pantalla.
+        """
+        auth_data = await create_authenticated_user(
+            client, "display1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+
+        sin_alias = await client.get("/api/v1/auth/current-user", headers=headers)
+        await client.patch("/api/v1/users/profile", json={"alias": "Chuchi"}, headers=headers)
+        con_alias = await client.get("/api/v1/auth/current-user", headers=headers)
+
+        assert sin_alias.status_code == status.HTTP_200_OK
+        assert sin_alias.json()["display_name"] == "Agustin Estevez"
+        assert con_alias.json()["display_name"] == "Chuchi"
+        # El nombre real sigue viajando: hay pantallas que lo necesitan, y el
+        # frontend desplegado hoy solo sabe leer esto
+        assert con_alias.json()["first_name"] == "Agustin"
+        assert con_alias.json()["last_name"] == "Estevez"
+
+    async def test_display_name_goes_back_to_the_real_name_when_the_alias_is_cleared(
+        self, client: AsyncClient
+    ):
+        """Quitar el alias devuelve el nombre completo a `display_name`."""
+        auth_data = await create_authenticated_user(
+            client, "display2.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Fugaz"}, headers=headers)
+
+        respuesta = await client.patch(
+            "/api/v1/users/profile", json={"alias": ""}, headers=headers
+        )
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        assert respuesta.json()["user"]["display_name"] == "Agustin Estevez"
+
+    async def test_autocomplete_carries_the_display_name(self, client: AsyncClient):
+        """El autocompletado lleva el nombre resuelto además del alias."""
+        owner = await create_authenticated_user(
+            client, "display3.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Resuelto"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "display4.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Resuelto"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        encontrado = response.json()["users"][0]
+        assert encontrado["display_name"] == "Resuelto"
+        assert encontrado["full_name"] == "Agustin Estevez"
+
+    # ========================================================================
+    # Tests del autocompletado por alias (BE #239)
+    # ========================================================================
+
+    async def test_autocomplete_finds_a_user_by_their_alias(self, client: AsyncClient):
+        """El autocompletado encuentra por alias, no solo por nombre."""
+        owner = await create_authenticated_user(
+            client, "auto1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "auto2.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Chuchi"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        users = response.json()["users"]
+        assert [u["alias"] for u in users] == ["Chuchi"]
+        assert users[0]["full_name"] == "Agustin Estevez"
+
+    async def test_autocomplete_carries_a_null_alias_when_there_is_none(
+        self, client: AsyncClient
+    ):
+        """Quien no tiene alias sale igual, con el campo a null."""
+        await create_authenticated_user(
+            client, "auto3.test@example.com", "s3cur3P@ssw0rd!", "Ana", "Buscable"
+        )
+        searcher = await create_authenticated_user(
+            client, "auto4.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Buscable"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        users = response.json()["users"]
+        assert len(users) == 1
+        assert users[0]["alias"] is None
+
+    async def test_autocomplete_does_not_leak_the_email(self, client: AsyncClient):
+        """
+        El alias no amplía lo que esta búsqueda expone.
+
+        Sigue sin llevar correo, que es lo que se retiró para que no se
+        pudieran recolectar direcciones tecleando nombres sueltos.
+        """
+        owner = await create_authenticated_user(
+            client, "auto5.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Discreto"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        searcher = await create_authenticated_user(
+            client, "auto6.test@example.com", "s3cur3P@ssw0rd!", "Otra", "Persona"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search-autocomplete",
+            params={"query": "Discreto"},
+            headers={"Authorization": f"Bearer {searcher['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "email" not in response.json()["users"][0]
+
+    # ========================================================================
+    # Tests del alias (BE #239)
+    # ========================================================================
+
+    async def test_update_profile_sets_an_alias(self, client: AsyncClient):
+        """Guardar un alias devuelve 200 y el alias en la respuesta."""
+        auth_data = await create_authenticated_user(
+            client, "alias1.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        token = auth_data["token"]
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] == "Chuchi"
+
+    async def test_update_profile_alias_alone_is_enough(self, client: AsyncClient):
+        """
+        El alias cuenta como campo: no hace falta mandar nombre y apellidos.
+
+        Es lo que permite el lápiz del panel, que solo manda el alias.
+        """
+        auth_data = await create_authenticated_user(
+            client, "alias2.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        token = auth_data["token"]
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Chuchi2"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["first_name"] == "Agustin"
+
+    async def test_update_profile_clears_the_alias(self, client: AsyncClient):
+        """Mandar el alias vacío lo borra y devuelve al nombre real."""
+        auth_data = await create_authenticated_user(
+            client, "alias3.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        token = auth_data["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Borrable"}, headers=headers)
+
+        response = await client.patch(
+            "/api/v1/users/profile", json={"alias": ""}, headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] is None
+
+    async def test_update_profile_rejects_an_alias_taken_by_somebody_else(
+        self, client: AsyncClient
+    ):
+        """Un alias que ya tiene otra persona devuelve 409."""
+        owner = await create_authenticated_user(
+            client, "alias4.test@example.com", "s3cur3P@ssw0rd!", "Ana", "Garcia"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Repetido"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        other = await create_authenticated_user(
+            client, "alias5.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Repetido"},
+            headers={"Authorization": f"Bearer {other['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "Repetido" in response.json()["detail"]
+
+    async def test_update_profile_alias_conflict_ignores_case(self, client: AsyncClient):
+        """La unicidad ignora mayúsculas: "repetido" choca con "Repetido"."""
+        owner = await create_authenticated_user(
+            client, "alias6.test@example.com", "s3cur3P@ssw0rd!", "Ana", "Garcia"
+        )
+        await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Mayusculas"},
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
+        other = await create_authenticated_user(
+            client, "alias7.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "mayusculas"},
+            headers={"Authorization": f"Bearer {other['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    async def test_update_profile_keeping_your_own_alias_is_not_a_conflict(
+        self, client: AsyncClient
+    ):
+        """Reenviar el alias propio con otro campo no choca consigo mismo."""
+        auth_data = await create_authenticated_user(
+            client, "alias8.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Propio"}, headers=headers)
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "Propio", "first_name": "Agus"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] == "Propio"
+        assert response.json()["user"]["first_name"] == "Agus"
+
+    async def test_update_profile_rejects_an_invalid_alias(self, client: AsyncClient):
+        """
+        Un alias inválido lo para Pydantic, que devuelve 422.
+
+        NO es un 400: la validación vive en el DTO, así que la petición ni
+        llega al caso de uso.
+        """
+        auth_data = await create_authenticated_user(
+            client, "alias9.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+
+        for invalid in ("C", "a" * 21, "Chu<b>chi", "chu@chi"):
+            response = await client.patch(
+                "/api/v1/users/profile", json={"alias": invalid}, headers=headers
+            )
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, invalid
+
+    async def test_update_profile_rejects_a_null_alias_on_its_own(self, client: AsyncClient):
+        """
+        `{"alias": null}` a secas es «no mandas nada», y lo para el DTO.
+
+        Debe salir como 422 con el mensaje del propio DTO, no como un 400 en
+        inglés desde la entidad.
+        """
+        auth_data = await create_authenticated_user(
+            client, "alias11.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": None},
+            headers={"Authorization": f"Bearer {auth_data['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_update_profile_null_alias_does_not_clear_it(self, client: AsyncClient):
+        """Con otro campo al lado, el alias a null se queda como estaba."""
+        auth_data = await create_authenticated_user(
+            client, "alias12.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+        headers = {"Authorization": f"Bearer {auth_data['token']}"}
+        await client.patch("/api/v1/users/profile", json={"alias": "Intacto"}, headers=headers)
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"first_name": "Agus", "alias": None},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] == "Intacto"
+
+    async def test_update_profile_normalises_spaces_in_the_alias(self, client: AsyncClient):
+        """Los espacios de los bordes se quitan y los internos se colapsan."""
+        auth_data = await create_authenticated_user(
+            client, "alias10.test@example.com", "s3cur3P@ssw0rd!", "Agustin", "Estevez"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/profile",
+            json={"alias": "  Chu  chi  "},
+            headers={"Authorization": f"Bearer {auth_data['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["user"]["alias"] == "Chu chi"
+
+    # ========================================================================
     # Tests para Update Security (PATCH /api/v1/users/security)
     # ========================================================================
 

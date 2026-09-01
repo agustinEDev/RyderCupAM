@@ -11,9 +11,10 @@ OWASP Coverage:
 
 from .field_limits import FieldLimits
 from .sanitizers import sanitize_all_fields, sanitize_html
-from .validators import EmailValidator, NameValidator, validate_email_strict
+from .validators import AliasValidator, EmailValidator, NameValidator, validate_email_strict
 
 __all__ = [
+    "AliasValidator",
     "EmailValidator",
     "FieldLimits",
     "NameValidator",

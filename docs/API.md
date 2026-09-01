@@ -295,16 +295,22 @@ Returned in all endpoints that include user data (login, current-user, register,
 **GET /api/v1/users/search-autocomplete** (Authenticated)
 
 **Query Parameters:**
-- `query` (string, required, 2-100 chars) - Partial name to search for
+- `query` (string, required, 2-100 chars) - Partial name or alias to search for
 
 **Response (200 OK):**
 - `users` (array, max 10 results)
   - `user_id` (string, UUID)
-  - `email` (string)
   - `full_name` (string) - "first_name last_name"
+  - `first_name` (string)
+  - `last_name` (string)
+  - `alias` (string or null) - public nickname, if the user set one
+  - `avatar_source`, `avatar_preset_id`, `has_avatar_upload`
 
 **Business Rules:**
-- Case-insensitive partial match on first_name or last_name
+- Case-insensitive partial match on first_name, last_name or alias
+- The alias travels next to the real name, so two similar players can be told apart
+- No email: it was removed so addresses could not be harvested by typing names
+- Deactivated accounts never appear, not even when the query matches their alias
 - Returns max 10 results
 - Only authenticated users can search
 

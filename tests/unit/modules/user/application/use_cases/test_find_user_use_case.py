@@ -202,12 +202,14 @@ class TestFindUserUseCase:
             user_id=sample_user.id.value,
             email=sample_user.email.value,
             full_name=sample_user.get_full_name(),
+            display_name=sample_user.display_name,
         )
 
         # Assert
         assert hasattr(response, "user_id")
         assert hasattr(response, "email")
         assert hasattr(response, "full_name")
+        assert hasattr(response, "display_name")
         assert response.user_id == sample_user.id.value
         assert response.email == sample_user.email.value
         assert response.full_name == "Test User"

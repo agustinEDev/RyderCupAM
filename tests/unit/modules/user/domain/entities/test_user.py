@@ -969,3 +969,173 @@ class TestUserEmailVerification:
         # Assert
         assert user.email_verified is False
         assert user.verification_token is None
+
+
+class TestUserAlias:
+    """
+    Tests del alias público del perfil (BE #239).
+
+    El alias sustituye al nombre real en toda la aplicación. `None` en
+    `update_profile` significa "no lo han mandado" y la cadena vacía
+    "quítamelo", igual que ya hacían country_code y gender.
+    """
+
+    def _user(self, alias=None):
+        user = User.create(
+            first_name="Agustin",
+            last_name="Estevez",
+            email_str="agustin@example.com",
+            plain_password="DefaultPassword123!",
+        )
+        user.clear_domain_events()
+        if alias is not None:
+            user.update_profile(alias=alias)
+            user.clear_domain_events()
+        return user
+
+    def test_new_user_has_no_alias(self):
+        """
+        Test: Un usuario nace sin alias
+
+        Given: Un usuario recién creado
+        When: Se mira su alias
+        Then: Es None, y display_name es su nombre completo
+        """
+        user = self._user()
+
+        assert user.alias is None
+        assert user.display_name == "Agustin Estevez"
+
+    def test_setting_an_alias_changes_display_name(self):
+        """
+        Test: Poner un alias cambia el nombre con el que se muestra
+
+        Given: Un usuario sin alias
+        When: Se le pone "Chuchi"
+        Then: display_name pasa a ser "Chuchi" y el nombre legal no cambia
+        """
+        user = self._user()
+
+        user.update_profile(alias="Chuchi")
+
+        assert user.alias == "Chuchi"
+        assert user.display_name == "Chuchi"
+        assert user.get_full_name() == "Agustin Estevez"
+
+    def test_get_full_name_ignores_the_alias(self):
+        """
+        Test: El nombre legal nunca es el alias
+
+        Given: Un usuario con alias
+        When: Se pide get_full_name()
+        Then: Devuelve el nombre real — la búsqueda de hándicap en la RFEG y
+              los correos van por ahí, y la federación busca por nombre legal
+        """
+        user = self._user("Chuchi")
+
+        assert user.get_full_name() == "Agustin Estevez"
+
+    def test_clearing_the_alias_returns_to_the_real_name(self):
+        """
+        Test: La cadena vacía borra el alias
+
+        Given: Un usuario con alias "Chuchi"
+        When: Se actualiza el perfil con alias=""
+        Then: El alias queda a None y vuelve a mostrarse el nombre real
+        """
+        user = self._user("Chuchi")
+
+        user.update_profile(alias="")
+
+        assert user.alias is None
+        assert user.display_name == "Agustin Estevez"
+
+    def test_not_sending_the_alias_leaves_it_alone(self):
+        """
+        Test: Omitir el alias no lo toca
+
+        Given: Un usuario con alias
+        When: Se actualiza solo el nombre
+        Then: El alias sigue ahí
+        """
+        user = self._user("Chuchi")
+
+        user.update_profile(first_name="Agus")
+
+        assert user.alias == "Chuchi"
+        assert user.display_name == "Chuchi"
+
+    def test_setting_the_same_alias_emits_no_event(self):
+        """
+        Test: Repetir el alias que ya se tiene no es un cambio
+
+        Given: Un usuario con alias "Chuchi"
+        When: Se manda el mismo alias
+        Then: No se emite evento
+        """
+        user = self._user("Chuchi")
+
+        user.update_profile(alias="Chuchi")
+
+        assert user.get_domain_events() == []
+
+    def test_alias_change_travels_in_the_profile_updated_event(self):
+        """
+        Test: El evento de perfil lleva el cambio de alias
+
+        Given: Un usuario con alias "Chuchi"
+        When: Lo cambia a "Chuchito"
+        Then: El evento lleva el anterior y el nuevo
+        """
+        user = self._user("Chuchi")
+
+        user.update_profile(alias="Chuchito")
+
+        event = user.get_domain_events()[0]
+        assert event.old_alias == "Chuchi"
+        assert event.new_alias == "Chuchito"
+        assert event.has_alias_change is True
+        assert event.to_dict()["profile_changes"]["alias"]["changed"] is True
+
+    def test_clearing_the_alias_travels_in_the_event(self):
+        """
+        Test: Quitar el alias también es un cambio que viaja en el evento
+
+        Given: Un usuario con alias
+        When: Lo borra
+        Then: El evento lleva el anterior y None como nuevo
+        """
+        user = self._user("Chuchi")
+
+        user.update_profile(alias="")
+
+        event = user.get_domain_events()[0]
+        assert event.old_alias == "Chuchi"
+        assert event.new_alias is None
+
+    def test_alias_alone_is_enough_to_update_the_profile(self):
+        """
+        Test: El alias cuenta como campo para "al menos uno"
+
+        Given: Un usuario
+        When: Se actualiza el perfil mandando solo el alias
+        Then: No se levanta el error de "ningún campo"
+        """
+        user = self._user()
+
+        user.update_profile(alias="Chuchi")
+
+        assert user.alias == "Chuchi"
+
+    def test_updating_with_no_field_at_all_still_fails(self):
+        """
+        Test: Sin ningún campo sigue siendo un error
+
+        Given: Un usuario
+        When: Se llama a update_profile sin nada
+        Then: ValueError, y el mensaje menciona el alias
+        """
+        user = self._user()
+
+        with pytest.raises(ValueError, match="alias"):
+            user.update_profile()

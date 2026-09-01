@@ -52,6 +52,13 @@ class PlayerProfileResponseDTO(BaseModel):
     id: str
     first_name: str
     last_name: str
+    display_name: str = Field(
+        ...,
+        description=(
+            "Nombre con el que se debe mostrar a esta persona: su alias si "
+            "tiene, y si no su nombre completo."
+        ),
+    )
     avatar_source: str
     avatar_preset_id: int | None = None
     has_avatar_upload: bool = Field(
@@ -113,6 +120,13 @@ class FeedAuthorDTO(BaseModel):
     id: str
     first_name: str
     last_name: str
+    display_name: str = Field(
+        ...,
+        description=(
+            "Nombre con el que se debe mostrar a esta persona: su alias si "
+            "tiene, y si no su nombre completo."
+        ),
+    )
     avatar_source: str
     avatar_preset_id: int | None = None
 

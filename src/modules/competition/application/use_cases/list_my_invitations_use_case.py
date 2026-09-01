@@ -101,18 +101,16 @@ class ListMyInvitationsUseCase:
         invitation_dtos = []
         async with self._user_uow:
             for inv in paginated:
+                # Los dos nombres se pintan en pantalla, asi que van con
+                # `display_name`: el alias de quien lo tenga (BE #239)
                 inviter_user = await self._user_uow.users.find_by_id(inv.inviter_id)
-                inviter_name = (
-                    f"{inviter_user.first_name} {inviter_user.last_name}"
-                    if inviter_user
-                    else "Unknown"
-                )
+                inviter_name = inviter_user.display_name if inviter_user else "Unknown"
 
                 invitee_name = None
                 if inv.invitee_user_id:
                     invitee_user = await self._user_uow.users.find_by_id(inv.invitee_user_id)
                     if invitee_user:
-                        invitee_name = f"{invitee_user.first_name} {invitee_user.last_name}"
+                        invitee_name = invitee_user.display_name
 
                 invitation_dtos.append(
                     InvitationResponseDTO(

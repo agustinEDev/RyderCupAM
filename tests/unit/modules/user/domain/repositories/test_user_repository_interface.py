@@ -187,6 +187,9 @@ class TestUserRepositoryInterface:
             async def find_by_full_name(self, full_name: str):
                 return None
 
+            async def find_by_alias(self, alias: str):
+                return None
+
             async def search_by_partial_name(self, query: str, limit: int = 10):
                 return []
 

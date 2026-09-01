@@ -26,7 +26,7 @@ class EnrolledUserDTO(BaseModel):
     para evitar múltiples llamadas API desde el frontend.
 
     Campos incluidos:
-    - Datos personales: id, first_name, last_name, email
+    - Datos personales: id, first_name, last_name, display_name, email
     - Datos de juego: handicap, country_code
     - Personalización: avatar_url (null por ahora)
     """
@@ -34,6 +34,13 @@ class EnrolledUserDTO(BaseModel):
     id: UUID = Field(..., description="ID único del usuario")
     first_name: str = Field(..., description="Nombre del usuario")
     last_name: str = Field(..., description="Apellido del usuario")
+    display_name: str = Field(
+        ...,
+        description=(
+            "Nombre con el que se debe mostrar a este jugador: su alias si "
+            "tiene, y si no su nombre completo."
+        ),
+    )
     email: str = Field(..., description="Email del usuario")
     handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
     country_code: str | None = Field(None, description="Código ISO del país del usuario")
