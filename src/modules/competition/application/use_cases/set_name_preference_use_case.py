@@ -9,11 +9,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     SetNamePreferenceRequestDTO,
     SetNamePreferenceResponseDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    EnrollmentNotFoundError,
-    NamePreferenceEditNotAllowedError,
-)
+from src.modules.competition.application.exceptions import EnrollmentNotFoundError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -34,18 +30,22 @@ class SetNamePreferenceUseCase:
     Orquesta:
     1. Validación de existencia del enrollment
     2. Validación de que el solicitante es el DUEÑO de la inscripción
-    3. Validación de que la competición sigue admitiendo el cambio
-    4. Establecer la preferencia
-    5. Persistencia mediante UoW
+    3. Establecer la preferencia
+    4. Persistencia mediante UoW
 
     Reglas de negocio:
     - Solo el propio jugador decide cómo se le muestra — a diferencia del
       hándicap personalizado, que decide el creador, aquí decide el dueño
-    - Solo se puede cambiar antes de que la competición esté IN_PROGRESS
-      (mismo corte que el hándicap personalizado, ver
-      CompetitionStatus.allows_name_preference_edits)
+    - Se puede cambiar en cualquier estado de la competición, torneo en
+      marcha incluido: quien se equivocó al elegir no tiene que esperar a
+      que acabe para corregirlo. Es una decisión de producto, no una
+      omisión — el precedente del hándicap (congelado tras IN_PROGRESS) se
+      consideró y se descartó a propósito para esta preferencia
     - En partida rápida el alias se sigue enseñando siempre: esto es
       exclusivo de las competiciones
+    - No hace falta comprobar que la competición exista: la clave foránea
+      de `enrollments.competition_id` es `ON DELETE CASCADE`, así que un
+      enrollment nunca sobrevive a su competición
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -66,9 +66,7 @@ class SetNamePreferenceUseCase:
 
         Raises:
             EnrollmentNotFoundError: Si la inscripción no existe
-            CompetitionNotFoundError: Si la competición no existe
             NotOwnerError: Si el solicitante no es el dueño de la inscripción
-            NamePreferenceEditNotAllowedError: Si la competición ya no lo admite
         """
         async with self._uow:
             enrollment_id = EnrollmentId(request.enrollment_id)
@@ -82,24 +80,10 @@ class SetNamePreferenceUseCase:
             if enrollment.user_id != user_id:
                 raise NotOwnerError("Solo puedes elegir cómo se te muestra en tu propia inscripción")
 
-            # 3. Obtener competición
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
-            if not competition:
-                raise CompetitionNotFoundError(
-                    f"Competición no encontrada: {enrollment.competition_id}"
-                )
-
-            # 4. Verificar que la competición admite el cambio
-            if not competition.status.allows_name_preference_edits():
-                raise NamePreferenceEditNotAllowedError(
-                    "La preferencia de nombre solo puede cambiarse mientras la competición "
-                    f"está en DRAFT, ACTIVE o CLOSED. Estado actual: {competition.status.value}"
-                )
-
-            # 5. Establecer preferencia
+            # 3. Establecer preferencia
             enrollment.set_name_preference(request.use_real_name)
 
-            # 6. Persistir cambios
+            # 4. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
         return SetNamePreferenceResponseDTO(

@@ -215,6 +215,29 @@ class GetLeaderboardUseCase:
         # Not decided early: use all hole results (e.g., "1UP" after 18 holes)
         return self._scoring_service.format_decided_result(hole_results)
 
+    async def _all_enrollments(self, competition_id: CompetitionId) -> list:
+        """
+        Todas las inscripciones de la competición, paginando.
+
+        `find_by_competition` trae como mucho `limit` (100 por defecto) de
+        una vez. Con una sola llamada, un torneo cuyas inscripciones han
+        acumulado más de 100 filas con el tiempo —peticiones rechazadas,
+        retiros, altas de nuevo, no solo aprobadas a la vez— dejaba caer en
+        silencio la preferencia de nombre de quien quedara detrás del corte.
+        """
+        enrollments = []
+        offset = 0
+        page_size = 100
+        while True:
+            page = await self._uow.enrollments.find_by_competition(
+                competition_id, limit=page_size, offset=offset
+            )
+            enrollments.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+        return enrollments
+
     async def _resolve_user_names(
         self, user_ids: list[UserId], competition_id: CompetitionId
     ) -> dict[UserId, str]:
@@ -230,7 +253,7 @@ class GetLeaderboardUseCase:
         if not user_ids:
             return {}
         users = await self._user_repo.find_by_ids(user_ids)
-        enrollments = await self._uow.enrollments.find_by_competition(competition_id)
+        enrollments = await self._all_enrollments(competition_id)
         real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
         names: dict[UserId, str] = {
             user.id: (user.get_full_name() if user.id in real_name_wanted else user.display_name)

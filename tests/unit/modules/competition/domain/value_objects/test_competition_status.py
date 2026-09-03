@@ -97,15 +97,3 @@ class TestCompetitionStatusHelpers:
         """allows_modifications() es True solo para DRAFT."""
         assert CompetitionStatus.DRAFT.allows_modifications() is True
         assert CompetitionStatus.ACTIVE.allows_modifications() is False
-
-    def test_allows_name_preference_edits_returns_true_before_in_progress(self):
-        """allows_name_preference_edits() es True en DRAFT, ACTIVE y CLOSED (BE #254)."""
-        assert CompetitionStatus.DRAFT.allows_name_preference_edits() is True
-        assert CompetitionStatus.ACTIVE.allows_name_preference_edits() is True
-        assert CompetitionStatus.CLOSED.allows_name_preference_edits() is True
-
-    def test_allows_name_preference_edits_returns_false_once_started(self):
-        """allows_name_preference_edits() es False desde IN_PROGRESS: la elección se congela."""
-        assert CompetitionStatus.IN_PROGRESS.allows_name_preference_edits() is False
-        assert CompetitionStatus.COMPLETED.allows_name_preference_edits() is False
-        assert CompetitionStatus.CANCELLED.allows_name_preference_edits() is False

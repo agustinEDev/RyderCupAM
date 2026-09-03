@@ -49,7 +49,6 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as HandleCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
-    CompetitionNotFoundError as NamePreferenceCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
     EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
     EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
@@ -59,7 +58,6 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     HandicapEditNotAllowedError,
     InvalidTeeColorError,
-    NamePreferenceEditNotAllowedError,
     NotCreatorError as DirectNotCreatorError,
     NotCreatorError as HandicapNotCreatorError,
     NotCreatorError as HandleNotCreatorError,
@@ -562,8 +560,9 @@ async def set_name_preference(
     Elige cómo se muestra el nombre del jugador en esta competición.
 
     A diferencia del hándicap personalizado, aquí decide el propio jugador
-    sobre su inscripción, no el creador. Solo se puede cambiar mientras la
-    competición está en DRAFT, ACTIVE o CLOSED.
+    sobre su inscripción, no el creador. Se puede cambiar en cualquier
+    momento, torneo en marcha incluido: quien se equivocó al elegir no
+    tiene que esperar a que acabe para corregirlo.
     """
     try:
         request_dto = SetNamePreferenceRequestDTO(
@@ -574,9 +573,5 @@ async def set_name_preference(
 
     except NamePreferenceEnrollmentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except NamePreferenceCompetitionNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NamePreferenceNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except NamePreferenceEditNotAllowedError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

@@ -672,8 +672,12 @@ class TestSetNamePreference:
         assert after_dto["user"]["display_name"] == "Player NamePrefThree"
 
     @pytest.mark.asyncio
-    async def test_set_name_preference_returns_400_once_in_progress(self, client: AsyncClient):
-        """La elección se congela igual que el hándicap personalizado: nada tras IN_PROGRESS."""
+    async def test_set_name_preference_succeeds_once_in_progress(self, client: AsyncClient):
+        """
+        A diferencia del hándicap personalizado, la elección NO se congela:
+        quien se equivocó al elegir puede corregirlo con el torneo ya en
+        marcha, sin esperar a que acabe.
+        """
         creator = await create_authenticated_user(
             client, "creator_np4@test.com", "P@ssw0rd123!", "Creator", "NamePrefFour"
         )
@@ -706,7 +710,8 @@ class TestSetNamePreference:
             cookies=player["cookies"],
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response.json()["use_real_name"] is True
 
 
 class TestEnrollmentEdgeCases:

@@ -7,10 +7,6 @@ import pytest
 from src.modules.competition.application.dto.enrollment_dto import (
     SetNamePreferenceRequestDTO,
 )
-from src.modules.competition.application.exceptions import (
-    CompetitionNotFoundError,
-    NamePreferenceEditNotAllowedError,
-)
 from src.modules.competition.application.use_cases.set_name_preference_use_case import (
     EnrollmentNotFoundError,
     NotOwnerError,
@@ -127,62 +123,21 @@ class TestSetNamePreferenceUseCase:
         with pytest.raises(EnrollmentNotFoundError):
             await use_case.execute(request, player_id)
 
-    async def test_should_raise_competition_not_found(
-        self, uow: InMemoryUnitOfWork, player_id: UserId
-    ):
-        """
-        Given: Un enrollment cuya competición no existe
-        When: Se intenta cambiar la preferencia
-        Then: Se lanza CompetitionNotFoundError
-        """
-        fake_comp_id = CompetitionId(uuid4())
-        enrollment = Enrollment.direct_enroll(
-            id=EnrollmentId.generate(),
-            competition_id=fake_comp_id,
-            user_id=player_id,
-        )
-        async with uow:
-            await uow.enrollments.add(enrollment)
-            await uow.commit()
-
-        use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
-
-        with pytest.raises(CompetitionNotFoundError):
-            await use_case.execute(request, player_id)
-
-    @pytest.mark.parametrize("status", ["IN_PROGRESS", "COMPLETED", "CANCELLED"])
-    async def test_should_raise_edit_not_allowed_once_competition_left_closed(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId, player_id: UserId, status: str
-    ):
-        """
-        Given: Un enrollment aprobado en una competición IN_PROGRESS/COMPLETED/CANCELLED
-        When: El jugador intenta cambiar su preferencia de nombre
-        Then: Se lanza NamePreferenceEditNotAllowedError — la clasificación de
-        un torneo en curso no puede cambiar de nombre a media lectura
-        """
-        created = await create_competition(uow, creator_id)
-        enrollment = await create_approved_enrollment(uow, created.id, player_id)
-        await set_competition_status(uow, created.id, status)
-
-        use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
-
-        with pytest.raises(NamePreferenceEditNotAllowedError):
-            await use_case.execute(request, player_id)
-
-    @pytest.mark.parametrize("status", ["DRAFT", "ACTIVE", "CLOSED"])
-    async def test_should_allow_edit_while_draft_active_or_closed(
+    @pytest.mark.parametrize(
+        "status", ["DRAFT", "ACTIVE", "CLOSED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
+    )
+    async def test_should_allow_edit_in_any_competition_status(
         self, uow: InMemoryUnitOfWork, creator_id: UserId, player_id: UserId, status: str
     ):
         """
         Given: Un enrollment aprobado
-        When: La competición está en DRAFT, ACTIVE o CLOSED
-        Then: Se puede cambiar la preferencia sin errores
+        When: La competición está en cualquier estado, torneo en marcha o
+        terminado incluidos
+        Then: Se puede cambiar la preferencia sin errores — a diferencia del
+        hándicap personalizado, esta elección no se congela: quien se
+        equivocó al elegir no tiene que esperar a que acabe el torneo para
+        corregirlo. Decisión de producto, no un descuido (ver el docstring
+        del caso de uso)
         """
         created = await create_competition(uow, creator_id)
         enrollment = await create_approved_enrollment(uow, created.id, player_id)

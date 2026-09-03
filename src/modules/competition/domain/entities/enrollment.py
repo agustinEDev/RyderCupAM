@@ -340,10 +340,9 @@ class Enrollment:
         Elige si esta competición muestra el nombre legal en vez del alias (BE #254).
 
         Quien decide es el propio jugador, sobre su propia inscripción — a
-        diferencia del hándicap personalizado, que decide el creador. La
-        congelación al empezar el torneo la comprueba el caso de uso contra
-        `CompetitionStatus`, no esta entidad: `Enrollment` no conoce el estado
-        de la competición a la que pertenece.
+        diferencia del hándicap personalizado, que decide el creador. Y a
+        diferencia del hándicap, esto no se congela al empezar el torneo: se
+        puede corregir en cualquier estado de la competición.
         """
         self._use_real_name = use_real_name
         self._updated_at = datetime.now()

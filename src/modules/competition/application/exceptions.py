@@ -109,12 +109,6 @@ class HandicapEditNotAllowedError(Exception):
     pass
 
 
-class NamePreferenceEditNotAllowedError(Exception):
-    """La preferencia de alias/nombre real no puede modificarse en el estado actual de la competición."""
-
-    pass
-
-
 class EnrollmentNotFoundError(Exception):
     """La inscripción no existe."""
 
