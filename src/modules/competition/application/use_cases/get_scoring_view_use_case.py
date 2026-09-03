@@ -1,5 +1,7 @@
 """Caso de Uso: Obtener vista de scoring de un partido."""
 
+import asyncio
+
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
     HoleInfoDTO,
@@ -291,13 +293,15 @@ class GetScoringViewUseCase:
         """
         names = {}
         for uid in user_ids:
-            user = await self._user_repo.find_by_id(uid)
+            # Las dos consultas de este jugador no dependen una de la otra:
+            # van a la vez para no pagar en serie lo que cuestan en paralelo,
+            # en una vista que se recarga a cada golpe anotado.
+            user, enrollment = await asyncio.gather(
+                self._user_repo.find_by_id(uid),
+                self._uow.enrollments.find_by_user_and_competition(uid, competition_id),
+            )
             if not user:
                 names[uid] = ""
                 continue
-            enrollment = await self._uow.enrollments.find_by_user_and_competition(
-                uid, competition_id
-            )
-            use_real_name = bool(enrollment and enrollment.use_real_name)
-            names[uid] = user.get_full_name() if use_real_name else user.display_name
+            names[uid] = user.display_name_for_competition(bool(enrollment and enrollment.use_real_name))
         return names

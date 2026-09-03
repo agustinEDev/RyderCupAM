@@ -343,6 +343,22 @@ class User:
         """
         return self._alias or self.get_full_name()
 
+    def display_name_for_competition(self, use_real_name: bool) -> str:
+        """
+        `display_name` salvo que ESA competición haya elegido el nombre legal
+        (BE #254).
+
+        La preferencia es por inscripción, no del perfil — por eso la decide
+        quien llama, no esta entidad, que no sabe en qué competición se está
+        preguntando. Es el único sitio donde vive esta segunda excepción al
+        fallback de `display_name`, igual que ese es el único sitio del
+        primero: sin él, la clasificación, la anotación y la lista de
+        inscritos habían escrito por su cuenta el mismo
+        `get_full_name() if use_real_name else display_name` cada una, listas
+        para quedar descoordinadas en cuanto una cambiara sin las otras.
+        """
+        return self.get_full_name() if use_real_name else self.display_name
+
     def has_valid_email(self) -> bool:
         """Verifica si el usuario tiene un email válido."""
         return self.email is not None

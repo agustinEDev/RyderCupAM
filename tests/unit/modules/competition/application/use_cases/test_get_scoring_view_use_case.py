@@ -91,6 +91,7 @@ def user_repo():
         # La vista de anotación pinta `display_name` (BE #239): sin esto el
         # mock devuelve otro MagicMock y el DTO lo rechaza por no ser texto
         user.display_name = f"Player {str(uid)[:8]}"
+        user.display_name_for_competition = MagicMock(return_value=f"Player {str(uid)[:8]}")
         return user
 
     repo = AsyncMock()
@@ -207,6 +208,7 @@ class TestScoringViewPaintsTheDisplayName:
             user.first_name = "Nombre"
             user.last_name = "Legal"
             user.display_name = "Chuchi"
+            user.display_name_for_competition = MagicMock(return_value="Chuchi")
             return user
 
         repo = AsyncMock()
@@ -240,6 +242,9 @@ class TestScoringViewRespectsNamePreference:
             user.last_name = "Legal"
             user.display_name = "Chuchi"
             user.get_full_name = MagicMock(return_value="Nombre Legal")
+            user.display_name_for_competition = MagicMock(
+                side_effect=lambda real: "Nombre Legal" if real else "Chuchi"
+            )
             return user
 
         repo = AsyncMock()

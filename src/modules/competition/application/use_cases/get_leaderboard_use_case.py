@@ -242,7 +242,7 @@ class GetLeaderboardUseCase:
         )
         real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
         names: dict[UserId, str] = {
-            user.id: (user.get_full_name() if user.id in real_name_wanted else user.display_name)
+            user.id: user.display_name_for_competition(user.id in real_name_wanted)
             for user in users
             if user.id is not None
         }
