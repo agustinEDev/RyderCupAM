@@ -60,7 +60,7 @@ class GetLeaderboardUseCase:
                         all_user_ids.add(p.user_id)
 
             # Resolve all names
-            user_names = await self._resolve_user_names(list(all_user_ids))
+            user_names = await self._resolve_user_names(list(all_user_ids), comp_id)
 
             for round_entity in rounds:
                 matches = matches_by_round[round_entity.id]
@@ -215,18 +215,27 @@ class GetLeaderboardUseCase:
         # Not decided early: use all hole results (e.g., "1UP" after 18 holes)
         return self._scoring_service.format_decided_result(hole_results)
 
-    async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
+    async def _resolve_user_names(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> dict[UserId, str]:
         """
         Resuelve user_id → el nombre con el que se pinta a esa persona.
 
-        `display_name`, no el nombre legal: el alias de quien lo tenga (BE
-        #239). La clasificación es de las pantallas donde más se lee un nombre.
+        `display_name` por defecto —el alias de quien lo tenga (BE #239)—,
+        salvo que la inscripción de esa persona en ESTA competición haya
+        elegido el nombre legal (BE #254). La clasificación es de las
+        pantallas donde más se lee un nombre, así que la preferencia por
+        competición se lee de las inscripciones, no del perfil.
         """
         if not user_ids:
             return {}
         users = await self._user_repo.find_by_ids(user_ids)
+        enrollments = await self._uow.enrollments.find_by_competition(competition_id)
+        real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
         names: dict[UserId, str] = {
-            user.id: user.display_name for user in users if user.id is not None
+            user.id: (user.get_full_name() if user.id in real_name_wanted else user.display_name)
+            for user in users
+            if user.id is not None
         }
         for uid in user_ids:
             if uid not in names:

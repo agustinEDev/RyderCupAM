@@ -97,6 +97,21 @@ class CompetitionStatus(StrEnum):
             CompetitionStatus.CLOSED,
         }
 
+    def allows_name_preference_edits(self) -> bool:
+        """
+        Verifica si el estado permite elegir alias o nombre real para esta competición (BE #254).
+
+        Mismos estados que `allows_handicap_edits`: antes de IN_PROGRESS. Un
+        método propio y no el mismo reutilizado porque son decisiones de
+        negocio distintas que hoy coinciden en sus estados — coincidir no es
+        ser la misma regla, y una podría cambiar sin la otra.
+        """
+        return self in {
+            CompetitionStatus.DRAFT,
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+        }
+
     def __composite_values__(self):
         """
         Retorna los valores para SQLAlchemy composite mapping.

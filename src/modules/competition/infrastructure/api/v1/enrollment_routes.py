@@ -19,6 +19,7 @@ from src.config.dependencies import (
     get_remove_custom_handicap_use_case,
     get_request_enrollment_use_case,
     get_set_custom_handicap_use_case,
+    get_set_name_preference_use_case,
     get_uow,  # User Unit of Work para obtener datos del usuario
     get_withdraw_enrollment_use_case,
 )
@@ -38,6 +39,8 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentResponseDTO,
     SetCustomHandicapRequestDTO,
     SetCustomHandicapResponseDTO,
+    SetNamePreferenceRequestDTO,
+    SetNamePreferenceResponseDTO,
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
@@ -46,14 +49,17 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as HandleCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
+    CompetitionNotFoundError as NamePreferenceCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
     EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
     EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
     EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
+    EnrollmentNotFoundError as NamePreferenceEnrollmentNotFoundError,
     EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
     EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     HandicapEditNotAllowedError,
     InvalidTeeColorError,
+    NamePreferenceEditNotAllowedError,
     NotCreatorError as DirectNotCreatorError,
     NotCreatorError as HandicapNotCreatorError,
     NotCreatorError as HandleNotCreatorError,
@@ -84,6 +90,10 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
+)
+from src.modules.competition.application.use_cases.set_name_preference_use_case import (
+    NotOwnerError as NamePreferenceNotOwnerError,
+    SetNamePreferenceUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     NotOwnerError as WithdrawNotOwnerError,
@@ -147,7 +157,9 @@ class EnrollmentDTOMapper:
         # Obtener información del usuario (si user_uow es provisto)
         user_dto = None
         if user_uow:
-            user_dto = await EnrollmentDTOMapper._get_user_dto(enrollment.user_id, user_uow)
+            user_dto = await EnrollmentDTOMapper._get_user_dto(
+                enrollment.user_id, user_uow, use_real_name=enrollment.use_real_name
+            )
 
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
@@ -158,6 +170,7 @@ class EnrollmentDTOMapper:
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
             tee_color=enrollment.tee_color,
+            use_real_name=enrollment.use_real_name,
             created_at=enrollment.created_at,
             updated_at=enrollment.updated_at,
         )
@@ -166,6 +179,8 @@ class EnrollmentDTOMapper:
     async def _get_user_dto(
         user_id: UserId,
         user_uow: UserUnitOfWorkInterface,
+        *,
+        use_real_name: bool = False,
     ) -> EnrolledUserDTO | None:
         """
         Obtiene la información de un usuario inscrito.
@@ -173,6 +188,8 @@ class EnrollmentDTOMapper:
         Args:
             user_id: ID del usuario
             user_uow: Unit of Work de usuarios
+            use_real_name: preferencia de SU inscripción en ESTA competición
+                (BE #254) — no del perfil, así que no se lee de `user`
 
         Returns:
             EnrolledUserDTO con los datos del usuario, o None si no se encuentra
@@ -188,7 +205,7 @@ class EnrollmentDTOMapper:
                 id=user.id.value,
                 first_name=user.first_name,
                 last_name=user.last_name,
-                display_name=user.display_name,
+                display_name=user.get_full_name() if use_real_name else user.display_name,
                 email=str(user.email),
                 handicap=user.handicap.value if user.handicap else None,
                 country_code=user.country_code.value if user.country_code else None,
@@ -523,4 +540,43 @@ async def remove_custom_handicap(
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except HandicapEditNotAllowedError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put(
+    "/enrollments/{enrollment_id}/name-preference",
+    response_model=SetNamePreferenceResponseDTO,
+    summary="Elegir alias o nombre real en esta competición",
+    description=(
+        "El propio jugador decide si esta competición le muestra por su alias "
+        "o por su nombre legal."
+    ),
+)
+async def set_name_preference(
+    enrollment_id: UUID,
+    request: SetNamePreferenceRequestDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SetNamePreferenceUseCase = Depends(get_set_name_preference_use_case),
+):
+    """
+    Elige cómo se muestra el nombre del jugador en esta competición.
+
+    A diferencia del hándicap personalizado, aquí decide el propio jugador
+    sobre su inscripción, no el creador. Solo se puede cambiar mientras la
+    competición está en DRAFT, ACTIVE o CLOSED.
+    """
+    try:
+        request_dto = SetNamePreferenceRequestDTO(
+            enrollment_id=enrollment_id, use_real_name=request.use_real_name
+        )
+        user_id = UserId(str(current_user.id))
+        return await use_case.execute(request_dto, user_id)
+
+    except NamePreferenceEnrollmentNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NamePreferenceCompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NamePreferenceNotOwnerError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NamePreferenceEditNotAllowedError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

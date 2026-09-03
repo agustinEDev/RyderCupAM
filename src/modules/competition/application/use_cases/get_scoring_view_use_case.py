@@ -21,6 +21,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
@@ -76,7 +77,7 @@ class GetScoringViewUseCase:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
 
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)
-            user_names = await self._resolve_user_names(match.get_all_player_ids())
+            user_names = await self._resolve_user_names(match.get_all_player_ids(), competition.id)
 
             # Cargar golf course para obtener holes y nombre
             golf_course_name = ""
@@ -271,17 +272,32 @@ class GetScoringViewUseCase:
             best_ball_player_b=best_b,
         )
 
-    async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
+    async def _resolve_user_names(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> dict[UserId, str]:
         """
         Resuelve user_id → el nombre con el que se pinta a esa persona.
 
-        `display_name`, no el nombre legal: es el alias de quien lo tenga y el
-        nombre completo de quien no (BE #239). Los campos de esta vista
-        —`user_name`, `scorer_name`, `marks_name`— ya eran «nombre para
-        enseñar», así que no hace falta un campo nuevo: cambia lo que llevan.
+        `display_name` por defecto —el alias de quien lo tenga y el nombre
+        completo de quien no (BE #239)—, salvo que la inscripción de esa
+        persona en ESTA competición haya elegido el nombre legal (BE #254).
+        Los campos de esta vista —`user_name`, `scorer_name`, `marks_name`—
+        ya eran «nombre para enseñar», así que no hace falta un campo nuevo:
+        cambia lo que llevan.
+
+        Un partido son 2-4 jugadores, así que se consulta la inscripción de
+        cada uno en vez de traer el aforo entero de la competición como hace
+        la clasificación.
         """
         names = {}
         for uid in user_ids:
             user = await self._user_repo.find_by_id(uid)
-            names[uid] = user.display_name if user else ""
+            if not user:
+                names[uid] = ""
+                continue
+            enrollment = await self._uow.enrollments.find_by_user_and_competition(
+                uid, competition_id
+            )
+            use_real_name = bool(enrollment and enrollment.use_real_name)
+            names[uid] = user.get_full_name() if use_real_name else user.display_name
         return names

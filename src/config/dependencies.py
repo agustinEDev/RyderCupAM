@@ -128,6 +128,9 @@ from src.modules.competition.application.use_cases.send_invitation_by_user_id_us
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
 )
+from src.modules.competition.application.use_cases.set_name_preference_use_case import (
+    SetNamePreferenceUseCase,
+)
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
 )
@@ -1879,6 +1882,13 @@ def get_set_custom_handicap_use_case(
 ) -> SetCustomHandicapUseCase:
     """Proveedor del caso de uso SetCustomHandicapUseCase."""
     return SetCustomHandicapUseCase(uow)
+
+
+def get_set_name_preference_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> SetNamePreferenceUseCase:
+    """Proveedor del caso de uso SetNamePreferenceUseCase."""
+    return SetNamePreferenceUseCase(uow)
 
 
 def get_remove_custom_handicap_use_case(
