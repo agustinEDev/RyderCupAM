@@ -149,6 +149,36 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_by_user_ids_and_competition(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> list[Enrollment]:
+        """
+        Busca las inscripciones de un conjunto conocido de usuarios en una competición.
+
+        Una sola consulta con `IN`, sin límite ni paginación: llamado con los
+        jugadores que ya aparecen en la clasificación, que es un conjunto
+        acotado por `max_players` (100) en un momento dado — al revés que
+        `find_by_competition`, cuyas filas se acumulan sin límite con el
+        tiempo (rechazos, retiros, altas de nuevo).
+
+        Args:
+            user_ids: IDs de los usuarios de interés
+            competition_id: ID de la competición
+
+        Returns:
+            List[Enrollment]: Las inscripciones encontradas
+        """
+        if not user_ids:
+            return []
+        statement = select(Enrollment).where(
+            and_(
+                Enrollment._competition_id == competition_id,
+                Enrollment._user_id.in_([str(uid) for uid in user_ids]),
+            )
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def find_by_user_and_competition(
         self, user_id: UserId, competition_id: CompetitionId
     ) -> Enrollment | None:

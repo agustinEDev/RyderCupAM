@@ -148,20 +148,19 @@ class TestLeaderboardRespectsNamePreference:
         assert user_names[str(player_b.user_id)] == "Chuchi"
 
     @pytest.mark.asyncio
-    async def test_no_se_pierde_tras_mas_de_cien_inscripciones_de_la_competicion(
+    async def test_no_se_pierde_entre_muchas_otras_inscripciones_de_la_competicion(
         self, uow, user_repo
     ):
         """
-        `find_by_competition` trae como mucho 100 filas por llamada. Una
-        competición cuyas inscripciones han acumulado más de 100 con el
-        tiempo —peticiones rechazadas, retiros, altas de nuevo, no solo
-        jugadores a la vez— tiene que seguir viendo la preferencia de quien
-        quede detrás del corte de la primera página.
+        Una competición cuyas inscripciones han acumulado con el tiempo
+        muchas más filas que jugadores a la vez —peticiones rechazadas,
+        retiros, altas de nuevo— tiene que seguir viendo la preferencia de
+        cualquiera de ellos: la búsqueda va acotada a los `user_ids` que
+        aparecen en la clasificación, no a traer la competición entera.
         """
         competition_id, player_a, _player_b = await _setup_scheduled_match(uow)
 
-        # 105 inscripciones de relleno, para que la de player_a caiga más
-        # allá del límite de 100 de la primera página.
+        # Inscripciones de relleno de otros usuarios, ajenas al partido.
         for _ in range(105):
             filler = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),

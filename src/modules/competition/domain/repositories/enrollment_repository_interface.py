@@ -144,6 +144,31 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_user_ids_and_competition(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> list[Enrollment]:
+        """
+        Busca las inscripciones de un conjunto conocido de usuarios en una competición.
+
+        Útil para: resolver un dato por-inscripción (por ejemplo la
+        preferencia de nombre, BE #254) de un grupo de jugadores ya
+        identificado —los que aparecen en la clasificación—, sin traer el
+        historial entero de inscripciones de la competición ni paginar.
+
+        Args:
+            user_ids: Los IDs de los usuarios de interés
+            competition_id: El ID de la competición
+
+        Returns:
+            List[Enrollment]: Las inscripciones encontradas, como mucho una
+                por usuario (a lo sumo `len(user_ids)` resultados)
+
+        Raises:
+            RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
     async def exists_for_user_in_competition(
         self, user_id: UserId, competition_id: CompetitionId
     ) -> bool:
