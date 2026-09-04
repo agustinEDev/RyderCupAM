@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-09-05
+
+### Added
+
+- **El historial de partidas manda el nombre de la partida rápida.** Se llamaba `tournament_name` y venía siempre nulo para una partida rápida, así que el nombre que le puso quien la creó —lo que uno usa para reconocerla después— no salía nunca del servidor. Ahora viaja en `match_name`, y con él el panel puede titular la fila con la partida en vez de con el rival (#261).
+
+  Campo propio y no reutilizar `tournament_name`, porque son cosas distintas y el cliente las distingue por ahí: un partido de torneo no tiene nombre propio, tiene el de su competición, y sigue mandando `match_name` nulo. El nombre es opcional: quien creó la partida sin ponerle uno recibe `null`, no una cadena vacía que se confunda con un nombre de verdad.
+
+### Notes
+
+- **Aditivo**: el frontend anterior ignora el campo y sigue funcionando igual. El que lo aprovecha es RyderCupWeb 2.28.1, y aun así la ventana entre los dos despliegues es inocua — sin backend nuevo, el panel se limita a seguir titulando con el rival.
+
 ## [2.14.0] - 2026-09-04
 
 ### Added
