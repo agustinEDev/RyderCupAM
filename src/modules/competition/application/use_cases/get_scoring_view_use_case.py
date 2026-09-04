@@ -1,5 +1,6 @@
 """Caso de Uso: Obtener vista de scoring de un partido."""
 
+
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
     HoleInfoDTO,
@@ -21,6 +22,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
@@ -76,7 +78,7 @@ class GetScoringViewUseCase:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
 
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)
-            user_names = await self._resolve_user_names(match.get_all_player_ids())
+            user_names = await self._resolve_user_names(match.get_all_player_ids(), competition.id)
 
             # Cargar golf course para obtener holes y nombre
             golf_course_name = ""
@@ -271,17 +273,44 @@ class GetScoringViewUseCase:
             best_ball_player_b=best_b,
         )
 
-    async def _resolve_user_names(self, user_ids: list[UserId]) -> dict[UserId, str]:
+    async def _resolve_user_names(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> dict[UserId, str]:
         """
         Resuelve user_id → el nombre con el que se pinta a esa persona.
 
-        `display_name`, no el nombre legal: es el alias de quien lo tenga y el
-        nombre completo de quien no (BE #239). Los campos de esta vista
-        —`user_name`, `scorer_name`, `marks_name`— ya eran «nombre para
-        enseñar», así que no hace falta un campo nuevo: cambia lo que llevan.
+        `display_name` por defecto —el alias de quien lo tenga y el nombre
+        completo de quien no (BE #239)—, salvo que la inscripción de esa
+        persona en ESTA competición haya elegido el nombre legal (BE #254).
+        Los campos de esta vista —`user_name`, `scorer_name`, `marks_name`—
+        ya eran «nombre para enseñar», así que no hace falta un campo nuevo:
+        cambia lo que llevan.
+
+        Un partido son 2-4 jugadores, así que se consulta la inscripción de
+        cada uno en vez de traer el aforo entero de la competición como hace
+        la clasificación.
         """
         names = {}
         for uid in user_ids:
+            # En serie a propósito, aunque las dos consultas no dependan una de
+            # la otra: `get_uow` y `get_competition_uow` cuelgan las dos de
+            # `get_db_session`, que FastAPI cachea por petición, así que el
+            # repositorio de usuarios y el de inscripciones comparten la MISMA
+            # `AsyncSession` — y una `AsyncSession` no admite dos operaciones a
+            # la vez. Un `asyncio.gather` aquí revienta en producción con
+            # «another operation is in progress», y no lo ve ningún test:
+            # los unitarios llevan dobles y los de integración no pasan por
+            # esta vista.
             user = await self._user_repo.find_by_id(uid)
-            names[uid] = user.display_name if user else ""
+            if not user:
+                names[uid] = ""
+                continue
+            enrollment = await self._uow.enrollments.find_by_user_and_competition(
+                uid, competition_id
+            )
+            # Sin inscripción no hay preferencia que leer, y en una competición
+            # lo que se muestra por defecto es el nombre legal (BE #254)
+            names[uid] = user.display_name_or_legal(
+                enrollment.use_real_name if enrollment else True
+            )
         return names

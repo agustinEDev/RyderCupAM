@@ -51,6 +51,7 @@ class Enrollment:
         team_id: str | None = None,
         custom_handicap: Decimal | None = None,
         tee_color: TeeColor | None = None,
+        use_real_name: bool = True,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -67,6 +68,7 @@ class Enrollment:
         self._team_id = team_id
         self._custom_handicap = custom_handicap
         self._tee_color = tee_color
+        self._use_real_name = use_real_name
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -180,6 +182,17 @@ class Enrollment:
     @property
     def tee_color(self) -> TeeColor | None:
         return self._tee_color
+
+    @property
+    def use_real_name(self) -> bool:
+        """
+        Si esta competición muestra el nombre legal del jugador en vez de su
+        alias (BE #254). `True` por defecto: una competición tiene lista de
+        salida y clasificación pública, así que enseña el nombre legal salvo
+        que el jugador pida su alias para ella. En las partidas rápidas el
+        alias sigue siendo incondicional.
+        """
+        return self._use_real_name
 
     @property
     def created_at(self) -> datetime:
@@ -323,6 +336,18 @@ class Enrollment:
     def has_tee_assigned(self) -> bool:
         """Verifica si tiene tee asignado."""
         return self._tee_color is not None
+
+    def set_name_preference(self, use_real_name: bool) -> None:
+        """
+        Elige si esta competición muestra el nombre legal en vez del alias (BE #254).
+
+        Quien decide es el propio jugador, sobre su propia inscripción — a
+        diferencia del hándicap personalizado, que decide el creador. Y a
+        diferencia del hándicap, esto no se congela al empezar el torneo: se
+        puede corregir en cualquier estado de la competición.
+        """
+        self._use_real_name = use_real_name
+        self._updated_at = datetime.now()
 
     # ===========================================
     # DOMAIN EVENTS

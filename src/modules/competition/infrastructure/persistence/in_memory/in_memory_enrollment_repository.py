@@ -112,6 +112,17 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
                 return enr
         return None
 
+    async def find_by_user_ids_and_competition(
+        self, user_ids: list[UserId], competition_id: CompetitionId
+    ) -> list[Enrollment]:
+        """Busca las inscripciones de un conjunto conocido de usuarios en una competición."""
+        wanted = set(user_ids)
+        return [
+            enr
+            for enr in self._enrollments.values()
+            if enr.competition_id == competition_id and enr.user_id in wanted
+        ]
+
     async def count_pending(self, competition_id: CompetitionId) -> int:
         """Cuenta el número de inscripciones pendientes (REQUESTED)."""
         return sum(

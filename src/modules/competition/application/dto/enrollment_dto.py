@@ -260,6 +260,37 @@ class SetCustomHandicapResponseDTO(BaseModel):
 
 
 # ======================================================================================
+# DTO para el Caso de Uso: Elegir Alias o Nombre Real en una Competición (BE #254)
+# ======================================================================================
+
+
+class SetNamePreferenceRequestDTO(BaseModel):
+    """
+    DTO de entrada para que un jugador elija cómo se le muestra en esta
+    competición: por su nombre legal (por defecto) o por su alias (BE #254).
+    """
+
+    enrollment_id: UUID = Field(..., description="ID de la inscripción.")
+    use_real_name: bool = Field(
+        ...,
+        description="True: se muestra el nombre legal en esta competición. False: se muestra el alias.",
+    )
+
+
+class SetNamePreferenceResponseDTO(BaseModel):
+    """DTO de salida para fijar la preferencia de nombre mostrado."""
+
+    id: UUID = Field(..., description="ID de la inscripción.")
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="ID del usuario.")
+    status: str = Field(..., description="Estado de la inscripción.")
+    use_real_name: bool = Field(..., description="Preferencia actualizada.")
+    updated_at: datetime = Field(..., description="Fecha y hora de actualización.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ======================================================================================
 # DTO para el Caso de Uso: Eliminar Hándicap Personalizado (revertir al oficial)
 # ======================================================================================
 
@@ -309,6 +340,10 @@ class EnrollmentResponseDTO(BaseModel):
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
     tee_color: str | None = Field(None, description="Color de barras elegido por el jugador.")
+    use_real_name: bool = Field(
+        True,
+        description="Si esta competición muestra el nombre legal del jugador en vez de su alias.",
+    )
     created_at: datetime = Field(..., description="Fecha y hora de creación.")
     updated_at: datetime = Field(..., description="Fecha y hora de última actualización.")
 

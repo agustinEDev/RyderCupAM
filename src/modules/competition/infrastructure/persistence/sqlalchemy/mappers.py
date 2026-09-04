@@ -731,6 +731,7 @@ enrollments_table = Table(
     Column("team_id", String(10), nullable=True),
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
     Column("tee_color", TeeColorDecorator, nullable=True),
+    Column("use_real_name", Boolean, nullable=False, server_default="true"),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -1010,6 +1011,7 @@ def start_competition_mappers():
                 "_team_id": enrollments_table.c.team_id,
                 "_custom_handicap": enrollments_table.c.custom_handicap,
                 "_tee_color": enrollments_table.c.tee_color,
+                "_use_real_name": enrollments_table.c.use_real_name,
                 "_created_at": enrollments_table.c.created_at,
                 "_updated_at": enrollments_table.c.updated_at,
                 # Composite VOs → private attrs
