@@ -308,7 +308,9 @@ class GetScoringViewUseCase:
             enrollment = await self._uow.enrollments.find_by_user_and_competition(
                 uid, competition_id
             )
+            # Sin inscripción no hay preferencia que leer, y en una competición
+            # lo que se muestra por defecto es el nombre legal (BE #254)
             names[uid] = user.display_name_or_legal(
-                bool(enrollment and enrollment.use_real_name)
+                enrollment.use_real_name if enrollment else True
             )
         return names

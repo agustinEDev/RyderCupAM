@@ -228,10 +228,9 @@ class TestScoringViewPaintsTheDisplayName:
 
 class TestScoringViewRespectsNamePreference:
     """
-    Salvo que la inscripción de esa competición haya elegido el nombre legal
-    (BE #254), en cuyo caso ese jugador se pinta por su nombre y el resto
-    sigue por su alias — la preferencia es por inscripción, no arrastra a
-    los demás jugadores del mismo partido.
+    Una competición pinta el nombre legal salvo que la inscripción haya pedido
+    el alias (BE #254), y esa elección es de esa inscripción: no arrastra a los
+    demás jugadores del mismo partido.
     """
 
     @pytest.fixture
@@ -252,23 +251,27 @@ class TestScoringViewRespectsNamePreference:
         return repo
 
     @pytest.mark.asyncio
-    async def test_el_jugador_que_eligio_su_nombre_legal_se_pinta_por_el(
+    async def test_el_jugador_que_pidio_su_alias_se_pinta_por_el_y_el_resto_no(
         self, uow, user_repo_con_alias
     ):
         match, yellow, red, gc_repo = await _setup(uow, _course_two_tees())
         # La única competición que `_setup` deja montada en el repo en memoria.
         competition_id = next(iter(uow._competitions._competitions.values())).id
-        enrollment = Enrollment.direct_enroll(
-            id=EnrollmentId.generate(),
-            competition_id=competition_id,
-            user_id=yellow.user_id,
-        )
-        enrollment.set_name_preference(True)
-        await uow.enrollments.add(enrollment)
+        for user_id, quiere_alias in ((yellow.user_id, True), (red.user_id, False)):
+            enrollment = Enrollment.direct_enroll(
+                id=EnrollmentId.generate(),
+                competition_id=competition_id,
+                user_id=user_id,
+            )
+            if quiere_alias:
+                enrollment.set_name_preference(False)
+            await uow.enrollments.add(enrollment)
 
         uc = GetScoringViewUseCase(uow, user_repo_con_alias, ScoringService(), gc_repo)
         view = await uc.execute(str(match.id))
 
         names = {p.user_id: p.user_name for p in view.players}
-        assert names[str(yellow.user_id)] == "Nombre Legal"
-        assert names[str(red.user_id)] == "Chuchi"
+        assert names[str(yellow.user_id)] == "Chuchi"
+        # Sin haber elegido nada: el nombre legal, que es el defecto de una
+        # competición desde que se invirtió
+        assert names[str(red.user_id)] == "Nombre Legal"

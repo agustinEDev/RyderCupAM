@@ -267,7 +267,7 @@ class SetCustomHandicapResponseDTO(BaseModel):
 class SetNamePreferenceRequestDTO(BaseModel):
     """
     DTO de entrada para que un jugador elija cómo se le muestra en esta
-    competición: por su alias (por defecto) o por su nombre legal (BE #254).
+    competición: por su nombre legal (por defecto) o por su alias (BE #254).
     """
 
     enrollment_id: UUID = Field(..., description="ID de la inscripción.")
@@ -341,7 +341,7 @@ class EnrollmentResponseDTO(BaseModel):
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
     tee_color: str | None = Field(None, description="Color de barras elegido por el jugador.")
     use_real_name: bool = Field(
-        False,
+        True,
         description="Si esta competición muestra el nombre legal del jugador en vez de su alias.",
     )
     created_at: datetime = Field(..., description="Fecha y hora de creación.")

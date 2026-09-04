@@ -731,7 +731,7 @@ enrollments_table = Table(
     Column("team_id", String(10), nullable=True),
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
     Column("tee_color", TeeColorDecorator, nullable=True),
-    Column("use_real_name", Boolean, nullable=False, server_default="false"),
+    Column("use_real_name", Boolean, nullable=False, server_default="true"),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
