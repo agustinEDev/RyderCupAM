@@ -343,19 +343,20 @@ class User:
         """
         return self._alias or self.get_full_name()
 
-    def display_name_for_competition(self, use_real_name: bool) -> str:
+    def display_name_or_legal(self, use_real_name: bool) -> str:
         """
-        `display_name` salvo que ESA competición haya elegido el nombre legal
-        (BE #254).
+        `display_name`, salvo que quien pregunta quiera el nombre legal.
 
-        La preferencia es por inscripción, no del perfil — por eso la decide
-        quien llama, no esta entidad, que no sabe en qué competición se está
-        preguntando. Es el único sitio donde vive esta segunda excepción al
-        fallback de `display_name`, igual que ese es el único sitio del
-        primero: sin él, la clasificación, la anotación y la lista de
-        inscritos habían escrito por su cuenta el mismo
-        `get_full_name() if use_real_name else display_name` cada una, listas
-        para quedar descoordinadas en cuanto una cambiara sin las otras.
+        Quién quiere una cosa u otra —y por qué— no es asunto de esta
+        entidad: le llega ya decidido en el argumento. Este agregado no sabe
+        en qué pantalla ni en qué contexto se está preguntando, y no tiene
+        que saberlo.
+
+        Es el único sitio donde vive esta segunda excepción al fallback de
+        `display_name`, igual que ese es el único sitio del primero: sin él,
+        cada pantalla que quisiera la excepción escribiría por su cuenta el
+        mismo `get_full_name() if ... else display_name`, listas para quedar
+        descoordinadas en cuanto una cambiara sin las otras.
         """
         return self.get_full_name() if use_real_name else self.display_name
 

@@ -1,6 +1,5 @@
 """Caso de Uso: Obtener vista de scoring de un partido."""
 
-import asyncio
 
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
@@ -293,15 +292,23 @@ class GetScoringViewUseCase:
         """
         names = {}
         for uid in user_ids:
-            # Las dos consultas de este jugador no dependen una de la otra:
-            # van a la vez para no pagar en serie lo que cuestan en paralelo,
-            # en una vista que se recarga a cada golpe anotado.
-            user, enrollment = await asyncio.gather(
-                self._user_repo.find_by_id(uid),
-                self._uow.enrollments.find_by_user_and_competition(uid, competition_id),
-            )
+            # En serie a propósito, aunque las dos consultas no dependan una de
+            # la otra: `get_uow` y `get_competition_uow` cuelgan las dos de
+            # `get_db_session`, que FastAPI cachea por petición, así que el
+            # repositorio de usuarios y el de inscripciones comparten la MISMA
+            # `AsyncSession` — y una `AsyncSession` no admite dos operaciones a
+            # la vez. Un `asyncio.gather` aquí revienta en producción con
+            # «another operation is in progress», y no lo ve ningún test:
+            # los unitarios llevan dobles y los de integración no pasan por
+            # esta vista.
+            user = await self._user_repo.find_by_id(uid)
             if not user:
                 names[uid] = ""
                 continue
-            names[uid] = user.display_name_for_competition(bool(enrollment and enrollment.use_real_name))
+            enrollment = await self._uow.enrollments.find_by_user_and_competition(
+                uid, competition_id
+            )
+            names[uid] = user.display_name_or_legal(
+                bool(enrollment and enrollment.use_real_name)
+            )
         return names

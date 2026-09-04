@@ -43,9 +43,9 @@ class SetNamePreferenceUseCase:
       consideró y se descartó a propósito para esta preferencia
     - En partida rápida el alias se sigue enseñando siempre: esto es
       exclusivo de las competiciones
-    - No hace falta comprobar que la competición exista: la clave foránea
-      de `enrollments.competition_id` es `ON DELETE CASCADE`, así que un
-      enrollment nunca sobrevive a su competición
+    - No se consulta la competición: ni la autorización ni la regla de
+      negocio dependen de ella, así que traerla solo para comprobar que
+      existe sería una consulta que no decide nada
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):

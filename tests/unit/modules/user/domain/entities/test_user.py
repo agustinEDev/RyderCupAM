@@ -1143,7 +1143,7 @@ class TestUserAlias:
 
 class TestUserDisplayNameForCompetition:
     """
-    `display_name_for_competition` (BE #254): el mismo fallback de
+    `display_name_or_legal` (BE #254): el mismo fallback de
     `display_name`, salvo que la inscripción en ESA competición haya elegido
     el nombre legal. Único sitio donde vive esa segunda excepción — la
     clasificación, la anotación y la lista de inscritos lo usan en vez de
@@ -1171,8 +1171,8 @@ class TestUserDisplayNameForCompetition:
         """
         user = self._user("Chuchi")
 
-        assert user.display_name_for_competition(False) == "Chuchi"
-        assert user.display_name_for_competition(False) == user.display_name
+        assert user.display_name_or_legal(False) == "Chuchi"
+        assert user.display_name_or_legal(False) == user.display_name
 
     def test_with_the_preference_it_is_the_legal_name_even_with_an_alias(self):
         """
@@ -1182,8 +1182,8 @@ class TestUserDisplayNameForCompetition:
         """
         user = self._user("Chuchi")
 
-        assert user.display_name_for_competition(True) == "Agustin Estevez"
-        assert user.display_name_for_competition(True) == user.get_full_name()
+        assert user.display_name_or_legal(True) == "Agustin Estevez"
+        assert user.display_name_or_legal(True) == user.get_full_name()
 
     def test_without_an_alias_the_preference_changes_nothing(self):
         """
@@ -1193,5 +1193,5 @@ class TestUserDisplayNameForCompetition:
         """
         user = self._user()
 
-        assert user.display_name_for_competition(True) == "Agustin Estevez"
-        assert user.display_name_for_competition(False) == "Agustin Estevez"
+        assert user.display_name_or_legal(True) == "Agustin Estevez"
+        assert user.display_name_or_legal(False) == "Agustin Estevez"

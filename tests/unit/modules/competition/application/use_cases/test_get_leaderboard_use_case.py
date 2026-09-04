@@ -45,7 +45,7 @@ def user_repo():
         user.last_name = "Legal"
         user.display_name = "Chuchi"
         user.get_full_name = MagicMock(return_value="Nombre Legal")
-        user.display_name_for_competition = MagicMock(
+        user.display_name_or_legal = MagicMock(
             side_effect=lambda real: "Nombre Legal" if real else "Chuchi"
         )
         return user

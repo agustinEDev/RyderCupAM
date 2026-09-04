@@ -123,6 +123,22 @@ class RequestEnrollmentBody(BaseModel):
     )
 
 
+class SetNamePreferenceBody(BaseModel):
+    """
+    Body para elegir alias o nombre real (BE #254).
+
+    Solo la preferencia: el `enrollment_id` va en la ruta y no se repite
+    aquí. Pidiéndolo también en el cuerpo, FastAPI valida ANTES de entrar al
+    endpoint y `{"use_real_name": true}` —el cuerpo natural— se comía un 422
+    sin llegar a ejecutarse nada.
+    """
+
+    use_real_name: bool = Field(
+        ...,
+        description="True: se muestra el nombre legal en esta competición. False: el alias.",
+    )
+
+
 # ======================================================================================
 # HELPER: EnrollmentDTOMapper (Presentation Layer Logic)
 # ======================================================================================
@@ -203,7 +219,7 @@ class EnrollmentDTOMapper:
                 id=user.id.value,
                 first_name=user.first_name,
                 last_name=user.last_name,
-                display_name=user.display_name_for_competition(use_real_name),
+                display_name=user.display_name_or_legal(use_real_name),
                 email=str(user.email),
                 handicap=user.handicap.value if user.handicap else None,
                 country_code=user.country_code.value if user.country_code else None,
@@ -552,7 +568,7 @@ async def remove_custom_handicap(
 )
 async def set_name_preference(
     enrollment_id: UUID,
-    request: SetNamePreferenceRequestDTO,
+    body: SetNamePreferenceBody,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: SetNamePreferenceUseCase = Depends(get_set_name_preference_use_case),
 ):
@@ -566,7 +582,7 @@ async def set_name_preference(
     """
     try:
         request_dto = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment_id, use_real_name=request.use_real_name
+            enrollment_id=enrollment_id, use_real_name=body.use_real_name
         )
         user_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, user_id)

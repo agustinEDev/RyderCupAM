@@ -587,7 +587,7 @@ class TestSetNamePreference:
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
-            json={"enrollment_id": enrollment_id, "use_real_name": True},
+            json={"use_real_name": True},
             cookies=player["cookies"],
         )
 
@@ -619,7 +619,7 @@ class TestSetNamePreference:
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
-            json={"enrollment_id": enrollment_id, "use_real_name": True},
+            json={"use_real_name": True},
             cookies=creator["cookies"],
         )
 
@@ -659,7 +659,7 @@ class TestSetNamePreference:
 
         await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
-            json={"enrollment_id": enrollment_id, "use_real_name": True},
+            json={"use_real_name": True},
             cookies=player["cookies"],
         )
 
@@ -706,11 +706,45 @@ class TestSetNamePreference:
 
         response = await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
-            json={"enrollment_id": enrollment_id, "use_real_name": True},
+            json={"use_real_name": True},
             cookies=player["cookies"],
         )
 
         assert response.status_code == 200
+        assert response.json()["use_real_name"] is True
+
+    @pytest.mark.asyncio
+    async def test_body_carries_only_the_preference(self, client: AsyncClient):
+        """
+        El `enrollment_id` va en la ruta y NO se repite en el cuerpo. Pidiéndolo
+        en los dos sitios, FastAPI validaba antes de entrar al endpoint y el
+        cuerpo natural —solo la preferencia— se comía un 422.
+        """
+        creator = await create_authenticated_user(
+            client, "creator_np5@test.com", "P@ssw0rd123!", "Creator", "NamePrefFive"
+        )
+        player = await create_authenticated_user(
+            client, "player_np5@test.com", "P@ssw0rd123!", "Player", "NamePrefFive"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=player["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == enrollment_id
         assert response.json()["use_real_name"] is True
 
 
