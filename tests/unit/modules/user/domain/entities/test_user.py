@@ -1139,3 +1139,59 @@ class TestUserAlias:
 
         with pytest.raises(ValueError, match="alias"):
             user.update_profile()
+
+
+class TestUserDisplayNameForCompetition:
+    """
+    `display_name_or_legal` (BE #254): el mismo fallback de
+    `display_name`, salvo que la inscripción en ESA competición haya elegido
+    el nombre legal. Único sitio donde vive esa segunda excepción — la
+    clasificación, la anotación y la lista de inscritos lo usan en vez de
+    repetir cada una `get_full_name() if use_real_name else display_name`.
+    """
+
+    def _user(self, alias=None):
+        user = User.create(
+            first_name="Agustin",
+            last_name="Estevez",
+            email_str="agustin@example.com",
+            plain_password="DefaultPassword123!",
+        )
+        user.clear_domain_events()
+        if alias is not None:
+            user.update_profile(alias=alias)
+            user.clear_domain_events()
+        return user
+
+    def test_without_the_preference_it_is_the_same_as_display_name(self):
+        """
+        Given: Un usuario con alias
+        When: Se pide su nombre para una competición sin la preferencia (False)
+        Then: Es igual que display_name — el alias
+        """
+        user = self._user("Chuchi")
+
+        assert user.display_name_or_legal(False) == "Chuchi"
+        assert user.display_name_or_legal(False) == user.display_name
+
+    def test_with_the_preference_it_is_the_legal_name_even_with_an_alias(self):
+        """
+        Given: Un usuario con alias
+        When: Se pide su nombre para una competición con la preferencia (True)
+        Then: Es el nombre legal, no el alias
+        """
+        user = self._user("Chuchi")
+
+        assert user.display_name_or_legal(True) == "Agustin Estevez"
+        assert user.display_name_or_legal(True) == user.get_full_name()
+
+    def test_without_an_alias_the_preference_changes_nothing(self):
+        """
+        Given: Un usuario sin alias
+        When: Se pide su nombre con y sin la preferencia
+        Then: Los dos caminos dan el mismo nombre legal, que es lo único que hay
+        """
+        user = self._user()
+
+        assert user.display_name_or_legal(True) == "Agustin Estevez"
+        assert user.display_name_or_legal(False) == "Agustin Estevez"

@@ -16,8 +16,10 @@ import pytest
 from src.modules.competition.application.use_cases.get_scoring_view_use_case import (
     GetScoringViewUseCase,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -89,6 +91,7 @@ def user_repo():
         # La vista de anotación pinta `display_name` (BE #239): sin esto el
         # mock devuelve otro MagicMock y el DTO lo rechaza por no ser texto
         user.display_name = f"Player {str(uid)[:8]}"
+        user.display_name_or_legal = MagicMock(return_value=f"Player {str(uid)[:8]}")
         return user
 
     repo = AsyncMock()
@@ -205,6 +208,7 @@ class TestScoringViewPaintsTheDisplayName:
             user.first_name = "Nombre"
             user.last_name = "Legal"
             user.display_name = "Chuchi"
+            user.display_name_or_legal = MagicMock(return_value="Chuchi")
             return user
 
         repo = AsyncMock()
@@ -220,3 +224,51 @@ class TestScoringViewPaintsTheDisplayName:
 
         assert {p.user_name for p in view.players} == {"Chuchi"}
         assert "Nombre Legal" not in {p.user_name for p in view.players}
+
+
+class TestScoringViewRespectsNamePreference:
+    """
+    Salvo que la inscripción de esa competición haya elegido el nombre legal
+    (BE #254), en cuyo caso ese jugador se pinta por su nombre y el resto
+    sigue por su alias — la preferencia es por inscripción, no arrastra a
+    los demás jugadores del mismo partido.
+    """
+
+    @pytest.fixture
+    def user_repo_con_alias(self):
+        def _make(uid):
+            user = MagicMock()
+            user.first_name = "Nombre"
+            user.last_name = "Legal"
+            user.display_name = "Chuchi"
+            user.get_full_name = MagicMock(return_value="Nombre Legal")
+            user.display_name_or_legal = MagicMock(
+                side_effect=lambda real: "Nombre Legal" if real else "Chuchi"
+            )
+            return user
+
+        repo = AsyncMock()
+        repo.find_by_id = AsyncMock(side_effect=_make)
+        return repo
+
+    @pytest.mark.asyncio
+    async def test_el_jugador_que_eligio_su_nombre_legal_se_pinta_por_el(
+        self, uow, user_repo_con_alias
+    ):
+        match, yellow, red, gc_repo = await _setup(uow, _course_two_tees())
+        # La única competición que `_setup` deja montada en el repo en memoria.
+        competition_id = next(iter(uow._competitions._competitions.values())).id
+        enrollment = Enrollment.direct_enroll(
+            id=EnrollmentId.generate(),
+            competition_id=competition_id,
+            user_id=yellow.user_id,
+        )
+        enrollment.set_name_preference(True)
+        await uow.enrollments.add(enrollment)
+
+        uc = GetScoringViewUseCase(uow, user_repo_con_alias, ScoringService(), gc_repo)
+        view = await uc.execute(str(match.id))
+
+        names = {p.user_id: p.user_name for p in view.players}
+        assert names[str(yellow.user_id)] == "Nombre Legal"
+        assert names[str(red.user_id)] == "Chuchi"

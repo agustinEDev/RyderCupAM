@@ -562,6 +562,192 @@ class TestRemoveCustomHandicap:
         assert remove_response.status_code == 400
 
 
+class TestSetNamePreference:
+    """Tests para PUT /api/v1/enrollments/{id}/name-preference (BE #254)."""
+
+    @pytest.mark.asyncio
+    async def test_set_name_preference_success(self, client: AsyncClient):
+        """El propio jugador elige mostrar su nombre legal en esta competición."""
+        creator = await create_authenticated_user(
+            client, "creator_np1@test.com", "P@ssw0rd123!", "Creator", "NamePrefOne"
+        )
+        player = await create_authenticated_user(
+            client, "player_np1@test.com", "P@ssw0rd123!", "Player", "NamePrefOne"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=player["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["use_real_name"] is True
+
+    @pytest.mark.asyncio
+    async def test_set_name_preference_not_owner_returns_403(self, client: AsyncClient):
+        """
+        A diferencia del hándicap personalizado, aquí decide el DUEÑO de la
+        inscripción, no el creador: el creador intentándolo recibe 403.
+        """
+        creator = await create_authenticated_user(
+            client, "creator_np2@test.com", "P@ssw0rd123!", "Creator", "NamePrefTwo"
+        )
+        player = await create_authenticated_user(
+            client, "player_np2@test.com", "P@ssw0rd123!", "Player", "NamePrefTwo"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=creator["cookies"],
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_enrolled_players_list_shows_the_chosen_name(self, client: AsyncClient):
+        """
+        La lista de inscritos —la que ve cualquiera que mire la competición—
+        enseña el nombre legal en cuanto el jugador lo elige, y el alias
+        antes de elegirlo.
+        """
+        creator = await create_authenticated_user(
+            client, "creator_np3@test.com", "P@ssw0rd123!", "Creator", "NamePrefThree"
+        )
+        player = await create_authenticated_user(
+            client, "player_np3@test.com", "P@ssw0rd123!", "Player", "NamePrefThree"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        before = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments",
+            cookies=creator["cookies"],
+        )
+        before_dto = next(e for e in before.json() if e["id"] == enrollment_id)
+        assert before_dto["use_real_name"] is False
+        assert before_dto["user"]["display_name"] == "Player NamePrefThree"
+
+        await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=player["cookies"],
+        )
+
+        after = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments",
+            cookies=creator["cookies"],
+        )
+        after_dto = next(e for e in after.json() if e["id"] == enrollment_id)
+        assert after_dto["use_real_name"] is True
+        assert after_dto["user"]["display_name"] == "Player NamePrefThree"
+
+    @pytest.mark.asyncio
+    async def test_set_name_preference_succeeds_once_in_progress(self, client: AsyncClient):
+        """
+        A diferencia del hándicap personalizado, la elección NO se congela:
+        quien se equivocó al elegir puede corregirlo con el torneo ya en
+        marcha, sin esperar a que acabe.
+        """
+        creator = await create_authenticated_user(
+            client, "creator_np4@test.com", "P@ssw0rd123!", "Creator", "NamePrefFour"
+        )
+        player = await create_authenticated_user(
+            client, "player_np4@test.com", "P@ssw0rd123!", "Player", "NamePrefFour"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=creator["cookies"],
+        )
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/start",
+            cookies=creator["cookies"],
+        )
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=player["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["use_real_name"] is True
+
+    @pytest.mark.asyncio
+    async def test_body_carries_only_the_preference(self, client: AsyncClient):
+        """
+        El `enrollment_id` va en la ruta y NO se repite en el cuerpo. Pidiéndolo
+        en los dos sitios, FastAPI validaba antes de entrar al endpoint y el
+        cuerpo natural —solo la preferencia— se comía un 422.
+        """
+        creator = await create_authenticated_user(
+            client, "creator_np5@test.com", "P@ssw0rd123!", "Creator", "NamePrefFive"
+        )
+        player = await create_authenticated_user(
+            client, "player_np5@test.com", "P@ssw0rd123!", "Player", "NamePrefFive"
+        )
+
+        comp = await create_competition(client, creator["cookies"])
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        enroll_response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": player["user"]["id"]},
+            cookies=creator["cookies"],
+        )
+        enrollment_id = enroll_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/enrollments/{enrollment_id}/name-preference",
+            json={"use_real_name": True},
+            cookies=player["cookies"],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == enrollment_id
+        assert response.json()["use_real_name"] is True
+
+
 class TestEnrollmentEdgeCases:
     """Tests de edge cases para Enrollment"""
 
