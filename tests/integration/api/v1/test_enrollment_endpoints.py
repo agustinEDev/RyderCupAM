@@ -629,8 +629,8 @@ class TestSetNamePreference:
     async def test_enrolled_players_list_shows_the_chosen_name(self, client: AsyncClient):
         """
         La lista de inscritos —la que ve cualquiera que mire la competición—
-        enseña el nombre legal en cuanto el jugador lo elige, y el alias
-        antes de elegirlo.
+        arranca con el nombre legal, que es el defecto de una competición, y
+        pasa al alias en cuanto el jugador lo pide.
         """
         creator = await create_authenticated_user(
             client, "creator_np3@test.com", "P@ssw0rd123!", "Creator", "NamePrefThree"
@@ -654,12 +654,13 @@ class TestSetNamePreference:
             cookies=creator["cookies"],
         )
         before_dto = next(e for e in before.json() if e["id"] == enrollment_id)
-        assert before_dto["use_real_name"] is False
+        # Nadie ha elegido nada todavía y ya se muestra el nombre legal
+        assert before_dto["use_real_name"] is True
         assert before_dto["user"]["display_name"] == "Player NamePrefThree"
 
         await client.put(
             f"/api/v1/enrollments/{enrollment_id}/name-preference",
-            json={"use_real_name": True},
+            json={"use_real_name": False},
             cookies=player["cookies"],
         )
 
@@ -668,7 +669,8 @@ class TestSetNamePreference:
             cookies=creator["cookies"],
         )
         after_dto = next(e for e in after.json() if e["id"] == enrollment_id)
-        assert after_dto["use_real_name"] is True
+        assert after_dto["use_real_name"] is False
+        # Este jugador no tiene alias, así que el nombre que se pinta no cambia
         assert after_dto["user"]["display_name"] == "Player NamePrefThree"
 
     @pytest.mark.asyncio

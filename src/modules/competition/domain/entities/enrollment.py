@@ -51,7 +51,7 @@ class Enrollment:
         team_id: str | None = None,
         custom_handicap: Decimal | None = None,
         tee_color: TeeColor | None = None,
-        use_real_name: bool = False,
+        use_real_name: bool = True,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -187,8 +187,10 @@ class Enrollment:
     def use_real_name(self) -> bool:
         """
         Si esta competición muestra el nombre legal del jugador en vez de su
-        alias (BE #254). `False` por defecto: mantiene el comportamiento de
-        antes de esta issue, donde el alias se pinta siempre que existe.
+        alias (BE #254). `True` por defecto: una competición tiene lista de
+        salida y clasificación pública, así que enseña el nombre legal salvo
+        que el jugador pida su alias para ella. En las partidas rápidas el
+        alias sigue siendo incondicional.
         """
         return self._use_real_name
 
