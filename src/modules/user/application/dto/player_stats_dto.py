@@ -104,6 +104,14 @@ class RecentMatchDTO(BaseModel):
     scoring_format: str | None = None
     golf_course_id: str | None = None
     golf_course_name: str | None = None
+    match_name: str | None = Field(
+        default=None,
+        description=(
+            "El nombre que le puso quien creó la partida rápida. Nulo en un "
+            "partido de torneo, que no tiene nombre propio: tiene el de su "
+            "competición, y ese va en `tournament_name`."
+        ),
+    )
     tournament_name: str | None = None
     result: str | None = Field(
         default=None, description="WON / LOST / HALVED en match play; None si no aplica"
