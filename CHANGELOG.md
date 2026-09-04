@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-09-04
+
+### Added
+
+- **Cada jugador elige, competición a competición, si se le ve por su alias o por su nombre legal.** El alias vale para una liguilla entre amigos, pero un torneo de club tiene lista de salida y clasificación pública, y ahí puede querer aparecer su nombre. La elección es **por inscripción**, no del perfil: la misma persona puede jugar un torneo de club con su nombre y una liguilla con su apodo la misma semana (#254).
+
+  ```
+  PUT /api/v1/enrollments/{enrollment_id}/name-preference   { "use_real_name": true }
+  ```
+
+  - **Decide el dueño de la inscripción, no quien organiza** — al revés que el hándicap personalizado. A cualquier otro se le responde 403.
+  - **Se puede cambiar en cualquier momento**, con el torneo ya en marcha: quien se equivocó al elegir no tiene que esperar a que acabe. Se valoró congelarlo al empezar, como el hándicap, y se descartó a propósito.
+  - `GET /competitions/{id}/enrollments` devuelve `use_real_name` en cada inscripción, para no obligar a una segunda llamada.
+  - El servidor **sigue resolviendo el nombre antes de mandarlo**: `display_name`, `user_name`, `scorer_name` y `marks_name` llegan igual que siempre, ya resueltos. Ninguna pantalla que pinte un nombre tiene que aprender nada.
+
+### Changed
+
+- **Una competición muestra el nombre legal por defecto, y el alias pasa a pedirse.** Al aterrizar, la preferencia nacía en «alias», que era el comportamiento anterior. Es al revés de lo que pide una lista de salida pública, así que se invierte: el nombre legal es el punto de partida y el alias es una elección explícita, para esa competición y solo para ella (#257).
+
+  La migración **arrastra también las inscripciones que ya existían**, no solo las nuevas: mover el valor por defecto a secas dejaba dos reglas conviviendo —las de antes con alias, las de después con nombre legal— sin nada en pantalla que explicara la diferencia. El `downgrade` restaura el valor por defecto y devuelve todas las filas a `false`; lo que no puede devolver es quién había elegido qué.
+
+- **Las partidas rápidas no cambian**: ahí el alias es incondicional y seguirá siéndolo.
+
+### Security
+
+- **`nltk` a 3.10.3**, que cierra cinco CVEs que tenían el CI en rojo. Llega como dependencia transitiva de `safety`, y quien decide el resultado de «Security Checks» es `pip-audit` (#256).
+
+### Notes
+
+- **El frontend que acompaña a esto es RyderCupWeb 2.28.0.** No hay cambio incompatible de contrato —el campo existe desde esta misma versión—, pero cada mitad por su cuenta deja una ventana rara: con solo el backend, todos los nombres saltan al legal y nadie tiene aún el interruptor para recuperar su alias; con solo el frontend, ese interruptor aparece encendido para todo el mundo. **Backend primero y los dos seguidos.**
+- **La firma del creador en el detalle de una competición sigue mostrando el alias** sin condiciones: se dejó fuera a propósito, tiene su propia decisión pendiente.
+
 ## [2.13.0] - 2026-09-01
 
 ### Added
