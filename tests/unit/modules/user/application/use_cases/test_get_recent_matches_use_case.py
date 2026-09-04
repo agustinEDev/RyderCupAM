@@ -156,6 +156,7 @@ async def played_quick_match(
     scoring_participant_indexes: set[int] | None = None,
     creator_tee_color: TeeColor | None = None,
     creator_tee_gender: Gender | None = None,
+    name: str | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -175,6 +176,7 @@ async def played_quick_match(
         scoring_format=scoring_format,
         creator_tee_color=creator_tee_color,
         creator_tee_gender=creator_tee_gender,
+        name=name,
     )
     for participant in others:
         match.add_participant(participant)
@@ -1189,3 +1191,67 @@ class TestParPorBarra:
         feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert feed.matches[0].stableford_points == 38
+
+
+@pytest.mark.asyncio
+class TestMatchName:
+    """
+    El nombre que le puso quien creó la partida rápida (BE #261). Sin él, el
+    historial no tenía con qué titular la fila y el cliente acababa poniendo el
+    nombre del rival donde se espera el de la partida.
+    """
+
+    async def test_a_quick_match_carries_the_name_it_was_created_with(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, "Named", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(qm_uow, course, player, name="Meis Fourball")
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].match_name == "Meis Fourball"
+
+    async def test_a_quick_match_without_a_name_sends_null(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        El nombre es opcional, y quien no lo puso no tiene que recibir una
+        cadena vacía que el cliente confunda con un nombre de verdad.
+        """
+        player = await create_user(user_uow, "Nameless", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(qm_uow, course, player)
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].match_name is None
+
+    async def test_a_tournament_match_has_no_name_of_its_own(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Tiene el de su competición, y ese ya viaja en `tournament_name`.
+        """
+        player = await create_user(user_uow, "Tourney", handicap=0)
+        rival = await create_user(user_uow, "Away")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "A", "score": "2UP"},
+        )
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].match_name is None
+        assert feed.matches[0].tournament_name == "Ryder Cup Test"

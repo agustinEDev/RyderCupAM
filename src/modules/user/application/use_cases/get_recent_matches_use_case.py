@@ -334,6 +334,10 @@ class GetRecentMatchesUseCase:
             scoring_format=match.scoring_format.value if match.scoring_format else None,
             golf_course_id=str(match.golf_course_id.value),
             golf_course_name=course.name if course else None,
+            # Lo que el jugador le puso al crearla, que es como reconoce la
+            # partida después. Es opcional: sin nombre viaja nulo y el cliente
+            # decide con qué titular la fila (BE #261)
+            match_name=match.name,
             tournament_name=None,
             result=result,
             score=score,
@@ -398,6 +402,9 @@ class GetRecentMatchesUseCase:
             scoring_format=None,
             golf_course_id=str(raw.round_.golf_course_id.value),
             golf_course_name=course.name if course else None,
+            # Un partido de torneo no tiene nombre propio: tiene el de su
+            # competición, que va en `tournament_name`
+            match_name=None,
             tournament_name=raw.tournament_name,
             result=self._result_for_team(match.get_winner(), "A" if in_team_a else "B"),
             score=match.result.get("score") if match.result else None,
