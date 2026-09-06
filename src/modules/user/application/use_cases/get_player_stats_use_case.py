@@ -21,6 +21,7 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.services.stableford_calculator import (
+    NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
     StablefordCalculator,
 )
@@ -130,7 +131,9 @@ class GetPlayerStatsUseCase:
         Una cuenta sin vueltas devuelve el desglose vacío, no un 404: el panel
         de un usuario nuevo es un caso normal.
         """
-        rounds = await self._collect_rounds(user_id, golf_course_id)
+        rounds = await self._collect_rounds(
+            user_id, golf_course_id, await self._profile_handicap(user_id)
+        )
 
         breakdown = self._breakdown.compute(
             [
@@ -171,7 +174,7 @@ class GetPlayerStatsUseCase:
         return len(enrollments), active
 
     async def _collect_rounds(
-        self, user_id: UserId, golf_course_id: GolfCourseId | None
+        self, user_id: UserId, golf_course_id: GolfCourseId | None, handicap: float | None
     ) -> list["_ComputableRound"]:
         """
         Las vueltas computables del jugador, de las dos fuentes y ya ordenadas.
@@ -181,8 +184,6 @@ class GetPlayerStatsUseCase:
         copias para que la media y el desglose dejaran de hablar de las mismas
         vueltas, sin que ningún test lo viera.
         """
-        handicap = await self._profile_handicap(user_id)
-
         quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
         async with self._competition_uow:
@@ -226,7 +227,7 @@ class GetPlayerStatsUseCase:
         repetirlos en un desglose por campo induciría a error.
         """
         handicap = await self._profile_handicap(user_id)
-        computable_rounds = await self._collect_rounds(user_id, golf_course_id)
+        computable_rounds = await self._collect_rounds(user_id, golf_course_id, handicap)
         tournaments_total, tournaments_active = await self._tournament_counters(
             user_id, golf_course_id
         )
@@ -421,9 +422,12 @@ class GetPlayerStatsUseCase:
                 hole_scores = scorecards.get(match.id, [])
                 player = self._find_match_player(match, user_id)
                 hole_card = self._hole_card(course, player)
-                to_par = self._scorecard_to_par(hole_scores, hole_card)
-                if to_par is None:
+                outcomes = self._competition_hole_outcomes(hole_scores, hole_card)
+                if outcomes is None:
                     continue
+                to_par = self._to_eighteen(
+                    sum(outcome.net_to_par for outcome in outcomes), len(outcomes)
+                )
 
                 # Por `own_submitted`, no por si hay número: la raya (hoyo
                 # recogido) está anotada y sin número, y el calculador la cuenta
@@ -455,7 +459,7 @@ class GetPlayerStatsUseCase:
                             tee_color=player.tee_color if player else None,
                             tee_gender=player.tee_gender if player else None,
                         ),
-                        holes=self._competition_hole_outcomes(hole_scores, hole_card) or [],
+                        holes=outcomes,
                         golf_course_id=str(course.id) if course is not None else None,
                         golf_course_name=str(course.name) if course is not None else None,
                     )
@@ -609,32 +613,6 @@ class GetPlayerStatsUseCase:
         round_ = rounds_by_match.get(match.id)
         return round_.golf_course_id if round_ is not None else None
 
-    def _scorecard_to_par(self, hole_scores: list, hole_card: list) -> int | None:
-        """
-        Neto respecto al par de la tarjeta, o None si no forma una vuelta.
-
-        Lo que decide es la tarjeta, no en qué hoyo se ganó el partido: un match
-        play resuelto en el 15 cuenta igual que cualquier otra vuelta si los
-        jugadores siguieron anotando hasta el 18. Lo que deja la ronda fuera es
-        dejar de anotar, no cerrar pronto.
-
-        Un hoyo RECOGIDO —anotado (`own_submitted`) y sin número— es un hoyo
-        jugado, no un hueco: cuenta como doble bogey neto, que es lo que el WHS
-        (Regla 3.1) manda anotar en un hoyo no terminado. Antes invalidaba la
-        vuelta entera, y eso dejaba a la misma vuelta contando para la media si
-        se jugaba en partida rápida y fuera si se jugaba en competición.
-
-        De ahí que lo anotado se mire por `own_submitted` y no por si hay
-        número: sin número está la raya y está el hoyo que nadie tocó, y
-        significan lo contrario.
-        """
-        outcomes = self._competition_hole_outcomes(hole_scores, hole_card)
-        if outcomes is None:
-            return None
-
-        to_par = sum(outcome.net_to_par for outcome in outcomes)
-        return self._to_eighteen(to_par, len(outcomes))
-
     def _competition_hole_outcomes(
         self, hole_scores: list, hole_card: list
     ) -> list[HoleOutcome] | None:
@@ -662,10 +640,14 @@ class GetPlayerStatsUseCase:
         for hole in played:
             hole_score = scored[hole.number]
             if hole_score.own_score is None:
+                # La raya: se anota `par + 2` de bruto —un total de golpes no
+                # puede depender del reparto— y doble bogey NETO en lo computable
+                gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR
                 computable = self._calculator.net_double_bogey(
                     hole.par, hole_score.strokes_received
                 )
             else:
+                gross = hole_score.own_score
                 computable = self._calculator.adjusted_gross(
                     hole_score.own_score, hole.par, hole_score.strokes_received
                 )
@@ -673,6 +655,7 @@ class GetPlayerStatsUseCase:
                 HoleOutcome(
                     number=hole.number,
                     par=hole.par,
+                    gross=gross,
                     adjusted_gross=computable,
                     strokes_received=hole_score.strokes_received,
                 )
@@ -715,6 +698,7 @@ class GetPlayerStatsUseCase:
                 strokes_basis, hole.stroke_index
             )
             score = scores_by_hole[hole.hole_number]
+            gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR if score is None else score
             computable = (
                 self._calculator.net_double_bogey(hole.par, strokes_received)
                 if score is None
@@ -724,6 +708,7 @@ class GetPlayerStatsUseCase:
                 HoleOutcome(
                     number=hole.hole_number,
                     par=hole.par,
+                    gross=gross,
                     adjusted_gross=computable,
                     strokes_received=strokes_received,
                 )

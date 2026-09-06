@@ -4,7 +4,7 @@
 # clase: de ahi el alias
 from datetime import date as date_type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlayerStatsResponseDTO(BaseModel):
@@ -180,8 +180,7 @@ class HoleDistributionDTO(BaseModel):
     double_or_worse: int = Field(0, description="Hoyos en doble bogey o peor")
     holes: int = Field(0, description="Hoyos contados en esta distribución")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ParPerformanceDTO(BaseModel):
@@ -193,8 +192,7 @@ class ParPerformanceDTO(BaseModel):
         ..., description="Media neta respecto al par, POR HOYO (+0.8 = casi un golpe de más)"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NinePerformanceDTO(BaseModel):
@@ -203,8 +201,7 @@ class NinePerformanceDTO(BaseModel):
     holes: int = Field(..., description="Hoyos contados en esa mitad")
     average_to_par: float = Field(..., description="Media neta respecto al par, POR HOYO")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CoursePerformanceDTO(BaseModel):
@@ -217,8 +214,7 @@ class CoursePerformanceDTO(BaseModel):
         ..., description="Media neta respecto al par por vuelta de 18, como `scoring_avg`"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScoringBreakdownResponseDTO(BaseModel):
@@ -260,5 +256,4 @@ class ScoringBreakdownResponseDTO(BaseModel):
         default_factory=list, description="Campos ordenados de mejor a peor media"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

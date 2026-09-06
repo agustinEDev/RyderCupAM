@@ -109,7 +109,9 @@ class ScoringBreakdownCalculator:
 
         return ScoringBreakdown(
             holes_counted=len(holes),
-            rounds_counted=len(rounds),
+            # Solo las que aportan hoyos: una vuelta vacía no es una vuelta
+            # jugada, y `by_par` y `by_course` ya la ignoran
+            rounds_counted=sum(1 for round_ in rounds if round_.holes),
             gross_distribution=self._distribution(hole.gross_to_par for hole in holes),
             net_distribution=self._distribution(hole.net_to_par for hole in holes),
             by_par=self._by_par(holes),

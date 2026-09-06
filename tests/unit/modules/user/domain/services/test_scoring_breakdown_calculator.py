@@ -13,11 +13,19 @@ from src.modules.user.domain.services.scoring_breakdown_calculator import (
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
 
 
-def hoyo(number: int, par: int, adjusted_gross: int, strokes_received: int = 0) -> HoleOutcome:
+def hoyo(
+    number: int,
+    par: int,
+    gross: int,
+    strokes_received: int = 0,
+    adjusted_gross: int | None = None,
+) -> HoleOutcome:
+    """Sin tope explícito, lo computable son los golpes que se dieron."""
     return HoleOutcome(
         number=number,
         par=par,
-        adjusted_gross=adjusted_gross,
+        gross=gross,
+        adjusted_gross=gross if adjusted_gross is None else adjusted_gross,
         strokes_received=strokes_received,
     )
 
@@ -214,3 +222,54 @@ class TestPorCampo:
 
         assert resultado.holes_counted == 2
         assert resultado.by_par != []
+
+
+class TestBrutoTopadoYBrutoReal:
+    """
+    La distribución en bruto mira los golpes que se dieron, no los computables.
+
+    Derivar el bruto del topado parecía inofensivo: para un jugador que recibe
+    golpes el tope está en `par + 2 + recibidos`, así que ninguna cesta cambia.
+    Para un jugador **plus** los recibidos son negativos y el tope cae POR
+    DEBAJO de `par + 2`: un doble bogey de verdad se contaba como bogey.
+    """
+
+    def test_un_jugador_plus_no_ve_su_doble_bogey_como_bogey(self):
+        # Par 4 jugado en 6 —doble bogey— por un plus que DEVUELVE un golpe:
+        # lo computable se topa en 5, pero el bruto sigue siendo 6
+        vuelta = RoundOutcome(
+            golf_course_id=None,
+            golf_course_name=None,
+            holes=[hoyo(1, 4, 6, strokes_received=-1, adjusted_gross=5)],
+        )
+
+        resultado = ScoringBreakdownCalculator().compute([vuelta])
+
+        assert resultado.gross_distribution.double_or_worse == 1
+        assert resultado.gross_distribution.bogey == 0
+
+    def test_el_neto_sigue_usando_lo_computable(self):
+        """El tope es lo que impide que un hoyo mueva la media de la temporada."""
+        vuelta = RoundOutcome(
+            golf_course_id=None,
+            golf_course_name=None,
+            holes=[hoyo(1, 4, 9, strokes_received=0, adjusted_gross=6)],
+        )
+
+        resultado = ScoringBreakdownCalculator().compute([vuelta])
+
+        # Bruto: un 9 en un par 4. Neto: topado en doble bogey
+        assert resultado.gross_distribution.double_or_worse == 1
+        assert resultado.by_par[0].average_to_par == 2.0
+
+
+class TestVueltasVacias:
+    def test_una_vuelta_vacia_no_infla_el_recuento_de_vueltas(self):
+        """Antes contaba, aunque no aportara ni un hoyo a ninguna otra vista."""
+        vacia = RoundOutcome(golf_course_id="c1", golf_course_name="Campo", holes=[])
+        real = vuelta_de_par([4] * 18, [4] * 18, golf_course_id="c1", golf_course_name="Campo")
+
+        resultado = ScoringBreakdownCalculator().compute([vacia, real])
+
+        assert resultado.rounds_counted == 1
+        assert resultado.holes_counted == 18

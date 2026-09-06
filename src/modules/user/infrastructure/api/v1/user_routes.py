@@ -385,8 +385,11 @@ async def get_my_scoring_breakdown(
     """
     Desglose de golpes (BE #168).
 
-    Va aparte de `/me/stats` y no dentro: son bastantes datos y el panel no
-    siempre los necesita, así que la pantalla de resumen no tiene que pagarlos.
+    Va aparte de `/me/stats` y no dentro porque son bastantes datos y el panel
+    no siempre los necesita. Lo que ahorra es la serialización, no el trabajo de
+    base de datos: recorre las mismas vueltas que el resumen, así que una
+    pantalla que pida los dos endpoints hace ese recorrido dos veces. Si algún
+    día pesa, la salida es un endpoint que devuelva ambos, no cachear este.
 
     Mide sobre las mismas vueltas que la media, con el mismo tope de doble bogey
     neto. Una cuenta sin historial devuelve ceros y listas vacías, no un 404.
