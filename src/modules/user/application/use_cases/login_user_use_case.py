@@ -35,6 +35,7 @@ from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,7 @@ class LoginUserUseCase:
             )
 
         # Verificar contraseña
-        if not user.verify_password(request.password):
+        if not await run_bcrypt(user.verify_password, request.password):
             # Account Lockout (v1.13.0): Registrar intento fallido
             user.record_failed_login()
 
