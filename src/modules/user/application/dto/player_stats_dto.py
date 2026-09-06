@@ -4,7 +4,7 @@
 # clase: de ahi el alias
 from datetime import date as date_type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlayerStatsResponseDTO(BaseModel):
@@ -159,3 +159,101 @@ class RecentMatchesResponseDTO(BaseModel):
     """Historial de partidas del jugador, de la más reciente a la más antigua."""
 
     matches: list[RecentMatchDTO] = Field(default_factory=list)
+
+
+# ============================================================================
+# Desglose de golpes (BE #168)
+# ============================================================================
+
+
+class HoleDistributionDTO(BaseModel):
+    """
+    Cuántos hoyos acabaron en cada cesta, sobre el total contado.
+
+    Se devuelven cuentas y no porcentajes: el porcentaje se saca dividiendo, y
+    dar los dos invita a que dejen de cuadrar.
+    """
+
+    birdie_or_better: int = Field(0, description="Hoyos en birdie o mejor")
+    par: int = Field(0, description="Hoyos en par")
+    bogey: int = Field(0, description="Hoyos en bogey")
+    double_or_worse: int = Field(0, description="Hoyos en doble bogey o peor")
+    holes: int = Field(0, description="Hoyos contados en esta distribución")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ParPerformanceDTO(BaseModel):
+    """Rendimiento en los hoyos de un par concreto."""
+
+    par: int = Field(..., description="Par del hoyo (3, 4, 5 o 6)")
+    holes: int = Field(..., description="Hoyos de ese par contados")
+    average_to_par: float = Field(
+        ..., description="Media neta respecto al par, POR HOYO (+0.8 = casi un golpe de más)"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NinePerformanceDTO(BaseModel):
+    """Rendimiento en una mitad de la vuelta."""
+
+    holes: int = Field(..., description="Hoyos contados en esa mitad")
+    average_to_par: float = Field(..., description="Media neta respecto al par, POR HOYO")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CoursePerformanceDTO(BaseModel):
+    """Rendimiento en un campo, en la escala de una vuelta de 18."""
+
+    golf_course_id: str = Field(..., description="ID del campo")
+    golf_course_name: str | None = Field(None, description="Nombre del campo")
+    rounds: int = Field(..., description="Vueltas contadas en ese campo")
+    average_to_par: float = Field(
+        ..., description="Media neta respecto al par por vuelta de 18, como `scoring_avg`"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ScoringBreakdownResponseDTO(BaseModel):
+    """
+    Dónde gana y dónde pierde los golpes un jugador.
+
+    `scoring_avg` dice cuánto juega de bien; esto dice dónde, que es lo que se
+    puede llevar al campo de prácticas. Sale de las mismas tarjetas y de las
+    mismas vueltas computables que la media, con el mismo tope de doble bogey
+    neto: los dos números no pueden contar historias distintas.
+
+    **Las medias van en dos escalas distintas, y es a propósito.** Por par y por
+    mitad de vuelta son medias POR HOYO —escalar un par 3 a 18 hoyos no
+    significa nada—; por campo va por vuelta de 18, que es la escala en la que
+    ya se publica `scoring_avg` y con la que hay que poder compararla.
+
+    La distribución se da **en bruto y en neto**: en bruto un birdie es un
+    birdie, y en neto un jugador de hándicap alto ve los pares netos que hace
+    en lugar de una lista de bogeys que no le dice dónde mejorar.
+
+    Una cuenta sin vueltas devuelve ceros y listas vacías, no un 404.
+    """
+
+    holes_counted: int = Field(0, description="Hoyos contados en todo el desglose")
+    rounds_counted: int = Field(0, description="Vueltas computables contadas")
+    gross_distribution: HoleDistributionDTO = Field(
+        default_factory=HoleDistributionDTO, description="Distribución en bruto"
+    )
+    net_distribution: HoleDistributionDTO = Field(
+        default_factory=HoleDistributionDTO, description="Distribución en neto"
+    )
+    by_par: list[ParPerformanceDTO] = Field(
+        default_factory=list,
+        description="Una entrada por cada par jugado de verdad, de menor a mayor",
+    )
+    front_nine: NinePerformanceDTO | None = Field(None, description="Hoyos 1-9")
+    back_nine: NinePerformanceDTO | None = Field(None, description="Hoyos 10-18")
+    by_course: list[CoursePerformanceDTO] = Field(
+        default_factory=list, description="Campos ordenados de mejor a peor media"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
