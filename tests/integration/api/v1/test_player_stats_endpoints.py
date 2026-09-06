@@ -339,3 +339,86 @@ class TestScoreDifferentials:
 
         assert body["rounds_with_differential"] == 3
         assert body["estimated_index"] == 15.5
+
+
+class TestScoringBreakdownEndpoint:
+    """El desglose de golpes (BE #168), sobre una partida jugada por la API."""
+
+    @pytest.mark.asyncio
+    async def test_breakdown_requires_a_session(self, client: AsyncClient):
+        client.cookies.clear()
+
+        response = await client.get("/api/v1/users/me/stats/breakdown")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_an_account_with_no_rounds_gets_zeros_not_a_404(self, client: AsyncClient):
+        player = await create_authenticated_user(
+            client, "breakdown_empty@test.com", "P@ssw0rd123!", "Empty", "Breakdown"
+        )
+        set_auth_cookies(client, player["cookies"])
+
+        response = await client.get("/api/v1/users/me/stats/breakdown")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["holes_counted"] == 0
+        assert body["by_par"] == []
+        assert body["front_nine"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_played_round_lands_in_every_view(self, client: AsyncClient):
+        """
+        Jugador sin hándicap en par 72, 5 golpes por hoyo: dieciocho bogeys.
+        Es la misma vuelta que da `scoring_avg` +18, vista por dentro.
+        """
+        admin = await create_admin_user(
+            client, "breakdown_admin@test.com", "P@ssw0rd123!", "Admin", "Breakdown"
+        )
+        player = await create_authenticated_user(
+            client, "breakdown_player@test.com", "P@ssw0rd123!", "Played", "Breakdown"
+        )
+        golf_course_id = await _approved_golf_course(client, admin, player)
+        await _played_medal_match(client, player, golf_course_id)
+
+        set_auth_cookies(client, player["cookies"])
+        response = await client.get("/api/v1/users/me/stats/breakdown")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        assert body["holes_counted"] == 18
+        assert body["rounds_counted"] == 1
+        assert body["gross_distribution"]["bogey"] == 18
+        # Sin hándicap, el neto es el bruto
+        assert body["net_distribution"]["bogey"] == 18
+        # El campo del helper es todo par 4, así que hay una sola entrada
+        assert [entry["par"] for entry in body["by_par"]] == [4]
+        assert body["by_par"][0]["average_to_par"] == 1.0
+        assert body["front_nine"]["average_to_par"] == 1.0
+        assert body["back_nine"]["average_to_par"] == 1.0
+        assert body["by_course"][0]["golf_course_id"] == golf_course_id
+        assert body["by_course"][0]["average_to_par"] == 18.0
+
+    @pytest.mark.asyncio
+    async def test_the_breakdown_agrees_with_the_average(self, client: AsyncClient):
+        """
+        El invariante que importa: las dos pantallas miran las mismas vueltas.
+        Si discreparan, el panel diría dos cosas a la vez sobre el mismo juego.
+        """
+        admin = await create_admin_user(
+            client, "breakdown_admin2@test.com", "P@ssw0rd123!", "Admin", "Agree"
+        )
+        player = await create_authenticated_user(
+            client, "breakdown_player2@test.com", "P@ssw0rd123!", "Agree", "Breakdown"
+        )
+        golf_course_id = await _approved_golf_course(client, admin, player)
+        await _played_medal_match(client, player, golf_course_id)
+
+        set_auth_cookies(client, player["cookies"])
+        stats = (await client.get("/api/v1/users/me/stats")).json()
+        breakdown = (await client.get("/api/v1/users/me/stats/breakdown")).json()
+
+        assert breakdown["rounds_counted"] == stats["rounds_played"]
+        assert breakdown["by_course"][0]["average_to_par"] == stats["scoring_avg"]

@@ -1,6 +1,6 @@
 """Caso de Uso: resumen de rendimiento de un jugador (BE #128, BE #167)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as date_type
 from decimal import Decimal
 
@@ -25,12 +25,20 @@ from src.modules.quick_match.domain.services.stableford_calculator import (
     StablefordCalculator,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
-from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
+from src.modules.user.application.dto.player_stats_dto import (
+    PlayerStatsResponseDTO,
+    ScoringBreakdownResponseDTO,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.services.scoring_breakdown_calculator import (
+    RoundOutcome,
+    ScoringBreakdownCalculator,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
+from src.shared.domain.value_objects.hole_outcome import HoleOutcome
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
@@ -57,6 +65,11 @@ class _ComputableRound:
     played_on: date_type
     to_par: int
     played_round: PlayedRound | None
+    # Los hoyos de la vuelta, para el desglose de golpes (BE #168). La media de
+    # arriba se suma de estos mismos, así que las dos vistas no pueden discrepar.
+    holes: list[HoleOutcome] = field(default_factory=list)
+    golf_course_id: str | None = None
+    golf_course_name: str | None = None
 
 
 class GetPlayerStatsUseCase:
@@ -102,20 +115,73 @@ class GetPlayerStatsUseCase:
         self._golf_course_uow = golf_course_uow
         self._calculator = stableford_calculator or StablefordCalculator()
         self._differentials = differential_calculator or ScoreDifferentialCalculator()
+        self._breakdown = ScoringBreakdownCalculator()
 
-    async def execute(
+    async def execute_breakdown(
         self, user_id: UserId, golf_course_id: GolfCourseId | None = None
-    ) -> PlayerStatsResponseDTO:
+    ) -> ScoringBreakdownResponseDTO:
         """
-        Resumen del jugador, opcionalmente restringido a un campo.
+        Desglose de golpes del jugador (BE #168): dónde gana y dónde pierde.
 
-        Con `golf_course_id` solo entran las rondas de ese campo, y los
-        contadores de torneos se dejan a cero: son globales del jugador y
-        repetirlos en un desglose por campo induciría a error.
+        Mide sobre EXACTAMENTE las mismas vueltas que `execute`, porque sale de
+        la misma recolección: si una tarjeta no entra en la media tampoco entra
+        aquí, y al revés. Dos recorridos distintos acabarían dando dos verdades.
+
+        Una cuenta sin vueltas devuelve el desglose vacío, no un 404: el panel
+        de un usuario nuevo es un caso normal.
         """
+        rounds = await self._collect_rounds(user_id, golf_course_id)
+
+        breakdown = self._breakdown.compute(
+            [
+                RoundOutcome(
+                    golf_course_id=item.golf_course_id,
+                    golf_course_name=item.golf_course_name,
+                    holes=item.holes,
+                )
+                for item in rounds
+            ]
+        )
+
+        return ScoringBreakdownResponseDTO.model_validate(breakdown)
+
+    async def _profile_handicap(self, user_id: UserId) -> float | None:
+        """El hándicap del perfil, o None si el jugador no tiene."""
         async with self._user_uow:
             user = await self._user_uow.users.find_by_id(user_id)
-            handicap = float(user.handicap.value) if user and user.handicap else None
+            return float(user.handicap.value) if user and user.handicap else None
+
+    async def _tournament_counters(
+        self, user_id: UserId, golf_course_id: GolfCourseId | None
+    ) -> tuple[int, int]:
+        """
+        Torneos totales y activos del jugador.
+
+        Con un campo elegido van a cero: son globales del jugador y repetirlos
+        dentro de un desglose por campo daría a entender que jugó ahí esos
+        torneos.
+        """
+        if golf_course_id is not None:
+            return 0, 0
+
+        async with self._competition_uow:
+            enrollments = await self._competition_uow.enrollments.find_by_user(user_id)
+            active = await self._competition_uow.enrollments.count_active_by_user(user_id)
+
+        return len(enrollments), active
+
+    async def _collect_rounds(
+        self, user_id: UserId, golf_course_id: GolfCourseId | None
+    ) -> list["_ComputableRound"]:
+        """
+        Las vueltas computables del jugador, de las dos fuentes y ya ordenadas.
+
+        La usan el resumen Y el desglose, y esa es la razón de que exista: si
+        cada uno recolectara por su cuenta, bastaría con tocar una de las dos
+        copias para que la media y el desglose dejaran de hablar de las mismas
+        vueltas, sin que ningún test lo viera.
+        """
+        handicap = await self._profile_handicap(user_id)
 
         quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
@@ -139,24 +205,32 @@ class GetPlayerStatsUseCase:
                 for match in competition_matches
             }
 
-            tournaments_total = 0
-            tournaments_active = 0
-            if golf_course_id is None:
-                enrollments = await self._competition_uow.enrollments.find_by_user(user_id)
-                tournaments_total = len(enrollments)
-                tournaments_active = (
-                    await self._competition_uow.enrollments.count_active_by_user(user_id)
-                )
-
         competition_rounds = await self._collect_competition_rounds(
             user_id, competition_matches, rounds_by_match, scorecards, handicap
         )
 
         # Las dos fuentes llegan ordenadas por su cuenta; el registro del WHS es
         # cronológico y no distingue de dónde salió cada vuelta
-        computable_rounds = sorted(
+        return sorted(
             quick_rounds + competition_rounds, key=lambda item: item.played_on, reverse=True
         )
+
+    async def execute(
+        self, user_id: UserId, golf_course_id: GolfCourseId | None = None
+    ) -> PlayerStatsResponseDTO:
+        """
+        Resumen del jugador, opcionalmente restringido a un campo.
+
+        Con `golf_course_id` solo entran las rondas de ese campo, y los
+        contadores de torneos se dejan a cero: son globales del jugador y
+        repetirlos en un desglose por campo induciría a error.
+        """
+        handicap = await self._profile_handicap(user_id)
+        computable_rounds = await self._collect_rounds(user_id, golf_course_id)
+        tournaments_total, tournaments_active = await self._tournament_counters(
+            user_id, golf_course_id
+        )
+
         differentials = self._differentials.differentials(
             [item.played_round for item in computable_rounds if item.played_round is not None]
         )
@@ -288,6 +362,14 @@ class GetPlayerStatsUseCase:
                             tee_color=participant.tee_color,
                             tee_gender=participant.tee_gender,
                         ),
+                        holes=self._quick_match_hole_outcomes(
+                            holes=holes,
+                            scores_by_hole=scores_by_hole,
+                            handicap=scoring_handicap,
+                            allowance_percentage=match.get_effective_allowance(),
+                        ),
+                        golf_course_id=str(course.id) if course is not None else None,
+                        golf_course_name=str(course.name) if course is not None else None,
                     )
                 )
 
@@ -373,6 +455,9 @@ class GetPlayerStatsUseCase:
                             tee_color=player.tee_color if player else None,
                             tee_gender=player.tee_gender if player else None,
                         ),
+                        holes=self._competition_hole_outcomes(hole_scores, hole_card) or [],
+                        golf_course_id=str(course.id) if course is not None else None,
+                        golf_course_name=str(course.name) if course is not None else None,
                     )
                 )
 
@@ -543,6 +628,27 @@ class GetPlayerStatsUseCase:
         número: sin número está la raya y está el hoyo que nadie tocó, y
         significan lo contrario.
         """
+        outcomes = self._competition_hole_outcomes(hole_scores, hole_card)
+        if outcomes is None:
+            return None
+
+        to_par = sum(outcome.net_to_par for outcome in outcomes)
+        return self._to_eighteen(to_par, len(outcomes))
+
+    def _competition_hole_outcomes(
+        self, hole_scores: list, hole_card: list
+    ) -> list[HoleOutcome] | None:
+        """
+        Los hoyos de una tarjeta de competición, o None si no forman vuelta.
+
+        Es el mismo recorrido que alimenta la media —de hecho la media se suma
+        de aquí— para que el desglose (BE #168) no mida sobre otros hoyos ni con
+        otro tope que el titular del panel.
+
+        Los golpes recibidos vienen del propio hoyo guardado, no se recalculan:
+        en competición el reparto se resolvió al anotar y es lo que el jugador
+        vio.
+        """
         scored = {
             hole_score.hole_number: hole_score
             for hole_score in hole_scores
@@ -552,7 +658,7 @@ class GetPlayerStatsUseCase:
         if played is None:
             return None
 
-        to_par = 0
+        outcomes = []
         for hole in played:
             hole_score = scored[hole.number]
             if hole_score.own_score is None:
@@ -563,9 +669,67 @@ class GetPlayerStatsUseCase:
                 computable = self._calculator.adjusted_gross(
                     hole_score.own_score, hole.par, hole_score.strokes_received
                 )
-            to_par += computable - hole_score.strokes_received - hole.par
+            outcomes.append(
+                HoleOutcome(
+                    number=hole.number,
+                    par=hole.par,
+                    adjusted_gross=computable,
+                    strokes_received=hole_score.strokes_received,
+                )
+            )
 
-        return self._to_eighteen(to_par, len(played))
+        return outcomes
+
+    def _quick_match_hole_outcomes(
+        self,
+        holes: list,
+        scores_by_hole: dict,
+        handicap: float | None,
+        allowance_percentage: int,
+    ) -> list[HoleOutcome]:
+        """
+        Los hoyos de una partida rápida, con el mismo tope que la media.
+
+        Aquí los golpes recibidos SÍ se calculan, porque en partida rápida el
+        reparto no se guarda hoyo a hoyo: sale del hándicap, del índice de
+        dificultad y del allowance, exactamente como al puntuar.
+
+        Se usa el calculador por sus métodos públicos y no se toca: su reparto
+        vive en el arnés de paridad con el frontend, y cambiarlo obliga a
+        regenerar el JSON de referencia.
+
+        La raya —clave presente con valor None, el hoyo recogido— vale doble
+        bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar.
+        Un hoyo que nadie tocó no está en `scores_by_hole` y no entra.
+        """
+        strokes_basis = self._calculator.resolve_strokes_basis(
+            handicap, None, allowance_percentage
+        )
+
+        outcomes = []
+        for hole in holes:
+            if hole.hole_number not in scores_by_hole:
+                continue
+
+            strokes_received = self._calculator.allocate_strokes(
+                strokes_basis, hole.stroke_index
+            )
+            score = scores_by_hole[hole.hole_number]
+            computable = (
+                self._calculator.net_double_bogey(hole.par, strokes_received)
+                if score is None
+                else self._calculator.adjusted_gross(score, hole.par, strokes_received)
+            )
+            outcomes.append(
+                HoleOutcome(
+                    number=hole.hole_number,
+                    par=hole.par,
+                    adjusted_gross=computable,
+                    strokes_received=strokes_received,
+                )
+            )
+
+        return outcomes
 
     # ==================== Jugadores y hándicaps ====================
 

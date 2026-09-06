@@ -21,6 +21,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.user.application.dto.player_stats_dto import (
     PlayerStatsResponseDTO,
     RecentMatchesResponseDTO,
+    ScoringBreakdownResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import (
     FindUserRequestDTO,
@@ -367,6 +368,30 @@ async def get_my_stats(
     hándicap; el campo está para no cambiar el contrato cuando lo haya.
     """
     return await use_case.execute(UserId(str(current_user.id)))
+
+
+@router.get(
+    "/me/stats/breakdown",
+    response_model=ScoringBreakdownResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Desglose de golpes del jugador",
+    description="Dónde gana y dónde pierde golpes: por par, por mitad de vuelta y por campo.",
+    tags=["Users"],
+)
+async def get_my_scoring_breakdown(
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+):
+    """
+    Desglose de golpes (BE #168).
+
+    Va aparte de `/me/stats` y no dentro: son bastantes datos y el panel no
+    siempre los necesita, así que la pantalla de resumen no tiene que pagarlos.
+
+    Mide sobre las mismas vueltas que la media, con el mismo tope de doble bogey
+    neto. Una cuenta sin historial devuelve ceros y listas vacías, no un 404.
+    """
+    return await use_case.execute_breakdown(UserId(str(current_user.id)))
 
 
 @router.get(
