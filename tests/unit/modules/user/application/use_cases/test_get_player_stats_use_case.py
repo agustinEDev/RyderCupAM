@@ -1508,3 +1508,140 @@ class TestParPorBarra:
 
         assert stats.rounds_with_differential == 1
         assert stats.best_differential is not None
+
+
+@pytest.mark.asyncio
+class TestScoringBreakdown:
+    """
+    El desglose de golpes (BE #168): dónde gana y dónde pierde el jugador.
+
+    Lo que se prueba aquí no es la aritmética —eso vive en los tests del
+    calculador— sino que el desglose mira EXACTAMENTE las mismas vueltas que la
+    media, que es lo que impide que el panel cuente dos historias distintas.
+    """
+
+    async def test_an_empty_account_returns_an_empty_breakdown_not_an_error(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-empty"))
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.holes_counted == 0
+        assert breakdown.rounds_counted == 0
+        assert breakdown.by_par == []
+        assert breakdown.by_course == []
+        assert breakdown.front_nine is None
+        assert breakdown.back_nine is None
+
+    async def test_counts_the_holes_of_a_played_quick_match(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-qm"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=4)
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.holes_counted == 18
+        assert breakdown.rounds_counted == 1
+        # Campo de par 4 jugado en 4: los dieciocho hoyos son pares
+        assert breakdown.gross_distribution.par == 18
+        assert breakdown.gross_distribution.holes == 18
+
+    async def test_a_bogey_round_lands_in_the_bogey_bucket(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-bogey"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.gross_distribution.bogey == 18
+
+    async def test_separates_the_front_nine_from_the_back_nine(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-nines"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        # Ida en par, vuelta en bogey
+        scores = {hole: (4 if hole <= 9 else 5) for hole in range(1, 19)}
+        await _played_quick_match(qm_uow, course, user, scores_by_hole=scores)
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.front_nine.average_to_par == 0.0
+        assert breakdown.back_nine.average_to_par == 1.0
+
+    async def test_reports_the_course_with_its_name(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-course"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert len(breakdown.by_course) == 1
+        assert breakdown.by_course[0].golf_course_name == "Test Golf Club"
+        assert breakdown.by_course[0].rounds == 1
+        assert breakdown.by_course[0].average_to_par == 18.0
+
+    # Este es el que importa: si el desglose y la media miraran vueltas
+    # distintas, el panel diría dos cosas a la vez
+    async def test_counts_the_same_rounds_the_average_counts(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        user = await create_user(user_uow, unique_email("breakdown-same"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=4)
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+        stats = await use_case.execute(user.id)
+        breakdown = await use_case.execute_breakdown(user.id)
+
+        assert breakdown.rounds_counted == stats.rounds_played
+
+    async def test_an_incomplete_card_stays_out_of_both(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Una vuelta a la que le falta un hoyo suelto no cuenta en ningún sitio."""
+        user = await create_user(user_uow, unique_email("breakdown-partial"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, holes=[1, 2, 3, 4, 5])
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+        stats = await use_case.execute(user.id)
+        breakdown = await use_case.execute_breakdown(user.id)
+
+        assert stats.rounds_played == 0
+        assert breakdown.rounds_counted == 0
+        assert breakdown.holes_counted == 0
+
+    async def test_a_half_round_counts_in_the_breakdown_too(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Los nueve de ida son vuelta computable, aquí igual que en la media."""
+        user = await create_user(user_uow, unique_email("breakdown-half"))
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, holes=list(range(1, 10)))
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.holes_counted == 9
+        assert breakdown.front_nine.holes == 9
+        assert breakdown.back_nine is None
