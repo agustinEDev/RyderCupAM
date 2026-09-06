@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-09-06
+
+### Added
+
+- **Desglose de golpes del jugador: dónde gana y dónde pierde.** Las métricas que ya había dicen *cuánto* juega de bien —media respecto al par, diferencial, índice estimado—. Estas dicen **dónde**, que es lo que se puede llevar al campo de prácticas (#168).
+
+  `GET /users/me/stats/breakdown` devuelve cuatro cosas: en qué acaban los hoyos (birdie o mejor, par, bogey, doble o peor), la media respecto al par **separada por el par del hoyo**, los primeros nueve contra los segundos, y la media por campo de mejor a peor.
+
+  **Sin un solo dato nuevo ni migración**: sale de las tarjetas que ya se guardan.
+
+  Decisiones que conviene conocer antes de consumirlo:
+
+  - **La distribución viene en bruto y en neto.** En bruto un birdie es un birdie; en neto un jugador de hándicap alto ve los pares netos que sí está haciendo en lugar de una lista de bogeys que no le dice dónde mejora. Medido sobre una vuelta real: la misma tarjeta son 0 birdies y 3 dobles en bruto, y 2 birdies y ningún doble en neto.
+  - **Hay dos escalas, a propósito.** Por par y por mitad de vuelta son medias **por hoyo** —escalar un par 3 a dieciocho hoyos no significa nada—; por campo va **por vuelta de 18**, que es la escala de `scoring_avg` y con la que hay que poder compararla.
+  - **Una entrada por cada par jugado de verdad**, no una lista fija de 3-4-5: hay hoyos par 6 y un pitch & putt es todo par 3.
+  - Las vueltas sin campo conocido quedan fuera del ranking de campos —no hay con qué compararlas— pero cuentan en todo lo demás.
+
+  Mide **exactamente** las vueltas que mide la media, porque ambos leen de la misma recolección. Una cuenta sin historial devuelve ceros y listas vacías, no un 404.
+
+### Fixed
+
+- **Un doble bogey de un jugador *plus* se contaba como bogey** en la distribución en bruto. El bruto se derivaba del golpe ya topado en el doble bogey neto; para quien recibe golpes el tope está por encima del par y no cambia nada, pero un jugador plus recibe golpes negativos y el tope cae por debajo. Ahora los golpes dados y los computables viajan por separado, que es como el calculador de partida rápida ya los trataba.
+
 ## [2.15.0] - 2026-09-05
 
 ### Added
