@@ -21,6 +21,7 @@ from src.shared.domain.repositories.country_repository_interface import (
 )
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,8 @@ class RegisterUserUseCase:
 
             # 2. Crear la entidad de dominio User
             gender = Gender(request.gender) if request.gender else None
-            new_user = User.create(
+            new_user = await run_bcrypt(
+                User.create,
                 email_str=request.email,
                 plain_password=request.password,
                 first_name=request.first_name,
