@@ -54,8 +54,10 @@ async def test_does_not_block_the_event_loop_while_hashing():
     """
     Mientras `run_bcrypt` trabaja, el loop tiene que seguir atendiendo otras tareas.
 
-    Sin el salto de hilo el contador se quedaría en 0: la función síncrona monopolizaría
-    el loop hasta terminar, que es exactamente el defecto que esto corrige.
+    Se compara el contador ANTES y DESPUÉS en vez de exigir un número de vueltas: con el
+    loop bloqueado el ticker no avanza ni una sola vez, así que basta con que avance para
+    distinguir los dos casos. Exigir «al menos N vueltas en 200 ms» medía de rebote lo
+    ocupada que estuviera la máquina, y fallaba en una cargada sin que nada estuviera roto.
     """
     ticks = 0
 
@@ -67,13 +69,17 @@ async def test_does_not_block_the_event_loop_while_hashing():
 
     task = asyncio.create_task(ticker())
     await asyncio.sleep(0)  # cede el control para que el ticker arranque
+    ticks_before = ticks
 
     try:
         await run_bcrypt(time.sleep, 0.2)  # simula el coste de bcrypt con 12 rounds
     finally:
         task.cancel()
 
-    assert ticks >= 3, f"el event loop quedó bloqueado (solo {ticks} ticks)"
+    assert ticks > ticks_before, (
+        f"el event loop quedó bloqueado: el ticker no avanzó ni una vez "
+        f"durante el hash (seguía en {ticks})"
+    )
 
 
 @pytest.mark.asyncio
