@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-09-07
+
+Release de rendimiento: no añade endpoints ni cambia ningún contrato, así que el frontend
+actual funciona igual antes y después. Los dos cambios atacan lo mismo desde sitios
+distintos —lo que la API deja de hacer mientras atiende a una persona— y los dos se
+midieron contra producción antes de escribirse.
+
+### Changed
+
+- **Un login ya no congela la API entera.** bcrypt con 12 rondas cuesta unos 200 ms de CPU
+  y se ejecutaba dentro de la propia corrutina. Producción corre **un solo worker de
+  uvicorn**, así que mientras se cifraba una contraseña el proceso no atendía **ninguna
+  otra petición**; la comprobación del historial de contraseñas, que encadena hasta cinco
+  verificaciones, lo dejaba parado más de un segundo (#272).
+
+  Los **siete** puntos que cifran pasan ahora por `run_bcrypt()`: login, cambio de
+  contraseña (comprobación de la actual, bucle del historial y hash nuevo), restablecer
+  contraseña, registro y el arranque del usuario de sistema. Eran siete, no uno: arreglar
+  solo el login habría dejado el resto congelando igual.
+
+  `run_bcrypt()` tiene dos mitades y la segunda importa tanto como la primera. Entrega el
+  trabajo a un hilo —bcrypt suelta el GIL mientras trabaja, así que el bucle sigue
+  repartiendo— y lo hace en **su propio pool pequeño** (`BCRYPT_MAX_CONCURRENCY`, 2 por
+  defecto). Sin ese tope, desbloquear el bucle habría cambiado un problema de latencia por
+  uno de agotamiento de recursos (OWASP A04): N logins simultáneos disparando N hashes
+  sobre medio núcleo. Lo que excede el tope espera en el bucle, que es barato.
+
+  El contexto viaja al hilo igual que en `asyncio.to_thread`, de modo que el
+  correlation-id sigue apareciendo en los registros escritos desde dentro del hash.
+
+- **`golf_course_tees` deja de leerse entera en cada consulta.** Medido en producción el 7
+  sep: **31.071 barridos secuenciales y 36 millones de tuplas leídas** de una tabla de
+  4.321 filas — más que todo lo demás junto (#284).
+
+  No se ve en los modelos: la tabla **ya tenía** dos índices que empiezan por
+  `golf_course_id`, pero los dos son **parciales** (`WHERE color <> 'OTHER'` y
+  `WHERE color = 'OTHER'`). PostgreSQL solo usa un índice parcial cuando la consulta
+  implica su predicado, y un `WHERE golf_course_id = ?` a secas no implica ninguno de los
+  dos, así que el planificador no tenía nada que usar. Probado, no supuesto: con
+  `enable_seqscan=off` prefería un barrido de coste 10.000.000.000 antes que cualquiera de
+  los dos índices existentes. Los parciales se quedan como están —hacen su trabajo de
+  unicidad—; lo que faltaba era el normal.
+
+### Fixed
+
+- **La migración limpia un índice inválido antes de crear el suyo.** Un
+  `CREATE INDEX CONCURRENTLY` que muere a medias deja el índice con `indisvalid = false`,
+  que el planificador ignora. Como `entrypoint.sh` reintenta `alembic upgrade head` en cada
+  arranque del contenedor, un `IF NOT EXISTS` a secas habría visto el nombre ocupado, se
+  habría saltado la creación y Alembic habría sellado la revisión: **el arreglo constaría
+  como desplegado mientras los barridos siguen**. Por el mismo motivo `env.py` pasa a
+  `transaction_per_migration`, que es lo que permite crear el índice sin bloquear la tabla.
+
+- El test que vigila que bcrypt no bloquea el bucle comparaba tiempos absolutos y fallaba
+  en una máquina cargada. Ahora mide el avance de un contador antes y después del hash, que
+  es lo que la prueba quería decir desde el principio.
+
+### Notes
+
+- **Nada que tocar en el despliegue.** `BCRYPT_MAX_CONCURRENCY`, `DB_POOL_SIZE` y
+  `DB_MAX_OVERFLOW` traen valores por defecto que **no cambian el comportamiento actual con
+  un solo proceso**; solo hacen explícito lo que ya era implícito. `env_int()` las lee con
+  respaldo seguro y un aviso, de modo que una variable mal escrita o vacía no puede tumbar
+  el contenedor al importar.
+- **Es release solo de backend.** Al no cambiar ningún contrato, no hay ventana peligrosa
+  entre despliegues y el frontend no tiene que ir detrás.
+
 ## [2.16.0] - 2026-09-06
 
 ### Added
