@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from src.shared.infrastructure.env import env_int
+
 # Cargar las variables de entorno del fichero .env
 load_dotenv()
 
@@ -36,6 +38,13 @@ async_engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,  # Detecta conexiones muertas antes de reutilizarlas
     pool_recycle=1800,  # Recicla conexiones cada 30 min (evita stale connections)
+    # El pool es POR PROCESO, y uvicorn lee WEB_CONCURRENCY del entorno por su cuenta
+    # (uvicorn/config.py), sin que este repo la declare en ninguna parte: subirla
+    # multiplica las conexiones contra Postgres por N x (pool_size + max_overflow), que
+    # los planes pequeños no dan. Los valores por defecto son los de SQLAlchemy, así que
+    # mientras haya un solo proceso nada cambia.
+    pool_size=env_int("DB_POOL_SIZE", default=5),
+    max_overflow=env_int("DB_MAX_OVERFLOW", default=10),
 )
 
 
