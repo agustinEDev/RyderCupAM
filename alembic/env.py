@@ -111,7 +111,19 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            # Una transacción POR migración, no una para todas las pendientes. Lo pide
+            # `autocommit_block()`, que usa la migración del índice de golf_course_tees
+            # (43bc18ca6df1): CREATE INDEX CONCURRENTLY no puede ir dentro de una
+            # transacción, así que el bloque cierra la que esté abierta. Sin esto, esa
+            # migración confirmaría de paso todas las anteriores del mismo arranque, y un
+            # fallo posterior dejaría la base a medias en vez de deshacerse entera.
+            # A cambio, cada revisión queda sellada al terminar: un reintento sigue por
+            # donde se quedó en lugar de repetirlas todas.
+            transaction_per_migration=True,
+        )
 
         with context.begin_transaction():
             context.run_migrations()

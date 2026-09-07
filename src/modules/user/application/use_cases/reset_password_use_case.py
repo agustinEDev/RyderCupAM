@@ -28,6 +28,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
 
 class ResetPasswordUseCase:
@@ -120,7 +121,8 @@ class ResetPasswordUseCase:
         try:
             # reset_password() internamente llama a can_reset_password()
             # Si el token es inválido/expirado, lanza ValueError
-            user.reset_password(
+            await run_bcrypt(
+                user.reset_password,
                 token=request.token,
                 new_password=request.new_password,
                 ip_address=ip_address,

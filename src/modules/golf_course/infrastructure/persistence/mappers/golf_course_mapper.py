@@ -307,6 +307,14 @@ golf_course_tees_table = Table(
     ),
     # Unique index funcional sobre (golf_course_id, color o identifier, género)
     # creado en la migración de tarjetas por barra
+    # Los dos funcionales de arriba empiezan por golf_course_id pero son PARCIALES, y
+    # Postgres solo usa un índice parcial si la consulta implica su predicado: un
+    # `WHERE golf_course_id = ?` no implica ninguno, así que la tabla se recorría entera
+    # (#284). Este va también en el modelo —y no solo en la migración, como el de
+    # tee_holes— porque es un índice normal de una columna y se expresa sin perder nada:
+    # así el esquema que los tests levantan desde los metadatos es el mismo que el de
+    # producción.
+    Index("ix_golf_course_tees_golf_course_id", "golf_course_id"),
     comment="Tees (salidas) de campos de golf con ratings WHS",
 )
 
