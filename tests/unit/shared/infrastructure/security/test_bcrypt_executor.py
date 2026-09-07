@@ -14,7 +14,11 @@ import time
 
 import pytest
 
-from src.shared.infrastructure.security.bcrypt_executor import MAX_CONCURRENCY, run_bcrypt
+from src.shared.infrastructure.security.bcrypt_executor import (
+    MAX_CONCURRENCY,
+    _executor,
+    run_bcrypt,
+)
 
 _probe_context: contextvars.ContextVar[str] = contextvars.ContextVar("probe_context")
 
@@ -102,3 +106,31 @@ async def test_propagates_the_context_to_the_thread():
     _probe_context.set("correlation-123")
 
     assert await run_bcrypt(_probe_context.get) == "correlation-123"
+
+
+@pytest.mark.asyncio
+async def test_does_not_let_work_pile_up_in_the_executor_queue():
+    """
+    El pool limita cuántos hashes CORREN; el semáforo limita cuántos ESPERAN.
+
+    Sin él, `ThreadPoolExecutor` encola una tarea por llamada en una cola sin tope, y
+    cada una retiene sus argumentos —contraseñas en claro entre ellos— hasta que le toca
+    el turno. Se mira la cola interna del executor a propósito: es la única forma de
+    afirmar la invariante desde fuera.
+    """
+    release = threading.Event()
+
+    def blocked():
+        release.wait(timeout=5)
+
+    tasks = [
+        asyncio.create_task(run_bcrypt(blocked)) for _ in range(MAX_CONCURRENCY * 10)
+    ]
+    try:
+        await asyncio.sleep(0.2)  # deja que todas intenten entrar
+        queued = _executor._work_queue.qsize()
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+
+    assert queued <= MAX_CONCURRENCY, f"{queued} tareas esperando dentro del executor"

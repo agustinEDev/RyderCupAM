@@ -12,11 +12,14 @@ La corrección tiene dos mitades, y la segunda importa tanto como la primera:
 
 1. Saltar a un hilo libera el event loop. bcrypt suelta el GIL mientras trabaja (la parte
    cara es C), así que el loop sigue despachando el resto de peticiones.
-2. Un pool PROPIO y pequeño limita cuántos hashes corren a la vez. Sin ese límite la
-   corrección abriría un agujero distinto: N logins simultáneos lanzarían N hashes contra
-   el medio núcleo del contenedor y lo dejarían de rodillas (OWASP A04, agotamiento de
-   recursos). Por encima del límite las peticiones esperan en el loop, que es barato.
-   `BCRYPT_MAX_CONCURRENCY` lo ajusta si algún día crece la CPU del plan.
+2. Un pool PROPIO y pequeño limita cuántos hashes corren a la vez, y un semáforo del
+   mismo tamaño limita cuántos ESPERAN. Sin el primero, N logins simultáneos lanzarían N
+   hashes contra el medio núcleo del contenedor y lo dejarían de rodillas (OWASP A04,
+   agotamiento de recursos). Sin el segundo, la cola del `ThreadPoolExecutor` —que no
+   tiene tope— acumularía una tarea por petición, cada una reteniendo sus argumentos
+   (contraseñas en claro incluidas) hasta que le tocara el turno. Con el semáforo la
+   espera ocurre en el event loop, que es barato y no guarda nada.
+   `BCRYPT_MAX_CONCURRENCY` ajusta los dos si algún día crece la CPU del plan.
 
 NO usar con `token_hash` (SHA-256): son microsegundos y el salto de hilo costaría más que
 la propia operación.
@@ -25,6 +28,7 @@ la propia operación.
 import asyncio
 import contextvars
 import functools
+import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import ParamSpec, TypeVar
@@ -41,6 +45,22 @@ MAX_CONCURRENCY = env_int("BCRYPT_MAX_CONCURRENCY", default=2)
 # Pool propio, no el del runtime: así el límite es real y los hashes no compiten por los
 # hilos que FastAPI usa para los endpoints síncronos.
 _executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENCY, thread_name_prefix="bcrypt")
+
+# Un semáforo por event loop. `asyncio.Semaphore` se ata al loop en el que se usa por
+# primera vez, así que uno global rompería en cuanto hubiera más de uno (los tests crean
+# uno por test). El diccionario es débil para que un loop cerrado no se quede retenido.
+_admission_gates: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, asyncio.Semaphore
+] = weakref.WeakKeyDictionary()
+
+
+def _admission_gate(loop: asyncio.AbstractEventLoop) -> asyncio.Semaphore:
+    """Devuelve el semáforo de admisión de este loop, creándolo la primera vez."""
+    gate = _admission_gates.get(loop)
+    if gate is None:
+        gate = asyncio.Semaphore(MAX_CONCURRENCY)
+        _admission_gates[loop] = gate
+    return gate
 
 
 async def run_bcrypt(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
@@ -65,4 +85,7 @@ async def run_bcrypt(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) ->
     # y demás contextvars sigan estando en los logs que salgan desde el hilo.
     context = contextvars.copy_context()
     call = functools.partial(context.run, functools.partial(func, *args, **kwargs))
-    return await loop.run_in_executor(_executor, call)
+    # Hay tantos permisos como hilos, así que nada llega al executor sin un hilo libre
+    # esperándolo: la cola de dentro no crece, y quien espera lo hace aquí.
+    async with _admission_gate(loop):
+        return await loop.run_in_executor(_executor, call)
