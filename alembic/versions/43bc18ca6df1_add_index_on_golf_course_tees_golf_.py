@@ -57,11 +57,19 @@ _IS_INVALID = sa.text(
 
 
 def upgrade() -> None:
-    # La comprobación va FUERA del autocommit_block, en la transacción de Alembic: solo
-    # lee, y así el bloque de abajo se queda con el DDL que no puede ir en transacción.
-    leftover_is_invalid = op.get_bind().execute(_IS_INVALID, {"name": INDEX_NAME}).scalar()
+    context = op.get_context()
 
-    with op.get_context().autocommit_block():
+    if context.as_sql:
+        # Modo offline (`alembic upgrade --sql`, que el CI usa para validar): no hay
+        # conexión que consultar —`op.get_bind()` devuelve None—, así que se emite el
+        # DROP siempre. Es idempotente y el guion resultante queda correcto igual.
+        leftover_is_invalid = True
+    else:
+        # La comprobación va FUERA del autocommit_block, en la transacción de Alembic:
+        # solo lee, y así el bloque se queda con el DDL que no puede ir en transacción.
+        leftover_is_invalid = op.get_bind().execute(_IS_INVALID, {"name": INDEX_NAME}).scalar()
+
+    with context.autocommit_block():
         if leftover_is_invalid:
             op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {INDEX_NAME}")
         op.execute(
