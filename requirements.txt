@@ -85,38 +85,10 @@ secure==0.3.0
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
 sentry-sdk[fastapi]==2.19.2
 
-# safety - Auditoría de vulnerabilidades en dependencias
-# Escanea el proyecto contra Safety DB (40K+ vulnerabilidades conocidas)
-# Detecta CVEs en dependencias directas y transitivas
-# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
-safety==3.7.0
-
-# pip-audit - Auditoría oficial de PyPA para dependencias
-# Escanea contra PyPI Advisory Database y OSV (Open Source Vulnerabilities)
-# Alternativa oficial mantenida por Python Packaging Authority
-# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
-pip-audit==2.10.0
-
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
 # Actualizado a 2.7.0 para resolver:
 # - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
 urllib3==2.7.0
-
-# filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
-# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition) y CVE-2026-22701
-filelock==3.20.3
-
-# authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
-# Fijada explícitamente para resolver:
-# - CVE-2025-61920 (DoS via large base64 tokens)
-# - CVE-2025-62706 (DoS via zip bomb decompression)
-# - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
-# - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
-# - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
-# - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
-# - PYSEC-2026-25 (Improper Verification of Cryptographic Signature - fixed in 1.6.11)
-# - PYSEC-2026-188 (fixed in 1.6.12)
-authlib==1.6.12
 
 # cryptography - Primitivas criptográficas de bajo nivel (dependencia transitiva)
 # Actualizado a 48.0.1 para resolver:
@@ -129,21 +101,17 @@ authlib==1.6.12
 # - CVE-2026-69249 (fixed in 49.0.0)
 cryptography==50.0.0
 
-# setuptools - Build system y package installer (dependencia transitiva de safety)
+# setuptools - Build system y package installer
+# Nadie lo declara como dependencia en producción: los paquetes que lo piden lo hacen desde
+# extras de test o dev. Se queda aquí a propósito, porque la imagen base de Python lo trae de
+# serie y hay librerías que usan pkg_resources en tiempo de ejecución sin declararlo; el pin
+# garantiza entonces que la versión presente sea una sin CVEs conocidas.
 # Fijada explícitamente para resolver:
 # - CVE-2024-6345 (Code Injection via package_index - CVSS 7.5 HIGH)
 # - CVE-2022-40897 (Regular Expression DoS - CVSS 5.9 MEDIUM)
 # - CVE-2025-47273 (Directory Traversal en _download_url - CVSS 6.8 MEDIUM)
 # - CVE-2026-59890 (Improper Handling of Unicode Encoding - MEDIUM)
 setuptools==83.0.0
-
-# zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata)
-# Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
-zipp==3.19.1
-
-# marshmallow - Object serialization/deserialization library (dependencia transitiva de safety)
-# Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
-marshmallow==3.26.2
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
@@ -153,22 +121,15 @@ idna==3.15
 # Fijada explícitamente para resolver CVE-2026-44307
 mako==1.3.12
 
-# nltk - Natural Language Toolkit (dependencia transitiva de safety)
-# Fijada explícitamente para resolver:
-# - PYSEC-2026-96, -97, -98, -99, CVE-2026-33230, CVE-2026-33231, GHSA-rf74-v2fm-23pw
-# - CVE-2026-54293, CVE-2026-12243, CVE-2026-12252 (path traversal / firma criptográfica, GHSA Dependabot #29/#31)
-# - CVE-2026-72818 (arreglada en 3.10.1) y CVE-2026-78680, -12876, -81723, -71513 (en 3.10.3)
-nltk==3.10.3
-
-# click - Command line interface creation kit (dependencia transitiva de nltk/safety/typer/uvicorn)
+# click - Command line interface creation kit (dependencia transitiva de uvicorn)
 # Fijada explícitamente para resolver SNYK-PYTHON-CLICK-16347201 (Command Injection)
 click==8.3.3
 
-# msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
-# Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)
-msgpack==1.2.1
-
-# pygments - Syntax highlighter (dependencia transitiva de varios dev tools)
+# pygments - Syntax highlighter (dependencia transitiva de pytest)
+# Se queda aquí, y no con los pins de las herramientas de auditoría, porque pytest está
+# declarado en ESTE fichero: sin el pin, la resolución de producción lo instala igual pero
+# sin garantía de versión. Comprobado con `pip install --dry-run -r requirements.txt`.
+# Si algún día el bloque de pytest se mueve a requirements-dev.txt, este pin se va con él.
 # Fijada explícitamente para resolver CVE-2026-4539
 pygments==2.20.0
 

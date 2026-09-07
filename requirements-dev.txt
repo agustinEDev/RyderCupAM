@@ -37,9 +37,69 @@ sqlalchemy[mypy]>=2.0.31
 # Detecta: SQL injection, uso de eval(), contraseñas hardcodeadas, etc.
 bandit[toml]>=1.7.9
 
-# Safety - Verifica vulnerabilidades conocidas en dependencias
-# Usa la base de datos de PyUp.io para detectar CVEs
-safety>=3.2.0
+# safety - Auditoría de vulnerabilidades en dependencias
+# Escanea el proyecto contra Safety DB (40K+ vulnerabilidades conocidas)
+# Detecta CVEs en dependencias directas y transitivas
+# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
+safety==3.7.0
+
+# pip-audit - Auditoría oficial de PyPA para dependencias
+# Escanea contra PyPI Advisory Database y OSV (Open Source Vulnerabilities)
+# Alternativa oficial mantenida por Python Packaging Authority
+# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
+pip-audit==2.10.0
+
+# ================================
+# PINS TRANSITIVOS DE LAS HERRAMIENTAS DE AUDITORÍA
+# ================================
+# Ninguno de estos lo usa la aplicación: los arrastran safety y pip-audit, que
+# solo se ejecutan aquí y en el job "Security Checks" del CI. Viven en este
+# fichero para que la imagen de producción no los instale (#289).
+# Comprobado con `pip show <paquete>`: su "Required-by" es exclusivamente de dev.
+# Los que sí necesita producción se quedan en requirements.txt — click (uvicorn),
+# urllib3 (requests, sentry-sdk) y mako (alembic).
+
+# filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
+# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition) y CVE-2026-22701
+filelock==3.20.3
+
+# authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
+# NO la usa el login con Google del proyecto: nada en src/ la importa.
+# Fijada explícitamente para resolver:
+# - CVE-2025-61920 (DoS via large base64 tokens)
+# - CVE-2025-62706 (DoS via zip bomb decompression)
+# - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
+# - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
+# - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
+# - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
+# - PYSEC-2026-25 (Improper Verification of Cryptographic Signature - fixed in 1.6.11)
+# - PYSEC-2026-188 (fixed in 1.6.12)
+authlib==1.6.12
+
+# marshmallow - Object serialization/deserialization library (dependencia transitiva de safety)
+# Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
+marshmallow==3.26.2
+
+# nltk - Natural Language Toolkit (dependencia transitiva de safety)
+# Sin versión parcheada para CVE-2026-81726 (GHSA-8mgp-746c-j5xp): 3.10.3 es la última
+# y sigue afectada. No la importa ningún módulo, así que la vía es no llevarla a producción.
+# OJO: esto NO la saca del CI. Los pasos de auditoría corren `pip-audit` y `safety scan`
+# contra el entorno instalado, que aquí sigue incluyendo nltk, así que la próxima CVE suya
+# CON versión de arreglo volverá a poner el pipeline en rojo igual que hoy.
+# Fijada explícitamente para resolver:
+# - PYSEC-2026-96, -97, -98, -99, CVE-2026-33230, CVE-2026-33231, GHSA-rf74-v2fm-23pw
+# - CVE-2026-54293, CVE-2026-12243, CVE-2026-12252 (path traversal / firma criptográfica, GHSA Dependabot #29/#31)
+# - CVE-2026-72818 (arreglada en 3.10.1) y CVE-2026-78680, -12876, -81723, -71513 (en 3.10.3)
+nltk==3.10.3
+
+# msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
+# Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)
+msgpack==1.2.1
+
+# zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
+# que a su vez entra con las herramientas de auditoría: ya no existe en producción)
+# Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
+zipp==3.19.1
 
 # ================================
 # ANÁLISIS DE CÓDIGO
