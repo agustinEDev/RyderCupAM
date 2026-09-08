@@ -122,4 +122,4 @@ tests/
 - [pytest-xdist Plugin](https://pytest-xdist.readthedocs.io/)
 - [Testing Best Practices](https://testing.googleblog.com/)
 - [Clean Architecture Testing](https://blog.cleancoder.com/uncle-bob/2014/05/14/TheLittleMocker.html)  
-- `requirements.txt`: Documented testing dependencies
+- `requirements-dev.txt`: Documented testing dependencies (moved out of `requirements.txt` in #291, so the production image does not ship the test runner)

@@ -30,6 +30,8 @@ RENDER_DEPLOYMENT.md
 
 # Tests
 tests/
+pytest.ini
+dev_tests.py
 .pytest_cache
 htmlcov/
 .coverage
