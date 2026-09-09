@@ -30,7 +30,7 @@ We need to establish a testing strategy that is:
 **We implement Optimized Testing** with:
 
 ### 1. Framework and Tools:
-- **pytest 8.3.0**: Main framework
+- **pytest 9.0.3**: Main framework
 - **pytest-xdist 3.8.0**: Automatic parallelization
 - **httpx 0.27.0**: HTTP client for API tests
 
