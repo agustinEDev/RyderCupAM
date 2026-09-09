@@ -102,6 +102,43 @@ msgpack==1.2.1
 zipp==3.19.1
 
 # ================================
+# TESTING
+# ================================
+# La suite no se ejecuta nunca dentro del contenedor: `.dockerignore` excluye `tests/`,
+# y el CI corre pytest directamente en el runner de GitHub. Vivían en requirements.txt,
+# de modo que la imagen de producción instalaba un ejecutor de pruebas y ninguna prueba
+# que ejecutar — 10 paquetes contando su árbol (#291).
+
+# pytest - Framework de testing moderno y potente
+# Más simple que unittest, mejor output de errores, fixtures potentes
+# Actualizado a 9.0.3 para resolver CVE-2025-71176 (arbitrary code execution via deserialization)
+pytest==9.0.3
+
+# pytest-json-report - Plugin para pytest que genera reportes en formato JSON
+# Esencial para el análisis programático de los resultados de los tests
+pytest-json-report==1.5.0
+
+# pytest-xdist - Plugin para pytest que permite ejecutar tests en paralelo
+# Acelera significativamente la suite de tests distribuyendo el trabajo
+pytest-xdist==3.8.0
+
+# pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
+# Permite usar async/await en tests y fixtures con asyncio_mode = auto
+# Actualizado a 1.4.0: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
+pytest-asyncio==1.4.0
+
+# pytest-cov - Plugin de cobertura para pytest
+# Sin versión fijada, como estaba en requirements.txt: se mueve tal cual para no
+# mezclar el traslado con un cambio de resolución
+pytest-cov
+
+# pygments - Syntax highlighter (dependencia transitiva de pytest)
+# Estaba pinneado en requirements.txt solo porque pytest lo arrastraba hasta producción.
+# Al mover el bloque de test, su único consumidor viene aquí, y el pin con él.
+# Fijada explícitamente para resolver CVE-2026-4539
+pygments==2.20.0
+
+# ================================
 # ANÁLISIS DE CÓDIGO
 # ================================
 

@@ -125,14 +125,6 @@ mako==1.3.12
 # Fijada explícitamente para resolver SNYK-PYTHON-CLICK-16347201 (Command Injection)
 click==8.3.3
 
-# pygments - Syntax highlighter (dependencia transitiva de pytest)
-# Se queda aquí, y no con los pins de las herramientas de auditoría, porque pytest está
-# declarado en ESTE fichero: sin el pin, la resolución de producción lo instala igual pero
-# sin garantía de versión. Comprobado con `pip install --dry-run -r requirements.txt`.
-# Si algún día el bloque de pytest se mueve a requirements-dev.txt, este pin se va con él.
-# Fijada explícitamente para resolver CVE-2026-4539
-pygments==2.20.0
-
 
 # ================================
 # IMÁGENES (Avatar de usuario)
@@ -170,22 +162,3 @@ httpx==0.27.0
 # Actualizado a 2.33.0 para resolver:
 # - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
 requests==2.33.0
-
-# pytest - Framework de testing moderno y potente
-# Más simple que unittest, mejor output de errores, fixtures potentes
-# Actualizado a 9.0.3 para resolver CVE-2025-71176 (arbitrary code execution via deserialization)
-pytest==9.0.3
-
-# pytest-json-report - Plugin para pytest que genera reportes en formato JSON
-# Esencial para el análisis programático de los resultados de los tests
-pytest-json-report==1.5.0
-
-# pytest-xdist - Plugin para pytest que permite ejecutar tests en paralelo
-# Acelera significativamente la suite de tests distribuyendo el trabajo
-pytest-xdist==3.8.0
-
-# pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
-# Permite usar async/await en tests y fixtures con asyncio_mode = auto
-# Actualizado a 1.4.0: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
-pytest-asyncio==1.4.0
-pytest-cov
