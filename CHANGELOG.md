@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.18.1] - 2026-09-15
+
+Hotfix: la v2.18.0 no llegó a arrancar en producción. Producción siguió sirviendo la 2.17.0
+durante todo el episodio, así que no hubo corte de servicio.
+
+### Fixed
+
+- **`jinja2` faltaba en la imagen y la aplicación no levantaba.** Nunca había sido una
+  dependencia declarada: entraba como transitiva de `safety`, y se fue con ella al sacar las
+  herramientas de auditoría de la imagen de producción (#289). Sentry lo necesita —
+  `FastApiIntegration` activa `StarletteIntegration`, cuyo `patch_templates()` importa
+  `starlette.templating`, que exige `jinja2`—, así que el arranque moría en el lifespan con
+  `ImportError: jinja2 must be installed to use Jinja2Templates`.
+
+  **Solo falla en producción**, y ahí está la razón de que no se detectara antes: sin
+  `SENTRY_DSN`, `init_sentry()` retorna antes de tocar nada, de modo que en el clúster local
+  la aplicación arranca perfectamente sin `jinja2`. La verificación de que la imagen
+  adelgazada arrancaba era correcta y aun así insuficiente: la ruta que rompe solo se recorre
+  con Sentry activo.
+
+  Queda fijado explícitamente y con la explicación al lado, para que no vuelva a parecer
+  prescindible: no se importa en ningún sitio del código.
+
 ## [2.18.0] - 2026-09-15
 
 La búsqueda de hándicap en la RFEG llevaba fallando para cualquier federado cuya grafía no
