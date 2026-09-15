@@ -572,8 +572,8 @@ cd RyderCupAM
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (dev includes production: it starts with -r requirements.txt)
+pip install -r requirements-dev.txt
 
 # Copy environment template
 cp .env.example .env
