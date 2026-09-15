@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-09-15
+
+La búsqueda de hándicap en la RFEG llevaba fallando para cualquier federado cuya grafía no
+coincidiese exactamente con la de la federación, que es buena parte de los nombres españoles.
+No añade endpoints ni cambia ningún contrato: el frontend actual funciona igual antes y
+después.
+
+Esta release lleva además la **imagen de producción adelgazada de 100 a 51 paquetes**. Es el
+único cambio con riesgo de arranque, y se verificó en el clúster local antes de cortar.
+
+### Fixed
+
+- **El hándicap de la RFEG no se encontraba si la grafía no coincidía al carácter.** La
+  respuesta de la federación se comparaba con la consulta en texto literal, así que bastaba
+  una tilde de diferencia para no encontrar a nadie. El reintento sin acentos que existía
+  para ese caso tampoco podía acertar nunca: comparaba su consulta ya normalizada contra una
+  respuesta acentuada. Ahora se normalizan los dos lados (#268).
+
+  Medido después contra la API real: la federación **no normaliza lo que guarda**. Hay fichas
+  con tildes, sin ellas y en mayúsculas y minúsculas mezcladas, así que no hay grafía de la
+  que fiarse y normalizar ambos lados es la única salida.
+
+- **La eñe se preserva al comparar.** El normalizador descomponía en NFD y borraba toda marca
+  diacrítica, de modo que `Peña` colapsaba en `Pena`: dos apellidos distintos. Casarlos habría
+  escrito el hándicap de otra persona, y en cuatro de los cinco flujos que buscan hándicap
+  —login, refresco masivo, generación de partidos y registro— eso se persiste sin que nadie lo
+  confirme, alimentando el reparto de golpes. La consulta sigue enviándose sin eñe.
+
+- **Tres excepciones dejaban la petición en un 500.** Un hándicap ilegible (`float()`), un 200
+  con cuerpo que no es JSON (una página de mantenimiento) y una respuesta con forma
+  inesperada lanzaban `ValueError`, `AttributeError` o `TypeError`, y ninguna es
+  `httpx.HTTPError`, así que escapaban del manejador del servicio. El registro, que captura
+  `HandicapServiceError` bajo un comentario que promete no fallar si no hay hándicap, se caía
+  entero. Ahora un fallo de forma es `HandicapServiceUnavailableError` y un dato ilegible se
+  descarta dejando aviso en los logs.
+
+- **El ADR-003 apuntaba al fichero equivocado** y anunciaba `pytest 8.3.0` con 9.0.3 fijado.
+  Salió de leer alrededor al sacar el runner de tests de la imagen.
+
+### Changed
+
+- **El reintento sin acentos de la RFEG se retira** (#295). Se mantuvo en su momento por falta
+  de datos; medido ya contra la API real con cuatro pares de nombres —`José García`, `Muñoz`,
+  `Estévez`, `Ibáñez`, con y sin tildes—, su buscador devuelve **resultados idénticos**. La
+  segunda consulta gastaba una petición para recibir lo mismo, y en el camino del login, que
+  busca hándicap en cada entrada.
+
+- **La imagen de producción pasa de 100 paquetes a 51.** Las herramientas de auditoría
+  (`safety`, `pip-audit`) y el runner de tests (`pytest`, `pygments`) se van a
+  `requirements-dev.txt` con los pines que solo ellas arrastraban (#289, #291). No sacan nada
+  del CI: los pasos de auditoría corren contra el entorno instalado, que sigue incluyendo las
+  dependencias de desarrollo.
+
+### Security
+
+- **ADR-038: política de identidad de red del cliente** (#274). Documenta por qué
+  `FORWARDED_ALLOW_IPS` sigue sin ponerse —activarla volvería el rate limit evadible con una
+  cabecera— y por qué el cubo de rate limit es único y deliberado. La decisión se había tomado
+  tres veces sin dejarla escrita.
+
 ## [2.17.0] - 2026-09-07
 
 Release de rendimiento: no añade endpoints ni cambia ningún contrato, así que el frontend
