@@ -7,6 +7,11 @@ Verifica la funcionalidad de normalización de texto para eliminar acentos.
 import unicodedata
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from src.modules.user.domain.errors.handicap_errors import (
+    HandicapServiceUnavailableError,
+)
 from src.modules.user.infrastructure.external.rfeg_handicap_service import (
     RFEGHandicapService,
 )
@@ -72,6 +77,36 @@ class TestRFEGHandicapServiceNormalizacion:
         assert resultado == "Jose Buela Fernandez"
 
 
+TOKEN_HTML = "var x = 'coded_" + "a1b2c3d4" * 4 + "';"
+
+
+def respuesta_token():
+    """Falsea la página principal de la que se extrae el token Bearer."""
+    respuesta = MagicMock()
+    respuesta.text = TOKEN_HTML
+    respuesta.raise_for_status = MagicMock()
+    return respuesta
+
+
+def respuesta_api(*jugadores: dict):
+    """Falsea la respuesta de la API de búsqueda con los jugadores dados."""
+    respuesta = MagicMock()
+    respuesta.raise_for_status = MagicMock()
+    respuesta.json = MagicMock(
+        return_value={"data": {"hits": [{"document": j} for j in jugadores]}}
+    )
+    return respuesta
+
+
+def cliente_que_devuelve(*respuestas):
+    """Monta el AsyncClient falso que irá soltando `respuestas` en orden."""
+    cliente = AsyncMock()
+    cliente.get = AsyncMock(side_effect=list(respuestas))
+    cliente.__aenter__ = AsyncMock(return_value=cliente)
+    cliente.__aexit__ = AsyncMock(return_value=None)
+    return cliente
+
+
 class TestRFEGHandicapServiceBusqueda:
     """
     Tests de `search_handicap` de punta a punta, con la RFEG falseada.
@@ -81,42 +116,13 @@ class TestRFEGHandicapServiceBusqueda:
     respuesta en literal.
     """
 
-    TOKEN_HTML = "var x = 'coded_" + "a1b2c3d4" * 4 + "';"
-
-    @staticmethod
-    def _respuesta_token():
-        """Falsea la página principal de la que se extrae el token Bearer."""
-        respuesta = MagicMock()
-        respuesta.text = TestRFEGHandicapServiceBusqueda.TOKEN_HTML
-        respuesta.raise_for_status = MagicMock()
-        return respuesta
-
-    @staticmethod
-    def _respuesta_api(*jugadores: dict):
-        """Falsea la respuesta de la API de búsqueda con los jugadores dados."""
-        respuesta = MagicMock()
-        respuesta.raise_for_status = MagicMock()
-        respuesta.json = MagicMock(
-            return_value={"data": {"hits": [{"document": j} for j in jugadores]}}
-        )
-        return respuesta
-
-    @staticmethod
-    def _cliente_que_devuelve(*respuestas):
-        """Monta el AsyncClient falso que irá soltando `respuestas` en orden."""
-        cliente = AsyncMock()
-        cliente.get = AsyncMock(side_effect=list(respuestas))
-        cliente.__aenter__ = AsyncMock(return_value=cliente)
-        cliente.__aexit__ = AsyncMock(return_value=None)
-        return cliente
-
     @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
     async def test_encuentra_con_tildes_a_los_dos_lados(self, mock_client_class):
         """El jugador escribe su nombre con tildes y la RFEG lo guarda con tildes"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
 
@@ -135,9 +141,9 @@ class TestRFEGHandicapServiceBusqueda:
         el nombre ya venía normalizado, y la única búsqueda comparaba en literal.
         """
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
 
@@ -151,9 +157,9 @@ class TestRFEGHandicapServiceBusqueda:
     async def test_encuentra_cuando_la_rfeg_responde_sin_tildes(self, mock_client_class):
         """El jugador escribe con tildes y la federación responde sin ellas"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "AGUSTIN ESTEVEZ", "handicap": 15.4}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "AGUSTIN ESTEVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
 
@@ -167,9 +173,9 @@ class TestRFEGHandicapServiceBusqueda:
     async def test_un_nombre_sin_tildes_sigue_funcionando(self, mock_client_class):
         """Sin tildes por ninguna parte, el comportamiento no cambia"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "JUAN LOPEZ", "handicap": 24.0}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "JUAN LOPEZ", "handicap": 24.0}),
         )
         mock_client_class.return_value = cliente
 
@@ -188,13 +194,13 @@ class TestRFEGHandicapServiceBusqueda:
         resultado debe seguir siendo None, no el hándicap del primero.
         """
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api(
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api(
                 {"full_name": "AGUSTÍN ESTÉVEZ GARCÍA", "handicap": 8.0},
                 {"full_name": "AGUSTÍN ESTÉBAN", "handicap": 12.0},
             ),
-            self._respuesta_api(),  # el reintento sin tildes tampoco encuentra
+            respuesta_api(),  # el reintento sin tildes tampoco encuentra
         )
         mock_client_class.return_value = cliente
 
@@ -208,9 +214,9 @@ class TestRFEGHandicapServiceBusqueda:
     async def test_un_resultado_sin_nombre_no_rompe_la_busqueda(self, mock_client_class):
         """Un hit con `full_name` nulo se ignora en vez de reventar la búsqueda"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api(
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api(
                 {"full_name": None, "handicap": 3.0},
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4},
             ),
@@ -230,10 +236,10 @@ class TestRFEGHandicapServiceBusqueda:
         consulta sin acentos, y esa es su razón de ser tras la issue #268.
         """
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api(),  # con tildes, la federación no devuelve nada
-            self._respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api(),  # con tildes, la federación no devuelve nada
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
 
@@ -301,17 +307,13 @@ class TestRFEGHandicapServiceComparacionConEnie:
 class TestRFEGHandicapServiceBusquedaCasosLimite:
     """Casos límite de `search_handicap` salidos de la revisión de la #268"""
 
-    _respuesta_token = staticmethod(TestRFEGHandicapServiceBusqueda._respuesta_token)
-    _respuesta_api = staticmethod(TestRFEGHandicapServiceBusqueda._respuesta_api)
-    _cliente_que_devuelve = staticmethod(TestRFEGHandicapServiceBusqueda._cliente_que_devuelve)
-
     @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
     async def test_no_casa_pena_con_penia(self, mock_client_class):
         """Un `Pena` no puede llevarse el hándicap de un `Peña`"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "JUAN PEÑA GARCIA", "handicap": 8.0}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "JUAN PEÑA GARCIA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
 
@@ -325,10 +327,10 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
     async def test_no_casa_penia_con_pena(self, mock_client_class):
         """Y al revés: un `Peña` tampoco se lleva el de un `Pena`"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
-            self._respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
+            respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
 
@@ -342,9 +344,9 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
     async def test_encuentra_a_un_penia_de_verdad(self, mock_client_class):
         """Preservar la eñe no puede impedir encontrar a quien sí la lleva"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "JUAN PEÑA GARCÍA", "handicap": 8.0}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "JUAN PEÑA GARCÍA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
 
@@ -363,10 +365,10 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         de `search_handicap`: escaparía del caso de uso como un 500.
         """
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
-            self._respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
+            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
         )
         mock_client_class.return_value = cliente
 
@@ -380,9 +382,9 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
     async def test_sigue_buscando_tras_un_handicap_ilegible(self, mock_client_class):
         """Un hit con hándicap ilegible no puede tapar al siguiente que sí vale"""
         # Arrange
-        cliente = self._cliente_que_devuelve(
-            self._respuesta_token(),
-            self._respuesta_api(
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_api(
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "15,4"},
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4},
             ),
@@ -394,3 +396,24 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
 
         # Assert
         assert handicap == 15.4
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_una_respuesta_que_no_es_json_es_servicio_no_disponible(self, mock_client_class):
+        """
+        Un 200 con una página de mantenimiento no puede salir como un 500.
+
+        `response.json()` lanzaría `JSONDecodeError`, que escapa del
+        `except httpx.HTTPError` de `search_handicap`. Los llamadores solo capturan
+        `HandicapServiceError`, así que un registro se caería entero en vez de
+        seguir sin hándicap, que es justo lo que su comentario promete.
+        """
+        # Arrange
+        respuesta_html = MagicMock()
+        respuesta_html.raise_for_status = MagicMock()
+        respuesta_html.json = MagicMock(side_effect=ValueError("Expecting value"))
+        cliente = cliente_que_devuelve(respuesta_token(), respuesta_html)
+        mock_client_class.return_value = cliente
+
+        # Act & Assert
+        with pytest.raises(HandicapServiceUnavailableError):
+            await RFEGHandicapService().search_handicap("Agustín Estévez")

@@ -6,6 +6,7 @@ Adaptador que encapsula la lógica de scraping del sistema de hándicaps de la
 Real Federación Española de Golf.
 """
 
+import logging
 import re
 import unicodedata
 from typing import ClassVar
@@ -16,6 +17,8 @@ from src.modules.user.domain.errors.handicap_errors import (
     HandicapServiceUnavailableError,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+
+logger = logging.getLogger(__name__)
 
 
 class RFEGHandicapService(HandicapService):
@@ -244,7 +247,17 @@ class RFEGHandicapService(HandicapService):
             )
             response.raise_for_status()
 
-            datos = response.json()
+            # Un 200 con cuerpo que no es JSON (una página de mantenimiento, por
+            # ejemplo) significa que la federación no está respondiendo lo que dice
+            # responder. Sin esto el error de parseo escapa del
+            # `except httpx.HTTPError` de search_handicap y tumba el registro con un
+            # 500, en vez de dejarlo seguir sin hándicap como promete su comentario.
+            try:
+                datos = response.json()
+            except ValueError as e:
+                raise HandicapServiceUnavailableError(
+                    f"La RFEG devolvió una respuesta que no es JSON: {e}"
+                ) from e
 
             # Buscar coincidencia exacta en todos los resultados
             # La API de RFEG devuelve la estructura: {"data": {"hits": [{"document": {...}}]}}
@@ -272,10 +285,17 @@ class RFEGHandicapService(HandicapService):
                         try:
                             return float(handicap)
                         except (TypeError, ValueError):
-                            # La RFEG puede devolver el hándicap como texto no
-                            # numérico ("N/A", "-", "15,4"). Sin esto la excepción
-                            # escapa del `except httpx.HTTPError` de search_handicap
-                            # y sale como un 500 en vez de "no encontrado".
+                            # Si la RFEG devolviera un hándicap ilegible, la
+                            # excepción escaparía del `except httpx.HTTPError` de
+                            # search_handicap y saldría como un 500 en vez de "no
+                            # encontrado". Se descarta el hit, pero con rastro: un
+                            # cambio de formato al otro lado degradaría la búsqueda
+                            # en silencio y no habría forma de saber por qué.
+                            logger.warning(
+                                "Hándicap no numérico en la respuesta de la RFEG para '%s': %r",
+                                nombre_encontrado,
+                                handicap,
+                            )
                             continue
 
             return None
