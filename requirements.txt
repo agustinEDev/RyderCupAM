@@ -85,6 +85,15 @@ secure==0.3.0
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
 sentry-sdk[fastapi]==2.19.2
 
+# jinja2 - Motor de plantillas (dependencia de RUNTIME, no opcional)
+# NO se usa directamente en el código, y por eso parece prescindible: no lo es.
+# Sentry activa StarletteIntegration a través de FastApiIntegration, y su
+# patch_templates() importa starlette.templating, que exige jinja2. Sin él la
+# aplicacion NO ARRANCA en produccion (v2.18.0, ImportError en el lifespan).
+# En desarrollo no se nota: sin SENTRY_DSN, init_sentry() retorna antes de llegar.
+# Entraba como transitiva de safety hasta que se sacó de la imagen (#289).
+jinja2==3.1.6
+
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
 # Actualizado a 2.7.0 para resolver:
 # - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
