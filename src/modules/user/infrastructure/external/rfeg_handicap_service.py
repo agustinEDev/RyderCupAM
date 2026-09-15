@@ -204,6 +204,64 @@ class RFEGHandicapService(HandicapService):
 
             return None
 
+    @staticmethod
+    def _extraer_jugadores(datos: object) -> list[dict]:
+        """
+        Valida la forma de la respuesta y devuelve los documentos de jugador.
+
+        Todo lo que llega de la RFEG pasa por aquí. Leer la estructura a pelo
+        (`datos["data"].get("hits")`) lanza `AttributeError` o `TypeError` en
+        cuanto la federación devuelve otra forma, y esas excepciones no son
+        `httpx.HTTPError`: se escapan de `search_handicap` y salen como un 500,
+        cuando lo que de verdad ha pasado es que el servicio no responde lo
+        acordado. Un contenedor con forma inesperada se trata como servicio no
+        disponible; un elemento suelto que no encaja se descarta con un aviso,
+        porque no invalida al resto de la respuesta.
+
+        Args:
+            datos: Cuerpo ya parseado de la respuesta de la RFEG
+
+        Returns:
+            Los documentos de jugador, o lista vacía si no hubo resultados
+
+        Raises:
+            HandicapServiceUnavailableError: Si la respuesta no tiene la forma
+                documentada: {"data": {"hits": [{"document": {...}}]}}
+        """
+
+        def no_disponible(detalle: str) -> HandicapServiceUnavailableError:
+            return HandicapServiceUnavailableError(
+                f"La RFEG devolvió una respuesta con forma inesperada: {detalle}"
+            )
+
+        if not datos:
+            return []
+        if not isinstance(datos, dict):
+            raise no_disponible(f"la raíz es {type(datos).__name__}, no un objeto")
+
+        contenedor = datos.get("data")
+        if not contenedor:
+            return []
+        if not isinstance(contenedor, dict):
+            raise no_disponible(f"'data' es {type(contenedor).__name__}, no un objeto")
+
+        hits = contenedor.get("hits") or []
+        if not isinstance(hits, list):
+            raise no_disponible(f"'hits' es {type(hits).__name__}, no una lista")
+
+        jugadores = []
+        for hit in hits:
+            if not isinstance(hit, dict):
+                logger.warning("Resultado descartado, no es un objeto: %r", hit)
+                continue
+            jugador = hit.get("document") or {}
+            if not isinstance(jugador, dict):
+                logger.warning("Resultado descartado, 'document' no es un objeto: %r", jugador)
+                continue
+            jugadores.append(jugador)
+
+        return jugadores
+
     async def _buscar_en_api(
         self, consulta: str, bearer_token: str, nombre_real: str | None = None
     ) -> float | None:
@@ -266,36 +324,30 @@ class RFEGHandicapService(HandicapService):
             # federación guarda los nombres con sus tildes y el jugador puede
             # escribirlos sin ellas (o al revés). Comparar en literal hacía fallar
             # la búsqueda en cuanto las dos grafías no coincidían exactamente.
-            if datos and "data" in datos:
-                hits = datos["data"].get("hits") or []
-                nombre_buscado = self._normalizar_para_comparar(
-                    nombre_real if nombre_real is not None else consulta
+            nombre_buscado = self._normalizar_para_comparar(
+                nombre_real if nombre_real is not None else consulta
+            ).upper()
+
+            for jugador in self._extraer_jugadores(datos):
+                nombre_encontrado = self._normalizar_para_comparar(
+                    jugador.get("full_name") or ""
                 ).upper()
 
-                for hit in hits:
-                    jugador = (hit or {}).get("document") or {}
-                    nombre_encontrado = self._normalizar_para_comparar(
-                        jugador.get("full_name") or ""
-                    ).upper()
-
-                    if nombre_encontrado and nombre_encontrado == nombre_buscado:
-                        handicap = jugador.get("handicap")
-                        if handicap is None:
-                            continue
-                        try:
-                            return float(handicap)
-                        except (TypeError, ValueError):
-                            # Si la RFEG devolviera un hándicap ilegible, la
-                            # excepción escaparía del `except httpx.HTTPError` de
-                            # search_handicap y saldría como un 500 en vez de "no
-                            # encontrado". Se descarta el hit, pero con rastro: un
-                            # cambio de formato al otro lado degradaría la búsqueda
-                            # en silencio y no habría forma de saber por qué.
-                            logger.warning(
-                                "Hándicap no numérico en la respuesta de la RFEG para '%s': %r",
-                                nombre_encontrado,
-                                handicap,
-                            )
-                            continue
+                if nombre_encontrado and nombre_encontrado == nombre_buscado:
+                    handicap = jugador.get("handicap")
+                    if handicap is None:
+                        continue
+                    try:
+                        return float(handicap)
+                    except (TypeError, ValueError):
+                        # Un hándicap ilegible se descarta, pero con rastro: un
+                        # cambio de formato al otro lado degradaría la búsqueda en
+                        # silencio y no habría forma de saber por qué.
+                        logger.warning(
+                            "Hándicap no numérico en la respuesta de la RFEG para '%s': %r",
+                            nombre_encontrado,
+                            handicap,
+                        )
+                        continue
 
             return None

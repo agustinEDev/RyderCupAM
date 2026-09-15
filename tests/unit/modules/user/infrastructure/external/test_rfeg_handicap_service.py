@@ -98,6 +98,14 @@ def respuesta_api(*jugadores: dict):
     return respuesta
 
 
+def respuesta_cruda(payload):
+    """Falsea una respuesta de la API con el cuerpo JSON que se le pase tal cual."""
+    respuesta = MagicMock()
+    respuesta.raise_for_status = MagicMock()
+    respuesta.json = MagicMock(return_value=payload)
+    return respuesta
+
+
 def cliente_que_devuelve(*respuestas):
     """Monta el AsyncClient falso que irá soltando `respuestas` en orden."""
     cliente = AsyncMock()
@@ -417,3 +425,81 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         # Act & Assert
         with pytest.raises(HandicapServiceUnavailableError):
             await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+
+class TestRFEGHandicapServiceFormaDeLaRespuesta:
+    """
+    La respuesta de la RFEG se valida antes de recorrerla.
+
+    Tercer caso de la misma familia que la #268 ya cerró dos veces: una excepción
+    que no es `httpx.HTTPError` se escapa de `search_handicap` y sale como un 500.
+    Aquí la lectura se unificó en `_extraer_jugadores` en vez de seguir parcheando.
+    """
+
+    @pytest.mark.parametrize(
+        ("payload", "motivo"),
+        [
+            (["data"], "la raíz es una lista"),
+            ({"data": [{"hits": []}]}, "'data' es una lista"),
+            ({"data": {"hits": {"document": {}}}}, "'hits' es un objeto"),
+        ],
+    )
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_una_forma_inesperada_es_servicio_no_disponible(
+        self, mock_client_class, payload, motivo
+    ):
+        """Una estructura que no reconocemos no puede decir 'no tiene hándicap'"""
+        # Arrange
+        cliente = cliente_que_devuelve(respuesta_token(), respuesta_cruda(payload))
+        mock_client_class.return_value = cliente
+
+        # Act & Assert
+        with pytest.raises(HandicapServiceUnavailableError):
+            await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+    @pytest.mark.parametrize("payload", [{}, {"data": None}, {"data": {}}])
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_una_respuesta_vacia_sigue_siendo_no_encontrado(self, mock_client_class, payload):
+        """Vacío no es lo mismo que mal formado: sigue siendo 'no encontrado'"""
+        # Arrange
+        cliente = cliente_que_devuelve(
+            respuesta_token(), respuesta_cruda(payload), respuesta_cruda(payload)
+        )
+        mock_client_class.return_value = cliente
+
+        # Act
+        handicap = await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+        # Assert
+        assert handicap is None
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_un_resultado_suelto_mal_formado_no_tapa_a_los_demas(self, mock_client_class):
+        """
+        Un elemento que no encaja se descarta, no tumba la respuesta entera.
+
+        Un hit malo no dice nada del resto, al contrario que un contenedor con
+        otra forma, que sí significa que el contrato cambió.
+        """
+        # Arrange
+        cliente = cliente_que_devuelve(
+            respuesta_token(),
+            respuesta_cruda(
+                {
+                    "data": {
+                        "hits": [
+                            "no soy un objeto",
+                            {"document": "tampoco"},
+                            {"document": {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}},
+                        ]
+                    }
+                }
+            ),
+        )
+        mock_client_class.return_value = cliente
+
+        # Act
+        handicap = await RFEGHandicapService().search_handicap("Agustín Estévez")
+
+        # Assert
+        assert handicap == 15.4
