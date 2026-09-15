@@ -132,15 +132,11 @@ class RFEGHandicapService(HandicapService):
         """
         Busca el hándicap de un jugador en la RFEG.
 
-        Intenta primero con el nombre original y si no encuentra resultados,
-        reintenta con el nombre normalizado (sin acentos).
-
-        El reintento NO existe para casar la respuesta: eso lo resuelve ya
-        `_buscar_en_api`, que compara normalizado contra normalizado. Se mantiene
-        porque el buscador de la RFEG puede devolver un conjunto de resultados
-        distinto según la consulta lleve tildes o no, que es una pregunta sobre su
-        motor y no sobre cómo comparamos. Solo dos llamadas reales pueden zanjarla;
-        hasta entonces se queda, porque quitarlo sería una apuesta sin datos.
+        Una sola consulta: el buscador de la federación ya ignora los diacríticos
+        —medido con cuatro pares de nombres, resultados idénticos con y sin
+        tildes—, así que reintentar sin acentos gastaba una petición de más para
+        recibir lo mismo. Que la grafía del jugador y la de la RFEG no coincidan
+        lo resuelve `_buscar_en_api`, comparando normalizado contra normalizado.
 
         Args:
             full_name: Nombre completo del jugador (ej: "Juan Pérez García")
@@ -159,20 +155,8 @@ class RFEGHandicapService(HandicapService):
                     "No se pudo obtener el token de autenticación de la RFEG"
                 )
 
-            # 2. Buscar jugador primero con nombre original
-            handicap = await self._buscar_en_api(full_name, bearer_token)
-            if handicap is not None:
-                return handicap
-
-            # 3. Si no se encontró, reintentar con nombre normalizado por si la
-            #    RFEG devuelve otros resultados para la consulta sin acentos
-            nombre_normalizado = self._normalizar_texto(full_name)
-            if nombre_normalizado != full_name:
-                return await self._buscar_en_api(
-                    nombre_normalizado, bearer_token, nombre_real=full_name
-                )
-
-            return None
+            # 2. Buscar al jugador
+            return await self._buscar_en_api(full_name, bearer_token)
 
         except httpx.HTTPError as e:
             raise HandicapServiceUnavailableError(
@@ -262,24 +246,18 @@ class RFEGHandicapService(HandicapService):
 
         return jugadores
 
-    async def _buscar_en_api(
-        self, consulta: str, bearer_token: str, nombre_real: str | None = None
-    ) -> float | None:
+    async def _buscar_en_api(self, full_name: str, bearer_token: str) -> float | None:
         """
         Realiza la búsqueda en la API de la RFEG.
 
-        La consulta que se envía y el nombre contra el que se comparan las
-        respuestas son dos cosas distintas: el reintento manda el nombre sin
-        acentos para ayudar al buscador de la federación, pero comparar contra esa
-        misma consulta despojada reintroduciría los falsos positivos que este
-        cambio corrige (un `Pena` casando con un `Peña`). Se compara siempre
-        contra lo que el jugador escribió de verdad.
+        El nombre se envía tal como lo escribió el jugador y se compara contra las
+        respuestas ya normalizado a ambos lados: la federación no normaliza lo que
+        guarda —hay fichas con tildes, sin ellas y en mayúsculas y minúsculas
+        mezcladas—, así que no hay grafía de la que fiarse.
 
         Args:
-            consulta: Texto que se envía a la RFEG como término de búsqueda
+            full_name: Nombre completo del jugador
             bearer_token: Token de autorización en formato "Bearer {token}"
-            nombre_real: Nombre del jugador contra el que comparar las respuestas.
-                Si no se indica, se compara contra la propia consulta.
 
         Returns:
             Hándicap del primer resultado encontrado o None
@@ -294,7 +272,7 @@ class RFEGHandicapService(HandicapService):
         )
 
         # Parámetros de búsqueda
-        params = {"q": consulta}
+        params = {"q": full_name}
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -324,9 +302,7 @@ class RFEGHandicapService(HandicapService):
             # federación guarda los nombres con sus tildes y el jugador puede
             # escribirlos sin ellas (o al revés). Comparar en literal hacía fallar
             # la búsqueda en cuanto las dos grafías no coincidían exactamente.
-            nombre_buscado = self._normalizar_para_comparar(
-                nombre_real if nombre_real is not None else consulta
-            ).upper()
+            nombre_buscado = self._normalizar_para_comparar(full_name).upper()
 
             for jugador in self._extraer_jugadores(datos):
                 nombre_encontrado = self._normalizar_para_comparar(
