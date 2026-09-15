@@ -208,7 +208,6 @@ class TestRFEGHandicapServiceBusqueda:
                 {"full_name": "AGUSTÍN ESTÉVEZ GARCÍA", "handicap": 8.0},
                 {"full_name": "AGUSTÍN ESTÉBAN", "handicap": 12.0},
             ),
-            respuesta_api(),  # el reintento sin tildes tampoco encuentra
         )
         mock_client_class.return_value = cliente
 
@@ -238,30 +237,30 @@ class TestRFEGHandicapServiceBusqueda:
         assert handicap == 15.4
 
     @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
-    async def test_reintenta_sin_tildes_cuando_la_primera_no_devuelve_nada(self, mock_client_class):
+    async def test_manda_una_sola_consulta_con_el_nombre_tal_cual(self, mock_client_class):
         """
-        El reintento se mantiene: la RFEG puede devolver otros resultados para la
-        consulta sin acentos, y esa es su razón de ser tras la issue #268.
+        Una búsqueda, no dos, y con el nombre sin tocar.
+
+        El reintento sin acentos se retiró en la #295: medido contra la RFEG, su
+        buscador devuelve resultados idénticos con y sin tildes, así que la segunda
+        consulta gastaba una petición para recibir lo mismo — en el camino del
+        login, que llama aquí en cada entrada.
         """
         # Arrange
-        cliente = cliente_que_devuelve(
-            respuesta_token(),
-            respuesta_api(),  # con tildes, la federación no devuelve nada
-            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
-        )
+        cliente = cliente_que_devuelve(respuesta_token(), respuesta_api())
         mock_client_class.return_value = cliente
 
         # Act
         handicap = await RFEGHandicapService().search_handicap("Agustín Estévez")
 
         # Assert
-        assert handicap == 15.4
+        assert handicap is None
         consultas = [
             llamada.kwargs["params"]["q"]
             for llamada in cliente.get.await_args_list
             if "params" in llamada.kwargs
         ]
-        assert consultas == ["Agustín Estévez", "Agustin Estevez"]
+        assert consultas == ["Agustín Estévez"]
 
 
 class TestRFEGHandicapServiceComparacionConEnie:
@@ -303,8 +302,8 @@ class TestRFEGHandicapServiceComparacionConEnie:
         # Assert
         assert resultado == "Peña"
 
-    def test_la_consulta_sigue_quitando_la_enie(self):
-        """`_normalizar_texto` no cambia: para buscar, la eñe se sigue quitando"""
+    def test_el_helper_original_sigue_quitando_la_enie(self):
+        """`_normalizar_texto` no cambia; `_normalizar_para_comparar` se apoya en él"""
         # Arrange & Act
         resultado = RFEGHandicapService._normalizar_texto("Peña")
 
@@ -337,7 +336,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         # Arrange
         cliente = cliente_que_devuelve(
             respuesta_token(),
-            respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
             respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
@@ -375,7 +373,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         # Arrange
         cliente = cliente_que_devuelve(
             respuesta_token(),
-            respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
             respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
         )
         mock_client_class.return_value = cliente
@@ -462,9 +459,7 @@ class TestRFEGHandicapServiceFormaDeLaRespuesta:
     async def test_una_respuesta_vacia_sigue_siendo_no_encontrado(self, mock_client_class, payload):
         """Vacío no es lo mismo que mal formado: sigue siendo 'no encontrado'"""
         # Arrange
-        cliente = cliente_que_devuelve(
-            respuesta_token(), respuesta_cruda(payload), respuesta_cruda(payload)
-        )
+        cliente = cliente_que_devuelve(respuesta_token(), respuesta_cruda(payload))
         mock_client_class.return_value = cliente
 
         # Act
