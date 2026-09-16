@@ -6,7 +6,22 @@ from pydantic import BaseModel, Field
 
 
 class SubmitHoleScoreBodyDTO(BaseModel):
-    """Body del request para registrar score de un hoyo."""
+    """
+    Body del request para registrar score de un hoyo.
+
+    **Omitir un score no es lo mismo que mandarlo nulo** (#301). Nulo es un hoyo
+    recogido —conceder el hoyo, en match play—, y un campo que no viene es un
+    campo que el jugador no ha tocado: el caso de uso mira `model_fields_set` y
+    solo actualiza los que llegan. Mandar los dos siempre concedia el hoyo del
+    jugador marcado sin que nadie lo concediera.
+
+    **Cuidado al reconstruir este DTO**: `model_fields_set` es procedencia, no
+    dato. Rehacerlo desde un volcado —`SubmitHoleScoreBodyDTO(**body.model_dump())`,
+    como haria un endpoint de sincronizacion por lotes o un camino de admin que
+    recomponga el body— marca los cuatro campos como enviados y vuelve a conceder
+    el hoyo, sin que falle ningun test. Si hace falta reenviar este body, pasar
+    `body.model_dump(exclude_unset=True)`.
+    """
 
     own_score: int | None = Field(None, ge=1, le=15)
     marked_player_id: str

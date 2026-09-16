@@ -79,11 +79,25 @@ class SubmitHoleScoreUseCase:
                 raise RoundNotFoundError("La ronda asociada no existe")
             match_format = round_entity.match_format
 
-            if not own_score_locked:
+            # Omitir un score NO es mandarlo nulo (#301). Nulo es un hoyo
+            # recogido —conceder, en match play—, y un campo que no viene es un
+            # campo que el jugador no ha tocado. Aplicar los dos siempre dejaba
+            # el hoyo del otro concedido sin que nadie lo concediera, y su fila
+            # en MISMATCH si ya habia anotado su numero.
+            #
+            # Misma intencion que partida rapida —nulo no es lo mismo que ausente—
+            # pero por el camino contrario: alli el score es obligatorio en el body
+            # y omitirlo da un 422; aqui omitirlo es un 200 que no toca nada. NO
+            # hacerlos obligatorios para "igualarlos": el frontend actual manda
+            # los dos siempre, y cada anotacion pasaria a ser un 422
+            own_score_recibido = "own_score" in body.model_fields_set
+            marked_score_recibido = "marked_score" in body.model_fields_set
+
+            if own_score_recibido and not own_score_locked:
                 await self._update_own_scores(
                     match, match_id, hole_number, body, user_id, match_format
                 )
-            if not marker_score_locked:
+            if marked_score_recibido and not marker_score_locked:
                 await self._update_marker_scores(
                     match, match_id, hole_number, body, marked_player_uid, match_format
                 )
