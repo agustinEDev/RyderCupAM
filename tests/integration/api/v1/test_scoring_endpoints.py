@@ -307,7 +307,8 @@ class TestSubmitHoleScore:
         b_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_b_id)
         assert b_score["marker_submitted"] is False
         assert b_score["marker_score"] is None
-        assert b_score["validation_status"] == "PENDING"
+        # En minusculas: es lo que serializa la vista de scoring, no el enum
+        assert b_score["validation_status"] == "pending"
 
     @pytest.mark.asyncio
     async def test_cross_validation_produces_match(self, client: AsyncClient):
