@@ -270,6 +270,46 @@ class TestSubmitHoleScore:
         assert b_score["own_submitted"] is False
 
     @pytest.mark.asyncio
+    async def test_submit_own_score_only_leaves_the_marked_player_untouched(
+        self, client: AsyncClient
+    ):
+        """
+        Given un hoyo sin anotar por nadie
+        When el body llega SIN marked_score (no nulo: ausente)
+        Then el hoyo del jugador marcado sigue sin anotar y no queda concedido
+
+        Por HTTP y no solo con el DTO en Python (#301): lo que hace el arreglo es
+        mirar `model_fields_set`, y eso lo rellena FastAPI al construir el body.
+        Un `model_validate` de mas en un middleware, o una version de Pydantic que
+        lo poblara distinto, dejaria el fallo intacto sin romper ningun test.
+        """
+        ctx = await setup_match_in_progress(client)
+        player_a_id = ctx["player_a"]["user"]["id"]
+        player_b_id = ctx["player_b"]["user"]["id"]
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={
+                "own_score": 4,
+                "marked_player_id": player_b_id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        hole_1 = next(s for s in data["scores"] if s["hole_number"] == 1)
+
+        a_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id)
+        assert a_score["own_score"] == 4
+        assert a_score["own_submitted"] is True
+
+        b_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_b_id)
+        assert b_score["marker_submitted"] is False
+        assert b_score["marker_score"] is None
+        assert b_score["validation_status"] == "PENDING"
+
+    @pytest.mark.asyncio
     async def test_cross_validation_produces_match(self, client: AsyncClient):
         """Cuando ambos jugadores registran el mismo score, validation_status es MATCH."""
         ctx = await setup_match_in_progress(client)

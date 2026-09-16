@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **La API ya distingue un golpe sin anotar de una raya** (#301). Ojo: **en producción nada
+  cambia con este despliegue**, porque el frontend de hoy manda siempre los dos campos. El
+  arreglo que el jugador nota llega con RyderCupWeb#609, cuando deje de mandar un golpe que no
+  ha puesto. Esto es lo que lo hace posible. El body del
+  envío lleva `own_score` y `marked_score`, los dos opcionales, y el frontend manda siempre los
+  dos: la casilla que nadie tocó viajaba como `null`. Y `null` es un **hoyo recogido** —conceder
+  el hoyo, en match play—, así que anotar solo tu golpe dejaba el del rival concedido sin que
+  nadie lo concediera. Al revés también: anotar solo el del rival concedía el tuyo.
+
+  Peor aún, si el otro ya había anotado su número, su hoyo pasaba a **MISMATCH**: un desacuerdo
+  que él no había provocado y que bloquea la entrega de la tarjeta.
+
+  Ahora el caso de uso mira `model_fields_set` y **solo aplica los campos que llegan**. Omitir un
+  campo no es mandarlo nulo; la raya, elegida a propósito, se sigue guardando igual. Es el mismo
+  criterio que partida rápida, donde el score es obligatorio en el body precisamente para que no
+  se pueda borrar por descuido.
+
+  Compatible con el frontend actual, que manda los dos campos: esto se despliega solo y sin
+  esperar a nada. Que el frontend deje de mandar un golpe sin valor es RyderCupWeb#609. Y es
+  requisito de #251: en Medal hay que rechazar la raya, y hasta ahora no se distinguía de una
+  casilla en blanco.
+
 ## [2.18.1] - 2026-09-15
 
 Hotfix: la v2.18.0 no llegó a arrancar en producción. Producción siguió sirviendo la 2.17.0
