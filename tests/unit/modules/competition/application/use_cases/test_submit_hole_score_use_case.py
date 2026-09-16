@@ -295,3 +295,179 @@ class TestSubmitHoleScoreHappyPath:
         updated_b = await uow.hole_scores.find_one(match.id, 1, b.user_id)
         assert updated_b.marker_score == 4
         assert updated_b.marker_submitted is True
+
+
+def _crossed_assignments(a, b):
+    return [
+        MarkerAssignment(
+            scorer_user_id=a.user_id, marks_user_id=b.user_id, marked_by_user_id=b.user_id
+        ),
+        MarkerAssignment(
+            scorer_user_id=b.user_id, marks_user_id=a.user_id, marked_by_user_id=a.user_id
+        ),
+    ]
+
+
+async def _match_with_hole_rows(uow, hole_number=1):
+    """Partido en juego, marcadores cruzados y las filas del hoyo ya creadas."""
+    a, b = _make_player(), _make_player()
+    match, mock_round = _setup_match(uow, [a], [b], marker_assignments=_crossed_assignments(a, b))
+    await uow.matches.add(match)
+    uow._rounds._rounds[mock_round.id] = mock_round
+
+    for player, team in ((a, "A"), (b, "B")):
+        await uow.hole_scores.add(
+            HoleScore.create(
+                match_id=match.id,
+                hole_number=hole_number,
+                player_user_id=player.user_id,
+                team=team,
+                strokes_received=0,
+            )
+        )
+
+    mock_comp = MagicMock()
+    mock_comp.id = mock_round.competition_id
+    mock_comp.team_1_name = "Team A"
+    mock_comp.team_2_name = "Team B"
+    uow._competitions._competitions[mock_comp.id] = mock_comp
+
+    return match, a, b
+
+
+class TestSubmitHoleScoreOmittedFields:
+    """Un score que no viene en el body no se toca (#301).
+
+    Nulo SI es un hoyo recogido —conceder, en match play—, asi que omitir y
+    mandar nulo no pueden significar lo mismo: hoy los dos dejan el hoyo del
+    otro concedido sin que nadie lo conceda.
+    """
+
+    @pytest.mark.asyncio
+    async def test_own_score_only_leaves_the_marked_player_untouched(
+        self, uow, user_repo, scoring_service
+    ):
+        """
+        Given un hoyo sin anotar por nadie
+        When llega own_score y marked_score NO viene en el body
+        Then la fila del jugador marcado se queda sin tocar
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(b.user_id))
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert marked.marker_submitted is False
+        assert marked.marker_score is None
+        own = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert own.own_score == 4
+        assert own.own_submitted is True
+
+    @pytest.mark.asyncio
+    async def test_marked_score_only_leaves_the_player_untouched(
+        self, uow, user_repo, scoring_service
+    ):
+        """
+        Given un hoyo sin anotar por nadie
+        When llega marked_score y own_score NO viene en el body
+        Then la fila del propio jugador se queda sin tocar
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(marked_player_id=str(b.user_id), marked_score=5)
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        own = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert own.own_submitted is False
+        assert own.own_score is None
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert marked.marker_score == 5
+        assert marked.marker_submitted is True
+
+    @pytest.mark.asyncio
+    async def test_an_explicit_null_own_score_is_still_a_picked_up_hole(
+        self, uow, user_repo, scoring_service
+    ):
+        """
+        Given un hoyo sin anotar
+        When own_score viene en el body con valor nulo (la raya)
+        Then el hoyo queda recogido, y la fila del marcado sin tocar
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(own_score=None, marked_player_id=str(b.user_id))
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        own = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert own.own_submitted is True
+        assert own.own_score is None
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert marked.marker_submitted is False
+
+    @pytest.mark.asyncio
+    async def test_an_explicit_null_marked_score_is_still_a_picked_up_hole(
+        self, uow, user_repo, scoring_service
+    ):
+        """
+        Given un hoyo sin anotar
+        When marked_score viene en el body con valor nulo
+        Then el hoyo del marcado queda recogido, y el propio sin tocar
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(marked_player_id=str(b.user_id), marked_score=None)
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert marked.marker_submitted is True
+        assert marked.marker_score is None
+        own = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert own.own_submitted is False
+
+    @pytest.mark.asyncio
+    async def test_a_body_with_no_scores_changes_nothing(self, uow, user_repo, scoring_service):
+        """
+        Given un hoyo sin anotar
+        When el body solo trae marked_player_id
+        Then no se anota nada en ninguna de las dos filas
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(marked_player_id=str(b.user_id))
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        own = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert own.own_submitted is False
+        assert marked.marker_submitted is False
+
+    @pytest.mark.asyncio
+    async def test_own_score_only_does_not_put_the_other_hole_in_mismatch(
+        self, uow, user_repo, scoring_service
+    ):
+        """
+        Given que el jugador marcado ya anoto su propio score
+        When llega own_score del otro sin marked_score
+        Then su hoyo sigue PENDING y no pasa a MISMATCH
+        """
+        match, a, b = await _match_with_hole_rows(uow)
+        marked_row = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        marked_row.set_own_score(4)
+        marked_row.recalculate_validation()
+        await uow.hole_scores.update(marked_row)
+
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(b.user_id))
+
+        await uc.execute(str(match.id), 1, body, a.user_id)
+
+        marked = await uow.hole_scores.find_one(match.id, 1, b.user_id)
+        assert marked.own_score == 4
+        assert marked.marker_submitted is False
+        assert marked.validation_status.value == "PENDING"

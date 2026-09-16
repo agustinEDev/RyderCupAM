@@ -121,7 +121,9 @@ async def submit_hole_score(
     """
     Registra el score de un jugador en un hoyo especifico.
 
-    Incluye tanto own_score como marked_score (score que el marcador asigna al jugador marcado).
+    Los dos scores son opcionales y se aplica **solo lo que llega**: omitir un campo
+    deja esa anotacion como estaba, y mandarlo nulo es una raya (hoyo recogido, o
+    concedido en match play). Ver #301. Acepta own_score y marked_score (score que el marcador asigna al jugador marcado).
     Retorna la vista completa de scoring actualizada.
 
     **Restricciones:**
