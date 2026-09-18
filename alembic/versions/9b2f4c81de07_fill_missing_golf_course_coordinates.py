@@ -9,10 +9,10 @@ cae en su municipio:
 
 - OpenStreetMap, nodo etiquetado como campo de golf: Estepona Golf, Compostela
   (los dos recorridos comparten club), Praia D'El Rey, Royal Óbidos, Grandvalira
-  (Golf Soldeu, Canillo), La Finca Golf (Pozuelo), Mas Torrellas y Bocigas —este
-  último aparece sin nombre, y el geocodificado inverso lo sitúa en el pueblo—.
+  (Golf Soldeu, Canillo), La Finca Golf (Pozuelo) y Mas Torrellas.
 - Coordenadas publicadas del club: San Roque New.
-- Código Plus de Google Maps, con precisión de unos 14 m: La Loma (Córdoba).
+- Código Plus de Google Maps, con precisión de unos 14 m: La Loma (Córdoba) y
+  Bocigas (este último apareció además en OpenStreetMap, sin nombre, a 236 m).
 - **Aproximadas**, del vial del propio complejo y no del campo: Isla del Fraile y
   La Resina. Sirven para situarlos en el mapa y, desde luego, para el huso; si
   alguien las afina, mejor.
@@ -43,7 +43,7 @@ depends_on = None
 
 COORDENADAS: list[tuple[str | None, str, float, float]] = [
     # identificador de la RFEG (o None), nombre, latitud, longitud
-    ("591:BOCIGAS", "Bocigas", 41.23204, -4.67892),
+    ("591:BOCIGAS", "Bocigas", 41.22994, -4.67931),
     ("1119:COMPOSTELA P P CORTO", "Compostela P&P Corto", 42.92283, -8.48453),
     ("1119:COMPOSTELA P P LARGO", "Compostela P&P Largo", 42.92283, -8.48453),
     ("1117:ESTEPONA GOLF", "Estepona Golf", 36.41297, -5.21219),
