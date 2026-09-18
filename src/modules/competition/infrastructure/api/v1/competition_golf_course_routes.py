@@ -242,6 +242,7 @@ async def list_competition_golf_courses(
                             course_type=golf_course.course_type.value,
                             total_par=golf_course.total_par,
                             approval_status=golf_course.approval_status.value,
+                            timezone=golf_course.timezone,
                             tees=[
                                 TeeResponseDTO(
                                     color=tee.color.value,

@@ -112,6 +112,7 @@ class GolfCourseMapper:
             approval_status=golf_course.approval_status.value,
             rejection_reason=golf_course.rejection_reason,
             total_par=golf_course.total_par,
+            timezone=golf_course.timezone,
             created_at=golf_course.created_at,
             updated_at=golf_course.updated_at,
             original_golf_course_id=(
@@ -195,6 +196,7 @@ class GolfCourseMapper:
             approval_status=golf_course.approval_status.value,
             rejection_reason=golf_course.rejection_reason,
             total_par=golf_course.total_par,
+            timezone=golf_course.timezone,
             created_at=golf_course.created_at,
             updated_at=golf_course.updated_at,
             original_golf_course_id=(

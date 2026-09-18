@@ -1,5 +1,7 @@
 """Excepciones compartidas de la capa de aplicación del módulo Competition."""
 
+from datetime import datetime
+
 
 class CompetitionNotFoundError(Exception):
     """La competición no existe."""
@@ -95,6 +97,22 @@ class MatchNotScoringError(Exception):
     """El partido no esta en estado para registrar scores."""
 
     pass
+
+
+class ScoringNotOpenYetError(Exception):
+    """
+    La anotacion de ese partido todavia no ha abierto (BE #305).
+
+    Distinto de `MatchNotScoringError` a proposito: este rechazo lo arregla
+    ESPERAR, asi que el movil tiene que conservar el golpe en su cola en vez de
+    darlo por perdido. Lleva la hora de apertura para poder decirla.
+    """
+
+    error_code = "SCORING_NOT_OPEN_YET"
+
+    def __init__(self, message: str, opens_at: datetime):
+        super().__init__(message)
+        self.opens_at = opens_at
 
 
 class InvalidHoleNumberError(Exception):

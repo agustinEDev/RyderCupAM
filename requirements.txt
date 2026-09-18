@@ -171,3 +171,18 @@ httpx==0.27.0
 # Actualizado a 2.33.0 para resolver:
 # - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
 requests==2.33.0
+
+# tzdata - Base de datos de zonas horarias para `zoneinfo`
+# La anotación de un partido abre a una hora LOCAL del campo (BE #305), y
+# `ZoneInfo("Europe/Madrid")` la resuelve hoy contra los ficheros del sistema
+# operativo, que nadie declara aquí: adelgazar la imagen podría llevárselos y
+# entonces fallaría hasta construir una competición. Con este paquete la lleva
+# Python, sin depender del sistema
+tzdata==2026.4
+
+# tzfpy - Zona horaria a partir de coordenadas
+# La anotación de un partido abre a una hora LOCAL del campo (BE #305) y el país
+# no basta: España tiene dos husos, y también EEUU, Chile o Australia. Lleva las
+# fronteras de husos del mundo en 3 MB y sin dependencias; la alternativa
+# habitual, `timezonefinder`, arrastra numpy
+tzfpy==2.1.0

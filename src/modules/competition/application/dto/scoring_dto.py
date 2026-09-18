@@ -1,5 +1,6 @@
 """DTOs para el modulo de scoring."""
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -147,6 +148,11 @@ class ScoringViewResponseDTO(BaseModel):
     scores: list[HoleScoreEntryDTO]
     match_standing: MatchStandingDTO
     scorecard_submitted_by: list[str]
+    # A que hora abre la anotacion de este partido, con su desfase (BE #305).
+    # El cliente la usa para ofrecer «Anotar» —tambien sin cobertura, desde lo
+    # que tenga guardado— en vez de adivinar si alguien pulso START. `None` en
+    # rondas sin fecha o sin sesion, que solo abren con START
+    scoring_opens_at: datetime | None = None
 
 
 class ScorecardResultDTO(BaseModel):

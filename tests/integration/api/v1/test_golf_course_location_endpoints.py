@@ -142,3 +142,89 @@ class TestGolfCourseLocation:
             course for course in listing.json()["golf_courses"] if course["id"] == course_id
         )
         assert listed["location"]["latitude"] == 43.29519
+
+
+TENERIFE_LOCATION = {
+    "latitude": 28.17084,
+    "longitude": -16.7926,
+    "city": "GUIA DE ISORA",
+    "province": "SANTA CRUZ DE TENERIFE",
+}
+
+
+class TestZonaHorariaDelCampo:
+    """
+    La zona horaria sale de las coordenadas al dar de alta el campo (BE #305).
+
+    De ahí sale la hora a la que se abre sola la anotación de un partido, y por
+    eso no vale el país: Derio y Tenerife son los dos España, con una hora de
+    diferencia.
+    """
+
+    @pytest.mark.asyncio
+    async def test_un_campo_peninsular_queda_en_madrid(self, client: AsyncClient):
+        user = await create_authenticated_user(
+            client, "tz-peninsula@test.com", "P@ssw0rd123!", "Creator", "Test"
+        )
+
+        response = await client.post(
+            "/api/v1/golf-courses/request",
+            json=build_course_payload(DERIO_LOCATION),
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert response.json()["timezone"] == "Europe/Madrid"
+
+    @pytest.mark.asyncio
+    async def test_un_campo_canario_queda_en_canarias(self, client: AsyncClient):
+        """El mismo país, otro huso: esto es lo que el código de país no puede dar."""
+        user = await create_authenticated_user(
+            client, "tz-canarias@test.com", "P@ssw0rd123!", "Creator", "Test"
+        )
+
+        response = await client.post(
+            "/api/v1/golf-courses/request",
+            json=build_course_payload(TENERIFE_LOCATION),
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert response.json()["timezone"] == "Atlantic/Canary"
+
+    @pytest.mark.asyncio
+    async def test_sin_coordenadas_no_hay_zona_y_no_se_inventa(self, client: AsyncClient):
+        """
+        Trece de los 805 campos no traen coordenadas. Ese campo se queda sin
+        zona: sus partidos solo se abren pulsando START, y la pantalla de la
+        competición lo avisa para que no se descubra en el campo sin cobertura.
+        """
+        user = await create_authenticated_user(
+            client, "tz-sin-coords@test.com", "P@ssw0rd123!", "Creator", "Test"
+        )
+
+        response = await client.post(
+            "/api/v1/golf-courses/request",
+            json=build_course_payload(),
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 201
+        assert response.json()["timezone"] is None
+
+    @pytest.mark.asyncio
+    async def test_la_zona_sobrevive_a_guardarla_y_volver_a_leerla(self, client: AsyncClient):
+        user = await create_authenticated_user(
+            client, "tz-detalle@test.com", "P@ssw0rd123!", "Creator", "Test"
+        )
+        creado = await client.post(
+            "/api/v1/golf-courses/request",
+            json=build_course_payload(TENERIFE_LOCATION),
+            cookies=user["cookies"],
+        )
+        course_id = creado.json()["id"]
+
+        detalle = await client.get(f"/api/v1/golf-courses/{course_id}", cookies=user["cookies"])
+
+        assert detalle.status_code == 200
+        assert detalle.json()["timezone"] == "Atlantic/Canary"

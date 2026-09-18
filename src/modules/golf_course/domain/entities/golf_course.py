@@ -8,6 +8,7 @@ Ver ADR-032 para detalles del workflow de aprobación.
 from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
@@ -112,6 +113,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -159,6 +161,11 @@ class GolfCourse:
         self._set_provenance(provenance)
         self._physical_holes = physical_holes
         self._validate_physical_holes()
+        # Donde esta el campo, en horario: la anotacion de un partido abre a una
+        # hora LOCAL (BE #305). Puede no saberse —un campo sin coordenadas— y
+        # entonces ese partido solo se abre con START
+        self._timezone = timezone
+        self._validate_timezone()
 
         # Reconciliar la tarjeta del campo con la de cada salida antes de validar
         self._sync_holes_and_tees()
@@ -192,6 +199,15 @@ class GolfCourse:
         self._source = provenance.source
         self._external_id = provenance.external_id
         self._imported_at = provenance.imported_at
+
+    def _validate_timezone(self) -> None:
+        """La zona tiene que existir: una invalida abre la anotacion a deshora."""
+        if self._timezone is None:
+            return
+        try:
+            ZoneInfo(self._timezone)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"La zona horaria '{self._timezone}' no existe") from e
 
     def _validate_physical_holes(self) -> None:
         """
@@ -290,6 +306,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse":
         """
         Factory method para crear un nuevo campo de golf.
@@ -335,6 +352,7 @@ class GolfCourse:
             location=location,
             provenance=provenance,
             physical_holes=physical_holes,
+            timezone=timezone,
         )
 
         # Registrar evento de creación
@@ -367,6 +385,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -390,6 +409,7 @@ class GolfCourse:
             location=location,
             provenance=provenance,
             physical_holes=physical_holes,
+            timezone=timezone,
         )
 
     def approve(self) -> None:
@@ -465,6 +485,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> None:
         """
         Actualiza los campos del golf course.
@@ -509,8 +530,21 @@ class GolfCourse:
         self._name = name
         self._country_code = country_code
         self._course_type = course_type
+        # El huso SIGUE a la ubicacion (BE #305): unas coordenadas nuevas con el
+        # huso viejo abren la anotacion a deshora, y un campo al que se le anaden
+        # coordenadas no ganaria nunca su apertura automatica
         if location is not None:
             self._set_location(location)
+            # Tambien cuando la zona no se conoce: quedarse con la del
+            # emplazamiento anterior es lo peor de todo, porque el campo sigue
+            # abriendo solo, y a deshora. Sin huso se abre con START y la
+            # pantalla lo avisa. Quien no pueda calcularlo —el caso de uso sin
+            # resolver— manda el que ya tenia, que no es lo mismo que no saberlo
+            self._timezone = timezone
+            self._validate_timezone()
+        elif timezone is not None:
+            self._timezone = timezone
+            self._validate_timezone()
         if provenance is not None:
             self._set_provenance(provenance)
         if physical_holes is not None:
@@ -559,6 +593,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse | None":
         """
         Aplica una actualización al campo de golf según las reglas de negocio.
@@ -607,6 +642,7 @@ class GolfCourse:
                 location=location,
                 provenance=provenance,
                 physical_holes=physical_holes,
+                timezone=timezone,
             )
             return None
 
@@ -621,6 +657,11 @@ class GolfCourse:
             tees=tees,
             holes=holes,
             location=location if location is not None else self.location,
+            # El huso, igual que la ubicacion: sin esto el clon nace sin el y
+            # aprobarlo dejaria el campo sin apertura automatica (BE #305). Si la
+            # propuesta trae ubicacion, el huso es el suyo —aunque sea ninguno—;
+            # heredar el viejo haria que aprobarla abriese a la hora de antes
+            timezone=timezone if location is not None else (timezone or self.timezone),
             provenance=provenance if provenance is not None else self.provenance,
             physical_holes=(
                 physical_holes if physical_holes is not None else self.physical_holes
@@ -643,6 +684,7 @@ class GolfCourse:
             original_golf_course_id=self._id,
             is_pending_update=False,
             location=clone.location,
+            timezone=clone.timezone,
             provenance=clone.provenance,
             physical_holes=clone.physical_holes,
         )
@@ -691,6 +733,9 @@ class GolfCourse:
         self._country_code = clone._country_code
         self._course_type = clone._course_type
         self._set_location(clone.location)
+        # Con su huso: aprobar unas coordenadas nuevas y quedarse con la hora
+        # vieja abre la anotacion a deshora (BE #305)
+        self._timezone = clone.timezone
         self._set_provenance(clone.provenance)
         self._physical_holes = clone.physical_holes
 
@@ -907,6 +952,11 @@ class GolfCourse:
     @property
     def rejection_reason(self) -> str | None:
         return self._rejection_reason
+
+    @property
+    def timezone(self) -> str | None:
+        """Zona horaria IANA del campo, o None si no se conoce."""
+        return self._timezone
 
     @property
     def created_at(self) -> datetime:

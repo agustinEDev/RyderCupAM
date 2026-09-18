@@ -28,6 +28,17 @@ class MatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, match_id: MatchId) -> Match | None:
+        """
+        Busca un partido por su ID bloqueando su fila (SELECT ... FOR UPDATE).
+
+        Lo usa la apertura automatica de la anotacion (BE #305): dos jugadores
+        pueden mandar su primer golpe a la vez, y sin bloqueo los dos abririan
+        el partido y duplicarian los 18 hoyos por jugador.
+        """
+        pass
+
+    @abstractmethod
     async def find_completed_for_player(
         self, user_id: UserId, limit: int | None = None
     ) -> list[Match]:

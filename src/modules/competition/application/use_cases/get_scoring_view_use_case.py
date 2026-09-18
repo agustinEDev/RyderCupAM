@@ -21,6 +21,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.scoring_opening_service import (
+    ScoringOpeningService,
+)
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
@@ -129,6 +132,13 @@ class GetScoringViewUseCase:
                 scores=scores_dto,
                 match_standing=MatchStandingDTO(**standing),
                 scorecard_submitted_by=[str(uid) for uid in match.scorecard_submitted_by],
+                # Para que el cliente ofrezca anotar desde esa hora, tambien sin
+                # cobertura, en vez de adivinar si alguien pulso START (BE #305)
+                scoring_opens_at=ScoringOpeningService.opens_at(
+                    round_entity.round_date,
+                    round_entity.session_type,
+                    golf_course.timezone if golf_course else None,
+                ),
             )
 
     def _build_marker_assignments(self, match, user_names):

@@ -7,6 +7,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     RequestGolfCourseResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
+from src.modules.golf_course.application.ports.timezone_resolver import ITimezoneResolver
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -45,8 +46,17 @@ class CreateDirectGolfCourseUseCase:
         ValueError: Si los datos son inválidos (reglas de dominio)
     """
 
-    def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
+    def __init__(
+        self,
+        uow: GolfCourseUnitOfWorkInterface,
+        timezone_resolver: ITimezoneResolver | None = None,
+    ) -> None:
         self._uow = uow
+        # De donde sale la zona horaria del campo (BE #305): se deduce de sus
+        # coordenadas, porque el pais no basta —España tiene dos husos—. Sin
+        # resolutor o sin coordenadas el campo se queda sin zona, y entonces sus
+        # partidos solo se abren pulsando START
+        self._timezone_resolver = timezone_resolver
 
     async def execute(
         self,
@@ -96,6 +106,7 @@ class CreateDirectGolfCourseUseCase:
                 location=GolfCourseMapper.to_domain_location(request.location),
                 provenance=provenance,
                 physical_holes=physical_holes,
+                timezone=self._zona_de(GolfCourseMapper.to_domain_location(request.location)),
             )
 
             # 6. Aprobar inmediatamente (Admin privilege)
@@ -108,3 +119,9 @@ class CreateDirectGolfCourseUseCase:
             response_dto = GolfCourseMapper.to_response_dto(golf_course)
 
             return RequestGolfCourseResponseDTO(golf_course=response_dto)
+
+    def _zona_de(self, location) -> str | None:
+        """La zona horaria del campo, deducida de sus coordenadas."""
+        if self._timezone_resolver is None or location is None:
+            return None
+        return self._timezone_resolver.for_coordinates(location.latitude, location.longitude)
