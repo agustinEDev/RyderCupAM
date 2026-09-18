@@ -83,6 +83,7 @@ class UpdateGolfCourseUseCase:
                 raise ValueError(f"Country with code '{request.country_code}' not found")
 
             # 4. Crear Tees y Holes desde DTOs
+            location = GolfCourseMapper.to_domain_location(request.location)
             tees = GolfCourseMapper.to_domain_tees(request.tees)
 
             holes = GolfCourseMapper.to_domain_holes(request.holes)
@@ -96,8 +97,8 @@ class UpdateGolfCourseUseCase:
                 tees=tees,
                 holes=holes,
                 is_admin=is_admin,
-                location=GolfCourseMapper.to_domain_location(request.location),
-                timezone=self._zona_de(GolfCourseMapper.to_domain_location(request.location)),
+                location=location,
+                timezone=self._zona_de(location, original_course.timezone),
                 provenance=provenance,
                 physical_holes=physical_holes,
             )
@@ -132,8 +133,20 @@ class UpdateGolfCourseUseCase:
                 pending_update=None,
             )
 
-    def _zona_de(self, location) -> str | None:
-        """La zona horaria de las coordenadas nuevas, si las hay."""
-        if self._timezone_resolver is None or location is None:
+    def _zona_de(self, location, actual: str | None) -> str | None:
+        """
+        La zona horaria de las coordenadas nuevas, si las hay.
+
+        Sin ubicación nueva devuelve None, que para `update` significa «deja el
+        huso como está». Con ubicación nueva el huso la sigue, y si no se resuelve
+        el campo se queda sin él: heredar el del emplazamiento anterior abriría la
+        anotación a deshora (CodeRabbit, PR #307).
+
+        Salvo sin resolver inyectado: entonces no es que la zona no se conozca, es
+        que no se puede calcular, así que se conserva la que hubiera.
+        """
+        if location is None:
             return None
+        if self._timezone_resolver is None:
+            return actual
         return self._timezone_resolver.for_coordinates(location.latitude, location.longitude)

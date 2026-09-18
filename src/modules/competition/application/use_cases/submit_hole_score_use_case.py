@@ -59,6 +59,12 @@ class SubmitHoleScoreUseCase:
         body: SubmitHoleScoreBodyDTO,
         user_id: UserId,
     ) -> ScoringViewResponseDTO:
+        # El instante en que LLEGA la peticion, no el de despues de las consultas:
+        # un golpe enviado antes de la hora de apertura no se acepta porque las
+        # busquedas de ronda, competicion y campo hayan tardado lo suyo
+        # (CodeRabbit, PR #307)
+        llegada = self._now()
+
         async with self._uow:
             match_id = MatchId(match_id_str)
             match = await self._uow.matches.find_by_id(match_id)
@@ -73,7 +79,7 @@ class SubmitHoleScoreUseCase:
             # solo acerto el identificador. Ademas el rechazo de «aun no ha
             # abierto» lleva la hora, que tampoco es suya (BE #305)
             if not match.status.can_record_scores():
-                match = await self._abre_si_toca(match)
+                match = await self._abre_si_toca(match, llegada)
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
             own_score_locked = match.has_submitted_scorecard(user_id)
@@ -127,7 +133,7 @@ class SubmitHoleScoreUseCase:
         )
         return await view_uc.execute(match_id_str)
 
-    async def _abre_si_toca(self, match):
+    async def _abre_si_toca(self, match, llegada):
         """
         Abre la anotacion del partido si ya es su hora, y devuelve el partido abierto.
 
@@ -174,7 +180,7 @@ class SubmitHoleScoreUseCase:
         )
         if opens_at is None:
             raise no_se_puede
-        if self._now() < opens_at:
+        if llegada < opens_at:
             raise ScoringNotOpenYetError(
                 f"La anotacion de este partido abre a las {opens_at.isoformat()}",
                 opens_at=opens_at,

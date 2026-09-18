@@ -530,12 +530,19 @@ class GolfCourse:
         self._name = name
         self._country_code = country_code
         self._course_type = course_type
-        if location is not None:
-            self._set_location(location)
         # El huso SIGUE a la ubicacion (BE #305): unas coordenadas nuevas con el
         # huso viejo abren la anotacion a deshora, y un campo al que se le anaden
         # coordenadas no ganaria nunca su apertura automatica
-        if timezone is not None:
+        if location is not None:
+            self._set_location(location)
+            # Tambien cuando la zona no se conoce: quedarse con la del
+            # emplazamiento anterior es lo peor de todo, porque el campo sigue
+            # abriendo solo, y a deshora. Sin huso se abre con START y la
+            # pantalla lo avisa. Quien no pueda calcularlo —el caso de uso sin
+            # resolver— manda el que ya tenia, que no es lo mismo que no saberlo
+            self._timezone = timezone
+            self._validate_timezone()
+        elif timezone is not None:
             self._timezone = timezone
             self._validate_timezone()
         if provenance is not None:
@@ -651,8 +658,10 @@ class GolfCourse:
             holes=holes,
             location=location if location is not None else self.location,
             # El huso, igual que la ubicacion: sin esto el clon nace sin el y
-            # aprobarlo dejaria el campo sin apertura automatica (BE #305)
-            timezone=timezone if timezone is not None else self.timezone,
+            # aprobarlo dejaria el campo sin apertura automatica (BE #305). Si la
+            # propuesta trae ubicacion, el huso es el suyo —aunque sea ninguno—;
+            # heredar el viejo haria que aprobarla abriese a la hora de antes
+            timezone=timezone if location is not None else (timezone or self.timezone),
             provenance=provenance if provenance is not None else self.provenance,
             physical_holes=(
                 physical_holes if physical_holes is not None else self.physical_holes

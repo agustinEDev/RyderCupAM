@@ -172,3 +172,61 @@ def test_una_zona_invalida_tampoco_entra_por_la_edicion(zona):
             location=CANARIAS,
             timezone=zona,
         )
+
+
+class TestCuandoLaUbicacionNuevaNoTieneHuso:
+    """
+    El huso sigue a la ubicación **también cuando no se conoce** (CodeRabbit, PR #307).
+
+    Quedarse con el del emplazamiento anterior es lo peor que puede pasar: el campo
+    conserva apertura automática y la abre a la hora de donde ya no está. Sin huso, al
+    menos, la anotación se abre con START y la pantalla lo avisa.
+    """
+
+    def test_vaciar_la_ubicacion_deja_el_campo_sin_huso(self):
+        campo = _campo(PENINSULA, "Europe/Madrid")
+
+        campo.update(
+            name="Campo de prueba",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            tees=_tees(),
+            holes=_holes(),
+            location=CourseLocation(),
+            timezone=None,
+        )
+
+        assert campo.timezone is None, "se ha quedado con el huso de donde ya no está"
+
+    def test_unas_coordenadas_cuya_zona_no_se_resuelve_no_heredan_la_anterior(self):
+        campo = _campo(CANARIAS, "Atlantic/Canary")
+
+        campo.update(
+            name="Campo de prueba",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            tees=_tees(),
+            holes=_holes(),
+            location=PENINSULA,
+            timezone=None,
+        )
+
+        assert campo.timezone is None, "un campo peninsular abriendo en hora canaria"
+
+    def test_el_clon_de_una_propuesta_tampoco_hereda_el_huso_viejo(self):
+        campo = _campo(PENINSULA, "Europe/Madrid")
+        campo.approve()
+
+        clone = campo.apply_update(
+            name="Campo de prueba",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            tees=_tees(),
+            holes=_holes(),
+            is_admin=False,
+            location=CourseLocation(),
+            timezone=None,
+        )
+
+        assert clone is not None
+        assert clone.timezone is None, "aprobar la propuesta pondría la hora de antes"

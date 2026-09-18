@@ -525,7 +525,7 @@ class TestNoSeAbreDosVeces:
             await uow.matches.update(match)
 
         async with uow:
-            abierto = await uc._abre_si_toca(copia_vieja)
+            abierto = await uc._abre_si_toca(copia_vieja, JUSTO)
             hoyos = await uow.hole_scores.find_by_match(match.id)
 
         assert abierto.status == MatchStatus.IN_PROGRESS
@@ -574,7 +574,7 @@ class TestNoSeAbreDosVeces:
         uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
         async with uow:
             with pytest.raises(MatchNotScoringError):
-                await uc._abre_si_toca(copia_vieja)
+                await uc._abre_si_toca(copia_vieja, JUSTO)
 
     @pytest.mark.asyncio
     async def test_quien_no_juega_el_partido_no_lo_abre(self, uow, user_repo, scoring_service, campos):
