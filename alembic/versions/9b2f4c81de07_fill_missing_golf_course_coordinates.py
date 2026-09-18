@@ -10,12 +10,14 @@ cae en su municipio:
 - OpenStreetMap, nodo etiquetado como campo de golf: Estepona Golf, Compostela
   (los dos recorridos comparten club), Praia D'El Rey, Royal Óbidos, Grandvalira
   (Golf Soldeu, Canillo), La Finca Golf (Pozuelo) y Mas Torrellas.
-- Coordenadas publicadas del club: San Roque New.
-- Código Plus de Google Maps, con precisión de unos 14 m: La Loma (Córdoba) y
-  Bocigas (este último apareció además en OpenStreetMap, sin nombre, a 236 m).
-- **Aproximadas**, del vial del propio complejo y no del campo: Isla del Fraile y
-  La Resina. Sirven para situarlos en el mapa y, desde luego, para el huso; si
-  alguien las afina, mejor.
+- Código Plus de Google Maps, con precisión de unos 14 m: La Loma (Córdoba),
+  Bocigas (este último apareció además en OpenStreetMap, sin nombre, a 236 m),
+  San Roque New (a 200 m de las coordenadas que publica el club, que valen para
+  todo el complejo y no para este recorrido) y La Resina (a 270 m del vial de la
+  urbanización, que era lo único que había).
+- **Aproximada**, del vial del propio complejo y no del campo: Isla del Fraile.
+  Sirve para situarlo en el mapa y, desde luego, para el huso; si alguien la
+  afina, mejor.
 
 Se identifica cada campo por su `external_id` de la RFEG, que es estable, y por
 el nombre solo los dos portugueses, dados de alta a mano y sin identificador.
@@ -51,9 +53,9 @@ COORDENADAS: list[tuple[str | None, str, float, float]] = [
     ("1122:ISLA DEL FRAILE P P", "Isla del Fraile - P&P", 37.42252, -1.56023),
     ("1126:LAFINCA GOLF", "La Finca Golf - Lafinca Golf", 40.40260, -3.79803),
     ("1137:LA LOMA", "La Loma", 37.89131, -4.82531),
-    ("1108:LA RESINA", "La Resina", 36.46586, -5.07239),
+    ("1108:LA RESINA", "La Resina", 36.46494, -5.07519),
     ("1116:MAS TORRELLAS", "Mas Torrellas", 41.81480, 3.01834),
-    ("1133:SAN ROQUE NEW", "San Roque New", 36.26700, -5.33800),
+    ("1133:SAN ROQUE NEW", "San Roque New", 36.26606, -5.33606),
     (None, "Praia D'El Rey Golf & Beach Resort", 39.38933, -9.28237),
     (None, "Royal Óbidos Spa & Golf Resort", 39.40788, -9.24873),
 ]
