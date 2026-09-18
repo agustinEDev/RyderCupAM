@@ -733,6 +733,10 @@ class TestAperturaAutomatica:
         assert cuerpo["scoring_opens_at"] == abre.isoformat()
         assert isinstance(cuerpo["detail"], str), "el mensaje es texto, no un objeto"
         assert "SCORING_NOT_OPEN_YET" not in cuerpo["detail"]
+        # El jugador tiene que leer CUANDO abre. Ojo: esto no distingue quien
+        # compone el texto —la ruta y la excepcion dicen hoy la misma hora—,
+        # solo fija el contrato de cara al cliente
+        assert abre.isoformat() in cuerpo["detail"]
 
     @pytest.mark.asyncio
     async def test_los_dos_jugadores_anotan_tras_abrirse(

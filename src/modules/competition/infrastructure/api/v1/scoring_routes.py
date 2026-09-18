@@ -176,10 +176,17 @@ async def submit_hole_score(
         # JSON en crudo, asi que el jugador leia el blob entero—. Por eso se
         # devuelve una respuesta y no se lanza `HTTPException`, que siempre
         # envuelve en `detail`
+        #
+        # El texto se compone aqui con la hora de apertura, y no con `str(e)`:
+        # lo que lee el jugador se escribe en la capa que le habla, y el mensaje
+        # de la excepcion se queda para los logs
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "detail": str(e),
+                "detail": (
+                    "La anotacion de este partido abre a las "
+                    f"{e.opens_at.isoformat()}"
+                ),
                 "error_code": ScoringNotOpenYetError.error_code,
                 "scoring_opens_at": e.opens_at.isoformat(),
             },
