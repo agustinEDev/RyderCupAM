@@ -129,7 +129,8 @@ async def submit_hole_score(
 
     **Restricciones:**
     - Solo jugadores del partido pueden registrar scores (o admin con acting_as)
-    - El partido debe estar IN_PROGRESS
+    - El partido debe estar IN_PROGRESS, o estar programado y haber llegado su
+      hora de apertura: entonces este primer golpe lo abre (BE #305)
     - Hoyo debe estar entre 1-18
     - Los campos bloqueados tras la entrega se omiten silenciosamente
 

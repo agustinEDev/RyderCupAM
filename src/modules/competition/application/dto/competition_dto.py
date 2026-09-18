@@ -880,6 +880,15 @@ class GolfCourseDetailDTO(BaseModel):
     )
     tees: list[TeeResponseDTO] = Field(default_factory=list, description="Tees del campo")
     holes: list[HoleResponseDTO] = Field(default_factory=list, description="Hoyos del campo")
+    timezone: str | None = Field(
+        None,
+        description=(
+            "Zona horaria IANA del campo, deducida de sus coordenadas (BE #305). "
+            "`null` cuando no se conoce: entonces la anotación de sus partidos NO "
+            "se abre sola y hay que pulsar START, cosa que conviene saber antes "
+            "de llegar a un campo sin cobertura."
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

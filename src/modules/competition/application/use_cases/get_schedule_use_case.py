@@ -21,6 +21,9 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 
 
 class GetScheduleUseCase:
@@ -33,8 +36,16 @@ class GetScheduleUseCase:
     Accesible por cualquier usuario (lectura).
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        golf_course_repo: IGolfCourseRepository | None = None,
+    ):
         self._uow = uow
+        # Para la hora a la que abre la anotacion de cada ronda, que es la LOCAL
+        # de SU campo (BE #305). De aqui saca el movil su lista de proximos
+        # partidos, asi que sin esto no puede ofrecer «Anotar» sin cobertura
+        self._gc_repo = golf_course_repo
 
     async def execute(self, request: GetScheduleRequestDTO) -> GetScheduleResponseDTO:
         async with self._uow:
@@ -61,7 +72,19 @@ class GetScheduleUseCase:
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
 
-        # 5. Agrupar rondas por día
+        # 5. La zona horaria de cada campo, una consulta por campo distinto: una
+        # competicion juega en uno o dos, no en veinte
+        zonas_por_campo: dict = {}
+        if self._gc_repo:
+            for round_entity, _ in rounds_with_matches:
+                if round_entity.golf_course_id in zonas_por_campo:
+                    continue
+                golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+                zonas_por_campo[round_entity.golf_course_id] = (
+                    golf_course.timezone if golf_course else None
+                )
+
+        # 6. Agrupar rondas por día
         days_map = defaultdict(list)
         for round_entity, matches in rounds_with_matches:
             match_dtos = [
@@ -100,7 +123,9 @@ class GetScheduleUseCase:
                 effective_allowance=round_entity.get_effective_allowance(),
                 matches=match_dtos,
                 scoring_opens_at=ScoringOpeningService.opens_at(
-                    round_entity.round_date, round_entity.session_type, competition.timezone
+                    round_entity.round_date,
+                    round_entity.session_type,
+                    zonas_por_campo.get(round_entity.golf_course_id),
                 ),
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,

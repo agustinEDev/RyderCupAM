@@ -211,6 +211,59 @@ class TestUpdateMatchStatusUseCase:
         assert response.new_status == "COMPLETED"
         assert response.match_id == match.id.value
 
+    async def test_start_manual_bloquea_la_fila_del_partido(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+    ):
+        """
+        START tambien tiene que bloquear el partido (CodeRabbit en la PR #307).
+
+        Given: un partido programado que ademas puede abrirse solo por su hora
+        When: el creador pulsa START
+        Then: el partido se lee CON bloqueo, para no cruzarse con el primer golpe
+              de un jugador: los dos crearian los 18 hoyos de cada uno y uno de
+              los dos se estrellaria contra la restriccion unica
+        """
+        competition = await self._create_in_progress_competition(uow, creator_id)
+        round_entity = Round.create(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        round_entity.mark_teams_assigned()
+        round_entity.mark_matches_generated()
+        player_a, player_b = self._create_match_players()
+        match = Match.create(
+            round_id=round_entity.id,
+            match_number=1,
+            team_a_players=[player_a],
+            team_b_players=[player_b],
+        )
+        async with uow:
+            await uow.rounds.add(round_entity)
+            await uow.matches.add(match)
+
+        pedidos = []
+        original = uow.matches.find_by_id_for_update
+
+        async def espia(match_id):
+            pedidos.append(match_id)
+            return await original(match_id)
+
+        uow.matches.find_by_id_for_update = espia
+
+        use_case = UpdateMatchStatusUseCase(uow)
+        await use_case.execute(
+            UpdateMatchStatusRequestDTO(match_id=str(match.id), action="START"),
+            creator_id,
+        )
+
+        assert pedidos == [match.id]
+
     async def test_should_auto_start_round(
         self,
         uow: InMemoryUnitOfWork,

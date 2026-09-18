@@ -6,7 +6,6 @@ Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
 from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -51,13 +50,6 @@ class CompetitionStateError(Exception):
     """Excepción lanzada cuando se intenta una operación en un estado inválido."""
 
     pass
-
-
-# La zona horaria donde se juega: la anotacion se abre a una hora LOCAL del
-# campo (BE #305), y las seis de Canarias no son las seis de Madrid. No se puede
-# deducir del pais —la tabla de paises no guarda husos, y España tiene dos—, asi
-# que se guarda aqui. Por defecto, lo que juega hoy la aplicacion
-DEFAULT_TIMEZONE = "Europe/Madrid"
 
 
 class Competition:
@@ -115,14 +107,12 @@ class Competition:
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
-        timezone: str = DEFAULT_TIMEZONE,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
         self._validate_max_players(max_players)
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
-        self._validate_timezone(timezone)
 
         # Asignación de atributos privados (encapsulación)
         self._id = id
@@ -136,7 +126,6 @@ class Competition:
         self._max_players = max_players
         self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
-        self._timezone = timezone
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -157,7 +146,6 @@ class Competition:
         max_players: int = 24,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
-        timezone: str = DEFAULT_TIMEZONE,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -176,7 +164,6 @@ class Competition:
             max_players=max_players,
             team_assignment=team_assignment,
             max_playing_handicap=max_playing_handicap,
-            timezone=timezone,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -207,14 +194,6 @@ class Competition:
         """Valida que max_players esté en rango válido."""
         if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
             raise ValueError(f"max_players debe estar entre {MIN_PLAYERS} y {MAX_PLAYERS}")
-
-    @staticmethod
-    def _validate_timezone(timezone: str) -> None:
-        """La zona tiene que existir: una invalida abriria la anotacion a deshora."""
-        try:
-            ZoneInfo(timezone)
-        except (ZoneInfoNotFoundError, ValueError) as e:
-            raise ValueError(f"La zona horaria '{timezone}' no existe") from e
 
     @staticmethod
     def _validate_max_playing_handicap(max_playing_handicap: int) -> None:
@@ -272,10 +251,6 @@ class Competition:
     @property
     def max_playing_handicap(self) -> int | None:
         return self._max_playing_handicap
-
-    @property
-    def timezone(self) -> str:
-        return self._timezone
 
     @property
     def status(self) -> CompetitionStatus:

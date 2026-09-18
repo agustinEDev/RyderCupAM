@@ -159,8 +159,18 @@ class SubmitHoleScoreUseCase:
         if not competition or not competition.is_in_progress():
             raise no_se_puede
 
+        # La hora es la LOCAL del campo donde se juega esa ronda, no la de la
+        # competicion: una competicion puede jugarse en campos de husos
+        # distintos. Un campo sin coordenadas no tiene zona, y entonces no hay
+        # apertura automatica: ese partido solo se abre con START, y la pantalla
+        # de la competicion lo avisa (BE #305)
+        golf_course = (
+            await self._gc_repo.find_by_id(round_entity.golf_course_id) if self._gc_repo else None
+        )
         opens_at = ScoringOpeningService.opens_at(
-            round_entity.round_date, round_entity.session_type, competition.timezone
+            round_entity.round_date,
+            round_entity.session_type,
+            golf_course.timezone if golf_course else None,
         )
         if opens_at is None:
             raise no_se_puede

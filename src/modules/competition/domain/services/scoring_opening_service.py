@@ -38,7 +38,7 @@ class ScoringOpeningService:
     def opens_at(
         round_date: date | None,
         session_type: SessionType | None,
-        timezone: str,
+        timezone: str | None,
     ) -> datetime | None:
         """
         La hora a la que se puede empezar a anotar, con su desfase.
@@ -48,7 +48,9 @@ class ScoringOpeningService:
         partidos siguen necesitando START.
 
         """
-        if round_date is None or session_type is None:
+        # Sin fecha, sin sesion o sin zona no hay hora que calcular: esos
+        # partidos siguen necesitando START
+        if round_date is None or session_type is None or timezone is None:
             return None
 
         hour = OPENING_HOUR_BY_SESSION.get(SessionType(session_type))
@@ -72,7 +74,7 @@ class ScoringOpeningService:
     def is_open(
         round_date: date | None,
         session_type: SessionType | None,
-        timezone: str,
+        timezone: str | None,
         now: datetime | None = None,
     ) -> bool:
         """

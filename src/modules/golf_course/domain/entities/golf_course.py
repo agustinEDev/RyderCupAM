@@ -8,6 +8,7 @@ Ver ADR-032 para detalles del workflow de aprobación.
 from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
@@ -112,6 +113,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
         domain_events: list[DomainEvent] | None = None,
     ) -> None:
         """
@@ -159,6 +161,11 @@ class GolfCourse:
         self._set_provenance(provenance)
         self._physical_holes = physical_holes
         self._validate_physical_holes()
+        # Donde esta el campo, en horario: la anotacion de un partido abre a una
+        # hora LOCAL (BE #305). Puede no saberse —un campo sin coordenadas— y
+        # entonces ese partido solo se abre con START
+        self._timezone = timezone
+        self._validate_timezone()
 
         # Reconciliar la tarjeta del campo con la de cada salida antes de validar
         self._sync_holes_and_tees()
@@ -192,6 +199,15 @@ class GolfCourse:
         self._source = provenance.source
         self._external_id = provenance.external_id
         self._imported_at = provenance.imported_at
+
+    def _validate_timezone(self) -> None:
+        """La zona tiene que existir: una invalida abre la anotacion a deshora."""
+        if self._timezone is None:
+            return
+        try:
+            ZoneInfo(self._timezone)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"La zona horaria '{self._timezone}' no existe") from e
 
     def _validate_physical_holes(self) -> None:
         """
@@ -290,6 +306,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse":
         """
         Factory method para crear un nuevo campo de golf.
@@ -335,6 +352,7 @@ class GolfCourse:
             location=location,
             provenance=provenance,
             physical_holes=physical_holes,
+            timezone=timezone,
         )
 
         # Registrar evento de creación
@@ -367,6 +385,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse":
         """
         Reconstruye un GolfCourse desde persistencia.
@@ -390,6 +409,7 @@ class GolfCourse:
             location=location,
             provenance=provenance,
             physical_holes=physical_holes,
+            timezone=timezone,
         )
 
     def approve(self) -> None:
@@ -907,6 +927,11 @@ class GolfCourse:
     @property
     def rejection_reason(self) -> str | None:
         return self._rejection_reason
+
+    @property
+    def timezone(self) -> str | None:
+        """Zona horaria IANA del campo, o None si no se conoce."""
+        return self._timezone
 
     @property
     def created_at(self) -> datetime:

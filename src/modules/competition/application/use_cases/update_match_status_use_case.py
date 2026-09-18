@@ -74,7 +74,11 @@ class UpdateMatchStatusUseCase:
     async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
-        match = await self._uow.matches.find_by_id(match_id)
+        # Con la fila bloqueada: START y la apertura automatica por hora de sesion
+        # (BE #305) hacen lo mismo, y si se cruzan los dos pre-crean los 18 hoyos
+        # de cada jugador y uno se estrella contra `uq_hole_score_match_hole_player`
+        # (CodeRabbit en la PR #307)
+        match = await self._uow.matches.find_by_id_for_update(match_id)
 
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")

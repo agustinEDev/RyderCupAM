@@ -229,6 +229,9 @@ class GolfCourseResponseDTO(BaseModel):
     approval_status: str = Field(..., description="Estado de aprobación")
     rejection_reason: str | None = Field(None, description="Razón de rechazo (si aplica)")
     total_par: int = Field(..., description="Par total del campo")
+    timezone: str | None = Field(
+        None, description="Zona horaria IANA del campo, deducida de sus coordenadas (BE #305)"
+    )
     created_at: datetime = Field(..., description="Fecha de creación")
     updated_at: datetime = Field(..., description="Fecha de última actualización")
     original_golf_course_id: str | None = Field(

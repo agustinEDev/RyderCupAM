@@ -179,3 +179,10 @@ requests==2.33.0
 # entonces fallaría hasta construir una competición. Con este paquete la lleva
 # Python, sin depender del sistema
 tzdata==2026.4
+
+# tzfpy - Zona horaria a partir de coordenadas
+# La anotación de un partido abre a una hora LOCAL del campo (BE #305) y el país
+# no basta: España tiene dos husos, y también EEUU, Chile o Australia. Lleva las
+# fronteras de husos del mundo en 3 MB y sin dependencias; la alternativa
+# habitual, `timezonefinder`, arrastra numpy
+tzfpy==2.1.0

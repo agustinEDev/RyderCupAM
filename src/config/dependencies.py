@@ -205,6 +205,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
 )
+from src.modules.golf_course.infrastructure.services.tzfpy_timezone_resolver import (
+    TzfpyTimezoneResolver,
+)
 from src.modules.quick_match.application.ports.round_achievements_publisher_interface import (
     RoundAchievementsPublisherInterface,
 )
@@ -1933,9 +1936,10 @@ def get_delete_round_use_case(
 
 def get_get_schedule_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetScheduleUseCase:
-    """Proveedor del caso de uso GetScheduleUseCase."""
-    return GetScheduleUseCase(uow)
+    """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse)."""
+    return GetScheduleUseCase(uow, gc_uow.golf_courses)
 
 
 def get_get_match_detail_use_case(
@@ -2150,7 +2154,7 @@ def get_request_golf_course_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> RequestGolfCourseUseCase:
     """Proveedor del caso de uso RequestGolfCourseUseCase."""
-    return RequestGolfCourseUseCase(uow)
+    return RequestGolfCourseUseCase(uow, TzfpyTimezoneResolver())
 
 
 def get_get_golf_course_by_id_use_case(
@@ -2192,7 +2196,7 @@ def get_create_direct_golf_course_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> CreateDirectGolfCourseUseCase:
     """Proveedor del caso de uso CreateDirectGolfCourseUseCase."""
-    return CreateDirectGolfCourseUseCase(uow)
+    return CreateDirectGolfCourseUseCase(uow, TzfpyTimezoneResolver())
 
 
 def get_update_golf_course_use_case(

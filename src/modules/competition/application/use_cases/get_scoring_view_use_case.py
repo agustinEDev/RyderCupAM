@@ -135,7 +135,9 @@ class GetScoringViewUseCase:
                 # Para que el cliente ofrezca anotar desde esa hora, tambien sin
                 # cobertura, en vez de adivinar si alguien pulso START (BE #305)
                 scoring_opens_at=ScoringOpeningService.opens_at(
-                    round_entity.round_date, round_entity.session_type, competition.timezone
+                    round_entity.round_date,
+                    round_entity.session_type,
+                    golf_course.timezone if golf_course else None,
                 ),
             )
 
