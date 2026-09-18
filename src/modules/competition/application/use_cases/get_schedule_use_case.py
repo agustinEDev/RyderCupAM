@@ -17,6 +17,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.scoring_opening_service import (
+    ScoringOpeningService,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 
 
@@ -96,6 +99,9 @@ class GetScheduleUseCase:
                 allowance_percentage=round_entity.allowance_percentage,
                 effective_allowance=round_entity.get_effective_allowance(),
                 matches=match_dtos,
+                scoring_opens_at=ScoringOpeningService.opens_at(
+                    round_entity.round_date, round_entity.session_type, competition.timezone
+                ),
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )

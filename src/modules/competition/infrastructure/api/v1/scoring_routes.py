@@ -35,6 +35,7 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
+    ScoringNotOpenYetError,
 )
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
@@ -137,7 +138,8 @@ async def submit_hole_score(
     - 400: Hoyo inválido (los campos ya entregados se omiten, no se rechaza)
     - 403: No es jugador del partido
     - 404: Partido no encontrado
-    - 409: Partido no en estado de scoring
+    - 409: Partido no en estado de scoring, o su anotacion aun no ha abierto
+      (`error_code` `SCORING_NOT_OPEN_YET`, con `scoring_opens_at`)
     """
     if body.acting_as is not None and not current_user.is_admin:
         raise HTTPException(
@@ -160,6 +162,18 @@ async def submit_hole_score(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
+        ) from e
+    except ScoringNotOpenYetError as e:
+        # Con codigo propio y la hora: este rechazo lo arregla ESPERAR, asi que
+        # el movil conserva el golpe en su cola en vez de darlo por perdido, a
+        # diferencia de los demas 409 de anotacion (BE #305)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": str(e),
+                "error_code": ScoringNotOpenYetError.error_code,
+                "scoring_opens_at": e.opens_at.isoformat(),
+            },
         ) from e
     except MatchNotScoringError as e:
         raise HTTPException(

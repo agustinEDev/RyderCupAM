@@ -702,6 +702,10 @@ competitions_table = Table(
     Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("max_playing_handicap", Integer, nullable=True),
+    # Donde se juega, para saber a que hora local abre la anotacion (BE #305).
+    # Con valor por defecto en la BD: las competiciones que ya existen se juegan
+    # en la peninsula
+    Column("timezone", String(64), nullable=False, server_default="Europe/Madrid"),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -949,6 +953,7 @@ def start_competition_mappers():
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
+                "_timezone": competitions_table.c.timezone,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs

@@ -26,6 +26,10 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
     async def find_by_id(self, match_id: MatchId) -> Match | None:
         return self._matches.get(match_id)
 
+    async def find_by_id_for_update(self, match_id: MatchId) -> Match | None:
+        """El partido, con el bloqueo como no-op: en memoria no hay concurrencia."""
+        return self._matches.get(match_id)
+
     async def find_completed_for_player(
         self, user_id: UserId, limit: int | None = None
     ) -> list[Match]:

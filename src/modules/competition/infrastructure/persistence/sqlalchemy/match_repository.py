@@ -32,6 +32,22 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
     async def find_by_id(self, match_id: MatchId) -> Match | None:
         return await self._session.get(Match, match_id)
 
+    async def find_by_id_for_update(self, match_id: MatchId) -> Match | None:
+        """
+        El partido con su fila bloqueada, para abrir la anotacion una sola vez.
+
+        Dos jugadores mandando su primer golpe a la vez abririan el partido los
+        dos y duplicarian los 18 hoyos por jugador, que `add_many` no deduplica
+        (BE #305).
+        """
+        # `populate_existing` no es un adorno: sin el, SQLAlchemy devuelve el
+        # objeto que ya tiene en su mapa de identidad —con el estado de antes del
+        # bloqueo— y la guarda contra la doble apertura no se dispara nunca.
+        # Mismo patron que `quick_match_repository`
+        return await self._session.get(
+            Match, match_id, with_for_update=True, populate_existing=True
+        )
+
     async def find_completed_for_player(
         self, user_id: UserId, limit: int | None = None
     ) -> list[Match]:
