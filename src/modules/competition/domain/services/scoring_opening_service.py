@@ -6,7 +6,7 @@ cobertura. En un campo sin señal eso es fragil: si nadie lo pulsa, todos los
 golpes vuelven rechazados y la vuelta se pierde (BE #305).
 
 La anotacion se abre sola a una hora fija segun la sesion de la ronda, en la
-zona horaria de la competicion. START se queda para abrir antes.
+zona horaria del CAMPO donde se juega esa ronda. START se queda para abrir antes.
 
 Lo que decide es el reloj del SERVIDOR cuando llega el golpe, nunca una hora
 enviada por el cliente: sin cobertura el movil no puede saber si el partido esta
@@ -22,8 +22,8 @@ from src.modules.competition.domain.value_objects.session_type import SessionTyp
 
 logger = logging.getLogger(__name__)
 
-# Decidido con el dueño del producto el 17 sep 2026. La hora es la LOCAL de la
-# competicion: las seis de Canarias no son las seis de Madrid.
+# Decidido con el dueño del producto el 17 sep 2026. La hora es la LOCAL del
+# campo: las seis de Canarias no son las seis de Madrid.
 OPENING_HOUR_BY_SESSION: dict[SessionType, int] = {
     SessionType.MORNING: 6,
     SessionType.AFTERNOON: 12,
