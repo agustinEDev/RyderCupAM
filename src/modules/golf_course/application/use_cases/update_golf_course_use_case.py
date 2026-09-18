@@ -7,6 +7,7 @@ from src.modules.golf_course.application.dtos.golf_course_dtos import (
     UpdateGolfCourseResponseDTO,
 )
 from src.modules.golf_course.application.mappers.golf_course_mapper import GolfCourseMapper
+from src.modules.golf_course.application.ports.timezone_resolver import ITimezoneResolver
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -30,8 +31,16 @@ class UpdateGolfCourseUseCase:
         - Campos REJECTED no son editables
     """
 
-    def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
+    def __init__(
+        self,
+        uow: GolfCourseUnitOfWorkInterface,
+        timezone_resolver: ITimezoneResolver | None = None,
+    ) -> None:
         self._uow = uow
+        # El huso sigue a las coordenadas (BE #305): editarlas sin recalcularlo
+        # dejaria la hora vieja —y abriria la anotacion a deshora—, y un campo al
+        # que se le anaden coordenadas no ganaria nunca su apertura automatica
+        self._timezone_resolver = timezone_resolver
 
     async def execute(
         self,
@@ -88,6 +97,7 @@ class UpdateGolfCourseUseCase:
                 holes=holes,
                 is_admin=is_admin,
                 location=GolfCourseMapper.to_domain_location(request.location),
+                timezone=self._zona_de(GolfCourseMapper.to_domain_location(request.location)),
                 provenance=provenance,
                 physical_holes=physical_holes,
             )
@@ -121,3 +131,9 @@ class UpdateGolfCourseUseCase:
                 message=message,
                 pending_update=None,
             )
+
+    def _zona_de(self, location) -> str | None:
+        """La zona horaria de las coordenadas nuevas, si las hay."""
+        if self._timezone_resolver is None or location is None:
+            return None
+        return self._timezone_resolver.for_coordinates(location.latitude, location.longitude)

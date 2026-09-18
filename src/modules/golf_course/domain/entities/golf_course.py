@@ -485,6 +485,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> None:
         """
         Actualiza los campos del golf course.
@@ -531,6 +532,12 @@ class GolfCourse:
         self._course_type = course_type
         if location is not None:
             self._set_location(location)
+        # El huso SIGUE a la ubicacion (BE #305): unas coordenadas nuevas con el
+        # huso viejo abren la anotacion a deshora, y un campo al que se le anaden
+        # coordenadas no ganaria nunca su apertura automatica
+        if timezone is not None:
+            self._timezone = timezone
+            self._validate_timezone()
         if provenance is not None:
             self._set_provenance(provenance)
         if physical_holes is not None:
@@ -579,6 +586,7 @@ class GolfCourse:
         location: CourseLocation | None = None,
         provenance: CourseProvenance | None = None,
         physical_holes: int | None = None,
+        timezone: str | None = None,
     ) -> "GolfCourse | None":
         """
         Aplica una actualización al campo de golf según las reglas de negocio.
@@ -627,6 +635,7 @@ class GolfCourse:
                 location=location,
                 provenance=provenance,
                 physical_holes=physical_holes,
+                timezone=timezone,
             )
             return None
 
@@ -641,6 +650,9 @@ class GolfCourse:
             tees=tees,
             holes=holes,
             location=location if location is not None else self.location,
+            # El huso, igual que la ubicacion: sin esto el clon nace sin el y
+            # aprobarlo dejaria el campo sin apertura automatica (BE #305)
+            timezone=timezone if timezone is not None else self.timezone,
             provenance=provenance if provenance is not None else self.provenance,
             physical_holes=(
                 physical_holes if physical_holes is not None else self.physical_holes
@@ -663,6 +675,7 @@ class GolfCourse:
             original_golf_course_id=self._id,
             is_pending_update=False,
             location=clone.location,
+            timezone=clone.timezone,
             provenance=clone.provenance,
             physical_holes=clone.physical_holes,
         )
@@ -711,6 +724,9 @@ class GolfCourse:
         self._country_code = clone._country_code
         self._course_type = clone._course_type
         self._set_location(clone.location)
+        # Con su huso: aprobar unas coordenadas nuevas y quedarse con la hora
+        # vieja abre la anotacion a deshora (BE #305)
+        self._timezone = clone.timezone
         self._set_provenance(clone.provenance)
         self._physical_holes = clone.physical_holes
 

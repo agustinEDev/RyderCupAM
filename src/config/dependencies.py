@@ -2203,7 +2203,7 @@ def get_update_golf_course_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> UpdateGolfCourseUseCase:
     """Proveedor del caso de uso UpdateGolfCourseUseCase."""
-    return UpdateGolfCourseUseCase(uow)
+    return UpdateGolfCourseUseCase(uow, TzfpyTimezoneResolver())
 
 
 def get_approve_update_golf_course_use_case(

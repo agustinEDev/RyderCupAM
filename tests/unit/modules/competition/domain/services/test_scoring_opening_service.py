@@ -76,58 +76,6 @@ class TestHoraDeApertura:
             is None
         )
 
-    def test_y_tampoco_abre_sola(self):
-        assert not ScoringOpeningService.is_open(
-            date(2020, 1, 1), SessionType.MORNING, "Marte/Olympus"
-        )
-
-
-class TestYaAbrio:
-    """Si a una hora dada ya se puede anotar."""
-
-    def test_justo_a_la_hora_ya_se_puede(self):
-        assert ScoringOpeningService.is_open(
-            date(2026, 9, 20),
-            SessionType.MORNING,
-            MADRID,
-            now=datetime(2026, 9, 20, 4, 0, tzinfo=UTC),
-        )
-
-    def test_un_minuto_antes_todavia_no(self):
-        assert not ScoringOpeningService.is_open(
-            date(2026, 9, 20),
-            SessionType.MORNING,
-            MADRID,
-            now=datetime(2026, 9, 20, 3, 59, tzinfo=UTC),
-        )
-
-    def test_el_dia_anterior_a_la_misma_hora_tampoco(self):
-        """Manda la fecha de la ronda, no solo la hora."""
-        assert not ScoringOpeningService.is_open(
-            date(2026, 9, 20),
-            SessionType.MORNING,
-            MADRID,
-            now=datetime(2026, 9, 19, 8, 0, tzinfo=UTC),
-        )
-
-    def test_dias_despues_sigue_abierto(self):
-        """Sin tope por arriba: un golpe que llega tarde entra igual."""
-        assert ScoringOpeningService.is_open(
-            date(2026, 9, 20),
-            SessionType.MORNING,
-            MADRID,
-            now=datetime(2026, 9, 25, 8, 0, tzinfo=UTC),
-        )
-
-    def test_sin_fecha_no_abre_nunca(self):
-        assert not ScoringOpeningService.is_open(
-            None,
-            SessionType.MORNING,
-            MADRID,
-            now=datetime(2026, 9, 25, 8, 0, tzinfo=UTC),
-        )
-
-    def test_sin_reloj_usa_el_del_servidor(self):
-        """El `now` es opcional: sin el manda el reloj del servidor, nunca el cliente."""
-        assert ScoringOpeningService.is_open(date(2020, 1, 1), SessionType.MORNING, MADRID)
-        assert not ScoringOpeningService.is_open(date(2099, 1, 1), SessionType.MORNING, MADRID)
+    def test_una_sesion_desconocida_tampoco(self):
+        """Datos raros no pueden tumbar la vista de anotacion ni el calendario."""
+        assert ScoringOpeningService.opens_at(date(2026, 9, 20), "MADRUGADA", MADRID) is None

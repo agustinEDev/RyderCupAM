@@ -726,9 +726,13 @@ class TestAperturaAutomatica:
         )
 
         assert response.status_code == 409, response.text
-        detalle = response.json()["detail"]
-        assert detalle["error_code"] == "SCORING_NOT_OPEN_YET"
-        assert detalle["scoring_opens_at"] == abre.isoformat()
+        cuerpo = response.json()
+        # En la RAIZ, que es donde el cliente lee el codigo (como el CSRF): dentro
+        # de `detail` no le llega, y ademas pinta el objeto como JSON en crudo
+        assert cuerpo["error_code"] == "SCORING_NOT_OPEN_YET"
+        assert cuerpo["scoring_opens_at"] == abre.isoformat()
+        assert isinstance(cuerpo["detail"], str), "el mensaje es texto, no un objeto"
+        assert "SCORING_NOT_OPEN_YET" not in cuerpo["detail"]
 
     @pytest.mark.asyncio
     async def test_los_dos_jugadores_anotan_tras_abrirse(

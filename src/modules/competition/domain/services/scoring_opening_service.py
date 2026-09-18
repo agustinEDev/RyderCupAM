@@ -15,7 +15,7 @@ hora entra sin problema si llega despues, que es el caso normal.
 """
 
 import logging
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -53,8 +53,12 @@ class ScoringOpeningService:
         if round_date is None or session_type is None or timezone is None:
             return None
 
-        hour = OPENING_HOUR_BY_SESSION.get(SessionType(session_type))
-        if hour is None:
+        try:
+            hour = OPENING_HOUR_BY_SESSION[SessionType(session_type)]
+        except (ValueError, KeyError):
+            # Una sesion que no conocemos no puede tumbar la LECTURA: esto se
+            # llama tambien al pintar la vista de anotacion y el calendario
+            logger.warning("Tipo de sesion desconocido al calcular la apertura: %s", session_type)
             return None
 
         try:
@@ -69,23 +73,3 @@ class ScoringOpeningService:
             return None
 
         return datetime.combine(round_date, time(hour=hour), tzinfo=zone)
-
-    @staticmethod
-    def is_open(
-        round_date: date | None,
-        session_type: SessionType | None,
-        timezone: str | None,
-        now: datetime | None = None,
-    ) -> bool:
-        """
-        Si a `now` —por omision, el reloj del servidor— ya se puede anotar.
-
-        Sin tope por arriba, a proposito (decidido el 18 sep 2026): un golpe que
-        llega dias tarde abre el partido igual, porque un golpe atascado en un
-        movil sin cobertura es justo para lo que esto existe.
-        """
-        opens_at = ScoringOpeningService.opens_at(round_date, session_type, timezone)
-        if opens_at is None:
-            return False
-
-        return (now or datetime.now(UTC)) >= opens_at

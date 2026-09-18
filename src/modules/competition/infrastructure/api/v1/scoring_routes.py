@@ -9,6 +9,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_concede_match_use_case,
@@ -167,15 +168,22 @@ async def submit_hole_score(
     except ScoringNotOpenYetError as e:
         # Con codigo propio y la hora: este rechazo lo arregla ESPERAR, asi que
         # el movil conserva el golpe en su cola en vez de darlo por perdido, a
-        # diferencia de los demas 409 de anotacion (BE #305)
-        raise HTTPException(
+        # diferencia de los demas 409 de anotacion (BE #305).
+        #
+        # `error_code` va en la RAIZ del cuerpo, no dentro de `detail`: es donde
+        # lo lee el cliente (`api.js`), como el fallo de CSRF. Metido en `detail`
+        # no llegaba —y ademas el cliente pinta un `detail` que no es texto como
+        # JSON en crudo, asi que el jugador leia el blob entero—. Por eso se
+        # devuelve una respuesta y no se lanza `HTTPException`, que siempre
+        # envuelve en `detail`
+        return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": str(e),
+            content={
+                "detail": str(e),
                 "error_code": ScoringNotOpenYetError.error_code,
                 "scoring_opens_at": e.opens_at.isoformat(),
             },
-        ) from e
+        )
     except MatchNotScoringError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
