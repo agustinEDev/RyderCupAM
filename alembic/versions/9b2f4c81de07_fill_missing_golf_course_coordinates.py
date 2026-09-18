@@ -13,11 +13,9 @@ cae en su municipio:
 - Código Plus de Google Maps, con precisión de unos 14 m: La Loma (Córdoba),
   Bocigas (este último apareció además en OpenStreetMap, sin nombre, a 236 m),
   San Roque New (a 200 m de las coordenadas que publica el club, que valen para
-  todo el complejo y no para este recorrido) y La Resina (a 270 m del vial de la
-  urbanización, que era lo único que había).
-- **Aproximada**, del vial del propio complejo y no del campo: Isla del Fraile.
-  Sirve para situarlo en el mapa y, desde luego, para el huso; si alguien la
-  afina, mejor.
+  todo el complejo y no para este recorrido), La Resina (a 270 m del vial de la
+  urbanización) e Isla del Fraile (a 650 m del vial del complejo). En los dos
+  últimos el vial era lo único que había, y ahora apuntan al campo.
 
 Se identifica cada campo por su `external_id` de la RFEG, que es estable, y por
 el nombre solo los dos portugueses, dados de alta a mano y sin identificador.
@@ -50,7 +48,7 @@ COORDENADAS: list[tuple[str | None, str, float, float]] = [
     ("1119:COMPOSTELA P P LARGO", "Compostela P&P Largo", 42.92283, -8.48453),
     ("1117:ESTEPONA GOLF", "Estepona Golf", 36.41297, -5.21219),
     ("1110:GRANDVALIRA", "Grandvalira", 42.56253, 1.66425),
-    ("1122:ISLA DEL FRAILE P P", "Isla del Fraile - P&P", 37.42252, -1.56023),
+    ("1122:ISLA DEL FRAILE P P", "Isla del Fraile - P&P", 37.41844, -1.55494),
     ("1126:LAFINCA GOLF", "La Finca Golf - Lafinca Golf", 40.40260, -3.79803),
     ("1137:LA LOMA", "La Loma", 37.89131, -4.82531),
     ("1108:LA RESINA", "La Resina", 36.46494, -5.07519),
