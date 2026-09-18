@@ -60,6 +60,14 @@ COORDENADAS: list[tuple[str | None, str, float, float]] = [
 
 
 def upgrade() -> None:
+    if op.get_context().as_sql:
+        # Modo offline (`alembic upgrade --sql`, que el CI usa para validar): la
+        # conexión solo escribe el guion y su `execute` devuelve None, así que la
+        # consulta de los puntos no se puede hacer. Esta migración es solo datos,
+        # de modo que el guion no lleva nada suyo; las coordenadas y los husos los
+        # pone cuando corre contra la base de datos
+        return
+
     conexion = op.get_bind()
 
     for external_id, nombre, latitude, longitude in COORDENADAS:

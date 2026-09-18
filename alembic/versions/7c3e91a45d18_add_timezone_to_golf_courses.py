@@ -37,6 +37,14 @@ def upgrade() -> None:
         sa.Column("timezone", sa.String(length=64), nullable=True),
     )
 
+    if op.get_context().as_sql:
+        # Modo offline (`alembic upgrade --sql`, que el CI usa para validar): hay
+        # conexión, pero su `execute` solo ESCRIBE el SQL y devuelve None, así que
+        # no se puede leer de ella. El relleno necesita saber qué coordenadas hay
+        # en la tabla, luego no cabe en un guion: se queda el DDL, y los husos los
+        # pone esta misma migración cuando corre contra la base de datos
+        return
+
     # Relleno desde las coordenadas. Se agrupan por punto: los campos de un mismo
     # club comparten coordenadas (Aldeamayor tiene tres), así que son bastantes
     # menos consultas que filas
