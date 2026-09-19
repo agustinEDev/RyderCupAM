@@ -428,7 +428,9 @@ async def update_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (CompetitionNotEditableError, ValueError) as e:
+    # InvalidCountryError también al editar, no solo al crear: desde que el PUT
+    # acepta `countries`, un país inexistente o no adyacente llega hasta aquí
+    except (CompetitionNotEditableError, InvalidCountryError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 

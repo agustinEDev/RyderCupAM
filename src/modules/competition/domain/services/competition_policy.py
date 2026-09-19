@@ -34,6 +34,15 @@ MAX_ENROLLMENTS_PER_USER = 20
 # Límites de duración
 MAX_COMPETITION_DURATION_DAYS = 365
 
+# Freno anti-abuso de invitaciones: correos que una competición puede disparar en
+# una hora. Es un límite de seguridad, no un número de producto, y por eso NO
+# sigue al cupo (`max_players`): con el cupo en 300, seguirlo convertiría una
+# competición en un emisor de 300 correos por hora. 100 es el techo que ya existía
+# de hecho cuando el cupo máximo era 100, así que no afloja nada de lo de hoy: el
+# límite efectivo es `min(max_players, MAX_INVITATIONS_PER_HOUR)` y una competición
+# de 12 sigue frenando en 12.
+MAX_INVITATIONS_PER_HOUR = 100
+
 
 class CompetitionPolicy:
     """
@@ -217,8 +226,9 @@ class CompetitionPolicy:
         """
         Valida que no se excedan las invitaciones por hora para una competicion.
 
-        El limite es max_players por hora: no tiene sentido enviar mas invitaciones
-        que participantes maximos en una hora.
+        El limite es `min(max_players, MAX_INVITATIONS_PER_HOUR)`: no tiene sentido
+        enviar mas invitaciones que participantes maximos, y por encima de
+        MAX_INVITATIONS_PER_HOUR manda el freno anti-abuso, que no sigue al cupo.
 
         Args:
             recent_invitations: Invitaciones enviadas en la ultima hora
@@ -228,11 +238,12 @@ class CompetitionPolicy:
         Raises:
             InvitationRateLimitViolation: Si se excede el limite
         """
-        if recent_invitations >= max_players:
+        limite = min(max_players, MAX_INVITATIONS_PER_HOUR)
+        if recent_invitations >= limite:
             raise InvitationRateLimitViolation(
                 f"Competition {competition_id}: Too many invitations sent in the last hour "
-                f"({recent_invitations}/{max_players}). "
-                f"Limit is {max_players} invitations per hour."
+                f"({recent_invitations}/{limite}). "
+                f"Limit is {limite} invitations per hour."
             )
 
     @staticmethod

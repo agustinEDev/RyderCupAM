@@ -68,7 +68,7 @@ class SendInvitationByEmailUseCase:
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
 
-            # 3b. Validar rate limit (max_players invitaciones por hora)
+            # 3b. Validar rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora)
             one_hour_ago = datetime.now() - timedelta(hours=1)
             recent_invitations = await self._uow.invitations.count_by_competition(
                 competition_id, since=one_hour_ago

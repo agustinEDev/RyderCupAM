@@ -1,9 +1,29 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from src.modules.competition.domain.entities.competition import (
+    DEFAULT_MAX_PLAYERS,
+    MAX_PLAYERS,
+    MIN_PLAYERS,
+)
+
+# Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
+# lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
+# asigna sobre el modelo ya validado, así que sin esto sus `min_length`/`max_length`
+# quedaban esquivados y un "PORTUGAL" llegaba entero al dominio.
+CountryCodeStr = Annotated[str, StringConstraints(min_length=2, max_length=2)]
 
 # Descripciones reutilizables para campos
 COMPETITION_NAME_DESC = "Nombre de la competición."
@@ -94,7 +114,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         description="Código ISO del país adyacente 2 (opcional).",
     )
     # Campo adicional para compatibilidad con frontend (se convierte automáticamente)
-    countries: list[str] | None = Field(
+    countries: list[CountryCodeStr] | None = Field(
         None, description="Lista de países adyacentes (formato frontend)."
     )
 
@@ -103,9 +123,9 @@ class CreateCompetitionRequestDTO(BaseModel):
 
     # Competition Config - con alias para compatibilidad con frontend
     max_players: int = Field(
-        default=24,
-        ge=2,
-        le=100,
+        default=DEFAULT_MAX_PLAYERS,
+        ge=MIN_PLAYERS,
+        le=MAX_PLAYERS,
         description=MAX_PLAYERS_DESC,
         alias="number_of_players",
     )
@@ -153,9 +173,14 @@ class CreateCompetitionRequestDTO(BaseModel):
     @field_validator("countries", mode="before")
     @classmethod
     def uppercase_countries(cls, v):
-        """Convierte códigos de países adyacentes a mayúsculas."""
+        """Convierte códigos de países adyacentes a mayúsculas.
+
+        Deja pasar intacto lo que no sea texto (el GET devuelve objetos país, y
+        hay clientes que reenvían esa forma) para que lo rechace la validación de
+        tipo con un 422, en vez de reventar aquí con un AttributeError y un 500.
+        """
         if v and isinstance(v, list):
-            return [country.upper().strip() for country in v]
+            return [c.upper().strip() if isinstance(c, str) else c for c in v]
         return v
 
     @model_validator(mode="after")
@@ -251,6 +276,10 @@ class UpdateCompetitionRequestDTO(BaseModel):
     Solo permitido en estado DRAFT.
     """
 
+    model_config = ConfigDict(
+        populate_by_name=True,  # Permite usar aliases, igual que al crear
+    )
+
     name: str | None = Field(
         None,
         min_length=3,
@@ -270,12 +299,25 @@ class UpdateCompetitionRequestDTO(BaseModel):
     adjacent_country_2: str | None = Field(
         None, min_length=2, max_length=2, description="Nuevo país adyacente 2."
     )
+    # Igual que al crear: la pantalla manda el mismo payload en las dos llamadas,
+    # y sin este campo los países acompañantes no se podían cambiar al editar
+    countries: list[CountryCodeStr] | None = Field(
+        None, description="Lista de países adyacentes (formato frontend)."
+    )
 
     # Play Mode
     play_mode: str | None = Field(None, description="Nuevo modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Competition Config
-    max_players: int | None = Field(None, ge=2, le=100, description="Nuevo máximo de jugadores.")
+    # El alias es el mismo que al crear: el cliente manda `number_of_players` en las
+    # dos llamadas, y sin él Pydantic descartaba la clave y el cupo se quedaba igual
+    max_players: int | None = Field(
+        None,
+        ge=MIN_PLAYERS,
+        le=MAX_PLAYERS,
+        description="Nuevo máximo de jugadores.",
+        alias="number_of_players",
+    )
     team_assignment: str | None = Field(None, description="Nueva asignación de equipos.")
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
@@ -310,6 +352,31 @@ class UpdateCompetitionRequestDTO(BaseModel):
         if v:
             return v.upper().strip()
         return v
+
+    @field_validator("countries", mode="before")
+    @classmethod
+    def uppercase_countries(cls, v):
+        """Convierte códigos de países adyacentes a mayúsculas.
+
+        Deja pasar intacto lo que no sea texto (el GET devuelve objetos país, y
+        hay clientes que reenvían esa forma) para que lo rechace la validación de
+        tipo con un 422, en vez de reventar aquí con un AttributeError y un 500.
+        """
+        if v and isinstance(v, list):
+            return [c.upper().strip() if isinstance(c, str) else c for c in v]
+        return v
+
+    @model_validator(mode="after")
+    def validate_and_convert_countries(self) -> "UpdateCompetitionRequestDTO":
+        """Convierte el campo countries del frontend a adjacent_country_1/2 si es necesario."""
+        # Si se proporcionó countries pero no adjacent_country_1/2, convertir
+        if self.countries and not self.adjacent_country_1 and not self.adjacent_country_2:
+            if len(self.countries) > 0:
+                self.adjacent_country_1 = self.countries[0]
+            if len(self.countries) > 1:
+                self.adjacent_country_2 = self.countries[1]
+
+        return self
 
 
 class UpdateCompetitionResponseDTO(BaseModel):

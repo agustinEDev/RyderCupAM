@@ -113,10 +113,22 @@ class UpdateCompetitionUseCase:
                     "Se deben proporcionar ambas fechas (start_date y end_date) para actualizarlas."
                 )
 
+            # La localización se reconstruye entera en cuanto llega cualquiera de sus
+            # campos, no solo con `main_country`: la pantalla permite cambiar los
+            # países acompañantes sin tocar el principal, y entonces no llega. Se mira
+            # qué campos trae el payload (no su valor) para distinguir «quítalos»
+            # (`countries: []`) de «no los toques» (campo ausente).
             location = None
-            if request.main_country:
+            campos_de_localizacion = {
+                "main_country",
+                "adjacent_country_1",
+                "adjacent_country_2",
+                "countries",
+            }
+            if campos_de_localizacion & request.model_fields_set:
                 location = await self._location_builder.build_from_codes(
-                    main_country=request.main_country,
+                    main_country=request.main_country
+                    or str(competition.location.main_country),
                     adjacent_country_1=request.adjacent_country_1,
                     adjacent_country_2=request.adjacent_country_2,
                 )

@@ -8,7 +8,10 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvitationCompetitionStatusViolation,
     InvitationRateLimitViolation,
 )
-from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
+from src.modules.competition.domain.services.competition_policy import (
+    MAX_INVITATIONS_PER_HOUR,
+    CompetitionPolicy,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
@@ -96,3 +99,37 @@ class TestValidateInvitationRate:
         CompetitionPolicy.validate_invitation_rate(3, 4, comp_id)
         with pytest.raises(InvitationRateLimitViolation):
             CompetitionPolicy.validate_invitation_rate(4, 4, comp_id)
+
+
+class TestInvitationRateCeiling:
+    """El freno no puede crecer con el cupo hasta 300 correos por hora.
+
+    El limite efectivo es `min(cupo, MAX_INVITATIONS_PER_HOUR)`: las competiciones
+    pequenas conservan su freno de siempre y las grandes topan en la constante.
+    """
+
+    def test_ceiling_is_one_hundred(self):
+        assert MAX_INVITATIONS_PER_HOUR == 100
+
+    def test_large_competition_passes_below_the_ceiling(self):
+        comp_id = CompetitionId(uuid4())
+        CompetitionPolicy.validate_invitation_rate(99, 300, comp_id)
+
+    def test_large_competition_raises_at_the_ceiling(self):
+        """Con cupo 300 el freno salta en 100, no en 300."""
+        comp_id = CompetitionId(uuid4())
+        with pytest.raises(InvitationRateLimitViolation):
+            CompetitionPolicy.validate_invitation_rate(100, 300, comp_id)
+
+    def test_message_states_the_effective_limit(self):
+        """El mensaje debe citar el limite que se aplica, no el cupo."""
+        comp_id = CompetitionId(uuid4())
+        with pytest.raises(InvitationRateLimitViolation, match="100/100"):
+            CompetitionPolicy.validate_invitation_rate(100, 300, comp_id)
+
+    def test_small_competition_keeps_its_own_limit(self):
+        """Un cupo de 12 sigue frenando en 12: el techo no afloja nada."""
+        comp_id = CompetitionId(uuid4())
+        CompetitionPolicy.validate_invitation_rate(11, 12, comp_id)
+        with pytest.raises(InvitationRateLimitViolation, match="12/12"):
+            CompetitionPolicy.validate_invitation_rate(12, 12, comp_id)

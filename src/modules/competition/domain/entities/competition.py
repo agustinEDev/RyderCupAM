@@ -41,7 +41,10 @@ from ..value_objects.team_assignment import TeamAssignment
 
 # Constantes de validación
 MIN_PLAYERS = 2
-MAX_PLAYERS = 100
+# 300: el objetivo de producto son los clubes, y un torneo de club no cabe en 100
+MAX_PLAYERS = 300
+# 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
+DEFAULT_MAX_PLAYERS = 12
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
 
@@ -100,7 +103,7 @@ class Competition:
         team_1_name: str,
         team_2_name: str,
         play_mode: PlayMode,
-        max_players: int = 24,
+        max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: datetime | None = None,
@@ -143,7 +146,7 @@ class Competition:
         team_1_name: str,
         team_2_name: str,
         play_mode: PlayMode,
-        max_players: int = 24,
+        max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
     ) -> "Competition":

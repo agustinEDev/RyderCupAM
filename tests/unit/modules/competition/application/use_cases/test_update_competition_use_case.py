@@ -79,6 +79,129 @@ class TestUpdateCompetitionUseCase:
         competition = await uow.competitions.find_by_id(CompetitionId(created.id))
         assert str(competition.name) == "Updated Name"
 
+    async def test_should_update_accompanying_countries_without_resending_main_country(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        Verifica que los países acompañantes se pueden cambiar por sí solos.
+
+        Given: Una competición en España, sin acompañantes
+        When: Se manda solo `countries`, sin repetir el país principal
+        Then: El acompañante queda guardado
+
+        La localización se reconstruía solo si llegaba `main_country`, así que
+        una edición de solo los acompañantes devolvía 200 sin cambiar nada.
+        """
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        created = await create_use_case.execute(
+            CreateCompetitionRequestDTO(
+                name="Original",
+                start_date=date(2025, 6, 1),
+                end_date=date(2025, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            creator_id,
+        )
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(countries=["PT"]),
+            creator_id,
+        )
+
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+        assert str(competition.location.main_country) == "ES"
+        assert str(competition.location.adjacent_country_1) == "PT"
+
+    async def test_should_update_adjacent_country_without_resending_main_country(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Lo mismo con el nombre canónico del campo, no solo con `countries`."""
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        created = await create_use_case.execute(
+            CreateCompetitionRequestDTO(
+                name="Original",
+                start_date=date(2025, 6, 1),
+                end_date=date(2025, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            creator_id,
+        )
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(adjacent_country_1="FR"),
+            creator_id,
+        )
+
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+        assert str(competition.location.main_country) == "ES"
+        assert str(competition.location.adjacent_country_1) == "FR"
+
+    async def test_should_remove_accompanying_countries_with_an_empty_list(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        Verifica que una lista vacía quita los acompañantes.
+
+        Es como los quita la pantalla: manda `countries: []`, no omite el campo.
+        """
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        created = await create_use_case.execute(
+            CreateCompetitionRequestDTO(
+                name="Original",
+                start_date=date(2025, 6, 1),
+                end_date=date(2025, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+                countries=["PT"],
+            ),
+            creator_id,
+        )
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(countries=[]),
+            creator_id,
+        )
+
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+        assert str(competition.location.main_country) == "ES"
+        assert competition.location.adjacent_country_1 is None
+
+    async def test_should_leave_location_untouched_when_no_country_is_sent(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Lo que no se manda no se toca: una edición de solo el nombre no borra países."""
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        created = await create_use_case.execute(
+            CreateCompetitionRequestDTO(
+                name="Original",
+                start_date=date(2025, 6, 1),
+                end_date=date(2025, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+                countries=["PT"],
+            ),
+            creator_id,
+        )
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(name="Updated"),
+            creator_id,
+        )
+
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+        assert str(competition.location.main_country) == "ES"
+        assert str(competition.location.adjacent_country_1) == "PT"
+
     async def test_should_update_multiple_fields(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """
         Verifica que se pueden actualizar múltiples campos a la vez.

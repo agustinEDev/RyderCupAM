@@ -558,6 +558,128 @@ class TestUpdateCompetition:
         # Por ahora, confiamos en que el cambio se aplicó si el resto funciona.
 
     @pytest.mark.asyncio
+    async def test_update_competition_applies_the_cap_sent_as_number_of_players(
+        self, client: AsyncClient
+    ):
+        """El cupo debe cambiar cuando llega como `number_of_players`.
+
+        Es el nombre que manda el cliente web en las dos llamadas. Sin el alias en
+        el DTO de actualización, Pydantic descartaba la clave, el cupo se quedaba
+        como estaba y la respuesta seguía siendo un 200: nada llegaba al usuario.
+        """
+        user = await create_authenticated_user(
+            client, "capupdater@test.com", "P@ssw0rd123!", "Cap", "Updater"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+        assert comp["max_players"] == 24
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"number_of_players": 20},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+        despues = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+        assert despues.status_code == 200
+        assert despues.json()["max_players"] == 20
+
+    @pytest.mark.asyncio
+    async def test_update_competition_rejects_a_cap_above_the_limit(self, client: AsyncClient):
+        """Un cupo por encima de 300 debe dar 422, no un 200 silencioso."""
+        user = await create_authenticated_user(
+            client, "capmax@test.com", "P@ssw0rd123!", "Cap", "Max"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"number_of_players": 301},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_competition_accepts_a_club_sized_cap(self, client: AsyncClient):
+        """300 jugadores: el cupo de un torneo de club debe entrar."""
+        user = await create_authenticated_user(
+            client, "capclub@test.com", "P@ssw0rd123!", "Cap", "Club"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"number_of_players": 300},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+        despues = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+        assert despues.json()["max_players"] == 300
+
+    @pytest.mark.asyncio
+    async def test_update_competition_applies_the_countries_sent_by_the_client(
+        self, client: AsyncClient
+    ):
+        """Los países acompañantes deben cambiar cuando llegan como `countries`.
+
+        Mismo hueco que el del cupo: la pantalla manda el mismo payload para crear
+        y para editar, y al editar el backend lo descartaba sin decir nada.
+        """
+        user = await create_authenticated_user(
+            client, "countriesupdater@test.com", "P@ssw0rd123!", "Countries", "Updater"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"main_country": "ES", "countries": ["PT"]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+        despues = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+        codigos = [c["code"] for c in despues.json()["countries"]]
+        assert "PT" in codigos
+
+    @pytest.mark.asyncio
+    async def test_update_competition_with_a_non_adjacent_country_returns_400(
+        self, client: AsyncClient
+    ):
+        """Un país que no vale debe dar 400 al editar, igual que al crear.
+
+        El `except` del PUT no contemplaba InvalidCountryError, que hasta ahora no
+        podía llegar porque `countries` se descartaba antes.
+        """
+        user = await create_authenticated_user(
+            client, "badcountry@test.com", "P@ssw0rd123!", "Bad", "Country"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"countries": ["JP"]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):
         """Actualizar competición de otro usuario retorna 403."""
         creator = await create_authenticated_user(
