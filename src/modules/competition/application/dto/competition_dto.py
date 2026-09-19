@@ -119,7 +119,12 @@ class CreateCompetitionRequestDTO(BaseModel):
     )
     # Campo adicional para compatibilidad con frontend (se convierte automáticamente)
     countries: list[CountryCodeStr] | None = Field(
-        None, description="Lista de países adyacentes (formato frontend)."
+        None,
+        # Dos como mucho: una Location tiene el país principal y dos huecos, y los
+        # validadores solo miran los dos primeros. Un tercero se descartaba en
+        # silencio y el torneo quedaba en menos países de los que pidió su creador
+        max_length=2,
+        description="Lista de países adyacentes (formato frontend).",
     )
 
     # Play Mode
@@ -293,7 +298,12 @@ class UpdateCompetitionRequestDTO(BaseModel):
     # Igual que al crear: la pantalla manda el mismo payload en las dos llamadas,
     # y sin este campo los países acompañantes no se podían cambiar al editar
     countries: list[CountryCodeStr] | None = Field(
-        None, description="Lista de países adyacentes (formato frontend)."
+        None,
+        # Dos como mucho: una Location tiene el país principal y dos huecos, y los
+        # validadores solo miran los dos primeros. Un tercero se descartaba en
+        # silencio y el torneo quedaba en menos países de los que pidió su creador
+        max_length=2,
+        description="Lista de países adyacentes (formato frontend).",
     )
 
     # Play Mode

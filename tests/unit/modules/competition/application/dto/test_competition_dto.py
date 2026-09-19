@@ -391,6 +391,27 @@ class TestCountriesFieldIsHostile:
         with pytest.raises(ValidationError):
             self.crear(countries=[None])
 
+    def test_update_rejects_more_than_two_countries(self):
+        """Una Location son tres países como mucho: el principal y dos.
+
+        Los validadores solo miran los dos primeros de la lista, así que un
+        tercero se descartaba en silencio y el torneo quedaba en menos países de
+        los que pidió su creador.
+        """
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(countries=["PT", "FR", "AD"])
+
+    def test_create_rejects_more_than_two_countries(self):
+        with pytest.raises(ValidationError):
+            self.crear(countries=["PT", "FR", "AD"])
+
+    def test_two_countries_are_accepted(self):
+        """Dos sí: son los dos huecos que hay."""
+        dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 == "FR"
+
     def test_update_still_converts_valid_codes(self):
         dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
 

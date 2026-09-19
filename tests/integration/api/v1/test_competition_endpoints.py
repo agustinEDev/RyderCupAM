@@ -756,6 +756,29 @@ class TestUpdateCompetition:
         assert "PT" in [c["code"] for c in despues.json()["countries"]]
 
     @pytest.mark.asyncio
+    async def test_update_competition_with_a_repeated_country_returns_400(
+        self, client: AsyncClient
+    ):
+        """Repetir un país acompañante debe dar 400, no 500.
+
+        `Location` lo rechaza con `InvalidLocationError`, que tampoco hereda de
+        `ValueError`: la tercera cara del mismo defecto en esta rama.
+        """
+        user = await create_authenticated_user(
+            client, "repeatedcountry@test.com", "P@ssw0rd123!", "Repeated", "Country"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"main_country": "ES", "countries": ["PT", "PT"]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):
         """Actualizar competición de otro usuario retorna 403."""
         creator = await create_authenticated_user(
