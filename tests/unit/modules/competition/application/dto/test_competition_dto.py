@@ -306,12 +306,16 @@ class TestUpdateCompetitionRequestDTO:
         assert dto.adjacent_country_1 == "PT"
         assert dto.adjacent_country_2 == "FR"
 
-    def test_countries_is_uppercased(self):
-        """Los códigos llegan en minúscula desde algunos selectores."""
+    def test_countries_are_placed_as_they_come(self):
+        """El DTO coloca el código, no lo normaliza: de eso sabe `CountryCode`.
+
+        Que una minúscula acabe guardada como ISO se comprueba de punta a punta en
+        los tests de integración del endpoint, que es donde se ve de verdad.
+        """
         dto = UpdateCompetitionRequestDTO(countries=["pt", "fr"])
 
-        assert dto.adjacent_country_1 == "PT"
-        assert dto.adjacent_country_2 == "FR"
+        assert dto.adjacent_country_1 == "pt"
+        assert dto.adjacent_country_2 == "fr"
 
     def test_empty_countries_leaves_both_adjacent_none(self):
         """Lista vacía es «sin países acompañantes», que es como se quitan."""
@@ -388,13 +392,13 @@ class TestCountriesFieldIsHostile:
             self.crear(countries=[None])
 
     def test_update_still_converts_valid_codes(self):
-        dto = UpdateCompetitionRequestDTO(countries=["pt", "fr"])
+        dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
 
         assert dto.adjacent_country_1 == "PT"
         assert dto.adjacent_country_2 == "FR"
 
     def test_create_still_converts_valid_codes(self):
-        dto = self.crear(countries=["pt", "fr"])
+        dto = self.crear(countries=["PT", "FR"])
 
         assert dto.adjacent_country_1 == "PT"
         assert dto.adjacent_country_2 == "FR"

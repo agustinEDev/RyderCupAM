@@ -657,6 +657,35 @@ class TestUpdateCompetition:
         assert "PT" in codigos
 
     @pytest.mark.asyncio
+    async def test_update_competition_normalises_a_lowercase_country_code(
+        self, client: AsyncClient
+    ):
+        """Un código en minúscula debe acabar guardado como ISO, en mayúsculas.
+
+        Quien normaliza es `CountryCode`, no el DTO: esto lo comprueba de punta a
+        punta para que la pieza que lo haga pueda cambiar sin que nadie lo note.
+        """
+        user = await create_authenticated_user(
+            client, "lowercountry@test.com", "P@ssw0rd123!", "Lower", "Country"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"countries": ["pt"]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+        despues = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+        codigos = [c["code"] for c in despues.json()["countries"]]
+        assert "PT" in codigos
+
+    @pytest.mark.asyncio
     async def test_update_competition_with_a_non_adjacent_country_returns_400(
         self, client: AsyncClient
     ):

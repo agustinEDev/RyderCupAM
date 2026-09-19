@@ -22,7 +22,8 @@ from src.modules.competition.domain.entities.competition import (
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
 # lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
 # asigna sobre el modelo ya validado, así que sin esto sus `min_length`/`max_length`
-# quedaban esquivados y un "PORTUGAL" llegaba entero al dominio.
+# quedaban esquivados. No se normaliza a mayúsculas aquí: lo hace `CountryCode`,
+# que es quien conoce la regla.
 CountryCodeStr = Annotated[str, StringConstraints(min_length=2, max_length=2)]
 
 # Descripciones reutilizables para campos
@@ -168,19 +169,6 @@ class CreateCompetitionRequestDTO(BaseModel):
         """Convierte team_assignment a mayúsculas."""
         if v:
             return v.upper().strip()
-        return v
-
-    @field_validator("countries", mode="before")
-    @classmethod
-    def uppercase_countries(cls, v):
-        """Convierte códigos de países adyacentes a mayúsculas.
-
-        Deja pasar intacto lo que no sea texto (el GET devuelve objetos país, y
-        hay clientes que reenvían esa forma) para que lo rechace la validación de
-        tipo con un 422, en vez de reventar aquí con un AttributeError y un 500.
-        """
-        if v and isinstance(v, list):
-            return [c.upper().strip() if isinstance(c, str) else c for c in v]
         return v
 
     @model_validator(mode="after")
@@ -351,19 +339,6 @@ class UpdateCompetitionRequestDTO(BaseModel):
         """Convierte team_assignment a mayúsculas."""
         if v:
             return v.upper().strip()
-        return v
-
-    @field_validator("countries", mode="before")
-    @classmethod
-    def uppercase_countries(cls, v):
-        """Convierte códigos de países adyacentes a mayúsculas.
-
-        Deja pasar intacto lo que no sea texto (el GET devuelve objetos país, y
-        hay clientes que reenvían esa forma) para que lo rechace la validación de
-        tipo con un 422, en vez de reventar aquí con un AttributeError y un 500.
-        """
-        if v and isinstance(v, list):
-            return [c.upper().strip() if isinstance(c, str) else c for c in v]
         return v
 
     @model_validator(mode="after")
