@@ -34,6 +34,17 @@ MAX_ENROLLMENTS_PER_USER = 20
 # Límites de duración
 MAX_COMPETITION_DURATION_DAYS = 365
 
+# Freno anti-abuso de invitaciones: correos que una competición puede disparar en
+# una hora. Es un límite de seguridad, no un número de producto, y por eso deja de
+# seguir al cupo (`max_players`): el día que el cupo suba, seguirlo convertiría una
+# competición en un emisor de tantos correos por hora como jugadores admita.
+#
+# Con el cupo de hoy (100) esto no cambia nada: 100 es el techo que ya había de
+# hecho, y el límite efectivo `min(max_players, MAX_INVITATIONS_PER_HOUR)` deja una
+# competición de 12 frenando en 12, como siempre. Está puesto para que subir el
+# cupo no arrastre el freno sin que nadie lo decida.
+MAX_INVITATIONS_PER_HOUR = 100
+
 
 class CompetitionPolicy:
     """
@@ -217,8 +228,9 @@ class CompetitionPolicy:
         """
         Valida que no se excedan las invitaciones por hora para una competicion.
 
-        El limite es max_players por hora: no tiene sentido enviar mas invitaciones
-        que participantes maximos en una hora.
+        El limite es `min(max_players, MAX_INVITATIONS_PER_HOUR)`: no tiene sentido
+        enviar mas invitaciones que participantes maximos, y por encima de
+        MAX_INVITATIONS_PER_HOUR manda el freno anti-abuso, que no sigue al cupo.
 
         Args:
             recent_invitations: Invitaciones enviadas en la ultima hora
@@ -228,11 +240,12 @@ class CompetitionPolicy:
         Raises:
             InvitationRateLimitViolation: Si se excede el limite
         """
-        if recent_invitations >= max_players:
+        limite = min(max_players, MAX_INVITATIONS_PER_HOUR)
+        if recent_invitations >= limite:
             raise InvitationRateLimitViolation(
                 f"Competition {competition_id}: Too many invitations sent in the last hour "
-                f"({recent_invitations}/{max_players}). "
-                f"Limit is {max_players} invitations per hour."
+                f"({recent_invitations}/{limite}). "
+                f"Limit is {limite} invitations per hour."
             )
 
     @staticmethod

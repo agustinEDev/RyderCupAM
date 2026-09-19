@@ -26,7 +26,10 @@ from sqlalchemy.orm import composite, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
 # Domain Entities
-from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition import (
+    DEFAULT_MAX_PLAYERS,
+    Competition,
+)
 from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
@@ -698,7 +701,7 @@ competitions_table = Table(
     Column("team_1_name", String(100), nullable=False),
     Column("team_2_name", String(100), nullable=False),
     Column("play_mode", PlayModeDecorator, nullable=False),
-    Column("max_players", Integer, nullable=False, default=24),
+    Column("max_players", Integer, nullable=False, default=DEFAULT_MAX_PLAYERS),
     Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("max_playing_handicap", Integer, nullable=True),
