@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.20.0] - 2026-09-20
+
+### Fixed
+
+- **Editar una competición ya no se traga el cupo de jugadores** (#312). El cliente manda el
+  cupo como `number_of_players` tanto al crear como al editar, pero el DTO de actualización no
+  conocía ese nombre: Pydantic lo descartaba como campo desconocido, el cupo se quedaba como
+  estaba y la respuesta seguía siendo un **200**. Nadie se enteraba. Reproducido contra el Kind
+  sobre una competición de 12: `PUT {"number_of_players": 20}` respondía 200 y seguía en 12.
+
+- **Y tampoco los países acompañantes** (#312). El mismo hueco, con el mismo silencio: la
+  pantalla manda un único payload para crear y para editar, el DTO de creación convierte la
+  lista `countries` en los dos países adyacentes y el de actualización no tenía ni el campo ni
+  el validador. Cambiar los países de un torneo no hacía nada.
+
+- **Cambiar solo un país acompañante ya no borra el otro** (#312). La localización se rehacía
+  únicamente si llegaba el país principal, así que una edición de solo los acompañantes
+  devolvía 200 sin tocar nada; y al arreglar eso, mandar un país suelto se llevaba por delante
+  los demás. Ahora se conserva lo que no viaja en la petición.
+
+- **Tres errores de país devolvían 500 en vez de 400** (#312). `InvalidCountryError`,
+  `InvalidCountryCodeError` e `InvalidLocationError` **no heredan de `ValueError`**, así que se
+  escapaban del manejador: un país que no existe o no es adyacente, un código de dos caracteres
+  mal formado como `"1a"`, y repetir un país. Los tres se nombran ahora explícitamente, en el
+  alta y en la edición.
+
+- **Un tercer país acompañante ya no se descarta en silencio** (#312). La lista no tenía tope y
+  los validadores solo leían los dos primeros: `["PT", "FR", "AD"]` entraba y `AD` desaparecía.
+
+### Changed
+
+- **El cupo por defecto pasa de 24 a 12** (#312), que es lo que propone el formulario y lo que
+  tiene una Ryder entre amigos. Sale de una única constante `DEFAULT_MAX_PLAYERS` en lugar de
+  estar repetido en el DTO, en los dos constructores de la entidad y en la columna. Una
+  migración alinea el `server_default` de la base de datos, que seguía en 24: era una tercera
+  versión de la verdad que habría recogido cualquier INSERT que omitiera la columna.
+
+- **El freno de invitaciones deja de seguir al cupo** (#312). Era `max_players` por hora, así
+  que subir el cupo habría convertido una competición en un emisor de tantos correos por hora
+  como jugadores admitiera. Ahora tiene su propio número, `MAX_INVITATIONS_PER_HOUR = 100`, y el
+  límite efectivo es `min(max_players, 100)`: con el cupo actual no cambia nada —100 ya era el
+  techo de hecho— y evita que subirlo arrastre el freno sin que nadie lo decida.
+
+### Removed
+
+- `FieldLimits.MAX_PLAYERS_MIN` y `MAX_PLAYERS_MAX` (#312), sin referencias en ningún sitio y
+  con un tope de 200 que contradecía el del dominio.
+
 ## [2.19.0] - 2026-09-19
 
 ### Added
