@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.19.0] - 2026-09-19
 
 ### Added
 
@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   CSRF— y con `scoring_opens_at`. Dentro de `detail` no le llegaba, y encima la app pintaba el
   objeto como JSON en crudo. Con el código en su sitio, la cola del móvil **conserva** el golpe
   y lo reintenta, en vez de darlo por perdido: este rechazo lo arregla esperar.
+
+- **Las migraciones de datos ya no rompen la validación del despliegue.** El job que valida
+  las migraciones las ejecuta con `alembic upgrade head --sql`, y en ese modo la conexión solo
+  escribe el guion: leer de ella devuelve `None`. Las dos migraciones nuevas leían, así que
+  reventaban el check —obligatorio— sin que ningún test lo notara.
 
 - **El huso de un campo sigue a sus coordenadas al editarlo** (#305). Si se corrigen las
   coordenadas y el huso se queda como estaba, pasa lo peor: el campo sigue abriendo solo, y a la
