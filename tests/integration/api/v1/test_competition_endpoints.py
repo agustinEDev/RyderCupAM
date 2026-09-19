@@ -590,7 +590,7 @@ class TestUpdateCompetition:
 
     @pytest.mark.asyncio
     async def test_update_competition_rejects_a_cap_above_the_limit(self, client: AsyncClient):
-        """Un cupo por encima de 300 debe dar 422, no un 200 silencioso."""
+        """Un cupo por encima de 100 debe dar 422, no un 200 silencioso."""
         user = await create_authenticated_user(
             client, "capmax@test.com", "P@ssw0rd123!", "Cap", "Max"
         )
@@ -599,24 +599,24 @@ class TestUpdateCompetition:
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 301},
+            json={"number_of_players": 101},
             cookies=user["cookies"],
         )
 
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_update_competition_accepts_a_club_sized_cap(self, client: AsyncClient):
-        """300 jugadores: el cupo de un torneo de club debe entrar."""
+    async def test_update_competition_accepts_the_maximum_cap(self, client: AsyncClient):
+        """100 jugadores: el cupo máximo debe entrar."""
         user = await create_authenticated_user(
-            client, "capclub@test.com", "P@ssw0rd123!", "Cap", "Club"
+            client, "capmaximo@test.com", "P@ssw0rd123!", "Cap", "Maximo"
         )
 
         comp = await create_competition(client, user["cookies"])
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 300},
+            json={"number_of_players": 100},
             cookies=user["cookies"],
         )
 
@@ -625,7 +625,7 @@ class TestUpdateCompetition:
         despues = await client.get(
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
-        assert despues.json()["max_players"] == 300
+        assert despues.json()["max_players"] == 100
 
     @pytest.mark.asyncio
     async def test_update_competition_applies_the_countries_sent_by_the_client(
@@ -707,6 +707,53 @@ class TestUpdateCompetition:
         )
 
         assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_competition_with_a_malformed_country_code_returns_400(
+        self, client: AsyncClient
+    ):
+        """Un código de dos caracteres pero mal formado debe dar 400, no 500.
+
+        Pasa la validación del DTO, que solo mira la longitud, y revienta al
+        construir el CountryCode con un error que no hereda de ValueError.
+        """
+        user = await create_authenticated_user(
+            client, "malformed@test.com", "P@ssw0rd123!", "Mal", "Formed"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"countries": ["1a"]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_competition_tolerates_padding_in_a_country_code(
+        self, client: AsyncClient
+    ):
+        """Un código con espacios debe valer, como en los campos hermanos."""
+        user = await create_authenticated_user(
+            client, "padded@test.com", "P@ssw0rd123!", "Pad", "Ded"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"countries": ["PT "]},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+        despues = await client.get(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+        assert "PT" in [c["code"] for c in despues.json()["countries"]]
 
     @pytest.mark.asyncio
     async def test_update_competition_not_creator_returns_403(self, client: AsyncClient):

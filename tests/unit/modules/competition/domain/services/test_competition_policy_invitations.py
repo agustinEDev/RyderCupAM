@@ -102,10 +102,12 @@ class TestValidateInvitationRate:
 
 
 class TestInvitationRateCeiling:
-    """El freno no puede crecer con el cupo hasta 300 correos por hora.
+    """El freno tiene su propio numero y deja de crecer con el cupo.
 
     El limite efectivo es `min(cupo, MAX_INVITATIONS_PER_HOUR)`: las competiciones
-    pequenas conservan su freno de siempre y las grandes topan en la constante.
+    pequenas conservan su freno de siempre y las grandes topan en la constante. Los
+    cupos de 300 de aqui son hipoteticos —hoy el maximo es 100— y estan para fijar
+    la regla antes de que el cupo suba.
     """
 
     def test_ceiling_is_one_hundred(self):
@@ -116,7 +118,7 @@ class TestInvitationRateCeiling:
         CompetitionPolicy.validate_invitation_rate(99, 300, comp_id)
 
     def test_large_competition_raises_at_the_ceiling(self):
-        """Con cupo 300 el freno salta en 100, no en 300."""
+        """Con un cupo de 300 el freno saltaria en 100, no en 300."""
         comp_id = CompetitionId(uuid4())
         with pytest.raises(InvitationRateLimitViolation):
             CompetitionPolicy.validate_invitation_rate(100, 300, comp_id)

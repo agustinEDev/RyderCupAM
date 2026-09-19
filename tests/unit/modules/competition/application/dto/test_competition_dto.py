@@ -156,7 +156,7 @@ class TestCreateCompetitionRequestDTO:
             )
 
     def test_max_players_above_maximum(self):
-        """Debe rechazar max_players mayor a 300."""
+        """Debe rechazar max_players mayor a 100."""
         with pytest.raises(ValidationError):
             CreateCompetitionRequestDTO(
                 name="Test Cup",
@@ -164,21 +164,21 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 play_mode="SCRATCH",
-                max_players=301,
+                max_players=101,
             )
 
     def test_max_players_accepts_the_cap(self):
-        """Debe aceptar exactamente 300, el cupo de una competición de club."""
+        """Debe aceptar exactamente 100, el cupo máximo de hoy."""
         dto = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
-            max_players=300,
+            max_players=100,
         )
 
-        assert dto.max_players == 300
+        assert dto.max_players == 100
 
     def test_max_players_accepts_the_minimum(self):
         """Debe aceptar exactamente 2, que sigue siendo el mínimo."""
@@ -267,12 +267,12 @@ class TestUpdateCompetitionRequestDTO:
         assert dto.max_players == 20
 
     def test_max_players_above_maximum(self):
-        """Debe rechazar un cupo mayor a 300, venga con el nombre que venga."""
+        """Debe rechazar un cupo mayor a 100, venga con el nombre que venga."""
         with pytest.raises(ValidationError):
-            UpdateCompetitionRequestDTO(number_of_players=301)
+            UpdateCompetitionRequestDTO(number_of_players=101)
 
         with pytest.raises(ValidationError):
-            UpdateCompetitionRequestDTO(max_players=301)
+            UpdateCompetitionRequestDTO(max_players=101)
 
     def test_max_players_below_minimum(self):
         """Debe rechazar un cupo menor a 2, venga con el nombre que venga."""
@@ -285,7 +285,7 @@ class TestUpdateCompetitionRequestDTO:
     def test_max_players_accepts_the_boundaries(self):
         """Debe aceptar los dos extremos exactos."""
         assert UpdateCompetitionRequestDTO(number_of_players=2).max_players == 2
-        assert UpdateCompetitionRequestDTO(number_of_players=300).max_players == 300
+        assert UpdateCompetitionRequestDTO(number_of_players=100).max_players == 100
 
     def test_countries_is_converted_like_on_create(self):
         """`countries` debe convertirse a adjacent_country_1/2, igual que al crear.

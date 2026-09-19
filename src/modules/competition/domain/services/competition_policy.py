@@ -35,12 +35,14 @@ MAX_ENROLLMENTS_PER_USER = 20
 MAX_COMPETITION_DURATION_DAYS = 365
 
 # Freno anti-abuso de invitaciones: correos que una competición puede disparar en
-# una hora. Es un límite de seguridad, no un número de producto, y por eso NO
-# sigue al cupo (`max_players`): con el cupo en 300, seguirlo convertiría una
-# competición en un emisor de 300 correos por hora. 100 es el techo que ya existía
-# de hecho cuando el cupo máximo era 100, así que no afloja nada de lo de hoy: el
-# límite efectivo es `min(max_players, MAX_INVITATIONS_PER_HOUR)` y una competición
-# de 12 sigue frenando en 12.
+# una hora. Es un límite de seguridad, no un número de producto, y por eso deja de
+# seguir al cupo (`max_players`): el día que el cupo suba, seguirlo convertiría una
+# competición en un emisor de tantos correos por hora como jugadores admita.
+#
+# Con el cupo de hoy (100) esto no cambia nada: 100 es el techo que ya había de
+# hecho, y el límite efectivo `min(max_players, MAX_INVITATIONS_PER_HOUR)` deja una
+# competición de 12 frenando en 12, como siempre. Está puesto para que subir el
+# cupo no arrastre el freno sin que nadie lo decida.
 MAX_INVITATIONS_PER_HOUR = 100
 
 

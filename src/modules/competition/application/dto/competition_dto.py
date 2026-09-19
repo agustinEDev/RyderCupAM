@@ -22,9 +22,12 @@ from src.modules.competition.domain.entities.competition import (
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
 # lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
 # asigna sobre el modelo ya validado, así que sin esto sus `min_length`/`max_length`
-# quedaban esquivados. No se normaliza a mayúsculas aquí: lo hace `CountryCode`,
-# que es quien conoce la regla.
-CountryCodeStr = Annotated[str, StringConstraints(min_length=2, max_length=2)]
+# quedaban esquivados. Se recortan los espacios como hacen esos campos, para que
+# `countries: ["ES "]` no sea un 422 mientras `adjacent_country_1: "ES "` funciona.
+# Lo que no se hace aquí es pasar a mayúsculas: de eso sabe `CountryCode`.
+CountryCodeStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2)
+]
 
 # Descripciones reutilizables para campos
 COMPETITION_NAME_DESC = "Nombre de la competición."

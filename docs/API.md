@@ -519,7 +519,7 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `country_code` (string, required, ISO 3166-1 alpha-2, main location)
 - `secondary_country_code` (string, optional, must be adjacent)
 - `tertiary_country_code` (string, optional, must be adjacent)
-- `max_players` (int, optional, 2-300, default 12; also accepted as `number_of_players`)
+- `max_players` (int, optional, 2-100, default 12; also accepted as `number_of_players`)
 - `play_mode` (enum, required: "SCRATCH" | "HANDICAP")
 - `team_assignment` (enum, required: "RANDOM" | "MANUAL")
 - `team_1_name` (string, optional, max 50)

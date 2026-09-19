@@ -41,8 +41,10 @@ from ..value_objects.team_assignment import TeamAssignment
 
 # Constantes de validación
 MIN_PLAYERS = 2
-# 300: el objetivo de producto son los clubes, y un torneo de club no cabe en 100
-MAX_PLAYERS = 300
+# 100 hasta que las inscripciones se paginen: hay seis consultas que piden como
+# mucho 100 filas sin decirlo, así que una competición mayor se sortearía y se
+# emparejaría con los 100 primeros. Subirlo a 300 va en su propia issue.
+MAX_PLAYERS = 100
 # 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
 DEFAULT_MAX_PLAYERS = 12
 MIN_PLAYING_HANDICAP = 1

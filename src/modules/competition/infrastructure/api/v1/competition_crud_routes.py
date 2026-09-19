@@ -57,6 +57,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import InvalidCountryCodeError
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +271,7 @@ async def create_competition(
 
     except CompetitionAlreadyExistsError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvalidCountryError as e:
+    except (InvalidCountryError, InvalidCountryCodeError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -429,8 +430,16 @@ async def update_competition(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     # InvalidCountryError también al editar, no solo al crear: desde que el PUT
-    # acepta `countries`, un país inexistente o no adyacente llega hasta aquí
-    except (CompetitionNotEditableError, InvalidCountryError, ValueError) as e:
+    # acepta `countries`, un país inexistente o no adyacente llega hasta aquí.
+    # InvalidCountryCodeError no hereda de ValueError, así que hay que nombrarlo:
+    # un código de dos caracteres pero mal formado ("1a") pasa la validación del
+    # DTO y revienta al construir el CountryCode.
+    except (
+        CompetitionNotEditableError,
+        InvalidCountryError,
+        InvalidCountryCodeError,
+        ValueError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
