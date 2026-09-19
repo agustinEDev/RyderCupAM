@@ -9,6 +9,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_concede_match_use_case,
@@ -35,6 +36,7 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
+    ScoringNotOpenYetError,
 )
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
@@ -128,7 +130,8 @@ async def submit_hole_score(
 
     **Restricciones:**
     - Solo jugadores del partido pueden registrar scores (o admin con acting_as)
-    - El partido debe estar IN_PROGRESS
+    - El partido debe estar IN_PROGRESS, o estar programado y haber llegado su
+      hora de apertura: entonces este primer golpe lo abre (BE #305)
     - Hoyo debe estar entre 1-18
     - Los campos bloqueados tras la entrega se omiten silenciosamente
 
@@ -137,7 +140,8 @@ async def submit_hole_score(
     - 400: Hoyo inválido (los campos ya entregados se omiten, no se rechaza)
     - 403: No es jugador del partido
     - 404: Partido no encontrado
-    - 409: Partido no en estado de scoring
+    - 409: Partido no en estado de scoring, o su anotacion aun no ha abierto
+      (`error_code` `SCORING_NOT_OPEN_YET`, con `scoring_opens_at`)
     """
     if body.acting_as is not None and not current_user.is_admin:
         raise HTTPException(
@@ -161,6 +165,32 @@ async def submit_hole_score(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+    except ScoringNotOpenYetError as e:
+        # Con codigo propio y la hora: este rechazo lo arregla ESPERAR, asi que
+        # el movil conserva el golpe en su cola en vez de darlo por perdido, a
+        # diferencia de los demas 409 de anotacion (BE #305).
+        #
+        # `error_code` va en la RAIZ del cuerpo, no dentro de `detail`: es donde
+        # lo lee el cliente (`api.js`), como el fallo de CSRF. Metido en `detail`
+        # no llegaba —y ademas el cliente pinta un `detail` que no es texto como
+        # JSON en crudo, asi que el jugador leia el blob entero—. Por eso se
+        # devuelve una respuesta y no se lanza `HTTPException`, que siempre
+        # envuelve en `detail`
+        #
+        # El texto se compone aqui con la hora de apertura, y no con `str(e)`:
+        # lo que lee el jugador se escribe en la capa que le habla, y el mensaje
+        # de la excepcion se queda para los logs
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": (
+                    "La anotacion de este partido abre a las "
+                    f"{e.opens_at.isoformat()}"
+                ),
+                "error_code": ScoringNotOpenYetError.error_code,
+                "scoring_opens_at": e.opens_at.isoformat(),
+            },
+        )
     except MatchNotScoringError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

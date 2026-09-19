@@ -180,6 +180,11 @@ golf_courses_table = Table(
     Column("address", String(300), nullable=True, comment="Dirección postal completa"),
     Column("city", String(100), nullable=True, comment="Localidad"),
     Column("province", String(100), nullable=True, comment="Provincia o región"),
+    # Zona horaria IANA del campo, deducida de sus coordenadas al darlo de alta
+    # (BE #305). La anotación de un partido abre a una hora LOCAL, y el país no
+    # basta: España tiene dos husos. NULL cuando no se conoce —un campo sin
+    # coordenadas—, y entonces ese partido solo se abre pulsando START
+    Column("timezone", String(64), nullable=True, comment="Zona horaria IANA del campo"),
     # Procedencia: de dónde salen los datos. Permite reconocer un campo ya
     # importado sin comparar nombres, que se rompe en cuanto alguien renombra.
     Column(
@@ -425,6 +430,7 @@ def start_golf_course_mappers():
                 "_external_id": column_property(golf_courses_table.c.external_id),
                 "_imported_at": column_property(golf_courses_table.c.imported_at),
                 "_physical_holes": column_property(golf_courses_table.c.physical_holes),
+                "_timezone": column_property(golf_courses_table.c.timezone),
                 # One-to-many relationships with tees and holes
                 "_tees": relationship(
                     Tee,

@@ -10,7 +10,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
-from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -74,7 +74,11 @@ class UpdateMatchStatusUseCase:
     async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
-        match = await self._uow.matches.find_by_id(match_id)
+        # Con la fila bloqueada: START y la apertura automatica por hora de sesion
+        # (BE #305) hacen lo mismo, y si se cruzan los dos pre-crean los 18 hoyos
+        # de cada jugador y uno se estrella contra `uq_hole_score_match_hole_player`
+        # (CodeRabbit en la PR #307)
+        match = await self._uow.matches.find_by_id_for_update(match_id)
 
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
@@ -98,32 +102,16 @@ class UpdateMatchStatusUseCase:
         return match, round_entity
 
     async def _handle_start(self, match, round_entity):
-        """Ejecuta START: match.start() + auto-start round + pre-create HoleScores."""
+        """Ejecuta START: match.start() + pre-create HoleScores + auto-start round.
+
+        Los tres pasos viven en `MatchOpener`, compartidos con la apertura
+        automatica por hora de sesion (BE #305): abrir un partido sin crear sus
+        hoyos hace que anotar devuelva 200 sin guardar nada.
+        """
         try:
-            match.start()
+            return await MatchOpener.open(match, round_entity, self._uow)
         except ValueError as e:
             raise InvalidActionError(str(e)) from e
-
-        # Pre-create 18 HoleScores per player (empty, ready for scoring)
-        hole_scores = []
-        for team, players in [("A", match.team_a_players), ("B", match.team_b_players)]:
-            for player in players:
-                for hole_num in range(1, 19):
-                    strokes_received = player.strokes_on_hole(hole_num)
-                    hs = HoleScore.create(
-                        match_id=match.id,
-                        hole_number=hole_num,
-                        player_user_id=player.user_id,
-                        team=team,
-                        strokes_received=strokes_received,
-                    )
-                    hole_scores.append(hs)
-        await self._uow.hole_scores.add_many(hole_scores)
-
-        if round_entity.status == RoundStatus.SCHEDULED:
-            round_entity.start()
-            return round_entity.status.value
-        return None
 
     async def _handle_complete(self, request, match, round_entity):
         """Ejecuta COMPLETE: match.complete() + auto-complete round."""

@@ -1,5 +1,8 @@
 """Caso de Uso: Registrar score de un hoyo."""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.scoring_dto import (
     ScoringViewResponseDTO,
     SubmitHoleScoreBodyDTO,
@@ -10,10 +13,15 @@ from src.modules.competition.application.exceptions import (
     MatchNotScoringError,
     NotMatchPlayerError,
     RoundNotFoundError,
+    ScoringNotOpenYetError,
 )
+from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.scoring_opening_service import (
+    ScoringOpeningService,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_id import MatchId
@@ -34,11 +42,15 @@ class SubmitHoleScoreUseCase:
         user_repo: UserRepositoryInterface,
         scoring_service: ScoringService,
         golf_course_repo: IGolfCourseRepository | None = None,
+        now: Callable[[], datetime] | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repo
         self._scoring_service = scoring_service
         self._gc_repo = golf_course_repo
+        # El reloj del SERVIDOR decide si la anotacion ya abrio (BE #305), nunca
+        # una hora que mande el cliente. Inyectable solo para poder probarlo
+        self._now = now or (lambda: datetime.now(UTC))
 
     async def execute(
         self,
@@ -47,19 +59,27 @@ class SubmitHoleScoreUseCase:
         body: SubmitHoleScoreBodyDTO,
         user_id: UserId,
     ) -> ScoringViewResponseDTO:
+        # El instante en que LLEGA la peticion, no el de despues de las consultas:
+        # un golpe enviado antes de la hora de apertura no se acepta porque las
+        # busquedas de ronda, competicion y campo hayan tardado lo suyo
+        # (CodeRabbit, PR #307)
+        llegada = self._now()
+
         async with self._uow:
             match_id = MatchId(match_id_str)
             match = await self._uow.matches.find_by_id(match_id)
             if not match:
                 raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
 
-            if not match.status.can_record_scores():
-                raise MatchNotScoringError(
-                    f"Partido no esta en estado para scoring. Estado: {match.status.value}"
-                )
-
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
+
+            # Despues de saber que es suyo: abrir el partido bloquea su fila,
+            # crea 36 filas y arranca la ronda, y eso no lo dispara alguien que
+            # solo acerto el identificador. Ademas el rechazo de «aun no ha
+            # abierto» lleva la hora, que tampoco es suya (BE #305)
+            if not match.status.can_record_scores():
+                match = await self._abre_si_toca(match, llegada)
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
             own_score_locked = match.has_submitted_scorecard(user_id)
@@ -112,6 +132,78 @@ class SubmitHoleScoreUseCase:
             self._uow, self._user_repo, self._scoring_service, self._gc_repo
         )
         return await view_uc.execute(match_id_str)
+
+    async def _abre_si_toca(self, match, llegada):
+        """
+        Abre la anotacion del partido si ya es su hora, y devuelve el partido abierto.
+
+        Un partido solo se podia anotar tras un START pulsado con cobertura. En
+        un campo sin señal eso pierde vueltas enteras: nadie lo pulsa y todos los
+        golpes vuelven rechazados. Ahora se abre solo a una hora fija segun la
+        sesion de su ronda (BE #305), y lo que decide es la hora a la que el
+        golpe LLEGA al servidor, asi que lo anotado sin cobertura entra bien.
+
+        Lo que no abre nada sigue siendo un rechazo definitivo: un partido
+        terminado, concedido o en walkover, una competicion que no esta en curso
+        y una ronda sin fecha ni sesion —datos viejos— que solo abre con START.
+
+        :raises ScoringNotOpenYetError: si el partido abre, pero mas tarde. Ese
+            rechazo lo arregla esperar, y el movil tiene que conservar el golpe.
+        :raises MatchNotScoringError: en cualquier otro caso.
+        """
+        no_se_puede = MatchNotScoringError(
+            f"Partido no esta en estado para scoring. Estado: {match.status.value}"
+        )
+        if not match.status.can_start():
+            raise no_se_puede
+
+        round_entity = await self._uow.rounds.find_by_id(match.round_id)
+        if not round_entity:
+            raise no_se_puede
+
+        competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+        if not competition or not competition.is_in_progress():
+            raise no_se_puede
+
+        # La hora es la LOCAL del campo donde se juega esa ronda, no la de la
+        # competicion: una competicion puede jugarse en campos de husos
+        # distintos. Un campo sin coordenadas no tiene zona, y entonces no hay
+        # apertura automatica: ese partido solo se abre con START, y la pantalla
+        # de la competicion lo avisa (BE #305)
+        golf_course = (
+            await self._gc_repo.find_by_id(round_entity.golf_course_id) if self._gc_repo else None
+        )
+        opens_at = ScoringOpeningService.opens_at(
+            round_entity.round_date,
+            round_entity.session_type,
+            golf_course.timezone if golf_course else None,
+        )
+        if opens_at is None:
+            raise no_se_puede
+        if llegada < opens_at:
+            raise ScoringNotOpenYetError(
+                f"La anotacion de este partido abre a las {opens_at.isoformat()}",
+                opens_at=opens_at,
+            )
+
+        # Con la fila bloqueada, y releyendo el estado: dos jugadores pueden
+        # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
+        # hoyos de cada jugador —`add_many` no deduplica—. El segundo se
+        # encuentra el partido ya abierto y solo anota lo suyo
+        match = await self._uow.matches.find_by_id_for_update(match.id)
+        if match is None:
+            raise no_se_puede
+        if match.status.can_record_scores():
+            return match
+        # Y si en ese rato lo concedieron o lo terminaron, tampoco se abre: sin
+        # esto, `match.start()` reventaria con un 500 en vez del 409 de siempre
+        if not match.status.can_start():
+            raise no_se_puede
+
+        await MatchOpener.open(match, round_entity, self._uow)
+        await self._uow.matches.update(match)
+        await self._uow.rounds.update(round_entity)
+        return match
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
         """Actualiza own_score para los jugadores afectados."""

@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.19.0] - 2026-09-19
+
+### Added
+
+- **La anotación se abre sola a la hora de la sesión** (#305). Hasta ahora un partido solo se
+  podía anotar después de que alguien pulsara START, y eso exige cobertura justo en el momento
+  justo: en un campo sin señal, si nadie lo pulsa, todos los golpes vuelven rechazados y la
+  vuelta se pierde. Ahora la mañana abre a las **6:00**, la tarde a las **12:00** y la noche a
+  las **18:00**, y START se queda para abrir antes.
+
+  La hora es la **local del campo donde se juega esa ronda**, no la de la competición: una
+  competición puede jugarse en campos de husos distintos, y las seis de Canarias no son las seis
+  de Madrid. Quien decide es el reloj del **servidor** cuando llega el golpe, nunca una hora
+  enviada por el cliente: sin cobertura el móvil no puede saber si el partido está abierto, y su
+  reloj se puede tocar. Un golpe anotado en modo avión antes de la hora entra sin problema si
+  llega después, que es el caso normal.
+
+  Los campos guardan ahora su **zona horaria**, deducida de sus coordenadas, y la devuelven en
+  `timezone`. La vista de anotación y el calendario llevan `scoring_opens_at`.
+
+  Un campo sin coordenadas no tiene zona y **no abre solo**: ese partido sigue necesitando START.
+  Por eso esta versión rellena también las coordenadas de los **13 campos de 805** que la
+  importación de la RFEG dejó sin ellas, cinco de códigos Plus y el resto de OpenStreetMap o de
+  datos publicados del club. Avisar en pantalla de los campos que hay que arrancar a mano es
+  RyderCupWeb#630.
+
+### Fixed
+
+- **Un golpe que llega antes de que abra la anotación ya no se pierde** (#305). El rechazo es un
+  409 con `error_code` **en la raíz** del cuerpo —donde lo lee el cliente, como el fallo de
+  CSRF— y con `scoring_opens_at`. Dentro de `detail` no le llegaba, y encima la app pintaba el
+  objeto como JSON en crudo. Con el código en su sitio, la cola del móvil **conserva** el golpe
+  y lo reintenta, en vez de darlo por perdido: este rechazo lo arregla esperar.
+
+- **Las migraciones de datos ya no rompen la validación del despliegue.** El job que valida
+  las migraciones las ejecuta con `alembic upgrade head --sql`, y en ese modo la conexión solo
+  escribe el guion: leer de ella devuelve `None`. Las dos migraciones nuevas leían, así que
+  reventaban el check —obligatorio— sin que ningún test lo notara.
+
+- **El huso de un campo sigue a sus coordenadas al editarlo** (#305). Si se corrigen las
+  coordenadas y el huso se queda como estaba, pasa lo peor: el campo sigue abriendo solo, y a la
+  hora de donde ya no está. Vale también cuando la zona nueva no se conoce —entonces se queda sin
+  huso, y su anotación se abre con START— y por el camino del clon, para que aprobar una
+  propuesta no devuelva la hora vieja.
+
 ## [2.18.2] - 2026-09-16
 
 ### Fixed

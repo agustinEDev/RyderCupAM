@@ -9,6 +9,7 @@ import pytest
 
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     HoleDTO,
+    LocationDTO,
     TeeDTO,
     UpdateGolfCourseRequestDTO,
 )
@@ -19,6 +20,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -316,6 +318,39 @@ class TestUpdateGolfCourseUseCase:
                 user_id=different_user_id,
                 is_admin=is_admin,
             )
+
+    async def test_sin_resolver_una_edicion_con_ubicacion_conserva_el_huso(
+        self, mock_uow, valid_update_dto, approved_golf_course
+    ):
+        """
+        Fila e de la tabla (CodeRabbit, PR #307): sin resolver inyectado no es que
+        la zona no se conozca, es que no se puede calcular. Aplicar el None de
+        vuelta dejaría el campo sin apertura automática en cada edición.
+        """
+        approved_golf_course.update(
+            name=approved_golf_course.name,
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            tees=approved_golf_course.tees,
+            holes=[Hole(number=i, par=4, stroke_index=i) for i in range(1, 19)],
+            location=CourseLocation(latitude=40.4637, longitude=-3.7492, city="Madrid"),
+            timezone="Europe/Madrid",
+        )
+        mock_uow.golf_courses.find_by_id.return_value = approved_golf_course
+        valid_update_dto.location = LocationDTO(
+            latitude=28.17084, longitude=-16.7926, city="Guía de Isora"
+        )
+
+        # Sin `timezone_resolver`
+        use_case = UpdateGolfCourseUseCase(mock_uow)
+        await use_case.execute(
+            golf_course_id=approved_golf_course.id,
+            request=valid_update_dto,
+            user_id=approved_golf_course.creator_id,
+            is_admin=True,
+        )
+
+        assert approved_golf_course.timezone == "Europe/Madrid"
 
     async def test_should_raise_error_when_course_is_rejected(self, mock_uow, valid_update_dto):
         """

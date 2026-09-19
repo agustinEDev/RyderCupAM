@@ -6,11 +6,14 @@ de scoring incluyendo registro de scores, validacion cruzada, entrega
 de tarjetas, leaderboard y concesion de partidos.
 """
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
 
+from src.modules.competition.domain.services.scoring_opening_service import (
+    ScoringOpeningService,
+)
 from tests.conftest import (
     activate_competition,
     approve_golf_course,
@@ -26,7 +29,7 @@ from tests.conftest import (
 # ======================================================================================
 
 
-async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
+async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = True):  # noqa: PLR0915
     """
     Setup completo: crea competicion SCRATCH con 2 jugadores, 1 ronda SINGLES,
     genera partidos, inicia competicion y match. Retorna IDs necesarios.
@@ -157,13 +160,16 @@ async def setup_match_in_progress(client: AsyncClient):  # noqa: PLR0915
     start_resp = await client.post(f"/api/v1/competitions/{comp_id}/start")
     assert start_resp.status_code == 200, f"Failed to start competition: {start_resp.text}"
 
-    # 16. Iniciar partido (pre-crea HoleScores)
-    set_auth_cookies(client, creator["cookies"])
-    status_resp = await client.put(
-        f"/api/v1/competitions/matches/{match_id}/status",
-        json={"action": "START"},
-    )
-    assert status_resp.status_code == 200, f"Failed to start match: {status_resp.text}"
+    # 16. Iniciar partido (pre-crea HoleScores). Con `start_match=False` se deja
+    # SCHEDULED, que es como llega al campo un partido que nadie arranco: desde
+    # la BE #305 lo abre el primer golpe si ya es su hora
+    if start_match:
+        set_auth_cookies(client, creator["cookies"])
+        status_resp = await client.put(
+            f"/api/v1/competitions/matches/{match_id}/status",
+            json={"action": "START"},
+        )
+        assert status_resp.status_code == 200, f"Failed to start match: {status_resp.text}"
 
     return {
         "creator": creator,
@@ -653,3 +659,109 @@ class TestConcedeMatch:
         )
 
         assert response.status_code == 404
+
+
+class TestAperturaAutomatica:
+    """
+    El primer golpe abre el partido si ya es su hora (BE #305).
+
+    La hora se fija desde el test: que sea 06:00, 12:00 o 18:00 lo prueban los
+    tests de `ScoringOpeningService`, y atarlo aqui al reloj haria que la suite
+    pasara o fallara segun la hora a la que se ejecute.
+    """
+
+    @staticmethod
+    def _con_apertura(monkeypatch, cuando):
+        monkeypatch.setattr(
+            ScoringOpeningService, "opens_at", staticmethod(lambda *args, **kwargs: cuando)
+        )
+
+    @pytest.mark.asyncio
+    async def test_el_primer_golpe_abre_el_partido_sin_start(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """Nadie pulso START: el golpe lo abre, se guarda y la vista lo refleja."""
+        ctx = await setup_match_in_progress(client, start_match=False)
+        self._con_apertura(monkeypatch, datetime.now(UTC) - timedelta(hours=1))
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={
+                "own_score": 4,
+                "marked_player_id": ctx["player_b"]["user"]["id"],
+                "marked_score": 5,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        vista = response.json()
+        assert vista["match_status"] == "IN_PROGRESS"
+        assert vista["scoring_opens_at"] is not None
+        hoyo_1 = next(e for e in vista["scores"] if e["hole_number"] == 1)
+        mio = next(
+            j
+            for j in hoyo_1["player_scores"]
+            if j["user_id"] == ctx["player_a"]["user"]["id"]
+        )
+        assert mio["own_score"] == 4, "el golpe tiene que quedar guardado, no caer en la nada"
+
+    @pytest.mark.asyncio
+    async def test_antes_de_su_hora_se_rechaza_con_su_codigo(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """El movil tiene que poder distinguirlo para conservar el golpe en la cola."""
+        ctx = await setup_match_in_progress(client, start_match=False)
+        abre = datetime.now(UTC) + timedelta(hours=2)
+        self._con_apertura(monkeypatch, abre)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={
+                "own_score": 4,
+                "marked_player_id": ctx["player_b"]["user"]["id"],
+                "marked_score": 5,
+            },
+        )
+
+        assert response.status_code == 409, response.text
+        cuerpo = response.json()
+        # En la RAIZ, que es donde el cliente lee el codigo (como el CSRF): dentro
+        # de `detail` no le llega, y ademas pinta el objeto como JSON en crudo
+        assert cuerpo["error_code"] == "SCORING_NOT_OPEN_YET"
+        assert cuerpo["scoring_opens_at"] == abre.isoformat()
+        assert isinstance(cuerpo["detail"], str), "el mensaje es texto, no un objeto"
+        assert "SCORING_NOT_OPEN_YET" not in cuerpo["detail"]
+        # El jugador tiene que leer CUANDO abre. Ojo: esto no distingue quien
+        # compone el texto —la ruta y la excepcion dicen hoy la misma hora—,
+        # solo fija el contrato de cara al cliente
+        assert abre.isoformat() in cuerpo["detail"]
+
+    @pytest.mark.asyncio
+    async def test_los_dos_jugadores_anotan_tras_abrirse(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """El segundo golpe no vuelve a abrir el partido ni pierde lo suyo."""
+        ctx = await setup_match_in_progress(client, start_match=False)
+        self._con_apertura(monkeypatch, datetime.now(UTC) - timedelta(hours=1))
+        a_id = ctx["player_a"]["user"]["id"]
+        b_id = ctx["player_b"]["user"]["id"]
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        primera = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 4, "marked_player_id": b_id, "marked_score": 5},
+        )
+        assert primera.status_code == 200, primera.text
+
+        set_auth_cookies(client, ctx["player_b"]["cookies"])
+        segunda = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 5, "marked_player_id": a_id, "marked_score": 4},
+        )
+
+        assert segunda.status_code == 200, segunda.text
+        hoyo_1 = next(e for e in segunda.json()["scores"] if e["hole_number"] == 1)
+        assert len(hoyo_1["player_scores"]) == 2, "un score por jugador, sin duplicados"
+        assert {j["own_score"] for j in hoyo_1["player_scores"]} == {4, 5}

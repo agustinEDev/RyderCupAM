@@ -85,6 +85,15 @@ class RoundResponseDTO(BaseModel):
     matches: list[MatchResponseDTO] = Field(
         default_factory=list, description="Partidos de la ronda."
     )
+    scoring_opens_at: datetime | None = Field(
+        None,
+        description=(
+            "Hora a la que se puede empezar a anotar los partidos de esta ronda, "
+            "con su desfase (BE #305). El cliente la usa para ofrecer «Anotar» "
+            "—también sin cobertura, desde lo que tenga guardado— en vez de "
+            "adivinar si alguien pulsó START."
+        ),
+    )
     created_at: datetime = Field(..., description="Fecha de creación.")
     updated_at: datetime = Field(..., description="Fecha de actualización.")
 
