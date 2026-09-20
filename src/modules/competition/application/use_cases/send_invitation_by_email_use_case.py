@@ -59,8 +59,13 @@ class SendInvitationByEmailUseCase:
             if not competition:
                 raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 
-            # 2. Verificar creator/admin
-            if not is_admin and not competition.is_creator(inviter_id):
+            # 2. Verificar creator/admin. En DRAFT no vale ser admin: invitar
+            # abre las inscripciones (BE #319), y publicar el torneo de otro no
+            # es decision suya — ademas le quitaria el poder borrarlo
+            es_el_creador = competition.is_creator(inviter_id)
+            if not es_el_creador and (
+                not is_admin or CompetitionPolicy.invitation_opens_enrollment(competition.status)
+            ):
                 raise NotCompetitionCreatorError(
                     "Only the competition creator can send invitations."
                 )

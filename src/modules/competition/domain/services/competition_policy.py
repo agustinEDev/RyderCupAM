@@ -216,7 +216,7 @@ class CompetitionPolicy:
             competition_status: Estado actual de la competicion
 
         Returns:
-            True si hay que abrir las inscripciones antes de invitar
+            True si esta invitacion tiene que abrir las inscripciones
         """
         return competition_status == CompetitionStatus.DRAFT
 
