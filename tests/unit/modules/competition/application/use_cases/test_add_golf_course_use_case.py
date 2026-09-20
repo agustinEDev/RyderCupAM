@@ -1,6 +1,6 @@
 """Tests para AddGolfCourseToCompetitionUseCase."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -19,11 +19,16 @@ from src.modules.competition.application.use_cases.add_golf_course_use_case impo
     NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -33,6 +38,7 @@ from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
@@ -225,6 +231,58 @@ class TestAddGolfCourseToCompetitionUseCase:
         # Act & Assert
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request_dto, other_user_id)
+
+    async def test_should_fail_when_there_is_already_a_schedule(
+        self,
+        competition_uow: InMemoryUnitOfWork,
+        golf_course_uow: InMemoryGolfCourseUnitOfWork,
+        competition: Competition,
+        golf_course: GolfCourse,
+        creator_id: UserId,
+    ):
+        """
+        Verifica que no se anaden campos con el calendario ya montado.
+
+        Given: Una competicion reabierta (ACTIVE) con una ronda programada
+        When: Se intenta anadir otro campo
+        Then: Lanza CompetitionNotDraftError
+
+        `ACTIVE` no implica que no haya nada montado: se vuelve ahi desde CLOSED
+        con `reopen_enrollments`. Y quien ya esta inscrito lleva un color de
+        barras elegido sobre los campos de entonces; cambiarlos por debajo hace
+        que la generacion de partidos falle mucho despues, sin pista de por que.
+        """
+        competition.activate()
+        async with competition_uow:
+            await competition_uow.competitions.update(competition)
+            await competition_uow.rounds.add(
+                Round(
+                    id=RoundId.generate(),
+                    competition_id=competition.id,
+                    golf_course_id=GolfCourseId.generate(),
+                    round_date=date(2026, 6, 1),
+                    session_type=SessionType.MORNING,
+                    match_format=MatchFormat.FOURBALL,
+                    status=RoundStatus.SCHEDULED,
+                    handicap_mode=None,
+                    allowance_percentage=None,
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+            )
+            await competition_uow.commit()
+
+        use_case = AddGolfCourseToCompetitionUseCase(
+            uow=competition_uow,
+            golf_course_repository=golf_course_uow.golf_courses,
+        )
+        request_dto = AddGolfCourseRequestDTO(
+            competition_id=str(competition.id.value),
+            golf_course_id=str(golf_course.id.value),
+        )
+
+        with pytest.raises(CompetitionNotDraftError):
+            await use_case.execute(request_dto, creator_id)
 
     async def test_should_fail_once_enrollment_is_closed(
         self,

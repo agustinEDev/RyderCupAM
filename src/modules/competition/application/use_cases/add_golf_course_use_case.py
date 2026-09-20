@@ -134,6 +134,16 @@ class AddGolfCourseToCompetitionUseCase:
                     f"abiertas. Estado actual: {competition.status.value}"
                 )
 
+            # Y con el calendario montado tampoco: se vuelve a ACTIVE desde CLOSED
+            # (`reopen_enrollments`), y quien ya esta inscrito eligio su color de
+            # barras sobre los campos de entonces. Cambiarlos por debajo hace que
+            # la generacion de partidos falle mucho despues (BE #323)
+            if await self._uow.rounds.find_by_competition(competition_id):
+                raise CompetitionNotDraftError(
+                    "No se pueden añadir campos: la competición ya tiene rondas "
+                    "programadas."
+                )
+
             # 4. Buscar el campo de golf
             golf_course_id = GolfCourseId(request.golf_course_id)
             golf_course = await self._golf_course_repo.find_by_id(golf_course_id)

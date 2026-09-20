@@ -495,7 +495,7 @@ class Competition:
         max_playing_handicap: int | None = None,
     ) -> None:
         """
-        Actualiza la información del torneo. Solo permitido en estado DRAFT.
+        Actualiza la información del torneo, mientras las inscripciones estén abiertas.
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -504,7 +504,7 @@ class Competition:
         if not self.allows_modifications():
             raise CompetitionStateError(
                 f"No se puede modificar la configuración en estado {self._status.value}. "
-                f"Solo se permite en estado DRAFT."
+                f"Solo mientras las inscripciones están abiertas."
             )
 
         if name is not None:

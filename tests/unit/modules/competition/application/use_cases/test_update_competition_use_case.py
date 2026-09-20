@@ -1,6 +1,6 @@
 """Tests para UpdateCompetitionUseCase."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -19,13 +19,19 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     UpdateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
@@ -530,6 +536,67 @@ class TestUpdateCompetitionUseCase:
 
         with pytest.raises(CompetitionNotEditableError):
             await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
+
+    async def _schedule_a_round(self, uow, competition_id):
+        """Deja una ronda programada: a partir de ahi hay calendario."""
+        async with uow:
+            await uow.rounds.add(
+                Round(
+                    id=RoundId.generate(),
+                    competition_id=CompetitionId(competition_id),
+                    golf_course_id=GolfCourseId.generate(),
+                    round_date=date(2025, 6, 1),
+                    session_type=SessionType.MORNING,
+                    match_format=MatchFormat.FOURBALL,
+                    status=RoundStatus.SCHEDULED,
+                    handicap_mode=None,
+                    allowance_percentage=None,
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+            )
+            await uow.commit()
+
+    async def test_cannot_be_edited_once_there_is_a_schedule(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Con calendario ya montado, la configuracion no se toca.
+
+        Given: Una competicion con inscripciones abiertas y una ronda programada
+        When: Se intentan mover las fechas
+        Then: Se rechaza
+
+        `ACTIVE` no significa «todavia no hay nada montado»: se vuelve a ACTIVE
+        desde CLOSED con `reopen_enrollments`, y entonces ya puede haber rondas,
+        equipos y partidos. Mover las fechas dejaria esas rondas fuera del rango
+        del torneo, un estado que la propia aplicacion considera invalido.
+        """
+        created = await self._create_and_open(uow, creator_id)
+        await self._schedule_a_round(uow, created.id)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        with pytest.raises(CompetitionNotEditableError):
+            await update_use_case.execute(
+                CompetitionId(created.id),
+                UpdateCompetitionRequestDTO(start_date=date(2025, 8, 1), end_date=date(2025, 8, 3)),
+                creator_id,
+            )
+
+    async def test_without_a_schedule_it_can_still_be_edited(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Sin calendario, que es el caso que motivo todo esto, se sigue pudiendo."""
+        created = await self._create_and_open(uow, creator_id)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(start_date=date(2025, 8, 1), end_date=date(2025, 8, 3)),
+            creator_id,
+        )
+
+        assert await self._cap_of(uow, created.id) is not None
 
     async def test_the_cap_cannot_drop_below_the_people_already_in(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
