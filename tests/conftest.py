@@ -728,6 +728,7 @@ def sample_competition_data() -> dict:
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
 
@@ -759,6 +760,11 @@ async def create_competition(
             "play_mode": "HANDICAP",
             "max_players": 24,
             "team_assignment": "MANUAL",
+            # Publica a proposito: la mayoria de los tests que usan este helper
+            # van de otra cosa —inscribirse, anotar, listar— y con el valor por
+            # defecto de produccion (PRIVATE, BE #318) un desconocido no podria
+            # ni pedir plaza. Que nace privada lo cubren los tests de #318
+            "visibility": "PUBLIC",
         }
 
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)

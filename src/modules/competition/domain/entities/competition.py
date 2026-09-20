@@ -39,6 +39,7 @@ from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.play_mode import PlayMode
 from ..value_objects.team_assignment import TeamAssignment
+from ..value_objects.visibility import Visibility
 
 # Constantes de validación
 MIN_PLAYERS = 2
@@ -114,6 +115,7 @@ class Competition:
         domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
         enrollment_opens_at: datetime | None = None,
+        visibility: Visibility = Visibility.PRIVATE,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
@@ -134,6 +136,7 @@ class Competition:
         self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
         self._enrollment_opens_at = enrollment_opens_at
+        self._visibility = visibility
         self._validate_enrollment_opening(enrollment_opens_at, dates)
         self._status = status
         self._created_at = created_at or datetime.now()
@@ -156,6 +159,7 @@ class Competition:
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
         enrollment_opens_at: datetime | None = None,
+        visibility: Visibility = Visibility.PRIVATE,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -175,6 +179,7 @@ class Competition:
             team_assignment=team_assignment,
             max_playing_handicap=max_playing_handicap,
             enrollment_opens_at=enrollment_opens_at,
+            visibility=visibility,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -338,6 +343,22 @@ class Competition:
                 f"la competición comienza el {rango.start_date.isoformat()}."
             )
 
+    def _update_team_names(self, team_1_name: str | None, team_2_name: str | None) -> None:
+        """Cambia los nombres de los equipos, validandolos como pareja.
+
+        Se validan juntos porque la regla es de los dos —no pueden llamarse
+        igual—, asi que cambiar uno solo tambien hay que mirarlo contra el otro.
+        """
+        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
+        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
+        self._validate_team_names(updated_team_1, updated_team_2)
+
+        if team_1_name is not None:
+            self._team_1_name = team_1_name
+
+        if team_2_name is not None:
+            self._team_2_name = team_2_name
+
     def schedule_enrollment_opening(self, cuando: datetime | None) -> None:
         """Programa —o desprograma— la apertura de las inscripciones.
 
@@ -348,6 +369,18 @@ class Competition:
         self._validate_enrollment_opening(cuando)
         self._enrollment_opens_at = cuando
         self._updated_at = datetime.now()
+
+    @property
+    def visibility(self) -> Visibility:
+        """Quien puede ver esta competicion y pedir sitio en ella."""
+        return self._visibility
+
+    def accepts_enrollment_requests(self) -> bool:
+        """Indica si un desconocido puede pedir plaza por su cuenta.
+
+        En una privada se entra porque el organizador invita (BE #318).
+        """
+        return self._visibility.accepts_enrollment_requests()
 
     def allows_enrollment_opening(self) -> bool:
         """Indica si todavia esta por abrir, sin mirar la hora.
@@ -564,6 +597,7 @@ class Competition:
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
         enrollment_opens_at: datetime | None = None,
+        visibility: Visibility | None = None,
     ) -> None:
         """
         Actualiza la información del torneo, mientras las inscripciones estén abiertas.
@@ -609,16 +643,10 @@ class Competition:
             self._validate_enrollment_opening(enrollment_opens_at, dates)
             self._enrollment_opens_at = enrollment_opens_at
 
-        # Validar y actualizar nombres de equipos
-        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
-        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
-        self._validate_team_names(updated_team_1, updated_team_2)
+        if visibility is not None:
+            self._visibility = visibility
 
-        if team_1_name is not None:
-            self._team_1_name = team_1_name
-
-        if team_2_name is not None:
-            self._team_2_name = team_2_name
+        self._update_team_names(team_1_name, team_2_name)
 
         self._updated_at = datetime.now()
 

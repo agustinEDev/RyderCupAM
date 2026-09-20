@@ -11,7 +11,17 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Quien tiene una invitacion o una solicitud en marcha necesita poder mirar la
+# competicion antes de decidir. Quien fue rechazado, se retiro o cancelo, no:
+# su fila sigue en la tabla, pero ya no esta dentro (BE #318)
+ESTADOS_QUE_DEJAN_VER = {
+    EnrollmentStatus.APPROVED,
+    EnrollmentStatus.REQUESTED,
+    EnrollmentStatus.INVITED,
+}
 
 
 class ListCompetitionsUseCase:
@@ -52,6 +62,8 @@ class ListCompetitionsUseCase:
         creator_id: str | None = None,
         search_name: str | None = None,
         search_creator: str | None = None,
+        viewer_id: str | None = None,
+        is_admin: bool = False,
     ) -> list[Competition]:
         """
         Ejecuta el caso de uso de listado de competiciones.
@@ -71,16 +83,58 @@ class ListCompetitionsUseCase:
         async with self._uow:
             # Si hay parámetros de búsqueda, usar el método find_by_filters
             if search_name or search_creator:
-                return await self._fetch_with_search(
+                encontradas = await self._fetch_with_search(
                     search_name=search_name,
                     search_creator=search_creator,
                     status=status,
                     creator_id=creator_id,
                 )
+                return await self._solo_las_que_puede_ver(encontradas, viewer_id, is_admin)
 
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
+            return await self._solo_las_que_puede_ver(competitions, viewer_id, is_admin)
+
+    async def _solo_las_que_puede_ver(
+        self,
+        competitions: list[Competition],
+        viewer_id: str | None,
+        is_admin: bool = False,
+    ) -> list[Competition]:
+        """Aparta las privadas de quien no esta dentro (BE #318).
+
+        Una privada la ve su creador, quien esta dentro y quien tiene una
+        invitacion o una solicitud en marcha — ese necesita mirarla antes de
+        decidir. No la ve quien fue rechazado, se retiro o cancelo: su fila
+        sigue en la tabla, pero ya no esta dentro.
+
+        Un admin lo ve todo: puede editarla y borrarla, asi que no verla en el
+        listado le dejaria con el permiso y sin la puerta.
+
+        Sin saber quien mira, solo se ensena lo publico.
+        """
+        if is_admin:
             return competitions
+
+        publicas = [c for c in competitions if c.visibility.is_discoverable()]
+        privadas = [c for c in competitions if not c.visibility.is_discoverable()]
+        if not privadas or viewer_id is None:
+            return publicas
+
+        quien = UserId(viewer_id)
+        # UNA consulta por quien mira, no una por competicion: el listado trae
+        # hasta 100 y el endpoint llama una vez por cada estado del filtro
+        inscripciones = await self._uow.enrollments.find_by_user(quien)
+        dentro_de = {
+            e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER
+        }
+
+        visibles = {c.id for c in publicas}
+        visibles |= {
+            c.id for c in privadas if c.creator_id == quien or c.id in dentro_de
+        }
+        # En el orden en que venian, que es el que decidio la consulta
+        return [c for c in competitions if c.id in visibles]
 
     async def _fetch_filtered_competitions(
         self,

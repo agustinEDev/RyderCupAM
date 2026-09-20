@@ -81,7 +81,7 @@ def _sanitize_creator_id(creator_id: str | None) -> str | None:
 
 
 async def _fetch_competitions_by_status(
-    use_case, status_filter, creator_id, search_name, search_creator
+    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
 ):
     """Obtiene competiciones aplicando filtros de status (soporte para lista o string único)."""
     if isinstance(status_filter, list) and len(status_filter) > 0:
@@ -92,6 +92,8 @@ async def _fetch_competitions_by_status(
                 creator_id=creator_id,
                 search_name=search_name,
                 search_creator=search_creator,
+                viewer_id=viewer_id,
+                is_admin=is_admin,
             )
             all_competitions.extend(comps)
         return list({c.id: c for c in all_competitions}.values())
@@ -101,6 +103,8 @@ async def _fetch_competitions_by_status(
         creator_id=creator_id,
         search_name=search_name,
         search_creator=search_creator,
+        viewer_id=viewer_id,
+        is_admin=is_admin,
     )
 
 
@@ -155,6 +159,7 @@ async def _get_user_competitions(
         str(current_user_id.value),
         search_name,
         search_creator,
+        viewer_id=str(current_user_id.value),
     )
 
     enrollments = await uow.enrollments.find_by_user(current_user_id)
@@ -190,10 +195,16 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
     return result
 
 
-async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
-    """Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario)."""
+async def _get_all_competitions(
+    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
+):
+    """Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
+
+    `viewer_id` no es opcional de verdad: sin el, las privadas de otros saldrian
+    en la pantalla de explorar, que es lo que BE #318 vino a arreglar.
+    """
     return await _fetch_competitions_by_status(
-        use_case, status_filter, creator_id, search_name, search_creator
+        use_case, status_filter, creator_id, search_name, search_creator, viewer_id, is_admin
     )
 
 
@@ -267,6 +278,7 @@ async def create_competition(
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
                 enrollment_opens_at=competition.enrollment_opens_at,
+                visibility=str(competition.visibility),
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
                 is_creator=True,
@@ -333,6 +345,8 @@ async def list_competitions(
                     sanitized_creator_id,
                     search_name,
                     search_creator,
+                    viewer_id=str(current_user_id.value),
+                    is_admin=current_user.is_admin,
                 )
                 competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
             else:
@@ -342,6 +356,8 @@ async def list_competitions(
                     sanitized_creator_id,
                     search_name,
                     search_creator,
+                    viewer_id=str(current_user_id.value),
+                    is_admin=current_user.is_admin,
                 )
 
             result = await _map_competitions_to_dtos(

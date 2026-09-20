@@ -18,6 +18,7 @@ from src.modules.competition.domain.entities.competition import (
     MAX_PLAYERS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.visibility import Visibility
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
 # lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
@@ -155,6 +156,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
     enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     @field_validator("enrollment_opens_at")
     @classmethod
@@ -267,6 +269,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
     enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados
     is_creator: bool = Field(default=True, description="Siempre True para el creador.")
@@ -343,6 +346,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
     )
     enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    visibility: Visibility | None = Field(None, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     @field_validator("enrollment_opens_at")
     @classmethod
@@ -472,6 +476,7 @@ class CompetitionResponseDTO(BaseModel):
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
     enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(

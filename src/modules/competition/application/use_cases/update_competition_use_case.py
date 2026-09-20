@@ -219,6 +219,7 @@ class UpdateCompetitionUseCase:
                 competition.schedule_enrollment_opening(request.enrollment_opens_at)
 
             competition.update_info(
+                visibility=request.visibility,
                 name=name,
                 dates=dates,
                 location=nueva_location,

@@ -60,6 +60,7 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
         "play_mode": "SCRATCH",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
     comp = await create_competition(client, creator["cookies"], comp_data)
     comp_id = comp["id"]
