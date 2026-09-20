@@ -159,6 +159,17 @@ class UpdateCompetitionUseCase:
                     f"Solo se permite en estado DRAFT."
                 )
 
+            # 3b. El cupo no puede quedarse por debajo de quien ya esta dentro.
+            # Con las inscripciones abiertas ya hay gente apuntada (BE #323), y
+            # bajar el numero les dejaria fuera de un torneo que ya tenian
+            if request.max_players is not None:
+                inscritos = await self._uow.enrollments.count_approved(competition_id)
+                if request.max_players < inscritos:
+                    raise CompetitionNotEditableError(
+                        f"No se puede bajar el cupo a {request.max_players}: "
+                        f"ya hay {inscritos} jugadores inscritos."
+                    )
+
             # 4. Construir los Value Objects y obtener valores opcionales
             name = CompetitionName(request.name) if request.name else None
 

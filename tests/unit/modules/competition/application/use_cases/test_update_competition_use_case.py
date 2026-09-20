@@ -18,8 +18,11 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     NotCompetitionCreatorError,
     UpdateCompetitionUseCase,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -442,17 +445,8 @@ class TestUpdateCompetitionUseCase:
 
         assert "Solo el creador" in str(exc_info.value)
 
-    async def test_should_raise_error_when_not_in_draft_state(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
-        """
-        Verifica que solo se puede actualizar en estado DRAFT.
-
-        Given: Una competición activada (ACTIVE)
-        When: Se intenta actualizar
-        Then: Se lanza CompetitionNotEditableError
-        """
-        # Arrange: Crear y activar competición
+    async def _create_and_open(self, uow, creator_id, **extra):
+        """Crea una competicion y la deja con las inscripciones abiertas."""
         create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         create_request = CreateCompetitionRequestDTO(
             name="Test",
@@ -460,24 +454,132 @@ class TestUpdateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            **extra,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
-        # Activar la competición (cambiar a ACTIVE)
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             competition.activate()
             await uow.competitions.update(competition)
             await uow.commit()
 
-        # Act & Assert: Intentar actualizar
+        return created
+
+    async def _approved_count(self, uow, competition_id):
+        """Cuantos hay dentro. Ojo: el creador se auto-inscribe al crear."""
+        async with uow:
+            return await uow.enrollments.count_approved(CompetitionId(competition_id))
+
+    async def _cap_of(self, uow, competition_id):
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(competition_id))
+            return competition.max_players
+
+    async def _approve_enrollments(self, uow, competition_id, cuantas):
+        """Mete `cuantas` inscripciones aceptadas en la competicion."""
+        async with uow:
+            for _ in range(cuantas):
+                await uow.enrollments.save(
+                    Enrollment(
+                        id=EnrollmentId.generate(),
+                        competition_id=CompetitionId(competition_id),
+                        user_id=UserId(str(uuid4())),
+                        status=EnrollmentStatus.APPROVED,
+                    )
+                )
+            await uow.commit()
+
+    async def test_can_still_be_fixed_while_enrollment_is_open(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """BE #323: con las inscripciones abiertas todavia se corrige el montaje.
+
+        Given: Una competicion con las inscripciones abiertas (ACTIVE)
+        When: Se actualiza
+        Then: Se aplica el cambio
+        """
+        created = await self._create_and_open(uow, creator_id)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        result = await update_use_case.execute(
+            CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Ya con nombre"), creator_id
+        )
+
+        assert result.name == "Ya Con Nombre"
+
+    async def test_should_raise_error_once_enrollment_is_closed(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        Verifica que al cerrar inscripciones deja de poder editarse.
+
+        Given: Una competicion con las inscripciones cerradas (CLOSED)
+        When: Se intenta actualizar
+        Then: Se lanza CompetitionNotEditableError
+        """
+        created = await self._create_and_open(uow, creator_id)
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+            competition.close_enrollments()
+            await uow.competitions.update(competition)
+            await uow.commit()
+
         update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         update_request = UpdateCompetitionRequestDTO(name="Cannot Update")
 
-        with pytest.raises(CompetitionNotEditableError) as exc_info:
+        with pytest.raises(CompetitionNotEditableError):
             await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
-        assert "Solo se permite en estado DRAFT" in str(exc_info.value)
+    async def test_the_cap_cannot_drop_below_the_people_already_in(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """El cupo no puede quedarse por debajo de quien ya esta dentro.
+
+        Given: Una competicion con 6 inscripciones aceptadas
+        When: Se intenta bajar el cupo a 4
+        Then: Se rechaza, porque dejaria a dos personas fuera de un torneo al
+              que ya estaban apuntadas
+        """
+        created = await self._create_and_open(uow, creator_id, max_players=12)
+        await self._approve_enrollments(uow, created.id, 6)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        with pytest.raises(CompetitionNotEditableError):
+            await update_use_case.execute(
+                CompetitionId(created.id), UpdateCompetitionRequestDTO(max_players=4), creator_id
+            )
+
+    async def test_the_cap_can_drop_to_exactly_the_people_already_in(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Justo hasta los que hay si se puede: nadie se queda fuera."""
+        created = await self._create_and_open(uow, creator_id, max_players=12)
+        await self._approve_enrollments(uow, created.id, 5)
+        # El creador ya cuenta como inscrito desde que crea la competicion
+        dentro = await self._approved_count(uow, created.id)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id), UpdateCompetitionRequestDTO(max_players=dentro), creator_id
+        )
+
+        assert await self._cap_of(uow, created.id) == dentro
+
+    async def test_the_cap_can_always_grow(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Subirlo no deja a nadie fuera, asi que no hay nada que comprobar."""
+        created = await self._create_and_open(uow, creator_id, max_players=12)
+        await self._approve_enrollments(uow, created.id, 6)
+
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id), UpdateCompetitionRequestDTO(max_players=24), creator_id
+        )
+
+        assert await self._cap_of(uow, created.id) == 24
 
     async def test_should_commit_transaction(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """

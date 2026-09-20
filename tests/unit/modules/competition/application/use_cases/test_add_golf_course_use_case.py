@@ -226,7 +226,7 @@ class TestAddGolfCourseToCompetitionUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request_dto, other_user_id)
 
-    async def test_should_fail_when_competition_not_draft(
+    async def test_should_fail_once_enrollment_is_closed(
         self,
         competition_uow: InMemoryUnitOfWork,
         golf_course_uow: InMemoryGolfCourseUnitOfWork,
@@ -243,6 +243,7 @@ class TestAddGolfCourseToCompetitionUseCase:
         """
         # Arrange
         competition.activate()
+        competition.close_enrollments()
         async with competition_uow:
             await competition_uow.competitions.update(competition)
 
