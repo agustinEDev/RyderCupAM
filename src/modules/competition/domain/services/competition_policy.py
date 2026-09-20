@@ -178,7 +178,12 @@ class CompetitionPolicy:
         """
         Valida si el estado de la competicion permite enviar invitaciones.
 
-        Allowed: ACTIVE, CLOSED, IN_PROGRESS.
+        Allowed: DRAFT, ACTIVE, CLOSED, IN_PROGRESS.
+
+        DRAFT entra desde BE #319: invitar a la primera persona ES abrir el
+        torneo, y quien invita no tiene por que pasar antes por un boton cuyo
+        unico trabajo es mover un estado. La apertura la hace el caso de uso
+        con `invitation_opens_enrollment`.
 
         Args:
             competition_status: Estado actual de la competicion
@@ -187,6 +192,7 @@ class CompetitionPolicy:
             InvitationCompetitionStatusViolation: Si el estado no permite invitaciones
         """
         allowed = {
+            CompetitionStatus.DRAFT,
             CompetitionStatus.ACTIVE,
             CompetitionStatus.CLOSED,
             CompetitionStatus.IN_PROGRESS,
@@ -194,8 +200,25 @@ class CompetitionPolicy:
         if competition_status not in allowed:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Invitations only allowed in ACTIVE, CLOSED, or IN_PROGRESS status."
+                "Invitations only allowed in DRAFT, ACTIVE, CLOSED, or IN_PROGRESS status."
             )
+
+    @staticmethod
+    def invitation_opens_enrollment(competition_status: CompetitionStatus) -> bool:
+        """
+        Indica si enviar una invitacion debe abrir las inscripciones.
+
+        Un torneo recien creado esta en DRAFT y nadie puede apuntarse hasta que
+        alguien pulsa "Activar", un boton cuyo unico trabajo es mover un estado.
+        Invitar a la primera persona ES abrir el torneo, asi que lo abre (BE #319).
+
+        Args:
+            competition_status: Estado actual de la competicion
+
+        Returns:
+            True si hay que abrir las inscripciones antes de invitar
+        """
+        return competition_status == CompetitionStatus.DRAFT
 
     @staticmethod
     def can_accept_invitation(competition_status: CompetitionStatus) -> None:

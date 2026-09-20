@@ -34,6 +34,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -92,6 +93,135 @@ class TestSendInvitationByUserIdUseCase:
             await comp_uow.commit()
 
         return created
+
+    async def _create_draft_competition(self, comp_uow, creator_id):
+        """Helper: crea una competicion y la deja en DRAFT, recien creada."""
+        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        request = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+            max_players=24,
+        )
+        return await create_uc.execute(request, creator_id)
+
+    async def _status_of(self, comp_uow, competition_id):
+        async with comp_uow:
+            competition = await comp_uow.competitions.find_by_id(CompetitionId(competition_id))
+            return competition.status
+
+    async def test_first_invitation_opens_enrollment(self, comp_uow, user_uow):
+        """BE #319: invitar a una competicion en DRAFT abre las inscripciones.
+
+        Nadie deberia tener que pulsar un boton cuyo unico trabajo es mover un
+        estado: el torneo arranca cuando se invita a la primera persona.
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        invitee = await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        result = await uc.execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_user_id=invitee.id.value,
+            )
+        )
+
+        assert result.status == "PENDING"
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
+
+    async def test_the_opening_gets_saved(self, comp_uow, user_uow):
+        """La apertura se persiste, no solo se cambia en memoria.
+
+        El repositorio en memoria guarda la MISMA instancia que devuelve, asi
+        que un `update` olvidado pasaria desapercibido aqui y no se escribiria
+        nada en Postgres. Por eso se mira que la competicion llegue a guardarse.
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        invitee = await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        guardadas = []
+        original = comp_uow.competitions.update
+
+        async def espia(competition):
+            guardadas.append(competition.status)
+            await original(competition)
+
+        comp_uow.competitions.update = espia
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        await uc.execute(SendInvitationByUserIdRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_user_id=invitee.id.value,
+            ))
+
+        assert CompetitionStatus.ACTIVE in guardadas
+
+    async def test_second_invitation_leaves_the_status_alone(self, comp_uow, user_uow):
+        """Ya abierta, invitar no vuelve a tocar el estado."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        primero = await self._create_user(user_uow, email="uno@test.com")
+        segundo = await self._create_user(user_uow, email="dos@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        for invitee in (primero, segundo):
+            await uc.execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=created.id,
+                    inviter_id=creator.id.value,
+                    invitee_user_id=invitee.id.value,
+                )
+            )
+
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
+
+    async def test_a_stranger_does_not_open_anything(self, comp_uow, user_uow):
+        """Quien no puede invitar tampoco abre las inscripciones de rebote."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        other = await self._create_user(user_uow, email="other@test.com")
+        invitee = await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        with pytest.raises(NotCompetitionCreatorError):
+            await uc.execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=created.id,
+                    inviter_id=other.id.value,
+                    invitee_user_id=invitee.id.value,
+                )
+            )
+
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
+
+    async def test_a_failed_invitation_does_not_leave_it_open(self, comp_uow, user_uow):
+        """Si la invitacion no sale adelante, la competicion sigue en DRAFT.
+
+        Abrir las inscripciones y luego fallar dejaria el torneo abierto sin que
+        nadie haya sido invitado, que es medio arranque.
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
+        with pytest.raises(InviteeNotFoundError):
+            await uc.execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=created.id,
+                    inviter_id=creator.id.value,
+                    invitee_user_id=uuid4(),
+                )
+            )
+
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
 
     async def test_should_send_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: enviar invitacion a un usuario registrado."""
@@ -245,22 +375,24 @@ class TestSendInvitationByUserIdUseCase:
         with pytest.raises(DuplicateInvitationViolation):
             await uc.execute(request)
 
-    async def test_should_raise_competition_status_violation_for_draft(self, comp_uow, user_uow):
-        """Competition en DRAFT no permite invitaciones."""
+    async def test_should_raise_competition_status_violation_for_cancelled(
+        self, comp_uow, user_uow
+    ):
+        """Una competicion cancelada no admite invitaciones.
+
+        Antes tampoco las admitia en DRAFT; eso cambio con BE #319, porque
+        invitar es justamente lo que abre el torneo. Lo que sigue cerrado son
+        los estados de los que ya no se vuelve.
+        """
         creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
 
-        # Crear competition sin activar (queda en DRAFT)
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
-        request = CreateCompetitionRequestDTO(
-            name="Draft Cup",
-            start_date=date(2026, 6, 1),
-            end_date=date(2026, 6, 3),
-            main_country="ES",
-            play_mode="SCRATCH",
-            max_players=24,
-        )
-        created = await create_uc.execute(request, creator.id)
+        async with comp_uow:
+            competition = await comp_uow.competitions.find_by_id(CompetitionId(created.id))
+            competition.cancel("se queda sin jugadores")
+            await comp_uow.competitions.update(competition)
+            await comp_uow.commit()
 
         uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
         send_req = SendInvitationByUserIdRequestDTO(

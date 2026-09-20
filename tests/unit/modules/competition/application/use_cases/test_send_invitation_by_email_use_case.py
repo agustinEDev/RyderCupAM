@@ -32,6 +32,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -88,6 +89,92 @@ class TestSendInvitationByEmailUseCase:
             await comp_uow.commit()
 
         return created
+
+    async def _create_draft_competition(self, comp_uow, creator_id):
+        """Helper: crea una competicion y la deja en DRAFT, recien creada."""
+        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        request = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+            max_players=24,
+        )
+        return await create_uc.execute(request, creator_id)
+
+    async def _status_of(self, comp_uow, competition_id):
+        async with comp_uow:
+            competition = await comp_uow.competitions.find_by_id(CompetitionId(competition_id))
+            return competition.status
+
+    async def test_first_invitation_opens_enrollment(self, comp_uow, user_uow):
+        """BE #319, el gemelo por correo: invitar en DRAFT abre las inscripciones."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
+        result = await uc.execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="invitee@test.com",
+            )
+        )
+
+        assert result.status == "PENDING"
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
+
+    async def test_a_stranger_does_not_open_anything(self, comp_uow, user_uow):
+        """Quien no puede invitar tampoco abre las inscripciones de rebote."""
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        other = await self._create_user(user_uow, email="other@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
+        with pytest.raises(NotCompetitionCreatorError):
+            await uc.execute(
+                SendInvitationByEmailRequestDTO(
+                    competition_id=created.id,
+                    inviter_id=other.id.value,
+                    invitee_email="quien.sea@test.com",
+                )
+            )
+
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
+
+    async def test_the_opening_gets_saved(self, comp_uow, user_uow):
+        """La apertura se persiste, no solo se cambia en memoria.
+
+        El repositorio en memoria guarda la MISMA instancia que devuelve, asi
+        que un `update` olvidado pasaria desapercibido aqui y no se escribiria
+        nada en Postgres. Por eso se mira que la competicion llegue a guardarse.
+        """
+        creator = await self._create_user(user_uow, email="creator@test.com")
+        await self._create_user(user_uow, email="invitee@test.com")
+        created = await self._create_draft_competition(comp_uow, creator.id)
+
+        guardadas = []
+        original = comp_uow.competitions.update
+
+        async def espia(competition):
+            guardadas.append(competition.status)
+            await original(competition)
+
+        comp_uow.competitions.update = espia
+
+        uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
+        await uc.execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="invitee@test.com",
+            )
+        )
+
+        assert CompetitionStatus.ACTIVE in guardadas
 
     async def test_should_send_invitation_to_registered_user(self, comp_uow, user_uow):
         """Happy path: enviar invitacion a un email de usuario registrado."""
