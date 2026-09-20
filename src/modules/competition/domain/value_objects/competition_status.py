@@ -86,8 +86,15 @@ class CompetitionStatus(StrEnum):
         return self in {CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED}
 
     def allows_modifications(self) -> bool:
-        """Verifica si el estado permite modificar la configuración."""
-        return self == CompetitionStatus.DRAFT
+        """Verifica si el estado permite modificar la configuración.
+
+        Mientras las inscripciones están abiertas todavía se puede corregir el
+        montaje: era solo DRAFT, y con la invitación abriendo el torneo
+        (BE #319) eso convertía invitar en una puerta de un solo sentido, sin
+        poder añadir siquiera el campo de golf que falta (BE #323). De CLOSED
+        en adelante ya se sortean equipos y se generan partidos.
+        """
+        return self in {CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE}
 
     def allows_handicap_edits(self) -> bool:
         """Verifica si el estado permite editar el hándicap personalizado de un jugador."""

@@ -9,7 +9,7 @@ Verifica que:
 - Se recalcula display_order tras la eliminación
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -19,6 +19,7 @@ from src.modules.competition.application.dto.competition_dto import (
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    GolfCourseHasRoundsError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
@@ -27,11 +28,16 @@ from src.modules.competition.application.use_cases.remove_golf_course_use_case i
     RemoveGolfCourseFromCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -221,7 +227,7 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request_dto, other_user_id)
 
-    async def test_should_fail_when_competition_not_draft(
+    async def test_should_fail_when_the_course_already_has_rounds(
         self,
         competition_uow: InMemoryUnitOfWork,
         competition: Competition,
@@ -229,15 +235,66 @@ class TestRemoveGolfCourseFromCompetitionUseCase:
         creator_id: UserId,
     ):
         """
-        Verifica que falla cuando la competición no está en estado DRAFT.
+        Verifica que no se quita un campo que ya tiene rondas programadas.
 
-        Given: Una competición ACTIVE con un campo asociado
+        Given: Una competicion con las inscripciones abiertas y una ronda en ese campo
+        When: Se intenta quitar el campo
+        Then: Se rechaza — la ronda se quedaria sin donde jugarse
+
+        Antes no hacia falta comprobarlo: no se podian crear rondas hasta
+        cerrar inscripciones, y para entonces ya no se tocaban los campos. Al
+        abrir la edicion mientras hay inscripciones (BE #323) las dos cosas
+        pueden convivir.
+        """
+        competition.add_golf_course(golf_course.id, CountryCode("ES"))
+        competition.activate()
+        await competition_uow.competitions.update(competition)
+        async with competition_uow:
+            await competition_uow.rounds.add(
+                Round(
+                    id=RoundId.generate(),
+                    competition_id=competition.id,
+                    golf_course_id=golf_course.id,
+                    round_date=date(2026, 6, 1),
+                    session_type=SessionType.MORNING,
+                    match_format=MatchFormat.FOURBALL,
+                    status=RoundStatus.SCHEDULED,
+                    handicap_mode=None,
+                    allowance_percentage=None,
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+            )
+            await competition_uow.commit()
+
+        use_case = RemoveGolfCourseFromCompetitionUseCase(uow=competition_uow)
+        request_dto = RemoveGolfCourseRequestDTO(
+            competition_id=str(competition.id.value),
+            golf_course_id=str(golf_course.id.value),
+        )
+
+        with pytest.raises(GolfCourseHasRoundsError):
+            await use_case.execute(request_dto, creator_id)
+
+    async def test_should_fail_once_enrollment_is_closed(
+        self,
+        competition_uow: InMemoryUnitOfWork,
+        competition: Competition,
+        golf_course: GolfCourse,
+        creator_id: UserId,
+    ):
+        """
+        Verifica que falla cuando las inscripciones ya se han cerrado.
+
+        Given: Una competición CLOSED con un campo asociado
         When: Se intenta eliminar el campo
         Then: Se lanza CompetitionNotDraftError
         """
-        # Arrange: Añadir el campo y activar la competición
+        # Arrange: añadir el campo y cerrar las inscripciones (BE #323: con
+        # ellas abiertas todavía se puede tocar)
         competition.add_golf_course(golf_course.id, CountryCode("ES"))
         competition.activate()
+        competition.close_enrollments()
         await competition_uow.competitions.update(competition)
 
         use_case = RemoveGolfCourseFromCompetitionUseCase(uow=competition_uow)

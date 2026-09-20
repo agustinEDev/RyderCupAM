@@ -14,6 +14,7 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotDraftError,
     CompetitionNotFoundError,
+    GolfCourseHasRoundsError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -73,7 +74,7 @@ class RemoveGolfCourseFromCompetitionUseCase:
         Raises:
             CompetitionNotFoundError: Si la competicion no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDraftError: Si la competicion no esta en estado DRAFT
+            CompetitionNotDraftError: Si las inscripciones ya no estan abiertas
             GolfCourseNotAssignedError: Si el campo no esta asociado a la competicion
         """
         async with self._uow:
@@ -93,14 +94,25 @@ class RemoveGolfCourseFromCompetitionUseCase:
                 )
 
             # 3. Verificar que este en estado DRAFT
-            if not competition.is_draft():
+            if not competition.allows_modifications():
                 raise CompetitionNotDraftError(
-                    f"Solo se pueden eliminar campos en estado DRAFT. "
-                    f"Estado actual: {competition.status.value}"
+                    f"Solo se pueden eliminar campos mientras las inscripciones están "
+                    f"abiertas. Estado actual: {competition.status.value}"
                 )
 
-            # 4. Eliminar el campo de la competicion (validacion en dominio)
+            # 4. Un campo con rondas programadas no se puede quitar: la ronda se
+            # quedaria sin donde jugarse. Antes no hacia falta mirarlo —no habia
+            # rondas hasta cerrar inscripciones, y entonces los campos ya no se
+            # tocaban—, pero ahora las dos cosas conviven (BE #323)
             golf_course_id = GolfCourseId(request.golf_course_id)
+            rondas = await self._uow.rounds.find_by_competition(competition_id)
+            if any(r.golf_course_id == golf_course_id for r in rondas):
+                raise GolfCourseHasRoundsError(
+                    f"El campo {request.golf_course_id} tiene rondas programadas "
+                    f"en esta competición."
+                )
+
+            # 5. Eliminar el campo de la competicion (validacion en dominio)
             try:
                 competition.remove_golf_course(golf_course_id)
             except ValueError as e:
