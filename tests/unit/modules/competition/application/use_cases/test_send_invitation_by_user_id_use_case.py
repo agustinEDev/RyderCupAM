@@ -135,40 +135,16 @@ class TestSendInvitationByUserIdUseCase:
         assert result.status == "PENDING"
         assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
 
-    async def test_an_admin_does_not_publish_somebody_elses_draft(self, comp_uow, user_uow):
-        """Abrir un torneo es decision de quien lo monta, no de un administrador.
+    async def test_an_admin_invites_as_the_creator_would(self, comp_uow, user_uow):
+        """Un admin invita como lo haria el creador, borrador incluido.
 
-        Un admin puede invitar —se salta la comprobacion de creador—, pero en
-        DRAFT eso ademas abriria las inscripciones del torneo de otro, sin que
-        el creador lo sepa y perdiendo de paso el poder borrarlo.
+        Decidido el 20 sep: no hay regla aparte para los administradores. Si
+        invitan a un borrador, se abre, igual que si lo hiciera su creador.
         """
         creator = await self._create_user(user_uow, email="creator@test.com")
-        admin = await self._create_user(user_uow, email="admin@test.com")
-        invitee = await self._create_user(user_uow, email="invitee@test.com")
-        created = await self._create_draft_competition(comp_uow, creator.id)
-
-        uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
-        with pytest.raises(NotCompetitionCreatorError):
-            await uc.execute(SendInvitationByUserIdRequestDTO(
-                competition_id=created.id,
-                inviter_id=admin.id.value,
-                invitee_user_id=invitee.id.value,
-            ), is_admin=True)
-
-        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.DRAFT
-
-    async def test_an_admin_can_still_invite_once_it_is_open(self, comp_uow, user_uow):
-        """Con el torneo ya abierto, el admin invita como hasta ahora."""
-        creator = await self._create_user(user_uow, email="creator@test.com")
         invitee = await self._create_user(user_uow, email="invitee@test.com")
         admin = await self._create_user(user_uow, email="admin@test.com")
         created = await self._create_draft_competition(comp_uow, creator.id)
-        async with comp_uow:
-            competition = await comp_uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await comp_uow.competitions.update(competition)
-            await comp_uow.commit()
-
         uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
         result = await uc.execute(SendInvitationByUserIdRequestDTO(
                 competition_id=created.id,
@@ -177,6 +153,7 @@ class TestSendInvitationByUserIdUseCase:
             ), is_admin=True)
 
         assert result.status == "PENDING"
+        assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
 
     async def test_the_opening_gets_saved(self, comp_uow, user_uow):
         """La apertura se persiste, no solo se cambia en memoria.
