@@ -261,6 +261,7 @@ class TestRateLimitingCompetition:
             "main_country": "ES",
             "number_of_players": 24,
             "team_assignment": "MANUAL",
+            "visibility": "PUBLIC",
             "team_1_name": "Europe",
             "team_2_name": "USA",
             "play_mode": "SCRATCH",
