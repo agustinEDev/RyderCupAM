@@ -276,7 +276,7 @@ class TestReorderGolfCoursesUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request_dto, other_user_id)
 
-    async def test_should_fail_when_competition_not_draft(
+    async def test_should_fail_once_enrollment_is_closed(
         self,
         competition_uow: InMemoryUnitOfWork,
         competition: Competition,
@@ -284,9 +284,9 @@ class TestReorderGolfCoursesUseCase:
         creator_id: UserId,
     ):
         """
-        Verifica que falla cuando la competición no está en estado DRAFT.
+        Verifica que falla cuando las inscripciones ya se han cerrado.
 
-        Given: Una competición ACTIVE con campos
+        Given: Una competición CLOSED con campos
         When: Se intenta reordenar
         Then: Se lanza CompetitionNotDraftError
         """
@@ -294,6 +294,7 @@ class TestReorderGolfCoursesUseCase:
         competition.add_golf_course(three_golf_courses[0].id, CountryCode("ES"))
         competition.add_golf_course(three_golf_courses[1].id, CountryCode("ES"))
         competition.activate()
+        competition.close_enrollments()
         await competition_uow.competitions.update(competition)
 
         use_case = ReorderGolfCoursesUseCase(uow=competition_uow)

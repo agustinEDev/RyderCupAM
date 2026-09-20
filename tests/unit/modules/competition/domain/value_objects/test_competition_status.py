@@ -93,7 +93,19 @@ class TestCompetitionStatusHelpers:
         assert CompetitionStatus.DRAFT.is_final() is False
         assert CompetitionStatus.IN_PROGRESS.is_final() is False
 
-    def test_allows_modifications_returns_true_for_draft(self):
-        """allows_modifications() es True solo para DRAFT."""
+    def test_allows_modifications_while_enrollment_is_open(self):
+        """BE #323: se puede corregir el montaje mientras hay inscripciones abiertas.
+
+        Antes solo DRAFT. Con la invitacion abriendo el torneo (BE #319), dejarlo
+        ahi convertia invitar en una puerta de un solo sentido: sin campo de golf
+        puesto, el torneo ya no se podia jugar nunca.
+        """
         assert CompetitionStatus.DRAFT.allows_modifications() is True
-        assert CompetitionStatus.ACTIVE.allows_modifications() is False
+        assert CompetitionStatus.ACTIVE.allows_modifications() is True
+
+    def test_does_not_allow_modifications_once_enrollment_closes(self):
+        """De CLOSED en adelante se sortean equipos y se generan partidos."""
+        assert CompetitionStatus.CLOSED.allows_modifications() is False
+        assert CompetitionStatus.IN_PROGRESS.allows_modifications() is False
+        assert CompetitionStatus.COMPLETED.allows_modifications() is False
+        assert CompetitionStatus.CANCELLED.allows_modifications() is False

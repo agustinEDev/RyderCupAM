@@ -303,7 +303,7 @@ class Competition:
 
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
-        return self._status == CompetitionStatus.DRAFT
+        return self._status.allows_modifications()
 
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
@@ -495,7 +495,7 @@ class Competition:
         max_playing_handicap: int | None = None,
     ) -> None:
         """
-        Actualiza la información del torneo. Solo permitido en estado DRAFT.
+        Actualiza la información del torneo, mientras las inscripciones estén abiertas.
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -504,7 +504,7 @@ class Competition:
         if not self.allows_modifications():
             raise CompetitionStateError(
                 f"No se puede modificar la configuración en estado {self._status.value}. "
-                f"Solo se permite en estado DRAFT."
+                f"Solo mientras las inscripciones están abiertas."
             )
 
         if name is not None:
@@ -584,13 +584,13 @@ class Competition:
         - No se permiten duplicados
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si el país no es compatible o el campo ya existe
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes añadir campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes añadir campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if not self._is_country_compatible(country_code):
@@ -618,13 +618,13 @@ class Competition:
         Quita un campo de golf de la competición. Reordena automáticamente.
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si el campo no existe
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes quitar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes quitar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         sorted_golf_courses = sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
@@ -651,13 +651,13 @@ class Competition:
         Valida que una lista de golf_course_ids es válida para reordenar.
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si los IDs no coinciden con los campos actuales
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes reordenar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes reordenar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if len(golf_course_ids) != len(self._golf_courses):
@@ -703,13 +703,13 @@ class Competition:
         Cambia el orden de los campos de golf (single-phase, for non-DB contexts).
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si hay órdenes duplicados o no secuenciales
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes reordenar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes reordenar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if len(new_order) != len(self._golf_courses):

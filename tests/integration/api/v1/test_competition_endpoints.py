@@ -1105,14 +1105,35 @@ class TestEdgeCases:
         assert response.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_update_non_draft_competition_returns_400(self, client: AsyncClient):
-        """Actualizar competición no-DRAFT retorna 400."""
+    async def test_update_while_enrollment_is_open_succeeds(self, client: AsyncClient):
+        """BE #323: con las inscripciones abiertas todavía se corrige el montaje."""
         user = await create_authenticated_user(
             client, "update_active@test.com", "P@ssw0rd123!", "Update", "Active"
         )
 
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"name": "New Name"},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+    async def test_update_after_enrollment_closes_returns_400(self, client: AsyncClient):
+        """Cerradas las inscripciones se sortean equipos: ya no se toca."""
+        user = await create_authenticated_user(
+            client, "update_closed@test.com", "P@ssw0rd123!", "Update", "Closed"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
+        )
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
@@ -1282,8 +1303,12 @@ class TestCompetitionGolfCourses:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_add_golf_course_not_draft_returns_400(self, client: AsyncClient):
-        """Añadir campo a competición ACTIVE retorna 400."""
+    async def test_add_golf_course_once_enrollment_closes_returns_400(self, client: AsyncClient):
+        """BE #323: con las inscripciones abiertas sí; cerradas, ya no.
+
+        Justo el caso que motivó el cambio: quien invita antes de poner el campo
+        —y con ello abre el torneo— tiene que poder ponerlo después.
+        """
         # Arrange
         admin = await create_admin_user(
             client, "admin_not_draft@test.com", "AdminP@ssw0rd123!", "Admin", "Test"
@@ -1299,16 +1324,30 @@ class TestCompetitionGolfCourses:
         golf_course = await create_golf_course(client, creator["cookies"])
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
 
-        # Act
-        response = await client.post(
+        # Con las inscripciones abiertas todavía se puede añadir
+        abierta = await client.post(
             f"/api/v1/competitions/{comp['id']}/golf-courses",
             json={"golf_course_id": golf_course["id"]},
             cookies=creator["cookies"],
         )
+        assert abierta.status_code == 201
 
-        # Assert
+        # Al cerrarlas, ya no
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=creator["cookies"],
+        )
+        otro_campo = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin["cookies"], otro_campo["id"])
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": otro_campo["id"]},
+            cookies=creator["cookies"],
+        )
+
         assert response.status_code == 400
-        assert "DRAFT" in response.text
+        assert "inscripciones" in response.text
 
     @pytest.mark.asyncio
     async def test_remove_golf_course_from_competition_success(self, client: AsyncClient):
