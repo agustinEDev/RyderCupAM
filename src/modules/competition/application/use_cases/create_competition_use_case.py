@@ -126,6 +126,7 @@ class CreateCompetitionUseCase:
                 max_players=request.max_players,
                 team_assignment=team_assignment_vo,
                 max_playing_handicap=request.max_playing_handicap,
+                enrollment_opens_at=request.enrollment_opens_at,
             )
 
             # 9. Persistir la competición
@@ -169,6 +170,7 @@ class CreateCompetitionUseCase:
             max_players=competition.max_players,
             team_assignment=competition.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
+            enrollment_opens_at=competition.enrollment_opens_at,
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

@@ -213,6 +213,11 @@ class UpdateCompetitionUseCase:
             )
 
             # 5. Actualizar la competición usando el método de dominio
+            # Aparte de `update_info`: ahi un `None` significa «no lo toques», y
+            # aqui tiene que poder significar «quitala» (BE #319)
+            if "enrollment_opens_at" in request.model_fields_set:
+                competition.schedule_enrollment_opening(request.enrollment_opens_at)
+
             competition.update_info(
                 name=name,
                 dates=dates,

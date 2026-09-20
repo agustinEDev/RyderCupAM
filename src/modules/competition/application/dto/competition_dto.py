@@ -154,6 +154,24 @@ class CreateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+
+    @field_validator("enrollment_opens_at")
+    @classmethod
+    def _la_hora_es_la_del_campo(cls, valor: datetime | None) -> datetime | None:
+        """Rechaza una hora con huso: la que vale es la local del campo.
+
+        El navegador manda `toISOString()`, que acaba en `Z`. Guardarla a pelo
+        haria dos estropicios: la columna no lleva huso y el driver revienta con
+        un 500, y aunque colara, «09:00Z» se leeria despues como las nueve del
+        campo — una hora de diferencia en Espana, y ocho en Los Angeles.
+        """
+        if valor is not None and valor.tzinfo is not None:
+            raise ValueError(
+                "enrollment_opens_at debe ir sin zona horaria: es la hora local "
+                "del campo donde se juega."
+            )
+        return valor
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
@@ -248,6 +266,7 @@ class CreateCompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
 
     # Campos calculados
     is_creator: bool = Field(default=True, description="Siempre True para el creador.")
@@ -323,6 +342,25 @@ class UpdateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+
+    @field_validator("enrollment_opens_at")
+    @classmethod
+    def _la_hora_es_la_del_campo(cls, valor: datetime | None) -> datetime | None:
+        """Rechaza una hora con huso: la que vale es la local del campo.
+
+        El navegador manda `toISOString()`, que acaba en `Z`. Guardarla a pelo
+        haria dos estropicios: la columna no lleva huso y el driver revienta con
+        un 500, y aunque colara, «09:00Z» se leeria despues como las nueve del
+        campo — una hora de diferencia en Espana, y ocho en Los Angeles.
+        """
+        if valor is not None and valor.tzinfo is not None:
+            raise ValueError(
+                "enrollment_opens_at debe ir sin zona horaria: es la hora local "
+                "del campo donde se juega."
+            )
+        return valor
+
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
     )
@@ -433,6 +471,7 @@ class CompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(

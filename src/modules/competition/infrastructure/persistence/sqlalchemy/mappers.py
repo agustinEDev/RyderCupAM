@@ -705,6 +705,9 @@ competitions_table = Table(
     Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("max_playing_handicap", Integer, nullable=True),
+    # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
+    # las nueve de alli, y la zona se resuelve al leerla (BE #319)
+    Column("enrollment_opens_at", DateTime, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -952,6 +955,7 @@ def start_competition_mappers():
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
+                "_enrollment_opens_at": competitions_table.c.enrollment_opens_at,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs

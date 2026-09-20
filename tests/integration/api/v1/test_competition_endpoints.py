@@ -5,7 +5,8 @@ Tests de integración que verifican el flujo completo de los endpoints
 de competiciones incluyendo autenticación, validaciones y persistencia.
 """
 
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -1593,3 +1594,144 @@ class TestCompetitionGolfCourses:
         golf_courses = response.json()
         assert len(golf_courses) == 0
         assert golf_courses == []
+
+# Del reloj y no del calendario: una fecha fija hace que el test empiece a
+# fallar solo el dia en que queda por detras de «ahora»
+APERTURA = (datetime.now() + timedelta(days=30)).replace(microsecond=0, second=0)
+
+
+class TestScheduledEnrollmentOpening:
+    """BE #319: la hora de apertura tiene que llegar y volver por la API."""
+
+    @pytest.mark.asyncio
+    async def test_the_scheduled_hour_survives_the_round_trip(self, client: AsyncClient):
+        """Se manda al crear y se lee al consultar.
+
+        Guardarla sin devolverla deja el formulario de edicion en blanco y al
+        organizador creyendo que no se acepto.
+        """
+        user = await create_authenticated_user(
+            client, "apertura@test.com", "P@ssw0rd123!", "Club", "Programado"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_at": APERTURA.isoformat(),
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["enrollment_opens_at"] == APERTURA.isoformat()
+
+        detalle = await client.get(
+            f"/api/v1/competitions/{creada.json()['id']}", cookies=user["cookies"]
+        )
+
+        assert detalle.status_code == 200
+        assert detalle.json()["enrollment_opens_at"] == APERTURA.isoformat()
+
+    @pytest.mark.asyncio
+    async def test_an_hour_with_an_offset_is_refused(self, client: AsyncClient):
+        """`toISOString()` del navegador acaba en Z, y eso no se guarda."""
+        user = await create_authenticated_user(
+            client, "apertura_z@test.com", "P@ssw0rd123!", "Club", "ConHuso"
+        )
+
+        respuesta = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_at": APERTURA.isoformat() + "Z",
+            },
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_looking_at_it_after_the_hour_opens_it(self, client: AsyncClient):
+        """Consultar la competicion pasada su hora es lo que la abre.
+
+        No hay ningun proceso de fondo: si el endpoint no pasa por el caso de
+        uso, la apertura programada no ocurre jamas y el torneo se queda en
+        borrador para siempre. Este test existe para que eso no pueda volver.
+        """
+        admin = await create_admin_user(
+            client, "admin_apertura@test.com", "AdminP@ssw0rd123!", "Admin", "Apertura"
+        )
+        user = await create_authenticated_user(
+            client, "abre_sola@test.com", "P@ssw0rd123!", "Club", "AbreSola"
+        )
+
+        ayer = (datetime.now() - timedelta(days=1)).replace(microsecond=0)
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo que ya abrio",
+                "start_date": (ayer + timedelta(days=30)).date().isoformat(),
+                "end_date": (ayer + timedelta(days=32)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_at": ayer.isoformat(),
+            },
+            cookies=user["cookies"],
+        )
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "DRAFT"
+
+        # La zona sale del campo que se juega: sin campo, la apertura espera
+        competicion_id = creada.json()["id"]
+        # Con coordenadas: la zona sale de ahi, no del pais (BE #305)
+        golf_course = await create_golf_course(
+            client,
+            user["cookies"],
+            golf_course_data={
+                "name": f"Campo con zona {uuid.uuid4().hex[:8]}",
+                "country_code": "ES",
+                "course_type": "STANDARD_18",
+                "location": {"latitude": 40.4168, "longitude": -3.7038},
+                "tees": [
+                    {
+                        "identifier": "Blanco",
+                        "color": "WHITE",
+                        "tee_gender": "MALE",
+                        "course_rating": 72.5,
+                        "slope_rating": 135,
+                        "par": 72,
+                    },
+                ],
+                "holes": [
+                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
+                ],
+            },
+        )
+        await approve_golf_course(client, admin["cookies"], golf_course["id"])
+        anadido = await client.post(
+            f"/api/v1/competitions/{competicion_id}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=user["cookies"],
+        )
+        assert anadido.status_code == 201, anadido.text
+
+        creado = await client.get(
+            f"/api/v1/golf-courses/{golf_course['id']}", cookies=user["cookies"]
+        )
+        assert creado.json().get("timezone") == "Europe/Madrid", creado.text[:200]
+
+        detalle = await client.get(
+            f"/api/v1/competitions/{competicion_id}", cookies=user["cookies"]
+        )
+
+        assert detalle.status_code == 200
+        assert detalle.json()["status"] == "ACTIVE"
