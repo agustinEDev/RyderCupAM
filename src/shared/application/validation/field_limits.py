@@ -87,10 +87,6 @@ class FieldLimits:
     HANDICAP_MIN_VALUE = -10.0  # WHS permite hasta -10
     HANDICAP_MAX_VALUE = 54.0  # WHS límite superior
 
-    # Max Players (competitions)
-    MAX_PLAYERS_MIN = 2  # Mínimo para competición
-    MAX_PLAYERS_MAX = 200  # Límite razonable
-
     # Handicap Percentage
     HANDICAP_PERCENTAGE_MIN = 0  # 0% (sin ajuste)
     HANDICAP_PERCENTAGE_MAX = 100  # 100% (hándicap completo)

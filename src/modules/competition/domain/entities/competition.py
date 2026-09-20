@@ -41,7 +41,12 @@ from ..value_objects.team_assignment import TeamAssignment
 
 # Constantes de validación
 MIN_PLAYERS = 2
+# 100 hasta que las inscripciones se paginen: hay seis consultas que piden como
+# mucho 100 filas sin decirlo, así que una competición mayor se sortearía y se
+# emparejaría con los 100 primeros. Subirlo a 300 va en su propia issue.
 MAX_PLAYERS = 100
+# 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
+DEFAULT_MAX_PLAYERS = 12
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
 
@@ -100,7 +105,7 @@ class Competition:
         team_1_name: str,
         team_2_name: str,
         play_mode: PlayMode,
-        max_players: int = 24,
+        max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: datetime | None = None,
@@ -143,7 +148,7 @@ class Competition:
         team_1_name: str,
         team_2_name: str,
         play_mode: PlayMode,
-        max_players: int = 24,
+        max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
     ) -> "Competition":

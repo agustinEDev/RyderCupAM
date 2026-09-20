@@ -52,11 +52,13 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
+from src.modules.competition.domain.value_objects.location import InvalidLocationError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import InvalidCountryCodeError
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +272,7 @@ async def create_competition(
 
     except CompetitionAlreadyExistsError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except InvalidCountryError as e:
+    except (InvalidCountryError, InvalidCountryCodeError, InvalidLocationError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -428,7 +430,19 @@ async def update_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (CompetitionNotEditableError, ValueError) as e:
+    # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
+    # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:
+    # el país que no existe o no es adyacente (InvalidCountryError), el código de
+    # dos caracteres pero mal formado como "1a" (InvalidCountryCodeError) y el
+    # país repetido, que el DTO deja pasar y rechaza la Location
+    # (InvalidLocationError). Sin nombrarlos, cada uno sale como un 500.
+    except (
+        CompetitionNotEditableError,
+        InvalidCountryError,
+        InvalidCountryCodeError,
+        InvalidLocationError,
+        ValueError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 

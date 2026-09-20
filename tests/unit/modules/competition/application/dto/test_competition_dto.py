@@ -167,6 +167,44 @@ class TestCreateCompetitionRequestDTO:
                 max_players=101,
             )
 
+    def test_max_players_accepts_the_cap(self):
+        """Debe aceptar exactamente 100, el cupo máximo de hoy."""
+        dto = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+            max_players=100,
+        )
+
+        assert dto.max_players == 100
+
+    def test_max_players_accepts_the_minimum(self):
+        """Debe aceptar exactamente 2, que sigue siendo el mínimo."""
+        dto = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+            max_players=2,
+        )
+
+        assert dto.max_players == 2
+
+    def test_max_players_defaults_to_twelve(self):
+        """Sin el campo debe quedar en 12: una Ryder entre amigos son 12 jugadores."""
+        dto = CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+
+        assert dto.max_players == 12
+
 
 class TestUpdateCompetitionRequestDTO:
     """Tests para UpdateCompetitionRequestDTO."""
@@ -193,6 +231,198 @@ class TestUpdateCompetitionRequestDTO:
         assert dto.main_country == "FR"
         assert dto.play_mode == "HANDICAP"
         assert dto.team_assignment == "AUTOMATIC"
+
+    def test_max_players_accepts_the_frontend_field_name(self):
+        """El cupo debe llegar bajo `number_of_players`, que es lo que manda el cliente.
+
+        Sin el alias, Pydantic descartaba la clave como extra desconocida y el PUT
+        respondía 200 sin cambiar nada.
+        """
+        dto = UpdateCompetitionRequestDTO(number_of_players=20)
+
+        assert dto.max_players == 20
+
+    def test_max_players_accepts_the_canonical_field_name(self):
+        """El nombre canónico debe seguir valiendo: es el que usa el propio backend."""
+        dto = UpdateCompetitionRequestDTO(max_players=20)
+
+        assert dto.max_players == 20
+
+    def test_max_players_stays_none_when_absent(self):
+        """Ausente significa «no lo toques», no «ponlo por defecto»."""
+        dto = UpdateCompetitionRequestDTO(name="New Name")
+
+        assert dto.max_players is None
+
+    def test_max_players_alias_wins_over_the_field_name(self):
+        """Con los dos nombres a la vez manda el alias, el que llega del cliente.
+
+        No debería pasar, pero si pasa el comportamiento queda fijado aquí y no
+        depende del orden en que Pydantic recorra el payload.
+        """
+        dto = UpdateCompetitionRequestDTO.model_validate(
+            {"number_of_players": 20, "max_players": 30}
+        )
+
+        assert dto.max_players == 20
+
+    def test_max_players_above_maximum(self):
+        """Debe rechazar un cupo mayor a 100, venga con el nombre que venga."""
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(number_of_players=101)
+
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(max_players=101)
+
+    def test_max_players_below_minimum(self):
+        """Debe rechazar un cupo menor a 2, venga con el nombre que venga."""
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(number_of_players=1)
+
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(max_players=1)
+
+    def test_max_players_accepts_the_boundaries(self):
+        """Debe aceptar los dos extremos exactos."""
+        assert UpdateCompetitionRequestDTO(number_of_players=2).max_players == 2
+        assert UpdateCompetitionRequestDTO(number_of_players=100).max_players == 100
+
+    def test_countries_is_converted_like_on_create(self):
+        """`countries` debe convertirse a adjacent_country_1/2, igual que al crear.
+
+        La pantalla manda el mismo payload para crear y para editar. Sin este
+        campo, cambiar los países acompañantes no tenía ningún efecto y la
+        respuesta seguía siendo un 200.
+        """
+        dto = UpdateCompetitionRequestDTO(countries=["PT"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 is None
+
+    def test_countries_converts_both_positions(self):
+        """Los dos países acompañantes, en orden."""
+        dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 == "FR"
+
+    def test_countries_are_placed_as_they_come(self):
+        """El DTO coloca el código, no lo normaliza: de eso sabe `CountryCode`.
+
+        Que una minúscula acabe guardada como ISO se comprueba de punta a punta en
+        los tests de integración del endpoint, que es donde se ve de verdad.
+        """
+        dto = UpdateCompetitionRequestDTO(countries=["pt", "fr"])
+
+        assert dto.adjacent_country_1 == "pt"
+        assert dto.adjacent_country_2 == "fr"
+
+    def test_empty_countries_leaves_both_adjacent_none(self):
+        """Lista vacía es «sin países acompañantes», que es como se quitan."""
+        dto = UpdateCompetitionRequestDTO(countries=[])
+
+        assert dto.adjacent_country_1 is None
+        assert dto.adjacent_country_2 is None
+
+    def test_explicit_adjacent_countries_win_over_countries(self):
+        """Si vienen los dos formatos manda el explícito, igual que al crear."""
+        dto = UpdateCompetitionRequestDTO(countries=["PT"], adjacent_country_1="FR")
+
+        assert dto.adjacent_country_1 == "FR"
+
+
+class TestCountriesFieldIsHostile:
+    """El campo `countries` recibe lo que mande el cliente, no lo que esperamos.
+
+    Vale para los dos DTOs: el validador estaba copiado y el defecto también.
+    Lo que nunca puede pasar es que una entrada rara salga como 500; el contrato
+    dice 422.
+    """
+
+    @staticmethod
+    def crear(**kwargs):
+        return CreateCompetitionRequestDTO(
+            name="Test Cup",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+            **kwargs,
+        )
+
+    def test_update_rejects_country_objects(self):
+        """Es la forma que devuelve el propio GET: `[{"code": "PT", ...}]`.
+
+        Un cliente que lea, edite y reenvíe mandaba esto y reventaba con un
+        AttributeError, que FastAPI convierte en 500.
+        """
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO.model_validate(
+                {"countries": [{"code": "PT", "name_es": "Portugal"}]}
+            )
+
+    def test_create_rejects_country_objects(self):
+        with pytest.raises(ValidationError):
+            CreateCompetitionRequestDTO.model_validate(
+                {
+                    "name": "Test Cup",
+                    "start_date": "2025-06-01",
+                    "end_date": "2025-06-03",
+                    "main_country": "ES",
+                    "play_mode": "SCRATCH",
+                    "countries": [{"code": "PT", "name_es": "Portugal"}],
+                }
+            )
+
+    def test_update_rejects_a_name_instead_of_a_code(self):
+        """Solo códigos ISO de dos letras: «PORTUGAL» se colaba tal cual."""
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(countries=["PORTUGAL"])
+
+    def test_create_rejects_a_name_instead_of_a_code(self):
+        with pytest.raises(ValidationError):
+            self.crear(countries=["PORTUGAL"])
+
+    def test_update_rejects_a_hole_in_the_list(self):
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(countries=[None])
+
+    def test_create_rejects_a_hole_in_the_list(self):
+        with pytest.raises(ValidationError):
+            self.crear(countries=[None])
+
+    def test_update_rejects_more_than_two_countries(self):
+        """Una Location son tres países como mucho: el principal y dos.
+
+        Los validadores solo miran los dos primeros de la lista, así que un
+        tercero se descartaba en silencio y el torneo quedaba en menos países de
+        los que pidió su creador.
+        """
+        with pytest.raises(ValidationError):
+            UpdateCompetitionRequestDTO(countries=["PT", "FR", "AD"])
+
+    def test_create_rejects_more_than_two_countries(self):
+        with pytest.raises(ValidationError):
+            self.crear(countries=["PT", "FR", "AD"])
+
+    def test_two_countries_are_accepted(self):
+        """Dos sí: son los dos huecos que hay."""
+        dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 == "FR"
+
+    def test_update_still_converts_valid_codes(self):
+        dto = UpdateCompetitionRequestDTO(countries=["PT", "FR"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 == "FR"
+
+    def test_create_still_converts_valid_codes(self):
+        dto = self.crear(countries=["PT", "FR"])
+
+        assert dto.adjacent_country_1 == "PT"
+        assert dto.adjacent_country_2 == "FR"
 
 
 # ======================================================================================

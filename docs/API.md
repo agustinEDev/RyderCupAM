@@ -519,7 +519,7 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `country_code` (string, required, ISO 3166-1 alpha-2, main location)
 - `secondary_country_code` (string, optional, must be adjacent)
 - `tertiary_country_code` (string, optional, must be adjacent)
-- `max_players` (int, required, 2-100)
+- `max_players` (int, optional, 2-100, default 12; also accepted as `number_of_players`)
 - `play_mode` (enum, required: "SCRATCH" | "HANDICAP")
 - `team_assignment` (enum, required: "RANDOM" | "MANUAL")
 - `team_1_name` (string, optional, max 50)
@@ -815,8 +815,8 @@ PENDING_APPROVAL → APPROVED
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/competitions/{id}/invitations` | POST | Creator | max_players/h | Invite user by ID |
-| `/competitions/{id}/invitations/by-email` | POST | Creator | max_players/h | Invite user by email |
+| `/competitions/{id}/invitations` | POST | Creator | min(max_players, 100)/h | Invite user by ID |
+| `/competitions/{id}/invitations/by-email` | POST | Creator | min(max_players, 100)/h | Invite user by email |
 | `/invitations/me` | GET | Yes | 20/min | List my pending invitations |
 | `/invitations/{id}/respond` | POST | Invitee | 10/min | Accept or decline invitation |
 | `/competitions/{id}/invitations` | GET | Creator | 20/min | List all invitations for competition |
@@ -852,7 +852,7 @@ PENDING_APPROVAL → APPROVED
 
 - **Token**: 256-bit secure token, SHA256 hash stored in DB, expires in 7 days
 - **Accept**: Creates enrollment with APPROVED status (bypasses approval flow)
-- **Rate limiting**: max_players invitations per hour per competition
+- **Rate limiting**: `min(max_players, 100)` invitations per hour per competition
 - **Bilingual emails**: ES/EN via Mailgun (fire-and-forget, failure doesn't block invitation)
 - **Duplicate prevention**: Only one PENDING invitation per email per competition
 
