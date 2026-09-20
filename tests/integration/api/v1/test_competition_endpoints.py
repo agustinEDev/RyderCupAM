@@ -1595,6 +1595,11 @@ class TestCompetitionGolfCourses:
         assert len(golf_courses) == 0
         assert golf_courses == []
 
+# Del reloj y no del calendario: una fecha fija hace que el test empiece a
+# fallar solo el dia en que queda por detras de «ahora»
+APERTURA = (datetime.now() + timedelta(days=30)).replace(microsecond=0, second=0)
+
+
 class TestScheduledEnrollmentOpening:
     """BE #319: la hora de apertura tiene que llegar y volver por la API."""
 
@@ -1613,24 +1618,24 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo del club",
-                "start_date": "2026-11-01",
-                "end_date": "2026-11-03",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
-                "enrollment_opens_at": "2026-10-14T09:00:00",
+                "enrollment_opens_at": APERTURA.isoformat(),
             },
             cookies=user["cookies"],
         )
 
         assert creada.status_code == 201
-        assert creada.json()["enrollment_opens_at"] == "2026-10-14T09:00:00"
+        assert creada.json()["enrollment_opens_at"] == APERTURA.isoformat()
 
         detalle = await client.get(
             f"/api/v1/competitions/{creada.json()['id']}", cookies=user["cookies"]
         )
 
         assert detalle.status_code == 200
-        assert detalle.json()["enrollment_opens_at"] == "2026-10-14T09:00:00"
+        assert detalle.json()["enrollment_opens_at"] == APERTURA.isoformat()
 
     @pytest.mark.asyncio
     async def test_an_hour_with_an_offset_is_refused(self, client: AsyncClient):
@@ -1647,7 +1652,7 @@ class TestScheduledEnrollmentOpening:
                 "end_date": "2026-11-03",
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
-                "enrollment_opens_at": "2026-10-14T09:00:00Z",
+                "enrollment_opens_at": APERTURA.isoformat() + "Z",
             },
             cookies=user["cookies"],
         )
@@ -1674,8 +1679,8 @@ class TestScheduledEnrollmentOpening:
             "/api/v1/competitions",
             json={
                 "name": "Torneo que ya abrio",
-                "start_date": "2026-11-01",
-                "end_date": "2026-11-03",
+                "start_date": (ayer + timedelta(days=30)).date().isoformat(),
+                "end_date": (ayer + timedelta(days=32)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
                 "enrollment_opens_at": ayer.isoformat(),

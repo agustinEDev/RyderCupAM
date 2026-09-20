@@ -51,7 +51,17 @@ class EnrollmentOpeningService:
             return None
 
         # La hora que escribio el organizador ya es local: se le pone el huso,
-        # no se convierte. Convertirla la moveria al huso de quien la mira
+        # no se convierte. Convertirla la moveria al huso de quien la mira.
+        #
+        # La madrugada del cambio de hora, una hora del calendario puede existir
+        # dos veces —en Madrid, las 2:30 del 25 de octubre— o no existir —el 29
+        # de marzo se salta de las 2:00 a las 3:00—. `fold=0`, que es el
+        # comportamiento por defecto, resuelve las dos como hace falta aqui: la
+        # ambigua se queda con la PRIMERA pasada (abre antes, no despues), y la
+        # que no existe cae en el mismo instante que habria tenido sin el salto,
+        # que el reloj local muestra como las 3:30. No se rechaza ninguna de las
+        # dos: son horas legitimas del calendario, y quien escribe «2:30» no
+        # tiene por que saberse los cambios de hora de memoria
         return enrollment_opens_at.replace(tzinfo=zone)
 
     @staticmethod

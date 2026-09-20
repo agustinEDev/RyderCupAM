@@ -89,3 +89,52 @@ class TestWhetherItIsDue:
 
         assert EnrollmentOpeningService.is_due(ahora_en_madrid, MADRID) is True
         assert EnrollmentOpeningService.is_due(ahora_en_madrid, CANARIAS) is False
+
+
+class TestTheNightTheClocksChange:
+    """Dos horas del calendario que no son una hora del reloj.
+
+    La madrugada en que se cambia la hora, una hora local puede no existir —en
+    Madrid, el 29 de marzo de 2026 salta de las 2:00 a las 3:00— o existir dos
+    veces —el 25 de octubre las 2:30 pasan dos veces—. `replace(tzinfo=...)` se
+    las traga sin rechistar y elige por su cuenta, asi que la apertura caia a un
+    instante que nadie habia pedido.
+
+    La politica, escrita: la que existe dos veces se queda con la primera
+    pasada —abre antes, no despues—, y la que no existe cae en el mismo
+    instante que habria tenido sin el salto. Ninguna se rechaza: son horas
+    legitimas del calendario, y quien escribe «2:30» no tiene por que saberse
+    los cambios de hora de memoria.
+    """
+
+    def test_an_hour_that_does_not_exist_lands_where_it_would_have(self):
+        """Las 2:30 del 29 de marzo de 2026 no existen en Madrid.
+
+        El reloj salta de las 2:00 a las 3:00. Esa hora cae en el instante que
+        le habria tocado sin el salto —01:30 UTC—, que el reloj local ya
+        muestra como las 3:30. Ni se adelanta ni se retrasa en absoluto.
+        """
+        no_existe = datetime(2026, 3, 29, 2, 30)
+
+        abre = EnrollmentOpeningService.opens_at(no_existe, MADRID)
+
+        assert abre is not None
+        assert abre.astimezone(UTC) == datetime(2026, 3, 29, 1, 30, tzinfo=UTC)
+
+    def test_an_hour_that_happens_twice_takes_the_first(self):
+        """Las 2:30 del 25 de octubre de 2026 pasan dos veces en Madrid."""
+        ambigua = datetime(2026, 10, 25, 2, 30)
+
+        abre = EnrollmentOpeningService.opens_at(ambigua, MADRID)
+
+        assert abre is not None
+        # La primera pasada, con el desfase de verano todavia puesto
+        assert abre.utcoffset() == timedelta(hours=2)
+
+    def test_an_ordinary_hour_is_left_alone(self):
+        """Lo de todos los demas dias del ano no se toca."""
+        normal = datetime(2026, 10, 14, 9, 0)
+
+        abre = EnrollmentOpeningService.opens_at(normal, MADRID)
+
+        assert abre == datetime(2026, 10, 14, 9, 0, tzinfo=ZoneInfo(MADRID))

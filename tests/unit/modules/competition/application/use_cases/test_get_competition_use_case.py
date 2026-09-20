@@ -186,12 +186,16 @@ class TestScheduledOpening:
         return UserId(uuid4())
 
     async def _draft_con_apertura(self, uow, creator_id, cuando, con_campo=True):
+        # Las fechas del torneo salen del mismo reloj que la apertura: fijarlas
+        # en el calendario hacia que los tests empezaran a fallar solos el dia
+        # en que esa fecha quedaba por detras de «ahora»
+        empieza = ((cuando or datetime.now()) + timedelta(days=30)).date()
         create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         created = await create_uc.execute(
             CreateCompetitionRequestDTO(
                 name="Torneo del club",
-                start_date=date(2026, 11, 1),
-                end_date=date(2026, 11, 3),
+                start_date=empieza,
+                end_date=empieza + timedelta(days=2),
                 main_country="ES",
                 play_mode="SCRATCH",
                 enrollment_opens_at=cuando,
