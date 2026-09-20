@@ -1,7 +1,8 @@
 """Tests para GetCompetitionUseCase."""
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -17,10 +18,25 @@ from src.modules.competition.application.use_cases.get_competition_use_case impo
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
+
+MADRID = "Europe/Madrid"
+
+
+class FakeZona:
+    """Dice la zona del primer campo sin bajar a la base de datos."""
+
+    def __init__(self, zona: str | None):
+        self._zona = zona
+
+    async def for_competition(self, competition) -> str | None:
+        return self._zona if competition.golf_courses else None
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -151,3 +167,110 @@ class TestGetCompetitionUseCase:
         assert competition.location.main_country.value == "IT"
         assert competition.location.adjacent_country_1 is None
         assert competition.location.adjacent_country_2 is None
+
+
+class TestScheduledOpening:
+    """BE #319: mirar la competicion despues de su hora es lo que la abre.
+
+    No hay ningun proceso programado en el backend, asi que «se abre sola»
+    significa que la abre la primera persona que pasa por ella pasada la hora.
+    Mismo criterio que la anotacion, que abre cuando llega el primer golpe.
+    """
+
+    @pytest.fixture
+    def uow(self) -> InMemoryUnitOfWork:
+        return InMemoryUnitOfWork()
+
+    @pytest.fixture
+    def creator_id(self) -> UserId:
+        return UserId(uuid4())
+
+    async def _draft_con_apertura(self, uow, creator_id, cuando, con_campo=True):
+        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        created = await create_uc.execute(
+            CreateCompetitionRequestDTO(
+                name="Torneo del club",
+                start_date=date(2026, 11, 1),
+                end_date=date(2026, 11, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+                enrollment_opens_at=cuando,
+            ),
+            creator_id,
+        )
+        if con_campo:
+            async with uow:
+                competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+                competition.add_golf_course(GolfCourseId.generate(), CountryCode("ES"))
+                await uow.competitions.update(competition)
+                await uow.commit()
+        return created
+
+    async def _status(self, uow, competition_id):
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(competition_id))
+            return competition.status
+
+    async def test_looking_at_it_after_the_hour_opens_it(self, uow, creator_id):
+        """La hora ya paso: quien mira la competicion la abre."""
+        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
+        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora)
+
+        uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
+        competition = await uc.execute(CompetitionId(created.id))
+
+        assert competition.status == CompetitionStatus.ACTIVE
+        assert await self._status(uow, created.id) == CompetitionStatus.ACTIVE
+
+    async def test_the_opening_gets_saved(self, uow, creator_id):
+        """La apertura se persiste, no solo se cambia en memoria.
+
+        El repositorio en memoria devuelve la MISMA instancia que guarda, asi
+        que un `update` olvidado pasaria desapercibido aqui y no se escribiria
+        nada en Postgres: la competicion volveria a parecer un borrador en la
+        siguiente peticion.
+        """
+        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
+        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora)
+
+        guardadas = []
+        original = uow.competitions.update
+
+        async def espia(competition):
+            guardadas.append(competition.status)
+            await original(competition)
+
+        uow.competitions.update = espia
+
+        uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
+        await uc.execute(CompetitionId(created.id))
+
+        assert CompetitionStatus.ACTIVE in guardadas
+
+    async def test_before_the_hour_it_stays_shut(self, uow, creator_id):
+        dentro_de_una_hora = (datetime.now(ZoneInfo(MADRID)) + timedelta(hours=1)).replace(tzinfo=None)
+        created = await self._draft_con_apertura(uow, creator_id, dentro_de_una_hora)
+
+        uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
+        competition = await uc.execute(CompetitionId(created.id))
+
+        assert competition.status == CompetitionStatus.DRAFT
+
+    async def test_without_a_course_it_waits(self, uow, creator_id):
+        """Sin campo no hay zona, y sin zona no se abre a ciegas (20 sep)."""
+        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
+        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora, con_campo=False)
+
+        uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
+        competition = await uc.execute(CompetitionId(created.id))
+
+        assert competition.status == CompetitionStatus.DRAFT
+
+    async def test_without_a_scheduled_hour_nothing_happens(self, uow, creator_id):
+        """Entre amigos no se programa nada: abre la invitacion, no el reloj."""
+        created = await self._draft_con_apertura(uow, creator_id, None)
+
+        uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
+        competition = await uc.execute(CompetitionId(created.id))
+
+        assert competition.status == CompetitionStatus.DRAFT

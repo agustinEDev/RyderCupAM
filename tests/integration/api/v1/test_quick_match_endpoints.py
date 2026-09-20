@@ -533,7 +533,7 @@ class TestQuickMatchFullFlow:
             json={"friend_user_id": friend["user"]["id"]},
         )
         assert add_response.status_code == 201
-        assert len(add_response.json()["participants"]) == 2  # noqa: PLR2004
+        assert len(add_response.json()["participants"]) == 2
 
         start_response = await client.post(
             f"/api/v1/quick-matches/{quick_match_id}/start",
@@ -546,7 +546,7 @@ class TestQuickMatchFullFlow:
             f"/api/v1/quick-matches/{quick_match_id}/holes/1/score", json={"score": 4}
         )
         assert score_response.status_code == 200
-        assert score_response.json()["score"] == 4  # noqa: PLR2004
+        assert score_response.json()["score"] == 4
 
         set_auth_cookies(client, friend["cookies"])
         friend_score_response = await client.post(
@@ -557,7 +557,7 @@ class TestQuickMatchFullFlow:
         detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
         assert detail_response.status_code == 200
         detail = detail_response.json()
-        assert len(detail["hole_scores"]) == 2  # noqa: PLR2004
+        assert len(detail["hole_scores"]) == 2
         assert detail["standing"]["holes_played"] == 1
 
         set_auth_cookies(client, creator["cookies"])
@@ -638,7 +638,7 @@ class TestQuickMatchGuestsAndScoringAssignment:
         assert guest_response.status_code == 201, guest_response.text
         guest_dto = next(p for p in guest_response.json()["participants"] if p["is_guest"])
         assert guest_dto["name"] == "Jane Doe"
-        assert guest_dto["handicap"] == 18.4  # noqa: PLR2004
+        assert guest_dto["handicap"] == 18.4
         guest_participant_id = guest_dto["participant_id"]
 
         # Solo el creador anota (1 anotador): debe cubrir tambien al invitado.
@@ -666,7 +666,7 @@ class TestQuickMatchGuestsAndScoringAssignment:
         detail_response = await client.get(f"/api/v1/quick-matches/{quick_match_id}")
         assert detail_response.status_code == 200
         detail = detail_response.json()
-        assert len(detail["hole_scores"]) == 2  # noqa: PLR2004
+        assert len(detail["hole_scores"]) == 2
         assert len(detail["scoring_assignments"]) == 1
         assert set(detail["scoring_assignments"][0]["covered_participant_ids"]) == {
             creator["user"]["id"],

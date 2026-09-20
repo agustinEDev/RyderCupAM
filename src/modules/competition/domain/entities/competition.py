@@ -31,6 +31,7 @@ from ..events.competition_reverted_to_in_progress_event import (
 )
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
+from ..services.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
@@ -112,6 +113,7 @@ class Competition:
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
+        enrollment_opens_at: datetime | None = None,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
@@ -131,6 +133,8 @@ class Competition:
         self._max_players = max_players
         self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
+        self._enrollment_opens_at = enrollment_opens_at
+        self._validate_enrollment_opening(enrollment_opens_at, dates)
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -151,6 +155,7 @@ class Competition:
         max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
+        enrollment_opens_at: datetime | None = None,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -169,6 +174,7 @@ class Competition:
             max_players=max_players,
             team_assignment=team_assignment,
             max_playing_handicap=max_playing_handicap,
+            enrollment_opens_at=enrollment_opens_at,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -300,6 +306,70 @@ class Competition:
     def allows_enrollments(self) -> bool:
         """Verifica si el torneo permite inscripciones."""
         return self._status == CompetitionStatus.ACTIVE
+
+    @property
+    def enrollment_opens_at(self) -> datetime | None:
+        """La hora a la que abren solas, tal como la escribio el organizador.
+
+        Sin huso a proposito: es hora LOCAL del campo donde se juega, y la zona
+        se resuelve al mirarla (BE #319).
+        """
+        return self._enrollment_opens_at
+
+    def _validate_enrollment_opening(
+        self, cuando: datetime | None, dates: DateRange | None = None
+    ) -> None:
+        """La apertura tiene que caer antes de que empiece a jugarse.
+
+        Abrir inscripciones con el torneo ya en marcha no significa nada, y un
+        ano mal tecleado —2027 en vez de 2026— lo programaba para despues de
+        haber terminado, sin que nadie dijera nada (BE #319).
+
+        En el pasado si se permite: eso quiere decir «abrela ya», y es lo que
+        pasa al poner una hora que acaba de cumplirse.
+        """
+        if cuando is None:
+            return
+
+        rango = dates or self._dates
+        if cuando.date() > rango.start_date:
+            raise ValueError(
+                f"Las inscripciones no pueden abrirse el {cuando.date().isoformat()}: "
+                f"la competición comienza el {rango.start_date.isoformat()}."
+            )
+
+    def schedule_enrollment_opening(self, cuando: datetime | None) -> None:
+        """Programa —o desprograma— la apertura de las inscripciones.
+
+        `None` aqui significa QUITAR la fecha, no «dejala como esta»: quien se
+        arrepiente de haberla puesto tiene que poder deshacerlo. Por eso no va
+        en `update_info`, donde `None` es lo contrario (BE #319).
+        """
+        self._validate_enrollment_opening(cuando)
+        self._enrollment_opens_at = cuando
+        self._updated_at = datetime.now()
+
+    def allows_enrollment_opening(self) -> bool:
+        """Indica si todavia esta por abrir, sin mirar la hora.
+
+        Separado de `due_to_open` para poder descartar sin resolver la zona,
+        que cuesta una consulta.
+        """
+        return self._status == CompetitionStatus.DRAFT
+
+    def due_to_open(self, timezone: str | None) -> bool:
+        """Indica si ya le toca abrirse, leyendo su hora en la zona del campo.
+
+        Sin fecha, nunca: ahi manda la invitacion (BE #319a). Y solo un
+        borrador se abre — una cancelada no resucita porque pase su hora, ni se
+        reabre una que ya cerro inscripciones.
+
+        La zona la pone el campo donde se juega, porque «las nueve» son las
+        nueve de alli. Sin campo todavia no se abre sola: no se adivina.
+        """
+        if self._status != CompetitionStatus.DRAFT:
+            return False
+        return EnrollmentOpeningService.is_due(self._enrollment_opens_at, timezone)
 
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
@@ -493,6 +563,7 @@ class Competition:
         max_players: int | None = None,
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
+        enrollment_opens_at: datetime | None = None,
     ) -> None:
         """
         Actualiza la información del torneo, mientras las inscripciones estén abiertas.
@@ -511,6 +582,10 @@ class Competition:
             self._name = name
 
         if dates is not None:
+            # La apertura ya puesta tiene que seguir cabiendo: adelantar el
+            # torneo por detras la dejaria despues del comienzo
+            if enrollment_opens_at is None:
+                self._validate_enrollment_opening(self._enrollment_opens_at, dates)
             self._dates = dates
 
         if location is not None:
@@ -529,6 +604,10 @@ class Competition:
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
             self._max_playing_handicap = max_playing_handicap
+
+        if enrollment_opens_at is not None:
+            self._validate_enrollment_opening(enrollment_opens_at, dates)
+            self._enrollment_opens_at = enrollment_opens_at
 
         # Validar y actualizar nombres de equipos
         updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name

@@ -598,6 +598,59 @@ class TestUpdateCompetitionUseCase:
 
         assert await self._cap_of(uow, created.id) is not None
 
+    async def test_the_scheduled_opening_can_be_called_off(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Quitar la fecha de apertura tiene que poder hacerse.
+
+        Given: Una competicion con la apertura programada
+        When: Se manda `enrollment_opens_at: null`
+        Then: Se queda sin fecha, y ya no se abrira sola
+
+        Es el mismo agujero que BE #313 cerro para el cupo y los paises: si
+        `null` se lee como «no lo toques», el organizador que se arrepiente
+        sigue teniendo el torneo programado para el miercoles.
+        """
+        cuando = datetime(2025, 5, 20, 9, 0)
+        created = await self._create_and_open(uow, creator_id)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(enrollment_opens_at=cuando),
+            creator_id,
+        )
+
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(enrollment_opens_at=None),
+            creator_id,
+        )
+
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+            assert competition.enrollment_opens_at is None
+
+    async def test_not_sending_the_opening_leaves_it_alone(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Y no mandarla no la borra: son dos cosas distintas."""
+        cuando = datetime(2025, 5, 20, 9, 0)
+        created = await self._create_and_open(uow, creator_id)
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        await update_use_case.execute(
+            CompetitionId(created.id),
+            UpdateCompetitionRequestDTO(enrollment_opens_at=cuando),
+            creator_id,
+        )
+
+        await update_use_case.execute(
+            CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Otro nombre"), creator_id
+        )
+
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+            assert competition.enrollment_opens_at == cuando
+
     async def test_the_cap_cannot_drop_below_the_people_already_in(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):

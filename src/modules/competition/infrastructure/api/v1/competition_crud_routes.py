@@ -10,6 +10,7 @@ from src.config.dependencies import (
     get_create_competition_use_case,
     get_current_user,
     get_delete_competition_use_case,
+    get_get_competition_use_case,
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
@@ -36,6 +37,9 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.get_competition_use_case import (
+    GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
@@ -262,6 +266,7 @@ async def create_competition(
                 play_mode=enriched_dto.play_mode,
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
+                enrollment_opens_at=competition.enrollment_opens_at,
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
                 is_creator=True,
@@ -361,11 +366,23 @@ async def get_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
+
+        # Por el caso de uso y no por el repositorio: mirar una competicion
+        # programada despues de su hora es lo que abre sus inscripciones, y no
+        # hay ningun proceso de fondo que lo haga por su cuenta (BE #319)
+        try:
+            await get_competition_uc.execute(competition_vo_id)
+        except CompetitionNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Competition {competition_vo_id.value} not found",
+            ) from e
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
