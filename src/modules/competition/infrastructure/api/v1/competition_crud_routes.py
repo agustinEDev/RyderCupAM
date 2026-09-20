@@ -178,7 +178,12 @@ async def _get_user_competitions(
         enrollment_status_map,
     )
 
-    return created_competitions + enrolled_competitions
+    # Las que salen de tus inscripciones tambien pasan por el filtro: una fila
+    # rechazada o retirada no se borra, y sin esto el expulsado recuperaba la
+    # privada por aqui (BE #318, punto gemelo del listado)
+    return created_competitions + await use_case.visibles_para(
+        enrolled_competitions, str(current_user_id.value)
+    )
 
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow, is_admin=False):

@@ -89,19 +89,24 @@ class ListCompetitionsUseCase:
                     status=status,
                     creator_id=creator_id,
                 )
-                return await self._solo_las_que_puede_ver(encontradas, viewer_id, is_admin)
+                return await self.visibles_para(encontradas, viewer_id, is_admin)
 
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
-            return await self._solo_las_que_puede_ver(competitions, viewer_id, is_admin)
+            return await self.visibles_para(competitions, viewer_id, is_admin)
 
-    async def _solo_las_que_puede_ver(
+    async def visibles_para(
         self,
         competitions: list[Competition],
         viewer_id: str | None,
         is_admin: bool = False,
     ) -> list[Competition]:
         """Aparta las privadas de quien no esta dentro (BE #318).
+
+        Publico a proposito: lo usa este caso de uso y tambien la ruta, que
+        anade por su cuenta las competiciones que salen de tus inscripciones.
+        Ese camino se salto el filtro y dejaba al expulsado recuperando la
+        privada de la que acababan de echarlo.
 
         Una privada la ve su creador, quien esta dentro y quien tiene una
         invitacion o una solicitud en marcha — ese necesita mirarla antes de

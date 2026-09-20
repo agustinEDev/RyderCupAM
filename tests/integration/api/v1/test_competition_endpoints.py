@@ -1840,3 +1840,61 @@ class TestPublicAndPrivate:
 
         assert respuesta.status_code == 403, respuesta.text
 
+    @pytest.mark.asyncio
+    async def test_somebody_rejected_cannot_pull_it_back_through_my_competitions(
+        self, client: AsyncClient
+    ):
+        """El expulsado no la recupera por «mis competiciones».
+
+        Es el camino gemelo del listado: las competiciones que salen de tus
+        inscripciones se anadian DESPUES del filtro de visibilidad, y las filas
+        rechazadas y retiradas no se borran.
+        """
+        organizador = await create_authenticated_user(
+            client, "organiza_gemelo@test.com", "P@ssw0rd123!", "Organiza", "Gemelo"
+        )
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder con puerta",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+            },
+            cookies=organizador["cookies"],
+        )
+        competicion_id = creada.json()["id"]
+        await client.post(
+            f"/api/v1/competitions/{competicion_id}/activate", cookies=organizador["cookies"]
+        )
+
+        # Pide plaza mientras es publica, y se la rechazan
+        rechazado = await create_authenticated_user(
+            client, "rechazado@test.com", "P@ssw0rd123!", "Le", "Rechazan"
+        )
+        pedida = await client.post(
+            f"/api/v1/competitions/{competicion_id}/enrollments", cookies=rechazado["cookies"]
+        )
+        assert pedida.status_code == 201, pedida.text
+        rechazo = await client.post(
+            f"/api/v1/enrollments/{pedida.json()['id']}/reject", cookies=organizador["cookies"]
+        )
+        assert rechazo.status_code == 200, rechazo.text
+
+        # Y el torneo se cierra al publico
+        await client.put(
+            f"/api/v1/competitions/{competicion_id}",
+            json={"visibility": "PRIVATE"},
+            cookies=organizador["cookies"],
+        )
+
+        mias = await client.get(
+            "/api/v1/competitions?my_competitions=true", cookies=rechazado["cookies"]
+        )
+
+        assert mias.status_code == 200
+        assert competicion_id not in [c["id"] for c in mias.json()]
+
+
