@@ -75,9 +75,13 @@ class DeleteCompetitionUseCase:
             CompetitionNotDeletableError: Si la competicion ya no se puede borrar
         """
         async with self._uow:
-            # 1. Buscar la competicion
+            # 1. Buscar la competicion, con la fila bloqueada. Entre comprobar
+            #    que no hay calendario y borrar caben milisegundos, y en READ
+            #    COMMITTED leer no reserva nada: una ronda creada a la vez desde
+            #    otra pestana se colaba y se iba en cascada sin que nadie lo
+            #    supiera. Mismo bloqueo que usa handle_enrollment para el cupo
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(

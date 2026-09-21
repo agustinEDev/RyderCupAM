@@ -442,6 +442,48 @@ class TestDeleteCompetitionUseCase:
         async with uow:
             assert await uow.competitions.find_by_id(CompetitionId(created.id)) is None
 
+    async def test_should_lock_the_competition_row_before_deleting(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        BE #333: la fila se bloquea al leerla, para que nadie monte nada a la vez.
+
+        Entre comprobar que no hay calendario y borrar caben milisegundos, y en
+        READ COMMITTED leer no reserva nada. Sin bloqueo, una ronda creada desde
+        otra pestaña justo ahí se colaba: el borrado ya había decidido con la
+        foto anterior, y la cascada se la llevaba sin que nadie se enterase.
+
+        Se comprueba que la lectura es la bloqueante porque el bloqueo no se
+        puede observar de otro modo en memoria: el repositorio en memoria lo
+        implementa como un no-op, y contra Postgres el efecto solo se ve con dos
+        transacciones a la vez.
+        """
+        created = await self._crear_competicion(uow, creator_id)
+
+        bloqueadas = []
+        sin_bloqueo = []
+        original_bloqueante = uow.competitions.find_by_id_for_update
+        original_normal = uow.competitions.find_by_id
+
+        async def espia_bloqueante(competition_id):
+            bloqueadas.append(competition_id)
+            return await original_bloqueante(competition_id)
+
+        async def espia_normal(competition_id):
+            sin_bloqueo.append(competition_id)
+            return await original_normal(competition_id)
+
+        uow.competitions.find_by_id_for_update = espia_bloqueante
+        uow.competitions.find_by_id = espia_normal
+
+        delete_use_case = DeleteCompetitionUseCase(uow)
+        request = DeleteCompetitionRequestDTO(competition_id=created.id)
+
+        await delete_use_case.execute(request, creator_id)
+
+        assert len(bloqueadas) == 1
+        assert sin_bloqueo == []
+
     # ===========================================
     # Helpers
     # ===========================================
