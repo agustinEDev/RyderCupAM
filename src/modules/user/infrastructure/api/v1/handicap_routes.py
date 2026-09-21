@@ -11,12 +11,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.config.dependencies import (
     get_current_user,
+    get_refresh_own_handicap_use_case,
     get_update_handicap_manually_use_case,
     get_update_handicap_use_case,
     get_update_multiple_handicaps_use_case,
 )
 from src.config.rate_limit import limiter
-from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.dto.user_dto import (
+    RefreshOwnHandicapRequestDTO,
+    RefreshOwnHandicapResponseDTO,
+    UserResponseDTO,
+)
+from src.modules.user.application.use_cases.refresh_own_handicap_use_case import (
+    RefreshOwnHandicapUseCase,
+)
 from src.modules.user.application.use_cases.update_multiple_handicaps_use_case import (
     UpdateMultipleHandicapsUseCase,
 )
@@ -122,6 +130,44 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
 
 
 # === Endpoints ===
+
+
+@router.post(
+    "/refresh-mine",
+    response_model=RefreshOwnHandicapResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Refrescar mi hándicap desde la RFEG",
+    description=(
+        "Refresca desde la RFEG el hándicap del usuario autenticado, una vez al día "
+        "y solo si es español, y dice si hay que pedírselo (needs_handicap). "
+        "Sustituye al refresco que hacía el login, que esperaba a la RFEG antes de "
+        "contestar (RyderCupAM#340)."
+    ),
+)
+async def refresh_own_handicap(
+    use_case: RefreshOwnHandicapUseCase = Depends(get_refresh_own_handicap_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+) -> RefreshOwnHandicapResponseDTO:
+    """
+    Refresca el hándicap del usuario autenticado.
+
+    Sin límite propio por hora a propósito: en producción todas las peticiones
+    comparten un solo cubo de rate limit (ADR-038), así que un "5/hour" como el
+    de /update serían cinco refrescos por hora para toda la app, y a este lo
+    llama cada jugador al entrar. Lo acotan la regla de una vez al día (tras un
+    refresco correcto no se vuelve a preguntar a la RFEG hasta mañana), que
+    exige sesión y el límite global.
+
+    Raises:
+        404: Si el usuario autenticado ya no existe
+    """
+    result = await use_case.execute(RefreshOwnHandicapRequestDTO(user_id=current_user.id))
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+    return result
 
 
 @router.post(

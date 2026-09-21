@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.20.1] - 2026-09-21
+
+### Fixed
+
+- **El hándicap de la RFEG vuelve a actualizarse** (#340). El 21 sep la federación cambió su
+  web: el token `coded_...` que se sacaba de la portada para llamar a `api.rfeg.es`
+  desapareció, y todas las búsquedas fallaban con «No se pudo obtener el token». Su página de
+  consulta llama ahora a un proxy público de su WordPress
+  (`rfegolf.es/wp-json/handicap-search/v1/search`), **sin token**, que devuelve el mismo
+  documento de siempre. El servicio pasa a una sola petición contra ese buscador; la
+  validación de la respuesta y la comparación de nombres no cambian.
+
+- **El login ya no espera a la RFEG** (#340). Refrescaba el hándicap antes de contestar, con
+  dos peticiones de hasta 10 s cada una: con la federación lenta, entrar tardaba lo que ella.
+  En producción iba rápido solo porque la búsqueda fallaba al instante. El refresco sale del
+  login a `POST /api/v1/handicaps/refresh-mine`, que el frontend pide después de entrar, con
+  las mismas reglas: una vez al día, solo España, y pedirle el hándicap al jugador cuando la
+  RFEG no lo da. La consulta se hace fuera de la unidad de trabajo, sin tener ocupada una
+  conexión a la BD mientras espera.
+
+### Removed
+
+- **`needs_handicap` de la respuesta del login** (#340). Ahora lo devuelve `refresh-mine`. Es
+  compatible con el frontend desplegado, que lo lee con `data.needs_handicap || false`: sin el
+  campo, simplemente no abre el modal hasta que llegue el frontend nuevo.
+
 ## [2.20.0] - 2026-09-20
 
 ### Fixed

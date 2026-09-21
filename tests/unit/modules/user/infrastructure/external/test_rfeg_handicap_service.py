@@ -7,6 +7,7 @@ Verifica la funcionalidad de normalización de texto para eliminar acentos.
 import unicodedata
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from src.modules.user.domain.errors.handicap_errors import (
@@ -77,17 +78,6 @@ class TestRFEGHandicapServiceNormalizacion:
         assert resultado == "Jose Buela Fernandez"
 
 
-TOKEN_HTML = "var x = 'coded_" + "a1b2c3d4" * 4 + "';"
-
-
-def respuesta_token():
-    """Falsea la página principal de la que se extrae el token Bearer."""
-    respuesta = MagicMock()
-    respuesta.text = TOKEN_HTML
-    respuesta.raise_for_status = MagicMock()
-    return respuesta
-
-
 def respuesta_api(*jugadores: dict):
     """Falsea la respuesta de la API de búsqueda con los jugadores dados."""
     respuesta = MagicMock()
@@ -129,7 +119,6 @@ class TestRFEGHandicapServiceBusqueda:
         """El jugador escribe su nombre con tildes y la RFEG lo guarda con tildes"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
@@ -150,7 +139,6 @@ class TestRFEGHandicapServiceBusqueda:
         """
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
@@ -166,7 +154,6 @@ class TestRFEGHandicapServiceBusqueda:
         """El jugador escribe con tildes y la federación responde sin ellas"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "AGUSTIN ESTEVEZ", "handicap": 15.4}),
         )
         mock_client_class.return_value = cliente
@@ -182,7 +169,6 @@ class TestRFEGHandicapServiceBusqueda:
         """Sin tildes por ninguna parte, el comportamiento no cambia"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "JUAN LOPEZ", "handicap": 24.0}),
         )
         mock_client_class.return_value = cliente
@@ -203,7 +189,6 @@ class TestRFEGHandicapServiceBusqueda:
         """
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api(
                 {"full_name": "AGUSTÍN ESTÉVEZ GARCÍA", "handicap": 8.0},
                 {"full_name": "AGUSTÍN ESTÉBAN", "handicap": 12.0},
@@ -222,7 +207,6 @@ class TestRFEGHandicapServiceBusqueda:
         """Un hit con `full_name` nulo se ignora en vez de reventar la búsqueda"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api(
                 {"full_name": None, "handicap": 3.0},
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4},
@@ -247,7 +231,7 @@ class TestRFEGHandicapServiceBusqueda:
         login, que llama aquí en cada entrada.
         """
         # Arrange
-        cliente = cliente_que_devuelve(respuesta_token(), respuesta_api())
+        cliente = cliente_que_devuelve(respuesta_api())
         mock_client_class.return_value = cliente
 
         # Act
@@ -319,7 +303,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         """Un `Pena` no puede llevarse el hándicap de un `Peña`"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "JUAN PEÑA GARCIA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
@@ -335,7 +318,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         """Y al revés: un `Peña` tampoco se lleva el de un `Pena`"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "JUAN PENA GARCIA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
@@ -351,7 +333,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         """Preservar la eñe no puede impedir encontrar a quien sí la lleva"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "JUAN PEÑA GARCÍA", "handicap": 8.0}),
         )
         mock_client_class.return_value = cliente
@@ -372,7 +353,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         """
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api({"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "N/A"}),
         )
         mock_client_class.return_value = cliente
@@ -388,7 +368,6 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         """Un hit con hándicap ilegible no puede tapar al siguiente que sí vale"""
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_api(
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": "15,4"},
                 {"full_name": "AGUSTÍN ESTÉVEZ", "handicap": 15.4},
@@ -416,7 +395,7 @@ class TestRFEGHandicapServiceBusquedaCasosLimite:
         respuesta_html = MagicMock()
         respuesta_html.raise_for_status = MagicMock()
         respuesta_html.json = MagicMock(side_effect=ValueError("Expecting value"))
-        cliente = cliente_que_devuelve(respuesta_token(), respuesta_html)
+        cliente = cliente_que_devuelve(respuesta_html)
         mock_client_class.return_value = cliente
 
         # Act & Assert
@@ -447,7 +426,7 @@ class TestRFEGHandicapServiceFormaDeLaRespuesta:
     ):
         """Una estructura que no reconocemos no puede decir 'no tiene hándicap'"""
         # Arrange
-        cliente = cliente_que_devuelve(respuesta_token(), respuesta_cruda(payload))
+        cliente = cliente_que_devuelve(respuesta_cruda(payload))
         mock_client_class.return_value = cliente
 
         # Act & Assert
@@ -459,7 +438,7 @@ class TestRFEGHandicapServiceFormaDeLaRespuesta:
     async def test_una_respuesta_vacia_sigue_siendo_no_encontrado(self, mock_client_class, payload):
         """Vacío no es lo mismo que mal formado: sigue siendo 'no encontrado'"""
         # Arrange
-        cliente = cliente_que_devuelve(respuesta_token(), respuesta_cruda(payload))
+        cliente = cliente_que_devuelve(respuesta_cruda(payload))
         mock_client_class.return_value = cliente
 
         # Act
@@ -478,7 +457,6 @@ class TestRFEGHandicapServiceFormaDeLaRespuesta:
         """
         # Arrange
         cliente = cliente_que_devuelve(
-            respuesta_token(),
             respuesta_cruda(
                 {
                     "data": {
@@ -498,3 +476,113 @@ class TestRFEGHandicapServiceFormaDeLaRespuesta:
 
         # Assert
         assert handicap == 15.4
+
+
+# Respuesta REAL del buscador de la RFEG, capturada el 21 sep 2026 (RyderCupAM#340).
+# Recortada a los campos que se leen y a los que dicen qué es cada cosa; el resto
+# del documento (club, licencia, avatar...) viaja igual y se ignora.
+RESPUESTA_REAL_RFEG = {
+    "data": {
+        "facet_counts": [],
+        "found": 1,
+        "hits": [
+            {
+                "document": {
+                    "club_title": "CAMPO DE GOLF MEIS (CLUB CHAN DO FENTO)",
+                    "competition_name": "ESTEVEZ DOMINGUEZ, AGUSTIN",
+                    "date_hdc_updated_at": "2026-08-07",
+                    "full_name": "AGUSTIN ESTEVEZ DOMINGUEZ",
+                    "handicap": "18.0",
+                    "id": "FED-357489",
+                    "level_code": "M",
+                }
+            }
+        ],
+        "out_of": 446534,
+        "page": 1,
+        "request_params": {
+            "collection_name": "global_search_handicap",
+            "per_page": 10,
+            "q": "agustin estevez dominguez",
+        },
+        "search_cutoff": False,
+        "search_time_ms": 3,
+    },
+    "message": "ok",
+    "status": True,
+}
+
+
+class TestRFEGHandicapServiceBuscadorNuevo:
+    """
+    El buscador que la RFEG estrenó el 21 sep 2026 (RyderCupAM#340).
+
+    El token `coded_...` que se sacaba de la portada desapareció, y con él el
+    camino portada -> token -> api.rfeg.es. Su página de consulta llama ahora a
+    un proxy público de WordPress, sin token, que devuelve el mismo documento.
+    """
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_una_sola_peticion_al_buscador_nuevo_y_sin_token(self, mock_client_class):
+        """
+        S1: un GET, al proxy de WordPress, sin cabecera de autorización.
+
+        Antes eran dos (la portada y la búsqueda), y el login esperaba a las dos.
+        """
+        # Arrange
+        cliente = cliente_que_devuelve(respuesta_cruda(RESPUESTA_REAL_RFEG))
+        mock_client_class.return_value = cliente
+
+        # Act
+        await RFEGHandicapService().search_handicap("Agustín Estévez Domínguez")
+
+        # Assert
+        assert cliente.get.await_count == 1
+        llamada = cliente.get.await_args
+        assert llamada.args[0] == "https://rfegolf.es/wp-json/handicap-search/v1/search"
+        assert llamada.kwargs["params"]["q"] == "Agustín Estévez Domínguez"
+        assert "Authorization" not in llamada.kwargs["headers"]
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_lee_el_handicap_de_la_respuesta_real(self, mock_client_class):
+        """S2: con lo que devuelve de verdad, el hándicap (que llega como texto) sale."""
+        # Arrange
+        cliente = cliente_que_devuelve(respuesta_cruda(RESPUESTA_REAL_RFEG))
+        mock_client_class.return_value = cliente
+
+        # Act
+        handicap = await RFEGHandicapService().search_handicap("Agustín Estévez Domínguez")
+
+        # Assert
+        assert handicap == 18.0
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_si_no_contesta_a_tiempo_es_servicio_no_disponible(self, mock_client_class):
+        """
+        S3: el 21 sep tardó 45-60 s en contestar. Eso es "no disponible",
+        no "no tiene hándicap".
+        """
+        # Arrange
+        cliente = cliente_que_devuelve(httpx.ReadTimeout("The read operation timed out"))
+        mock_client_class.return_value = cliente
+
+        # Act & Assert
+        with pytest.raises(HandicapServiceUnavailableError):
+            await RFEGHandicapService().search_handicap("Agustín Estévez Domínguez")
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_un_error_http_es_servicio_no_disponible(self, mock_client_class):
+        """S4: un 503 de su WordPress tampoco puede leerse como "no encontrado"."""
+        # Arrange
+        respuesta = MagicMock()
+        respuesta.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "503 Service Unavailable", request=MagicMock(), response=MagicMock()
+            )
+        )
+        cliente = cliente_que_devuelve(respuesta)
+        mock_client_class.return_value = cliente
+
+        # Act & Assert
+        with pytest.raises(HandicapServiceUnavailableError):
+            await RFEGHandicapService().search_handicap("Agustín Estévez Domínguez")

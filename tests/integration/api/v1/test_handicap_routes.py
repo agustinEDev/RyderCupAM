@@ -2,6 +2,8 @@
 Integration tests for Handicap API endpoints
 """
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -230,3 +232,70 @@ class TestHandicapEndpoints:
 
         # Assert
         assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.integration
+class TestRefreshMineEndpoint:
+    """
+    POST /api/v1/handicaps/refresh-mine (RyderCupAM#340).
+
+    El refresco que antes hacía el login, ahora aparte: el frontend lo pide
+    después de entrar, y el login ya no espera a la RFEG.
+    """
+
+    def teardown_method(self):
+        app.dependency_overrides.clear()
+
+    @staticmethod
+    def _rfeg_que_devuelve(handicap: float | None) -> None:
+        servicio = MockHandicapService(handicaps={"Rafael Nadal Parera": handicap}, default=None)
+        app.dependency_overrides[get_handicap_service] = lambda: servicio
+
+    @pytest.mark.asyncio
+    async def test_sin_sesion_no_se_puede(self, client: AsyncClient):
+        """R1: sin sesión, 401."""
+        response = await client.post("/api/v1/handicaps/refresh-mine")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_un_espanol_que_la_rfeg_encuentra_queda_actualizado(self, client: AsyncClient):
+        """
+        R2: español, la RFEG lo encuentra -> 200 con el hándicap y sin pedírselo.
+
+        Al registrarse la RFEG todavía no lo tiene (si no, quedaría actualizado
+        hoy y el refresco no llegaría a preguntar); después sí.
+        """
+        # Arrange
+        self._rfeg_que_devuelve(None)
+        await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "rafa.es@test.com",
+                "password": "P@ssw0rd123!",
+                "first_name": "Rafael",
+                "last_name": "Nadal Parera",
+                "country_code": "ES",
+            },
+            headers={"X-Test-Client-ID": f"register-{uuid.uuid4()}"},
+        )
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "rafa.es@test.com", "password": "P@ssw0rd123!"},
+            headers={"X-Test-Client-ID": f"login-{uuid.uuid4()}"},
+        )
+        assert login.status_code == 200
+        assert "needs_handicap" not in login.json()
+        token = login.json()["access_token"]
+        client.cookies.clear()
+        self._rfeg_que_devuelve(8.5)
+
+        # Act
+        response = await client.post(
+            "/api/v1/handicaps/refresh-mine",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Assert
+        assert response.status_code == 200
+        assert response.json() == {"needs_handicap": False, "handicap": 8.5}
