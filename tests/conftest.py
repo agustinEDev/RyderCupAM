@@ -268,6 +268,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
 
+    # Publicada para los tests que necesitan comprobar que algo se PERSISTIO:
+    # cualquier ruta que lea la competicion puede abrirla ella misma, asi que un
+    # assert contra la API no distingue «se guardo» de «se acaba de abrir otra
+    # vez en memoria» (BE #331)
+    _URL_DE_LA_BD_DE_TEST["url"] = test_db_url
+
     # Generar ID único para este test (evita colisiones con rate limiter)
     test_client_id = f"test-{uuid.uuid4()}"
 
@@ -728,6 +734,7 @@ def sample_competition_data() -> dict:
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
 
@@ -759,6 +766,11 @@ async def create_competition(
             "play_mode": "HANDICAP",
             "max_players": 24,
             "team_assignment": "MANUAL",
+            # Publica a proposito: la mayoria de los tests que usan este helper
+            # van de otra cosa —inscribirse, anotar, listar— y con el valor por
+            # defecto de produccion (PRIVATE, BE #318) un desconocido no podria
+            # ni pedir plaza. Que nace privada lo cubren los tests de #318
+            "visibility": "PUBLIC",
         }
 
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
@@ -770,11 +782,71 @@ async def create_competition(
     return response.json()
 
 
+async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
+    """Helper para crear una competición que todavía espera su hora.
+
+    Desde BE #332 una competición nace con las inscripciones abiertas, y la
+    única que sigue en DRAFT es la que tiene apertura programada. Los tests de
+    transiciones necesitan esa, porque son las que todavía pueden activarse.
+    """
+    import uuid
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=30)
+    return await create_competition(
+        client,
+        cookies,
+        {
+            "name": f"Torneo programado {uuid.uuid4().hex[:8]}",
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=3)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+            "enrollment_opens_days_before": 5,
+        },
+    )
+
+
+# Lo rellena la fixture `client` con la base de datos de ESTE test, que lleva el
+# id del worker de xdist: no hay una URL fija que se pueda leer del entorno
+_URL_DE_LA_BD_DE_TEST: dict[str, str] = {}
+
+
+async def estado_en_bd(competition_id: str) -> str | None:
+    """Lee el estado de una competición directamente de la base de datos."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.connect() as conn:
+            fila = await conn.execute(
+                text("SELECT status FROM competitions WHERE id = :id"),
+                {"id": competition_id},
+            )
+            encontrada = fila.first()
+            return encontrada[0] if encontrada else None
+    finally:
+        await engine.dispose()
+
+
 async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
-    """Helper para activar una competición (DRAFT -> ACTIVE)."""
+    """Helper para dejar una competición con las inscripciones abiertas.
+
+    Desde BE #332 una competición nace ya ACTIVE salvo que se le den días de
+    apertura, así que activar solo hace falta cuando todavía está esperando su
+    hora. Se comprueba el estado en vez de activar a ciegas: llamar a `/activate`
+    sobre una ya abierta es un 400, y los tests que solo quieren una competición
+    abierta no deberían tener que saber cómo nació.
+    """
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
+
+    actual = await client.get(f"/api/v1/competitions/{competition_id}")
+    assert actual.status_code == 200, f"Failed to read competition: {actual.text}"
+    if actual.json()["status"] != "DRAFT":
+        return actual.json()
 
     response = await client.post(f"/api/v1/competitions/{competition_id}/activate")
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"

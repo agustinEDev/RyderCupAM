@@ -129,6 +129,13 @@ class SendInvitationByEmailUseCase:
             # 8. Persistir
             await self._uow.invitations.add(invitation)
 
+            # 10. Y con la primera invitacion se abren las inscripciones (BE #319).
+            # Aqui y no antes: abrir y fallar luego dejaria el torneo abierto sin
+            # nadie invitado, que es medio arranque
+            if CompetitionPolicy.invitation_opens_enrollment(competition.status):
+                competition.activate()
+                await self._uow.competitions.update(competition)
+
         # 9. Retornar DTO enriquecido
         async with self._user_uow:
             # `display_name` (BE #239), tambien en el correo: ver el comentario

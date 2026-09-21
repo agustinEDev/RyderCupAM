@@ -105,7 +105,7 @@ class AddGolfCourseToCompetitionUseCase:
         Raises:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDraftError: Si la competición no está en estado DRAFT
+            CompetitionNotDraftError: Si las inscripciones ya no están abiertas
             GolfCourseNotFoundError: Si el campo de golf no existe
             GolfCourseNotApprovedError: Si el campo no está aprobado
             GolfCourseAlreadyAssignedError: Si el campo ya está asociado
@@ -128,10 +128,20 @@ class AddGolfCourseToCompetitionUseCase:
                 )
 
             # 3. Verificar que esté en estado DRAFT
-            if not competition.is_draft():
+            if not competition.allows_modifications():
                 raise CompetitionNotDraftError(
-                    f"Solo se pueden añadir campos en estado DRAFT. "
-                    f"Estado actual: {competition.status.value}"
+                    f"Solo se pueden añadir campos mientras las inscripciones están "
+                    f"abiertas. Estado actual: {competition.status.value}"
+                )
+
+            # Y con el calendario montado tampoco: se vuelve a ACTIVE desde CLOSED
+            # (`reopen_enrollments`), y quien ya esta inscrito eligio su color de
+            # barras sobre los campos de entonces. Cambiarlos por debajo hace que
+            # la generacion de partidos falle mucho despues (BE #323)
+            if await self._uow.rounds.find_by_competition(competition_id):
+                raise CompetitionNotDraftError(
+                    "No se pueden añadir campos: la competición ya tiene rondas "
+                    "programadas."
                 )
 
             # 4. Buscar el campo de golf

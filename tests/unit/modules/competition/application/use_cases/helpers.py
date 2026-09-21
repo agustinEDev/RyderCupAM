@@ -19,8 +19,14 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-async def create_competition(uow: InMemoryUnitOfWork, creator_id: UserId):
-    """Crea una competición en DRAFT."""
+async def create_competition(
+    uow: InMemoryUnitOfWork, creator_id: UserId, enrollment_opens_days_before: int | None = None
+):
+    """Crea una competición.
+
+    Sin días de apertura nace con las inscripciones abiertas (BE #332). Con
+    ellos espera en DRAFT, que es la única forma de tener hoy un borrador.
+    """
     create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
     request = CreateCompetitionRequestDTO(
         name="Test Cup",
@@ -29,6 +35,7 @@ async def create_competition(uow: InMemoryUnitOfWork, creator_id: UserId):
         main_country="ES",
         play_mode="SCRATCH",
         max_players=24,
+        enrollment_opens_days_before=enrollment_opens_days_before,
     )
     return await create_uc.execute(request, creator_id)
 
@@ -37,7 +44,17 @@ async def set_competition_status(uow: InMemoryUnitOfWork, competition_id, status
     """Mueve una competición a través de sus transiciones hasta `status`."""
     async with uow:
         competition = await uow.competitions.find_by_id(CompetitionId(competition_id))
-        if status in ("ACTIVE", "CLOSED", "IN_PROGRESS", "COMPLETED", "CANCELLED"):
+        # Desde BE #332 nace ya ACTIVE si no lleva apertura programada, asi que
+        # solo hay que abrirla cuando todavia esta esperando su hora
+        if status == "DRAFT":
+            raise ValueError(
+                "Una competicion creada sin apertura programada ya nace ACTIVE "
+                "(BE #332), y de ahi no se vuelve. Para un borrador, creala con "
+                "`create_competition(uow, creator_id, enrollment_opens_days_before=5)`. "
+                "Dejarlo pasar devolveria una abierta y el test afirmaria contra "
+                "el estado que no es."
+            )
+        if competition.is_draft():
             competition.activate()
         if status in ("CLOSED", "IN_PROGRESS", "COMPLETED"):
             competition.close_enrollments()

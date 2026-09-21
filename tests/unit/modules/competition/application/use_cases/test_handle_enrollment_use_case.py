@@ -69,11 +69,6 @@ class TestHandleEnrollmentUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
 
         return created
 

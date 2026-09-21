@@ -86,8 +86,50 @@ class CompetitionStatus(StrEnum):
         return self in {CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED}
 
     def allows_modifications(self) -> bool:
-        """Verifica si el estado permite modificar la configuración."""
-        return self == CompetitionStatus.DRAFT
+        """Verifica si el estado permite modificar la configuración.
+
+        Mientras las inscripciones están abiertas todavía se puede corregir el
+        montaje: era solo DRAFT, y con la invitación abriendo el torneo
+        (BE #319) eso convertía invitar en una puerta de un solo sentido, sin
+        poder añadir siquiera el campo de golf que falta (BE #323). De CLOSED
+        en adelante ya se sortean equipos y se generan partidos.
+        """
+        return self in {CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE}
+
+    def allows_deletion(self) -> bool:
+        """Verifica si el estado permite borrar la competicion del todo.
+
+        Mientras las inscripciones siguen abiertas, equivocarse al crearla se
+        deshace: era solo DRAFT, y con las competiciones naciendo abiertas
+        (BE #332) eso dejaba cancelar como unica salida, con la cancelada
+        quedandose en la lista para siempre.
+
+        CANCELLED entra por eso mismo: cancelar era la salida de un error, no su
+        destino, y dejarla fuera reproducia el problema que esto viene a quitar.
+        Lo que protege al historial no es el estado sino no haber llegado a
+        montarse, y de eso se encarga la otra mitad de la regla.
+
+        De CLOSED en adelante, no: ahi ya se monta el calendario y se generan
+        partidos, y el borrado va en cascada hasta los golpes anotados. Lo que
+        protege eso de verdad es la otra mitad de la regla, no el estado — vease
+        abajo.
+
+        OJO: el estado por si solo no basta, y por eso esto es la MITAD de la
+        regla. Se puede andar hacia atras —`revert-status` devuelve un torneo en
+        juego a CLOSED y `reopen-enrollments` lo devuelve a ACTIVE—, y ninguna de
+        las dos borra rondas ni partidos. Un torneo ya jugado puede estar en
+        ACTIVE con sus tarjetas dentro. La otra mitad la pone
+        `Competition.allows_deletion`, que ademas exige que no haya calendario.
+
+        Regla propia y no `allows_modifications`, aunque hoy coincidan: corregir
+        el montaje y destruirlo no son lo mismo, y compartir el metodo las haria
+        moverse juntas sin que nadie lo decida.
+        """
+        return self in {
+            CompetitionStatus.DRAFT,
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CANCELLED,
+        }
 
     def allows_handicap_edits(self) -> bool:
         """Verifica si el estado permite editar el hándicap personalizado de un jugador."""

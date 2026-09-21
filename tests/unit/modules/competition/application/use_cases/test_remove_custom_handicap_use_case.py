@@ -203,11 +203,15 @@ class TestRemoveCustomHandicapUseCase:
         When: La competición está en DRAFT, ACTIVE o CLOSED
         Then: Se puede eliminar el hándicap personalizado sin errores
         """
-        created = await create_competition(uow, creator_id)
+        # Con dias si se quiere un borrador: es lo unico que sigue en DRAFT
+        created = await create_competition(
+            uow, creator_id, enrollment_opens_days_before=5 if status == "DRAFT" else None
+        )
         enrollment = await create_approved_enrollment(
             uow, created.id, player_id, custom_handicap=Decimal("20.0")
         )
-        await set_competition_status(uow, created.id, status)
+        if status != "DRAFT":
+            await set_competition_status(uow, created.id, status)
 
         use_case = RemoveCustomHandicapUseCase(uow)
         response = await use_case.execute(str(enrollment.id.value), creator_id)

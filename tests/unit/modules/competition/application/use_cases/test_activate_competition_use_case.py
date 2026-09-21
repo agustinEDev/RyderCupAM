@@ -65,6 +65,9 @@ class TestActivateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada, que desde BE #332 es la unica que nace esperando: lo
+            # que «activar» hace hoy es ADELANTAR esa apertura
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -123,6 +126,9 @@ class TestActivateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada, que desde BE #332 es la unica que nace esperando: lo
+            # que «activar» hace hoy es ADELANTAR esa apertura
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -154,6 +160,9 @@ class TestActivateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada, que desde BE #332 es la unica que nace esperando: lo
+            # que «activar» hace hoy es ADELANTAR esa apertura
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -187,6 +196,9 @@ class TestActivateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada, que desde BE #332 es la unica que nace esperando: lo
+            # que «activar» hace hoy es ADELANTAR esa apertura
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -228,6 +240,9 @@ class TestActivateCompetitionUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada, que desde BE #332 es la unica que nace esperando: lo
+            # que «activar» hace hoy es ADELANTAR esa apertura
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 

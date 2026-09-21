@@ -33,6 +33,15 @@ class CompetitionNotActiveError(Exception):
     pass
 
 
+class CompetitionIsPrivateError(Exception):
+    """En una competicion privada se entra porque el organizador invita.
+
+    Pedir plaza por cuenta propia solo vale en las publicas (BE #318).
+    """
+
+    pass
+
+
 class AlreadyEnrolledError(Exception):
     """Excepcion lanzada cuando el usuario ya tiene una inscripcion en esta competicion."""
 
@@ -91,7 +100,16 @@ class RequestEnrollmentUseCase:
                     f"Competicion no encontrada: {request.competition_id}"
                 )
 
-            # 2. Verificar capacidad disponible
+            # 2. En una privada no se pide sitio: se entra porque te invitan.
+            # Antes de esto, cualquiera podia llamar a la puerta de la Ryder de
+            # unos amigos y el organizador tenia que ir rechazando a mano (BE #318)
+            if not competition.accepts_enrollment_requests():
+                raise CompetitionIsPrivateError(
+                    f"La competición {request.competition_id} es privada: "
+                    f"solo se entra por invitación."
+                )
+
+            # 3. Verificar capacidad disponible
             approved_count = await self._uow.enrollments.count_approved_by_competition(
                 competition_id
             )

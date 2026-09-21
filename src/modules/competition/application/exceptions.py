@@ -137,3 +137,14 @@ class NotCreatorError(Exception):
     """El usuario no es el creador de la competición."""
 
     pass
+
+
+class GolfCourseHasRoundsError(Exception):
+    """El campo tiene rondas programadas, así que no se puede quitar.
+
+    Antes no hacía falta: no se podían crear rondas hasta cerrar inscripciones,
+    y para entonces los campos ya no se tocaban. Al poder corregir el montaje
+    con las inscripciones abiertas (BE #323), las dos cosas conviven.
+    """
+
+    pass
