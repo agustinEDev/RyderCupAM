@@ -188,6 +188,25 @@ class TestRefreshOwnHandicapUseCase:
         assert respuesta.needs_handicap is True
         assert respuesta.handicap is None
 
+    async def test_u9b_si_falla_el_guardado_devuelve_el_que_sigue_guardado(self):
+        """
+        U9b: con 12.5 guardado de ayer, la RFEG da 18.4 y el guardado falla.
+
+        La entidad ya lleva el 18.4, pero la BD sigue teniendo el 12.5. Devolver
+        null diría "no tienes hándicap" y el modal se abriría vacío; devolver
+        18.4 diría algo que no quedó guardado. Lo cierto es el 12.5.
+        """
+        uow = InMemoryUnitOfWork()
+        usuario = await _guarda(uow, _actualizado_hace(_usuario(), dias=1))
+        uow.users.save = AsyncMock(side_effect=RuntimeError("disco lleno"))
+
+        respuesta = await RefreshOwnHandicapUseCase(uow, _servicio(devuelve=18.4)).execute(
+            _pide(usuario)
+        )
+
+        assert respuesta.needs_handicap is True
+        assert respuesta.handicap == 12.5
+
     async def test_u10_el_usuario_ya_no_existe_devuelve_none(self):
         """U10: borrado entre la autenticación y la llamada -> None (la ruta da 404)."""
         uow = InMemoryUnitOfWork()

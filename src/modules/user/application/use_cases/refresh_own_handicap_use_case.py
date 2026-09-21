@@ -78,6 +78,8 @@ class RefreshOwnHandicapUseCase:
         if handicap_value is None:
             return self._resultado(user, needs_handicap=True)
 
+        # Lo que hay guardado ahora: si el guardado falla, es lo que sigue siendo cierto
+        handicap_guardado = user.handicap.value if user.handicap else None
         try:
             user.update_handicap(handicap_value)
             async with self._uow:
@@ -89,8 +91,8 @@ class RefreshOwnHandicapUseCase:
                 exc_info=True,
             )
             # La entidad ya lleva el valor nuevo, pero no quedó guardado: devolverlo
-            # sería afirmar algo que la BD no tiene
-            return RefreshOwnHandicapResponseDTO(needs_handicap=True, handicap=None)
+            # sería afirmar algo que la BD no tiene, y null diría que no hay ninguno
+            return RefreshOwnHandicapResponseDTO(needs_handicap=True, handicap=handicap_guardado)
 
         return self._resultado(user, needs_handicap=False)
 
