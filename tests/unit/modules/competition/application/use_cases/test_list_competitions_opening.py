@@ -160,16 +160,21 @@ class TestElFiltroSeRespetaDespuesDeAbrir:
         assert resultado == []
         assert competition.status == CompetitionStatus.ACTIVE
 
-    async def test_la_que_se_abre_entra_en_el_filtro_de_activas(self):
-        """Y al reves: si pediste ACTIVE, la que acaba de abrirse cuenta."""
+    async def test_el_filtro_se_normaliza(self):
+        """`?status=active` en minusculas tiene que seguir funcionando.
+
+        La consulta normaliza y la ruta tambien; comparar aqui en crudo traia
+        las filas correctas y luego las tiraba todas.
+        """
         uow = InMemoryUnitOfWork()
-        competition = _competicion(5, empieza_en=3)
+        competition = _competicion(None, empieza_en=30)
+        competition.activate()
         async with uow:
             await uow.competitions.add(competition)
             await uow.commit()
 
         use_case = ListCompetitionsUseCase(uow, zona_del_campo=FakeZona())
-        resultado = await use_case.execute(status="ACTIVE", viewer_id=str(uuid4()))
+        resultado = await use_case.execute(status="active", viewer_id=str(uuid4()))
 
         assert [c.id for c in resultado] == [competition.id]
 

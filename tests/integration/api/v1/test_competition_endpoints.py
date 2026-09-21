@@ -19,6 +19,7 @@ from tests.conftest import (
     create_competition,
     create_draft_competition,
     create_golf_course,
+    estado_en_bd,
     set_auth_cookies,
 )
 
@@ -959,18 +960,22 @@ class TestListingOpensScheduledCompetitions:
         )
         assert asociado.status_code == 201, asociado.text
 
-        # Sin abrir su ficha en ningun momento: solo listados. Comprobarlo con
-        # `GET /{id}` no valdria, porque esa ruta abre la competicion ella misma
-        # y el test pasaria aunque el listado no hiciera nada
+        # Sin abrir su ficha en ningun momento: solo el listado. Y se comprueba
+        # contra la FILA GUARDADA, no con otra peticion: cualquier ruta que lea
+        # la competicion la abriria ella misma, asi que el test pasaria aunque
+        # el listado no hubiera hecho nada —o la hubiera abierto sin persistir,
+        # que es el fallo que de verdad hay que cazar
         listado = await client.get("/api/v1/competitions", params={"status": "DRAFT"})
         assert listado.status_code == 200
+        assert comp["id"] not in [c["id"] for c in listado.json()], (
+            "una vez abierta ya no es un borrador, asi que no puede salir "
+            "dentro de un listado filtrado por DRAFT"
+        )
 
-        segundo = await client.get("/api/v1/competitions", params={"status": "ACTIVE"})
-        assert segundo.status_code == 200
-        abiertas = [c["id"] for c in segundo.json()]
-        assert comp["id"] in abiertas, (
-            "el primer listado tenia que haberla abierto y persistido, "
-            "y el segundo deberia encontrarla ya entre las activas"
+        guardado = await estado_en_bd(comp["id"])
+        assert guardado == "ACTIVE", (
+            "el listado tenia que haberla abierto y PERSISTIDO: en memoria no basta, "
+            f"la siguiente peticion la encontraria en borrador otra vez. Estado: {guardado}"
         )
 
 

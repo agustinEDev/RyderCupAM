@@ -140,7 +140,13 @@ class ListCompetitionsUseCase:
         """
         if status is None:
             return competitions
-        return [c for c in competitions if c.status.value == status]
+
+        # `.upper()` como en todas las demas capas: la consulta normaliza
+        # (`CompetitionStatus(status.upper())`) y la ruta tambien, asi que
+        # comparar aqui en crudo hacia que `?status=active` devolviera vacio
+        # despues de haber traido las filas correctas
+        pedido = status.upper()
+        return [c for c in competitions if c.status.value == pedido]
 
     async def visibles_para(
         self,
@@ -208,16 +214,6 @@ class ListCompetitionsUseCase:
             status_enum = CompetitionStatus(status.upper())
             competitions = await self._uow.competitions.find_by_status(status_enum)
 
-            # Pidiendo las abiertas hay que traer tambien las que YA DEBERIAN
-            # estarlo: una programada cuyo dia paso sigue en DRAFT solo porque
-            # nadie la ha mirado todavia, y ese es precisamente el trabajo de
-            # este listado. Se abriran mas abajo, y las que no les toque se
-            # caen al volver a aplicar el filtro (BE #331)
-            if status_enum == CompetitionStatus.ACTIVE and self._zona_del_campo is not None:
-                esperando = await self._uow.competitions.find_by_status(CompetitionStatus.DRAFT)
-                competitions = competitions + [
-                    c for c in esperando if c.enrollment_opens_days_before is not None
-                ]
 
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:

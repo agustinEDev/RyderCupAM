@@ -147,7 +147,7 @@ class TestCuandoLaRelacionNoVieneCargada:
         monkeypatch.setattr(
             "src.modules.competition.infrastructure.services."
             "competition_timezone_from_course.inspect",
-            lambda _: type("Estado", (), {"unloaded": {"_golf_courses"}})(),
+            lambda _: _estado_falso(unloaded={"_golf_courses"}),
         )
 
         zona = await servicio.for_competition(CompeticionSinCargar(completa))
@@ -167,7 +167,7 @@ class TestCuandoLaRelacionNoVieneCargada:
         monkeypatch.setattr(
             "src.modules.competition.infrastructure.services."
             "competition_timezone_from_course.inspect",
-            lambda _: type("Estado", (), {"unloaded": set()})(),
+            lambda _: _estado_falso(unloaded=set()),
         )
 
         zona = await servicio.for_competition(completa)
@@ -199,3 +199,46 @@ def _competicion_con_campo(golf_course_id) -> Competition:
     )
     competition.add_golf_course(golf_course_id, CountryCode("ES"))
     return competition
+
+
+def _estado_falso(unloaded: set):
+    """Imita lo que devuelve `inspect()` sobre una entidad mapeada.
+
+    Hace falta el mapper además de `unloaded`, porque el servicio comprueba que
+    la relación siga existiendo antes de fiarse de ella: así un renombrado avisa
+    en vez de saltarse la recarga en silencio.
+    """
+    relacion = type("Relacion", (), {"key": "_golf_courses"})()
+    mapper = type("Mapper", (), {"relationships": [relacion]})()
+    return type("Estado", (), {"unloaded": unloaded, "mapper": mapper})()
+
+
+class TestSiLaRelacionSeRenombra:
+    """Un renombrado no puede convertirse en un 500 silencioso del listado."""
+
+    async def test_recarga_y_avisa_cuando_la_relacion_ya_no_existe(self, monkeypatch, caplog):
+        """Antes esto se leia como «ya cargada» y se saltaba la recarga.
+
+        Y saltarse la recarga en el listado es un `MissingGreenlet`: no un fallo
+        en esa competicion, sino la peticion entera caida.
+        """
+        campo = GolfCourseId.generate()
+        completa = _competicion_con_campo(campo)
+        repo_competiciones = RepositorioDeCompeticiones(completa)
+        servicio = CompetitionTimezoneFromCourse(
+            RepositorioFalso({campo: CampoFalso("Europe/Madrid")}),
+            repo_competiciones,
+        )
+        renombrada = type("Relacion", (), {"key": "_campos_de_golf"})()
+        mapper = type("Mapper", (), {"relationships": [renombrada]})()
+        monkeypatch.setattr(
+            "src.modules.competition.infrastructure.services."
+            "competition_timezone_from_course.inspect",
+            lambda _: type("Estado", (), {"unloaded": set(), "mapper": mapper})(),
+        )
+
+        zona = await servicio.for_competition(CompeticionSinCargar(completa))
+
+        assert zona == "Europe/Madrid"
+        assert repo_competiciones.consultas == 1
+        assert "ya no existe en el mapeo" in caplog.text

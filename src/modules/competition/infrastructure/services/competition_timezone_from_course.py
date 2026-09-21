@@ -26,6 +26,10 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 
 logger = logging.getLogger(__name__)
 
+# El atributo mapeado que guarda los campos de la competicion. El listado no
+# lo carga y la ficha si, y de eso depende si hay que recargar (BE #331)
+RELACION_DE_CAMPOS = "_golf_courses"
+
 
 class CompetitionTimezoneFromCourse(ICompetitionTimezone):
     """Resuelve la zona de una competicion mirando el campo que se juega."""
@@ -57,7 +61,24 @@ class CompetitionTimezoneFromCourse(ICompetitionTimezone):
 
         try:
             estado = inspect(competition)
-            sin_cargar = estado is not None and "_golf_courses" in estado.unloaded
+            if estado is None:
+                return competition
+
+            # El nombre va a mano porque la clave del mapper solo existe con
+            # TODOS los mapeos registrados, y este modulo se importa antes. Para
+            # que un renombrado no se convierta en un 500 silencioso del listado
+            # entero, se comprueba que la relacion siga existiendo: si no, se
+            # recarga igual y se deja dicho en el log
+            conocidas = {relacion.key for relacion in estado.mapper.relationships}
+            if RELACION_DE_CAMPOS not in conocidas:
+                logger.warning(
+                    "La relacion %s ya no existe en el mapeo de Competition: se "
+                    "recarga por si acaso. Revisar CompetitionTimezoneFromCourse.",
+                    RELACION_DE_CAMPOS,
+                )
+                sin_cargar = True
+            else:
+                sin_cargar = RELACION_DE_CAMPOS in estado.unloaded
         except NoInspectionAvailable:
             # Una entidad que no viene de SQLAlchemy —un test con objetos en
             # memoria— no tiene nada que recargar
