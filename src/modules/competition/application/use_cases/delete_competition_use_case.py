@@ -36,7 +36,7 @@ class DeleteCompetitionUseCase:
 
     Restricciones:
     - Solo si el estado lo permite y no hay calendario montado (BE #333)
-    - Solo el creador puede eliminar
+    - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments si existieran)
 
     Orquesta:

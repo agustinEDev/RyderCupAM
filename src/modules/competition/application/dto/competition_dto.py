@@ -746,7 +746,7 @@ class DeleteCompetitionRequestDTO(BaseModel):
     Restricciones:
     - Solo si el estado lo permite (DRAFT, ACTIVE o CANCELLED)
     - Y solo si no hay calendario montado (los equipos sorteados no impiden)
-    - Solo el creador puede eliminar
+    - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """
 
