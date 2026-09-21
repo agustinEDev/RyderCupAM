@@ -22,11 +22,15 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.team_assignment_mode import (
+    TeamAssignmentMode,
+)
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -182,6 +186,9 @@ class TestDeleteCompetitionUseCase:
             await delete_use_case.execute(delete_request, creator_id)
 
         assert "Estado actual: CLOSED" in str(exc_info.value)
+        # El motivo es el estado, no el montaje: decirle «sin calendario» a quien
+        # solo tiene que reabrir las inscripciones le manda a arreglar otra cosa
+        assert "calendario" not in str(exc_info.value).lower()
 
     async def test_should_raise_error_when_trying_to_delete_in_progress_competition(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -407,6 +414,33 @@ class TestDeleteCompetitionUseCase:
 
         assert "calendario" in str(exc_info.value).lower()
 
+    async def test_should_refuse_to_delete_a_competition_whose_teams_are_already_drawn(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        BE #333: el sorteo de equipos también cuenta como torneo montado.
+
+        Sortear equipos solo exige CLOSED, no rondas, y `reopen-enrollments` no
+        deshace el sorteo. Cerrar, sortear y reabrir para cambiar a un jugador
+        deja la competición en ACTIVE sin calendario pero con los equipos hechos,
+        y mirando solo las rondas la cascada se los llevaría.
+
+        Given: Una competición en ACTIVE con los equipos ya sorteados
+        When: El creador intenta eliminarla
+        Then: Se lanza CompetitionNotDeletableError
+        """
+        created = await self._crear_competicion(uow, creator_id)
+        await self._activar(uow, created.id)
+        await self._sortear_equipos(uow, created.id)
+
+        delete_use_case = DeleteCompetitionUseCase(uow)
+        request = DeleteCompetitionRequestDTO(competition_id=created.id)
+
+        with pytest.raises(CompetitionNotDeletableError) as exc_info:
+            await delete_use_case.execute(request, creator_id)
+
+        assert "equipos" in str(exc_info.value).lower()
+
     # ===========================================
     # Helpers
     # ===========================================
@@ -455,6 +489,19 @@ class TestDeleteCompetitionUseCase:
                     round_date=date(2025, 6, 1),
                     session_type=SessionType.MORNING,
                     match_format=MatchFormat.SINGLES,
+                )
+            )
+            await uow.commit()
+
+    async def _sortear_equipos(self, uow: InMemoryUnitOfWork, competition_id: str) -> None:
+        """Deja los equipos sorteados, como haría el reparto antes del calendario."""
+        async with uow:
+            await uow.team_assignments.add(
+                TeamAssignment.create(
+                    competition_id=CompetitionId(competition_id),
+                    mode=TeamAssignmentMode.MANUAL,
+                    team_a_player_ids=[UserId(uuid4())],
+                    team_b_player_ids=[UserId(uuid4())],
                 )
             )
             await uow.commit()
