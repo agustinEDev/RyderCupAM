@@ -18,6 +18,7 @@ from tests.conftest import (
     create_authenticated_user,
     create_competition,
     create_golf_course,
+    set_auth_cookies,
 )
 
 
@@ -819,20 +820,132 @@ class TestDeleteCompetition:
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_delete_active_competition_returns_400(self, client: AsyncClient):
-        """Eliminar competición ACTIVE retorna 400."""
+    async def test_delete_active_competition_succeeds(self, client: AsyncClient):
+        """BE #333: con las inscripciones abiertas todavía se puede borrar.
+
+        Las competiciones nacen abiertas (BE #332), así que dejar el borrado solo
+        en DRAFT dejaba cancelar como única salida a un error al crearlas.
+        """
         user = await create_authenticated_user(
             client, "deleter2@test.com", "P@ssw0rd123!", "Delete", "Two"
         )
 
+        jugador = await create_authenticated_user(
+            client, "enrolled@test.com", "P@ssw0rd123!", "Enrolled", "Player"
+        )
+
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
+
+        # Con alguien dentro: si la cascada no llegara a las inscripciones, el
+        # borrado reventaria contra la clave ajena en vez de responder 204
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        inscrito = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+        )
+        assert inscrito.status_code == 201, inscrito.text
+
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 204
+
+        # Y deja de existir de verdad, no solo responde que sí
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        assert (await client.get(f"/api/v1/competitions/{comp['id']}")).status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_closed_competition_returns_400(self, client: AsyncClient):
+        """BE #333: cerradas las inscripciones ya no se borra.
+
+        A partir de aquí se sortean equipos y se generan partidos, y el borrado
+        va en cascada hasta los golpes anotados.
+        """
+        user = await create_authenticated_user(
+            client, "deleter3@test.com", "P@ssw0rd123!", "Delete", "Three"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
+
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
 
         response = await client.delete(
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
         assert response.status_code == 400
+        assert "CLOSED" in response.json()["detail"]
+
+
+class TestDeleteReopenedCompetition:
+    """BE #333: volver a ACTIVE no vuelve a hacer borrable un torneo montado."""
+
+    @pytest.mark.asyncio
+    async def test_delete_reopened_competition_with_rounds_returns_400(
+        self, client: AsyncClient
+    ):
+        """Con calendario montado no se borra, aunque el estado haya vuelto a ACTIVE.
+
+        El estado se puede andar hacia atrás y ninguna de esas vueltas deshace
+        rondas ni partidos. Mirando solo el estado, la cascada se llevaría el
+        torneo entero con sus tarjetas.
+        """
+        admin = await create_admin_user(
+            client, "reopen-admin@test.com", "P@ssw0rd123!", "Reopen", "Admin"
+        )
+        user = await create_authenticated_user(
+            client, "reopener@test.com", "P@ssw0rd123!", "Re", "Opener"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        gc = await create_golf_course(client, user["cookies"])
+        await approve_golf_course(client, admin["cookies"], gc["id"])
+
+        set_auth_cookies(client, user["cookies"])
+        asociado = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc["id"]},
+        )
+        assert asociado.status_code == 201, asociado.text
+
+        await activate_competition(client, user["cookies"], comp["id"])
+
+        set_auth_cookies(client, user["cookies"])
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
+
+        ronda = await client.post(
+            f"/api/v1/competitions/{comp['id']}/rounds",
+            json={
+                "golf_course_id": gc["id"],
+                "round_date": comp["start_date"],
+                "session_type": "MORNING",
+                "match_format": "SINGLES",
+            },
+        )
+        assert ronda.status_code == 201, ronda.text
+
+        reabierta = await client.post(
+            f"/api/v1/competitions/{comp['id']}/reopen-enrollments"
+        )
+        assert reabierta.status_code == 200, reabierta.text
+        assert reabierta.json()["status"] == "ACTIVE"
+
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 400
+        assert "calendario" in response.json()["detail"].lower()
 
 
 class TestCompetitionStateTransitions:

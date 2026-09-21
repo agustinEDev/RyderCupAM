@@ -1,7 +1,8 @@
 """
 Caso de Uso: Eliminar Competition (eliminacion fisica).
 
-Permite eliminar fisicamente una competicion en estado DRAFT.
+Permite eliminar fisicamente una competicion mientras las inscripciones
+siguen abiertas (DRAFT o ACTIVE).
 Solo el creador puede realizar esta accion.
 """
 
@@ -23,7 +24,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class CompetitionNotDeletableError(Exception):
-    """Excepcion lanzada cuando la competicion no esta en estado DRAFT."""
+    """Excepcion lanzada cuando la competicion ya no se puede borrar."""
 
     pass
 
@@ -33,14 +34,14 @@ class DeleteCompetitionUseCase:
     Caso de uso para eliminar fisicamente una competicion.
 
     Restricciones:
-    - Solo se puede eliminar en estado DRAFT
+    - Solo en DRAFT o ACTIVE, y sin calendario montado (BE #333)
     - Solo el creador puede eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments si existieran)
 
     Orquesta:
     1. Buscar la competicion por ID
     2. Verificar que el usuario sea el creador
-    3. Verificar que este en estado DRAFT
+    3. Verificar que todavia se pueda borrar
     4. Eliminar la competicion del repositorio
     5. Commit de la transaccion
     """
@@ -70,7 +71,7 @@ class DeleteCompetitionUseCase:
         Raises:
             CompetitionNotFoundError: Si la competicion no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDeletableError: Si la competicion no esta en estado DRAFT
+            CompetitionNotDeletableError: Si la competicion ya no se puede borrar
         """
         async with self._uow:
             # 1. Buscar la competicion
@@ -86,11 +87,16 @@ class DeleteCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede eliminar la competicion")
 
-            # 3. Verificar que este en estado DRAFT
-            if not competition.is_draft():
+            # 3. Verificar que todavia se pueda borrar. El calendario se
+            #    consulta porque el estado se puede andar hacia atras sin
+            #    deshacerlo: un torneo ya jugado puede estar de vuelta en ACTIVE
+            rondas = await self._uow.rounds.find_by_competition(competition_id)
+            if not competition.allows_deletion(has_schedule=bool(rondas)):
                 raise CompetitionNotDeletableError(
-                    f"Solo se pueden eliminar competiciones en estado DRAFT. "
-                    f"Estado actual: {competition.status.value}"
+                    f"Solo se pueden eliminar competiciones mientras las inscripciones "
+                    f"siguen abiertas y sin calendario montado. "
+                    f"Estado actual: {competition.status.value}, "
+                    f"rondas: {len(rondas)}"
                 )
 
             # 4. Guardar datos para el response antes de eliminar

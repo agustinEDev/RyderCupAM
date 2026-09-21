@@ -488,7 +488,11 @@ async def update_competition(
     "/{competition_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Eliminar competición",
-    description="Elimina físicamente una competición (SOLO en estado DRAFT y SOLO el creador).",
+    description=(
+        "Elimina físicamente una competición, con todo lo que cuelga de ella. "
+        "Solo mientras las inscripciones siguen abiertas (DRAFT o ACTIVE) y solo "
+        "el creador o un administrador."
+    ),
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")
