@@ -30,6 +30,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
 )
+from src.modules.competition.application.services.enrollment_opener import (
+    EnrollmentOpener,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -122,12 +125,17 @@ def _matches_status_filter(competition_status, status_filter):
     return competition_status == status_filter.upper()
 
 
-async def _fetch_enrolled_competitions(
-    uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
-):
-    """Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó)."""
+async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids):
+    """Las competiciones donde el usuario está inscrito, sin filtrar por estado.
+
+    Solo las trae. Los filtros que dependen del estado van en
+    `_filtrar_inscritas`, y se aplican después de abrir las que toquen: este
+    camino no pasa por `ListCompetitionsUseCase`, así que la apertura programada
+    hay que aplicarla aquí también o «Mis competiciones» seguiría enseñando en
+    borrador la competición a la que a uno le invitaron, pasado su día (BE #331).
+    """
     enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
-    enrolled_competitions = []
+    candidatas = []
 
     for comp_id in enrolled_competition_ids:
         competition = await uow.competitions.find_by_id(comp_id)
@@ -135,15 +143,29 @@ async def _fetch_enrolled_competitions(
         if not competition or competition.id in created_competition_ids:
             continue
 
+        candidatas.append(competition)
+
+    return candidatas
+
+
+def _filtrar_inscritas(competitions, status_filter, enrollment_status_map):
+    """Aplica los filtros que dependen del ESTADO, ya con el estado definitivo.
+
+    Va después de abrir las que tocan: hacerlo antes filtraría por el estado
+    viejo, y una competición que acaba de abrirse se descartaría o se enseñaría
+    cerrada (BE #331).
+    """
+    resultado = []
+    for competition in competitions:
         enrollment_status = enrollment_status_map.get(competition.id)
 
         if _should_exclude_enrollment(enrollment_status, competition.status.value):
             continue
 
         if _matches_status_filter(competition.status.value, status_filter):
-            enrolled_competitions.append(competition)
+            resultado.append(competition)
 
-    return enrolled_competitions
+    return resultado
 
 
 async def _get_user_competitions(
@@ -170,19 +192,20 @@ async def _get_user_competitions(
 
     created_competition_ids = [c.id for c in created_competitions]
 
-    enrolled_competitions = await _fetch_enrolled_competitions(
-        uow,
-        enrollments,
-        created_competition_ids,
-        status_filter,
-        enrollment_status_map,
-    )
+    candidatas = await _fetch_enrolled_competitions(uow, enrollments, created_competition_ids)
 
     # Las que salen de tus inscripciones tambien pasan por el filtro: una fila
     # rechazada o retirada no se borra, y sin esto el expulsado recuperaba la
     # privada por aqui (BE #318, punto gemelo del listado)
-    return created_competitions + await use_case.visibles_para(
-        enrolled_competitions, str(current_user_id.value)
+    visibles = await use_case.visibles_para(candidatas, str(current_user_id.value))
+
+    # Abrir DESPUES de la visibilidad y ANTES del filtro por estado, igual que
+    # hace el caso de uso: a quien no se le ensena una privada tampoco se le
+    # abre de paso, y filtrar por el estado viejo tiraria la recien abierta
+    await EnrollmentOpener.abrir_las_que_toquen(visibles, uow, use_case.zona_del_campo)
+
+    return created_competitions + _filtrar_inscritas(
+        visibles, status_filter, enrollment_status_map
     )
 
 

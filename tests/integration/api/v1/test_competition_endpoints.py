@@ -19,6 +19,7 @@ from tests.conftest import (
     create_competition,
     create_draft_competition,
     create_golf_course,
+    estado_en_bd,
     set_auth_cookies,
 )
 
@@ -886,6 +887,96 @@ class TestDeleteCompetition:
 
         assert response.status_code == 400
         assert "CLOSED" in response.json()["detail"]
+
+
+class TestListingOpensScheduledCompetitions:
+    """BE #331: verla en un listado tambien la abre, no solo abrir su ficha."""
+
+    @pytest.mark.asyncio
+    async def test_listing_opens_a_scheduled_competition_whose_day_has_passed(
+        self, client: AsyncClient
+    ):
+        """Por HTTP, que es donde se murio esto la vez anterior.
+
+        En BE #327 la apertura funcionaba en 31 tests unitarios y no ocurria
+        jamas en produccion, porque ninguna ruta pasaba por el caso de uso. Este
+        test existe para que el listado no pueda quedarse asi.
+        """
+        admin = await create_admin_user(
+            client, "listado_admin@test.com", "AdminP@ssw0rd123!", "Listado", "Admin"
+        )
+        user = await create_authenticated_user(
+            client, "listado_club@test.com", "P@ssw0rd123!", "Listado", "Club"
+        )
+
+        # Empieza en 3 dias y abre 5 antes: su momento ya paso
+        empieza = date.today() + timedelta(days=3)
+        comp = await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": f"Publica programada {uuid.uuid4().hex[:8]}",
+                "start_date": empieza.isoformat(),
+                "end_date": (empieza + timedelta(days=2)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+                "enrollment_opens_days_before": 5,
+            },
+        )
+        assert comp["status"] == "DRAFT"
+
+        # La zona sale de las coordenadas del campo, no del pais (BE #305)
+        golf_course = await create_golf_course(
+            client,
+            user["cookies"],
+            golf_course_data={
+                "name": f"Campo con zona {uuid.uuid4().hex[:8]}",
+                "country_code": "ES",
+                "course_type": "STANDARD_18",
+                # Las coordenadas van DENTRO de location: sueltas se ignoran, el
+                # campo se crea sin zona y la competicion no abre nunca (BE #327)
+                "location": {"latitude": 40.4168, "longitude": -3.7038},
+                "tees": [
+                    {
+                        "identifier": "Blanco",
+                        "color": "WHITE",
+                        "tee_gender": "MALE",
+                        "course_rating": 72.5,
+                        "slope_rating": 135,
+                        "par": 72,
+                    },
+                ],
+                "holes": [
+                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
+                ],
+            },
+        )
+        await approve_golf_course(client, admin["cookies"], golf_course["id"])
+        set_auth_cookies(client, user["cookies"])
+        asociado = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+        )
+        assert asociado.status_code == 201, asociado.text
+
+        # Sin abrir su ficha en ningun momento: solo el listado. Y se comprueba
+        # contra la FILA GUARDADA, no con otra peticion: cualquier ruta que lea
+        # la competicion la abriria ella misma, asi que el test pasaria aunque
+        # el listado no hubiera hecho nada —o la hubiera abierto sin persistir,
+        # que es el fallo que de verdad hay que cazar
+        listado = await client.get("/api/v1/competitions", params={"status": "DRAFT"})
+        assert listado.status_code == 200
+        assert comp["id"] not in [c["id"] for c in listado.json()], (
+            "una vez abierta ya no es un borrador, asi que no puede salir "
+            "dentro de un listado filtrado por DRAFT"
+        )
+
+        guardado = await estado_en_bd(comp["id"])
+        assert guardado == "ACTIVE", (
+            "el listado tenia que haberla abierto y PERSISTIDO: en memoria no basta, "
+            f"la siguiente peticion la encontraria en borrador otra vez. Estado: {guardado}"
+        )
 
 
 class TestDeleteReopenedCompetition:

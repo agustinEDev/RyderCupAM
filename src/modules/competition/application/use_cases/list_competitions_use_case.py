@@ -4,6 +4,12 @@ Caso de Uso: Listar Competitions con filtros.
 Permite obtener lista de competiciones con filtros opcionales.
 """
 
+from src.modules.competition.application.ports.competition_timezone import (
+    ICompetitionTimezone,
+)
+from src.modules.competition.application.services.enrollment_opener import (
+    EnrollmentOpener,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -47,14 +53,32 @@ class ListCompetitionsUseCase:
     - Convertir entidades a DTOs
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zona_del_campo: ICompetitionTimezone | None = None,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para acceso a repositorios
+            zona_del_campo: De donde sale la zona horaria del campo que se juega.
+                Hace falta para abrir las competiciones programadas a las que ya
+                les toca: mirarlas en un listado tambien las abre (BE #331). Sin
+                ella el listado sigue funcionando, simplemente no abre nada.
         """
         self._uow = uow
+        self._zona_del_campo = zona_del_campo
+
+    @property
+    def zona_del_campo(self) -> ICompetitionTimezone | None:
+        """De donde sale la zona horaria, para el camino gemelo de la ruta.
+
+        «Mis competiciones» arma su lista por su cuenta, sin pasar por `execute`,
+        y necesita abrir lo que toque igual que este caso de uso (BE #331).
+        """
+        return self._zona_del_campo
 
     async def execute(
         self,
@@ -89,11 +113,40 @@ class ListCompetitionsUseCase:
                     status=status,
                     creator_id=creator_id,
                 )
-                return await self.visibles_para(encontradas, viewer_id, is_admin)
+                visibles = await self.visibles_para(encontradas, viewer_id, is_admin)
+                await EnrollmentOpener.abrir_las_que_toquen(
+                    visibles, self._uow, self._zona_del_campo
+                )
+                return self._los_que_siguen_cumpliendo(visibles, status)
 
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
-            return await self.visibles_para(competitions, viewer_id, is_admin)
+            visibles = await self.visibles_para(competitions, viewer_id, is_admin)
+
+            # Se abren DESPUES de filtrar la visibilidad: una privada que no se
+            # le ensena a quien mira tampoco se le abre de paso (BE #318)
+            await EnrollmentOpener.abrir_las_que_toquen(visibles, self._uow, self._zona_del_campo)
+            return self._los_que_siguen_cumpliendo(visibles, status)
+
+    @staticmethod
+    def _los_que_siguen_cumpliendo(
+        competitions: list[Competition], status: str | None
+    ) -> list[Competition]:
+        """Vuelve a aplicar el filtro de estado despues de abrir.
+
+        La consulta filtro por el estado que habia; abrir cambia el de algunas,
+        y devolverlas igual haria que una pestana «Borradores» pintase una
+        competicion con las inscripciones ya abiertas (BE #331).
+        """
+        if status is None:
+            return competitions
+
+        # `.upper()` como en todas las demas capas: la consulta normaliza
+        # (`CompetitionStatus(status.upper())`) y la ruta tambien, asi que
+        # comparar aqui en crudo hacia que `?status=active` devolviera vacio
+        # despues de haber traido las filas correctas
+        pedido = status.upper()
+        return [c for c in competitions if c.status.value == pedido]
 
     async def visibles_para(
         self,
@@ -160,6 +213,7 @@ class ListCompetitionsUseCase:
         if status:
             status_enum = CompetitionStatus(status.upper())
             competitions = await self._uow.competitions.find_by_status(status_enum)
+
 
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:

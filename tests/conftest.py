@@ -268,6 +268,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
 
+    # Publicada para los tests que necesitan comprobar que algo se PERSISTIO:
+    # cualquier ruta que lea la competicion puede abrirla ella misma, asi que un
+    # assert contra la API no distingue «se guardo» de «se acaba de abrir otra
+    # vez en memoria» (BE #331)
+    _URL_DE_LA_BD_DE_TEST["url"] = test_db_url
+
     # Generar ID único para este test (evita colisiones con rate limiter)
     test_client_id = f"test-{uuid.uuid4()}"
 
@@ -799,6 +805,29 @@ async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
             "enrollment_opens_days_before": 5,
         },
     )
+
+
+# Lo rellena la fixture `client` con la base de datos de ESTE test, que lleva el
+# id del worker de xdist: no hay una URL fija que se pueda leer del entorno
+_URL_DE_LA_BD_DE_TEST: dict[str, str] = {}
+
+
+async def estado_en_bd(competition_id: str) -> str | None:
+    """Lee el estado de una competición directamente de la base de datos."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.connect() as conn:
+            fila = await conn.execute(
+                text("SELECT status FROM competitions WHERE id = :id"),
+                {"id": competition_id},
+            )
+            encontrada = fila.first()
+            return encontrada[0] if encontrada else None
+    finally:
+        await engine.dispose()
 
 
 async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:

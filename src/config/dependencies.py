@@ -1625,6 +1625,7 @@ def get_create_competition_use_case(
 
 def get_list_competitions_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> ListCompetitionsUseCase:
     """
     Proveedor del caso de uso ListCompetitionsUseCase.
@@ -1634,7 +1635,14 @@ def get_list_competitions_use_case(
     2. Crea una instancia de `ListCompetitionsUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ListCompetitionsUseCase(uow)
+    # La zona del campo hace falta para abrir las programadas a las que ya les
+    # toca: verlas en un listado tambien las abre (BE #331). Sin esto el caso de
+    # uso funciona igual pero no abre nada, y una competicion seguiria
+    # anunciando «abre el martes» el miercoles
+    return ListCompetitionsUseCase(
+        uow,
+        zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_update_competition_use_case(
@@ -1669,7 +1677,7 @@ def get_get_competition_use_case(
     # «las nueve» son las nueve de donde se juega
     return GetCompetitionUseCase(
         uow,
-        zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses),
+        zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
     )
 
 

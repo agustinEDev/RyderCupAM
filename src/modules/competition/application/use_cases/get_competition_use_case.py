@@ -8,6 +8,9 @@ from src.modules.competition.application.exceptions import CompetitionNotFoundEr
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
+from src.modules.competition.application.services.enrollment_opener import (
+    EnrollmentOpener,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -74,32 +77,8 @@ class GetCompetitionUseCase:
                     f"No existe competición con ID {competition_id.value}"
                 )
 
-            await self._abrir_si_toca(competition)
+            await EnrollmentOpener.abrir_las_que_toquen(
+                [competition], self._uow, self._zona_del_campo
+            )
 
             return competition
-
-    async def _abrir_si_toca(self, competition: Competition) -> None:
-        """Abre las inscripciones si ya paso su hora.
-
-        La hora escrita es local del campo donde se juega, asi que hace falta
-        su zona. Sin campo todavia —o con uno cuya zona no se conoce— el torneo
-        espera: no se adivina, porque abrir a deshora anuncia una cosa y hace
-        otra (decidido el 20 sep).
-        """
-        if self._zona_del_campo is None:
-            return
-
-        # Las dos preguntas baratas primero. Casi ninguna competicion programa
-        # su apertura, y resolver la zona baja a la base de datos a traerse el
-        # campo entero con sus barras para leer una cadena
-        if competition.enrollment_opens_days_before is None:
-            return
-        if not competition.allows_enrollment_opening():
-            return
-
-        zona = await self._zona_del_campo.for_competition(competition)
-        if not competition.due_to_open(zona):
-            return
-
-        competition.activate()
-        await self._uow.competitions.update(competition)
