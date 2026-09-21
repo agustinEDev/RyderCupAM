@@ -86,16 +86,16 @@ class TestSendInvitationByUserIdUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-        async with comp_uow:
-            competition = await comp_uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await comp_uow.competitions.update(competition)
-            await comp_uow.commit()
 
         return created
 
     async def _create_draft_competition(self, comp_uow, creator_id):
-        """Helper: crea una competicion y la deja en DRAFT, recien creada."""
+        """Helper: crea una competicion que todavia espera su hora.
+
+        Desde BE #332 una competicion nace con las inscripciones abiertas salvo
+        que tenga apertura programada, asi que la unica que sigue en DRAFT —y
+        por tanto la unica a la que una invitacion puede abrirle nada— es esa.
+        """
         create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
@@ -104,6 +104,7 @@ class TestSendInvitationByUserIdUseCase:
             main_country="ES",
             play_mode="SCRATCH",
             max_players=24,
+            enrollment_opens_days_before=5,
         )
         return await create_uc.execute(request, creator_id)
 

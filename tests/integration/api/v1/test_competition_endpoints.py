@@ -17,6 +17,7 @@ from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
     create_competition,
+    create_draft_competition,
     create_golf_course,
     set_auth_cookies,
 )
@@ -55,7 +56,7 @@ class TestCreateCompetition:
         assert response.status_code == 201
         data = response.json()
         assert data["name"] == "Ryder Cup Integration Test"
-        assert data["status"] == "DRAFT"
+        assert data["status"] == "ACTIVE"
         assert "id" in data
 
     @pytest.mark.asyncio
@@ -157,7 +158,8 @@ class TestListCompetitions:
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
 
-        # Crear otra en DRAFT
+        # Crear otra que siga en DRAFT: desde BE #332 la unica que espera es
+        # la que tiene apertura programada
         start = date.today() + timedelta(days=90)
         end = start + timedelta(days=3)
         await create_competition(
@@ -171,6 +173,7 @@ class TestListCompetitions:
                 "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
+                "enrollment_opens_days_before": 5,
             },
         )
 
@@ -958,7 +961,7 @@ class TestCompetitionStateTransitions:
             client, "activator@test.com", "P@ssw0rd123!", "Activate", "User"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
@@ -991,7 +994,7 @@ class TestCompetitionStateTransitions:
         )
 
         # 1. Crear (DRAFT)
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
         assert comp["status"] == "DRAFT"
 
         # 2. Activar (ACTIVE)
@@ -1026,7 +1029,7 @@ class TestCompetitionStateTransitions:
             client, "invalid_trans@test.com", "P@ssw0rd123!", "Invalid", "Trans"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Intentar cerrar inscripciones desde DRAFT (debe ser ACTIVE)
         response = await client.post(
@@ -1043,7 +1046,7 @@ class TestCompetitionStateTransitions:
             client, "revert_status@test.com", "P@ssw0rd123!", "Revert", "Status"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a IN_PROGRESS
         r1 = await client.post(
@@ -1074,7 +1077,7 @@ class TestCompetitionStateTransitions:
             client, "reopen_enroll@test.com", "P@ssw0rd123!", "Reopen", "Enroll"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a CLOSED
         r1 = await client.post(
@@ -1120,7 +1123,7 @@ class TestCompetitionStateTransitions:
             client, "revert_to_ip@test.com", "P@ssw0rd123!", "Revert", "ToInProgress"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a COMPLETED
         r1 = await client.post(
@@ -1710,14 +1713,13 @@ class TestCompetitionGolfCourses:
 
 # Del reloj y no del calendario: una fecha fija hace que el test empiece a
 # fallar solo el dia en que queda por detras de «ahora»
-APERTURA = (datetime.now() + timedelta(days=30)).replace(microsecond=0, second=0)
 
 
 class TestScheduledEnrollmentOpening:
-    """BE #319: la hora de apertura tiene que llegar y volver por la API."""
+    """BE #319, #332: los dias de antelacion tienen que llegar y volver."""
 
     @pytest.mark.asyncio
-    async def test_the_scheduled_hour_survives_the_round_trip(self, client: AsyncClient):
+    async def test_the_scheduled_days_survive_the_round_trip(self, client: AsyncClient):
         """Se manda al crear y se lee al consultar.
 
         Guardarla sin devolverla deja el formulario de edicion en blanco y al
@@ -1735,26 +1737,82 @@ class TestScheduledEnrollmentOpening:
                 "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
-                "enrollment_opens_at": APERTURA.isoformat(),
+                "enrollment_opens_days_before": 5,
             },
             cookies=user["cookies"],
         )
 
         assert creada.status_code == 201
-        assert creada.json()["enrollment_opens_at"] == APERTURA.isoformat()
+        assert creada.json()["enrollment_opens_days_before"] == 5
 
         detalle = await client.get(
             f"/api/v1/competitions/{creada.json()['id']}", cookies=user["cookies"]
         )
 
         assert detalle.status_code == 200
-        assert detalle.json()["enrollment_opens_at"] == APERTURA.isoformat()
+        assert detalle.json()["enrollment_opens_days_before"] == 5
 
     @pytest.mark.asyncio
-    async def test_an_hour_with_an_offset_is_refused(self, client: AsyncClient):
-        """`toISOString()` del navegador acaba en Z, y eso no se guarda."""
+    async def test_without_days_it_is_born_with_enrolment_open(self, client: AsyncClient):
+        """Sin dias programados nace ABIERTA, en una sola llamada (BE #332).
+
+        Nadie deberia pulsar un boton cuyo unico trabajo es mover un estado. Y
+        va en la misma operacion: crear y activar por separado dejaria la
+        competicion creada y cerrada si falla la segunda, con el organizador
+        creyendo que esta abierta.
+        """
         user = await create_authenticated_user(
-            client, "apertura_z@test.com", "P@ssw0rd123!", "Club", "ConHuso"
+            client, "nace_abierta@test.com", "P@ssw0rd123!", "Nace", "Abierta"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo entre amigos",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "ACTIVE"
+        assert creada.json()["enrollment_opens_days_before"] is None
+
+    @pytest.mark.asyncio
+    async def test_with_days_it_waits_in_draft(self, client: AsyncClient):
+        """Con dias puestos espera: DRAFT significa «esperando su hora»."""
+        user = await create_authenticated_user(
+            client, "espera_su_hora@test.com", "P@ssw0rd123!", "Espera", "SuHora"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_days_before": 5,
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "DRAFT"
+
+    @pytest.mark.asyncio
+    async def test_more_than_a_fortnight_is_refused(self, client: AsyncClient):
+        """Dos semanas es el tope: 15 dias no entra (BE #332).
+
+        El rango se comprueba en la puerta, no solo en el dominio: un 15 que
+        colara dejaria una apertura que nadie puede volver a elegir en la app.
+        """
+        user = await create_authenticated_user(
+            client, "apertura_rango@test.com", "P@ssw0rd123!", "Club", "FueraDeRango"
         )
 
         respuesta = await client.post(
@@ -1765,7 +1823,7 @@ class TestScheduledEnrollmentOpening:
                 "end_date": "2026-11-03",
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
-                "enrollment_opens_at": APERTURA.isoformat() + "Z",
+                "enrollment_opens_days_before": 15,
             },
             cookies=user["cookies"],
         )
@@ -1773,7 +1831,7 @@ class TestScheduledEnrollmentOpening:
         assert respuesta.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_looking_at_it_after_the_hour_opens_it(self, client: AsyncClient):
+    async def test_looking_at_it_after_the_opening_day_opens_it(self, client: AsyncClient):
         """Consultar la competicion pasada su hora es lo que la abre.
 
         No hay ningun proceso de fondo: si el endpoint no pasa por el caso de
@@ -1787,16 +1845,15 @@ class TestScheduledEnrollmentOpening:
             client, "abre_sola@test.com", "P@ssw0rd123!", "Club", "AbreSola"
         )
 
-        ayer = (datetime.now() - timedelta(days=1)).replace(microsecond=0)
         creada = await client.post(
             "/api/v1/competitions",
             json={
                 "name": "Torneo que ya abrio",
-                "start_date": (ayer + timedelta(days=30)).date().isoformat(),
-                "end_date": (ayer + timedelta(days=32)).date().isoformat(),
+                "start_date": (datetime.now() + timedelta(days=3)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=5)).date().isoformat(),
                 "main_country": "ES",
                 "play_mode": "SCRATCH",
-                "enrollment_opens_at": ayer.isoformat(),
+                "enrollment_opens_days_before": 5,
             },
             cookies=user["cookies"],
         )

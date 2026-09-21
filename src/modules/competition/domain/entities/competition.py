@@ -49,6 +49,12 @@ MIN_PLAYERS = 2
 MAX_PLAYERS = 100
 # 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
 DEFAULT_MAX_PLAYERS = 12
+
+# Cuantos dias antes del torneo pueden abrirse solas las inscripciones (BE #332).
+# Cero no es «antes» de nada, y dos semanas es el tope decidido el 21 sep: con
+# mas antelacion la apertura deja de elegirse en una lista y se teclea.
+MIN_ENROLLMENT_OPENING_DAYS = 1
+MAX_ENROLLMENT_OPENING_DAYS = 14
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
 
@@ -114,7 +120,7 @@ class Competition:
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
-        enrollment_opens_at: datetime | None = None,
+        enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
     ):
         # Validaciones de invariantes
@@ -135,9 +141,9 @@ class Competition:
         self._max_players = max_players
         self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
-        self._enrollment_opens_at = enrollment_opens_at
+        self._enrollment_opens_days_before = enrollment_opens_days_before
         self._visibility = visibility
-        self._validate_enrollment_opening(enrollment_opens_at, dates)
+        self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -158,7 +164,7 @@ class Competition:
         max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
-        enrollment_opens_at: datetime | None = None,
+        enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
     ) -> "Competition":
         """
@@ -178,7 +184,7 @@ class Competition:
             max_players=max_players,
             team_assignment=team_assignment,
             max_playing_handicap=max_playing_handicap,
-            enrollment_opens_at=enrollment_opens_at,
+            enrollment_opens_days_before=enrollment_opens_days_before,
             visibility=visibility,
             status=CompetitionStatus.DRAFT,
         )
@@ -313,34 +319,28 @@ class Competition:
         return self._status == CompetitionStatus.ACTIVE
 
     @property
-    def enrollment_opens_at(self) -> datetime | None:
-        """La hora a la que abren solas, tal como la escribio el organizador.
+    def enrollment_opens_days_before(self) -> int | None:
+        """Cuantos dias antes del torneo se abren solas las inscripciones.
 
-        Sin huso a proposito: es hora LOCAL del campo donde se juega, y la zona
-        se resuelve al mirarla (BE #319).
+        `None` es lo normal: la mayoria de torneos nacen ya abiertos.
         """
-        return self._enrollment_opens_at
+        return self._enrollment_opens_days_before
 
-    def _validate_enrollment_opening(
-        self, cuando: datetime | None, dates: DateRange | None = None
-    ) -> None:
-        """La apertura tiene que caer antes de que empiece a jugarse.
+    def _validate_enrollment_opening(self, dias: int | None) -> None:
+        """Entre 1 y 14 dias antes, o nada.
 
-        Abrir inscripciones con el torneo ya en marcha no significa nada, y un
-        ano mal tecleado —2027 en vez de 2026— lo programaba para despues de
-        haber terminado, sin que nadie dijera nada (BE #319).
-
-        En el pasado si se permite: eso quiere decir «abrela ya», y es lo que
-        pasa al poner una hora que acaba de cumplirse.
+        Abajo, cero dias no es «antes» de nada: para abrir ya, no se programa.
+        Arriba, dos semanas es el tope que se decidio (21 sep): mas antelacion
+        deja de elegirse en una lista y se teclea, y un torneo que abre
+        inscripciones con meses de antelacion las abre a mano.
         """
-        if cuando is None:
+        if dias is None:
             return
 
-        rango = dates or self._dates
-        if cuando.date() > rango.start_date:
+        if not MIN_ENROLLMENT_OPENING_DAYS <= dias <= MAX_ENROLLMENT_OPENING_DAYS:
             raise ValueError(
-                f"Las inscripciones no pueden abrirse el {cuando.date().isoformat()}: "
-                f"la competición comienza el {rango.start_date.isoformat()}."
+                f"Las inscripciones se abren entre {MIN_ENROLLMENT_OPENING_DAYS} y "
+                f"{MAX_ENROLLMENT_OPENING_DAYS} días antes del torneo. Recibido: {dias}."
             )
 
     def _update_team_names(self, team_1_name: str | None, team_2_name: str | None) -> None:
@@ -359,16 +359,30 @@ class Competition:
         if team_2_name is not None:
             self._team_2_name = team_2_name
 
-    def schedule_enrollment_opening(self, cuando: datetime | None) -> None:
+    def schedule_enrollment_opening(self, dias: int | None) -> None:
         """Programa —o desprograma— la apertura de las inscripciones.
 
         `None` aqui significa QUITAR la fecha, no «dejala como esta»: quien se
         arrepiente de haberla puesto tiene que poder deshacerlo. Por eso no va
         en `update_info`, donde `None` es lo contrario (BE #319).
         """
-        self._validate_enrollment_opening(cuando)
-        self._enrollment_opens_at = cuando
+        self._validate_enrollment_opening(dias)
+
+        # Programar lo que ya esta abierto no significa nada, y aceptarlo en
+        # silencio dejaba al organizador con un «abre en 5 dias» de vuelta en
+        # cada lectura mientras la gente ya se apuntaba
+        if dias is not None and self._status != CompetitionStatus.DRAFT:
+            raise ValueError(
+                "No se puede programar la apertura: las inscripciones ya están abiertas."
+            )
+
+        self._enrollment_opens_days_before = dias
         self._updated_at = datetime.now()
+
+        # Quitar los dias es decir «abrela ya»: sin programacion no hay nada que
+        # esperar, y dejarla en DRAFT la varaba sin salida (BE #332)
+        if dias is None and self._status == CompetitionStatus.DRAFT:
+            self.activate()
 
     @property
     def visibility(self) -> Visibility:
@@ -402,7 +416,9 @@ class Competition:
         """
         if self._status != CompetitionStatus.DRAFT:
             return False
-        return EnrollmentOpeningService.is_due(self._enrollment_opens_at, timezone)
+        return EnrollmentOpeningService.is_due(
+            self._dates.start_date, self._enrollment_opens_days_before, timezone
+        )
 
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
@@ -445,6 +461,11 @@ class Competition:
 
         self._status = CompetitionStatus.ACTIVE
         self._updated_at = datetime.now()
+
+        # La apertura programada queda cumplida al abrir, venga de su hora, de
+        # una invitacion o del boton. Conservarla haria que la ficha siguiera
+        # anunciando «abre 5 dias antes» de algo que ya abrio (BE #332)
+        self._enrollment_opens_days_before = None
 
         event = CompetitionActivatedEvent(
             competition_id=str(self._id),
@@ -615,7 +636,6 @@ class Competition:
         max_players: int | None = None,
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
-        enrollment_opens_at: datetime | None = None,
         visibility: Visibility | None = None,
     ) -> None:
         """
@@ -635,10 +655,9 @@ class Competition:
             self._name = name
 
         if dates is not None:
-            # La apertura ya puesta tiene que seguir cabiendo: adelantar el
-            # torneo por detras la dejaria despues del comienzo
-            if enrollment_opens_at is None:
-                self._validate_enrollment_opening(self._enrollment_opens_at, dates)
+            # Mover las fechas ya no puede invalidar la apertura: son dias de
+            # antelacion, asi que la apertura se mueve CON el torneo. Eso es lo
+            # que se buscaba al dejar de guardar el instante (BE #332)
             self._dates = dates
 
         if location is not None:
@@ -657,10 +676,6 @@ class Competition:
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
             self._max_playing_handicap = max_playing_handicap
-
-        if enrollment_opens_at is not None:
-            self._validate_enrollment_opening(enrollment_opens_at, dates)
-            self._enrollment_opens_at = enrollment_opens_at
 
         if visibility is not None:
             self._visibility = visibility

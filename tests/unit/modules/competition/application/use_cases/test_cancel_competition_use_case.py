@@ -107,11 +107,6 @@ class TestCancelCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Activar
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
 
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)
@@ -148,7 +143,6 @@ class TestCancelCompetitionUseCase:
         # Llevar a IN_PROGRESS
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             await uow.competitions.update(competition)
@@ -268,7 +262,6 @@ class TestCancelCompetitionUseCase:
         # Llevar a COMPLETED
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             competition.complete()
@@ -340,11 +333,6 @@ class TestCancelCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Activar
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
 
         # Act: Cancelar competición
         cancel_use_case = CancelCompetitionUseCase(uow)

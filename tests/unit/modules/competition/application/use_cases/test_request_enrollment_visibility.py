@@ -57,11 +57,6 @@ class TestAskingForAPlace:
             ),
             creator_id,
         )
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
         return created
 
     async def test_a_stranger_cannot_ask_to_join_a_private_one(self, uow, creator_id):

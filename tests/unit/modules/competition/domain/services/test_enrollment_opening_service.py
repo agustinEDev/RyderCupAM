@@ -1,140 +1,106 @@
-"""A que hora se abren solas las inscripciones (BE #319).
+"""Tests de la apertura derivada de los dias de antelacion (BE #332)."""
 
-Dos maneras de arrancar un torneo, y ninguna es pulsar un boton:
-
-- **Entre amigos**: no hay fecha, y la primera invitacion lo abre (BE #319a).
-- **Club**: se crea hoy y las inscripciones abren el miercoles a las nueve. Se
-  pone la fecha, y se abre sola.
-
-«Las nueve» son las nueve **del campo donde se juega**, que es lo que el
-organizador tiene en la cabeza al escribirlo. La zona sale de las coordenadas
-del campo, no del pais: tres puntos espanoles dan `Europe/Madrid`,
-`Atlantic/Canary` y `Africa/Ceuta` (BE #305).
-
-Y quien decide que ya es la hora es el SERVIDOR. Si lo decidiera el movil,
-cambiarle el reloj abriria el torneo antes de tiempo.
-
-Sin campo todavia, o con un campo sin zona conocida, **no se abre sola**:
-decidido el 20 sep, no se adivina. Ahi sigue abriendo la invitacion.
-"""
-
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
-
-import pytest
 
 from src.modules.competition.domain.services.enrollment_opening_service import (
     EnrollmentOpeningService,
 )
 
-MADRID = "Europe/Madrid"
-CANARIAS = "Atlantic/Canary"
 
+class TestOpensAt:
+    """`opens_at` deriva el instante de la fecha de inicio y los dias."""
 
-class TestWhenItOpens:
-    """La hora escrita, leida en la zona del campo."""
+    def test_cuenta_los_dias_hacia_atras_desde_el_comienzo(self):
+        """Cinco dias antes del 10 de junio es el 5, a las 00:00 del campo."""
+        abre = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, "Europe/Madrid")
 
-    def test_the_hour_is_read_at_the_course(self):
-        """Las nueve en Madrid y las nueve en Canarias no son el mismo instante."""
-        escrito = datetime(2026, 10, 14, 9, 0)
+        assert abre == datetime(2026, 6, 5, 0, 0, tzinfo=ZoneInfo("Europe/Madrid"))
 
-        en_madrid = EnrollmentOpeningService.opens_at(escrito, MADRID)
-        en_canarias = EnrollmentOpeningService.opens_at(escrito, CANARIAS)
+    def test_un_dia_antes_es_la_vispera(self):
+        """El minimo, 1, abre el dia anterior al torneo."""
+        abre = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 1, "Europe/Madrid")
 
-        assert en_madrid == datetime(2026, 10, 14, 9, 0, tzinfo=ZoneInfo(MADRID))
-        assert en_canarias == datetime(2026, 10, 14, 9, 0, tzinfo=ZoneInfo(CANARIAS))
-        assert en_canarias > en_madrid
+        assert abre.date() == date(2026, 6, 9)
 
-    def test_without_a_date_there_is_no_hour(self):
-        """Sin fecha manda la invitacion, no el reloj."""
-        assert EnrollmentOpeningService.opens_at(None, MADRID) is None
+    def test_catorce_dias_antes_cruza_el_mes(self):
+        """El maximo, 14, restando por encima del cambio de mes."""
+        abre = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 14, "Europe/Madrid")
 
-    def test_without_a_zone_there_is_no_hour(self):
-        """Sin campo, o con un campo sin zona: no se adivina."""
-        assert EnrollmentOpeningService.opens_at(datetime(2026, 10, 14, 9, 0), None) is None
+        assert abre.date() == date(2026, 5, 27)
 
-    def test_an_unknown_zone_does_not_bring_anything_down(self):
-        """Una zona que no existe no puede tumbar la lectura de la pantalla."""
-        assert EnrollmentOpeningService.opens_at(datetime(2026, 10, 14, 9, 0), "Marte/Olympus") is None
+    def test_sin_dias_no_hay_nada_que_calcular(self):
+        """La mayoria de torneos no programan nada: ahi manda la invitacion."""
+        assert EnrollmentOpeningService.opens_at(date(2026, 6, 10), None, "Europe/Madrid") is None
 
+    def test_sin_zona_espera_en_vez_de_adivinar(self):
+        """Sin campo todavia no hay zona, y abrir a deshora anuncia otra cosa."""
+        assert EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, None) is None
 
-class TestWhetherItIsDue:
-    """Si ya toca abrir, con el reloj del servidor."""
+    def test_una_zona_que_no_existe_no_tumba_la_lectura(self):
+        """Esto se llama al pintar la pantalla: no puede reventar."""
+        assert EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, "Marte/Olympus") is None
 
-    def test_an_hour_already_past_is_due(self):
-        hace_una_hora = datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)
+    def test_la_zona_es_la_del_campo_no_la_del_servidor(self):
+        """Las 00:00 de Canarias no son las de Madrid: una hora de diferencia."""
+        madrid = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, "Europe/Madrid")
+        canarias = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, "Atlantic/Canary")
 
-        assert EnrollmentOpeningService.is_due(hace_una_hora.replace(tzinfo=None), MADRID) is True
+        assert madrid.utcoffset() != canarias.utcoffset()
+        assert canarias > madrid
 
-    def test_an_hour_still_to_come_is_not(self):
-        dentro_de_una_hora = datetime.now(ZoneInfo(MADRID)) + timedelta(hours=1)
+    def test_una_medianoche_que_no_existe_no_revienta(self):
+        """Hay zonas donde el cambio de hora se come las 00:00.
 
-        assert EnrollmentOpeningService.is_due(dentro_de_una_hora.replace(tzinfo=None), MADRID) is False
-
-    @pytest.mark.parametrize("zona", [None, "Marte/Olympus"])
-    def test_without_a_usable_zone_it_is_never_due(self, zona):
-        """Nunca se abre a ciegas: sin zona, el torneo espera al campo."""
-        hace_una_hora = datetime.now(UTC) - timedelta(hours=1)
-
-        assert EnrollmentOpeningService.is_due(hace_una_hora.replace(tzinfo=None), zona) is False
-
-    def test_the_canary_hour_has_not_arrived_when_the_madrid_one_has(self):
-        """La misma hora escrita, dos campos: en uno toca y en el otro todavia no.
-
-        Justo en esa hora de diferencia esta el sentido de leerla en el campo:
-        con la zona equivocada, el torneo canario abriria una hora antes de lo
-        que su organizador anuncio.
+        En Santiago de Chile el reloj salta de las 23:59 del sabado a la 1:00
+        del domingo, asi que las 00:00 de ese dia no existen en el calendario.
+        No es motivo para dejar el torneo sin abrir: `fold=0` lo resuelve en el
+        instante que habria tenido sin el salto, y el reloj local lo ensena como
+        la 1:00. Abrir una hora mas tarde ese dia concreto es inofensivo;
+        quedarse sin abrir, no.
         """
-        ahora_en_madrid = datetime.now(ZoneInfo(MADRID)).replace(tzinfo=None)
+        abre = EnrollmentOpeningService.opens_at(date(2026, 9, 11), 5, "America/Santiago")
 
-        assert EnrollmentOpeningService.is_due(ahora_en_madrid, MADRID) is True
-        assert EnrollmentOpeningService.is_due(ahora_en_madrid, CANARIAS) is False
+        # El instante en UTC es lo unico que prueba donde cayo de verdad: la
+        # fecha de pared seria la misma aunque el calculo estuviera mal, porque
+        # `combine` guarda el dia que se le da pase lo que pase con el huso.
+        # Las 00:00 inexistentes del 6 caen en el instante que habrian tenido
+        # sin el salto, que alli se lee como la 1:00
+        assert abre.astimezone(UTC) == datetime(2026, 9, 6, 4, 0, tzinfo=UTC)
+        # Y ese instante, leido en el reloj del campo, son la 1:00 — hay que
+        # pasar por UTC para verlo: `astimezone` sobre un datetime que ya lleva
+        # esa zona no lo normaliza y devolveria las 00:00 que no existieron
+        en_el_campo = abre.astimezone(UTC).astimezone(ZoneInfo("America/Santiago"))
+        assert en_el_campo.hour == 1
 
 
-class TestTheNightTheClocksChange:
-    """Dos horas del calendario que no son una hora del reloj.
+class TestIsDue:
+    """`is_due` lo decide el reloj del servidor, nunca el del movil."""
 
-    La madrugada en que se cambia la hora, una hora local puede no existir —en
-    Madrid, el 29 de marzo de 2026 salta de las 2:00 a las 3:00— o existir dos
-    veces —el 25 de octubre las 2:30 pasan dos veces—. `replace(tzinfo=...)` se
-    las traga sin rechistar y elige por su cuenta, asi que la apertura caia a un
-    instante que nadie habia pedido.
+    def test_ya_paso_la_hora(self):
+        ayer = date.today()
+        assert EnrollmentOpeningService.is_due(ayer, 1, "Europe/Madrid") is True
 
-    La politica, escrita: la que existe dos veces se queda con la primera
-    pasada —abre antes, no despues—, y la que no existe cae en el mismo
-    instante que habria tenido sin el salto. Ninguna se rechaza: son horas
-    legitimas del calendario, y quien escribe «2:30» no tiene por que saberse
-    los cambios de hora de memoria.
-    """
+    def test_todavia_no_toca(self):
+        # Con timedelta y no `replace(year=...)`: el 29 de febrero de un bisiesto
+        # ese replace revienta con «day is out of range for month»
+        dentro_de_un_mes = date.today() + timedelta(days=30)
+        assert EnrollmentOpeningService.is_due(dentro_de_un_mes, 1, "Europe/Madrid") is False
 
-    def test_an_hour_that_does_not_exist_lands_where_it_would_have(self):
-        """Las 2:30 del 29 de marzo de 2026 no existen en Madrid.
+    def test_sin_dias_nunca_toca(self):
+        assert EnrollmentOpeningService.is_due(date(2020, 1, 1), None, "Europe/Madrid") is False
 
-        El reloj salta de las 2:00 a las 3:00. Esa hora cae en el instante que
-        le habria tocado sin el salto —01:30 UTC—, que el reloj local ya
-        muestra como las 3:30. Ni se adelanta ni se retrasa en absoluto.
+    def test_sin_zona_nunca_toca(self):
+        """Nunca se abre a ciegas: sin campo, el torneo espera."""
+        assert EnrollmentOpeningService.is_due(date(2020, 1, 1), 5, None) is False
+
+    def test_el_instante_lleva_huso_para_poder_compararlo_en_utc(self):
+        """Si saliera sin huso, `is_due` reventaria al compararlo con `now(UTC)`.
+
+        Es lo que hace que decida el reloj del SERVIDOR y no el del movil: se
+        comparan instantes, no horas de calendario.
         """
-        no_existe = datetime(2026, 3, 29, 2, 30)
+        abre = EnrollmentOpeningService.opens_at(date(2026, 6, 10), 5, "Europe/Madrid")
 
-        abre = EnrollmentOpeningService.opens_at(no_existe, MADRID)
-
-        assert abre is not None
-        assert abre.astimezone(UTC) == datetime(2026, 3, 29, 1, 30, tzinfo=UTC)
-
-    def test_an_hour_that_happens_twice_takes_the_first(self):
-        """Las 2:30 del 25 de octubre de 2026 pasan dos veces en Madrid."""
-        ambigua = datetime(2026, 10, 25, 2, 30)
-
-        abre = EnrollmentOpeningService.opens_at(ambigua, MADRID)
-
-        assert abre is not None
-        # La primera pasada, con el desfase de verano todavia puesto
-        assert abre.utcoffset() == timedelta(hours=2)
-
-    def test_an_ordinary_hour_is_left_alone(self):
-        """Lo de todos los demas dias del ano no se toca."""
-        normal = datetime(2026, 10, 14, 9, 0)
-
-        abre = EnrollmentOpeningService.opens_at(normal, MADRID)
-
-        assert abre == datetime(2026, 10, 14, 9, 0, tzinfo=ZoneInfo(MADRID))
+        assert abre.tzinfo is not None
+        assert abre.utcoffset() is not None

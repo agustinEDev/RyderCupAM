@@ -776,11 +776,48 @@ async def create_competition(
     return response.json()
 
 
+async def create_draft_competition(client: AsyncClient, cookies: dict) -> dict:
+    """Helper para crear una competición que todavía espera su hora.
+
+    Desde BE #332 una competición nace con las inscripciones abiertas, y la
+    única que sigue en DRAFT es la que tiene apertura programada. Los tests de
+    transiciones necesitan esa, porque son las que todavía pueden activarse.
+    """
+    import uuid
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=30)
+    return await create_competition(
+        client,
+        cookies,
+        {
+            "name": f"Torneo programado {uuid.uuid4().hex[:8]}",
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=3)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+            "enrollment_opens_days_before": 5,
+        },
+    )
+
+
 async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
-    """Helper para activar una competición (DRAFT -> ACTIVE)."""
+    """Helper para dejar una competición con las inscripciones abiertas.
+
+    Desde BE #332 una competición nace ya ACTIVE salvo que se le den días de
+    apertura, así que activar solo hace falta cuando todavía está esperando su
+    hora. Se comprueba el estado en vez de activar a ciegas: llamar a `/activate`
+    sobre una ya abierta es un 400, y los tests que solo quieren una competición
+    abierta no deberían tener que saber cómo nació.
+    """
     # Establecer cookies en el cliente (evita DeprecationWarning de httpx)
     client.cookies.clear()
     client.cookies.update(cookies)
+
+    actual = await client.get(f"/api/v1/competitions/{competition_id}")
+    assert actual.status_code == 200, f"Failed to read competition: {actual.text}"
+    if actual.json()["status"] != "DRAFT":
+        return actual.json()
 
     response = await client.post(f"/api/v1/competitions/{competition_id}/activate")
     assert response.status_code == 200, f"Failed to activate competition: {response.text}"

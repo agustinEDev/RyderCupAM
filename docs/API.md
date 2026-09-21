@@ -477,12 +477,12 @@ Returns a `UserRolesResponseDTO` object detailing the user's roles.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/competitions` | POST | Yes | Create competition (DRAFT status) |
+| `/competitions` | POST | Yes | Create competition (ACTIVE, or DRAFT if a scheduled opening is given) |
 | `/competitions` | GET | No | List competitions with filters |
 | `/competitions/{id}` | GET | No | Get competition by ID |
-| `/competitions/{id}` | PUT | Yes | Update (DRAFT only, creator only) |
-| `/competitions/{id}` | DELETE | Yes | Delete (DRAFT only, creator only) |
-| `/competitions/{id}/activate` | POST | Yes | Transition DRAFT → ACTIVE |
+| `/competitions/{id}` | PUT | Yes | Update (DRAFT or ACTIVE, creator or admin) |
+| `/competitions/{id}` | DELETE | Yes | Delete (DRAFT, ACTIVE or CANCELLED, no schedule, creator or admin) |
+| `/competitions/{id}/activate` | POST | Yes | Transition DRAFT → ACTIVE (brings a scheduled opening forward) |
 | `/competitions/{id}/close-enrollments` | POST | Yes | Transition ACTIVE → CLOSED |
 | `/competitions/{id}/start` | POST | Yes | Transition CLOSED → IN_PROGRESS |
 | `/competitions/{id}/complete` | POST | Yes | Transition IN_PROGRESS → COMPLETED |
@@ -524,6 +524,8 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `team_assignment` (enum, required: "RANDOM" | "MANUAL")
 - `team_1_name` (string, optional, max 50)
 - `team_2_name` (string, optional, max 50)
+- `visibility` (enum, optional: "PRIVATE" | "PUBLIC", default "PRIVATE") — a private competition is invisible to anyone not in it, and a place cannot be requested without an invitation
+- `enrollment_opens_days_before` (int, optional, 1-14) — how many days before the tournament enrolment opens by itself. Omit it and the competition is born with enrolment already **open**; send it and the competition waits in `DRAFT`. On update, `null` **cancels** the schedule (it does not mean "leave it alone")
 
 ### Query Parameters (List)
 
@@ -533,6 +535,20 @@ Use when the creator needs to add or remove players after closing enrollments. R
 - `my_competitions` (bool, optional) - Only competitions where user is creator or enrolled
 - `search_name` (string, optional) - Partial search in name (case-insensitive)
 - `search_creator` (string, optional) - Partial search in creator name
+
+### Scheduled Enrolment Opening
+
+A competition is born with **enrolment open** unless `enrollment_opens_days_before` is given. With it, the competition waits in `DRAFT` until its opening moment passes.
+
+The moment is **not stored**: it is derived on every read as `start_date − days`, at **00:00 in the time zone of the course being played**. Moving the tournament's dates therefore moves the opening with it.
+
+Three things follow from that, and none of them is obvious:
+
+- **The zone comes from the course's coordinates**, never from the country: three Spanish points give `Europe/Madrid`, `Atlantic/Canary` and `Africa/Ceuta`. **With no course attached there is no zone, so the competition never opens by itself** — it waits rather than guessing.
+- **Whoever reads the competition after that moment is what opens it.** There is no scheduled job in this backend, exactly as there is none for scoring opening at its session hour.
+- The server's clock decides. Nothing about the opening is taken from the client.
+
+If the days asked for exceed the days left until the tournament starts, the opening is already in the past and the competition opens on the first read. That is deliberate — a past moment means "open it now" — but the caller gets something sooner than asked for, and the UI should say so.
 
 ### Competition Response (Computed Fields)
 

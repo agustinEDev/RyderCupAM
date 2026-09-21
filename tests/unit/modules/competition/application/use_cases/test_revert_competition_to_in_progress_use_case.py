@@ -65,7 +65,6 @@ class TestRevertCompetitionToInProgressUseCase:
 
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             competition.complete()
@@ -148,7 +147,6 @@ class TestRevertCompetitionToInProgressUseCase:
 
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             await uow.competitions.update(competition)

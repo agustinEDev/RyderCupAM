@@ -69,11 +69,6 @@ class TestListCompetitionInvitationsUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-        async with comp_uow:
-            competition = await comp_uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await comp_uow.competitions.update(competition)
-            await comp_uow.commit()
 
         return created
 

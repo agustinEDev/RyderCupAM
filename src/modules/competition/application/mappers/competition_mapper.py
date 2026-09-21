@@ -132,7 +132,7 @@ class CompetitionDTOMapper:
                 else competition.team_assignment
             ),
             max_playing_handicap=competition.max_playing_handicap,
-            enrollment_opens_at=competition.enrollment_opens_at,
+            enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
             # Teams
             team_1_name=competition.team_1_name,

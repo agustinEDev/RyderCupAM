@@ -235,7 +235,7 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
     response_model=CreateCompetitionResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Crear nueva competición",
-    description="Crea una nueva competición en estado DRAFT. Requiere autenticación.",
+    description="Crea una nueva competición. Nace con las inscripciones ABIERTAS salvo que se indique `enrollment_opens_days_before`, en cuyo caso espera en DRAFT hasta su apertura. Requiere autenticación.",
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")
@@ -282,7 +282,7 @@ async def create_competition(
                 play_mode=enriched_dto.play_mode,
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
-                enrollment_opens_at=competition.enrollment_opens_at,
+                enrollment_opens_days_before=competition.enrollment_opens_days_before,
                 visibility=str(competition.visibility),
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
@@ -429,7 +429,7 @@ async def get_competition(
     response_model=CompetitionResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar competición",
-    description="Actualiza una competición (SOLO en estado DRAFT y SOLO el creador).",
+    description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")

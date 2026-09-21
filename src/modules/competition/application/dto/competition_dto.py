@@ -15,7 +15,9 @@ from pydantic import (
 
 from src.modules.competition.domain.entities.competition import (
     DEFAULT_MAX_PLAYERS,
+    MAX_ENROLLMENT_OPENING_DAYS,
     MAX_PLAYERS,
+    MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
 from src.modules.competition.domain.value_objects.visibility import Visibility
@@ -155,25 +157,19 @@ class CreateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
-    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        ge=MIN_ENROLLMENT_OPENING_DAYS,
+        le=MAX_ENROLLMENT_OPENING_DAYS,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
     visibility: Visibility = Field(Visibility.PRIVATE, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
-
-    @field_validator("enrollment_opens_at")
-    @classmethod
-    def _la_hora_es_la_del_campo(cls, valor: datetime | None) -> datetime | None:
-        """Rechaza una hora con huso: la que vale es la local del campo.
-
-        El navegador manda `toISOString()`, que acaba en `Z`. Guardarla a pelo
-        haria dos estropicios: la columna no lleva huso y el driver revienta con
-        un 500, y aunque colara, «09:00Z» se leeria despues como las nueve del
-        campo — una hora de diferencia en Espana, y ocho en Los Angeles.
-        """
-        if valor is not None and valor.tzinfo is not None:
-            raise ValueError(
-                "enrollment_opens_at debe ir sin zona horaria: es la hora local "
-                "del campo donde se juega."
-            )
-        return valor
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
@@ -239,7 +235,15 @@ class CreateCompetitionResponseDTO(BaseModel):
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     creator: CreatorDTO | None = Field(None, description="Información completa del creador.")
     name: str = Field(..., description=COMPETITION_NAME_DESC)
-    status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
+    status: str = Field(
+        ...,
+        description=(
+            "Estado de la competición. Al crearla es ACTIVE —nace con las "
+            "inscripciones abiertas—, salvo que se indique "
+            "`enrollment_opens_days_before`, en cuyo caso queda en DRAFT "
+            "esperando su apertura."
+        ),
+    )
 
     # Dates
     start_date: date = Field(..., description="Fecha de inicio.")
@@ -268,7 +272,16 @@ class CreateCompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
-    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados
@@ -345,25 +358,19 @@ class UpdateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
     )
-    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        ge=MIN_ENROLLMENT_OPENING_DAYS,
+        le=MAX_ENROLLMENT_OPENING_DAYS,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
     visibility: Visibility | None = Field(None, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
-
-    @field_validator("enrollment_opens_at")
-    @classmethod
-    def _la_hora_es_la_del_campo(cls, valor: datetime | None) -> datetime | None:
-        """Rechaza una hora con huso: la que vale es la local del campo.
-
-        El navegador manda `toISOString()`, que acaba en `Z`. Guardarla a pelo
-        haria dos estropicios: la columna no lleva huso y el driver revienta con
-        un 500, y aunque colara, «09:00Z» se leeria despues como las nueve del
-        campo — una hora de diferencia en Espana, y ocho en Los Angeles.
-        """
-        if valor is not None and valor.tzinfo is not None:
-            raise ValueError(
-                "enrollment_opens_at debe ir sin zona horaria: es la hora local "
-                "del campo donde se juega."
-            )
-        return valor
 
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
@@ -475,7 +482,16 @@ class CompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
-    enrollment_opens_at: datetime | None = Field(None, description="La hora a la que se abren solas las inscripciones. Es hora local del campo donde se juega, sin huso: las nueve son las nueve de alli. Sin fecha, abre la primera invitacion.")
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados (NUEVO - requeridos por frontend)
