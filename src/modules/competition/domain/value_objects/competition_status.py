@@ -109,10 +109,10 @@ class CompetitionStatus(StrEnum):
         Lo que protege al historial no es el estado sino no haber llegado a
         montarse, y de eso se encarga la otra mitad de la regla.
 
-        De CLOSED en adelante, no: ahi ya se sortean equipos, se monta el
-        calendario y se generan partidos, y el borrado va en cascada hasta los
-        golpes anotados. Lo que protege eso de verdad es la otra mitad de la
-        regla, no el estado — vease abajo.
+        De CLOSED en adelante, no: ahi ya se monta el calendario y se generan
+        partidos, y el borrado va en cascada hasta los golpes anotados. Lo que
+        protege eso de verdad es la otra mitad de la regla, no el estado — vease
+        abajo.
 
         OJO: el estado por si solo no basta, y por eso esto es la MITAD de la
         regla. Se puede andar hacia atras —`revert-status` devuelve un torneo en

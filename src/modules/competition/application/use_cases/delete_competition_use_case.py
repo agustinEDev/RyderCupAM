@@ -1,9 +1,9 @@
 """
 Caso de Uso: Eliminar Competition (eliminacion fisica).
 
-Permite eliminar fisicamente una competicion mientras no este ya montada:
+Permite eliminar fisicamente una competicion mientras no tenga calendario:
 el estado tiene que permitirlo (DRAFT, ACTIVE o CANCELLED) y no puede haber
-ni calendario ni equipos sorteados.
+rondas montadas.
 Solo el creador o un administrador pueden realizar esta accion.
 """
 
@@ -35,7 +35,7 @@ class DeleteCompetitionUseCase:
     Caso de uso para eliminar fisicamente una competicion.
 
     Restricciones:
-    - Solo si el estado lo permite y el torneo no esta ya montado (BE #333)
+    - Solo si el estado lo permite y no hay calendario montado (BE #333)
     - Solo el creador puede eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments si existieran)
 
@@ -99,14 +99,14 @@ class DeleteCompetitionUseCase:
                     f"Estado actual: {competition.status.value}"
                 )
 
-            # El montaje se consulta porque el estado se puede andar hacia atras
-            # sin deshacerlo: un torneo ya preparado puede estar de vuelta en
-            # ACTIVE, y la cascada se llevaria calendario, equipos y golpes
-            montada = await self._ya_montada(competition_id)
-            if not competition.allows_deletion(already_set_up=montada):
+            # El calendario se consulta porque el estado se puede andar hacia
+            # atras sin deshacerlo: un torneo ya jugado puede estar de vuelta en
+            # ACTIVE, y la cascada se llevaria sus partidos y sus golpes
+            con_calendario = await self._tiene_calendario(competition_id)
+            if not competition.allows_deletion(has_schedule=con_calendario):
                 raise CompetitionNotDeletableError(
-                    "No se puede eliminar una competición que ya tiene calendario "
-                    "o equipos sorteados. Se perderían con ella."
+                    "No se puede eliminar una competición que ya tiene calendario: "
+                    "con él se irían sus partidos y los golpes anotados."
                 )
 
             # 4. Guardar datos para el response antes de eliminar
@@ -124,18 +124,18 @@ class DeleteCompetitionUseCase:
             deleted_at=datetime.now(),
         )
 
-    async def _ya_montada(self, competition_id: CompetitionId) -> bool:
-        """Indica si el torneo llego a prepararse, aunque hoy no lo parezca.
+    async def _tiene_calendario(self, competition_id: CompetitionId) -> bool:
+        """Indica si el torneo llego a montar su calendario.
 
-        Dos rastros, y basta con uno: el calendario y el sorteo de equipos. Los
-        dos se hacen en CLOSED y ninguna vuelta atras los deshace, asi que
-        cualquiera de ellos delata que este torneo paso de ahi. Sortear equipos
-        no exige tener rondas, de modo que mirar solo el calendario dejaria el
-        sorteo desprotegido.
+        Es lo unico que hay que proteger aqui, y el motivo es concreto: sin
+        rondas no hay partidos, y sin partidos no puede haber un solo golpe
+        anotado. Con rondas si, porque un torneo jugado puede volver a ACTIVE
+        —`revert-status` y luego `reopen-enrollments`— sin que nada las deshaga.
 
-        El calendario primero porque es lo mas comun: si hay rondas no hace
-        falta preguntar por los equipos.
+        El sorteo de equipos NO cuenta, decidido con el dueno del producto el 21
+        sep: se protege lo jugado, no lo preparado. Un sorteo sin calendario no
+        tapa ningun golpe y se rehace en un minuto —`assign_teams` reasigna
+        borrando el anterior—, asi que no vale para impedir que alguien deshaga
+        un torneo que esta borrando a proposito.
         """
-        if await self._uow.rounds.find_by_competition(competition_id):
-            return True
-        return await self._uow.team_assignments.find_by_competition(competition_id) is not None
+        return bool(await self._uow.rounds.find_by_competition(competition_id))

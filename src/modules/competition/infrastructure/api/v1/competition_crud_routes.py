@@ -491,10 +491,10 @@ async def update_competition(
     description=(
         "Elimina físicamente una competición, con todo lo que cuelga de ella. "
         "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
-        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y el torneo no está ya "
-        "montado — sin calendario y sin equipos sorteados. La segunda no se "
-        "deduce del estado: reabrir las inscripciones devuelve a ACTIVE un "
-        "torneo ya preparado sin deshacer nada. Si no se cumple, 400."
+        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
+        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
+        "equipos sorteados no lo impiden. Si no se cumple, 400."
     ),
     tags=["Competitions"],
 )

@@ -414,20 +414,20 @@ class TestDeleteCompetitionUseCase:
 
         assert "calendario" in str(exc_info.value).lower()
 
-    async def test_should_refuse_to_delete_a_competition_whose_teams_are_already_drawn(
+    async def test_should_delete_a_competition_whose_teams_are_drawn_but_has_no_schedule(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
-        BE #333: el sorteo de equipos también cuenta como torneo montado.
+        BE #333: el sorteo de equipos no impide borrar (decidido 21 sep).
 
-        Sortear equipos solo exige CLOSED, no rondas, y `reopen-enrollments` no
-        deshace el sorteo. Cerrar, sortear y reabrir para cambiar a un jugador
-        deja la competición en ACTIVE sin calendario pero con los equipos hechos,
-        y mirando solo las rondas la cascada se los llevaría.
+        Lo que se protege es lo jugado, no lo preparado. Sin rondas no hay
+        partidos, y sin partidos no puede haber un solo golpe anotado —anotar
+        exige IN_PROGRESS—, asi que aqui no se pierde nada irrecuperable: el
+        sorteo se rehace, y `assign_teams` ya reasigna borrando el anterior.
 
-        Given: Una competición en ACTIVE con los equipos ya sorteados
-        When: El creador intenta eliminarla
-        Then: Se lanza CompetitionNotDeletableError
+        Given: Una competición en ACTIVE con los equipos sorteados y sin calendario
+        When: El creador la elimina
+        Then: Se elimina
         """
         created = await self._crear_competicion(uow, creator_id)
         await self._activar(uow, created.id)
@@ -436,10 +436,11 @@ class TestDeleteCompetitionUseCase:
         delete_use_case = DeleteCompetitionUseCase(uow)
         request = DeleteCompetitionRequestDTO(competition_id=created.id)
 
-        with pytest.raises(CompetitionNotDeletableError) as exc_info:
-            await delete_use_case.execute(request, creator_id)
+        response = await delete_use_case.execute(request, creator_id)
 
-        assert "equipos" in str(exc_info.value).lower()
+        assert response.deleted is True
+        async with uow:
+            assert await uow.competitions.find_by_id(CompetitionId(created.id)) is None
 
     # ===========================================
     # Helpers
