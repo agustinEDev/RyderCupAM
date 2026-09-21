@@ -1,8 +1,7 @@
 """Tests para GetCompetitionUseCase."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -84,7 +83,7 @@ class TestGetCompetitionUseCase:
         # Assert
         assert competition.id.value == created.id
         assert str(competition.name) == "Ryder Cup 2025"
-        assert competition.status.value == "DRAFT"
+        assert competition.status.value == "ACTIVE"
         assert competition.creator_id.value == creator_id.value
         assert competition.dates.start_date == date(2025, 6, 1)
         assert competition.dates.end_date == date(2025, 6, 3)
@@ -185,11 +184,16 @@ class TestScheduledOpening:
     def creator_id(self) -> UserId:
         return UserId(uuid4())
 
-    async def _draft_con_apertura(self, uow, creator_id, cuando, con_campo=True):
-        # Las fechas del torneo salen del mismo reloj que la apertura: fijarlas
-        # en el calendario hacia que los tests empezaran a fallar solos el dia
-        # en que esa fecha quedaba por detras de «ahora»
-        empieza = ((cuando or datetime.now()) + timedelta(days=30)).date()
+    async def _draft_con_apertura(self, uow, creator_id, dias_antes, empieza_en=30, con_campo=True):
+        """Una competicion que espera su hora, a tantos dias de empezar.
+
+        La apertura se deriva de la fecha de inicio (BE #332), asi que lo que
+        decide si ya toca es cuanto falta para el torneo frente a los dias de
+        antelacion: empezando dentro de 3 dias y abriendo 5 antes, la apertura
+        quedo atras. Todo relativo a hoy, que si no los tests se estropean solos
+        el dia en que la fecha fijada queda por detras.
+        """
+        empieza = date.today() + timedelta(days=empieza_en)
         create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
         created = await create_uc.execute(
             CreateCompetitionRequestDTO(
@@ -198,7 +202,7 @@ class TestScheduledOpening:
                 end_date=empieza + timedelta(days=2),
                 main_country="ES",
                 play_mode="SCRATCH",
-                enrollment_opens_at=cuando,
+                enrollment_opens_days_before=dias_antes,
             ),
             creator_id,
         )
@@ -217,8 +221,8 @@ class TestScheduledOpening:
 
     async def test_looking_at_it_after_the_hour_opens_it(self, uow, creator_id):
         """La hora ya paso: quien mira la competicion la abre."""
-        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
-        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora)
+        # Empieza en 3 dias y abria 5 antes: hace dos que le tocaba
+        created = await self._draft_con_apertura(uow, creator_id, 5, empieza_en=3)
 
         uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
         competition = await uc.execute(CompetitionId(created.id))
@@ -234,8 +238,8 @@ class TestScheduledOpening:
         nada en Postgres: la competicion volveria a parecer un borrador en la
         siguiente peticion.
         """
-        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
-        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora)
+        # Empieza en 3 dias y abria 5 antes: hace dos que le tocaba
+        created = await self._draft_con_apertura(uow, creator_id, 5, empieza_en=3)
 
         guardadas = []
         original = uow.competitions.update
@@ -252,8 +256,8 @@ class TestScheduledOpening:
         assert CompetitionStatus.ACTIVE in guardadas
 
     async def test_before_the_hour_it_stays_shut(self, uow, creator_id):
-        dentro_de_una_hora = (datetime.now(ZoneInfo(MADRID)) + timedelta(hours=1)).replace(tzinfo=None)
-        created = await self._draft_con_apertura(uow, creator_id, dentro_de_una_hora)
+        # Empieza dentro de un mes y abre 5 dias antes: todavia falta
+        created = await self._draft_con_apertura(uow, creator_id, 5, empieza_en=30)
 
         uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
         competition = await uc.execute(CompetitionId(created.id))
@@ -262,19 +266,29 @@ class TestScheduledOpening:
 
     async def test_without_a_course_it_waits(self, uow, creator_id):
         """Sin campo no hay zona, y sin zona no se abre a ciegas (20 sep)."""
-        hace_una_hora = (datetime.now(ZoneInfo(MADRID)) - timedelta(hours=1)).replace(tzinfo=None)
-        created = await self._draft_con_apertura(uow, creator_id, hace_una_hora, con_campo=False)
+        created = await self._draft_con_apertura(uow, creator_id, 5, empieza_en=3, con_campo=False)
 
         uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
         competition = await uc.execute(CompetitionId(created.id))
 
         assert competition.status == CompetitionStatus.DRAFT
 
-    async def test_without_a_scheduled_hour_nothing_happens(self, uow, creator_id):
-        """Entre amigos no se programa nada: abre la invitacion, no el reloj."""
-        created = await self._draft_con_apertura(uow, creator_id, None)
+    async def test_calling_the_schedule_off_opens_it(self, uow, creator_id):
+        """Quitar los dias es decir «abrela ya».
+
+        Bajo el modelo nuevo «sin programacion» significa «abierta», asi que
+        desprogramar no puede dejar la competicion cerrada sin nada que esperar:
+        se quedaria varada, sin mas salida que el boton que FE #640 quiere
+        retirar.
+        """
+        created = await self._draft_con_apertura(uow, creator_id, 5, empieza_en=3)
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+            competition.schedule_enrollment_opening(None)
+            await uow.competitions.update(competition)
+            await uow.commit()
 
         uc = GetCompetitionUseCase(uow, zona_del_campo=FakeZona(MADRID))
         competition = await uc.execute(CompetitionId(created.id))
 
-        assert competition.status == CompetitionStatus.DRAFT
+        assert competition.status == CompetitionStatus.ACTIVE

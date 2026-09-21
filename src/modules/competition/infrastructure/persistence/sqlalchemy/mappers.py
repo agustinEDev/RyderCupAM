@@ -709,7 +709,7 @@ competitions_table = Table(
     Column("max_playing_handicap", Integer, nullable=True),
     # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
     # las nueve de alli, y la zona se resuelve al leerla (BE #319)
-    Column("enrollment_opens_at", DateTime, nullable=True),
+    Column("enrollment_opens_days_before", Integer, nullable=True),
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
@@ -960,7 +960,7 @@ def start_competition_mappers():
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
-                "_enrollment_opens_at": competitions_table.c.enrollment_opens_at,
+                "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,

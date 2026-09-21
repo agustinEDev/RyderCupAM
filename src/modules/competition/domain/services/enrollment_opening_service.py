@@ -1,22 +1,26 @@
 """
-A que hora se abren solas las inscripciones de una competicion (BE #319).
+A que hora se abren solas las inscripciones de una competicion (BE #319, #332).
 
-Un torneo entre amigos no programa nada: se invita a alguien y con eso se abre.
-Un club sí: se crea hoy y las inscripciones abren el miercoles a las nueve.
+Un torneo entre amigos no programa nada: nace con las inscripciones abiertas.
+Un club si: se crea hoy y las inscripciones abren cinco dias antes de jugarse.
 
-«Las nueve» son las nueve **del campo donde se juega** — es lo que el
-organizador tiene en la cabeza al escribirlo, y es lo que decidio Agustin el 20
-sep. La zona sale de las coordenadas del campo, nunca del pais: tres puntos
-espanoles dan `Europe/Madrid`, `Atlantic/Canary` y `Africa/Ceuta`, asi que el
-pais no la determina (BE #305).
+Lo que el organizador dice son **dias de antelacion**, no una fecha: «abre cinco
+dias antes». El instante no se guarda, se deriva en cada lectura a partir de la
+fecha de inicio del torneo, de modo que mover las fechas mueve la apertura sin
+que nadie tenga que acordarse (decidido el 21 sep).
+
+La hora es **las 00:00 del campo donde se juega**: «cinco dias completos antes»
+sale literal y no hay que inventarse ninguna hora. La zona sale de las
+coordenadas del campo, nunca del pais: tres puntos espanoles dan `Europe/Madrid`,
+`Atlantic/Canary` y `Africa/Ceuta` (BE #305).
 
 Sin campo todavia, o con un campo cuya zona no se conoce, no hay hora que
-calcular y el torneo **no se abre solo**. No se adivina: abrir a deshora
-anuncia una cosa y hace otra. Ahi sigue abriendo la invitacion.
+calcular y el torneo **no se abre solo**. No se adivina: abrir a deshora anuncia
+una cosa y hace otra.
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -26,19 +30,22 @@ class EnrollmentOpeningService:
     """Calcula a que hora abren las inscripciones, y si ya abrieron."""
 
     @staticmethod
-    def opens_at(enrollment_opens_at: datetime | None, timezone: str | None) -> datetime | None:
+    def opens_at(
+        start_date: date | None, days_before: int | None, timezone: str | None
+    ) -> datetime | None:
         """
         El instante en que abren, con su desfase.
 
         Args:
-            enrollment_opens_at: La fecha y hora que escribio el organizador,
-                sin huso: es hora local del campo.
+            start_date: El dia en que empieza a jugarse el torneo.
+            days_before: Cuantos dias antes abren las inscripciones, 1 a 14.
+                `None` significa que no hay apertura programada.
             timezone: La zona IANA del primer campo que se juega.
 
         Returns:
             El instante con su huso, o `None` si no hay nada que calcular.
         """
-        if enrollment_opens_at is None or timezone is None:
+        if start_date is None or days_before is None or timezone is None:
             return None
 
         try:
@@ -50,22 +57,25 @@ class EnrollmentOpeningService:
             logger.warning("Zona horaria desconocida al calcular la apertura: %s", timezone)
             return None
 
-        # La hora que escribio el organizador ya es local: se le pone el huso,
-        # no se convierte. Convertirla la moveria al huso de quien la mira.
+        dia = start_date - timedelta(days=days_before)
+
+        # Las 00:00 se le PONEN al dia con el huso del campo, no se convierten:
+        # convertirlas las moveria al huso de quien mira.
         #
-        # La madrugada del cambio de hora, una hora del calendario puede existir
-        # dos veces —en Madrid, las 2:30 del 25 de octubre— o no existir —el 29
-        # de marzo se salta de las 2:00 a las 3:00—. `fold=0`, que es el
-        # comportamiento por defecto, resuelve las dos como hace falta aqui: la
-        # ambigua se queda con la PRIMERA pasada (abre antes, no despues), y la
-        # que no existe cae en el mismo instante que habria tenido sin el salto,
-        # que el reloj local muestra como las 3:30. No se rechaza ninguna de las
-        # dos: son horas legitimas del calendario, y quien escribe «2:30» no
-        # tiene por que saberse los cambios de hora de memoria
-        return enrollment_opens_at.replace(tzinfo=zone)
+        # Casi todas las zonas cambian la hora de madrugada, a las 2 o las 3, y
+        # entonces las 00:00 no tienen nada de particular. Pero no todas: en
+        # Santiago de Chile o en La Habana el reloj salta de las 23:59 a la
+        # 1:00, y esa medianoche NO EXISTE en el calendario. `fold=0`, que es el
+        # comportamiento por defecto, la resuelve en el mismo instante que
+        # habria tenido sin el salto —el reloj local lo ensena como la 1:00—.
+        # Se acepta a proposito: abrir una hora mas tarde ese dia concreto es
+        # inofensivo, y dejar el torneo sin abrir por un cambio de hora, no.
+        return datetime.combine(dia, time(0, 0), tzinfo=zone)
 
     @staticmethod
-    def is_due(enrollment_opens_at: datetime | None, timezone: str | None) -> bool:
+    def is_due(
+        start_date: date | None, days_before: int | None, timezone: str | None
+    ) -> bool:
         """
         Indica si ya paso la hora de abrir.
 
@@ -73,7 +83,7 @@ class EnrollmentOpeningService:
         Si lo decidiera el cliente, cambiarle la hora al movil abriria el
         torneo antes de tiempo.
         """
-        abre = EnrollmentOpeningService.opens_at(enrollment_opens_at, timezone)
+        abre = EnrollmentOpeningService.opens_at(start_date, days_before, timezone)
         if abre is None:
             return False
         return abre <= datetime.now(UTC)

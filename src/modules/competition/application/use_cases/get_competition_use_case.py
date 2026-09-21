@@ -92,7 +92,7 @@ class GetCompetitionUseCase:
         # Las dos preguntas baratas primero. Casi ninguna competicion programa
         # su apertura, y resolver la zona baja a la base de datos a traerse el
         # campo entero con sus barras para leer una cadena
-        if competition.enrollment_opens_at is None:
+        if competition.enrollment_opens_days_before is None:
             return
         if not competition.allows_enrollment_opening():
             return

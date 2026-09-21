@@ -65,7 +65,6 @@ class TestReopenEnrollmentsUseCase:
 
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
@@ -145,11 +144,6 @@ class TestReopenEnrollmentsUseCase:
         )
         created = await create_use_case.execute(create_request, creator_id)
 
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
 
         use_case = ReopenEnrollmentsUseCase(uow)
         request = ReopenEnrollmentsRequestDTO(competition_id=created.id)

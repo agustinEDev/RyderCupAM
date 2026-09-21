@@ -5,6 +5,9 @@ Tests de integración que verifican el flujo completo de los endpoints
 de inscripciones incluyendo autenticación, validaciones y persistencia.
 """
 
+import uuid
+from datetime import date, timedelta
+
 import pytest
 from httpx import AsyncClient
 
@@ -54,8 +57,24 @@ class TestRequestEnrollment:
             client, "player2@test.com", "P@ssw0rd123!", "Player", "Two"
         )
 
-        comp = await create_competition(client, creator["cookies"])
-        # No activamos la competición
+        # Publica y con apertura programada. Las dos cosas hacen falta: desde
+        # BE #332 la unica que sigue en DRAFT es la programada, y desde BE #318
+        # una privada rechaza la solicitud con 403 antes de mirar el estado, asi
+        # que con una privada este test no llegaria a probar lo que dice probar
+        start = date.today() + timedelta(days=30)
+        comp = await create_competition(
+            client,
+            creator["cookies"],
+            {
+                "name": f"Publica programada {uuid.uuid4().hex[:8]}",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=3)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+                "enrollment_opens_days_before": 5,
+            },
+        )
 
         set_auth_cookies(client, player["cookies"])
         response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")

@@ -172,7 +172,6 @@ class TestDeleteCompetitionUseCase:
         # Llevarla hasta CLOSED, que es donde deja de poder borrarse
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
@@ -214,7 +213,6 @@ class TestDeleteCompetitionUseCase:
         # Llevar a IN_PROGRESS (DRAFT → ACTIVE → CLOSED → IN_PROGRESS)
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             await uow.competitions.update(competition)
@@ -254,7 +252,6 @@ class TestDeleteCompetitionUseCase:
         # Llevar a COMPLETED
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             competition.start()
             competition.complete()
@@ -502,11 +499,6 @@ class TestDeleteCompetitionUseCase:
 
     async def _activar(self, uow: InMemoryUnitOfWork, competition_id: str) -> None:
         """Abre las inscripciones de una competición recién creada."""
-        async with uow:
-            competition = await uow.competitions.find_by_id(CompetitionId(competition_id))
-            competition.activate()
-            await uow.competitions.update(competition)
-            await uow.commit()
 
     async def _inscribir(
         self, uow: InMemoryUnitOfWork, competition_id: str, cuantos: int

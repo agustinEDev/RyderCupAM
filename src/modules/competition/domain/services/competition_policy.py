@@ -208,9 +208,14 @@ class CompetitionPolicy:
         """
         Indica si enviar una invitacion debe abrir las inscripciones.
 
-        Un torneo recien creado esta en DRAFT y nadie puede apuntarse hasta que
-        alguien pulsa "Activar", un boton cuyo unico trabajo es mover un estado.
-        Invitar a la primera persona ES abrir el torneo, asi que lo abre (BE #319).
+        Invitar a la primera persona ES abrir el torneo, asi que lo abre
+        (BE #319).
+
+        Desde BE #332 la unica que sigue en DRAFT es la que espera su apertura
+        programada, asi que esto ya solo alcanza a esas: invitar a alguien es
+        adelantar esa apertura a proposito. Al abrirse, la competicion deja de
+        anunciar los dias —lo hace `activate()`—, porque si no la ficha seguiria
+        prometiendo una apertura futura de algo que acaba de abrirse.
 
         Args:
             competition_status: Estado actual de la competicion
