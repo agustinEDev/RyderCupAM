@@ -242,3 +242,34 @@ class TestSiLaRelacionSeRenombra:
         assert zona == "Europe/Madrid"
         assert repo_competiciones.consultas == 1
         assert "ya no existe en el mapeo" in caplog.text
+
+
+class TestSiLaCompeticionDesapareceAlRecargar:
+    """Un borrado concurrente no puede reventar el listado entero."""
+
+    async def test_no_toca_la_relacion_sin_cargar_si_la_recarga_no_la_encuentra(
+        self, monkeypatch
+    ):
+        """Devolver la original seria el MissingGreenlet que esto viene a evitar.
+
+        Sus campos siguen sin cargar, asi que tocarlos tumba la peticion. Sin
+        competicion no hay zona, y sin zona no se abre nada: esa es la respuesta
+        segura.
+        """
+        campo = GolfCourseId.generate()
+        completa = _competicion_con_campo(campo)
+        borrada = RepositorioDeCompeticiones(None)
+        servicio = CompetitionTimezoneFromCourse(
+            RepositorioFalso({campo: CampoFalso("Europe/Madrid")}), borrada
+        )
+        monkeypatch.setattr(
+            "src.modules.competition.infrastructure.services."
+            "competition_timezone_from_course.inspect",
+            lambda _: _estado_falso(unloaded={"_golf_courses"}),
+        )
+
+        # CompeticionSinCargar revienta si alguien toca sus campos
+        zona = await servicio.for_competition(CompeticionSinCargar(completa))
+
+        assert zona is None
+        assert borrada.consultas == 1

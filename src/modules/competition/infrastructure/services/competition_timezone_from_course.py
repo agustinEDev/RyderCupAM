@@ -42,7 +42,7 @@ class CompetitionTimezoneFromCourse(ICompetitionTimezone):
         self._golf_courses = golf_course_repository
         self._competitions = competition_repository
 
-    async def _con_sus_campos(self, competition: Competition) -> Competition:
+    async def _con_sus_campos(self, competition: Competition) -> Competition | None:
         """Devuelve la competicion con sus campos cargados, recargandola si hace falta.
 
         La ficha la trae entera —`find_by_id` hace eager load—, pero el listado
@@ -87,13 +87,20 @@ class CompetitionTimezoneFromCourse(ICompetitionTimezone):
         if not sin_cargar:
             return competition
 
-        recargada = await self._competitions.find_by_id(competition.id)
-        return recargada if recargada is not None else competition
+        # Si la recarga no la encuentra —la han borrado mientras se listaba—
+        # NO se devuelve la original: sus campos siguen sin cargar, y tocarlos
+        # es el MissingGreenlet que esta recarga existe para evitar. Sin
+        # competicion no hay zona, y sin zona no se abre nada, que es la
+        # respuesta segura
+        return await self._competitions.find_by_id(competition.id)
 
     async def for_competition(self, competition: Competition) -> str | None:
         """La zona del primer campo, o `None` si todavia no hay campo."""
-        competition = await self._con_sus_campos(competition)
-        campos = competition.golf_courses
+        con_campos = await self._con_sus_campos(competition)
+        if con_campos is None:
+            return None
+
+        campos = con_campos.golf_courses
         if not campos:
             # Se puede crear una competicion, invitar y anadir el campo despues
             # (BE #323): hasta que lo haya, la apertura programada espera
