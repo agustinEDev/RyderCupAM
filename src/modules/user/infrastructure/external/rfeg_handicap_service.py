@@ -1,9 +1,9 @@
 """
 RFEG Handicap Service - Infrastructure Layer
 
-Implementación concreta del servicio de hándicap usando la API de la RFEG.
-Adaptador que encapsula la lógica de scraping del sistema de hándicaps de la
-Real Federación Española de Golf.
+Implementación concreta del servicio de hándicap usando el buscador de la RFEG.
+Adaptador que encapsula la consulta al sistema de hándicaps de la Real
+Federación Española de Golf.
 """
 
 import logging
@@ -25,18 +25,26 @@ class RFEGHandicapService(HandicapService):
     """
     Implementación concreta del servicio de hándicap usando la API de la RFEG.
 
-    Este servicio:
-    1. Obtiene un token Bearer dinámicamente de la página principal
-    2. Usa ese token para consultar la API de búsqueda de hándicaps
-    3. Parsea la respuesta JSON y extrae el hándicap del primer resultado
+    Este servicio consulta el buscador de la RFEG y extrae el hándicap del
+    resultado cuyo nombre casa con el del jugador.
+
+    Hasta el 21 sep 2026 eran dos peticiones: la portada, de la que se sacaba un
+    token `coded_...`, y con él la API de `api.rfeg.es`. Ese día la federación
+    retiró el token y su página de consulta pasó a llamar a un proxy público de
+    su WordPress, sin autenticación, que devuelve el mismo documento
+    (RyderCupAM#340).
 
     La implementación está aislada en la capa de infraestructura,
     permitiendo cambiarla sin afectar la lógica de dominio.
     """
 
     # Constantes de configuración
-    URL_PAGINA_PRINCIPAL = "https://rfegolf.es"
-    URL_API_HANDICAP = "https://api.rfeg.es/web/search/handicap"
+    URL_BUSQUEDA = "https://rfegolf.es/wp-json/handicap-search/v1/search"
+
+    # Resultados por consulta. Su página pide 5 para el desplegable; aquí se
+    # piden algunos más porque se busca UNA ficha entre homónimos, y la que casa
+    # puede no venir la primera.
+    RESULTADOS_POR_CONSULTA = 10
 
     # Centinelas para apartar la eñe mientras se borran los diacríticos.
     # Son caracteres de control: no pueden aparecer en un nombre real.
@@ -148,45 +156,12 @@ class RFEGHandicapService(HandicapService):
             HandicapServiceUnavailableError: Si el servicio no está disponible
         """
         try:
-            # 1. Obtener token Bearer dinámicamente
-            bearer_token = await self._obtener_bearer_token()
-            if not bearer_token:
-                raise HandicapServiceUnavailableError(
-                    "No se pudo obtener el token de autenticación de la RFEG"
-                )
-
-            # 2. Buscar al jugador
-            return await self._buscar_en_api(full_name, bearer_token)
+            return await self._buscar_en_api(full_name)
 
         except httpx.HTTPError as e:
             raise HandicapServiceUnavailableError(
                 f"Error de conexión con el servicio RFEG: {e}"
             ) from e
-
-    async def _obtener_bearer_token(self) -> str | None:
-        """
-        Obtiene el token Bearer extrayéndolo de la página principal.
-
-        El token se encuentra en el código JavaScript de la página
-        y tiene el formato 'coded_[hexadecimal]'.
-
-        Returns:
-            Token en formato "Bearer {token}" o None si no se encuentra
-        """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                self.URL_PAGINA_PRINCIPAL, headers=self.HEADERS, timeout=self._timeout
-            )
-            response.raise_for_status()
-
-            # Buscar token en el HTML usando regex
-            # Patrón: 'coded_' seguido de caracteres hexadecimales (longitud variable)
-            match = re.search(r"'coded_[0-9a-fA-F]{32,}'", response.text)
-            if match:
-                token = match.group(0).strip("'")
-                return f"Bearer {token}"
-
-            return None
 
     @staticmethod
     def _extraer_jugadores(datos: object) -> list[dict]:
@@ -246,9 +221,9 @@ class RFEGHandicapService(HandicapService):
 
         return jugadores
 
-    async def _buscar_en_api(self, full_name: str, bearer_token: str) -> float | None:
+    async def _buscar_en_api(self, full_name: str) -> float | None:
         """
-        Realiza la búsqueda en la API de la RFEG.
+        Realiza la búsqueda en el buscador de la RFEG.
 
         El nombre se envía tal como lo escribió el jugador y se compara contra las
         respuestas ya normalizado a ambos lados: la federación no normaliza lo que
@@ -257,26 +232,16 @@ class RFEGHandicapService(HandicapService):
 
         Args:
             full_name: Nombre completo del jugador
-            bearer_token: Token de autorización en formato "Bearer {token}"
 
         Returns:
             Hándicap del primer resultado encontrado o None
         """
-        # Preparar headers con el token de autorización
-        api_headers = self.HEADERS.copy()
-        api_headers.update(
-            {
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Authorization": bearer_token,
-            }
-        )
-
-        # Parámetros de búsqueda
-        params = {"q": full_name}
+        api_headers = {**self.HEADERS, "Accept": "application/json"}
+        params: dict[str, str | int] = {"q": full_name, "size": self.RESULTADOS_POR_CONSULTA}
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                self.URL_API_HANDICAP,
+                self.URL_BUSQUEDA,
                 params=params,
                 headers=api_headers,
                 timeout=self._timeout,
@@ -296,7 +261,7 @@ class RFEGHandicapService(HandicapService):
                 ) from e
 
             # Buscar coincidencia exacta en todos los resultados
-            # La API de RFEG devuelve la estructura: {"data": {"hits": [{"document": {...}}]}}
+            # El buscador devuelve la estructura: {"data": {"hits": [{"document": {...}}]}}
             #
             # La comparación se hace sobre el texto normalizado a ambos lados: la
             # federación guarda los nombres con sus tildes y el jugador puede

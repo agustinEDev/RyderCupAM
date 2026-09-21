@@ -360,16 +360,6 @@ class LoginResponseDTO(BaseModel):
         default=False,
         description="True si el caller debe setear la cookie device_id (v2.0.4). False si la cookie ya existe.",
     )
-    # HM-2: Handicap request flow
-    needs_handicap: bool = Field(
-        default=False,
-        description=(
-            "True si el hándicap del usuario no se ha actualizado hoy y no pudo "
-            "refrescarse automáticamente: usuarios no españoles, sin país registrado, "
-            "o españoles cuya búsqueda RFEG falló o no devolvió resultado. "
-            "El FE debe mostrar HandicapRequestModal."
-        ),
-    )
 
 
 # ======================================================================================
@@ -912,4 +902,32 @@ class UserRolesResponseDTO(BaseModel):
     )
     competition_id: str = Field(
         ..., description="UUID de la competición para la cual se consultaron los roles."
+    )
+
+
+class RefreshOwnHandicapRequestDTO(BaseModel):
+    """Petición para refrescar desde la RFEG el hándicap del propio usuario (#340)."""
+
+    user_id: UUID = Field(..., description="ID del usuario autenticado que lo pide.")
+
+
+class RefreshOwnHandicapResponseDTO(BaseModel):
+    """
+    Resultado del refresco del hándicap propio (#340).
+
+    Sustituye al `needs_handicap` que devolvía el login: el login ya no espera a
+    la RFEG, así que la respuesta llega aparte, cuando el frontend la pide.
+    """
+
+    needs_handicap: bool = Field(
+        ...,
+        description=(
+            "True si hay que pedirle el hándicap al jugador: no es español, no tiene "
+            "país, o es español y la RFEG no lo encontró, no respondió o no se pudo "
+            "guardar lo que dio. El FE debe mostrar HandicapRequestModal."
+        ),
+    )
+    handicap: float | None = Field(
+        None,
+        description="Hándicap vigente tras el refresco, o null si no hay uno guardado.",
     )
