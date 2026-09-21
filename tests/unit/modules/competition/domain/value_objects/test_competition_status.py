@@ -109,3 +109,35 @@ class TestCompetitionStatusHelpers:
         assert CompetitionStatus.IN_PROGRESS.allows_modifications() is False
         assert CompetitionStatus.COMPLETED.allows_modifications() is False
         assert CompetitionStatus.CANCELLED.allows_modifications() is False
+
+    def test_allows_deletion_while_enrollment_is_open(self):
+        """BE #333: un torneo recien creado se puede borrar, abierto o no.
+
+        Con las competiciones naciendo con las inscripciones abiertas (BE #332),
+        dejar el borrado solo en DRAFT significaria que equivocarse al crearlas
+        ya no se deshace: solo quedaria cancelarlas, y la cancelada se queda en
+        la lista para siempre.
+        """
+        assert CompetitionStatus.DRAFT.allows_deletion() is True
+        assert CompetitionStatus.ACTIVE.allows_deletion() is True
+
+    def test_allows_deletion_of_a_cancelled_competition(self):
+        """Una cancelada tambien se borra: cancelar era la salida, no el destino.
+
+        El motivo de todo esto es que equivocarse al crear un torneo no deje una
+        fila muerta para siempre, y dejar CANCELLED fuera reproducia justo eso.
+        Lo que protege al historial de verdad no es el estado, sino no tener
+        calendario montado, que `Competition.allows_deletion` exige aparte.
+        """
+        assert CompetitionStatus.CANCELLED.allows_deletion() is True
+
+    def test_does_not_allow_deletion_once_enrollment_closes(self):
+        """De CLOSED en adelante se sortean equipos y se generan partidos.
+
+        Esta es solo la mitad de la regla: el estado se puede andar hacia atras
+        sin deshacer nada de eso, asi que `Competition.allows_deletion` exige
+        ademas que no haya calendario montado.
+        """
+        assert CompetitionStatus.CLOSED.allows_deletion() is False
+        assert CompetitionStatus.IN_PROGRESS.allows_deletion() is False
+        assert CompetitionStatus.COMPLETED.allows_deletion() is False

@@ -408,6 +408,25 @@ class Competition:
         """Verifica si el torneo permite modificar configuración."""
         return self._status.allows_modifications()
 
+    def allows_deletion(self, has_schedule: bool) -> bool:
+        """Verifica si el torneo todavía se puede borrar del todo (BE #333).
+
+        Dos condiciones, y la segunda no se puede leer del estado. El estado
+        tiene que permitirlo, y ademas **no puede haber calendario**: el estado
+        se anda hacia atras —`revert-status` y `reopen-enrollments`— sin
+        deshacer las rondas, asi que un torneo ya jugado puede volver a ACTIVE
+        con sus golpes dentro. Mirando solo el estado, la cascada se los
+        llevaria.
+
+        El sorteo de equipos no entra (21 sep): se protege lo jugado, no lo
+        preparado. Sin rondas no hay partidos ni golpes, y el sorteo se rehace.
+
+        Args:
+            has_schedule: Si ya tiene rondas. Solo se crean en CLOSED, asi que
+                tenerlas significa que este torneo paso de ahi.
+        """
+        return self._status.allows_deletion() and not has_schedule
+
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
     # ===========================================

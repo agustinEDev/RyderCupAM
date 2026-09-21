@@ -735,7 +735,7 @@ class CompleteCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 # --------------------------------------------------------------------------------------
-# Delete Competition (eliminación física - solo DRAFT)
+# Delete Competition (eliminación física - mientras no haya calendario)
 # --------------------------------------------------------------------------------------
 
 
@@ -744,8 +744,9 @@ class DeleteCompetitionRequestDTO(BaseModel):
     DTO de entrada para eliminar físicamente una competición.
 
     Restricciones:
-    - Solo se puede eliminar en estado DRAFT (antes de activar)
-    - Solo el creador puede eliminar
+    - Solo si el estado lo permite (DRAFT, ACTIVE o CANCELLED)
+    - Y solo si no hay calendario montado (los equipos sorteados no impiden)
+    - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """
 

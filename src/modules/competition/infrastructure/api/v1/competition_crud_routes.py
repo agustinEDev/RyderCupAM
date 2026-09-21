@@ -488,7 +488,14 @@ async def update_competition(
     "/{competition_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Eliminar competición",
-    description="Elimina físicamente una competición (SOLO en estado DRAFT y SOLO el creador).",
+    description=(
+        "Elimina físicamente una competición, con todo lo que cuelga de ella. "
+        "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
+        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
+        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
+        "equipos sorteados no lo impiden. Si no se cumple, 400."
+    ),
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")
