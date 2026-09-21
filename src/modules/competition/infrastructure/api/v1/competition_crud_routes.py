@@ -30,6 +30,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
 )
+from src.modules.competition.application.services.enrollment_opener import (
+    EnrollmentOpener,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -123,9 +126,21 @@ def _matches_status_filter(competition_status, status_filter):
 
 
 async def _fetch_enrolled_competitions(
-    uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
+    uow,
+    enrollments,
+    created_competition_ids,
+    status_filter,
+    enrollment_status_map,
+    zona_del_campo=None,
 ):
-    """Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó)."""
+    """Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó).
+
+    Este camino no pasa por `ListCompetitionsUseCase`, así que la apertura
+    programada hay que aplicarla aquí también: a un jugador INVITADO a una
+    competición que espera su hora, «Mis competiciones» se la seguiría
+    enseñando en borrador pasado su día, y un filtro por ACTIVE la dejaría
+    fuera del todo (BE #331).
+    """
     enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
     enrolled_competitions = []
 
@@ -134,6 +149,10 @@ async def _fetch_enrolled_competitions(
 
         if not competition or competition.id in created_competition_ids:
             continue
+
+        # Antes de mirar su estado, no después: si no, se filtra por el estado
+        # viejo y la que acaba de abrirse se descarta o se enseña cerrada
+        await EnrollmentOpener.abrir_las_que_toquen([competition], uow, zona_del_campo)
 
         enrollment_status = enrollment_status_map.get(competition.id)
 
@@ -176,6 +195,7 @@ async def _get_user_competitions(
         created_competition_ids,
         status_filter,
         enrollment_status_map,
+        zona_del_campo=use_case.zona_del_campo,
     )
 
     # Las que salen de tus inscripciones tambien pasan por el filtro: una fila

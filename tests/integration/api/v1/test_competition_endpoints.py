@@ -888,6 +888,92 @@ class TestDeleteCompetition:
         assert "CLOSED" in response.json()["detail"]
 
 
+class TestListingOpensScheduledCompetitions:
+    """BE #331: verla en un listado tambien la abre, no solo abrir su ficha."""
+
+    @pytest.mark.asyncio
+    async def test_listing_opens_a_scheduled_competition_whose_day_has_passed(
+        self, client: AsyncClient
+    ):
+        """Por HTTP, que es donde se murio esto la vez anterior.
+
+        En BE #327 la apertura funcionaba en 31 tests unitarios y no ocurria
+        jamas en produccion, porque ninguna ruta pasaba por el caso de uso. Este
+        test existe para que el listado no pueda quedarse asi.
+        """
+        admin = await create_admin_user(
+            client, "listado_admin@test.com", "AdminP@ssw0rd123!", "Listado", "Admin"
+        )
+        user = await create_authenticated_user(
+            client, "listado_club@test.com", "P@ssw0rd123!", "Listado", "Club"
+        )
+
+        # Empieza en 3 dias y abre 5 antes: su momento ya paso
+        empieza = date.today() + timedelta(days=3)
+        comp = await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": f"Publica programada {uuid.uuid4().hex[:8]}",
+                "start_date": empieza.isoformat(),
+                "end_date": (empieza + timedelta(days=2)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+                "enrollment_opens_days_before": 5,
+            },
+        )
+        assert comp["status"] == "DRAFT"
+
+        # La zona sale de las coordenadas del campo, no del pais (BE #305)
+        golf_course = await create_golf_course(
+            client,
+            user["cookies"],
+            golf_course_data={
+                "name": f"Campo con zona {uuid.uuid4().hex[:8]}",
+                "country_code": "ES",
+                "course_type": "STANDARD_18",
+                # Las coordenadas van DENTRO de location: sueltas se ignoran, el
+                # campo se crea sin zona y la competicion no abre nunca (BE #327)
+                "location": {"latitude": 40.4168, "longitude": -3.7038},
+                "tees": [
+                    {
+                        "identifier": "Blanco",
+                        "color": "WHITE",
+                        "tee_gender": "MALE",
+                        "course_rating": 72.5,
+                        "slope_rating": 135,
+                        "par": 72,
+                    },
+                ],
+                "holes": [
+                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
+                ],
+            },
+        )
+        await approve_golf_course(client, admin["cookies"], golf_course["id"])
+        set_auth_cookies(client, user["cookies"])
+        asociado = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+        )
+        assert asociado.status_code == 201, asociado.text
+
+        # Sin abrir su ficha en ningun momento: solo listados. Comprobarlo con
+        # `GET /{id}` no valdria, porque esa ruta abre la competicion ella misma
+        # y el test pasaria aunque el listado no hiciera nada
+        listado = await client.get("/api/v1/competitions", params={"status": "DRAFT"})
+        assert listado.status_code == 200
+
+        segundo = await client.get("/api/v1/competitions", params={"status": "ACTIVE"})
+        assert segundo.status_code == 200
+        abiertas = [c["id"] for c in segundo.json()]
+        assert comp["id"] in abiertas, (
+            "el primer listado tenia que haberla abierto y persistido, "
+            "y el segundo deberia encontrarla ya entre las activas"
+        )
+
+
 class TestDeleteReopenedCompetition:
     """BE #333: volver a ACTIVE no vuelve a hacer borrable un torneo montado."""
 

@@ -101,3 +101,101 @@ class TestTheZoneOfACompetition:
         resolutor = CompetitionTimezoneFromCourse(RepositorioFalso({}))
 
         assert await resolutor.for_competition(competition) is None
+
+
+class RepositorioDeCompeticiones:
+    """Devuelve la competición completa, como haría `find_by_id` con eager load."""
+
+    def __init__(self, completa: Competition | None):
+        self._completa = completa
+        self.consultas = 0
+
+    async def find_by_id(self, competition_id):
+        self.consultas += 1
+        return self._completa
+
+
+class CompeticionSinCargar:
+    """Imita una competición traída por el listado: tocar sus campos revienta.
+
+    Es lo que hace SQLAlchemy cuando la relación no viene cargada y se accede a
+    ella fuera de la sesión async: `MissingGreenlet`. Aquí se simula con un
+    error cualquiera, porque lo que se prueba es que NO se llega a tocarla.
+    """
+
+    def __init__(self, competition: Competition):
+        self.id = competition.id
+        self._real = competition
+
+    @property
+    def golf_courses(self):
+        raise AssertionError("no se debe tocar la relación sin cargar")
+
+
+class TestCuandoLaRelacionNoVieneCargada:
+    """El listado no carga los campos; la ficha sí (BE #331)."""
+
+    async def test_la_recarga_cuando_no_esta_cargada(self, monkeypatch):
+        """Sin esto, el listado reventaba con MissingGreenlet."""
+        campo = GolfCourseId.generate()
+        completa = _competicion_con_campo(campo)
+        repo_competiciones = RepositorioDeCompeticiones(completa)
+        servicio = CompetitionTimezoneFromCourse(
+            RepositorioFalso({campo: CampoFalso("Europe/Madrid")}),
+            repo_competiciones,
+        )
+        monkeypatch.setattr(
+            "src.modules.competition.infrastructure.services."
+            "competition_timezone_from_course.inspect",
+            lambda _: type("Estado", (), {"unloaded": {"_golf_courses"}})(),
+        )
+
+        zona = await servicio.for_competition(CompeticionSinCargar(completa))
+
+        assert zona == "Europe/Madrid"
+        assert repo_competiciones.consultas == 1
+
+    async def test_no_la_recarga_si_ya_viene_cargada(self, monkeypatch):
+        """La ficha la trae entera: recargarla sería una consulta de más."""
+        campo = GolfCourseId.generate()
+        completa = _competicion_con_campo(campo)
+        repo_competiciones = RepositorioDeCompeticiones(completa)
+        servicio = CompetitionTimezoneFromCourse(
+            RepositorioFalso({campo: CampoFalso("Europe/Madrid")}),
+            repo_competiciones,
+        )
+        monkeypatch.setattr(
+            "src.modules.competition.infrastructure.services."
+            "competition_timezone_from_course.inspect",
+            lambda _: type("Estado", (), {"unloaded": set()})(),
+        )
+
+        zona = await servicio.for_competition(completa)
+
+        assert zona == "Europe/Madrid"
+        assert repo_competiciones.consultas == 0
+
+    async def test_sin_repositorio_de_competiciones_no_recarga(self):
+        """Construido con un solo argumento se comporta como antes de BE #331."""
+        campo = GolfCourseId.generate()
+        completa = _competicion_con_campo(campo)
+        servicio = CompetitionTimezoneFromCourse(
+            RepositorioFalso({campo: CampoFalso("Europe/Madrid")})
+        )
+
+        assert await servicio.for_competition(completa) == "Europe/Madrid"
+
+
+def _competicion_con_campo(golf_course_id) -> Competition:
+    competition = Competition.create(
+        id=CompetitionId.generate(),
+        creator_id=UserId.generate(),
+        name=CompetitionName("Torneo"),
+        dates=DateRange(date(2026, 6, 1), date(2026, 6, 3)),
+        location=Location(main_country=CountryCode("ES")),
+        team_1_name="A",
+        team_2_name="B",
+        play_mode=PlayMode.SCRATCH,
+    )
+    competition.add_golf_course(golf_course_id, CountryCode("ES"))
+    return competition
