@@ -235,7 +235,15 @@ class CreateCompetitionResponseDTO(BaseModel):
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     creator: CreatorDTO | None = Field(None, description="Información completa del creador.")
     name: str = Field(..., description=COMPETITION_NAME_DESC)
-    status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
+    status: str = Field(
+        ...,
+        description=(
+            "Estado de la competición. Al crearla es ACTIVE —nace con las "
+            "inscripciones abiertas—, salvo que se indique "
+            "`enrollment_opens_days_before`, en cuyo caso queda en DRAFT "
+            "esperando su apertura."
+        ),
+    )
 
     # Dates
     start_date: date = Field(..., description="Fecha de inicio.")
