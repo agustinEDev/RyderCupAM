@@ -275,6 +275,16 @@ class HoleScore:
         return self._validation_status
 
     @property
+    def is_recorded(self) -> bool:
+        """Indica si alguien llegó a anotar este hoyo (BE #347).
+
+        Las tarjetas se crean vacías al abrir el partido, así que tener la fila
+        no dice nada. Se mira el envío y no el número porque una raya —bola
+        levantada— se anota sin número, y es un hoyo jugado.
+        """
+        return self._own_submitted or self._marker_submitted
+
+    @property
     def created_at(self) -> datetime:
         return self._created_at
 

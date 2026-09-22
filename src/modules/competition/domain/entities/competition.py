@@ -424,24 +424,24 @@ class Competition:
         """Verifica si el torneo permite modificar configuración."""
         return self._status.allows_modifications()
 
-    def allows_deletion(self, has_schedule: bool) -> bool:
-        """Verifica si el torneo todavía se puede borrar del todo (BE #333).
+    def allows_deletion(self, has_played: bool) -> bool:
+        """Verifica si el torneo todavía se puede borrar del todo (BE #333, #347).
 
         Dos condiciones, y la segunda no se puede leer del estado. El estado
-        tiene que permitirlo, y ademas **no puede haber calendario**: el estado
+        tiene que permitirlo, y ademas **no puede haber nada jugado**: el estado
         se anda hacia atras —`revert-status` y `reopen-enrollments`— sin
-        deshacer las rondas, asi que un torneo ya jugado puede volver a ACTIVE
-        con sus golpes dentro. Mirando solo el estado, la cascada se los
-        llevaria.
+        deshacer partidos ni golpes, asi que un torneo ya jugado puede volver a
+        ACTIVE con sus tarjetas dentro. Mirando solo el estado, la cascada se
+        las llevaria.
 
-        El sorteo de equipos no entra (21 sep): se protege lo jugado, no lo
-        preparado. Sin rondas no hay partidos ni golpes, y el sorteo se rehace.
+        Tener calendario o equipos sorteados no cuenta (21 y 22 sep): se protege
+        lo jugado, no lo montado, y lo montado se rehace.
 
         Args:
-            has_schedule: Si ya tiene rondas. Solo se crean en CLOSED, asi que
-                tenerlas significa que este torneo paso de ahi.
+            has_played: Si algun partido quedo terminado o con walkover, o
+                alguien llego a anotar un hoyo.
         """
-        return self._status.allows_deletion() and not has_schedule
+        return self._status.allows_deletion() and not has_played
 
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)

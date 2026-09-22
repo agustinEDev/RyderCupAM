@@ -356,3 +356,22 @@ class TestHoleScoreEquality:
     def test_hash_by_id(self, match_id, player_id):
         hs = _create_hole_score(match_id, player_id)
         assert hash(hs) == hash(hs.id)
+
+
+class TestHoleScoreIsRecorded:
+    """BE #347: una tarjeta creada al abrir el partido no es un golpe anotado."""
+
+    def test_a_blank_card_is_not_recorded(self, match_id, player_id):
+        assert _create_hole_score(match_id, player_id).is_recorded is False
+
+    @pytest.mark.parametrize(
+        ("quien", "golpes"),
+        [("own", 4), ("own", None), ("marker", 4), ("marker", None)],
+    )
+    def test_anything_sent_by_either_side_is_recorded(self, match_id, player_id, quien, golpes):
+        """Una raya (None) también cuenta: es un hoyo jugado y levantado."""
+        hs = _create_hole_score(match_id, player_id)
+
+        getattr(hs, f"set_{quien}_score")(golpes)
+
+        assert hs.is_recorded is True

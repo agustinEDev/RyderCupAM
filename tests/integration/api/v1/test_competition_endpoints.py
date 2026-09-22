@@ -22,6 +22,7 @@ from tests.conftest import (
     estado_en_bd,
     set_auth_cookies,
 )
+from tests.integration.api.v1.test_scoring_endpoints import setup_match_in_progress
 
 
 class TestCreateCompetition:
@@ -254,9 +255,7 @@ class TestListCompetitions:
         data = response.json()
         assert [c["name"] for c in data] == [creada["name"]]
 
-    async def test_list_competitions_by_creator_ignores_a_blank_search(
-        self, client: AsyncClient
-    ):
+    async def test_list_competitions_by_creator_ignores_a_blank_search(self, client: AsyncClient):
         """
         Buscar por espacios no devuelve la lista entera.
 
@@ -332,9 +331,7 @@ class TestListCompetitions:
         assert response.status_code == 200
         assert response.json() == []
 
-    async def test_list_competitions_by_creator_still_finds_a_real_name(
-        self, client: AsyncClient
-    ):
+    async def test_list_competitions_by_creator_still_finds_a_real_name(self, client: AsyncClient):
         """
         La rama nueva del OR no puede tapar la búsqueda de siempre.
 
@@ -588,9 +585,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert despues.status_code == 200
         assert despues.json()["max_players"] == 20
 
@@ -628,9 +623,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert despues.json()["max_players"] == 100
 
     @pytest.mark.asyncio
@@ -656,9 +649,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         codigos = [c["code"] for c in despues.json()["countries"]]
         assert "PT" in codigos
 
@@ -685,9 +676,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         codigos = [c["code"] for c in despues.json()["countries"]]
         assert "PT" in codigos
 
@@ -756,9 +745,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert "PT" in [c["code"] for c in despues.json()["countries"]]
 
     @pytest.mark.asyncio
@@ -863,11 +850,12 @@ class TestDeleteCompetition:
         assert (await client.get(f"/api/v1/competitions/{comp['id']}")).status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_closed_competition_returns_400(self, client: AsyncClient):
-        """BE #333: cerradas las inscripciones ya no se borra.
+    async def test_delete_closed_competition_with_nothing_played_returns_204(
+        self, client: AsyncClient
+    ):
+        """BE #347: cerradas las inscripciones se sigue pudiendo borrar.
 
-        A partir de aquí se sortean equipos y se generan partidos, y el borrado
-        va en cascada hasta los golpes anotados.
+        Se protege lo jugado, no el estado: sin un golpe no hay nada que perder.
         """
         user = await create_authenticated_user(
             client, "deleter3@test.com", "P@ssw0rd123!", "Delete", "Three"
@@ -885,8 +873,7 @@ class TestDeleteCompetition:
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
-        assert response.status_code == 400
-        assert "CLOSED" in response.json()["detail"]
+        assert response.status_code == 204, response.text
 
 
 class TestListingOpensScheduledCompetitions:
@@ -947,9 +934,7 @@ class TestListingOpensScheduledCompetitions:
                         "par": 72,
                     },
                 ],
-                "holes": [
-                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
-                ],
+                "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
             },
         )
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
@@ -979,67 +964,74 @@ class TestListingOpensScheduledCompetitions:
         )
 
 
-class TestDeleteReopenedCompetition:
-    """BE #333: volver a ACTIVE no vuelve a hacer borrable un torneo montado."""
+class TestDeletePlayedCompetition:
+    """BE #347: lo que decide es lo jugado, no el estado ni el calendario.
+
+    Por HTTP y contra Postgres, que es donde vive la cascada: borrar una
+    competición con calendario se lleva rondas, partidos y tarjetas por
+    `ON DELETE CASCADE`, y hasta ahora no había llegado a pasar nunca.
+    """
+
+    async def _en_juego_y_de_vuelta(self, client: AsyncClient, *, anotar: bool) -> dict:
+        """Partido abierto, con un hoyo anotado o no, y el torneo devuelto a CLOSED."""
+        ctx = await setup_match_in_progress(client)
+        if anotar:
+            set_auth_cookies(client, ctx["player_a"]["cookies"])
+            hoyo = await client.post(
+                f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+                json={
+                    "own_score": 4,
+                    "marked_player_id": ctx["player_b"]["user"]["id"],
+                    "marked_score": 5,
+                },
+            )
+            assert hoyo.status_code == 200, hoyo.text
+
+        set_auth_cookies(client, ctx["creator"]["cookies"])
+        vuelta = await client.put(f"/api/v1/competitions/{ctx['competition_id']}/revert-status")
+        assert vuelta.status_code == 200, vuelta.text
+        assert vuelta.json()["status"] == "CLOSED"
+        return ctx
 
     @pytest.mark.asyncio
-    async def test_delete_reopened_competition_with_rounds_returns_400(
-        self, client: AsyncClient
-    ):
-        """Con calendario montado no se borra, aunque el estado haya vuelto a ACTIVE.
+    async def test_delete_competition_with_a_recorded_hole_returns_400(self, client: AsyncClient):
+        """Un solo hoyo anotado la protege, aunque el estado haya vuelto a ACTIVE.
 
-        El estado se puede andar hacia atrás y ninguna de esas vueltas deshace
-        rondas ni partidos. Mirando solo el estado, la cascada se llevaría el
-        torneo entero con sus tarjetas.
+        El estado se anda hacia atrás sin deshacer partidos ni golpes: mirando
+        solo el estado, la cascada se llevaría las tarjetas.
         """
-        admin = await create_admin_user(
-            client, "reopen-admin@test.com", "P@ssw0rd123!", "Reopen", "Admin"
-        )
-        user = await create_authenticated_user(
-            client, "reopener@test.com", "P@ssw0rd123!", "Re", "Opener"
-        )
-
-        comp = await create_competition(client, user["cookies"])
-
-        gc = await create_golf_course(client, user["cookies"])
-        await approve_golf_course(client, admin["cookies"], gc["id"])
-
-        set_auth_cookies(client, user["cookies"])
-        asociado = await client.post(
-            f"/api/v1/competitions/{comp['id']}/golf-courses",
-            json={"golf_course_id": gc["id"]},
-        )
-        assert asociado.status_code == 201, asociado.text
-
-        await activate_competition(client, user["cookies"], comp["id"])
-
-        set_auth_cookies(client, user["cookies"])
-        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
-        assert cerrada.status_code == 200, cerrada.text
-
-        ronda = await client.post(
-            f"/api/v1/competitions/{comp['id']}/rounds",
-            json={
-                "golf_course_id": gc["id"],
-                "round_date": comp["start_date"],
-                "session_type": "MORNING",
-                "match_format": "SINGLES",
-            },
-        )
-        assert ronda.status_code == 201, ronda.text
-
-        reabierta = await client.post(
-            f"/api/v1/competitions/{comp['id']}/reopen-enrollments"
-        )
+        ctx = await self._en_juego_y_de_vuelta(client, anotar=True)
+        comp_id = ctx["competition_id"]
+        reabierta = await client.post(f"/api/v1/competitions/{comp_id}/reopen-enrollments")
         assert reabierta.status_code == 200, reabierta.text
         assert reabierta.json()["status"] == "ACTIVE"
 
-        response = await client.delete(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        ficha = await client.get(f"/api/v1/competitions/{comp_id}")
+        response = await client.delete(f"/api/v1/competitions/{comp_id}")
 
+        assert ficha.json()["can_delete"] is False
         assert response.status_code == 400
-        assert "calendario" in response.json()["detail"].lower()
+        assert "golpes anotados" in response.json()["detail"]
+        assert "calendario" not in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_competition_whose_open_match_has_blank_cards_returns_204(
+        self, client: AsyncClient
+    ):
+        """Abrir un partido crea las tarjetas vacías: eso no es haber jugado.
+
+        Y el borrado se lleva por cascada la ronda, el partido y sus 36 tarjetas.
+        """
+        ctx = await self._en_juego_y_de_vuelta(client, anotar=False)
+        comp_id = ctx["competition_id"]
+
+        ficha = await client.get(f"/api/v1/competitions/{comp_id}")
+        response = await client.delete(f"/api/v1/competitions/{comp_id}")
+        despues = await client.get(f"/api/v1/competitions/{comp_id}")
+
+        assert ficha.json()["can_delete"] is True
+        assert response.status_code == 204, response.text
+        assert despues.status_code == 404
 
 
 class TestCompetitionStateTransitions:
@@ -1802,6 +1794,7 @@ class TestCompetitionGolfCourses:
         assert len(golf_courses) == 0
         assert golf_courses == []
 
+
 # Del reloj y no del calendario: una fecha fija hace que el test empiece a
 # fallar solo el dia en que queda por detras de «ahora»
 
@@ -1972,9 +1965,7 @@ class TestScheduledEnrollmentOpening:
                         "par": 72,
                     },
                 ],
-                "holes": [
-                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
-                ],
+                "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
             },
         )
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
@@ -2159,3 +2150,57 @@ class TestPublicAndPrivate:
         assert competicion_id not in [c["id"] for c in mias.json()]
 
 
+@pytest.mark.integration
+class TestCanDeleteEnLaFicha:
+    """
+    La ficha dice si quien la mira puede borrarla ahora (BE #347), para que la
+    app enseñe el botón solo cuando el borrado va a funcionar. En los listados
+    no se calcula: sería mirar el calendario de cada competición de la lista.
+    """
+
+    @pytest.mark.asyncio
+    async def test_i1_el_creador_de_una_abierta_sin_calendario_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200, ficha.text
+        assert ficha.json()["can_delete"] is True
+
+    @pytest.mark.asyncio
+    async def test_i2_otro_usuario_no_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador2@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        otro = await create_authenticated_user(
+            client, "cd-otro@test.com", "P@ssw0rd123!", "Otro", "Usuario"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(otro["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200
+        assert ficha.json()["can_delete"] is False
+
+    @pytest.mark.asyncio
+    async def test_i3_en_los_listados_no_se_calcula(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador3@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert listado.status_code == 200
+        competiciones = listado.json()
+        assert competiciones
+        assert all(c.get("can_delete") is None for c in competiciones)

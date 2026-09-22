@@ -411,6 +411,7 @@ async def get_competition(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
+    delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
@@ -441,6 +442,13 @@ async def get_competition(
                 competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
+        # Solo aquí y no en el mapper, que usan también los listados: saberlo
+        # exige recorrer lo jugado. La regla es la misma que aplica el borrado,
+        # no una copia (BE #347). Fuera del bloque de arriba: el caso de uso abre
+        # su propia unidad de trabajo
+        dto.can_delete = await delete_uc.puede_borrar(
+            competition_vo_id, current_user_id, is_admin=current_user.is_admin
+        )
         return dto
 
     except ValueError as e:
@@ -514,10 +522,12 @@ async def update_competition(
     description=(
         "Elimina físicamente una competición, con todo lo que cuelga de ella. "
         "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
-        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
-        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
-        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
-        "equipos sorteados no lo impiden. Si no se cumple, 400."
+        "estado lo permite (todos menos IN_PROGRESS y COMPLETED) y no hay nada "
+        "jugado: ningún partido terminado, con walkover o concedido, ni un hoyo "
+        "anotado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus partidos. El "
+        "calendario sin jugar y los equipos sorteados no lo impiden, y se van "
+        "con ella. Si no se cumple, 400."
     ),
     tags=["Competitions"],
 )
