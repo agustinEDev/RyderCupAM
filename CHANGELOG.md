@@ -53,6 +53,9 @@ salida.
   cosas: que el estado lo permita **y** que no tenga calendario. El estado solo no
   basta: `revert-status` y `reopen-enrollments` lo andan hacia atrás sin deshacer
   las rondas, y un torneo ya jugado puede volver a `ACTIVE` con sus golpes dentro.
+  **Solo en la API por ahora**: la aplicación sigue ofreciendo «Eliminar» únicamente
+  en borrador. El botón en activas y canceladas llega con su modal de confirmación
+  (RyderCupWeb#667).
 
 ### Fixed
 
