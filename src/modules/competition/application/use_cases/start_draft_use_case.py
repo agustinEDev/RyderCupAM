@@ -16,6 +16,7 @@ from uuid import UUID
 from src.modules.competition.application.dto.draft_dto import DraftStateDTO
 from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
+    InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.services.draft_room import DraftRoom
@@ -79,6 +80,7 @@ class StartDraftUseCase:
             CompetitionNotFoundError: Si la competicion no existe
             NotCompetitionCreatorError: Si no es el creador ni admin
             CompetitionNotClosedError: Si las inscripciones siguen abiertas
+            InsufficientPlayersError: Si no queda nadie a quien elegir
             CaptainMissingError: Si falta algun capitan, o no hay ninguno
             DraftAlreadyStartedError: Si la sala ya arranco o hay equipos
         """
@@ -114,6 +116,14 @@ class StartDraftUseCase:
                 raise DraftAlreadyStartedError("La sala de draft ya estaba abierta")
 
             capitan_a, capitan_b = capitanes
+            elegibles = await self._room.elegibles(competition)
+            if not elegibles:
+                # Sin nadie que repartir, la sala nace muerta: nadie puede
+                # elegir, así que nunca termina, y al minuto cada mirada
+                # intentaría elegir por el capitán sin tener a quién
+                raise InsufficientPlayersError(
+                    "No queda ningún jugador que repartir: los inscritos son los dos capitanes"
+                )
             draft = Draft.create(
                 competition_id=comp_id,
                 team_a_captain_id=capitan_a,
@@ -123,5 +133,4 @@ class StartDraftUseCase:
             draft.start(first_pick=self._sorteo(), ahora=self._room.ahora)
             await self._uow.drafts.add(draft)
 
-            elegibles = await self._room.elegibles(competition)
             return await self._room.estado(competition, draft, elegibles)

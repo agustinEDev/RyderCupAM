@@ -111,6 +111,14 @@ class AssignTeamsUseCase:
                 )
 
             mode = TeamAssignmentMode(request.mode)
+            if mode == TeamAssignmentMode.DRAFT:
+                # DRAFT no se pide: es lo que queda cuando la sala termina.
+                # Admitirlo aqui guardaria un reparto calculado por la
+                # aplicacion diciendo que lo eligieron los capitanes
+                raise ValueError(
+                    "Los equipos de un draft los eligen los capitanes en la sala, "
+                    "no se piden por aquí"
+                )
             team_a_ids, team_b_ids = await self._repartir(competition, request, enrollments, mode)
 
             assignment = await TeamAssignmentWriter.guardar(

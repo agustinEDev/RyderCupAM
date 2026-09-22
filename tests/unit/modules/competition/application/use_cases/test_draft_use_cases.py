@@ -24,6 +24,7 @@ import pytest
 from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
     CompetitionNotFoundError,
+    InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
@@ -235,6 +236,29 @@ class TestAbrirLaSala:
         with pytest.raises(CaptainMissingError):
             await start.execute(comp_id.value, creator_id)
 
+    async def test_sin_nadie_a_quien_elegir_no_se_abre_la_sala(self):
+        """Dos inscritos son los dos capitanes: no queda nadie que repartir.
+
+        Abrirla igual dejaba una sala muerta: nadie puede elegir, así que nunca
+        termina, y al minuto TODA mirada revienta —la aplicación intenta elegir
+        por el capitán y no hay a quién—. Sin forma de salir: ni se reabre ni se
+        borra.
+        """
+        uow, comp_id, creator_id, _, usuarios = await _montar(jugadores=2)
+        start, _, _, _ = _casos(uow, usuarios)
+
+        with pytest.raises(InsufficientPlayersError):
+            await start.execute(comp_id.value, creator_id)
+
+    async def test_con_un_solo_elegible_si_se_abre(self):
+        """Tres inscritos: los dos capitanes y uno más. Equipos de 2 y 1."""
+        uow, comp_id, creator_id, _, usuarios = await _montar(jugadores=3)
+        start, _, _, _ = _casos(uow, usuarios)
+
+        sala = await start.execute(comp_id.value, creator_id)
+
+        assert len(sala.available_players) == 1
+
     async def test_no_se_vuelve_a_sortear_con_la_sala_en_marcha(self):
         """Volver a sortear cambiaría el orden con elecciones ya hechas."""
         uow, comp_id, creator_id, _, usuarios = await _montar()
@@ -253,6 +277,29 @@ class TestAbrirLaSala:
 
         with pytest.raises(DraftAlreadyStartedError):
             await start.execute(comp_id.value, creator_id)
+
+
+class TestLosNombresQueSeVen:
+    async def test_cada_eleccion_viaja_con_el_nombre_del_elegido(self):
+        """Quien entra a mitad no tiene de dónde sacarlos: sin esto, ve UUIDs."""
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, _, pick, _ = _casos(uow, usuarios)
+        sala = await start.execute(comp_id.value, creator_id)
+        capitan = creator_id if sala.current_team == "A" else resto[0]
+        elegido = sala.available_players[0]
+
+        sala = await pick.execute(comp_id.value, capitan, elegido.user_id)
+
+        assert sala.picks[-1].name == elegido.name
+
+    async def test_y_los_capitanes_llevan_el_suyo(self):
+        uow, comp_id, creator_id, _, usuarios = await _montar()
+        start, _, _, _ = _casos(uow, usuarios)
+
+        sala = await start.execute(comp_id.value, creator_id)
+
+        assert sala.team_a_captain_name == "Ana Alba"
+        assert sala.team_b_captain_name == "Jugador 1"
 
 
 class TestMirarLaSala:
@@ -425,6 +472,36 @@ class TestElMinutoQueSeAgota:
         with pytest.raises(NotYourTurnError):
             await pick.execute(comp_id.value, capitan, sala.available_players[1].user_id)
 
+    async def test_mirar_sin_turno_vencido_no_bloquea_ninguna_fila(self):
+        """La sala la refrescan doce móviles cada pocos segundos.
+
+        Bloquear la competición en cada vistazo serializa a todos los
+        espectadores sobre la misma fila, y de paso frena cualquier escritura
+        de la competición. Solo se bloquea cuando hay un turno que resolver.
+        """
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, ver, _, _ = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+        bloqueos = _contar_bloqueos(uow)
+
+        await ver.execute(comp_id.value, resto[-1])
+
+        assert bloqueos["competitions"] == 0
+        assert bloqueos["drafts"] == 0
+
+    async def test_y_con_un_turno_vencido_si_lo_bloquea(self):
+        """Resolverlo es escribir: dos miradas a la vez elegirían dos veces."""
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, ver, _, reloj = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+        reloj.avanza(61)
+        bloqueos = _contar_bloqueos(uow)
+
+        await ver.execute(comp_id.value, resto[-1])
+
+        assert bloqueos["drafts"] == 1
+        assert bloqueos["competitions"] == 1
+
     async def test_dentro_del_minuto_no_se_resuelve_nada(self):
         uow, comp_id, creator_id, resto, usuarios = await _montar()
         start, ver, _, reloj = _casos(uow, usuarios)
@@ -496,6 +573,24 @@ class TestCuandoTermina:
         async with uow:
             ronda = await uow.rounds.find_by_id(ronda_id)
         assert ronda.status.value == "PENDING_MATCHES"
+
+
+def _contar_bloqueos(uow):
+    """Cuenta las lecturas con bloqueo que se piden a partir de ahora."""
+    cuenta = {"competitions": 0, "drafts": 0}
+
+    def espiar(repo, metodo, clave):
+        original = getattr(repo, metodo)
+
+        async def espia(*args, **kwargs):
+            cuenta[clave] += 1
+            return await original(*args, **kwargs)
+
+        setattr(repo, metodo, espia)
+
+    espiar(uow.competitions, "find_by_id_for_update", "competitions")
+    espiar(uow.drafts, "find_by_competition_for_update", "drafts")
+    return cuenta
 
 
 async def _crear_ronda(uow, comp_id):

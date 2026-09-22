@@ -10,7 +10,7 @@ donde se entrase.
 """
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.draft_dto import (
     DraftPickDTO,
@@ -56,23 +56,37 @@ class DraftRoom:
         """
         self._uow = uow
         self._user_repo = user_repository
-        self._clock = clock or datetime.now
+        # UTC, como el resto del modulo (BE #305 y la generacion de partidos), y
+        # sin huso al guardarlo porque la columna no lo lleva: en un servidor en
+        # Madrid, `datetime.now` dejaria estas horas dos horas por delante de
+        # las columnas hermanas, y `server_time` saldria del lado del cliente
+        # con un desfase que no existe
+        self._clock = clock or (lambda: datetime.now(UTC).replace(tzinfo=None))
 
     @property
     def ahora(self) -> datetime:
         """La hora del servidor."""
         return self._clock()
 
-    async def competicion(self, competition_id: CompetitionId) -> Competition:
-        """La competicion, con su fila bloqueada.
+    async def competicion(
+        self, competition_id: CompetitionId, bloquear: bool = True
+    ) -> Competition:
+        """La competicion, con su fila bloqueada salvo que solo se vaya a leer.
 
-        Bloqueada porque al terminar la sala se le tocan los equipos, y porque
-        nombrar capitanes a la vez cambiaria quien puede elegir.
+        Bloqueada al escribir, porque al terminar la sala se le tocan los
+        equipos y porque nombrar capitanes a la vez cambiaria quien puede
+        elegir. Sin bloquear al mirar: la sala la refrescan doce moviles cada
+        pocos segundos, y bloquear ahi serializa a todos los espectadores sobre
+        la misma fila y frena cualquier escritura de la competicion.
 
         Raises:
             CompetitionNotFoundError: Si no existe
         """
-        competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+        competition = (
+            await self._uow.competitions.find_by_id_for_update(competition_id)
+            if bloquear
+            else await self._uow.competitions.find_by_id(competition_id)
+        )
         if not competition:
             raise CompetitionNotFoundError(f"No existe competición con ID {competition_id.value}")
         return competition
@@ -125,8 +139,19 @@ class DraftRoom:
         """La sala entera, que es lo que la pantalla pinta en directo."""
         cogidos = {pick.user_id for pick in draft.picks}
         disponibles = [p for p in elegibles if p.user_id not in cogidos]
+        # De todos los que aparecen, en una sola consulta: los disponibles, los
+        # ya elegidos y los dos capitanes. Quien entra a mitad de draft no
+        # tiene de donde sacar esos nombres
         nombres = await PlayerNames.de_la_competicion(
-            [p.user_id for p in disponibles], competition.id, self._user_repo, self._uow
+            [
+                *(p.user_id for p in disponibles),
+                *cogidos,
+                draft.team_a_captain_id,
+                draft.team_b_captain_id,
+            ],
+            competition.id,
+            self._user_repo,
+            self._uow,
         )
         equipo_a, equipo_b = draft.teams()
         return DraftStateDTO(
@@ -140,11 +165,14 @@ class DraftRoom:
             server_time=self.ahora,
             team_a_captain_id=draft.team_a_captain_id.value,
             team_b_captain_id=draft.team_b_captain_id.value,
+            team_a_captain_name=nombres.get(draft.team_a_captain_id, ""),
+            team_b_captain_name=nombres.get(draft.team_b_captain_id, ""),
             team_a=[uid.value for uid in equipo_a],
             team_b=[uid.value for uid in equipo_b],
             picks=[
                 DraftPickDTO(
                     user_id=pick.user_id.value,
+                    name=nombres.get(pick.user_id, ""),
                     team=pick.team,
                     order=pick.order,
                     automatic=pick.automatic,

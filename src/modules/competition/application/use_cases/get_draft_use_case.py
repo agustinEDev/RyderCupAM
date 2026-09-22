@@ -58,11 +58,21 @@ class GetDraftUseCase:
         """
         async with self._uow:
             comp_id = CompetitionId(competition_id)
-            competition = await self._room.competicion(comp_id)
-            draft = await self._uow.drafts.find_by_competition_for_update(comp_id)
+            # Sin bloquear: mirar es leer, y la sala la refrescan doce móviles
+            # cada pocos segundos
+            competition = await self._room.competicion(comp_id, bloquear=False)
+            draft = await self._uow.drafts.find_by_competition(comp_id)
             if draft is None:
                 return None
 
-            elegibles = await self._room.elegibles(competition)
-            await self._room.al_dia(competition, draft, elegibles)
+            if draft.turn_expired(self._room.ahora):
+                # Resolverlo SÍ es escribir, y dos miradas a la vez elegirían
+                # dos veces por el mismo turno: se relee todo con la fila
+                # bloqueada antes de tocar nada
+                competition = await self._room.competicion(comp_id)
+                draft = await self._uow.drafts.find_by_competition_for_update(comp_id)
+                elegibles = await self._room.elegibles(competition)
+                await self._room.al_dia(competition, draft, elegibles)
+            else:
+                elegibles = await self._room.elegibles(competition)
             return await self._room.estado(competition, draft, elegibles)

@@ -158,6 +158,21 @@ class TestLaSalaPorHttp:
         assert sorted(reparto["team_a_player_ids"]) == sorted(sala["team_a"])
         assert sorted(reparto["team_b_player_ids"]) == sorted(sala["team_b"])
 
+    async def test_el_reparto_por_api_no_acepta_el_modo_draft(self, client: AsyncClient):
+        """Un reparto calculado por la aplicación no puede decir que lo eligieron
+        los capitanes, y además bloquearía la sala: con equipos hechos ya no se abre."""
+        # Seis, que con un número impar el reparto se queja de eso primero
+        montaje = await _cerrada_con_capitanes(client, jugadores=6)
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+
+        repartido = await client.post(
+            f"/api/v1/competitions/{montaje['comp']['id']}/teams",
+            json={"competition_id": montaje["comp"]["id"], "mode": "DRAFT"},
+        )
+
+        assert repartido.status_code == 400, repartido.text
+        assert "draft" in repartido.json()["detail"].lower()
+
     async def test_con_los_equipos_hechos_no_se_vuelve_a_sortear(self, client: AsyncClient):
         """Un draft sobre equipos ya hechos los reharía por detrás."""
         montaje = await _cerrada_con_capitanes(client)

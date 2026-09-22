@@ -66,12 +66,38 @@ class TestTeamAssignmentCreate:
         assert len(assignment.team_a_player_ids) == 2
         assert len(assignment.team_b_player_ids) == 1
 
-    def test_create_with_two_players_more_in_a_team_raises(self):
-        """Dos de diferencia no sale de ningún reparto: es un error de quien llama."""
-        with pytest.raises(ValueError, match="one player"):
+    def test_manual_assignment_still_requires_equal_teams(self):
+        """A mano, uno de diferencia es un jugador que se quedó fuera.
+
+        Nadie reparte a mano 5 y 4 de diez inscritos queriendo: es que se le
+        olvidó uno, y aguas abajo `generate_matches` empareja `min(a, b)`, así
+        que el sobrante no juega y nadie avisa. En el draft sí pasa, porque
+        los turnos se alternan y con impares uno se queda sin pareja.
+        """
+        with pytest.raises(ValueError, match="equal players"):
+            TeamAssignment.create(
+                competition_id=CompetitionId.generate(),
+                mode=TeamAssignmentMode.MANUAL,
+                team_a_player_ids=[UserId.generate(), UserId.generate()],
+                team_b_player_ids=[UserId.generate()],
+            )
+
+    def test_automatic_assignment_still_requires_equal_teams(self):
+        """El reparto automático ya rechaza los impares antes de llegar aquí."""
+        with pytest.raises(ValueError, match="equal players"):
             TeamAssignment.create(
                 competition_id=CompetitionId.generate(),
                 mode=TeamAssignmentMode.AUTOMATIC,
+                team_a_player_ids=[UserId.generate(), UserId.generate()],
+                team_b_player_ids=[UserId.generate()],
+            )
+
+    def test_create_with_two_players_more_in_a_team_raises(self):
+        """Ni siquiera en el draft: los turnos se alternan uno a uno."""
+        with pytest.raises(ValueError, match="one player"):
+            TeamAssignment.create(
+                competition_id=CompetitionId.generate(),
+                mode=TeamAssignmentMode.DRAFT,
                 team_a_player_ids=[UserId.generate(), UserId.generate(), UserId.generate()],
                 team_b_player_ids=[UserId.generate()],
             )

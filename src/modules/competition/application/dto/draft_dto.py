@@ -24,6 +24,9 @@ class DraftPickDTO(BaseModel):
     """Una eleccion ya hecha."""
 
     user_id: UUID = Field(..., description="A quien se eligio.")
+    # El nombre viaja con la eleccion: quien entra a mitad de draft no tiene de
+    # donde sacarlo, y sin esto la sala pintaria UUIDs
+    name: str = Field(..., description="Nombre del elegido.")
     team: str = Field(..., description="Equipo que lo eligio: A o B.")
     order: int = Field(..., description="En que turno se eligio, empezando por 1.")
     automatic: bool = Field(
@@ -47,6 +50,8 @@ class DraftStateDTO(BaseModel):
     server_time: datetime = Field(..., description="La hora del servidor al responder.")
     team_a_captain_id: UUID = Field(..., description="Capitan del equipo A.")
     team_b_captain_id: UUID = Field(..., description="Capitan del equipo B.")
+    team_a_captain_name: str = Field(..., description="Nombre del capitan del equipo A.")
+    team_b_captain_name: str = Field(..., description="Nombre del capitan del equipo B.")
     team_a: list[UUID] = Field(default_factory=list, description="Equipo A: capitan y elegidos.")
     team_b: list[UUID] = Field(default_factory=list, description="Equipo B: capitan y elegidos.")
     picks: list[DraftPickDTO] = Field(default_factory=list, description="Las elecciones, en orden.")
