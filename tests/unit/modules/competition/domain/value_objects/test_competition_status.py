@@ -127,17 +127,20 @@ class TestCompetitionStatusHelpers:
         El motivo de todo esto es que equivocarse al crear un torneo no deje una
         fila muerta para siempre, y dejar CANCELLED fuera reproducia justo eso.
         Lo que protege al historial de verdad no es el estado, sino no tener
-        calendario montado, que `Competition.allows_deletion` exige aparte.
+        nada jugado, que el caso de uso comprueba aparte.
         """
         assert CompetitionStatus.CANCELLED.allows_deletion() is True
 
-    def test_does_not_allow_deletion_once_enrollment_closes(self):
-        """De CLOSED en adelante se sortean equipos y se generan partidos.
+    def test_allows_deletion_of_a_closed_competition(self):
+        """BE #347: cerrar las inscripciones no hace sagrado el torneo.
 
-        Esta es solo la mitad de la regla: el estado se puede andar hacia atras
-        sin deshacer nada de eso, asi que `Competition.allows_deletion` exige
-        ademas que no haya calendario montado.
+        En CLOSED se sortean equipos y se monta el calendario, y todo eso se
+        rehace. Lo irrecuperable son los golpes, y de eso se encarga la otra
+        mitad de la regla, que mira lo jugado y no el estado.
         """
-        assert CompetitionStatus.CLOSED.allows_deletion() is False
+        assert CompetitionStatus.CLOSED.allows_deletion() is True
+
+    def test_does_not_allow_deletion_while_being_played_or_once_finished(self):
+        """En juego o terminado, nunca: ahi el torneo ES lo jugado."""
         assert CompetitionStatus.IN_PROGRESS.allows_deletion() is False
         assert CompetitionStatus.COMPLETED.allows_deletion() is False

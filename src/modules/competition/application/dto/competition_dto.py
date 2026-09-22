@@ -497,8 +497,8 @@ class CompetitionResponseDTO(BaseModel):
         None,
         description=(
             "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
-            "estado que lo permita y sin calendario). Null en los listados, donde no "
-            "se calcula para no consultar el calendario de cada competición."
+            "estado que lo permita y nada jugado). Null en los listados, donde no "
+            "se calcula para no recorrer los partidos de cada competición."
         ),
     )
 
@@ -759,7 +759,7 @@ class CompleteCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 # --------------------------------------------------------------------------------------
-# Delete Competition (eliminación física - mientras no haya calendario)
+# Delete Competition (eliminación física - mientras no haya nada jugado)
 # --------------------------------------------------------------------------------------
 
 
@@ -768,8 +768,8 @@ class DeleteCompetitionRequestDTO(BaseModel):
     DTO de entrada para eliminar físicamente una competición.
 
     Restricciones:
-    - Solo si el estado lo permite (DRAFT, ACTIVE o CANCELLED)
-    - Y solo si no hay calendario montado (los equipos sorteados no impiden)
+    - Solo si el estado lo permite (todos menos IN_PROGRESS y COMPLETED)
+    - Y solo si no hay nada jugado (el calendario y los equipos no impiden)
     - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """

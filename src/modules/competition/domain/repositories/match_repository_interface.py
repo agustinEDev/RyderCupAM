@@ -57,6 +57,17 @@ class MatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_round_for_update(self, round_id: RoundId) -> list[Match]:
+        """
+        Los partidos de una ronda con sus filas bloqueadas (SELECT ... FOR UPDATE).
+
+        Lo usa el borrado de competiciones (BE #347): conceder o terminar un
+        partido no bloquea la competición, y sin esto uno concedido a la vez que
+        se borra se iría en la cascada.
+        """
+        pass
+
+    @abstractmethod
     async def delete(self, match_id: MatchId) -> bool:
         """Elimina un partido. Retorna True si existia."""
         pass

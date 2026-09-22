@@ -55,6 +55,11 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         return [m for m in self._matches.values() if m.round_id == round_id]
 
+    async def find_by_round_for_update(self, round_id: RoundId) -> list[Match]:
+        # En memoria no hay nada que bloquear. Sin pasar por `find_by_round`:
+        # los tests espían cuál de las dos lecturas usa cada camino
+        return [m for m in self._matches.values() if m.round_id == round_id]
+
     async def delete(self, match_id: MatchId) -> bool:
         if match_id in self._matches:
             del self._matches[match_id]

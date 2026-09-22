@@ -2,14 +2,19 @@
 Tests para DeleteCompetitionUseCase.puede_borrar (BE #347).
 
 La ficha necesita saber si quien la mira puede borrarla ahora, para enseñar o no
-el botón. La regla ya vive en `execute`: quién (creador o admin), el estado
-(`Competition.allows_deletion`) y el calendario (`_tiene_calendario`). Aquí no se
-reescribe: se comprueba que la pregunta y el borrado de verdad dicen SIEMPRE lo
-mismo, en cada combinación de estado, calendario y rol. Si algún día divergen,
-el botón mentiría, y este test lo dice antes.
+el botón. La regla vive en `execute`: quién (creador o admin), el estado
+(`CompetitionStatus.allows_deletion`) y que no haya nada jugado
+(`_tiene_algo_jugado`). Aquí se comprueban dos cosas en cada combinación de
+situación y rol: que la pregunta y el borrado de verdad dicen SIEMPRE lo mismo
+—si divergen, el botón miente— y que lo que dicen es la regla acordada.
+
+La regla, decidida con el dueño del producto el 22 sep: se protege lo jugado, no
+lo montado. Tener calendario no impide borrar; un solo golpe anotado, un
+walkover o un partido terminado, sí. Y lo que está en juego o terminado, nunca.
 """
 
 from datetime import date
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -26,33 +31,50 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
 )
-from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import montar_calendario
 
 pytestmark = pytest.mark.asyncio
 
-# Cada situación: cómo se deja la competición y si tiene calendario
+# Cada situación: el estado, hasta dónde se jugó su calendario (None si no
+# tiene) y si el creador o un admin pueden borrarla
 SITUACIONES = {
-    "borrador": ("DRAFT", False),
-    "abierta": ("ACTIVE", False),
-    "cerrada": ("CLOSED", False),
-    "en juego": ("IN_PROGRESS", True),
-    "cancelada sin calendario": ("CANCELLED", False),
-    "cancelada con calendario": ("CANCELLED", True),
+    "borrador": ("DRAFT", None, True),
+    "abierta": ("ACTIVE", None, True),
+    # Reabierta tras montar el calendario: sin jugar no hay nada que perder
+    "abierta con calendario sin jugar": ("ACTIVE", "sin jugar", True),
+    # Ya jugada y devuelta a ACTIVE con `revert-status` + `reopen-enrollments`
+    "abierta con un golpe": ("ACTIVE", "golpe propio", False),
+    "cerrada": ("CLOSED", None, True),
+    "cerrada con calendario sin jugar": ("CLOSED", "sin jugar", True),
+    # La anotación se abre sola a la hora de la sesión (BE #305): las tarjetas
+    # existen, vacías, sin que nadie haya jugado
+    "cerrada con partido abierto sin golpes": ("CLOSED", "empezado", True),
+    "cerrada con un golpe propio": ("CLOSED", "golpe propio", False),
+    "cerrada con un golpe del marcador": ("CLOSED", "golpe del marcador", False),
+    # Una raya no lleva número, pero es un hoyo jugado
+    "cerrada con una raya": ("CLOSED", "raya", False),
+    "cerrada con un walkover": ("CLOSED", "walkover", False),
+    "cerrada con un partido concedido": ("CLOSED", "concedido", False),
+    "cerrada con un partido terminado": ("CLOSED", "terminado", False),
+    "en juego": ("IN_PROGRESS", None, False),
+    "en juego sin jugar": ("IN_PROGRESS", "sin jugar", False),
+    "terminada": ("COMPLETED", None, False),
+    "cancelada sin calendario": ("CANCELLED", None, True),
+    "cancelada con calendario sin jugar": ("CANCELLED", "sin jugar", True),
+    "cancelada con un golpe": ("CANCELLED", "golpe propio", False),
+    "cancelada con un walkover": ("CANCELLED", "walkover", False),
 }
 ROLES = ("creador", "admin", "otro")
 
 
-async def _montar(uow: InMemoryUnitOfWork, creator_id: UserId, estado: str, con_calendario: bool):
-    """Crea la competición, la lleva al estado pedido y, si toca, le pone una ronda."""
+async def _montar(uow: InMemoryUnitOfWork, creator_id: UserId, estado: str, como: str | None):
+    """Crea la competición, la lleva al estado pedido y, si toca, le cuelga el calendario."""
     programada = estado == "DRAFT"
     request = CreateCompetitionRequestDTO(
         name="Ryder Cup 2030",
@@ -70,24 +92,19 @@ async def _montar(uow: InMemoryUnitOfWork, creator_id: UserId, estado: str, con_
 
     async with uow:
         competition = await uow.competitions.find_by_id(competition_id)
-        if estado in ("CLOSED", "IN_PROGRESS"):
+        if estado in ("CLOSED", "IN_PROGRESS", "COMPLETED"):
             competition.close_enrollments()
-        if estado == "IN_PROGRESS":
+        if estado in ("IN_PROGRESS", "COMPLETED"):
             competition.start()
+        if estado == "COMPLETED":
+            competition.complete()
         if estado == "CANCELLED":
             competition.cancel()
         await uow.competitions.update(competition)
-        if con_calendario:
-            await uow.rounds.add(
-                Round.create(
-                    competition_id=competition_id,
-                    golf_course_id=GolfCourseId(uuid4()),
-                    round_date=date(2030, 6, 1),
-                    session_type=SessionType.MORNING,
-                    match_format=MatchFormat.SINGLES,
-                )
-            )
         await uow.commit()
+
+    if como is not None:
+        await montar_calendario(uow, competition_id, como)
 
     return competition_id, competition.status.value
 
@@ -106,12 +123,12 @@ async def test_puede_borrar_dice_lo_mismo_que_el_borrado(situacion, rol):
     """
     Given: una competición en cada situación y alguien con cada rol
     When: se pregunta si puede borrarla y luego se intenta de verdad
-    Then: la respuesta coincide con lo que pasa al borrar
+    Then: la respuesta coincide con lo que pasa al borrar, y los dos con la regla
     """
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
-    estado, con_calendario = SITUACIONES[situacion]
-    competition_id, estado_real = await _montar(uow, creator_id, estado, con_calendario)
+    estado, como, borrable = SITUACIONES[situacion]
+    competition_id, estado_real = await _montar(uow, creator_id, estado, como)
     assert estado_real == estado, f"el montaje dejó {estado_real}, no {estado}"
     user_id, is_admin = _quien(rol, creator_id)
     use_case = DeleteCompetitionUseCase(uow)
@@ -129,32 +146,7 @@ async def test_puede_borrar_dice_lo_mismo_que_el_borrado(situacion, rol):
         borra = False
 
     assert dice is borra
-
-
-async def test_puede_borrar_casos_que_importan():
-    """
-    Los que la tabla cubre, dichos en claro: una cancelada sin calendario SÍ,
-    una cancelada con calendario NO, y alguien ajeno nunca.
-    """
-    for situacion, rol, esperado in [
-        ("cancelada sin calendario", "creador", True),
-        ("abierta", "creador", True),
-        ("borrador", "admin", True),
-        ("cancelada con calendario", "creador", False),
-        ("cerrada", "creador", False),
-        ("abierta", "otro", False),
-    ]:
-        uow = InMemoryUnitOfWork()
-        creator_id = UserId(uuid4())
-        estado, con_calendario = SITUACIONES[situacion]
-        competition_id, _ = await _montar(uow, creator_id, estado, con_calendario)
-        user_id, is_admin = _quien(rol, creator_id)
-
-        dice = await DeleteCompetitionUseCase(uow).puede_borrar(
-            competition_id, user_id, is_admin=is_admin
-        )
-
-        assert dice is esperado, f"{situacion} / {rol}"
+    assert borra is (borrable and rol != "otro")
 
 
 async def test_puede_borrar_una_que_no_existe_es_no():
@@ -171,9 +163,24 @@ async def test_puede_borrar_no_borra_nada():
     """Preguntar no puede tener efectos: la competición sigue ahí."""
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
-    competition_id, _ = await _montar(uow, creator_id, "ACTIVE", False)
+    competition_id, _ = await _montar(uow, creator_id, "ACTIVE", None)
 
     await DeleteCompetitionUseCase(uow).puede_borrar(competition_id, creator_id, is_admin=False)
 
     async with uow:
         assert await uow.competitions.find_by_id(competition_id) is not None
+
+
+@pytest.mark.parametrize("estado", ["IN_PROGRESS", "COMPLETED"])
+async def test_puede_borrar_no_recorre_el_calendario_si_el_estado_ya_dice_que_no(estado):
+    """Se pregunta en cada ficha: un torneo en juego no debe costar N consultas."""
+    uow = InMemoryUnitOfWork()
+    creator_id = UserId(uuid4())
+    competition_id, _ = await _montar(uow, creator_id, estado, "sin jugar")
+    uow.rounds.find_by_competition = AsyncMock(side_effect=AssertionError("no debía mirarlo"))
+
+    dice = await DeleteCompetitionUseCase(uow).puede_borrar(
+        competition_id, creator_id, is_admin=False
+    )
+
+    assert dice is False

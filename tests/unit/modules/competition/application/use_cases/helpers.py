@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
@@ -10,13 +11,22 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CreateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 
 async def create_competition(
@@ -85,3 +95,83 @@ async def create_approved_enrollment(
         await uow.enrollments.add(enrollment)
         await uow.commit()
     return enrollment
+
+
+# Hasta dónde llegó a jugarse un calendario (BE #347). El orden importa poco;
+# lo que cuenta es que «empezado» y «sin jugar» NO son jugar, y el resto sí
+COMO_SE_JUGO = (
+    "sin jugar",
+    "empezado",
+    "golpe propio",
+    "golpe del marcador",
+    "raya",
+    "walkover",
+    "concedido",
+    "terminado",
+)
+
+
+def _jugador() -> MatchPlayer:
+    return MatchPlayer.create(
+        user_id=UserId.generate(),
+        playing_handicap=10,
+        tee_color=TeeColor.YELLOW,
+        tee_gender=Gender.MALE,
+        strokes_received=[],
+    )
+
+
+async def montar_calendario(uow: InMemoryUnitOfWork, competition_id, como: str) -> None:
+    """Cuelga de la competición una ronda con un partido jugado hasta `como`.
+
+    «empezado» deja las tarjetas creadas y VACÍAS, que es lo que hace de verdad
+    empezar un partido (`match_opener`): tener filas no es haber anotado nada.
+    """
+    if como not in COMO_SE_JUGO:
+        raise ValueError(f"no sé montar un calendario «{como}»")
+    if not isinstance(competition_id, CompetitionId):
+        competition_id = CompetitionId(competition_id)
+    ronda = Round.create(
+        competition_id=competition_id,
+        golf_course_id=GolfCourseId(uuid4()),
+        round_date=date(2030, 6, 1),
+        session_type=SessionType.MORNING,
+        match_format=MatchFormat.SINGLES,
+    )
+    a, b = _jugador(), _jugador()
+    partido = Match.create(
+        round_id=ronda.id, match_number=1, team_a_players=[a], team_b_players=[b]
+    )
+    tarjetas = []
+    if como == "walkover":
+        partido.declare_walkover("A")
+    elif como != "sin jugar":
+        partido.start()
+        tarjetas = [
+            HoleScore.create(
+                match_id=partido.id,
+                hole_number=hoyo,
+                player_user_id=jugador.user_id,
+                team=equipo,
+                strokes_received=0,
+            )
+            for hoyo in range(1, 19)
+            for jugador, equipo in ((a, "A"), (b, "B"))
+        ]
+        if como == "golpe propio":
+            tarjetas[0].set_own_score(4)
+        if como == "golpe del marcador":
+            tarjetas[0].set_marker_score(4)
+        if como == "raya":
+            # Bola levantada: se envía sin número, y es un hoyo jugado
+            tarjetas[0].set_own_score(None)
+        if como == "concedido":
+            # Sin un solo golpe: se concede antes de empezar a anotar
+            partido.concede("B")
+        if como == "terminado":
+            partido.complete({"winner": "A", "score": "1UP"})
+    async with uow:
+        await uow.rounds.add(ronda)
+        await uow.matches.add(partido)
+        await uow.hole_scores.add_many(tarjetas)
+        await uow.commit()

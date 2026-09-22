@@ -443,7 +443,7 @@ async def get_competition(
             )
 
         # Solo aquí y no en el mapper, que usan también los listados: saberlo
-        # exige mirar el calendario. La regla es la misma que aplica el borrado,
+        # exige recorrer lo jugado. La regla es la misma que aplica el borrado,
         # no una copia (BE #347). Fuera del bloque de arriba: el caso de uso abre
         # su propia unidad de trabajo
         dto.can_delete = await delete_uc.puede_borrar(
@@ -522,10 +522,12 @@ async def update_competition(
     description=(
         "Elimina físicamente una competición, con todo lo que cuelga de ella. "
         "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
-        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
-        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
-        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
-        "equipos sorteados no lo impiden. Si no se cumple, 400."
+        "estado lo permite (todos menos IN_PROGRESS y COMPLETED) y no hay nada "
+        "jugado: ningún partido terminado, con walkover o concedido, ni un hoyo "
+        "anotado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus partidos. El "
+        "calendario sin jugar y los equipos sorteados no lo impiden, y se van "
+        "con ella. Si no se cumple, 400."
     ),
     tags=["Competitions"],
 )

@@ -32,6 +32,17 @@ class HoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_match_for_update(self, match_id: MatchId) -> list[HoleScore]:
+        """
+        Los hole scores de un partido con sus filas bloqueadas (SELECT ... FOR UPDATE).
+
+        Lo usa el borrado de competiciones (BE #347): anotar un hoyo en un
+        partido abierto no bloquea la competición, y sin esto un golpe anotado a
+        la vez que se borra se iría en la cascada.
+        """
+        pass
+
+    @abstractmethod
     async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         """Busca los hole scores de un hoyo especifico de un partido."""
         pass

@@ -90,6 +90,19 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_by_round_for_update(self, round_id: RoundId) -> list[Match]:
+        # `populate_existing`, como en `find_by_id_for_update`: sin el, un
+        # partido ya cargado vuelve con el estado de antes del bloqueo
+        statement = (
+            select(Match)
+            .where(Match._round_id == round_id)
+            .order_by(Match._match_number.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def delete(self, match_id: MatchId) -> bool:
         match = await self.find_by_id(match_id)
         if match is None:
