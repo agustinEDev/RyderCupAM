@@ -2159,3 +2159,59 @@ class TestPublicAndPrivate:
         assert competicion_id not in [c["id"] for c in mias.json()]
 
 
+
+
+@pytest.mark.integration
+class TestCanDeleteEnLaFicha:
+    """
+    La ficha dice si quien la mira puede borrarla ahora (BE #347), para que la
+    app enseñe el botón solo cuando el borrado va a funcionar. En los listados
+    no se calcula: sería mirar el calendario de cada competición de la lista.
+    """
+
+    @pytest.mark.asyncio
+    async def test_i1_el_creador_de_una_abierta_sin_calendario_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200, ficha.text
+        assert ficha.json()["can_delete"] is True
+
+    @pytest.mark.asyncio
+    async def test_i2_otro_usuario_no_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador2@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        otro = await create_authenticated_user(
+            client, "cd-otro@test.com", "P@ssw0rd123!", "Otro", "Usuario"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(otro["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200
+        assert ficha.json()["can_delete"] is False
+
+    @pytest.mark.asyncio
+    async def test_i3_en_los_listados_no_se_calcula(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador3@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert listado.status_code == 200
+        competiciones = listado.json()
+        assert competiciones
+        assert all(c.get("can_delete") is None for c in competiciones)

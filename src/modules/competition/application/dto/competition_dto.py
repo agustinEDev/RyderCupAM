@@ -493,6 +493,14 @@ class CompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    can_delete: bool | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
+            "estado que lo permita y sin calendario). Null en los listados, donde no "
+            "se calcula para no consultar el calendario de cada competición."
+        ),
+    )
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(

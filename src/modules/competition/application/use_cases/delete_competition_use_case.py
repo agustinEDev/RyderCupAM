@@ -128,6 +128,37 @@ class DeleteCompetitionUseCase:
             deleted_at=datetime.now(),
         )
 
+    async def puede_borrar(
+        self, competition_id: CompetitionId, user_id: UserId, is_admin: bool = False
+    ) -> bool:
+        """Indica si ese usuario podría borrar la competición ahora (BE #347).
+
+        La ficha lo necesita para enseñar o no el botón. Son las mismas tres
+        comprobaciones que `execute` —quién, el estado y el calendario— y con las
+        mismas piezas, pero contestando sí o no en vez de lanzar el error que
+        diga cuál falla. Que las dos digan siempre lo mismo lo vigila una tabla
+        de equivalencia en los tests. No bloquea la fila: es una pregunta.
+
+        Args:
+            competition_id: La competición
+            user_id: Quién pregunta
+            is_admin: Si es administrador
+
+        Returns:
+            True si `execute` la borraría ahora mismo para ese usuario
+        """
+        async with self._uow:
+            competition = await self._uow.competitions.find_by_id(competition_id)
+            if not competition:
+                return False
+            if not is_admin and not competition.is_creator(user_id):
+                return False
+            # El estado va dentro: `execute` lo mira aparte solo para decir cuál
+            # de las dos mitades falla, y aquí no hay mensaje que dar
+            return competition.allows_deletion(
+                has_schedule=await self._tiene_calendario(competition_id)
+            )
+
     async def _tiene_calendario(self, competition_id: CompetitionId) -> bool:
         """Indica si el torneo llego a montar su calendario.
 
