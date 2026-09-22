@@ -169,6 +169,9 @@ from src.modules.competition.domain.services.snake_draft_service import (
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
+from src.modules.competition.infrastructure.services.competition_timezone_from_course import (
+    CompetitionTimezoneFromCourse,
+)
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
 )
@@ -1639,6 +1642,7 @@ def get_create_competition_use_case(
 
 def get_list_competitions_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> ListCompetitionsUseCase:
     """
     Proveedor del caso de uso ListCompetitionsUseCase.
@@ -1648,7 +1652,14 @@ def get_list_competitions_use_case(
     2. Crea una instancia de `ListCompetitionsUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ListCompetitionsUseCase(uow)
+    # La zona del campo hace falta para abrir las programadas a las que ya les
+    # toca: verlas en un listado tambien las abre (BE #331). Sin esto el caso de
+    # uso funciona igual pero no abre nada, y una competicion seguiria
+    # anunciando «abre el martes» el miercoles
+    return ListCompetitionsUseCase(
+        uow,
+        zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_update_competition_use_case(
@@ -1669,6 +1680,7 @@ def get_update_competition_use_case(
 
 def get_get_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetCompetitionUseCase:
     """
     Proveedor del caso de uso GetCompetitionUseCase.
@@ -1678,7 +1690,12 @@ def get_get_competition_use_case(
     2. Crea una instancia de `GetCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return GetCompetitionUseCase(uow)
+    # La zona del campo hace falta para abrir las inscripciones a su hora (BE #319):
+    # «las nueve» son las nueve de donde se juega
+    return GetCompetitionUseCase(
+        uow,
+        zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_delete_competition_use_case(

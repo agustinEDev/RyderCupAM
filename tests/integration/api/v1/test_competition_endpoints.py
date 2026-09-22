@@ -5,7 +5,8 @@ Tests de integración que verifican el flujo completo de los endpoints
 de competiciones incluyendo autenticación, validaciones y persistencia.
 """
 
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -16,7 +17,10 @@ from tests.conftest import (
     create_admin_user,
     create_authenticated_user,
     create_competition,
+    create_draft_competition,
     create_golf_course,
+    estado_en_bd,
+    set_auth_cookies,
 )
 
 
@@ -53,7 +57,7 @@ class TestCreateCompetition:
         assert response.status_code == 201
         data = response.json()
         assert data["name"] == "Ryder Cup Integration Test"
-        assert data["status"] == "DRAFT"
+        assert data["status"] == "ACTIVE"
         assert "id" in data
 
     @pytest.mark.asyncio
@@ -155,7 +159,8 @@ class TestListCompetitions:
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
 
-        # Crear otra en DRAFT
+        # Crear otra que siga en DRAFT: desde BE #332 la unica que espera es
+        # la que tiene apertura programada
         start = date.today() + timedelta(days=90)
         end = start + timedelta(days=3)
         await create_competition(
@@ -169,6 +174,7 @@ class TestListCompetitions:
                 "play_mode": "SCRATCH",
                 "max_players": 24,
                 "team_assignment": "MANUAL",
+                "enrollment_opens_days_before": 5,
             },
         )
 
@@ -818,20 +824,222 @@ class TestDeleteCompetition:
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_delete_active_competition_returns_400(self, client: AsyncClient):
-        """Eliminar competición ACTIVE retorna 400."""
+    async def test_delete_active_competition_succeeds(self, client: AsyncClient):
+        """BE #333: con las inscripciones abiertas todavía se puede borrar.
+
+        Las competiciones nacen abiertas (BE #332), así que dejar el borrado solo
+        en DRAFT dejaba cancelar como única salida a un error al crearlas.
+        """
         user = await create_authenticated_user(
             client, "deleter2@test.com", "P@ssw0rd123!", "Delete", "Two"
         )
 
+        jugador = await create_authenticated_user(
+            client, "enrolled@test.com", "P@ssw0rd123!", "Enrolled", "Player"
+        )
+
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
+
+        # Con alguien dentro: si la cascada no llegara a las inscripciones, el
+        # borrado reventaria contra la clave ajena en vez de responder 204
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        inscrito = await client.post(
+            f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+            json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+        )
+        assert inscrito.status_code == 201, inscrito.text
+
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 204
+
+        # Y deja de existir de verdad, no solo responde que sí
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        assert (await client.get(f"/api/v1/competitions/{comp['id']}")).status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_closed_competition_returns_400(self, client: AsyncClient):
+        """BE #333: cerradas las inscripciones ya no se borra.
+
+        A partir de aquí se sortean equipos y se generan partidos, y el borrado
+        va en cascada hasta los golpes anotados.
+        """
+        user = await create_authenticated_user(
+            client, "deleter3@test.com", "P@ssw0rd123!", "Delete", "Three"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
+
+        client.cookies.clear()
+        client.cookies.update(user["cookies"])
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
 
         response = await client.delete(
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
         assert response.status_code == 400
+        assert "CLOSED" in response.json()["detail"]
+
+
+class TestListingOpensScheduledCompetitions:
+    """BE #331: verla en un listado tambien la abre, no solo abrir su ficha."""
+
+    @pytest.mark.asyncio
+    async def test_listing_opens_a_scheduled_competition_whose_day_has_passed(
+        self, client: AsyncClient
+    ):
+        """Por HTTP, que es donde se murio esto la vez anterior.
+
+        En BE #327 la apertura funcionaba en 31 tests unitarios y no ocurria
+        jamas en produccion, porque ninguna ruta pasaba por el caso de uso. Este
+        test existe para que el listado no pueda quedarse asi.
+        """
+        admin = await create_admin_user(
+            client, "listado_admin@test.com", "AdminP@ssw0rd123!", "Listado", "Admin"
+        )
+        user = await create_authenticated_user(
+            client, "listado_club@test.com", "P@ssw0rd123!", "Listado", "Club"
+        )
+
+        # Empieza en 3 dias y abre 5 antes: su momento ya paso
+        empieza = date.today() + timedelta(days=3)
+        comp = await create_competition(
+            client,
+            user["cookies"],
+            {
+                "name": f"Publica programada {uuid.uuid4().hex[:8]}",
+                "start_date": empieza.isoformat(),
+                "end_date": (empieza + timedelta(days=2)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+                "enrollment_opens_days_before": 5,
+            },
+        )
+        assert comp["status"] == "DRAFT"
+
+        # La zona sale de las coordenadas del campo, no del pais (BE #305)
+        golf_course = await create_golf_course(
+            client,
+            user["cookies"],
+            golf_course_data={
+                "name": f"Campo con zona {uuid.uuid4().hex[:8]}",
+                "country_code": "ES",
+                "course_type": "STANDARD_18",
+                # Las coordenadas van DENTRO de location: sueltas se ignoran, el
+                # campo se crea sin zona y la competicion no abre nunca (BE #327)
+                "location": {"latitude": 40.4168, "longitude": -3.7038},
+                "tees": [
+                    {
+                        "identifier": "Blanco",
+                        "color": "WHITE",
+                        "tee_gender": "MALE",
+                        "course_rating": 72.5,
+                        "slope_rating": 135,
+                        "par": 72,
+                    },
+                ],
+                "holes": [
+                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
+                ],
+            },
+        )
+        await approve_golf_course(client, admin["cookies"], golf_course["id"])
+        set_auth_cookies(client, user["cookies"])
+        asociado = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+        )
+        assert asociado.status_code == 201, asociado.text
+
+        # Sin abrir su ficha en ningun momento: solo el listado. Y se comprueba
+        # contra la FILA GUARDADA, no con otra peticion: cualquier ruta que lea
+        # la competicion la abriria ella misma, asi que el test pasaria aunque
+        # el listado no hubiera hecho nada —o la hubiera abierto sin persistir,
+        # que es el fallo que de verdad hay que cazar
+        listado = await client.get("/api/v1/competitions", params={"status": "DRAFT"})
+        assert listado.status_code == 200
+        assert comp["id"] not in [c["id"] for c in listado.json()], (
+            "una vez abierta ya no es un borrador, asi que no puede salir "
+            "dentro de un listado filtrado por DRAFT"
+        )
+
+        guardado = await estado_en_bd(comp["id"])
+        assert guardado == "ACTIVE", (
+            "el listado tenia que haberla abierto y PERSISTIDO: en memoria no basta, "
+            f"la siguiente peticion la encontraria en borrador otra vez. Estado: {guardado}"
+        )
+
+
+class TestDeleteReopenedCompetition:
+    """BE #333: volver a ACTIVE no vuelve a hacer borrable un torneo montado."""
+
+    @pytest.mark.asyncio
+    async def test_delete_reopened_competition_with_rounds_returns_400(
+        self, client: AsyncClient
+    ):
+        """Con calendario montado no se borra, aunque el estado haya vuelto a ACTIVE.
+
+        El estado se puede andar hacia atrás y ninguna de esas vueltas deshace
+        rondas ni partidos. Mirando solo el estado, la cascada se llevaría el
+        torneo entero con sus tarjetas.
+        """
+        admin = await create_admin_user(
+            client, "reopen-admin@test.com", "P@ssw0rd123!", "Reopen", "Admin"
+        )
+        user = await create_authenticated_user(
+            client, "reopener@test.com", "P@ssw0rd123!", "Re", "Opener"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+
+        gc = await create_golf_course(client, user["cookies"])
+        await approve_golf_course(client, admin["cookies"], gc["id"])
+
+        set_auth_cookies(client, user["cookies"])
+        asociado = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": gc["id"]},
+        )
+        assert asociado.status_code == 201, asociado.text
+
+        await activate_competition(client, user["cookies"], comp["id"])
+
+        set_auth_cookies(client, user["cookies"])
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
+
+        ronda = await client.post(
+            f"/api/v1/competitions/{comp['id']}/rounds",
+            json={
+                "golf_course_id": gc["id"],
+                "round_date": comp["start_date"],
+                "session_type": "MORNING",
+                "match_format": "SINGLES",
+            },
+        )
+        assert ronda.status_code == 201, ronda.text
+
+        reabierta = await client.post(
+            f"/api/v1/competitions/{comp['id']}/reopen-enrollments"
+        )
+        assert reabierta.status_code == 200, reabierta.text
+        assert reabierta.json()["status"] == "ACTIVE"
+
+        response = await client.delete(
+            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 400
+        assert "calendario" in response.json()["detail"].lower()
 
 
 class TestCompetitionStateTransitions:
@@ -844,7 +1052,7 @@ class TestCompetitionStateTransitions:
             client, "activator@test.com", "P@ssw0rd123!", "Activate", "User"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/activate", cookies=user["cookies"]
@@ -877,7 +1085,7 @@ class TestCompetitionStateTransitions:
         )
 
         # 1. Crear (DRAFT)
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
         assert comp["status"] == "DRAFT"
 
         # 2. Activar (ACTIVE)
@@ -912,7 +1120,7 @@ class TestCompetitionStateTransitions:
             client, "invalid_trans@test.com", "P@ssw0rd123!", "Invalid", "Trans"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Intentar cerrar inscripciones desde DRAFT (debe ser ACTIVE)
         response = await client.post(
@@ -929,7 +1137,7 @@ class TestCompetitionStateTransitions:
             client, "revert_status@test.com", "P@ssw0rd123!", "Revert", "Status"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a IN_PROGRESS
         r1 = await client.post(
@@ -960,7 +1168,7 @@ class TestCompetitionStateTransitions:
             client, "reopen_enroll@test.com", "P@ssw0rd123!", "Reopen", "Enroll"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a CLOSED
         r1 = await client.post(
@@ -1006,7 +1214,7 @@ class TestCompetitionStateTransitions:
             client, "revert_to_ip@test.com", "P@ssw0rd123!", "Revert", "ToInProgress"
         )
 
-        comp = await create_competition(client, user["cookies"])
+        comp = await create_draft_competition(client, user["cookies"])
 
         # Avanzar a COMPLETED
         r1 = await client.post(
@@ -1105,14 +1313,35 @@ class TestEdgeCases:
         assert response.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_update_non_draft_competition_returns_400(self, client: AsyncClient):
-        """Actualizar competición no-DRAFT retorna 400."""
+    async def test_update_while_enrollment_is_open_succeeds(self, client: AsyncClient):
+        """BE #323: con las inscripciones abiertas todavía se corrige el montaje."""
         user = await create_authenticated_user(
             client, "update_active@test.com", "P@ssw0rd123!", "Update", "Active"
         )
 
         comp = await create_competition(client, user["cookies"])
         await activate_competition(client, user["cookies"], comp["id"])
+
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"name": "New Name"},
+            cookies=user["cookies"],
+        )
+
+        assert response.status_code == 200
+
+    async def test_update_after_enrollment_closes_returns_400(self, client: AsyncClient):
+        """Cerradas las inscripciones se sortean equipos: ya no se toca."""
+        user = await create_authenticated_user(
+            client, "update_closed@test.com", "P@ssw0rd123!", "Update", "Closed"
+        )
+
+        comp = await create_competition(client, user["cookies"])
+        await activate_competition(client, user["cookies"], comp["id"])
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=user["cookies"],
+        )
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
@@ -1282,8 +1511,12 @@ class TestCompetitionGolfCourses:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_add_golf_course_not_draft_returns_400(self, client: AsyncClient):
-        """Añadir campo a competición ACTIVE retorna 400."""
+    async def test_add_golf_course_once_enrollment_closes_returns_400(self, client: AsyncClient):
+        """BE #323: con las inscripciones abiertas sí; cerradas, ya no.
+
+        Justo el caso que motivó el cambio: quien invita antes de poner el campo
+        —y con ello abre el torneo— tiene que poder ponerlo después.
+        """
         # Arrange
         admin = await create_admin_user(
             client, "admin_not_draft@test.com", "AdminP@ssw0rd123!", "Admin", "Test"
@@ -1299,16 +1532,30 @@ class TestCompetitionGolfCourses:
         golf_course = await create_golf_course(client, creator["cookies"])
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
 
-        # Act
-        response = await client.post(
+        # Con las inscripciones abiertas todavía se puede añadir
+        abierta = await client.post(
             f"/api/v1/competitions/{comp['id']}/golf-courses",
             json={"golf_course_id": golf_course["id"]},
             cookies=creator["cookies"],
         )
+        assert abierta.status_code == 201
 
-        # Assert
+        # Al cerrarlas, ya no
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments",
+            cookies=creator["cookies"],
+        )
+        otro_campo = await create_golf_course(client, creator["cookies"])
+        await approve_golf_course(client, admin["cookies"], otro_campo["id"])
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": otro_campo["id"]},
+            cookies=creator["cookies"],
+        )
+
         assert response.status_code == 400
-        assert "DRAFT" in response.text
+        assert "inscripciones" in response.text
 
     @pytest.mark.asyncio
     async def test_remove_golf_course_from_competition_success(self, client: AsyncClient):
@@ -1554,3 +1801,361 @@ class TestCompetitionGolfCourses:
         golf_courses = response.json()
         assert len(golf_courses) == 0
         assert golf_courses == []
+
+# Del reloj y no del calendario: una fecha fija hace que el test empiece a
+# fallar solo el dia en que queda por detras de «ahora»
+
+
+class TestScheduledEnrollmentOpening:
+    """BE #319, #332: los dias de antelacion tienen que llegar y volver."""
+
+    @pytest.mark.asyncio
+    async def test_the_scheduled_days_survive_the_round_trip(self, client: AsyncClient):
+        """Se manda al crear y se lee al consultar.
+
+        Guardarla sin devolverla deja el formulario de edicion en blanco y al
+        organizador creyendo que no se acepto.
+        """
+        user = await create_authenticated_user(
+            client, "apertura@test.com", "P@ssw0rd123!", "Club", "Programado"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_days_before": 5,
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["enrollment_opens_days_before"] == 5
+
+        detalle = await client.get(
+            f"/api/v1/competitions/{creada.json()['id']}", cookies=user["cookies"]
+        )
+
+        assert detalle.status_code == 200
+        assert detalle.json()["enrollment_opens_days_before"] == 5
+
+    @pytest.mark.asyncio
+    async def test_without_days_it_is_born_with_enrolment_open(self, client: AsyncClient):
+        """Sin dias programados nace ABIERTA, en una sola llamada (BE #332).
+
+        Nadie deberia pulsar un boton cuyo unico trabajo es mover un estado. Y
+        va en la misma operacion: crear y activar por separado dejaria la
+        competicion creada y cerrada si falla la segunda, con el organizador
+        creyendo que esta abierta.
+        """
+        user = await create_authenticated_user(
+            client, "nace_abierta@test.com", "P@ssw0rd123!", "Nace", "Abierta"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo entre amigos",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "ACTIVE"
+        assert creada.json()["enrollment_opens_days_before"] is None
+
+    @pytest.mark.asyncio
+    async def test_with_days_it_waits_in_draft(self, client: AsyncClient):
+        """Con dias puestos espera: DRAFT significa «esperando su hora»."""
+        user = await create_authenticated_user(
+            client, "espera_su_hora@test.com", "P@ssw0rd123!", "Espera", "SuHora"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_days_before": 5,
+            },
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "DRAFT"
+
+    @pytest.mark.asyncio
+    async def test_more_than_a_fortnight_is_refused(self, client: AsyncClient):
+        """Dos semanas es el tope: 15 dias no entra (BE #332).
+
+        El rango se comprueba en la puerta, no solo en el dominio: un 15 que
+        colara dejaria una apertura que nadie puede volver a elegir en la app.
+        """
+        user = await create_authenticated_user(
+            client, "apertura_rango@test.com", "P@ssw0rd123!", "Club", "FueraDeRango"
+        )
+
+        respuesta = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo del club",
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_days_before": 15,
+            },
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_looking_at_it_after_the_opening_day_opens_it(self, client: AsyncClient):
+        """Consultar la competicion pasada su hora es lo que la abre.
+
+        No hay ningun proceso de fondo: si el endpoint no pasa por el caso de
+        uso, la apertura programada no ocurre jamas y el torneo se queda en
+        borrador para siempre. Este test existe para que eso no pueda volver.
+        """
+        admin = await create_admin_user(
+            client, "admin_apertura@test.com", "AdminP@ssw0rd123!", "Admin", "Apertura"
+        )
+        user = await create_authenticated_user(
+            client, "abre_sola@test.com", "P@ssw0rd123!", "Club", "AbreSola"
+        )
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Torneo que ya abrio",
+                "start_date": (datetime.now() + timedelta(days=3)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=5)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "enrollment_opens_days_before": 5,
+            },
+            cookies=user["cookies"],
+        )
+        assert creada.status_code == 201
+        assert creada.json()["status"] == "DRAFT"
+
+        # La zona sale del campo que se juega: sin campo, la apertura espera
+        competicion_id = creada.json()["id"]
+        # Con coordenadas: la zona sale de ahi, no del pais (BE #305)
+        golf_course = await create_golf_course(
+            client,
+            user["cookies"],
+            golf_course_data={
+                "name": f"Campo con zona {uuid.uuid4().hex[:8]}",
+                "country_code": "ES",
+                "course_type": "STANDARD_18",
+                "location": {"latitude": 40.4168, "longitude": -3.7038},
+                "tees": [
+                    {
+                        "identifier": "Blanco",
+                        "color": "WHITE",
+                        "tee_gender": "MALE",
+                        "course_rating": 72.5,
+                        "slope_rating": 135,
+                        "par": 72,
+                    },
+                ],
+                "holes": [
+                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
+                ],
+            },
+        )
+        await approve_golf_course(client, admin["cookies"], golf_course["id"])
+        anadido = await client.post(
+            f"/api/v1/competitions/{competicion_id}/golf-courses",
+            json={"golf_course_id": golf_course["id"]},
+            cookies=user["cookies"],
+        )
+        assert anadido.status_code == 201, anadido.text
+
+        creado = await client.get(
+            f"/api/v1/golf-courses/{golf_course['id']}", cookies=user["cookies"]
+        )
+        assert creado.json().get("timezone") == "Europe/Madrid", creado.text[:200]
+
+        detalle = await client.get(
+            f"/api/v1/competitions/{competicion_id}", cookies=user["cookies"]
+        )
+
+        assert detalle.status_code == 200
+        assert detalle.json()["status"] == "ACTIVE"
+
+
+class TestPublicAndPrivate:
+    """BE #318: una privada no se le ensena a quien no esta dentro."""
+
+    @pytest.mark.asyncio
+    async def test_a_stranger_does_not_see_a_private_competition(self, client: AsyncClient):
+        """La Ryder de unos amigos no sale en la pantalla de explorar."""
+        organizador = await create_authenticated_user(
+            client, "organiza_privada@test.com", "P@ssw0rd123!", "Organiza", "Privada"
+        )
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder de los amigos",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=organizador["cookies"],
+        )
+        assert creada.status_code == 201
+        assert creada.json()["visibility"] == "PRIVATE", "nace privada"
+
+        desconocido = await create_authenticated_user(
+            client, "curioso@test.com", "P@ssw0rd123!", "Un", "Curioso"
+        )
+        explorar = await client.get(
+            "/api/v1/competitions?my_competitions=false", cookies=desconocido["cookies"]
+        )
+
+        assert explorar.status_code == 200
+        ids = [c["id"] for c in explorar.json()]
+        assert creada.json()["id"] not in ids
+
+    @pytest.mark.asyncio
+    async def test_a_stranger_does_see_a_public_one(self, client: AsyncClient):
+        organizador = await create_authenticated_user(
+            client, "organiza_publica@test.com", "P@ssw0rd123!", "Organiza", "Publica"
+        )
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Campeonato del club",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+            },
+            cookies=organizador["cookies"],
+        )
+        assert creada.status_code == 201
+        assert creada.json()["visibility"] == "PUBLIC"
+
+        desconocido = await create_authenticated_user(
+            client, "curioso2@test.com", "P@ssw0rd123!", "Otro", "Curioso"
+        )
+        explorar = await client.get(
+            "/api/v1/competitions?my_competitions=false", cookies=desconocido["cookies"]
+        )
+
+        ids = [c["id"] for c in explorar.json()]
+        assert creada.json()["id"] in ids
+
+    @pytest.mark.asyncio
+    async def test_asking_for_a_place_in_a_private_one_is_refused_cleanly(
+        self, client: AsyncClient
+    ):
+        """Y se rechaza con un 403, no con un 500.
+
+        Toda competicion que ya existe pasa a PRIVATE con la migracion, asi que
+        este es el camino por defecto del boton de pedir plaza: una excepcion
+        sin capturar aqui es un error del servidor en produccion.
+        """
+        organizador = await create_authenticated_user(
+            client, "organiza_403@test.com", "P@ssw0rd123!", "Organiza", "Cerrada"
+        )
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder cerrada",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=organizador["cookies"],
+        )
+        competicion_id = creada.json()["id"]
+        await client.post(
+            f"/api/v1/competitions/{competicion_id}/activate", cookies=organizador["cookies"]
+        )
+
+        desconocido = await create_authenticated_user(
+            client, "pide_plaza@test.com", "P@ssw0rd123!", "Pide", "Plaza"
+        )
+        respuesta = await client.post(
+            f"/api/v1/competitions/{competicion_id}/enrollments",
+            cookies=desconocido["cookies"],
+        )
+
+        assert respuesta.status_code == 403, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_somebody_rejected_cannot_pull_it_back_through_my_competitions(
+        self, client: AsyncClient
+    ):
+        """El expulsado no la recupera por «mis competiciones».
+
+        Es el camino gemelo del listado: las competiciones que salen de tus
+        inscripciones se anadian DESPUES del filtro de visibilidad, y las filas
+        rechazadas y retiradas no se borran.
+        """
+        organizador = await create_authenticated_user(
+            client, "organiza_gemelo@test.com", "P@ssw0rd123!", "Organiza", "Gemelo"
+        )
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder con puerta",
+                "start_date": (datetime.now() + timedelta(days=60)).date().isoformat(),
+                "end_date": (datetime.now() + timedelta(days=62)).date().isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "visibility": "PUBLIC",
+            },
+            cookies=organizador["cookies"],
+        )
+        competicion_id = creada.json()["id"]
+        await client.post(
+            f"/api/v1/competitions/{competicion_id}/activate", cookies=organizador["cookies"]
+        )
+
+        # Pide plaza mientras es publica, y se la rechazan
+        rechazado = await create_authenticated_user(
+            client, "rechazado@test.com", "P@ssw0rd123!", "Le", "Rechazan"
+        )
+        pedida = await client.post(
+            f"/api/v1/competitions/{competicion_id}/enrollments", cookies=rechazado["cookies"]
+        )
+        assert pedida.status_code == 201, pedida.text
+        rechazo = await client.post(
+            f"/api/v1/enrollments/{pedida.json()['id']}/reject", cookies=organizador["cookies"]
+        )
+        assert rechazo.status_code == 200, rechazo.text
+
+        # Y el torneo se cierra al publico
+        await client.put(
+            f"/api/v1/competitions/{competicion_id}",
+            json={"visibility": "PRIVATE"},
+            cookies=organizador["cookies"],
+        )
+
+        mias = await client.get(
+            "/api/v1/competitions?my_competitions=true", cookies=rechazado["cookies"]
+        )
+
+        assert mias.status_code == 200
+        assert competicion_id not in [c["id"] for c in mias.json()]
+
+

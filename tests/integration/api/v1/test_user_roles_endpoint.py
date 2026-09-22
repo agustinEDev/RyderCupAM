@@ -75,6 +75,7 @@ async def test_get_my_roles_returns_is_admin_true_for_admin_user(client: AsyncCl
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
     comp_response = await client.post(
@@ -127,6 +128,7 @@ async def test_get_my_roles_returns_is_creator_true_for_creator(client: AsyncCli
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
     comp_response = await client.post(
@@ -178,6 +180,7 @@ async def test_get_my_roles_returns_is_player_true_for_enrolled_user(client: Asy
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
     comp_response = await client.post(
@@ -258,6 +261,7 @@ async def test_get_my_roles_all_false_for_unrelated_user(client: AsyncClient):
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
     comp_response = await client.post(
@@ -318,6 +322,7 @@ async def test_get_my_roles_creator_can_also_be_player(client: AsyncClient):
         "play_mode": "HANDICAP",
         "max_players": 24,
         "team_assignment": "MANUAL",
+        "visibility": "PUBLIC",
     }
 
     comp_response = await client.post(

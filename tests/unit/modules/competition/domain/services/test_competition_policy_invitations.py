@@ -30,9 +30,9 @@ class TestCanSendInvitation:
     def test_in_progress_allows_send(self):
         CompetitionPolicy.can_send_invitation(CompetitionStatus.IN_PROGRESS)
 
-    def test_draft_raises(self):
-        with pytest.raises(InvitationCompetitionStatusViolation, match="DRAFT"):
-            CompetitionPolicy.can_send_invitation(CompetitionStatus.DRAFT)
+    def test_draft_allows_send(self):
+        """BE #319: invitar a la primera persona es lo que abre el torneo."""
+        CompetitionPolicy.can_send_invitation(CompetitionStatus.DRAFT)
 
     def test_completed_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="COMPLETED"):
@@ -41,6 +41,27 @@ class TestCanSendInvitation:
     def test_cancelled_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="CANCELLED"):
             CompetitionPolicy.can_send_invitation(CompetitionStatus.CANCELLED)
+
+
+class TestInvitationOpensEnrollment:
+    """Tests para CompetitionPolicy.invitation_opens_enrollment()."""
+
+    def test_draft_opens(self):
+        assert CompetitionPolicy.invitation_opens_enrollment(CompetitionStatus.DRAFT) is True
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+            CompetitionStatus.IN_PROGRESS,
+            CompetitionStatus.COMPLETED,
+            CompetitionStatus.CANCELLED,
+        ],
+    )
+    def test_the_rest_do_not(self, status):
+        """Solo se abre lo que esta por abrir: nada de reabrir un torneo."""
+        assert CompetitionPolicy.invitation_opens_enrollment(status) is False
 
 
 class TestCanAcceptInvitation:

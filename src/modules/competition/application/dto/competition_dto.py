@@ -15,9 +15,12 @@ from pydantic import (
 
 from src.modules.competition.domain.entities.competition import (
     DEFAULT_MAX_PLAYERS,
+    MAX_ENROLLMENT_OPENING_DAYS,
     MAX_PLAYERS,
+    MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.visibility import Visibility
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
 # lista `countries` usa el mismo tipo: al convertirla a adjacent_country_1/2 se
@@ -154,6 +157,19 @@ class CreateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        ge=MIN_ENROLLMENT_OPENING_DAYS,
+        le=MAX_ENROLLMENT_OPENING_DAYS,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
@@ -219,7 +235,15 @@ class CreateCompetitionResponseDTO(BaseModel):
     creator_id: UUID = Field(..., description="ID del usuario creador.")
     creator: CreatorDTO | None = Field(None, description="Información completa del creador.")
     name: str = Field(..., description=COMPETITION_NAME_DESC)
-    status: str = Field(..., description="Estado de la competición (DRAFT al crear).")
+    status: str = Field(
+        ...,
+        description=(
+            "Estado de la competición. Al crearla es ACTIVE —nace con las "
+            "inscripciones abiertas—, salvo que se indique "
+            "`enrollment_opens_days_before`, en cuyo caso queda en DRAFT "
+            "esperando su apertura."
+        ),
+    )
 
     # Dates
     start_date: date = Field(..., description="Fecha de inicio.")
@@ -248,6 +272,17 @@ class CreateCompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
+    visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados
     is_creator: bool = Field(default=True, description="Siempre True para el creador.")
@@ -323,6 +358,20 @@ class UpdateCompetitionRequestDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, ge=1, le=54, description="Nuevo límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        ge=MIN_ENROLLMENT_OPENING_DAYS,
+        le=MAX_ENROLLMENT_OPENING_DAYS,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
+    visibility: Visibility | None = Field(None, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
     )
@@ -433,6 +482,17 @@ class CompetitionResponseDTO(BaseModel):
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
+    enrollment_opens_days_before: int | None = Field(
+        None,
+        description=(
+            "Cuántos días antes del torneo se abren solas las inscripciones, de "
+            "1 a 14. Abren a las 00:00 del campo donde se juega, y la fecha se "
+            "calcula sobre el comienzo del torneo: si el torneo se mueve, la "
+            "apertura se mueve con él. Sin esto, la competición nace con las "
+            "inscripciones ya abiertas."
+        ),
+    )
+    visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(
@@ -691,7 +751,7 @@ class CompleteCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 # --------------------------------------------------------------------------------------
-# Delete Competition (eliminación física - solo DRAFT)
+# Delete Competition (eliminación física - mientras no haya calendario)
 # --------------------------------------------------------------------------------------
 
 
@@ -700,8 +760,9 @@ class DeleteCompetitionRequestDTO(BaseModel):
     DTO de entrada para eliminar físicamente una competición.
 
     Restricciones:
-    - Solo se puede eliminar en estado DRAFT (antes de activar)
-    - Solo el creador puede eliminar
+    - Solo si el estado lo permite (DRAFT, ACTIVE o CANCELLED)
+    - Y solo si no hay calendario montado (los equipos sorteados no impiden)
+    - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """
 

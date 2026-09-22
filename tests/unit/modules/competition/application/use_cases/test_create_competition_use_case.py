@@ -1,6 +1,6 @@
 """Tests para CreateCompetitionUseCase."""
 
-from datetime import date
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -16,6 +16,7 @@ from src.modules.competition.domain.services.location_builder import (
     InvalidCountryError,
     LocationBuilder,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -46,7 +47,7 @@ class TestCreateCompetitionUseCase:
 
         Given: Datos válidos de competición con país principal España
         When: Se ejecuta el caso de uso
-        Then: La competición se crea en estado DRAFT y se persiste
+        Then: La competición se crea con las inscripciones abiertas (BE #332)
         """
         # Arrange
         use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
@@ -68,7 +69,7 @@ class TestCreateCompetitionUseCase:
         # Assert
         # 1. Verificar respuesta del DTO
         assert response.name == "Ryder Cup 2025"
-        assert response.status == "DRAFT"
+        assert response.status == "ACTIVE"
         assert response.creator_id == creator_id.value
         assert response.start_date == date(2025, 6, 1)
         assert response.end_date == date(2025, 6, 3)
@@ -289,3 +290,80 @@ class TestCreateCompetitionUseCase:
 
         # Assert
         assert uow.committed is True
+
+
+class TestComoNaceLaCompeticion:
+    """Sin apertura programada nace abierta; con ella, esperando (BE #332)."""
+
+    @pytest.fixture
+    def uow(self) -> InMemoryUnitOfWork:
+        return InMemoryUnitOfWork()
+
+    @pytest.fixture
+    def creator_id(self) -> UserId:
+        return UserId(uuid4())
+
+    def _peticion(self, dias: int | None = None) -> CreateCompetitionRequestDTO:
+        manana = date.today() + timedelta(days=30)
+        return CreateCompetitionRequestDTO(
+            name="Ryder Cup 2026",
+            start_date=manana,
+            end_date=manana + timedelta(days=2),
+            main_country="ES",
+            play_mode="SCRATCH",
+            enrollment_opens_days_before=dias,
+        )
+
+    @pytest.mark.asyncio
+    async def test_sin_programar_nace_con_las_inscripciones_abiertas(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Nadie deberia pulsar un boton cuyo unico trabajo es mover un estado."""
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        respuesta = await use_case.execute(self._peticion(), creator_id)
+
+        assert respuesta.status == "ACTIVE"
+
+    @pytest.mark.asyncio
+    async def test_programada_nace_esperando_su_hora(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Con dias puestos, DRAFT significa una sola cosa: esperando."""
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
+
+        assert respuesta.status == "DRAFT"
+
+    @pytest.mark.asyncio
+    async def test_abrirla_al_nacer_anuncia_el_evento(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Nacer abierta tiene que emitir el evento, como cualquier apertura.
+
+        Es el motivo de abrirla llamando a `activate()` y no naciendo en ACTIVE
+        desde el factory: el estado se habria movido sin que nadie se enterase.
+        """
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        respuesta = await use_case.execute(self._peticion(), creator_id)
+
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(respuesta.id))
+        eventos = [type(e).__name__ for e in competition.get_domain_events()]
+        assert "CompetitionActivatedEvent" in eventos
+
+    @pytest.mark.asyncio
+    async def test_la_que_espera_no_anuncia_apertura(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Todavia no ha abierto: anunciarlo diria algo que no ha pasado."""
+        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+
+        respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
+
+        async with uow:
+            competition = await uow.competitions.find_by_id(CompetitionId(respuesta.id))
+        eventos = [type(e).__name__ for e in competition.get_domain_events()]
+        assert "CompetitionActivatedEvent" not in eventos

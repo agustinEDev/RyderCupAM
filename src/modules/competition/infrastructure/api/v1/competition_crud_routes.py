@@ -10,6 +10,7 @@ from src.config.dependencies import (
     get_create_competition_use_case,
     get_current_user,
     get_delete_competition_use_case,
+    get_get_competition_use_case,
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
@@ -29,6 +30,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
 )
+from src.modules.competition.application.services.enrollment_opener import (
+    EnrollmentOpener,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -36,6 +40,9 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.get_competition_use_case import (
+    GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
@@ -77,7 +84,7 @@ def _sanitize_creator_id(creator_id: str | None) -> str | None:
 
 
 async def _fetch_competitions_by_status(
-    use_case, status_filter, creator_id, search_name, search_creator
+    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
 ):
     """Obtiene competiciones aplicando filtros de status (soporte para lista o string único)."""
     if isinstance(status_filter, list) and len(status_filter) > 0:
@@ -88,6 +95,8 @@ async def _fetch_competitions_by_status(
                 creator_id=creator_id,
                 search_name=search_name,
                 search_creator=search_creator,
+                viewer_id=viewer_id,
+                is_admin=is_admin,
             )
             all_competitions.extend(comps)
         return list({c.id: c for c in all_competitions}.values())
@@ -97,6 +106,8 @@ async def _fetch_competitions_by_status(
         creator_id=creator_id,
         search_name=search_name,
         search_creator=search_creator,
+        viewer_id=viewer_id,
+        is_admin=is_admin,
     )
 
 
@@ -114,12 +125,17 @@ def _matches_status_filter(competition_status, status_filter):
     return competition_status == status_filter.upper()
 
 
-async def _fetch_enrolled_competitions(
-    uow, enrollments, created_competition_ids, status_filter, enrollment_status_map
-):
-    """Obtiene las competiciones donde el usuario está inscrito (excluyendo las que ya creó)."""
+async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids):
+    """Las competiciones donde el usuario está inscrito, sin filtrar por estado.
+
+    Solo las trae. Los filtros que dependen del estado van en
+    `_filtrar_inscritas`, y se aplican después de abrir las que toquen: este
+    camino no pasa por `ListCompetitionsUseCase`, así que la apertura programada
+    hay que aplicarla aquí también o «Mis competiciones» seguiría enseñando en
+    borrador la competición a la que a uno le invitaron, pasado su día (BE #331).
+    """
     enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
-    enrolled_competitions = []
+    candidatas = []
 
     for comp_id in enrolled_competition_ids:
         competition = await uow.competitions.find_by_id(comp_id)
@@ -127,15 +143,29 @@ async def _fetch_enrolled_competitions(
         if not competition or competition.id in created_competition_ids:
             continue
 
+        candidatas.append(competition)
+
+    return candidatas
+
+
+def _filtrar_inscritas(competitions, status_filter, enrollment_status_map):
+    """Aplica los filtros que dependen del ESTADO, ya con el estado definitivo.
+
+    Va después de abrir las que tocan: hacerlo antes filtraría por el estado
+    viejo, y una competición que acaba de abrirse se descartaría o se enseñaría
+    cerrada (BE #331).
+    """
+    resultado = []
+    for competition in competitions:
         enrollment_status = enrollment_status_map.get(competition.id)
 
         if _should_exclude_enrollment(enrollment_status, competition.status.value):
             continue
 
         if _matches_status_filter(competition.status.value, status_filter):
-            enrolled_competitions.append(competition)
+            resultado.append(competition)
 
-    return enrolled_competitions
+    return resultado
 
 
 async def _get_user_competitions(
@@ -151,6 +181,7 @@ async def _get_user_competitions(
         str(current_user_id.value),
         search_name,
         search_creator,
+        viewer_id=str(current_user_id.value),
     )
 
     enrollments = await uow.enrollments.find_by_user(current_user_id)
@@ -161,15 +192,21 @@ async def _get_user_competitions(
 
     created_competition_ids = [c.id for c in created_competitions]
 
-    enrolled_competitions = await _fetch_enrolled_competitions(
-        uow,
-        enrollments,
-        created_competition_ids,
-        status_filter,
-        enrollment_status_map,
-    )
+    candidatas = await _fetch_enrolled_competitions(uow, enrollments, created_competition_ids)
 
-    return created_competitions + enrolled_competitions
+    # Las que salen de tus inscripciones tambien pasan por el filtro: una fila
+    # rechazada o retirada no se borra, y sin esto el expulsado recuperaba la
+    # privada por aqui (BE #318, punto gemelo del listado)
+    visibles = await use_case.visibles_para(candidatas, str(current_user_id.value))
+
+    # Abrir DESPUES de la visibilidad y ANTES del filtro por estado, igual que
+    # hace el caso de uso: a quien no se le ensena una privada tampoco se le
+    # abre de paso, y filtrar por el estado viejo tiraria la recien abierta
+    await EnrollmentOpener.abrir_las_que_toquen(visibles, uow, use_case.zona_del_campo)
+
+    return created_competitions + _filtrar_inscritas(
+        visibles, status_filter, enrollment_status_map
+    )
 
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow, is_admin=False):
@@ -186,10 +223,16 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
     return result
 
 
-async def _get_all_competitions(use_case, status_filter, creator_id, search_name, search_creator):
-    """Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario)."""
+async def _get_all_competitions(
+    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
+):
+    """Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
+
+    `viewer_id` no es opcional de verdad: sin el, las privadas de otros saldrian
+    en la pantalla de explorar, que es lo que BE #318 vino a arreglar.
+    """
     return await _fetch_competitions_by_status(
-        use_case, status_filter, creator_id, search_name, search_creator
+        use_case, status_filter, creator_id, search_name, search_creator, viewer_id, is_admin
     )
 
 
@@ -215,7 +258,7 @@ async def _exclude_user_competitions(competitions, current_user_id, uow):
     response_model=CreateCompetitionResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Crear nueva competición",
-    description="Crea una nueva competición en estado DRAFT. Requiere autenticación.",
+    description="Crea una nueva competición. Nace con las inscripciones ABIERTAS salvo que se indique `enrollment_opens_days_before`, en cuyo caso espera en DRAFT hasta su apertura. Requiere autenticación.",
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")
@@ -262,6 +305,8 @@ async def create_competition(
                 play_mode=enriched_dto.play_mode,
                 max_players=enriched_dto.max_players,
                 team_assignment=enriched_dto.team_assignment,
+                enrollment_opens_days_before=competition.enrollment_opens_days_before,
+                visibility=str(competition.visibility),
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
                 is_creator=True,
@@ -328,6 +373,8 @@ async def list_competitions(
                     sanitized_creator_id,
                     search_name,
                     search_creator,
+                    viewer_id=str(current_user_id.value),
+                    is_admin=current_user.is_admin,
                 )
                 competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
             else:
@@ -337,6 +384,8 @@ async def list_competitions(
                     sanitized_creator_id,
                     search_name,
                     search_creator,
+                    viewer_id=str(current_user_id.value),
+                    is_admin=current_user.is_admin,
                 )
 
             result = await _map_competitions_to_dtos(
@@ -361,11 +410,23 @@ async def get_competition(
     current_user: UserResponseDTO = Depends(get_current_user),
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
+
+        # Por el caso de uso y no por el repositorio: mirar una competicion
+        # programada despues de su hora es lo que abre sus inscripciones, y no
+        # hay ningun proceso de fondo que lo haga por su cuenta (BE #319)
+        try:
+            await get_competition_uc.execute(competition_vo_id)
+        except CompetitionNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Competition {competition_vo_id.value} not found",
+            ) from e
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)
@@ -391,7 +452,7 @@ async def get_competition(
     response_model=CompetitionResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar competición",
-    description="Actualiza una competición (SOLO en estado DRAFT y SOLO el creador).",
+    description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")
@@ -450,7 +511,14 @@ async def update_competition(
     "/{competition_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Eliminar competición",
-    description="Elimina físicamente una competición (SOLO en estado DRAFT y SOLO el creador).",
+    description=(
+        "Elimina físicamente una competición, con todo lo que cuelga de ella. "
+        "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
+        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
+        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
+        "equipos sorteados no lo impiden. Si no se cumple, 400."
+    ),
     tags=["Competitions"],
 )
 @limiter.limit("10/hour")

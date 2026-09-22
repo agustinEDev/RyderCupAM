@@ -139,9 +139,13 @@ class TestSetNamePreferenceUseCase:
         corregirlo. Decisión de producto, no un descuido (ver el docstring
         del caso de uso)
         """
-        created = await create_competition(uow, creator_id)
+        # Con dias si se quiere un borrador: es lo unico que sigue en DRAFT
+        created = await create_competition(
+            uow, creator_id, enrollment_opens_days_before=5 if status == "DRAFT" else None
+        )
         enrollment = await create_approved_enrollment(uow, created.id, player_id)
-        await set_competition_status(uow, created.id, status)
+        if status != "DRAFT":
+            await set_competition_status(uow, created.id, status)
 
         use_case = SetNamePreferenceUseCase(uow)
         request = SetNamePreferenceRequestDTO(

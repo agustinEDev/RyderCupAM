@@ -126,12 +126,26 @@ class CreateCompetitionUseCase:
                 max_players=request.max_players,
                 team_assignment=team_assignment_vo,
                 max_playing_handicap=request.max_playing_handicap,
+                enrollment_opens_days_before=request.enrollment_opens_days_before,
+                visibility=request.visibility,
             )
 
-            # 9. Persistir la competición
+            # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
+            #    (BE #332). Se abre llamando a `activate()` y no naciendo en
+            #    ACTIVE desde el factory porque abrir emite su evento: naciendo
+            #    activa, el estado se movia sin que nadie se enterase.
+            #
+            #    Va en la misma operacion, no en una segunda llamada desde la
+            #    app: crear y activar por separado deja la competicion creada y
+            #    cerrada si falla la segunda, con el organizador creyendo que
+            #    esta abierta.
+            if request.enrollment_opens_days_before is None:
+                competition.activate()
+
+            # 10. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 10. Auto-enroll del creador como jugador APPROVED
+            # 11. Auto-enroll del creador como jugador APPROVED
             creator_enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
@@ -139,7 +153,7 @@ class CreateCompetitionUseCase:
             )
             await self._uow.enrollments.add(creator_enrollment)
 
-        # 11. Retornar DTO de respuesta
+        # 12. Retornar DTO de respuesta
         return CreateCompetitionResponseDTO(
             id=competition.id.value,
             creator_id=competition.creator_id.value,
@@ -169,6 +183,8 @@ class CreateCompetitionUseCase:
             max_players=competition.max_players,
             team_assignment=competition.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
+            enrollment_opens_days_before=competition.enrollment_opens_days_before,
+            visibility=str(competition.visibility),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

@@ -31,6 +31,7 @@ from ..events.competition_reverted_to_in_progress_event import (
 )
 from ..events.competition_started_event import CompetitionStartedEvent
 from ..events.competition_updated_event import CompetitionUpdatedEvent
+from ..services.enrollment_opening_service import EnrollmentOpeningService
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
@@ -38,6 +39,7 @@ from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.play_mode import PlayMode
 from ..value_objects.team_assignment import TeamAssignment
+from ..value_objects.visibility import Visibility
 
 # Constantes de validación
 MIN_PLAYERS = 2
@@ -47,6 +49,12 @@ MIN_PLAYERS = 2
 MAX_PLAYERS = 100
 # 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
 DEFAULT_MAX_PLAYERS = 12
+
+# Cuantos dias antes del torneo pueden abrirse solas las inscripciones (BE #332).
+# Cero no es «antes» de nada, y dos semanas es el tope decidido el 21 sep: con
+# mas antelacion la apertura deja de elegirse en una lista y se teclea.
+MIN_ENROLLMENT_OPENING_DAYS = 1
+MAX_ENROLLMENT_OPENING_DAYS = 14
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
 
@@ -112,6 +120,8 @@ class Competition:
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
         max_playing_handicap: int | None = None,
+        enrollment_opens_days_before: int | None = None,
+        visibility: Visibility = Visibility.PRIVATE,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
@@ -131,6 +141,9 @@ class Competition:
         self._max_players = max_players
         self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
+        self._enrollment_opens_days_before = enrollment_opens_days_before
+        self._visibility = visibility
+        self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
@@ -151,6 +164,8 @@ class Competition:
         max_players: int = DEFAULT_MAX_PLAYERS,
         team_assignment: TeamAssignment = TeamAssignment.MANUAL,
         max_playing_handicap: int | None = None,
+        enrollment_opens_days_before: int | None = None,
+        visibility: Visibility = Visibility.PRIVATE,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -169,6 +184,8 @@ class Competition:
             max_players=max_players,
             team_assignment=team_assignment,
             max_playing_handicap=max_playing_handicap,
+            enrollment_opens_days_before=enrollment_opens_days_before,
+            visibility=visibility,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -301,9 +318,130 @@ class Competition:
         """Verifica si el torneo permite inscripciones."""
         return self._status == CompetitionStatus.ACTIVE
 
+    @property
+    def enrollment_opens_days_before(self) -> int | None:
+        """Cuantos dias antes del torneo se abren solas las inscripciones.
+
+        `None` es lo normal: la mayoria de torneos nacen ya abiertos.
+        """
+        return self._enrollment_opens_days_before
+
+    def _validate_enrollment_opening(self, dias: int | None) -> None:
+        """Entre 1 y 14 dias antes, o nada.
+
+        Abajo, cero dias no es «antes» de nada: para abrir ya, no se programa.
+        Arriba, dos semanas es el tope que se decidio (21 sep): mas antelacion
+        deja de elegirse en una lista y se teclea, y un torneo que abre
+        inscripciones con meses de antelacion las abre a mano.
+        """
+        if dias is None:
+            return
+
+        if not MIN_ENROLLMENT_OPENING_DAYS <= dias <= MAX_ENROLLMENT_OPENING_DAYS:
+            raise ValueError(
+                f"Las inscripciones se abren entre {MIN_ENROLLMENT_OPENING_DAYS} y "
+                f"{MAX_ENROLLMENT_OPENING_DAYS} días antes del torneo. Recibido: {dias}."
+            )
+
+    def _update_team_names(self, team_1_name: str | None, team_2_name: str | None) -> None:
+        """Cambia los nombres de los equipos, validandolos como pareja.
+
+        Se validan juntos porque la regla es de los dos —no pueden llamarse
+        igual—, asi que cambiar uno solo tambien hay que mirarlo contra el otro.
+        """
+        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
+        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
+        self._validate_team_names(updated_team_1, updated_team_2)
+
+        if team_1_name is not None:
+            self._team_1_name = team_1_name
+
+        if team_2_name is not None:
+            self._team_2_name = team_2_name
+
+    def schedule_enrollment_opening(self, dias: int | None) -> None:
+        """Programa —o desprograma— la apertura de las inscripciones.
+
+        `None` aqui significa QUITAR la fecha, no «dejala como esta»: quien se
+        arrepiente de haberla puesto tiene que poder deshacerlo. Por eso no va
+        en `update_info`, donde `None` es lo contrario (BE #319).
+        """
+        self._validate_enrollment_opening(dias)
+
+        # Programar lo que ya esta abierto no significa nada, y aceptarlo en
+        # silencio dejaba al organizador con un «abre en 5 dias» de vuelta en
+        # cada lectura mientras la gente ya se apuntaba
+        if dias is not None and self._status != CompetitionStatus.DRAFT:
+            raise ValueError(
+                "No se puede programar la apertura: las inscripciones ya están abiertas."
+            )
+
+        self._enrollment_opens_days_before = dias
+        self._updated_at = datetime.now()
+
+        # Quitar los dias es decir «abrela ya»: sin programacion no hay nada que
+        # esperar, y dejarla en DRAFT la varaba sin salida (BE #332)
+        if dias is None and self._status == CompetitionStatus.DRAFT:
+            self.activate()
+
+    @property
+    def visibility(self) -> Visibility:
+        """Quien puede ver esta competicion y pedir sitio en ella."""
+        return self._visibility
+
+    def accepts_enrollment_requests(self) -> bool:
+        """Indica si un desconocido puede pedir plaza por su cuenta.
+
+        En una privada se entra porque el organizador invita (BE #318).
+        """
+        return self._visibility.accepts_enrollment_requests()
+
+    def allows_enrollment_opening(self) -> bool:
+        """Indica si todavia esta por abrir, sin mirar la hora.
+
+        Separado de `due_to_open` para poder descartar sin resolver la zona,
+        que cuesta una consulta.
+        """
+        return self._status == CompetitionStatus.DRAFT
+
+    def due_to_open(self, timezone: str | None) -> bool:
+        """Indica si ya le toca abrirse, leyendo su hora en la zona del campo.
+
+        Sin fecha, nunca: ahi manda la invitacion (BE #319a). Y solo un
+        borrador se abre — una cancelada no resucita porque pase su hora, ni se
+        reabre una que ya cerro inscripciones.
+
+        La zona la pone el campo donde se juega, porque «las nueve» son las
+        nueve de alli. Sin campo todavia no se abre sola: no se adivina.
+        """
+        if self._status != CompetitionStatus.DRAFT:
+            return False
+        return EnrollmentOpeningService.is_due(
+            self._dates.start_date, self._enrollment_opens_days_before, timezone
+        )
+
     def allows_modifications(self) -> bool:
         """Verifica si el torneo permite modificar configuración."""
-        return self._status == CompetitionStatus.DRAFT
+        return self._status.allows_modifications()
+
+    def allows_deletion(self, has_schedule: bool) -> bool:
+        """Verifica si el torneo todavía se puede borrar del todo (BE #333).
+
+        Dos condiciones, y la segunda no se puede leer del estado. El estado
+        tiene que permitirlo, y ademas **no puede haber calendario**: el estado
+        se anda hacia atras —`revert-status` y `reopen-enrollments`— sin
+        deshacer las rondas, asi que un torneo ya jugado puede volver a ACTIVE
+        con sus golpes dentro. Mirando solo el estado, la cascada se los
+        llevaria.
+
+        El sorteo de equipos no entra (21 sep): se protege lo jugado, no lo
+        preparado. Sin rondas no hay partidos ni golpes, y el sorteo se rehace.
+
+        Args:
+            has_schedule: Si ya tiene rondas. Solo se crean en CLOSED, asi que
+                tenerlas significa que este torneo paso de ahi.
+        """
+        return self._status.allows_deletion() and not has_schedule
 
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
@@ -323,6 +461,11 @@ class Competition:
 
         self._status = CompetitionStatus.ACTIVE
         self._updated_at = datetime.now()
+
+        # La apertura programada queda cumplida al abrir, venga de su hora, de
+        # una invitacion o del boton. Conservarla haria que la ficha siguiera
+        # anunciando «abre 5 dias antes» de algo que ya abrio (BE #332)
+        self._enrollment_opens_days_before = None
 
         event = CompetitionActivatedEvent(
             competition_id=str(self._id),
@@ -493,9 +636,10 @@ class Competition:
         max_players: int | None = None,
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
+        visibility: Visibility | None = None,
     ) -> None:
         """
-        Actualiza la información del torneo. Solo permitido en estado DRAFT.
+        Actualiza la información del torneo, mientras las inscripciones estén abiertas.
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -504,13 +648,16 @@ class Competition:
         if not self.allows_modifications():
             raise CompetitionStateError(
                 f"No se puede modificar la configuración en estado {self._status.value}. "
-                f"Solo se permite en estado DRAFT."
+                f"Solo mientras las inscripciones están abiertas."
             )
 
         if name is not None:
             self._name = name
 
         if dates is not None:
+            # Mover las fechas ya no puede invalidar la apertura: son dias de
+            # antelacion, asi que la apertura se mueve CON el torneo. Eso es lo
+            # que se buscaba al dejar de guardar el instante (BE #332)
             self._dates = dates
 
         if location is not None:
@@ -530,16 +677,10 @@ class Competition:
             self._validate_max_playing_handicap(max_playing_handicap)
             self._max_playing_handicap = max_playing_handicap
 
-        # Validar y actualizar nombres de equipos
-        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
-        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
-        self._validate_team_names(updated_team_1, updated_team_2)
+        if visibility is not None:
+            self._visibility = visibility
 
-        if team_1_name is not None:
-            self._team_1_name = team_1_name
-
-        if team_2_name is not None:
-            self._team_2_name = team_2_name
+        self._update_team_names(team_1_name, team_2_name)
 
         self._updated_at = datetime.now()
 
@@ -584,13 +725,13 @@ class Competition:
         - No se permiten duplicados
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si el país no es compatible o el campo ya existe
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes añadir campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes añadir campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if not self._is_country_compatible(country_code):
@@ -618,13 +759,13 @@ class Competition:
         Quita un campo de golf de la competición. Reordena automáticamente.
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si el campo no existe
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes quitar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes quitar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         sorted_golf_courses = sorted(self._golf_courses, key=lambda cgc: cgc.display_order)
@@ -651,13 +792,13 @@ class Competition:
         Valida que una lista de golf_course_ids es válida para reordenar.
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si los IDs no coinciden con los campos actuales
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes reordenar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes reordenar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if len(golf_course_ids) != len(self._golf_courses):
@@ -703,13 +844,13 @@ class Competition:
         Cambia el orden de los campos de golf (single-phase, for non-DB contexts).
 
         Raises:
-            CompetitionStateError: Si no está en DRAFT
+            CompetitionStateError: Si las inscripciones ya no están abiertas
             ValueError: Si hay órdenes duplicados o no secuenciales
         """
-        if self._status != CompetitionStatus.DRAFT:
+        if not self.allows_modifications():
             raise CompetitionStateError(
-                f"Solo puedes reordenar campos de golf en estado DRAFT. "
-                f"Estado actual: {self._status.value}"
+                f"Solo puedes reordenar campos de golf mientras las inscripciones "
+                f"están abiertas. Estado actual: {self._status.value}"
             )
 
         if len(new_order) != len(self._golf_courses):

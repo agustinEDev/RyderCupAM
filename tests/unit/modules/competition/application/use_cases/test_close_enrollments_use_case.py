@@ -71,7 +71,6 @@ class TestCloseEnrollmentsUseCase:
         # Activar
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             await uow.competitions.update(competition)
             await uow.commit()
 
@@ -136,7 +135,6 @@ class TestCloseEnrollmentsUseCase:
         # Activar
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             await uow.competitions.update(competition)
             await uow.commit()
 
@@ -168,6 +166,9 @@ class TestCloseEnrollmentsUseCase:
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
+            # Programada: desde BE #332 es la única que nace en DRAFT, que es el
+            # estado que este test quiere probar
+            enrollment_opens_days_before=5,
         )
         created = await create_use_case.execute(create_request, creator_id)
 
@@ -205,7 +206,6 @@ class TestCloseEnrollmentsUseCase:
         # Activar y cerrar
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
@@ -244,7 +244,6 @@ class TestCloseEnrollmentsUseCase:
         # Activar
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
-            competition.activate()
             await uow.competitions.update(competition)
             await uow.commit()
 

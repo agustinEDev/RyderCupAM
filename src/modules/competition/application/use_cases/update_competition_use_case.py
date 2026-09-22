@@ -156,8 +156,32 @@ class UpdateCompetitionUseCase:
             if not competition.allows_modifications():
                 raise CompetitionNotEditableError(
                     f"No se puede modificar una competición en estado {competition.status.value}. "
-                    f"Solo se permite en estado DRAFT."
+                    f"Solo mientras las inscripciones están abiertas."
                 )
+
+            # 3a. Con el calendario ya montado, la configuracion no se toca.
+            # `ACTIVE` no significa «todavia no hay nada»: se vuelve a ACTIVE desde
+            # CLOSED con `reopen_enrollments`, y entonces ya puede haber rondas,
+            # equipos y partidos. Mover las fechas dejaria esas rondas fuera del
+            # rango del torneo, y cambiar el modo de juego dejaria los golpes ya
+            # anotados sin relacion con lo que se ensena (BE #323)
+            rondas = await self._uow.rounds.find_by_competition(competition_id)
+            if rondas:
+                raise CompetitionNotEditableError(
+                    "No se puede modificar la configuración: la competición ya tiene "
+                    "rondas programadas."
+                )
+
+            # 3b. El cupo no puede quedarse por debajo de quien ya esta dentro.
+            # Con las inscripciones abiertas ya hay gente apuntada (BE #323), y
+            # bajar el numero les dejaria fuera de un torneo que ya tenian
+            if request.max_players is not None:
+                inscritos = await self._uow.enrollments.count_approved(competition_id)
+                if request.max_players < inscritos:
+                    raise CompetitionNotEditableError(
+                        f"No se puede bajar el cupo a {request.max_players}: "
+                        f"ya hay {inscritos} jugadores inscritos."
+                    )
 
             # 4. Construir los Value Objects y obtener valores opcionales
             name = CompetitionName(request.name) if request.name else None
@@ -189,7 +213,13 @@ class UpdateCompetitionUseCase:
             )
 
             # 5. Actualizar la competición usando el método de dominio
+            # Aparte de `update_info`: ahi un `None` significa «no lo toques», y
+            # aqui tiene que poder significar «quitala» (BE #319)
+            if "enrollment_opens_days_before" in request.model_fields_set:
+                competition.schedule_enrollment_opening(request.enrollment_opens_days_before)
+
             competition.update_info(
+                visibility=request.visibility,
                 name=name,
                 dates=dates,
                 location=nueva_location,

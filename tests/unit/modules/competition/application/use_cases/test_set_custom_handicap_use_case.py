@@ -192,9 +192,13 @@ class TestSetCustomHandicapUseCase:
         When: El creador intenta establecer el hándicap
         Then: Se lanza HandicapEditNotAllowedError
         """
-        created = await create_competition(uow, creator_id)
+        # Con dias si se quiere un borrador: es lo unico que sigue en DRAFT
+        created = await create_competition(
+            uow, creator_id, enrollment_opens_days_before=5 if status == "DRAFT" else None
+        )
         enrollment = await create_approved_enrollment(uow, created.id, player_id)
-        await set_competition_status(uow, created.id, status)
+        if status != "DRAFT":
+            await set_competition_status(uow, created.id, status)
 
         use_case = SetCustomHandicapUseCase(uow)
         request = SetCustomHandicapRequestDTO(
@@ -213,9 +217,13 @@ class TestSetCustomHandicapUseCase:
         When: La competición está en DRAFT, ACTIVE o CLOSED
         Then: Se puede establecer el hándicap personalizado sin errores
         """
-        created = await create_competition(uow, creator_id)
+        # Con dias si se quiere un borrador: es lo unico que sigue en DRAFT
+        created = await create_competition(
+            uow, creator_id, enrollment_opens_days_before=5 if status == "DRAFT" else None
+        )
         enrollment = await create_approved_enrollment(uow, created.id, player_id)
-        await set_competition_status(uow, created.id, status)
+        if status != "DRAFT":
+            await set_competition_status(uow, created.id, status)
 
         use_case = SetCustomHandicapUseCase(uow)
         request = SetCustomHandicapRequestDTO(
