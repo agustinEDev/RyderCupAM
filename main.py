@@ -40,6 +40,7 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     competition_crud_routes,
     competition_golf_course_routes,
     competition_state_routes,
+    draft_routes,
     enrollment_routes,
     invitation_routes,
     round_match_routes,
@@ -398,6 +399,11 @@ app.include_router(
 
 app.include_router(
     competition_state_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    draft_routes.router,
     prefix="/api/v1/competitions",
 )
 

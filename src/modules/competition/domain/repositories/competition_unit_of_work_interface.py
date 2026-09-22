@@ -13,6 +13,7 @@ from src.shared.domain.repositories.country_repository_interface import (
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 from .competition_repository_interface import CompetitionRepositoryInterface
+from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
@@ -63,6 +64,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         """Acceso al repositorio de asignaciones de equipos."""
+        pass
+
+    @property
+    @abstractmethod
+    def drafts(self) -> DraftRepositoryInterface:
+        """Acceso al repositorio de salas de draft (FE #653)."""
         pass
 
     @property

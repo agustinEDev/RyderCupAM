@@ -80,10 +80,14 @@ class TeamAssignment:
         if not team_a_player_ids or not team_b_player_ids:
             raise ValueError("Both teams must have at least one player")
 
-        # Validar equipos balanceados
-        if len(team_a_player_ids) != len(team_b_player_ids):
+        # Validar equipos balanceados. Se admite uno de diferencia: con un
+        # numero impar de inscritos se avisa y se deja seguir (decidido el 20
+        # sep), y si esto lo rechazara, la sala de draft no podria cerrar y los
+        # equipos que los capitanes acaban de elegir se perderian. Dos de
+        # diferencia no sale de ningun reparto: es un error de quien llama
+        if abs(len(team_a_player_ids) - len(team_b_player_ids)) > 1:
             raise ValueError(
-                f"Teams must have equal players. "
+                f"Teams must not differ by more than one player. "
                 f"Team A: {len(team_a_player_ids)}, Team B: {len(team_b_player_ids)}"
             )
 

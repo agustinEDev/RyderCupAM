@@ -6,6 +6,9 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.repositories.draft_repository_interface import (
+    DraftRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
@@ -32,6 +35,7 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 )
 
 from .in_memory_competition_repository import InMemoryCompetitionRepository
+from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
@@ -50,6 +54,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._rounds = InMemoryRoundRepository()
         self._matches = InMemoryMatchRepository()
         self._team_assignments = InMemoryTeamAssignmentRepository()
+        self._drafts = InMemoryDraftRepository()
         self._invitations = InMemoryInvitationRepository()
         self._hole_scores = InMemoryHoleScoreRepository()
         self.committed = False
@@ -77,6 +82,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         return self._team_assignments
+
+    @property
+    def drafts(self) -> DraftRepositoryInterface:
+        return self._drafts
 
     @property
     def invitations(self) -> InvitationRepositoryInterface:

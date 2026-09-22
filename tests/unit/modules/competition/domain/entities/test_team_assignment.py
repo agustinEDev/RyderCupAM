@@ -48,13 +48,31 @@ class TestTeamAssignmentCreate:
 
         assert assignment.mode == TeamAssignmentMode.MANUAL
 
-    def test_create_with_unbalanced_teams_raises(self):
-        """Error si equipos no tienen mismo número de jugadores."""
-        with pytest.raises(ValueError, match="Teams must have equal players"):
+    def test_create_with_one_player_more_in_a_team_is_allowed(self):
+        """Con un número impar de inscritos, un equipo lleva uno más.
+
+        Nombrar capitanes con impares avisa y deja seguir (decidido el 20 sep):
+        quedarse atascado la víspera es peor que un torneo desigual. Si el
+        reparto lo rechazara, la sala de draft no podría cerrar y los equipos
+        elegidos se perderían.
+        """
+        assignment = TeamAssignment.create(
+            competition_id=CompetitionId.generate(),
+            mode=TeamAssignmentMode.DRAFT,
+            team_a_player_ids=[UserId.generate(), UserId.generate()],
+            team_b_player_ids=[UserId.generate()],
+        )
+
+        assert len(assignment.team_a_player_ids) == 2
+        assert len(assignment.team_b_player_ids) == 1
+
+    def test_create_with_two_players_more_in_a_team_raises(self):
+        """Dos de diferencia no sale de ningún reparto: es un error de quien llama."""
+        with pytest.raises(ValueError, match="one player"):
             TeamAssignment.create(
                 competition_id=CompetitionId.generate(),
                 mode=TeamAssignmentMode.AUTOMATIC,
-                team_a_player_ids=[UserId.generate(), UserId.generate()],
+                team_a_player_ids=[UserId.generate(), UserId.generate(), UserId.generate()],
                 team_b_player_ids=[UserId.generate()],
             )
 
