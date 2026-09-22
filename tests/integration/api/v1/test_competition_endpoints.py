@@ -2236,6 +2236,7 @@ class TestCaptains:
         return creador, comp, jugadores
 
     async def _nombrar(self, client, comp, a, b):
+        """PUT de los capitanes con las cookies que tenga el cliente en ese momento."""
         return await client.put(
             f"/api/v1/competitions/{comp['id']}/captains",
             json={"team_a_captain_id": a["user"]["id"], "team_b_captain_id": b["user"]["id"]},
@@ -2243,6 +2244,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_nombrarlos_cierra_y_la_ficha_los_ensena(self, client: AsyncClient):
+        """
+        Given: una abierta con cuatro inscritos
+        When: el creador nombra a Ana y Bea
+        Then: queda CLOSED, avisa que los números cuadran y la ficha, leída de Postgres, los enseña
+        """
         _, comp, (ana, bea, _) = await self._abierta_con(client, 3)
 
         respuesta = await self._nombrar(client, comp, ana, bea)
@@ -2258,6 +2264,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_con_numeros_impares_avisa_y_deja_seguir(self, client: AsyncClient):
+        """
+        Given: una abierta con tres inscritos
+        When: se nombran capitanes
+        Then: responde 200 con `uneven_teams` a true
+        """
         _, comp, (ana, bea) = await self._abierta_con(client, 2)
 
         respuesta = await self._nombrar(client, comp, ana, bea)
@@ -2268,6 +2279,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_sin_capitanes_la_ficha_los_da_nulos(self, client: AsyncClient):
+        """
+        Given: una competición recién creada
+        When: se abre su ficha
+        Then: los dos capitanes vienen a null, no ausentes
+        """
         _, comp, _ = await self._abierta_con(client, 0)
 
         ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
@@ -2277,6 +2293,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_un_capitan_que_no_esta_inscrito_es_400(self, client: AsyncClient):
+        """
+        Given: un usuario que no se ha inscrito
+        When: el creador lo nombra capitán
+        Then: 400, y el motivo habla de los inscritos
+        """
         creador, comp, (ana,) = await self._abierta_con(client, 1)
         ajeno = await create_authenticated_user(
             client, "capi-ajeno@test.com", "P@ssw0rd123!", "Ajeno", "Capitanes"
@@ -2290,6 +2311,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_otro_usuario_no_puede_nombrarlos(self, client: AsyncClient):
+        """
+        Given: una abierta ajena
+        When: un jugador intenta nombrar capitanes
+        Then: 403
+        """
         _, comp, (ana, bea) = await self._abierta_con(client, 2)
         set_auth_cookies(client, ana["cookies"])
 
@@ -2299,6 +2325,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_una_competicion_que_no_existe_es_404(self, client: AsyncClient):
+        """
+        Given: un identificador que no existe
+        When: se nombran capitanes
+        Then: 404
+        """
         _, _, (ana, bea) = await self._abierta_con(client, 2)
 
         respuesta = await self._nombrar(client, {"id": str(uuid.uuid4())}, ana, bea)
@@ -2307,6 +2338,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_la_baja_de_un_capitan_libera_su_puesto(self, client: AsyncClient):
+        """
+        Given: capitanes nombrados y sin equipos
+        When: Ana se da de baja
+        Then: la ficha deja libre su puesto y conserva a Bea
+        """
         creador, comp, (ana, bea) = await self._abierta_con(client, 2)
         assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
 
@@ -2320,6 +2356,7 @@ class TestCaptains:
         assert ficha.json()["team_b_captain_id"] == bea["user"]["id"]
 
     async def _repartir(self, client, comp, modo, equipo_a=None, equipo_b=None):
+        """POST del reparto; con listas, manual, y sin ellas, automático."""
         cuerpo = {"mode": modo}
         if equipo_a is not None:
             cuerpo["team_a_player_ids"] = [j["user"]["id"] for j in equipo_a]
@@ -2328,6 +2365,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_repartir_con_un_capitan_fuera_de_su_equipo_es_400(self, client: AsyncClient):
+        """
+        Given: capitanes nombrados
+        When: el reparto manual pone a cada una en el equipo contrario
+        Then: 400 y no 500
+        """
         creador, comp, (ana, bea, carla) = await self._abierta_con(client, 3)
         assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
 
@@ -2342,6 +2384,11 @@ class TestCaptains:
     async def test_repartir_con_un_solo_capitan_es_400(self, client: AsyncClient):
         # Cinco con el creador, y tras la baja cuatro: con un número impar el
         # reparto se pararía antes, por los impares, y no llegaría a esto
+        """
+        Given: capitanes nombrados y Ana de baja
+        When: se reparte en automático
+        Then: 400 pidiendo el capitán que falta
+        """
         creador, comp, (ana, bea, *_) = await self._abierta_con(client, 4)
         assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
         set_auth_cookies(client, ana["cookies"])
@@ -2382,6 +2429,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_la_capitana_elige_subcapitan_y_asciende_si_se_va(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Ana elige a Carla y después se da de baja
+        Then: Carla pasa a capitana y su puesto de subcapitana queda libre
+        """
         creador, comp, ana, _, carla = await self._repartida(client)
 
         set_auth_cookies(client, ana["cookies"])
@@ -2401,6 +2453,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_otro_no_elige_el_subcapitan_de_un_equipo_ajeno(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Bea intenta elegir el subcapitán del equipo A
+        Then: 403
+        """
         _, comp, _, bea, carla = await self._repartida(client)
         set_auth_cookies(client, bea["cookies"])
 
@@ -2413,6 +2470,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_un_subcapitan_de_otro_equipo_es_400(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Ana elige a alguien del equipo B
+        Then: 400
+        """
         creador, comp, ana, _, _ = await self._repartida(client)
         set_auth_cookies(client, ana["cookies"])
 
@@ -2425,6 +2487,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_un_equipo_que_no_existe_es_422(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: se pide el subcapitán del equipo C
+        Then: 422: la ruta solo admite A o B
+        """
         creador, comp, _, _, carla = await self._repartida(client)
         set_auth_cookies(client, creador["cookies"])
 
@@ -2439,6 +2506,11 @@ class TestCaptains:
     async def test_el_organizador_cubre_el_puesto_de_un_capitan_que_se_fue(
         self, client: AsyncClient
     ):
+        """
+        Given: Ana se va tras el draft sin subcapitán
+        When: el organizador pone a Carla, y Bea lo intenta después
+        Then: Carla queda de capitana y a Bea se le responde 403
+        """
         creador, comp, ana, bea, carla = await self._repartida(client)
         set_auth_cookies(client, ana["cookies"])
         await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
@@ -2460,6 +2532,11 @@ class TestCaptains:
 
     @pytest.mark.asyncio
     async def test_cubrir_un_puesto_que_no_esta_vacio_es_400(self, client: AsyncClient):
+        """
+        Given: Ana sigue de capitana
+        When: el organizador intenta cubrir su puesto
+        Then: 400: no se cambia a un capitán que sigue
+        """
         creador, comp, _, _, carla = await self._repartida(client)
         set_auth_cookies(client, creador["cookies"])
 

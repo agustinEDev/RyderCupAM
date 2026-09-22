@@ -825,14 +825,17 @@ class Competition:
         self._team_b_vice_captain_id = None
 
     def _captain(self, team: str) -> UserId | None:
+        """El capitán de ese equipo; valida antes que el equipo sea A o B."""
         self._comprobar_equipo(team)
         return self._team_a_captain_id if team == "A" else self._team_b_captain_id
 
     def _vice_captain(self, team: str) -> UserId | None:
+        """El subcapitán de ese equipo; valida antes que el equipo sea A o B."""
         self._comprobar_equipo(team)
         return self._team_a_vice_captain_id if team == "A" else self._team_b_vice_captain_id
 
     def _set_vice_captain(self, team: str, player: UserId | None) -> None:
+        """Pone o vacía el subcapitán de un equipo ya validado."""
         if team == "A":
             self._team_a_vice_captain_id = player
         else:
@@ -840,6 +843,7 @@ class Competition:
 
     @staticmethod
     def _comprobar_equipo(team: str) -> None:
+        """Solo hay dos equipos: A y B."""
         if team not in ("A", "B"):
             raise ValueError(f"El equipo tiene que ser A o B, no {team!r}")
 

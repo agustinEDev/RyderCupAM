@@ -42,6 +42,7 @@ INSCRITOS = [ANA, BEA, CARLA] + [UserId.generate() for _ in range(9)]
 
 
 def _competicion(estado: CompetitionStatus) -> Competition:
+    """Una competición en ese estado, sin eventos pendientes."""
     competicion = Competition(
         id=CompetitionId.generate(),
         creator_id=UserId.generate(),
@@ -58,6 +59,7 @@ def _competicion(estado: CompetitionStatus) -> Competition:
 
 
 def _cierres(competicion: Competition) -> list:
+    """Los eventos de cierre de inscripciones que tiene pendientes."""
     return [
         e
         for e in competicion.get_domain_events()
@@ -79,6 +81,11 @@ class TestNameCaptains:
         assert [e.total_enrollments for e in _cierres(competicion)] == [12]
 
     def test_ya_cerrada_se_pueden_cambiar_sin_volver_a_cerrar(self):
+        """
+        Given: capitanes nombrados, que la cerraron
+        When: se cambia la capitana del A
+        Then: cambia, sigue CLOSED y no sale un segundo evento de cierre
+        """
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
         competicion.clear_domain_events()
@@ -123,6 +130,11 @@ class TestNameCaptains:
         assert competicion.status == estado
 
     def test_la_misma_persona_no_capitanea_los_dos_equipos(self):
+        """
+        Given: una abierta
+        When: se nombra a Ana para los dos equipos
+        Then: se rechaza y no cambia nada
+        """
         competicion = _competicion(CompetitionStatus.ACTIVE)
 
         with pytest.raises(ValueError, match="distint"):
@@ -145,6 +157,11 @@ class TestNameCaptains:
         assert competicion.status == CompetitionStatus.ACTIVE
 
     def test_nace_sin_capitanes(self):
+        """
+        Given: una competición recién creada
+        When: se miran sus capitanes
+        Then: no tiene ninguno
+        """
         competicion = _competicion(CompetitionStatus.ACTIVE)
 
         assert competicion.team_a_captain_id is None
@@ -153,11 +170,17 @@ class TestNameCaptains:
 
 class TestHandleWithdrawalBeforeTheDraft:
     def _con_capitanes(self) -> Competition:
+        """Abierta con Ana y Bea de capitanas, lo que la deja cerrada."""
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
         return competicion
 
     def test_libera_el_puesto_del_capitan_a(self):
+        """
+        Given: Ana y Bea capitanas, sin equipos
+        When: Ana se da de baja
+        Then: su puesto queda libre y Bea sigue
+        """
         competicion = self._con_capitanes()
 
         assert competicion.handle_withdrawal(ANA) is True
@@ -166,6 +189,11 @@ class TestHandleWithdrawalBeforeTheDraft:
         assert competicion.team_b_captain_id == BEA
 
     def test_libera_el_puesto_del_capitan_b(self):
+        """
+        Given: Ana y Bea capitanas, sin equipos
+        When: Bea se da de baja
+        Then: su puesto queda libre y Ana sigue
+        """
         competicion = self._con_capitanes()
 
         assert competicion.handle_withdrawal(BEA) is True
@@ -174,6 +202,11 @@ class TestHandleWithdrawalBeforeTheDraft:
         assert competicion.team_b_captain_id is None
 
     def test_quien_no_es_capitan_no_cambia_nada(self):
+        """
+        Given: Ana y Bea capitanas
+        When: Carla se da de baja
+        Then: nada cambia y se dice que no era capitana
+        """
         competicion = self._con_capitanes()
 
         assert competicion.handle_withdrawal(CARLA) is False
@@ -189,6 +222,11 @@ class TestCaptainsForTeamSplit:
         assert _competicion(CompetitionStatus.CLOSED).captains_for_team_split() is None
 
     def test_con_los_dos_devuelve_la_pareja(self):
+        """
+        Given: los dos capitanes nombrados
+        When: se piden para repartir
+        Then: vienen los dos, en su orden
+        """
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
@@ -196,6 +234,11 @@ class TestCaptainsForTeamSplit:
 
     @pytest.mark.parametrize("se_va", ["A", "B"])
     def test_con_uno_solo_no_se_reparte_cojo(self, se_va):
+        """
+        Given: un capitán se ha ido
+        When: se piden para repartir
+        Then: se rechaza pidiendo el que falta
+        """
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
         competicion.handle_withdrawal(ANA if se_va == "A" else BEA)
@@ -208,11 +251,17 @@ class TestCheckCaptainsPlacement:
     """En el reparto manual, cada capitán tiene que estar en el equipo que capitanea."""
 
     def _con_capitanes(self) -> Competition:
+        """Abierta con Ana y Bea de capitanas, lo que la deja cerrada."""
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
         return competicion
 
     def test_cada_uno_en_el_suyo_vale(self):
+        """
+        Given: capitanes nombrados
+        When: cada uno aparece en su equipo
+        Then: se acepta
+        """
         self._con_capitanes().check_captains_placement([ANA, CARLA], [BEA])
 
     @pytest.mark.parametrize(
@@ -221,13 +270,28 @@ class TestCheckCaptainsPlacement:
         ids=["cambiados", "B en el A", "A fuera"],
     )
     def test_un_capitan_fuera_de_su_equipo(self, equipo_a, equipo_b):
+        """
+        Given: capitanes nombrados
+        When: están cambiados, juntos o uno fuera
+        Then: se rechaza
+        """
         with pytest.raises(CaptainOnWrongTeamError):
             self._con_capitanes().check_captains_placement(equipo_a, equipo_b)
 
     def test_sin_capitanes_no_se_comprueba_nada(self):
+        """
+        Given: una competición sin capitanes
+        When: se comprueba cualquier reparto
+        Then: se acepta: es el flujo de antes
+        """
         _competicion(CompetitionStatus.CLOSED).check_captains_placement([BEA], [ANA])
 
     def test_con_uno_solo_tampoco_se_acepta(self):
+        """
+        Given: un capitán se ha ido
+        When: se comprueba el reparto
+        Then: se rechaza pidiendo el que falta
+        """
         competicion = self._con_capitanes()
         competicion.handle_withdrawal(BEA)
 
@@ -262,6 +326,11 @@ def _repartida(estado: CompetitionStatus = CompetitionStatus.CLOSED) -> Competit
 
 class TestNameViceCaptain:
     def test_tras_el_draft_se_elige_entre_los_del_equipo(self):
+        """
+        Given: equipos repartidos
+        When: cada capitana elige a uno de su equipo
+        Then: quedan los dos subcapitanes
+        """
         competicion = _repartida()
 
         competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
@@ -271,6 +340,11 @@ class TestNameViceCaptain:
         assert competicion.team_b_vice_captain_id == EVA
 
     def test_elegir_otro_sustituye_al_anterior(self):
+        """
+        Given: Carla de subcapitana del A
+        When: se elige a Dani
+        Then: Dani sustituye a Carla
+        """
         competicion = _repartida()
         competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
 
@@ -279,12 +353,22 @@ class TestNameViceCaptain:
         assert competicion.team_a_vice_captain_id == DANI
 
     def test_antes_del_draft_no_hay_equipo_del_que_elegir(self):
+        """
+        Given: capitanes nombrados sin equipos
+        When: se elige subcapitán
+        Then: se rechaza
+        """
         competicion = _repartida()
 
         with pytest.raises(TeamsNotAssignedError):
             competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=False)
 
     def test_tiene_que_ser_de_su_equipo(self):
+        """
+        Given: equipos repartidos
+        When: se elige a alguien de fuera de ese equipo
+        Then: se rechaza y no queda ninguno
+        """
         competicion = _repartida()
 
         with pytest.raises(CaptainOnWrongTeamError):
@@ -293,6 +377,11 @@ class TestNameViceCaptain:
         assert competicion.team_a_vice_captain_id is None
 
     def test_el_capitan_no_es_su_propio_subcapitan(self):
+        """
+        Given: equipos repartidos
+        When: Ana se elige a sí misma
+        Then: se rechaza
+        """
         competicion = _repartida()
 
         with pytest.raises(ValueError, match="capit"):
@@ -300,12 +389,22 @@ class TestNameViceCaptain:
 
     @pytest.mark.parametrize("estado", [CompetitionStatus.IN_PROGRESS, CompetitionStatus.COMPLETED])
     def test_con_el_torneo_en_marcha_no(self, estado):
+        """
+        Given: el torneo en marcha
+        When: se intenta el cambio
+        Then: se rechaza por el estado
+        """
         competicion = _repartida(estado)
 
         with pytest.raises(CompetitionStateError):
             competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
 
     def test_un_equipo_que_no_existe(self):
+        """
+        Given: equipos repartidos
+        When: se pide el equipo C
+        Then: se rechaza
+        """
         with pytest.raises(ValueError, match="equipo"):
             _repartida().name_vice_captain("C", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
 
@@ -314,11 +413,17 @@ class TestFillCaptain:
     """El organizador cubre el puesto de un capitán que se fue sin subcapitán."""
 
     def _sin_capitan_a(self) -> Competition:
+        """Repartida, y Ana se ha ido sin subcapitán."""
         competicion = _repartida()
         competicion.handle_withdrawal(ANA)
         return competicion
 
     def test_cubre_el_puesto_vacio_con_alguien_del_equipo(self):
+        """
+        Given: Ana se fue sin subcapitán
+        When: el organizador pone a Dani
+        Then: Dani queda de capitán
+        """
         competicion = self._sin_capitan_a()
 
         competicion.fill_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=True)
@@ -344,6 +449,11 @@ class TestFillCaptain:
         assert competicion.team_a_captain_id == DANI
 
     def test_no_sirve_para_cambiar_a_un_capitan_que_sigue(self):
+        """
+        Given: Ana sigue en el torneo
+        When: se intenta cubrir su puesto
+        Then: se rechaza y Ana sigue
+        """
         competicion = _repartida()
 
         with pytest.raises(CaptainsLockedError):
@@ -352,12 +462,22 @@ class TestFillCaptain:
         assert competicion.team_a_captain_id == ANA
 
     def test_antes_del_draft_se_nombran_los_dos(self):
+        """
+        Given: Ana se fue antes del reparto
+        When: se intenta cubrir su puesto
+        Then: se rechaza: antes del draft se nombran los dos
+        """
         competicion = self._sin_capitan_a()
 
         with pytest.raises(TeamsNotAssignedError):
             competicion.fill_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=False)
 
     def test_tiene_que_ser_de_su_equipo(self):
+        """
+        Given: equipos repartidos
+        When: se elige a alguien de fuera de ese equipo
+        Then: se rechaza y no queda ninguno
+        """
         competicion = self._sin_capitan_a()
 
         with pytest.raises(CaptainOnWrongTeamError):
@@ -366,6 +486,11 @@ class TestFillCaptain:
         assert competicion.team_a_captain_id is None
 
     def test_con_el_torneo_en_marcha_no(self):
+        """
+        Given: el torneo en marcha
+        When: se intenta el cambio
+        Then: se rechaza por el estado
+        """
         competicion = self._sin_capitan_a()
         competicion.start()
 
@@ -375,6 +500,11 @@ class TestFillCaptain:
 
 class TestHandleWithdrawal:
     def test_si_se_va_el_capitan_asciende_el_subcapitan(self):
+        """
+        Given: Ana con Carla de subcapitana
+        When: Ana se va
+        Then: Carla asciende y su puesto queda libre
+        """
         competicion = _repartida()
         competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
 
@@ -383,6 +513,11 @@ class TestHandleWithdrawal:
         assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (CARLA, None)
 
     def test_si_se_va_el_capitan_b_asciende_el_suyo(self):
+        """
+        Given: Bea con Eva de subcapitana
+        When: Bea se va
+        Then: Eva asciende y su puesto queda libre
+        """
         competicion = _repartida()
         competicion.name_vice_captain("B", EVA, team_player_ids=EQUIPO_B, has_teams=True)
 
@@ -391,6 +526,11 @@ class TestHandleWithdrawal:
         assert (competicion.team_b_captain_id, competicion.team_b_vice_captain_id) == (EVA, None)
 
     def test_sin_subcapitan_el_puesto_queda_libre(self):
+        """
+        Given: Bea sin subcapitana
+        When: Bea se va
+        Then: su puesto queda libre y Ana sigue
+        """
         competicion = _repartida()
 
         competicion.handle_withdrawal(BEA)
@@ -398,6 +538,11 @@ class TestHandleWithdrawal:
         assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ANA, None)
 
     def test_si_se_va_el_subcapitan_su_puesto_queda_libre(self):
+        """
+        Given: Carla de subcapitana del A
+        When: Carla se va
+        Then: su puesto queda libre y Ana sigue de capitana
+        """
         competicion = _repartida()
         competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
 
@@ -406,6 +551,11 @@ class TestHandleWithdrawal:
         assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (ANA, None)
 
     def test_si_se_va_otro_no_cambia_nada(self):
+        """
+        Given: capitanas nombradas
+        When: se va Dani, que no es ni capitán ni subcapitán
+        Then: nada cambia
+        """
         competicion = _repartida()
 
         assert competicion.handle_withdrawal(DANI) is False
@@ -438,6 +588,11 @@ class TestTeamsReassigned:
 
 class TestIsCaptainOf:
     def test_cada_capitan_lo_es_de_su_equipo(self):
+        """
+        Given: Ana capitana del A y Bea del B
+        When: se pregunta por cada una en cada equipo
+        Then: cada una lo es solo del suyo
+        """
         competicion = _repartida()
 
         assert competicion.is_captain_of("A", ANA) is True
@@ -446,4 +601,9 @@ class TestIsCaptainOf:
         assert competicion.is_captain_of("B", CARLA) is False
 
     def test_sin_capitan_nadie_lo_es(self):
+        """
+        Given: una competición sin capitanes
+        When: se pregunta por Ana
+        Then: no lo es de ninguno
+        """
         assert _competicion(CompetitionStatus.CLOSED).is_captain_of("A", ANA) is False

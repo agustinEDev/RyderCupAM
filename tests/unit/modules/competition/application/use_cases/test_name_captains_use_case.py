@@ -60,17 +60,24 @@ async def _montar(inscritos: int = 4):
 
 
 def _peticion(competition_id, a: UserId, b: UserId) -> NameCaptainsRequestDTO:
+    """La petición de nombrar a `a` y `b` capitanes de esa competición."""
     return NameCaptainsRequestDTO(
         competition_id=competition_id, team_a_captain_id=a.value, team_b_captain_id=b.value
     )
 
 
 async def _competicion(uow, competition_id):
+    """La competición tal como quedó guardada."""
     async with uow:
         return await uow.competitions.find_by_id(CompetitionId(competition_id))
 
 
 async def test_nombrarlos_cierra_las_inscripciones_y_los_guarda():
+    """
+    Given: una abierta con cuatro inscritos
+    When: el creador nombra a dos de ellos
+    Then: queda CLOSED con los dos guardados, y la respuesta lo dice
+    """
     uow, comp_id, creator_id, (ana, bea, *_) = await _montar(inscritos=4)
 
     respuesta = await NameCaptainsUseCase(uow).execute(_peticion(comp_id, ana, bea), creator_id)
@@ -106,6 +113,11 @@ async def test_el_organizador_puede_nombrarse_a_si_mismo():
 
 
 async def test_un_admin_puede_nombrarlos_en_la_de_otro():
+    """
+    Given: la competición de otro
+    When: un admin nombra capitanes
+    Then: se nombran y queda cerrada
+    """
     uow, comp_id, _, (ana, bea, *_) = await _montar()
 
     await NameCaptainsUseCase(uow).execute(
@@ -116,6 +128,11 @@ async def test_un_admin_puede_nombrarlos_en_la_de_otro():
 
 
 async def test_otro_usuario_no_puede():
+    """
+    Given: una abierta
+    When: un jugador que no es el creador nombra capitanes
+    Then: se rechaza y sigue abierta
+    """
     uow, comp_id, _, (ana, bea, *_) = await _montar()
 
     with pytest.raises(NotCompetitionCreatorError):
@@ -125,6 +142,11 @@ async def test_otro_usuario_no_puede():
 
 
 async def test_una_competicion_que_no_existe():
+    """
+    Given: un identificador que no existe
+    When: se nombran capitanes
+    Then: se dice que no existe
+    """
     uow = InMemoryUnitOfWork()
 
     with pytest.raises(CompetitionNotFoundError):
@@ -171,6 +193,11 @@ async def test_el_capitan_a_tambien_se_comprueba():
 
 
 async def test_con_los_equipos_repartidos_ya_no_se_cambian():
+    """
+    Given: una cerrada con los equipos ya repartidos
+    When: se nombran otros capitanes
+    Then: se rechaza: habría que rehacer los equipos
+    """
     uow, comp_id, creator_id, (ana, bea, carla, dani) = await _montar(inscritos=5)
     await set_competition_status(uow, comp_id, "CLOSED")
     async with uow:
@@ -189,6 +216,11 @@ async def test_con_los_equipos_repartidos_ya_no_se_cambian():
 
 
 async def test_en_juego_no_se_nombran():
+    """
+    Given: una competición en juego
+    When: se nombran capitanes
+    Then: se rechaza por el estado
+    """
     uow, comp_id, creator_id, (ana, bea, *_) = await _montar()
     await set_competition_status(uow, comp_id, "IN_PROGRESS")
 
@@ -203,6 +235,7 @@ async def test_bloquea_la_fila_de_la_competicion():
     original = uow.competitions.find_by_id_for_update
 
     async def espia(competition_id):
+        """Anota con qué competición se pidió el bloqueo y deja hacer al original."""
         llamadas.append(competition_id)
         return await original(competition_id)
 

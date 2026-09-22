@@ -36,6 +36,7 @@ COLUMNAS = (
 
 
 def upgrade() -> None:
+    """Añade las cuatro columnas, nullable y con SET NULL al borrar el usuario."""
     for columna in COLUMNAS:
         op.add_column(
             "competitions",
@@ -50,5 +51,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Quita las cuatro columnas en orden inverso."""
     for columna in reversed(COLUMNAS):
         op.drop_column("competitions", columna)

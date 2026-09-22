@@ -50,18 +50,25 @@ async def _con_capitanes():
 
 
 async def _retirar(uow, inscripcion, quien):
+    """Ese jugador se da de baja de su inscripción."""
     await WithdrawEnrollmentUseCase(uow).execute(
         WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), quien
     )
 
 
 async def _capitanes(uow, competition_id):
+    """Los dos capitanes tal como quedaron guardados."""
     async with uow:
         competicion = await uow.competitions.find_by_id(competition_id)
     return competicion.team_a_captain_id, competicion.team_b_captain_id
 
 
 async def test_si_se_retira_la_capitana_a_su_puesto_queda_libre():
+    """
+    Given: Ana y Bea capitanas, sin equipos
+    When: Ana se da de baja
+    Then: su puesto queda libre y Bea sigue
+    """
     uow, comp_id, inscripciones, (ana, bea, _) = await _con_capitanes()
 
     await _retirar(uow, inscripciones[ana], ana)
@@ -70,6 +77,11 @@ async def test_si_se_retira_la_capitana_a_su_puesto_queda_libre():
 
 
 async def test_si_se_retira_la_capitana_b_su_puesto_queda_libre():
+    """
+    Given: Ana y Bea capitanas, sin equipos
+    When: Bea se da de baja
+    Then: su puesto queda libre y Ana sigue
+    """
     uow, comp_id, inscripciones, (ana, bea, _) = await _con_capitanes()
 
     await _retirar(uow, inscripciones[bea], bea)
@@ -78,6 +90,11 @@ async def test_si_se_retira_la_capitana_b_su_puesto_queda_libre():
 
 
 async def test_si_se_retira_otro_los_capitanes_siguen():
+    """
+    Given: Ana y Bea capitanas
+    When: Carla se da de baja
+    Then: las dos siguen de capitanas
+    """
     uow, comp_id, inscripciones, (ana, bea, carla) = await _con_capitanes()
 
     await _retirar(uow, inscripciones[carla], carla)
@@ -92,6 +109,7 @@ async def test_retirarse_bloquea_la_fila_de_la_competicion():
     original = uow.competitions.find_by_id_for_update
 
     async def espia(competition_id):
+        """Anota con qué competición se pidió el bloqueo y deja hacer al original."""
         llamadas.append(competition_id)
         return await original(competition_id)
 

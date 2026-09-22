@@ -335,11 +335,17 @@ class TestAssignTeamsWithCaptains:
     """BE #320: los capitanes, fijos en su equipo y fuera del draft."""
 
     def _jugadores(self, n: int) -> list[PlayerForDraft]:
+        """`n` jugadores con hándicaps distintos, de menor a mayor."""
         return [
             PlayerForDraft(user_id=UserId(str(uuid4())), handicap=Decimal(i * 3)) for i in range(n)
         ]
 
     def test_cada_capitan_en_su_equipo_y_el_resto_por_draft(self):
+        """
+        Given: seis jugadores y dos de ellos capitanes
+        When: se reparte
+        Then: cada capitán encabeza su equipo y el resto sale igual que un draft solo de ellos
+        """
         servicio = SnakeDraftService()
         jugadores = self._jugadores(6)
         capitan_a, capitan_b = jugadores[1].user_id, jugadores[4].user_id
@@ -363,6 +369,11 @@ class TestAssignTeamsWithCaptains:
         )
 
     def test_un_capitan_que_no_esta_entre_los_jugadores(self):
+        """
+        Given: un capitán que no está en la lista
+        When: se reparte
+        Then: se rechaza
+        """
         servicio = SnakeDraftService()
         jugadores = self._jugadores(4)
 

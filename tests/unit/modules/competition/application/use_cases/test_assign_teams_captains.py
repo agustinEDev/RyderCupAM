@@ -77,18 +77,21 @@ async def _montar(capitanes: str = "los dos"):
 
 
 def _use_case(uow) -> AssignTeamsUseCase:
+    """El caso de uso con un repositorio de usuarios que no encuentra a nadie."""
     repo = AsyncMock()
     repo.find_by_id = AsyncMock(return_value=None)
     return AssignTeamsUseCase(uow, repo)
 
 
 async def _automatico(uow, comp_id, creator_id):
+    """Reparto automático pedido por el creador."""
     return await _use_case(uow).execute(
         AssignTeamsRequestDTO(competition_id=comp_id.value, mode="AUTOMATIC"), creator_id
     )
 
 
 async def _manual(uow, comp_id, creator_id, equipo_a, equipo_b):
+    """Reparto manual con esas dos listas."""
     return await _use_case(uow).execute(
         AssignTeamsRequestDTO(
             competition_id=comp_id.value,
@@ -133,6 +136,11 @@ async def test_automatico_sin_capitanes_sigue_como_siempre():
 
 
 async def test_manual_con_cada_capitan_en_su_equipo():
+    """
+    Given: capitanes nombrados
+    When: el reparto manual pone a cada uno en el suyo
+    Then: se acepta
+    """
     uow, comp_id, creator_id, jugadores, (capitan_a, capitan_b) = await _montar()
     resto = [j for j in jugadores if j not in (capitan_a, capitan_b)]
 
@@ -146,6 +154,11 @@ async def test_manual_con_cada_capitan_en_su_equipo():
 
 @pytest.mark.parametrize("error", ["A en el equipo B", "B en el equipo A", "A fuera"])
 async def test_manual_un_capitan_fuera_de_su_equipo_no_se_acepta(error):
+    """
+    Given: capitanes nombrados
+    When: el reparto manual los cambia, junta a los dos o deja fuera a uno
+    Then: se rechaza y no se guarda ningún reparto
+    """
     uow, comp_id, creator_id, jugadores, (capitan_a, capitan_b) = await _montar()
     resto = [j for j in jugadores if j not in (capitan_a, capitan_b)]
     equipos = {
@@ -184,6 +197,7 @@ async def test_repartir_bloquea_la_fila_de_la_competicion():
     original = uow.competitions.find_by_id_for_update
 
     async def espia(competition_id):
+        """Anota con qué competición se pidió el bloqueo y deja hacer al original."""
         llamadas.append(competition_id)
         return await original(competition_id)
 

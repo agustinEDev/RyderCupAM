@@ -169,6 +169,7 @@ class CompetitionDTOMapper:
         """Capitanes y subcapitanes de la competición (BE #320)."""
 
         def valor(user_id: UserId | None):
+            """El UUID del jugador, o None si el puesto está vacío."""
             return user_id.value if user_id else None
 
         return CaptaincyResponseDTO(

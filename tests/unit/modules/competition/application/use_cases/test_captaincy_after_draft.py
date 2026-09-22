@@ -57,6 +57,7 @@ class Torneo:
     """Seis inscritos, Ana y Bea capitanas y, si se pide, los equipos repartidos."""
 
     def __init__(self):
+        """Los jugadores del torneo, todavía sin montar."""
         self.uow = InMemoryUnitOfWork()
         self.organizador = UserId(uuid4())
         self.ana, self.bea = UserId(uuid4()), UserId(uuid4())
@@ -64,6 +65,7 @@ class Torneo:
         self.inscripciones = {}
 
     async def montar(self, repartir: bool = True) -> "Torneo":
+        """Crea la competición, inscribe a todos, nombra a Ana y Bea y, si se pide, reparte."""
         creada = await create_competition(self.uow, self.organizador)
         self.comp_id = CompetitionId(creada.id)
         for jugador in (self.ana, self.bea, *self.otros):
@@ -83,6 +85,7 @@ class Torneo:
         return self
 
     async def repartir(self):
+        """Reparto automático; guarda cómo quedaron los dos equipos."""
         usuarios = AsyncMock()
         usuarios.find_by_id = AsyncMock(return_value=None)
         reparto = await AssignTeamsUseCase(self.uow, usuarios).execute(
@@ -97,9 +100,11 @@ class Torneo:
         return next(j for j in self.equipo_a if j in self.otros)
 
     def de_b(self) -> UserId:
+        """Un jugador corriente del equipo B: ni la capitana ni el organizador."""
         return next(j for j in self.equipo_b if j in self.otros)
 
     async def subcapitan(self, equipo: str, jugador: UserId, quien: UserId, admin=False):
+        """Pide el subcapitán de ese equipo en nombre de `quien`."""
         return await NameViceCaptainUseCase(self.uow).execute(
             NameViceCaptainRequestDTO(
                 competition_id=self.comp_id.value, team=equipo, player_id=jugador.value
@@ -109,6 +114,7 @@ class Torneo:
         )
 
     async def cubrir(self, equipo: str, jugador: UserId, quien: UserId, admin=False):
+        """Pide cubrir el puesto de capitán de ese equipo en nombre de `quien`."""
         return await FillCaptainUseCase(self.uow).execute(
             FillCaptainRequestDTO(
                 competition_id=self.comp_id.value, team=equipo, player_id=jugador.value
@@ -118,12 +124,14 @@ class Torneo:
         )
 
     async def retirar(self, jugador: UserId):
+        """El jugador se da de baja de su propia inscripción."""
         await WithdrawEnrollmentUseCase(self.uow).execute(
             WithdrawEnrollmentRequestDTO(enrollment_id=self.inscripciones[jugador].id.value),
             jugador,
         )
 
     async def competicion(self):
+        """La competición tal como quedó guardada."""
         async with self.uow:
             return await self.uow.competitions.find_by_id(self.comp_id)
 
@@ -132,6 +140,11 @@ class Torneo:
 
 
 async def test_la_capitana_elige_a_su_subcapitan():
+    """
+    Given: equipos repartidos
+    When: Ana elige a un jugador de su equipo
+    Then: queda guardado y la respuesta lo trae
+    """
     t = await Torneo().montar()
 
     respuesta = await t.subcapitan("A", t.de_a(), t.ana)
@@ -153,6 +166,11 @@ async def test_el_organizador_o_un_admin_tambien_pueden(quien):
 
 @pytest.mark.parametrize("quien", ["la otra capitana", "un jugador"])
 async def test_nadie_mas_puede_elegirlo(quien):
+    """
+    Given: equipos repartidos
+    When: la otra capitana o un jugador corriente eligen el subcapitán del A
+    Then: se rechaza y no se guarda nada
+    """
     t = await Torneo().montar()
     persona = t.bea if quien == "la otra capitana" else t.de_a()
 
@@ -163,6 +181,11 @@ async def test_nadie_mas_puede_elegirlo(quien):
 
 
 async def test_tiene_que_ser_de_su_equipo():
+    """
+    Given: equipos repartidos
+    When: Ana elige a alguien del equipo B
+    Then: se rechaza
+    """
     t = await Torneo().montar()
 
     with pytest.raises(CaptainOnWrongTeamError):
@@ -180,6 +203,11 @@ async def test_quien_se_retiro_ya_no_cuenta_como_de_su_equipo():
 
 
 async def test_antes_del_draft_no_hay_subcapitan():
+    """
+    Given: capitanes nombrados sin equipos
+    When: Ana elige subcapitán
+    Then: se rechaza: todavía no hay equipo del que elegir
+    """
     t = await Torneo().montar(repartir=False)
     alguien = t.otros[0]
 
@@ -191,6 +219,11 @@ async def test_antes_del_draft_no_hay_subcapitan():
 
 
 async def test_si_se_va_la_capitana_asciende_su_subcapitan():
+    """
+    Given: Ana con subcapitán
+    When: Ana se da de baja
+    Then: el subcapitán pasa a capitán y su puesto queda libre
+    """
     t = await Torneo().montar()
     segundo = t.de_a()
     await t.subcapitan("A", segundo, t.ana)
@@ -202,6 +235,11 @@ async def test_si_se_va_la_capitana_asciende_su_subcapitan():
 
 
 async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
+    """
+    Given: Ana se va sin subcapitán
+    When: el organizador pone a un jugador del equipo A
+    Then: queda de capitán y la respuesta lo trae
+    """
     t = await Torneo().montar()
     await t.retirar(t.ana)
     nuevo = t.de_a()
@@ -213,6 +251,11 @@ async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
 
 
 async def test_cubrir_el_puesto_es_cosa_del_organizador():
+    """
+    Given: Ana se va sin subcapitán
+    When: Bea intenta cubrir el puesto
+    Then: se rechaza
+    """
     t = await Torneo().montar()
     await t.retirar(t.ana)
 
@@ -221,6 +264,11 @@ async def test_cubrir_el_puesto_es_cosa_del_organizador():
 
 
 async def test_repartir_de_nuevo_deja_libres_los_subcapitanes():
+    """
+    Given: Ana con subcapitán
+    When: se vuelven a repartir los equipos
+    Then: el puesto de subcapitán queda libre
+    """
     t = await Torneo().montar()
     await t.subcapitan("A", t.de_a(), t.ana)
 
@@ -239,6 +287,7 @@ async def test_bloquean_la_fila_de_la_competicion(accion):
     original = t.uow.competitions.find_by_id_for_update
 
     async def espia(competition_id):
+        """Anota con qué competición se pidió el bloqueo y deja hacer al original."""
         llamadas.append(competition_id)
         return await original(competition_id)
 
