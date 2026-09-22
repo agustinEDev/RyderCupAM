@@ -20,6 +20,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.visibility import Visibility
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
@@ -170,6 +171,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         ),
     )
     visibility: Visibility = Field(Visibility.PRIVATE, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: SetupMode = Field(SetupMode.RYDER_CUP, description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
@@ -283,6 +285,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: str = Field(..., description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     # Campos calculados
     is_creator: bool = Field(default=True, description="Siempre True para el creador.")
@@ -371,6 +374,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         ),
     )
     visibility: Visibility | None = Field(None, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: SetupMode | None = Field(None, description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
@@ -493,6 +497,7 @@ class CompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: str = Field(..., description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
     team_a_captain_id: UUID | None = Field(
         None, description="Capitán del equipo A, o null si no hay (BE #320)."
     )

@@ -135,6 +135,7 @@ class CompetitionDTOMapper:
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
+            setup_mode=str(competition.setup_mode),
             team_a_captain_id=(
                 competition.team_a_captain_id.value if competition.team_a_captain_id else None
             ),

@@ -2587,3 +2587,100 @@ class TestTeamsAssignedEnLaFicha:
         assert reparto.status_code == 201, reparto.text
         assert despues.json()["teams_assigned"] is True
         assert all(c.get("teams_assigned") is None for c in listado.json())
+
+
+class TestSetupMode:
+    """FE #695: el modo de configuración se elige al crear y se cambia mientras abre."""
+
+    @pytest.mark.asyncio
+    async def test_se_crea_con_el_modo_elegido_y_la_ficha_lo_devuelve(self, client: AsyncClient):
+        """
+        Given: un organizador
+        When: crea una competición en modo automático
+        Then: la ficha y el listado lo devuelven
+        """
+        user = await create_authenticated_user(
+            client, "modo-auto@test.com", "P@ssw0rd123!", "Modo", "Automatico"
+        )
+        set_auth_cookies(client, user["cookies"])
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": f"Modo automatico {uuid.uuid4().hex[:6]}",
+                "start_date": "2030-06-01",
+                "end_date": "2030-06-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "setup_mode": "AUTOMATIC",
+            },
+        )
+        assert creada.status_code == 201, creada.text
+        ficha = await client.get(f"/api/v1/competitions/{creada.json()['id']}")
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert creada.json()["setup_mode"] == "AUTOMATIC"
+        assert ficha.status_code == 200, ficha.text
+        assert ficha.json()["setup_mode"] == "AUTOMATIC"
+        assert [c["setup_mode"] for c in listado.json()] == ["AUTOMATIC"]
+
+    @pytest.mark.asyncio
+    async def test_sin_decir_nada_nace_en_estilo_rydercup(self, client: AsyncClient):
+        """Es lo que son todas hoy: nadie ve cambiar su torneo por no contestar."""
+        user = await create_authenticated_user(
+            client, "modo-defecto@test.com", "P@ssw0rd123!", "Modo", "Defecto"
+        )
+        comp = await create_competition(client, user["cookies"])
+        set_auth_cookies(client, user["cookies"])
+
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.json()["setup_mode"] == "RYDER_CUP"
+
+    @pytest.mark.asyncio
+    async def test_se_cambia_mientras_abre_y_ya_no_al_cerrar(self, client: AsyncClient):
+        """
+        Given: una competición abierta
+        When: se cambia el modo, se cierran las inscripciones y se intenta otra vez
+        Then: el primer cambio entra y el segundo se rechaza
+        """
+        user = await create_authenticated_user(
+            client, "modo-cambio@test.com", "P@ssw0rd123!", "Modo", "Cambio"
+        )
+        comp = await create_competition(client, user["cookies"])
+        set_auth_cookies(client, user["cookies"])
+
+        cambiada = await client.put(
+            f"/api/v1/competitions/{comp['id']}", json={"setup_mode": "MANUAL"}
+        )
+        await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        despues = await client.put(
+            f"/api/v1/competitions/{comp['id']}", json={"setup_mode": "AUTOMATIC"}
+        )
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert cambiada.status_code == 200, cambiada.text
+        assert cambiada.json()["setup_mode"] == "MANUAL"
+        assert despues.status_code == 400
+        assert ficha.json()["setup_mode"] == "MANUAL"
+
+    @pytest.mark.asyncio
+    async def test_un_modo_que_no_existe_es_422(self, client: AsyncClient):
+        user = await create_authenticated_user(
+            client, "modo-malo@test.com", "P@ssw0rd123!", "Modo", "Malo"
+        )
+        set_auth_cookies(client, user["cookies"])
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": f"Modo malo {uuid.uuid4().hex[:6]}",
+                "start_date": "2030-06-01",
+                "end_date": "2030-06-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "setup_mode": "SEMIAUTOMATIC",
+            },
+        )
+
+        assert creada.status_code == 422

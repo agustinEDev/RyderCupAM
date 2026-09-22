@@ -72,6 +72,7 @@ from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.team_assignment import (
     TeamAssignment as TeamAssignmentVO,
 )
@@ -362,6 +363,7 @@ TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
 TeeColorDecorator = _create_enum_decorator(TeeColor)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 VisibilityDecorator = _create_enum_decorator(Visibility)
+SetupModeDecorator = _create_enum_decorator(SetupMode)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
 
@@ -713,6 +715,8 @@ competitions_table = Table(
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
+    # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
+    Column("setup_mode", SetupModeDecorator, nullable=False, server_default="RYDER_CUP"),
     # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
     Column(
         "team_a_captain_id",
@@ -987,6 +991,7 @@ def start_competition_mappers():
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
+                "_setup_mode": competitions_table.c.setup_mode,
                 "_team_a_captain_id": competitions_table.c.team_a_captain_id,
                 "_team_b_captain_id": competitions_table.c.team_b_captain_id,
                 "_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
