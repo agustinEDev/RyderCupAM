@@ -104,7 +104,12 @@ async def start_draft(
     ),
     tags=["Competitions - Draft"],
 )
-@limiter.limit("120/minute")
+# 300/min: la sala la miran los doce a la vez, cada uno cada cinco segundos, y
+# **comparten el mismo cubo** —uno por IP, y detras del proxy la IP es la misma
+# para todos (ADR-038)—. Doce moviles son 144 peticiones por minuto, mas las
+# recargas: con 120 la ceremonia entera se caia con 429, y con ella el turno
+# agotado, que lo resuelve justo este GET
+@limiter.limit("300/minute")
 async def get_draft(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
