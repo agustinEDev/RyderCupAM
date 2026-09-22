@@ -82,3 +82,15 @@ class GetCompetitionUseCase:
             )
 
             return competition
+
+    async def tiene_equipos(self, competition_id: CompetitionId) -> bool:
+        """Indica si la competición ya tiene los equipos repartidos (FE #692).
+
+        La ficha lo necesita para ofrecer el botón correcto: con equipos, los
+        capitanes ya no se cambian, y una competición reabierta solo se vuelve a
+        cerrar con «Cerrar inscripciones», porque reabrir no deshace el reparto.
+        No escribe nada: es una pregunta.
+        """
+        async with self._uow:
+            reparto = await self._uow.team_assignments.find_by_competition(competition_id)
+            return reparto is not None

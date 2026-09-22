@@ -449,6 +449,8 @@ async def get_competition(
         dto.can_delete = await delete_uc.puede_borrar(
             competition_vo_id, current_user_id, is_admin=current_user.is_admin
         )
+        # Igual, solo en la ficha: con él elige el botón de capitanes (FE #692)
+        dto.teams_assigned = await get_competition_uc.tiene_equipos(competition_vo_id)
         return dto
 
     except ValueError as e:

@@ -2546,3 +2546,44 @@ class TestCaptains:
         )
 
         assert respuesta.status_code == 400, respuesta.text
+
+
+class TestTeamsAssignedEnLaFicha:
+    """FE #692: la ficha dice si ya hay equipos, para ofrecer el botón correcto."""
+
+    @pytest.mark.asyncio
+    async def test_la_ficha_dice_si_hay_equipos_y_los_listados_no(self, client: AsyncClient):
+        """
+        Given: una competición cerrada con cuatro inscritos
+        When: se mira la ficha antes y después de repartir, y el listado
+        Then: false, luego true, y null en el listado, donde no se calcula
+        """
+        creador = await create_authenticated_user(
+            client, "equipos-creador@test.com", "P@ssw0rd123!", "Creador", "Equipos"
+        )
+        comp = await create_competition(client, creador["cookies"])
+        set_auth_cookies(client, creador["cookies"])
+        for letra in "ABC":
+            jugador = await create_authenticated_user(
+                client, f"equipos-{letra}@test.com", "P@ssw0rd123!", "Jugador" + letra, "Equipos"
+            )
+            set_auth_cookies(client, creador["cookies"])
+            inscrito = await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+            )
+            assert inscrito.status_code == 201, inscrito.text
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
+
+        antes = await client.get(f"/api/v1/competitions/{comp['id']}")
+        reparto = await client.post(
+            f"/api/v1/competitions/{comp['id']}/teams", json={"mode": "AUTOMATIC"}
+        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}")
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert antes.json()["teams_assigned"] is False
+        assert reparto.status_code == 201, reparto.text
+        assert despues.json()["teams_assigned"] is True
+        assert all(c.get("teams_assigned") is None for c in listado.json())

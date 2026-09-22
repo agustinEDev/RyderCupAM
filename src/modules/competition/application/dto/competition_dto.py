@@ -505,6 +505,14 @@ class CompetitionResponseDTO(BaseModel):
     team_b_vice_captain_id: UUID | None = Field(
         None, description="Subcapitán del equipo B, o null si no hay (BE #320)."
     )
+    teams_assigned: bool | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: si ya hay equipos repartidos. Con equipos los capitanes "
+            "ya no se cambian, y reabrir las inscripciones no deshace el reparto. Null "
+            "en los listados, donde no se calcula."
+        ),
+    )
     can_delete: bool | None = Field(
         None,
         description=(
