@@ -77,10 +77,22 @@ class WithdrawEnrollmentUseCase:
             if enrollment.user_id != user_id:
                 raise NotOwnerError("Solo puedes retirarte de tu propia inscripción")
 
-            # 3. Withdraw (la entidad valida el estado)
+            # 3. La competicion, con su fila bloqueada ANTES de tocar la
+            #    inscripcion: el mismo orden que al nombrar capitanes (BE #320).
+            #    Si no, un capitan que se retira a la vez que lo nombran quedaria
+            #    nombrado sin jugar
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
+
+            # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
 
-            # 4. Persistir cambios
+            #    Si era capitan, su puesto queda libre
+            if competition and competition.handle_withdrawal(enrollment.user_id):
+                await self._uow.competitions.update(competition)
+
+            # 5. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
         # 6. Retornar DTO
