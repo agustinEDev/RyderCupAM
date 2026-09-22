@@ -713,6 +713,31 @@ competitions_table = Table(
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
+    # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
+    Column(
+        "team_a_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_b_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_a_vice_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_b_vice_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -962,6 +987,10 @@ def start_competition_mappers():
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
+                "_team_a_captain_id": competitions_table.c.team_a_captain_id,
+                "_team_b_captain_id": competitions_table.c.team_b_captain_id,
+                "_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
+                "_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs

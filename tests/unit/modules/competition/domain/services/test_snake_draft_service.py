@@ -1,6 +1,7 @@
 """Tests para SnakeDraftService domain service."""
 
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
@@ -328,3 +329,55 @@ class TestSnakeDraftServiceIntegration:
             assert r1.user_id == r2.user_id
             assert r1.team == r2.team
             assert r1.draft_order == r2.draft_order
+
+
+class TestAssignTeamsWithCaptains:
+    """BE #320: los capitanes, fijos en su equipo y fuera del draft."""
+
+    def _jugadores(self, n: int) -> list[PlayerForDraft]:
+        """`n` jugadores con hándicaps distintos, de menor a mayor."""
+        return [
+            PlayerForDraft(user_id=UserId(str(uuid4())), handicap=Decimal(i * 3)) for i in range(n)
+        ]
+
+    def test_cada_capitan_en_su_equipo_y_el_resto_por_draft(self):
+        """
+        Given: seis jugadores y dos de ellos capitanes
+        When: se reparte
+        Then: cada capitán encabeza su equipo y el resto sale igual que un draft solo de ellos
+        """
+        servicio = SnakeDraftService()
+        jugadores = self._jugadores(6)
+        capitan_a, capitan_b = jugadores[1].user_id, jugadores[4].user_id
+
+        equipo_a, equipo_b = servicio.assign_teams_with_captains(jugadores, capitan_a, capitan_b)
+
+        resto = [j for j in jugadores if j.user_id not in (capitan_a, capitan_b)]
+        draft = servicio.assign_teams(resto)
+        assert equipo_a == [capitan_a, *servicio.get_team_players(draft, Team.A)]
+        assert equipo_b == [capitan_b, *servicio.get_team_players(draft, Team.B)]
+
+    def test_si_solo_estan_los_capitanes_uno_en_cada_equipo(self):
+        """Sin nadie más no hay draft que hacer, y no puede reventar por eso."""
+        servicio = SnakeDraftService()
+        jugadores = self._jugadores(2)
+        capitan_a, capitan_b = jugadores[0].user_id, jugadores[1].user_id
+
+        assert servicio.assign_teams_with_captains(jugadores, capitan_a, capitan_b) == (
+            [capitan_a],
+            [capitan_b],
+        )
+
+    def test_un_capitan_que_no_esta_entre_los_jugadores(self):
+        """
+        Given: un capitán que no está en la lista
+        When: se reparte
+        Then: se rechaza
+        """
+        servicio = SnakeDraftService()
+        jugadores = self._jugadores(4)
+
+        with pytest.raises(ValueError, match="capit"):
+            servicio.assign_teams_with_captains(
+                jugadores, jugadores[0].user_id, UserId(str(uuid4()))
+            )

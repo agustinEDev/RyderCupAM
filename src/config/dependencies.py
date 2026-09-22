@@ -59,6 +59,9 @@ from src.modules.competition.application.use_cases.delete_round_use_case import 
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
 )
+from src.modules.competition.application.use_cases.fill_captain_use_case import (
+    FillCaptainUseCase,
+)
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
@@ -91,6 +94,12 @@ from src.modules.competition.application.use_cases.list_enrollments_use_case imp
 )
 from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
     ListMyInvitationsUseCase,
+)
+from src.modules.competition.application.use_cases.name_captains_use_case import (
+    NameCaptainsUseCase,
+)
+from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
+    NameViceCaptainUseCase,
 )
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     ReassignMatchPlayersUseCase,
@@ -1738,6 +1747,27 @@ def get_close_enrollments_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return CloseEnrollmentsUseCase(uow)
+
+
+def get_name_captains_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> NameCaptainsUseCase:
+    """Proveedor del caso de uso NameCaptainsUseCase (BE #320)."""
+    return NameCaptainsUseCase(uow)
+
+
+def get_name_vice_captain_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> NameViceCaptainUseCase:
+    """Proveedor del caso de uso NameViceCaptainUseCase (BE #320)."""
+    return NameViceCaptainUseCase(uow)
+
+
+def get_fill_captain_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> FillCaptainUseCase:
+    """Proveedor del caso de uso FillCaptainUseCase (BE #320)."""
+    return FillCaptainUseCase(uow)
 
 
 def get_start_competition_use_case(

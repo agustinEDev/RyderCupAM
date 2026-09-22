@@ -68,6 +68,7 @@ from src.modules.competition.application.use_cases.assign_teams_use_case import 
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
     CompetitionNotFoundError as AssignTeamsNotFoundError,
+    DuplicatePlayerInTeamsError,
     InsufficientPlayersError as AssignTeamsInsufficientError,
     NotCompetitionCreatorError as AssignTeamsNotCreatorError,
     OddPlayersError,
@@ -142,6 +143,10 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
     RoundNotFoundError as UpdateRoundNotFoundError,
     RoundNotModifiableError as UpdateRoundNotModifiableError,
     UpdateRoundUseCase,
+)
+from src.modules.competition.domain.entities.competition import (
+    CaptainMissingError,
+    CaptainOnWrongTeamError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -625,7 +630,8 @@ async def assign_teams(
 
     **Returns:**
     - 201: Equipos asignados
-    - 400: Estado inválido, jugadores insuficientes, o equipos desequilibrados
+    - 400: Estado inválido, jugadores insuficientes, equipos desequilibrados,
+      un jugador en los dos equipos, o un capitán fuera de su equipo o sin pareja
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
@@ -654,6 +660,11 @@ async def assign_teams(
         AssignTeamsInsufficientError,
         OddPlayersError,
         PlayerNotEnrolledError,
+        DuplicatePlayerInTeamsError,
+        CaptainMissingError,
+        CaptainOnWrongTeamError,
+        # Equipos desiguales en el reparto manual (lo rechaza TeamAssignment)
+        ValueError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

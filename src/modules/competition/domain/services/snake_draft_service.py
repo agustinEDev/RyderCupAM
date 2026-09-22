@@ -141,6 +141,43 @@ class SnakeDraftService:
 
         return results
 
+    def assign_teams_with_captains(
+        self,
+        players: list[PlayerForDraft],
+        captain_a: UserId,
+        captain_b: UserId,
+    ) -> tuple[list[UserId], list[UserId]]:
+        """
+        Reparte con cada capitan fijo en su equipo y el draft para el resto (BE #320).
+
+        Los capitanes no entran en el draft: nombrarlos ya los fija. Si solo
+        estan ellos, no hay draft que hacer.
+
+        Args:
+            players: Todos los jugadores, capitanes incluidos
+            captain_a: Capitan del equipo A
+            captain_b: Capitan del equipo B
+
+        Returns:
+            Los jugadores del equipo A y del B, cada uno encabezado por su capitan
+
+        Raises:
+            ValueError: Si un capitan no esta entre los jugadores, o si el resto
+                no se puede repartir (ver `assign_teams`)
+        """
+        ids = {p.user_id for p in players}
+        if captain_a not in ids or captain_b not in ids:
+            raise ValueError("Los capitanes tienen que estar entre los jugadores")
+
+        resto = [p for p in players if p.user_id not in (captain_a, captain_b)]
+        if not resto:
+            return [captain_a], [captain_b]
+        results = self.assign_teams(resto)
+        return (
+            [captain_a, *self.get_team_players(results, Team.A)],
+            [captain_b, *self.get_team_players(results, Team.B)],
+        )
+
     def _should_switch_team(self, pick_number: int) -> bool:
         """
         Determina si debe cambiar de equipo después de este pick.

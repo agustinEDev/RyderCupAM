@@ -1,7 +1,7 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -493,6 +493,18 @@ class CompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    team_a_captain_id: UUID | None = Field(
+        None, description="Capitán del equipo A, o null si no hay (BE #320)."
+    )
+    team_b_captain_id: UUID | None = Field(
+        None, description="Capitán del equipo B, o null si no hay (BE #320)."
+    )
+    team_a_vice_captain_id: UUID | None = Field(
+        None, description="Subcapitán del equipo A, o null si no hay (BE #320)."
+    )
+    team_b_vice_captain_id: UUID | None = Field(
+        None, description="Subcapitán del equipo B, o null si no hay (BE #320)."
+    )
     can_delete: bool | None = Field(
         None,
         description=(
@@ -612,6 +624,99 @@ class CloseEnrollmentsResponseDTO(BaseModel):
     closed_at: datetime = Field(..., description="Fecha y hora de cierre.")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Name Captains (BE #320): nombrarlos cierra las inscripciones
+# --------------------------------------------------------------------------------------
+
+
+class NameCaptainsBodyDTO(BaseModel):
+    """Cuerpo de PUT /competitions/{id}/captains: la competición va en la ruta."""
+
+    team_a_captain_id: UUID = Field(
+        ..., description="Capitán del equipo A: un inscrito aprobado."
+    )
+    team_b_captain_id: UUID = Field(
+        ..., description="Capitán del equipo B: un inscrito aprobado, distinto del A."
+    )
+
+
+class NameCaptainsRequestDTO(BaseModel):
+    """
+    DTO de entrada para nombrar a los dos capitanes.
+
+    Con las inscripciones abiertas, las cierra (ACTIVE → CLOSED). Ya cerradas,
+    los cambia, mientras no haya equipos repartidos.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team_a_captain_id: UUID = Field(
+        ..., description="Capitán del equipo A: un inscrito aprobado."
+    )
+    team_b_captain_id: UUID = Field(
+        ..., description="Capitán del equipo B: un inscrito aprobado, distinto del A."
+    )
+
+
+class NameCaptainsResponseDTO(BaseModel):
+    """
+    DTO de salida al nombrar capitanes, con el aviso de números que no cuadran.
+    """
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    status: str = Field(..., description="Estado tras nombrarlos (CLOSED).")
+    team_a_captain_id: UUID = Field(..., description="Capitán del equipo A.")
+    team_b_captain_id: UUID = Field(..., description="Capitán del equipo B.")
+    total_players: int = Field(..., description="Inscritos aprobados.")
+    uneven_teams: bool = Field(
+        ...,
+        description=(
+            "Aviso, no bloqueo: con un número impar de inscritos los equipos no "
+            "saldrán iguales. Los capitanes quedan nombrados, pero para repartir "
+            "los equipos hará falta un número par: que entre o salga alguien."
+        ),
+    )
+
+
+class TeamPlayerBodyDTO(BaseModel):
+    """Cuerpo de las rutas de capitanía de un equipo: el jugador elegido."""
+
+    player_id: UUID = Field(..., description="Jugador del equipo, inscrito y aprobado.")
+
+
+class NameViceCaptainRequestDTO(BaseModel):
+    """
+    DTO de entrada para nombrar al subcapitán de un equipo, tras el draft.
+
+    Lo elige el capitán de ese equipo; también el organizador o un admin.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team: Literal["A", "B"] = Field(..., description="Equipo: A o B.")
+    player_id: UUID = Field(..., description="Subcapitán: un jugador de ese equipo.")
+
+
+class FillCaptainRequestDTO(BaseModel):
+    """
+    DTO de entrada para cubrir el puesto de un capitán que se fue sin subcapitán.
+
+    Solo el organizador o un admin, solo tras el draft y solo un puesto vacío.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team: Literal["A", "B"] = Field(..., description="Equipo: A o B.")
+    player_id: UUID = Field(..., description="Nuevo capitán: un jugador de ese equipo.")
+
+
+class CaptaincyResponseDTO(BaseModel):
+    """Capitanes y subcapitanes de la competición, tras cambiar alguno."""
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team_a_captain_id: UUID | None = Field(None, description="Capitán del equipo A.")
+    team_b_captain_id: UUID | None = Field(None, description="Capitán del equipo B.")
+    team_a_vice_captain_id: UUID | None = Field(None, description="Subcapitán del equipo A.")
+    team_b_vice_captain_id: UUID | None = Field(None, description="Subcapitán del equipo B.")
 
 
 # --------------------------------------------------------------------------------------

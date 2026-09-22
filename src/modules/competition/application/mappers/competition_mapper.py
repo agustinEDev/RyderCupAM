@@ -3,6 +3,7 @@
 import logging
 
 from src.modules.competition.application.dto.competition_dto import (
+    CaptaincyResponseDTO,
     CompetitionResponseDTO,
     CountryResponseDTO,
     CreatorDTO,
@@ -134,6 +135,22 @@ class CompetitionDTOMapper:
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
+            team_a_captain_id=(
+                competition.team_a_captain_id.value if competition.team_a_captain_id else None
+            ),
+            team_b_captain_id=(
+                competition.team_b_captain_id.value if competition.team_b_captain_id else None
+            ),
+            team_a_vice_captain_id=(
+                competition.team_a_vice_captain_id.value
+                if competition.team_a_vice_captain_id
+                else None
+            ),
+            team_b_vice_captain_id=(
+                competition.team_b_vice_captain_id.value
+                if competition.team_b_vice_captain_id
+                else None
+            ),
             # Teams
             team_1_name=competition.team_1_name,
             team_2_name=competition.team_2_name,
@@ -145,6 +162,22 @@ class CompetitionDTOMapper:
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,
+        )
+
+    @staticmethod
+    def to_captaincy_dto(competition: Competition) -> CaptaincyResponseDTO:
+        """Capitanes y subcapitanes de la competición (BE #320)."""
+
+        def valor(user_id: UserId | None):
+            """El UUID del jugador, o None si el puesto está vacío."""
+            return user_id.value if user_id else None
+
+        return CaptaincyResponseDTO(
+            id=competition.id.value,
+            team_a_captain_id=valor(competition.team_a_captain_id),
+            team_b_captain_id=valor(competition.team_b_captain_id),
+            team_a_vice_captain_id=valor(competition.team_a_vice_captain_id),
+            team_b_vice_captain_id=valor(competition.team_b_vice_captain_id),
         )
 
     @staticmethod

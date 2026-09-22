@@ -1,5 +1,6 @@
 """Competition State Transition Routes - activate, close, start, complete, cancel."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -11,6 +12,9 @@ from src.config.dependencies import (
     get_competition_uow,
     get_complete_competition_use_case,
     get_current_user,
+    get_fill_captain_use_case,
+    get_name_captains_use_case,
+    get_name_vice_captain_use_case,
     get_reopen_enrollments_use_case,
     get_revert_competition_status_use_case,
     get_revert_competition_to_in_progress_use_case,
@@ -21,13 +25,20 @@ from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
     ActivateCompetitionRequestDTO,
     CancelCompetitionRequestDTO,
+    CaptaincyResponseDTO,
     CloseEnrollmentsRequestDTO,
     CompetitionResponseDTO,
     CompleteCompetitionRequestDTO,
+    FillCaptainRequestDTO,
+    NameCaptainsBodyDTO,
+    NameCaptainsRequestDTO,
+    NameCaptainsResponseDTO,
+    NameViceCaptainRequestDTO,
     ReopenEnrollmentsRequestDTO,
     RevertCompetitionStatusRequestDTO,
     RevertCompetitionToInProgressRequestDTO,
     StartCompetitionRequestDTO,
+    TeamPlayerBodyDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -54,6 +65,16 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.fill_captain_use_case import (
+    FillCaptainUseCase,
+)
+from src.modules.competition.application.use_cases.name_captains_use_case import (
+    NameCaptainsUseCase,
+)
+from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
+    NameViceCaptainUseCase,
+    NotCaptainOrCreatorError,
+)
 from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
     ReopenEnrollmentsUseCase,
 )
@@ -69,7 +90,11 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
     StartCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import (
+    CaptainNotEnrolledError,
+    CaptainOnWrongTeamError,
+    CaptainsLockedError,
     CompetitionStateError,
+    TeamsNotAssignedError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -426,4 +451,135 @@ async def cancel_competition(
     except CancelNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionStateError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put(
+    "/{competition_id}/captains",
+    response_model=NameCaptainsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Nombrar a los capitanes (cierra las inscripciones)",
+    description=(
+        "Nombra a los dos capitanes, uno por equipo: dos inscritos aprobados, y "
+        "el organizador puede ser uno. Con las inscripciones abiertas, las cierra "
+        "(ACTIVE → CLOSED). Ya cerradas, los cambia mientras no haya equipos "
+        "repartidos. Con un número impar de inscritos responde `uneven_teams: "
+        "true`: es un aviso, no un bloqueo. Solo el creador o un administrador."
+    ),
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def name_captains(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    body: NameCaptainsBodyDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: NameCaptainsUseCase = Depends(get_name_captains_use_case),
+):
+    """Nombra a los capitanes (BE #320)."""
+    try:
+        request_dto = NameCaptainsRequestDTO(
+            competition_id=competition_id,
+            team_a_captain_id=body.team_a_captain_id,
+            team_b_captain_id=body.team_b_captain_id,
+        )
+        return await use_case.execute(
+            request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (
+        CaptainNotEnrolledError,
+        CaptainsLockedError,
+        CompetitionStateError,
+        ValueError,
+    ) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+# Errores de las dos rutas de capitanía de un equipo que son del que pide, no del
+# servidor: un equipo sin repartir, alguien de otro equipo, un puesto ocupado
+_ERRORES_DE_CAPITANIA = (
+    TeamsNotAssignedError,
+    CaptainOnWrongTeamError,
+    CaptainsLockedError,
+    CompetitionStateError,
+    ValueError,
+)
+
+
+@router.put(
+    "/{competition_id}/teams/{team}/vice-captain",
+    response_model=CaptaincyResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Nombrar al subcapitán de un equipo",
+    description=(
+        "Tras el draft, el capitán de un equipo elige a su subcapitán entre los "
+        "jugadores de ese equipo que siguen inscritos. También el organizador o un "
+        "administrador. Si el capitán se da de baja, asciende el subcapitán."
+    ),
+    tags=["Competitions - Teams"],
+)
+@limiter.limit("10/minute")
+async def name_vice_captain(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    team: Literal["A", "B"],
+    body: TeamPlayerBodyDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: NameViceCaptainUseCase = Depends(get_name_vice_captain_use_case),
+):
+    """Nombra al subcapitán (BE #320)."""
+    try:
+        request_dto = NameViceCaptainRequestDTO(
+            competition_id=competition_id, team=team, player_id=body.player_id
+        )
+        return await use_case.execute(
+            request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCaptainOrCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except _ERRORES_DE_CAPITANIA as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put(
+    "/{competition_id}/teams/{team}/captain",
+    response_model=CaptaincyResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Cubrir el puesto de capitán de un equipo",
+    description=(
+        "Para cuando un capitán se da de baja tras el draft sin subcapitán que "
+        "ascienda: el organizador nombra a otro jugador de ese equipo. Solo cubre "
+        "un puesto vacío; no cambia a un capitán que sigue. Solo el creador o un "
+        "administrador."
+    ),
+    tags=["Competitions - Teams"],
+)
+@limiter.limit("10/minute")
+async def fill_captain(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    team: Literal["A", "B"],
+    body: TeamPlayerBodyDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: FillCaptainUseCase = Depends(get_fill_captain_use_case),
+):
+    """Cubre el puesto vacío de capitán (BE #320)."""
+    try:
+        request_dto = FillCaptainRequestDTO(
+            competition_id=competition_id, team=team, player_id=body.player_id
+        )
+        return await use_case.execute(
+            request_dto, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except _ERRORES_DE_CAPITANIA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
