@@ -39,6 +39,7 @@ from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.play_mode import PlayMode
+from ..value_objects.setup_mode import SetupMode
 from ..value_objects.team_assignment import TeamAssignment
 from ..value_objects.visibility import Visibility
 
@@ -153,6 +154,7 @@ class Competition:
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
+        setup_mode: SetupMode = SetupMode.RYDER_CUP,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
@@ -174,6 +176,9 @@ class Competition:
         self._max_playing_handicap = max_playing_handicap
         self._enrollment_opens_days_before = enrollment_opens_days_before
         self._visibility = visibility
+        # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
+        self._setup_mode = setup_mode
+        self._team_assignment = self._reparto_del_modo(setup_mode)
         self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
         self._created_at = created_at or datetime.now()
@@ -203,6 +208,7 @@ class Competition:
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
+        setup_mode: SetupMode = SetupMode.RYDER_CUP,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -223,6 +229,7 @@ class Competition:
             max_playing_handicap=max_playing_handicap,
             enrollment_opens_days_before=enrollment_opens_days_before,
             visibility=visibility,
+            setup_mode=setup_mode,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -425,6 +432,28 @@ class Competition:
     def visibility(self) -> Visibility:
         """Quien puede ver esta competicion y pedir sitio en ella."""
         return self._visibility
+
+    @property
+    def setup_mode(self) -> SetupMode:
+        """Cuanto monta la aplicacion por su cuenta (FE #695)."""
+        return self._setup_mode
+
+    @staticmethod
+    def _reparto_del_modo(setup_mode: SetupMode) -> "TeamAssignment":
+        """Como se reparten los equipos, segun el modo (FE #695, 22 sep).
+
+        El reparto dejo de preguntarse aparte: un campo propio podia
+        contradecir al modo —«todo automatico» con el reparto a mano—, y la
+        ficha devolvia las dos cosas.
+
+        En estilo RyderCup los equipos salen del draft, o se ponen a mano: lo
+        que no puede es repartirlos la aplicacion a espaldas del organizador.
+        """
+        return (
+            TeamAssignment.AUTOMATIC
+            if setup_mode == SetupMode.AUTOMATIC
+            else TeamAssignment.MANUAL
+        )
 
     def accepts_enrollment_requests(self) -> bool:
         """Indica si un desconocido puede pedir plaza por su cuenta.
@@ -943,6 +972,7 @@ class Competition:
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
         visibility: Visibility | None = None,
+        setup_mode: SetupMode | None = None,
     ) -> None:
         """
         Actualiza la información del torneo, mientras las inscripciones estén abiertas.
@@ -985,6 +1015,16 @@ class Competition:
 
         if visibility is not None:
             self._visibility = visibility
+
+        # Mientras las inscripciones sigan abiertas, que es lo que ya exige este
+        # metodo: al cerrarlas el modo decide lo que ya esta montado (FE #695).
+        # Ojo: por la API hay un limite mas estrecho —BE #323 rechaza la edicion
+        # entera si ya hay rondas—, asi que una reabierta con calendario ya no
+        # cambia de modo
+        if setup_mode is not None:
+            self._setup_mode = setup_mode
+            # El modo manda: si llegan los dos, el reparto sale de el
+            self._team_assignment = self._reparto_del_modo(setup_mode)
 
         self._update_team_names(team_1_name, team_2_name)
 

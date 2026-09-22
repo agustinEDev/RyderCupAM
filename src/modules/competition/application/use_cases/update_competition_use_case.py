@@ -220,6 +220,7 @@ class UpdateCompetitionUseCase:
 
             competition.update_info(
                 visibility=request.visibility,
+                setup_mode=request.setup_mode,
                 name=name,
                 dates=dates,
                 location=nueva_location,

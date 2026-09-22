@@ -128,6 +128,7 @@ class CreateCompetitionUseCase:
                 max_playing_handicap=request.max_playing_handicap,
                 enrollment_opens_days_before=request.enrollment_opens_days_before,
                 visibility=request.visibility,
+                setup_mode=request.setup_mode,
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -185,6 +186,7 @@ class CreateCompetitionUseCase:
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
+            setup_mode=str(competition.setup_mode),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

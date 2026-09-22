@@ -307,6 +307,7 @@ async def create_competition(
                 team_assignment=enriched_dto.team_assignment,
                 enrollment_opens_days_before=competition.enrollment_opens_days_before,
                 visibility=str(competition.visibility),
+                setup_mode=str(competition.setup_mode),
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
                 is_creator=True,
