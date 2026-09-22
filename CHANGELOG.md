@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.21.0] - 2026-09-22
+
+El rediseño de las competiciones, piezas 1 a 4: invitar, pública o privada y
+cuándo se abren las inscripciones. Principio de fondo: **ningún paso existe solo
+para mover un estado**; cada estado cae de algo que el organizador quería hacer
+de todas formas. El botón «Activar» sigue existiendo, pero ya no es la única
+salida.
+
+### Added
+
+- **Competiciones públicas y privadas** (#318, #330). No existía ni el campo: el
+  «Explorar» enseñaba el torneo entre amigos de cualquiera, y `request_enrollment`
+  no comprobaba invitación, así que un desconocido podía pedir plaza. Ahora la
+  visibilidad la decide el servidor: una privada no sale al explorar y solo entra
+  quien está invitado. Las competiciones existentes quedan **privadas** (la
+  migración pone `PRIVATE` por defecto).
+
+- **La primera invitación abre las inscripciones** (#319, #322). Invitar al
+  primero **es** abrir el torneo; ya no hace falta pulsar un botón cuyo único
+  trabajo era mover el estado.
+
+- **Las inscripciones se abren N días antes del torneo** (#332, #336). El
+  organizador dice «ábrelas cinco días antes», de 1 a 14. El instante no se guarda:
+  se deriva en cada lectura como `start_date − N` a las 00:00 **en la zona
+  horaria del campo**, así que mover el torneo mueve la apertura. Sustituye a la
+  hora absoluta que había llegado antes en esta misma serie (#327).
+
+- **Una competición sin programar nace con las inscripciones abiertas** (#336).
+  `DRAFT` pasa a significar una sola cosa: *esperando su apertura programada*.
+
+- **Una programada se abre al mirarla, también desde los listados** (#331, #338).
+  No hay tarea en segundo plano: quien la mira es quien la abre, igual que la
+  anotación a la hora de la sesión. Antes solo lo hacía la ficha, y en los listados
+  seguía cerrada pasado su momento. Sin campo de golf no se abre sola: la hora es
+  la del campo y no se adivina.
+
+### Changed
+
+- **La configuración se puede corregir mientras las inscripciones están
+  abiertas** (#323, #324). Con la invitación abriendo el torneo, `ACTIVE` prohibía
+  editar y añadir campos, y no había vuelta a `DRAFT`: invitar a alguien antes de
+  poner el campo dejaba el torneo inservible para siempre.
+
+- **Se puede borrar una competición mientras las inscripciones están abiertas,
+  y también cancelada**, no solo en borrador (#333, #335). La regla exige dos
+  cosas: que el estado lo permita **y** que no tenga calendario. El estado solo no
+  basta: `revert-status` y `reopen-enrollments` lo andan hacia atrás sin deshacer
+  las rondas, y un torneo ya jugado puede volver a `ACTIVE` con sus golpes dentro.
+
+### Fixed
+
+- **`?status=active` en minúsculas no devolvía nada** (#338), y el listado
+  inyectaba borradores donde no tocaba.
+- **Un borrado concurrente podía disparar un `MissingGreenlet`** (#338).
+
 ## [2.20.1] - 2026-09-21
 
 ### Fixed
