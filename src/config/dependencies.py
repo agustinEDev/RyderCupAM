@@ -99,6 +99,9 @@ from src.modules.competition.application.use_cases.list_enrollments_use_case imp
 from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
     ListMyInvitationsUseCase,
 )
+from src.modules.competition.application.use_cases.list_my_pending_envelopes_use_case import (
+    ListMyPendingEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
 )
@@ -2138,6 +2141,17 @@ def get_reveal_envelopes_use_case(
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
     )
+
+
+def get_list_my_pending_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ListMyPendingEnvelopesUseCase:
+    """Proveedor del caso de uso ListMyPendingEnvelopesUseCase (FE #655).
+
+    El dia de hoy lo pone el SERVIDOR: con la fecha del movil, un telefono
+    atrasado resucitaria avisos de sesiones ya jugadas.
+    """
+    return ListMyPendingEnvelopesUseCase(uow)
 
 
 def get_reset_envelopes_use_case(

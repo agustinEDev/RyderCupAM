@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from src.config.dependencies import (
     get_current_user,
     get_envelopes_use_case,
+    get_list_my_pending_envelopes_use_case,
     get_reset_envelopes_use_case,
     get_reveal_envelopes_use_case,
     get_submit_envelope_use_case,
@@ -16,6 +17,7 @@ from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.envelope_dto import (
     EnvelopeDTO,
     EnvelopesViewDTO,
+    PendingEnvelopeDTO,
     ResetEnvelopesResponseDTO,
     RevealEnvelopesResponseDTO,
 )
@@ -30,6 +32,9 @@ from src.modules.competition.application.services.envelope_desk import (
 )
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
+)
+from src.modules.competition.application.use_cases.list_my_pending_envelopes_use_case import (
+    ListMyPendingEnvelopesUseCase,
 )
 from src.modules.competition.application.use_cases.reset_envelopes_use_case import (
     NothingToResetError,
@@ -243,3 +248,27 @@ async def reset_envelopes(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (SessionAlreadyPlayedError, NothingToResetError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.get(
+    "/me/pending-envelopes",
+    response_model=list[PendingEnvelopeDTO],
+    status_code=status.HTTP_200_OK,
+    summary="Mis sobres sin entregar",
+    description=(
+        "Las sesiones en las que quien pregunta capitanea y todavía no ha "
+        "entregado su sobre, de la más próxima a la más lejana. Alimenta el "
+        "bloque «Requiere tu Atención» del panel: sin esto, un capitán solo se "
+        "entera entrando sesión por sesión en la agenda de cada competición, y "
+        "el plazo le vence sin saberlo. Vacío para quien no capitanea nada."
+    ),
+    tags=["Competitions - Envelopes"],
+)
+@limiter.limit("60/minute")
+async def list_my_pending_envelopes(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ListMyPendingEnvelopesUseCase = Depends(get_list_my_pending_envelopes_use_case),
+):
+    """Los sobres que me faltan por entregar (FE #655)."""
+    return await use_case.execute(UserId(str(current_user.id)))
