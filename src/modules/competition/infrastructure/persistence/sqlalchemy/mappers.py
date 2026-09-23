@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import composite, relationship
@@ -34,6 +35,7 @@ from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
@@ -58,6 +60,7 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
+from src.modules.competition.domain.value_objects.envelope_id import EnvelopeId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.hole_score_id import HoleScoreId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
@@ -287,6 +290,25 @@ class RoundIdDecorator(TypeDecorator):
         return RoundId(uuid.UUID(value))
 
 
+class EnvelopeIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir EnvelopeId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: "EnvelopeId | str | None", dialect) -> str | None:
+        if isinstance(value, EnvelopeId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> "EnvelopeId | None":
+        if value is None:
+            return None
+        return EnvelopeId(uuid.UUID(value))
+
+
 class MatchIdDecorator(TypeDecorator):
     """TypeDecorator para convertir MatchId (UUID VO) a/desde VARCHAR(36)."""
 
@@ -446,6 +468,30 @@ class UserIdsJsonType(TypeDecorator):
         if value is None:
             return None
         return tuple(UserId(uuid.UUID(uid_str)) for uid_str in value)
+
+
+class EnvelopeEntriesJsonType(TypeDecorator):
+    """
+    TypeDecorator para las filas de un sobre (FE #655).
+
+    Se almacena como array de arrays de UUID: [["uuid-1"], ["uuid-2"], ...] en
+    individuales, y [["uuid-1", "uuid-2"], ...] en los formatos de dos. Van en
+    la misma fila del sobre porque el ORDEN es el dato: una tabla aparte
+    obligaria a ordenar por una columna que no aporta nada mas.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if value is None:
+            return None
+        return [[str(uid.value) for uid in fila] for fila in value]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple | None:
+        if value is None:
+            return None
+        return tuple(tuple(UserId(uuid.UUID(uid)) for uid in fila) for fila in value)
 
 
 class MatchResultJsonType(TypeDecorator):
@@ -885,6 +931,46 @@ team_assignments_table = Table(
 
 
 # =============================================================================
+# TABLA ENVELOPES (FE #655)
+# =============================================================================
+
+envelopes_table = Table(
+    "envelopes",
+    metadata,
+    Column("id", EnvelopeIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "round_id",
+        RoundIdDecorator,
+        ForeignKey("rounds.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("team", String(1), nullable=False),
+    Column("match_format", MatchFormatDecorator, nullable=False),
+    Column("entries", EnvelopeEntriesJsonType, nullable=False),
+    Column("submitted_at", DateTime, nullable=True),
+    # SET NULL y no CASCADE: si el capitan se borra, el sobre sigue valiendo.
+    # Quien lo entrego es un dato de auditoria, no lo que hace valido el sobre
+    Column(
+        "submitted_by",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column("automatic", Boolean, nullable=False, default=False),
+    Column("revealed", Boolean, nullable=False, default=False),
+    # Uno por equipo y sesion: dos serian dos listas a la vez para el mismo
+    # cruce, y nadie sabria cual manda
+    UniqueConstraint("round_id", "team", name="uq_envelopes_round_team"),
+)
+
+
+# =============================================================================
 # TABLA INVITATIONS
 # =============================================================================
 
@@ -1143,6 +1229,25 @@ def start_competition_mappers():
                 "_team_a_player_ids": team_assignments_table.c.team_a_player_ids,
                 "_team_b_player_ids": team_assignments_table.c.team_b_player_ids,
                 "_created_at": team_assignments_table.c.created_at,
+            },
+        )
+
+    # Mapear Envelope (FE #655)
+    if Envelope not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            Envelope,
+            envelopes_table,
+            properties={
+                "_id": envelopes_table.c.id,
+                "_competition_id": envelopes_table.c.competition_id,
+                "_round_id": envelopes_table.c.round_id,
+                "_team": envelopes_table.c.team,
+                "_match_format": envelopes_table.c.match_format,
+                "_entries": envelopes_table.c.entries,
+                "_submitted_at": envelopes_table.c.submitted_at,
+                "_submitted_by": envelopes_table.c.submitted_by,
+                "_automatic": envelopes_table.c.automatic,
+                "_revealed": envelopes_table.c.revealed,
             },
         )
 

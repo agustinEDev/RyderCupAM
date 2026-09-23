@@ -68,6 +68,9 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.get_envelopes_use_case import (
+    GetEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
 )
@@ -122,6 +125,9 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
 )
+from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
+    RevealEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
     RevertCompetitionStatusUseCase,
 )
@@ -142,6 +148,9 @@ from src.modules.competition.application.use_cases.set_name_preference_use_case 
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.submit_envelope_use_case import (
+    SubmitEnvelopeUseCase,
 )
 from src.modules.competition.application.use_cases.submit_hole_score_use_case import (
     SubmitHoleScoreUseCase,
@@ -2044,6 +2053,27 @@ def get_assign_teams_use_case(
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
     )
+
+
+def get_submit_envelope_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> SubmitEnvelopeUseCase:
+    """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655)."""
+    return SubmitEnvelopeUseCase(uow)
+
+
+def get_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetEnvelopesUseCase:
+    """Proveedor del caso de uso GetEnvelopesUseCase (FE #655)."""
+    return GetEnvelopesUseCase(uow)
+
+
+def get_reveal_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RevealEnvelopesUseCase:
+    """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655)."""
+    return RevealEnvelopesUseCase(uow)
 
 
 def get_generate_matches_use_case(

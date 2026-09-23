@@ -16,6 +16,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.envelope_pairings import (
+    EnvelopePairings,
+)
 from src.modules.competition.application.services.tee_context_builder import (
     TeeContextBuilder,
 )
@@ -200,9 +203,22 @@ class GenerateMatchesUseCase:
 
             max_playing_handicap = competition.max_playing_handicap
 
-            if request.manual_pairings:
+            # Los sobres abiertos ya decidieron los enfrentamientos (FE #655):
+            # sin esto el organizador pulsaria «generar» y la aplicacion
+            # emparejaria por handicap como si nadie hubiera entregado nada
+            pairings = request.manual_pairings or await EnvelopePairings.de_la_ronda(
+                self._uow, round_entity.id
+            )
+            if not pairings:
+                # Sin emparejamientos fijados se empareja por ranking, y eso con
+                # un sobre entregado y cerrado seria tirar su lista a la basura
+                await EnvelopePairings.comprobar_que_no_hay_sobres_sin_abrir(
+                    self._uow, round_entity.id
+                )
+
+            if pairings:
                 matches_created = await self._generate_manual(
-                    request,
+                    pairings,
                     round_entity,
                     enrollment_map,
                     tee_ratings,
@@ -437,7 +453,7 @@ class GenerateMatchesUseCase:
 
     async def _generate_manual(
         self,
-        request,
+        pairings,
         round_entity,
         enrollment_map,
         tee_ratings,
@@ -450,9 +466,13 @@ class GenerateMatchesUseCase:
         max_playing_handicap=None,
         holes_by_tee=None,
     ):
-        """Genera partidos según emparejamientos manuales."""
+        """Genera partidos según emparejamientos ya decididos.
+
+        Los trae el organizador en la petición, o los fijan los sobres de los
+        capitanes cuando ya se abrieron (FE #655).
+        """
         # Validar que todos los jugadores estén inscritos (APPROVED)
-        for pairing in request.manual_pairings:
+        for pairing in pairings:
             for uid in list(pairing.team_a_player_ids) + list(pairing.team_b_player_ids):
                 if str(uid) not in enrollment_map:
                     raise InsufficientPlayersError(
@@ -462,7 +482,7 @@ class GenerateMatchesUseCase:
         match_format = round_entity.match_format
 
         matches_created = 0
-        for i, pairing in enumerate(request.manual_pairings):
+        for i, pairing in enumerate(pairings):
             a_ids = [UserId(uid) for uid in pairing.team_a_player_ids]
             b_ids = [UserId(uid) for uid in pairing.team_b_player_ids]
 
