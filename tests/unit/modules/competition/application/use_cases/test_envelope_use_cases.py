@@ -249,6 +249,8 @@ async def _montar(
 # La ronda del montaje es del 1 de junio y de mañana, así que su plazo vence a
 # las 00:00 de ese día: este reloj está después
 _PASADO_EL_PLAZO = datetime(2026, 6, 1, 1, 0, tzinfo=ZoneInfo("Europe/Madrid"))
+# El día antes: el plazo todavía no ha vencido
+_ANTES = datetime(2026, 5, 31, 12, 0, tzinfo=ZoneInfo("Europe/Madrid"))
 
 
 async def _abrir_por_plazo(uow, round_id, quien):
@@ -391,11 +393,26 @@ class TestCuandoFaltanLosEquipos:
             await _entregar(uow).execute(round_id.value, equipo_a[0], [[str(equipo_a[0].value)]])
 
     async def test_y_tampoco_se_abren(self):
+        """Sin equipos no hay sobres que entregar, así que el motivo es ese."""
         uow, _, round_id, equipo_a, _ = await _montar(con_equipos=False)
-        # Los dos «entregan» es imposible sin equipos, así que lo que se
-        # comprueba es que el motivo que se cuenta es ese y no otro
-        with pytest.raises((TeamsNotAssignedError, RivalEnvelopeMissingError)):
-            await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        with pytest.raises(RivalEnvelopeMissingError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona()).execute(
+                round_id.value, equipo_a[0]
+            )
+
+    async def test_y_sin_plazo_el_organizador_se_lleva_el_motivo_de_verdad(self):
+        """Ahí sí llega a intentarlo, y entonces el diagnóstico es el bueno.
+
+        «Hay jugadores que no son de este equipo» mandaba a buscar el fallo
+        donde no está.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar(con_equipos=False)
+
+        with pytest.raises(TeamsNotAssignedError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona(None)).execute(
+                round_id.value, equipo_a[0]
+            )
 
     async def test_un_sobre_vacio_no_es_una_entrega(self):
         """Un 200 sin guardar nada deja al capitán creyendo que entregó."""
@@ -690,7 +707,9 @@ class TestQuienPuedeAbrirlos:
             round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
 
-        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, organizador)
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), _Reloj(_ANTES), _Zona()).execute(
+            round_id.value, organizador
+        )
 
         assert vista.can_reveal is False
 
@@ -737,6 +756,77 @@ class TestQuienPuedeAbrirlos:
         vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
 
         assert vista.can_reveal is False
+
+
+class TestCuandoNoHayPlazoQueVencer:
+    """El campo sin zona horaria: 2 de los 805 que hay cargados.
+
+    Sin zona no hay hora que calcular, así que los sobres NO se abren solos
+    nunca. Si además nadie pudiera abrirlos a mano, esa sesión se quedaría
+    atascada para siempre: su capitán entregó, el sobre está cerrado y
+    «generar partidos» lo rechaza mientras haya sobres sin abrir.
+
+    Por eso el organizador conserva ahí la llave —es la salida que ya estaba
+    decidida antes del 23 sep—, y solo ahí.
+    """
+
+    async def test_el_organizador_puede_abrir_con_un_sobre_fuera(self):
+        uow, _, round_id, equipo_a, _ = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(
+            uow, _RepoUsuarios(), _Reloj(_ANTES), _Zona(None)
+        ).execute(round_id.value, organizador)
+
+        assert vista.reveal_scheduled_at is None
+        assert vista.can_reveal is True
+
+    async def test_y_al_abrirlos_la_aplicacion_rellena_el_que_falta(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+
+        abierto = await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona(None)).execute(
+            round_id.value, organizador
+        )
+
+        assert abierto.filled_automatically == ["B"]
+        assert len(abierto.matchups) == len(equipo_b)
+
+    async def test_pero_un_capitan_sigue_sin_poder(self):
+        """La llave es del que arbitra: el rival no la tiene ni aquí."""
+        uow, _, round_id, _, equipo_b = await _montar()
+        await _entregar(uow).execute(
+            round_id.value, equipo_b[0], [[str(equipo_b[1].value)], [str(equipo_b[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(
+            uow, _RepoUsuarios(), _Reloj(_ANTES), _Zona(None)
+        ).execute(round_id.value, equipo_b[0])
+
+        assert vista.can_reveal is False
+        with pytest.raises(RivalEnvelopeMissingError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona(None)).execute(
+                round_id.value, equipo_b[0]
+            )
+
+    async def test_con_zona_el_organizador_no_la_tiene(self):
+        """La misma sesión con un campo normal: a esperar como todo el mundo."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+
+        with pytest.raises(RivalEnvelopeMissingError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona()).execute(
+                round_id.value, organizador
+            )
 
 
 class TestQuienVeQue:
@@ -949,19 +1039,6 @@ class TestAbrirLosSobres:
             await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
                 round_id.value, UserId(uuid4()), is_admin=True
             )
-
-    async def test_y_la_pantalla_tampoco_lo_ofrece(self):
-        """Ofrecerlo sería mandar al organizador contra un error."""
-        uow, _, round_id, equipo_a, _ = await _montar()
-        await _entregar(uow).execute(
-            round_id.value,
-            equipo_a[0],
-            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
-        )
-
-        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
-
-        assert vista.can_reveal is False
 
     async def test_los_abre_el_organizador_o_un_capitan_y_nadie_mas(self):
         uow, _, round_id, equipo_a, _ = await _montar()
