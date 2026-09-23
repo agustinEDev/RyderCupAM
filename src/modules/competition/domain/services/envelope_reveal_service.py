@@ -1,14 +1,16 @@
 """
 EnvelopeRevealService - Cuando se abren solos los sobres de una sesion (FE #655).
 
-Decidido con el dueno del producto el 23 sep: **12 horas antes de la sesion**.
+Decidido con el dueno del producto el 23 sep: **6 horas antes de la sesion**.
+Esa hora es ademas el PLAZO: los sobres tienen que estar cubiertos antes, y lo
+que no haya llegado lo rellena la aplicacion al abrirlos.
 La hora de una sesion ya estaba definida en el producto —06:00 la de manana,
 12:00 la de tarde, 18:00 la de noche, en hora local del campo—, asi que esto no
 inventa un reloj nuevo: se apoya en el mismo que abre la anotacion (BE #305).
 
 Pero el reloj no manda solo: **nunca antes de que acabe la sesion anterior**. Un
-«12 horas» a secas abriria los sobres de la tarde a las 00:00 del mismo dia, con
-la sesion de manana sin jugarse, y se perderia lo que da sentido a esperar:
+un plazo a secas abriria los sobres de la tarde a las 06:00 del mismo dia, con
+la sesion de manana empezando, y se perderia lo que da sentido a esperar:
 elegir con el marcador delante.
 
 Y para que eso no se atasque, la anterior se da por acabada cuando sus partidos
@@ -23,8 +25,9 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 )
 from src.modules.competition.domain.value_objects.session_type import SessionType
 
-# Decidido el 23 sep 2026
-HOURS_BEFORE_SESSION = 12
+# Decidido el 23 sep 2026. Es tambien el plazo para entregar: a esta hora se
+# abren, y lo que no este dentro lo rellena la aplicacion
+HOURS_BEFORE_SESSION = 6
 
 
 class EnvelopeRevealService:

@@ -15,7 +15,7 @@ Las decisiones del 20 sep que fijan esta tabla:
   como lo hace la Ryder de verdad.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -408,7 +408,7 @@ class TestLosNombresQueSeVen:
         assert vista.player_names[str(equipo_b[0].value)]
 
 
-class TestElRevelado12HorasAntes:
+class TestElRevelado6HorasAntes:
     async def test_llegada_la_hora_se_abren_solos_al_mirarlos(self):
         """Como la anotación, que se abre sola al llegar el primer golpe: no hay
         proceso de fondo mirando el reloj, lo resuelve quien mira."""
@@ -417,10 +417,10 @@ class TestElRevelado12HorasAntes:
             await _entregar(uow).execute(
                 round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
             )
-        # La sesión es de mañana: sus sobres se abren a las 18:00 del día anterior
-        # Con huso explícito: una hora «pelada» se lee como UTC, y las 17:00 UTC
-        # ya son las 19:00 en Madrid
-        reloj = _Reloj(datetime(2026, 5, 31, 18, 30, tzinfo=ZoneInfo("Europe/Madrid")))
+        # La sesión es de mañana (06:00), así que sus sobres se abren a las
+        # 00:00 de ese mismo día. Con huso explícito: una hora «pelada» se lee
+        # como UTC y en Madrid serían otras
+        reloj = _Reloj(datetime(2026, 6, 1, 0, 30, tzinfo=ZoneInfo("Europe/Madrid")))
 
         vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
             round_id.value, equipo_a[1]
@@ -435,7 +435,7 @@ class TestElRevelado12HorasAntes:
             await _entregar(uow).execute(
                 round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
             )
-        reloj = _Reloj(datetime(2026, 5, 31, 17, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+        reloj = _Reloj(datetime(2026, 5, 31, 23, 0, tzinfo=ZoneInfo("Europe/Madrid")))
 
         vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
             round_id.value, equipo_a[1]
@@ -445,7 +445,7 @@ class TestElRevelado12HorasAntes:
         assert vista.matchups == []
 
     async def test_la_vista_dice_a_que_hora_se_abren(self):
-        """Para que la pantalla pueda contarlo en vez de dejar al capitán a ciegas."""
+        """Es el plazo para entregar, así que la pantalla tiene que poder decirlo."""
         uow, _, round_id, equipo_a, _ = await _montar(con_zona=True)
         reloj = _Reloj(datetime(2026, 5, 30, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
 
@@ -454,7 +454,8 @@ class TestElRevelado12HorasAntes:
         )
 
         assert vista.reveal_scheduled_at is not None
-        assert vista.reveal_scheduled_at.hour == 18
+        assert vista.reveal_scheduled_at.hour == 0
+        assert vista.reveal_scheduled_at.date() == date(2026, 6, 1)
 
     async def test_sin_zona_horaria_no_se_abren_solos(self):
         """Sin campo todavía no hay reloj: los abre el organizador a mano."""

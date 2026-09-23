@@ -1,15 +1,16 @@
 """
 Cuándo se abren solos los sobres de una sesión (FE #655).
 
-Decidido por el dueño del producto el 23 sep: **12 horas antes de la sesión**,
+Decidido por el dueño del producto el 23 sep: **6 horas antes de la sesión**, que
+es además el plazo para entregar —lo que no esté dentro lo rellena la aplicación—,
 y la hora de una sesión ya está definida en el producto —06:00 la de mañana,
 12:00 la de tarde, 18:00 la de noche, en la hora local del campo— porque es la
 misma a la que se abre sola la anotación (BE #305). Así que los sobres de la
-sesión de mañana se abren a las 18:00 del día anterior.
+sesión de mañana se abren a medianoche del mismo día.
 
 Pero el reloj no manda solo: **nunca antes de que acabe la sesión anterior**.
-Un «12 horas» a secas abriría los de la tarde a las 00:00 del mismo día, con la
-sesión de mañana sin jugarse, y se perdería lo que da sentido a esperar: elegir
+El plazo a secas abriría los de la tarde a las 06:00 del mismo día, con la
+sesión de mañana empezando, y se perdería lo que da sentido a esperar: elegir
 con el marcador delante.
 
 Y para que eso no se atasque, la sesión anterior se da por acabada **cuando sus
@@ -39,15 +40,15 @@ class TestLaHoraProgramada:
     @pytest.mark.parametrize(
         ("sesion", "dia_de_apertura", "hora"),
         [
-            # La de mañana empieza a las 6:00, luego se abre a las 18:00 del día ANTERIOR
-            (SessionType.MORNING, date(2026, 6, 14), 18),
-            # La de tarde empieza a las 12:00: a medianoche del mismo día
-            (SessionType.AFTERNOON, DIA, 0),
-            # La de noche empieza a las 18:00: a las 6:00 del mismo día
-            (SessionType.EVENING, DIA, 6),
+            # La de mañana empieza a las 6:00, luego se abre a las 00:00 de ese día
+            (SessionType.MORNING, DIA, 0),
+            # La de tarde empieza a las 12:00: a las 6:00 del mismo día
+            (SessionType.AFTERNOON, DIA, 6),
+            # La de noche empieza a las 18:00: a las 12:00 del mismo día
+            (SessionType.EVENING, DIA, 12),
         ],
     )
-    def test_doce_horas_antes_del_comienzo_de_la_sesion(self, sesion, dia_de_apertura, hora):
+    def test_seis_horas_antes_del_comienzo_de_la_sesion(self, sesion, dia_de_apertura, hora):
         programado = EnvelopeRevealService.scheduled_for(DIA, sesion, MADRID)
 
         assert programado == _en_madrid(dia_de_apertura, hora)
@@ -71,17 +72,17 @@ class TestLaHoraProgramada:
 
 class TestSiYaTocaAbrirlos:
     def test_antes_de_la_hora_no(self):
-        programado = _en_madrid(date(2026, 6, 14), 18)
+        programado = _en_madrid(DIA, 0)
 
         assert (
             EnvelopeRevealService.is_due(
-                programado, la_anterior_acabo=True, ahora=_en_madrid(date(2026, 6, 14), 17, 59)
+                programado, la_anterior_acabo=True, ahora=_en_madrid(date(2026, 6, 14), 23, 59)
             )
             is False
         )
 
     def test_en_la_hora_si(self):
-        programado = _en_madrid(date(2026, 6, 14), 18)
+        programado = _en_madrid(DIA, 0)
 
         assert (
             EnvelopeRevealService.is_due(programado, la_anterior_acabo=True, ahora=programado)
@@ -90,7 +91,7 @@ class TestSiYaTocaAbrirlos:
 
     def test_con_la_sesion_anterior_viva_no_se_abren_aunque_toque(self):
         """Elegir con el marcador delante es lo que da sentido a esperar."""
-        programado = _en_madrid(DIA, 0)
+        programado = _en_madrid(DIA, 6)
 
         assert (
             EnvelopeRevealService.is_due(
