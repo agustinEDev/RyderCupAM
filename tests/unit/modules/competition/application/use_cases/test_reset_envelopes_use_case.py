@@ -258,7 +258,12 @@ class TestLoJugadoNoSeToca:
             assert len(await uow.matches.find_by_round(round_id)) == len(partidos)
 
     async def test_un_partido_empezado_sin_anotar_nada_no_estorba(self):
-        """Se protege lo jugado, no lo montado: la anotacion se abre sola."""
+        """Se protege lo jugado, no lo montado: la anotacion se abre sola.
+
+        Y la sesion, que arranca con el primer partido, tiene que volver a
+        esperar partidos: sin eso se queda IN_PROGRESS y vacia, y generar
+        exige PENDING_MATCHES, asi que no habria forma de rehacerla.
+        """
         uow, _, round_id, equipo_a, equipo_b = await _montar()
         await _entregar_los_dos(uow, round_id, equipo_a, equipo_b)
         partidos = await _generar_partidos(uow, round_id, equipo_a, equipo_b)
@@ -266,11 +271,17 @@ class TestLoJugadoNoSeToca:
             partido = await uow.matches.find_by_id(partidos[0].id)
             partido.start()
             await uow.matches.update(partido)
+            ronda = await uow.rounds.find_by_id(round_id)
+            ronda.start()
+            await uow.rounds.update(ronda)
             await uow.commit()
 
         respuesta = await _resetear(uow).execute(round_id.value, equipo_a[0])
 
         assert respuesta.matches_removed == len(partidos)
+        async with uow:
+            ronda = await uow.rounds.find_by_id(round_id)
+            assert ronda.status == RoundStatus.PENDING_MATCHES
 
 
 class TestCuandoNoHayNadaQueRehacer:

@@ -98,10 +98,12 @@ class ResetEnvelopesUseCase:
             await self._uow.envelopes.delete_by_round(ronda.id)
 
             # La sesion vuelve a esperar sus partidos, que es de donde salio.
-            # Sin esto se queda en SCHEDULED sin un solo partido y «generar»
-            # la rechaza por estado
-            if ronda.status == RoundStatus.SCHEDULED:
-                ronda.reopen_for_regeneration()
+            # Sin esto se queda sin un solo partido en un estado que «generar»
+            # rechaza, y no habria forma de rehacerla. Tambien desde
+            # IN_PROGRESS: una sesion arranca sola a su hora (BE #305) sin que
+            # nadie haya jugado, y hasta aqui solo llega lo NO jugado
+            if ronda.status in (RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS):
+                ronda.reset_to_pending_matches()
                 await self._uow.rounds.update(ronda)
 
             await self._uow.commit()
