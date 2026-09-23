@@ -197,9 +197,16 @@ class TestDeQuienEsElTurno:
 
 class TestElRelojDelServidor:
     def test_el_turno_expira_al_minuto(self):
+        """Al minuto EXACTO ya se acabó: es lo que dice el contador del móvil.
+
+        Con `>` el turno duraba 60,000001 segundos, y `turn_deadline` —que es
+        inicio + 60— decía otra cosa: la sala se contradecía consigo misma al
+        resolver un turno agotado.
+        """
         sala = _empezada()
 
         assert sala.turn_expired(AHORA + timedelta(seconds=59)) is False
+        assert sala.turn_expired(AHORA + timedelta(seconds=60)) is True
         assert sala.turn_expired(AHORA + timedelta(seconds=61)) is True
 
     def test_sin_empezar_no_expira_nada(self):

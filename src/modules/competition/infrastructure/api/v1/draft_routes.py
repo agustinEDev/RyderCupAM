@@ -17,6 +17,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
+    NotCompetitionParticipantError,
 )
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
@@ -121,6 +122,8 @@ async def get_draft(
         draft = await use_case.execute(competition_id, UserId(str(current_user.id)))
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionParticipantError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     if draft is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -5,6 +5,7 @@ from src.modules.competition.domain.repositories.draft_repository_interface impo
     DraftRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class InMemoryDraftRepository(DraftRepositoryInterface):
@@ -22,9 +23,12 @@ class InMemoryDraftRepository(DraftRepositoryInterface):
     async def find_by_competition(self, competition_id: CompetitionId) -> Draft | None:
         return self._drafts.get(str(competition_id.value))
 
-    async def find_by_competition_for_update(
-        self, competition_id: CompetitionId
-    ) -> Draft | None:
+    async def find_by_competition_for_update(self, competition_id: CompetitionId) -> Draft | None:
         # En memoria no hay nada que bloquear. Sin pasar por `find_by_competition`:
         # los tests espian cual de las dos lecturas usa cada camino
         return self._drafts.get(str(competition_id.value))
+
+    async def exists_by_captain(self, user_id: UserId) -> bool:
+        return any(
+            user_id in (d.team_a_captain_id, d.team_b_captain_id) for d in self._drafts.values()
+        )

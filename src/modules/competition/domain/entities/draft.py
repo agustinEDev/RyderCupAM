@@ -196,7 +196,7 @@ class Draft:
         """
         if self._status != DraftStatus.IN_PROGRESS or self._turn_started_at is None:
             return False
-        return (ahora - self._turn_started_at).total_seconds() > self._seconds_per_turn
+        return (ahora - self._turn_started_at).total_seconds() >= self._seconds_per_turn
 
     # ==================== Acciones ====================
 

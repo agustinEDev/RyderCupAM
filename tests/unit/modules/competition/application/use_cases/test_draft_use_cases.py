@@ -26,6 +26,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InsufficientPlayersError,
     NotCompetitionCreatorError,
+    NotCompetitionParticipantError,
 )
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
@@ -308,6 +309,19 @@ class TestMirarLaSala:
         _, ver, _, _ = _casos(uow, usuarios)
 
         assert await ver.execute(comp_id.value, creator_id) is None
+
+    async def test_un_ajeno_a_la_competicion_no_la_ve(self):
+        """Probando identificadores se sacaban nombres, hándicaps y equipos.
+
+        La sala la ve el grupo, que es la gracia; pero el grupo es el de ESA
+        competición, y una privada no se enseña a quien pase por ahí.
+        """
+        uow, comp_id, creator_id, _, usuarios = await _montar()
+        start, ver, _, _ = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+
+        with pytest.raises(NotCompetitionParticipantError):
+            await ver.execute(comp_id.value, UserId(uuid4()))
 
     async def test_cualquier_inscrito_la_ve_en_directo(self):
         """El resto lo mira sin poder tocar: es la ceremonia."""

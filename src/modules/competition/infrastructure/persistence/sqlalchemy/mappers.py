@@ -426,7 +426,9 @@ class MatchPlayersJsonType(TypeDecorator):
                 "tee_color": p.tee_color.value,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
-                "player_handicap": str(p.player_handicap) if p.player_handicap is not None else None,
+                "player_handicap": str(p.player_handicap)
+                if p.player_handicap is not None
+                else None,
             }
             for p in value
         ]
@@ -944,8 +946,20 @@ drafts_table = Table(
         nullable=False,
         unique=True,
     ),
-    Column("team_a_captain_id", UserIdDecorator, nullable=False),
-    Column("team_b_captain_id", UserIdDecorator, nullable=False),
+    # RESTRICT: una sala sin capitan no existe, asi que borrar a uno con un
+    # draft vivo se para antes, en el panel de administracion
+    Column(
+        "team_a_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column(
+        "team_b_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
     Column("status", DraftStatusDecorator, nullable=False),
     Column("first_pick", String(1), nullable=True),
     Column("current_team", String(1), nullable=True),

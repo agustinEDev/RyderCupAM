@@ -47,20 +47,23 @@ class GetDraftUseCase:
 
         Args:
             competition_id: La competicion
-            user_id: Quien mira. Hoy no decide nada: la sala la ve quien ve la
-                competicion, y eso lo resuelve la ruta
+            user_id: Quien mira. Tiene que ser de esta competicion: la sala la
+                ve el grupo, pero el grupo es el de ESA competicion
 
         Returns:
             La sala, o None si todavia no se ha lanzado el sorteo
 
         Raises:
             CompetitionNotFoundError: Si la competicion no existe
+            NotCompetitionParticipantError: Si quien mira no es de esta
+                competicion
         """
         async with self._uow:
             comp_id = CompetitionId(competition_id)
             # Sin bloquear: mirar es leer, y la sala la refrescan doce móviles
             # cada pocos segundos
             competition = await self._room.competicion(comp_id, bloquear=False)
+            await self._room.comprobar_que_es_de_la_competicion(competition, user_id)
             draft = await self._uow.drafts.find_by_competition(comp_id)
             if draft is None:
                 return None

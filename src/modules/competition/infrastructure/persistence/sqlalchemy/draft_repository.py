@@ -7,6 +7,7 @@ from src.modules.competition.domain.repositories.draft_repository_interface impo
     DraftRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class SQLAlchemyDraftRepository(DraftRepositoryInterface):
@@ -38,3 +39,12 @@ class SQLAlchemyDraftRepository(DraftRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def exists_by_captain(self, user_id: UserId) -> bool:
+        statement = (
+            select(Draft.__table__.c.id)
+            .where((Draft._team_a_captain_id == user_id) | (Draft._team_b_captain_id == user_id))
+            .limit(1)
+        )
+        result = await self._session.execute(statement)
+        return result.first() is not None

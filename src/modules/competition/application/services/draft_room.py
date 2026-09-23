@@ -17,7 +17,10 @@ from src.modules.competition.application.dto.draft_dto import (
     DraftPlayerDTO,
     DraftStateDTO,
 )
-from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.exceptions import (
+    CompetitionNotFoundError,
+    NotCompetitionParticipantError,
+)
 from src.modules.competition.application.services.draft_roster import DraftRoster
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.team_assignment_writer import (
@@ -36,6 +39,7 @@ from src.modules.competition.domain.value_objects.team_assignment_mode import Te
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class DraftRoom:
@@ -90,6 +94,28 @@ class DraftRoom:
         if not competition:
             raise CompetitionNotFoundError(f"No existe competición con ID {competition_id.value}")
         return competition
+
+    async def comprobar_que_es_de_la_competicion(
+        self, competition: Competition, user_id: UserId
+    ) -> None:
+        """Quien mira la sala tiene que ser de esta competicion.
+
+        La ve el grupo entero, que es la gracia del draft; pero el grupo es el
+        de ESA competicion. Sin esto, probando identificadores se sacaban
+        nombres, handicaps y equipos de cualquiera, incluida una privada.
+
+        Raises:
+            NotCompetitionParticipantError: Si no esta inscrito ni la organiza
+        """
+        if competition.is_creator(user_id):
+            return
+        inscripcion = await self._uow.enrollments.find_by_user_and_competition(
+            user_id, competition.id
+        )
+        if inscripcion is None:
+            raise NotCompetitionParticipantError(
+                "Esta sala es de una competición en la que no participas"
+            )
 
     async def elegibles(self, competition: Competition) -> list[PlayerForDraft]:
         """Los inscritos aprobados que no capitanean, con su handicap.

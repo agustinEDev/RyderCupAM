@@ -80,6 +80,11 @@ class AdminDeleteUserUseCase:
             if has_scores:
                 reasons.append("has recorded hole scores in one or more matches")
 
+            # Una sala de draft sin capitan no existe: se dice aqui, que si no
+            # el borrado se estrella contra la clave ajena y sale un 500
+            if await self._competition_uow.drafts.exists_by_captain(user_id):
+                reasons.append("is a captain in a live draft room")
+
         async with self._quick_match_uow:
             if await self._quick_match_uow.quick_matches.exists_created_by(user_id):
                 reasons.append("has created one or more quick matches")

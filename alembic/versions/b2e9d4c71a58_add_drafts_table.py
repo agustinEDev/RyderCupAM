@@ -29,8 +29,21 @@ def upgrade() -> None:
         "drafts",
         sa.Column("id", sa.CHAR(36), primary_key=True),
         sa.Column("competition_id", sa.CHAR(36), nullable=False, unique=True),
-        sa.Column("team_a_captain_id", sa.CHAR(36), nullable=False),
-        sa.Column("team_b_captain_id", sa.CHAR(36), nullable=False),
+        # RESTRICT y no SET NULL: una sala sin capitan no existe —son quienes
+        # eligen—, asi que borrar a uno con un draft vivo tiene que pararse
+        # antes, en el panel de administracion, y no acabar con la fila rota
+        sa.Column(
+            "team_a_captain_id",
+            sa.CHAR(36),
+            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
+        sa.Column(
+            "team_b_captain_id",
+            sa.CHAR(36),
+            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
         sa.Column("status", sa.String(20), nullable=False),
         sa.Column("first_pick", sa.String(1), nullable=True),
         sa.Column("current_team", sa.String(1), nullable=True),

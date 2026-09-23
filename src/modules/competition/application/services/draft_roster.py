@@ -40,18 +40,24 @@ class DraftRoster:
             Los jugadores con su handicap, en el orden de las inscripciones
         """
         fuera = set(excluidos)
-        players = []
-        for enrollment in enrollments:
-            if enrollment.user_id in fuera:
-                continue
-            if enrollment.custom_handicap is not None:
-                handicap = enrollment.custom_handicap
-            else:
-                user = await user_repository.find_by_id(enrollment.user_id)
-                handicap = (
-                    Decimal(str(user.handicap.value))
-                    if user and user.handicap is not None
-                    else Decimal("0")
-                )
-            players.append(PlayerForDraft(user_id=enrollment.user_id, handicap=handicap))
-        return players
+        entran = [e for e in enrollments if e.user_id not in fuera]
+
+        # Una sola consulta para todos los que no traen handicap propio: la
+        # sala se refresca cada pocos segundos y la miran doce a la vez, asi que
+        # una consulta por jugador aqui es una tormenta de N+1 cada vez
+        sin_handicap_propio = [e.user_id for e in entran if e.custom_handicap is None]
+        del_perfil = {}
+        if sin_handicap_propio:
+            for user in await user_repository.find_by_ids(sin_handicap_propio):
+                if user.id is not None and user.handicap is not None:
+                    del_perfil[user.id] = Decimal(str(user.handicap.value))
+
+        return [
+            PlayerForDraft(
+                user_id=e.user_id,
+                handicap=e.custom_handicap
+                if e.custom_handicap is not None
+                else del_perfil.get(e.user_id, Decimal("0")),
+            )
+            for e in entran
+        ]
