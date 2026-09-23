@@ -12,6 +12,9 @@ from src.modules.competition.domain.repositories.draft_repository_interface impo
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.envelope_repository_interface import (
+    EnvelopeRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,
 )
@@ -37,6 +40,7 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 from .in_memory_competition_repository import InMemoryCompetitionRepository
 from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
+from .in_memory_envelope_repository import InMemoryEnvelopeRepository
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
 from .in_memory_match_repository import InMemoryMatchRepository
@@ -55,6 +59,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._matches = InMemoryMatchRepository()
         self._team_assignments = InMemoryTeamAssignmentRepository()
         self._drafts = InMemoryDraftRepository()
+        self._envelopes = InMemoryEnvelopeRepository()
         self._invitations = InMemoryInvitationRepository()
         self._hole_scores = InMemoryHoleScoreRepository()
         self.committed = False
@@ -86,6 +91,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def drafts(self) -> DraftRepositoryInterface:
         return self._drafts
+
+    @property
+    def envelopes(self) -> EnvelopeRepositoryInterface:
+        return self._envelopes
 
     @property
     def invitations(self) -> InvitationRepositoryInterface:

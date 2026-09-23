@@ -69,6 +69,9 @@ from src.modules.competition.application.use_cases.get_competition_use_case impo
     GetCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
+from src.modules.competition.application.use_cases.get_envelopes_use_case import (
+    GetEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
 )
@@ -126,6 +129,9 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
 )
+from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
+    RevealEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.revert_competition_status_use_case import (
     RevertCompetitionStatusUseCase,
 )
@@ -149,6 +155,9 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
 )
 from src.modules.competition.application.use_cases.start_draft_use_case import (
     StartDraftUseCase,
+)
+from src.modules.competition.application.use_cases.submit_envelope_use_case import (
+    SubmitEnvelopeUseCase,
 )
 from src.modules.competition.application.use_cases.submit_hole_score_use_case import (
     SubmitHoleScoreUseCase,
@@ -1565,9 +1574,7 @@ def get_round_achievements_publisher(
 def get_complete_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    achievements: RoundAchievementsPublisherInterface = Depends(
-        get_round_achievements_publisher
-    ),
+    achievements: RoundAchievementsPublisherInterface = Depends(get_round_achievements_publisher),
 ) -> CompleteQuickMatchUseCase:
     """Proveedor del caso de uso CompleteQuickMatchUseCase."""
     return CompleteQuickMatchUseCase(uow, user_uow, achievements)
@@ -1614,9 +1621,7 @@ def get_get_quick_match_use_case(
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
-    return GetQuickMatchUseCase(
-        uow, user_uow, scoring_service, coverage_service, golf_course_uow
-    )
+    return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service, golf_course_uow)
 
 
 def get_list_my_quick_matches_use_case(
@@ -2075,6 +2080,32 @@ def get_make_draft_pick_use_case(
 ) -> MakeDraftPickUseCase:
     """Proveedor del caso de uso MakeDraftPickUseCase (FE #653)."""
     return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
+def get_submit_envelope_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SubmitEnvelopeUseCase:
+    """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655)."""
+    return SubmitEnvelopeUseCase(uow, user_uow.users)
+
+
+def get_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetEnvelopesUseCase:
+    """Proveedor del caso de uso GetEnvelopesUseCase (FE #655)."""
+    return GetEnvelopesUseCase(uow, user_uow.users)
+
+
+def get_reveal_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> RevealEnvelopesUseCase:
+    """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
+
+    El repositorio de usuarios es para el handicap del sobre que haya que
+    rellenar: el propio de la inscripcion si lo tiene, y si no el del jugador.
+    """
+    return RevealEnvelopesUseCase(uow, user_uow.users)
 
 
 def get_generate_matches_use_case(
