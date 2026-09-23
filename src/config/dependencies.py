@@ -2119,13 +2119,22 @@ def get_envelopes_use_case(
 def get_reveal_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> RevealEnvelopesUseCase:
     """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
 
     El repositorio de usuarios es para el handicap del sobre que haya que
     rellenar: el propio de la inscripcion si lo tiene, y si no el del jugador.
+
+    La zona del campo es para saber si esta sesion llega a tener plazo: la que
+    no lo tiene —campo sin zona— no se abre sola nunca, y ahi el organizador
+    conserva la llave. Sin este cableado esa sesion se quedaria atascada.
     """
-    return RevealEnvelopesUseCase(uow, user_uow.users)
+    return RevealEnvelopesUseCase(
+        uow,
+        user_uow.users,
+        timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_generate_matches_use_case(

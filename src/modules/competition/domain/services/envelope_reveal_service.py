@@ -44,7 +44,9 @@ class EnvelopeRevealService:
 
         Returns:
             La hora con su desfase, o None si falta el dato para calcularla
-            —fecha, sesion o zona—, y entonces los abre el organizador a mano
+            —fecha, sesion o zona—. Sin hora no se abren solos nunca, y
+            entonces los abre a mano el que arbitra: es la unica salida que le
+            queda a esa sesion
         """
         comienzo = ScoringOpeningService.opens_at(round_date, session_type, timezone)
         if comienzo is None:

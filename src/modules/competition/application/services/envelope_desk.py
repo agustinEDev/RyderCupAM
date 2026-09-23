@@ -87,8 +87,9 @@ class EnvelopeDesk:
             clock: El reloj del SERVIDOR, para el revelado del plazo. Se
                 inyecta para poder moverlo en los tests, nunca para que lo
                 ponga el cliente
-            timezone_service: La zona del campo donde se juega. Sin ella no hay
-                hora que calcular y los sobres los abre el organizador a mano
+            timezone_service: La zona del campo donde se juega. Sin ella no
+                hay hora que calcular: esos sobres no se abren solos nunca y
+                los abre a mano el que arbitra, que es el unico con llave ahi
         """
         self._uow = uow
         self._user_repo = user_repository
@@ -257,13 +258,25 @@ class EnvelopeDesk:
         sobres: dict[str, Envelope],
         ronda: Round | None = None,
         is_admin: bool = False,
+        sin_plazo: bool = False,
     ) -> bool:
         """Si esa persona puede abrir los sobres AHORA.
 
-        El organizador siempre —es quien arbitra, y si un capitan no aparece no
-        se queda todo parado—; un capitan solo con los dos sobres dentro,
-        porque el relleno automatico es predecible y abrir antes le dejaria
-        armar su lista para ganar todos los cruces.
+        **Hacen falta los dos sobres dentro, sea quien sea** (decidido el 23
+        sep): abrir es lo que desvela el orden de juego, y con uno fuera no hay
+        nada que desvelar. Ni el organizador ni un administrador lo fuerzan.
+
+        El capitan que no aparece no deja nada atascado: al vencer el plazo se
+        abren solos y la aplicacion rellena lo que falte.
+
+        **Salvo que no haya plazo que vencer** (`sin_plazo`): un campo sin zona
+        horaria no da hora que calcular, asi que esos sobres no se abren solos
+        NUNCA y la sesion se quedaria atascada —«generar partidos» la rechaza
+        mientras queden sobres cerrados—. Ahi el que arbitra conserva la llave,
+        que es la salida que ya estaba decidida antes del 23 sep.
+
+        Quien: el organizador, un administrador o uno de los dos capitanes;
+        quien solo mira, no.
 
         Vive aqui y no en cada caso de uso: la comprobacion de verdad y lo que
         la vista le cuenta a la pantalla tienen que decir lo mismo.
@@ -275,18 +288,42 @@ class EnvelopeDesk:
         # ofrecerlo seria mandar a la pantalla contra un 400
         if ronda is not None and ronda.status in _CON_PARTIDOS_YA_HECHOS:
             return False
-        if is_admin or competition.is_creator(user_id):
-            return True
-        if self.equipo_de(competition, user_id) is None:
+        arbitra = is_admin or competition.is_creator(user_id)
+        if not arbitra and self.equipo_de(competition, user_id) is None:
             return False
+        if arbitra and sin_plazo:
+            return True
         return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
 
     async def programado_para(self, ronda: Round, competition: Competition) -> datetime | None:
         """A que hora se abren solos los sobres de esa sesion."""
+        zona = await self._zona_de(ronda)
+        return EnvelopeRevealService.scheduled_for(ronda.round_date, ronda.session_type, zona)
+
+    async def _zona_de(self, ronda: Round) -> str | None:
+        """La zona del campo de ESA sesion, no la del primero de la competicion.
+
+        Una competicion se puede jugar en varios campos, y cada sesion tiene el
+        suyo. Con el primero mandando, una sesion heredaba la hora de otro
+        sitio, y desde el 23 sep tambien la llave: el primero sin zona repartia
+        salida de emergencia a sesiones que si tenian plazo.
+        """
         if self._timezone is None:
             return None
-        zona = await self._timezone.for_competition(competition)
-        return EnvelopeRevealService.scheduled_for(ronda.round_date, ronda.session_type, zona)
+        return await self._timezone.for_course(ronda.golf_course_id)
+
+    def sin_plazo_que_vencer(self, programado: datetime | None) -> bool:
+        """Si esa sesion no tiene hora a la que abrirse sola.
+
+        Recibe el plazo ya calculado porque quien pregunta esto tambien lo
+        enseña, y resolverlo dos veces son dos consultas a los campos.
+
+        Sin servicio de zona —un caso de uso que no lo inyecta— la respuesta
+        es que plazo hay, y entonces manda la regla estricta: que un cableado
+        incompleto reparta llaves es como se pierde una regla sin que nadie lo
+        note.
+        """
+        return self._timezone is not None and programado is None
 
     async def revelar_si_toca(
         self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
@@ -374,8 +411,9 @@ class EnvelopeDesk:
         if programado is None or self.ahora < programado:
             return False
 
-        zona = await self._timezone.for_competition(competition) if self._timezone else None
-        comienzo = ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
+        comienzo = ScoringOpeningService.opens_at(
+            ronda.round_date, ronda.session_type, await self._zona_de(ronda)
+        )
         anterior_acabo = EnvelopeRevealService.previous_session_is_over(
             await self._partidos_pendientes_de_la_anterior(ronda, competition),
             comienzo,

@@ -16,6 +16,9 @@ from src.modules.competition.application.dto.envelope_dto import (
     matchups_to_dto,
 )
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
+from src.modules.competition.application.ports.competition_timezone import (
+    ICompetitionTimezone,
+)
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
 )
@@ -28,7 +31,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class RivalEnvelopeMissingError(Exception):
-    """Un capitan no puede abrir mientras el rival no haya entregado."""
+    """Faltan sobres por entregar: nadie abre hasta que esten los dos."""
 
     pass
 
@@ -36,14 +39,22 @@ class RivalEnvelopeMissingError(Exception):
 class RevealEnvelopesUseCase:
     """Caso de uso para abrir los dos sobres de una sesion."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository,
+        timezone_service: ICompetitionTimezone | None = None,
+    ):
         """
         Args:
             uow: Unit of Work del modulo
             user_repository: De donde sale el handicap para el sobre que falte
+            timezone_service: La zona del campo donde se juega. Hace falta para
+                saber si esta sesion llega a tener plazo: sin el, la respuesta
+                es que si, y manda la regla estricta
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository)
+        self._desk = EnvelopeDesk(uow, user_repository, timezone_service=timezone_service)
 
     async def execute(
         self, round_id: UUID, user_id: UserId, is_admin: bool = False
@@ -62,8 +73,7 @@ class RevealEnvelopesUseCase:
         Raises:
             RoundNotFoundError: Si la sesion no existe
             NotCompetitionCreatorError: Si no es el organizador ni un capitan
-            RivalEnvelopeMissingError: Si los abre un capitan y el rival no ha
-                entregado todavia
+            RivalEnvelopeMissingError: Si falta algun sobre por entregar
             EnvelopeAlreadyRevealedError: Si ya estaban abiertos
         """
         async with self._uow:
@@ -77,14 +87,25 @@ class RevealEnvelopesUseCase:
                 raise NotCompetitionCreatorError(
                     "Los sobres los abre el organizador o uno de los capitanes"
                 )
-            if not arbitra:
-                # La misma regla que le cuenta la vista a la pantalla
-                # Un capitan no puede forzar que el rival se rellene solo: el
-                # relleno automatico es PREDECIBLE —por handicap—, asi que
-                # entregar y abrir de inmediato deja armar la lista propia para
-                # ganar todos los cruces. El azar de esto esta en no saber que
-                # hizo el otro. El organizador si puede: es quien arbitra, y si
-                # un capitan no aparece no se queda todo parado
+            # Hacen falta los dos sobres dentro, sea quien sea: abrir es lo que
+            # desvela el orden de juego, y con uno fuera no hay nada que
+            # desvelar. Ademas, el relleno automatico es PREDECIBLE —por
+            # handicap—, asi que entregar y abrir de inmediato dejaria armar la
+            # lista propia para ganar todos los cruces.
+            #
+            # El capitan que no aparece no deja nada atascado: al vencer el
+            # plazo se abren solos y la aplicacion rellena lo que falte.
+            #
+            # Salvo en una sesion SIN plazo —campo sin zona horaria—, que no se
+            # abre sola nunca: ahi el que arbitra conserva la llave o la sesion
+            # se queda atascada para siempre.
+            #
+            # Unos sobres ya abiertos pasan por aqui —rellenar deja entradas
+            # dentro—, y el error de «ya estaban abiertos» lo da el bucle
+            sin_plazo = self._desk.sin_plazo_que_vencer(
+                await self._desk.programado_para(ronda, competition)
+            )
+            if not (arbitra and sin_plazo):
                 await self._comprobar_que_los_dos_entregaron(ronda)
 
             ahora = datetime.now(UTC).replace(tzinfo=None)
@@ -121,5 +142,9 @@ class RevealEnvelopesUseCase:
         }
         if entregados != {"A", "B"}:
             raise RivalEnvelopeMissingError(
-                "El otro capitán todavía no ha entregado su sobre: los abre el organizador"
+                # Sin promesas sobre el plazo: la pantalla ya lo enseña, y
+                # hay sesiones que no se abren solas —campo sin zona, un
+                # equipo impar en parejas— donde prometerlo manda a esperar
+                # algo que no va a llegar
+                "Falta un sobre por entregar: hasta que estén los dos no hay nada que abrir"
             )

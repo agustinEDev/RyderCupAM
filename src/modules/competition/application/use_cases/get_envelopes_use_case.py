@@ -96,6 +96,7 @@ class GetEnvelopesUseCase:
                 list(dict.fromkeys(aparecen)), competition.id, self._desk.user_repository, self._uow
             )
             handicaps = dict(await self._desk.handicaps_de(competition, mis_jugadores))
+            programado = await self._desk.programado_para(ronda, competition)
 
             return EnvelopesViewDTO(
                 round_id=ronda.id.value,
@@ -114,9 +115,14 @@ class GetEnvelopesUseCase:
                 rival_wants_early=bool(rival and rival.reveal_when_both_ready),
                 # La regla vive en un solo sitio: aqui solo se pregunta
                 can_reveal=self._desk.puede_abrirlos(
-                    competition, user_id, sobres, ronda=ronda, is_admin=is_admin
+                    competition,
+                    user_id,
+                    sobres,
+                    ronda=ronda,
+                    is_admin=is_admin,
+                    sin_plazo=self._desk.sin_plazo_que_vencer(programado),
                 ),
-                reveal_scheduled_at=await self._desk.programado_para(ronda, competition),
+                reveal_scheduled_at=programado,
                 matchups=matchups_to_dto(sobre_a, sobre_b) if abiertos else [],
                 my_players=[
                     EnvelopePlayerDTO(
