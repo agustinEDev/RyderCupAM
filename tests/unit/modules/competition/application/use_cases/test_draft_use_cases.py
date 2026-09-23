@@ -42,8 +42,10 @@ from src.modules.competition.domain.entities.draft import (
     NotYourTurnError,
     PlayerAlreadyPickedError,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
@@ -322,6 +324,27 @@ class TestMirarLaSala:
 
         with pytest.raises(NotCompetitionParticipantError):
             await ver.execute(comp_id.value, UserId(uuid4()))
+
+    async def test_ni_alguien_que_se_retiro(self):
+        """Estar inscrito no basta: hay que estarlo APROBADO.
+
+        Una inscripción retirada o rechazada seguía valiendo de llave, y con
+        ella se leían nombres, hándicaps y equipos.
+        """
+        uow, comp_id, creator_id, _, usuarios = await _montar()
+        start, ver, _, _ = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+        retirado = UserId(uuid4())
+        async with uow:
+            inscripcion = Enrollment.direct_enroll(
+                id=EnrollmentId.generate(), competition_id=comp_id, user_id=retirado
+            )
+            inscripcion.withdraw()
+            await uow.enrollments.add(inscripcion)
+            await uow.commit()
+
+        with pytest.raises(NotCompetitionParticipantError):
+            await ver.execute(comp_id.value, retirado)
 
     async def test_cualquier_inscrito_la_ve_en_directo(self):
         """El resto lo mira sin poder tocar: es la ceremonia."""

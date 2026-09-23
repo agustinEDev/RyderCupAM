@@ -112,7 +112,9 @@ class DraftRoom:
         inscripcion = await self._uow.enrollments.find_by_user_and_competition(
             user_id, competition.id
         )
-        if inscripcion is None:
+        # APROBADA: una retirada o rechazada seguia valiendo de llave, y con
+        # ella se leian nombres, handicaps y equipos
+        if inscripcion is None or inscripcion.status != EnrollmentStatus.APPROVED:
             raise NotCompetitionParticipantError(
                 "Esta sala es de una competición en la que no participas"
             )
