@@ -1567,9 +1567,7 @@ def get_round_achievements_publisher(
 def get_complete_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    achievements: RoundAchievementsPublisherInterface = Depends(
-        get_round_achievements_publisher
-    ),
+    achievements: RoundAchievementsPublisherInterface = Depends(get_round_achievements_publisher),
 ) -> CompleteQuickMatchUseCase:
     """Proveedor del caso de uso CompleteQuickMatchUseCase."""
     return CompleteQuickMatchUseCase(uow, user_uow, achievements)
@@ -1616,9 +1614,7 @@ def get_get_quick_match_use_case(
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
-    return GetQuickMatchUseCase(
-        uow, user_uow, scoring_service, coverage_service, golf_course_uow
-    )
+    return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service, golf_course_uow)
 
 
 def get_list_my_quick_matches_use_case(
@@ -2057,23 +2053,30 @@ def get_assign_teams_use_case(
 
 def get_submit_envelope_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> SubmitEnvelopeUseCase:
     """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655)."""
-    return SubmitEnvelopeUseCase(uow)
+    return SubmitEnvelopeUseCase(uow, user_uow.users)
 
 
 def get_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> GetEnvelopesUseCase:
     """Proveedor del caso de uso GetEnvelopesUseCase (FE #655)."""
-    return GetEnvelopesUseCase(uow)
+    return GetEnvelopesUseCase(uow, user_uow.users)
 
 
 def get_reveal_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> RevealEnvelopesUseCase:
-    """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655)."""
-    return RevealEnvelopesUseCase(uow)
+    """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
+
+    El repositorio de usuarios es para el handicap del sobre que haya que
+    rellenar: el propio de la inscripcion si lo tiene, y si no el del jugador.
+    """
+    return RevealEnvelopesUseCase(uow, user_uow.users)
 
 
 def get_generate_matches_use_case(

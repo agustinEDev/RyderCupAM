@@ -20,6 +20,7 @@ from datetime import datetime
 import pytest
 
 from src.modules.competition.domain.entities.envelope import (
+    EmptyEnvelopeError,
     Envelope,
     EnvelopeAlreadyRevealedError,
     PlayerNotInTeamError,
@@ -174,7 +175,7 @@ class TestQueVeQuien:
         sobre = _sobre()
 
         assert sobre.is_submitted() is False
-        with pytest.raises(ValueError, match="(?i)vac"):
+        with pytest.raises(EmptyEnvelopeError):
             sobre.reveal()
 
 

@@ -35,6 +35,12 @@ class EnvelopeAlreadyRevealedError(Exception):
     pass
 
 
+class EmptyEnvelopeError(Exception):
+    """El sobre no lleva nada dentro."""
+
+    pass
+
+
 class PlayerNotInTeamError(Exception):
     """Ese jugador no es de este equipo."""
 
@@ -219,7 +225,7 @@ class Envelope:
             ValueError: Si está vacío: no hay nada que abrir
         """
         if not self.is_submitted():
-            raise ValueError("El sobre está vacío: no hay nada que abrir")
+            raise EmptyEnvelopeError("El sobre está vacío: no hay nada que abrir")
         self._revealed = True
 
     @staticmethod
@@ -245,6 +251,10 @@ class Envelope:
             raise EnvelopeAlreadyRevealedError("El sobre ya se abrió")
 
     def _validar(self, entries: Sequence[Sequence[UserId]], equipo: Sequence[UserId]) -> None:
+        if not entries:
+            # Con el equipo vacio, «faltan» tambien sale vacio y esto pasaria:
+            # un 200 que no guarda nada y deja al capitan creyendo que entrego
+            raise EmptyEnvelopeError("El sobre está vacío: pon el orden de tu equipo")
         por_fila = self.players_per_row()
         for fila in entries:
             if len(fila) != por_fila:

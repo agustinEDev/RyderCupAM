@@ -40,3 +40,12 @@ class EnvelopeRepositoryInterface(ABC):
         lista de la aplicación encima de la suya.
         """
         pass
+
+    @abstractmethod
+    async def delete_by_round(self, round_id: RoundId) -> int:
+        """Borra los sobres de esa sesion y devuelve cuantos eran.
+
+        Se usa al cambiar el formato de la sesion: un sobre de parejas no vale
+        para unos individuales, y al reves revienta al generar los partidos.
+        """
+        pass

@@ -22,13 +22,14 @@ from src.modules.user.domain.value_objects.user_id import UserId
 class GetEnvelopesUseCase:
     """Caso de uso para consultar los sobres de una sesion."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
         """
         Args:
             uow: Unit of Work del modulo
+            user_repository: Lo pide la mesa de sobres para los handicaps
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow)
+        self._desk = EnvelopeDesk(uow, user_repository)
 
     async def execute(self, round_id: UUID, user_id: UserId) -> EnvelopesViewDTO:
         """
@@ -44,9 +45,12 @@ class GetEnvelopesUseCase:
 
         Raises:
             RoundNotFoundError: Si la sesion no existe
+            NotCompetitionParticipantError: Si quien pregunta no es de esta
+                competicion
         """
         async with self._uow:
             ronda, competition = await self._desk.ronda_y_competicion(RoundId(round_id))
+            await self._desk.comprobar_que_es_de_la_competicion(competition, user_id)
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
             abiertos = bool(
@@ -62,6 +66,11 @@ class GetEnvelopesUseCase:
                 revealed=abiertos,
                 team_a_submitted=bool(sobre_a and sobre_a.is_submitted()),
                 team_b_submitted=bool(sobre_b and sobre_b.is_submitted()),
+                # Lo que rellena la aplicacion cuenta como «hay algo dentro»,
+                # pero NO como que el capitan entrego: sin esto la pantalla
+                # diria que entregaron los dos y seria mentira
+                team_a_automatic=bool(sobre_a and sobre_a.automatic),
+                team_b_automatic=bool(sobre_b and sobre_b.automatic),
                 mine=_a_dto(mio) if mio and mio.is_submitted() else None,
                 # El del rival SOLO cuando ya estan abiertos
                 rival=_a_dto(rival) if abiertos and rival else None,

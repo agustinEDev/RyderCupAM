@@ -148,3 +148,13 @@ class GolfCourseHasRoundsError(Exception):
     """
 
     pass
+
+
+class NotCompetitionParticipantError(Exception):
+    """Quien pregunta no es de esta competicion.
+
+    Sin esto, probando identificadores se leia la sesion de cualquiera, incluida
+    la de una competicion privada (FE #655).
+    """
+
+    pass

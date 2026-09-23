@@ -32,6 +32,12 @@ class SQLAlchemyEnvelopeRepository(EnvelopeRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def delete_by_round(self, round_id: RoundId) -> int:
+        sobres = await self.find_by_round(round_id)
+        for sobre in sobres:
+            await self._session.delete(sobre)
+        return len(sobres)
+
     async def find_by_round_and_team_for_update(
         self, round_id: RoundId, team: str
     ) -> Envelope | None:

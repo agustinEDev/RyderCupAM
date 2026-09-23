@@ -20,6 +20,7 @@ from src.modules.competition.application.dto.envelope_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
+    NotCompetitionParticipantError,
     RoundNotFoundError,
 )
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
@@ -27,12 +28,15 @@ from src.modules.competition.application.use_cases.get_envelopes_use_case import
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
     RevealEnvelopesUseCase,
+    RivalEnvelopeMissingError,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
     SubmitEnvelopeUseCase,
 )
+from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
 from src.modules.competition.domain.entities.envelope import (
+    EmptyEnvelopeError,
     EnvelopeAlreadyRevealedError,
     PlayerNotInTeamError,
     TeamNotFullyEnteredError,
@@ -56,13 +60,16 @@ class SubmitEnvelopeBodyDTO(BaseModel):
     )
 
 
-# Lo que es culpa de quien pide: una lista que no cuadra con su equipo o un
-# sobre que ya se abrio
+# Lo que es culpa de quien pide: una lista que no cuadra con su equipo, un
+# sobre ya abierto o unos equipos todavia sin repartir. `ValueError` pelado NO:
+# se llevaria por delante los de Pydantic y los de un dato mal guardado, y un
+# 500 de verdad saldria como un 400 «culpa tuya»
 _ERRORES_DEL_SOBRE = (
     EnvelopeAlreadyRevealedError,
     PlayerNotInTeamError,
     TeamNotFullyEnteredError,
-    ValueError,
+    TeamsNotAssignedError,
+    EmptyEnvelopeError,
 )
 
 
@@ -125,6 +132,8 @@ async def get_envelopes(
         return await use_case.execute(round_id, UserId(str(current_user.id)))
     except (RoundNotFoundError, CompetitionNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionParticipantError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 @router.post(
@@ -157,5 +166,8 @@ async def reveal_envelopes(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except RivalEnvelopeMissingError as e:
+        # 409 y no 400: la petición es correcta, es que todavía no toca
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

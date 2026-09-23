@@ -28,13 +28,14 @@ class NotATeamCaptainError(Exception):
 class SubmitEnvelopeUseCase:
     """Caso de uso para entregar —o corregir— el sobre de un equipo."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
         """
         Args:
             uow: Unit of Work del modulo
+            user_repository: Lo pide la mesa de sobres para los handicaps
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow)
+        self._desk = EnvelopeDesk(uow, user_repository)
 
     async def execute(
         self, round_id: UUID, user_id: UserId, entries: Sequence[Sequence[str | UUID]]
@@ -59,7 +60,12 @@ class SubmitEnvelopeUseCase:
             TeamNotFullyEnteredError: Si falta alguien del equipo
         """
         async with self._uow:
-            ronda, competition = await self._desk.ronda_y_competicion(RoundId(round_id))
+            # Con la competicion bloqueada: dos peticiones a la vez leerian
+            # que no hay sobre, las dos lo crearian, y una reventaria contra la
+            # clave unica con un 500
+            ronda, competition = await self._desk.ronda_y_competicion(
+                RoundId(round_id), bloquear=True
+            )
             team = self._desk.equipo_de(competition, user_id)
             if team is None:
                 raise NotATeamCaptainError("Solo los capitanes entregan su sobre")

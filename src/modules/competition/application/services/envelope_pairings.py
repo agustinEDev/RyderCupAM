@@ -24,8 +24,43 @@ class EnvelopesNotRevealedError(Exception):
     pass
 
 
+class EnvelopesDecideThePairingsError(Exception):
+    """Con los sobres abiertos, los enfrentamientos ya no los pone nadie mas."""
+
+    pass
+
+
 class EnvelopePairings:
     """Los enfrentamientos de una sesion, si los sobres ya estan abiertos."""
+
+    @staticmethod
+    async def decidir(uow: CompetitionUnitOfWorkInterface, round_id: RoundId, manual_pairings=None):
+        """Los enfrentamientos que se van a usar para generar los partidos.
+
+        Los de los sobres abiertos mandan: sin esto el organizador pulsaria
+        «generar» y la aplicacion emparejaria por handicap como si nadie
+        hubiera entregado nada. Y los que manda el organizador NO los pisan;
+        la comprobacion va ANTES de mirarlos porque, si no, la guarda de los
+        sobres sin abrir se esquivaba mandando emparejamientos a mano.
+
+        Returns:
+            Los de los sobres, los del organizador, o None para emparejar por
+            ranking como se ha hecho siempre
+
+        Raises:
+            EnvelopesDecideThePairingsError: Si hay sobres abiertos y ademas se
+                mandan emparejamientos a mano
+            EnvelopesNotRevealedError: Si hay algun sobre entregado sin abrir
+        """
+        de_los_sobres = await EnvelopePairings.de_la_ronda(uow, round_id)
+        if de_los_sobres is None:
+            await EnvelopePairings.comprobar_que_no_hay_sobres_sin_abrir(uow, round_id)
+            return manual_pairings
+        if manual_pairings:
+            raise EnvelopesDecideThePairingsError(
+                "Los enfrentamientos de esta sesión salen de los sobres de los capitanes"
+            )
+        return de_los_sobres
 
     @staticmethod
     async def comprobar_que_no_hay_sobres_sin_abrir(

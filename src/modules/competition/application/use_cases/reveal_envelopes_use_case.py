@@ -23,16 +23,23 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
+class RivalEnvelopeMissingError(Exception):
+    """Un capitan no puede abrir mientras el rival no haya entregado."""
+
+    pass
+
+
 class RevealEnvelopesUseCase:
     """Caso de uso para abrir los dos sobres de una sesion."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
         """
         Args:
             uow: Unit of Work del modulo
+            user_repository: De donde sale el handicap para el sobre que falte
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow)
+        self._desk = EnvelopeDesk(uow, user_repository)
 
     async def execute(
         self, round_id: UUID, user_id: UserId, is_admin: bool = False
@@ -51,15 +58,28 @@ class RevealEnvelopesUseCase:
         Raises:
             RoundNotFoundError: Si la sesion no existe
             NotCompetitionCreatorError: Si no es el organizador ni un capitan
+            RivalEnvelopeMissingError: Si los abre un capitan y el rival no ha
+                entregado todavia
             EnvelopeAlreadyRevealedError: Si ya estaban abiertos
         """
         async with self._uow:
-            ronda, competition = await self._desk.ronda_y_competicion(RoundId(round_id))
+            ronda, competition = await self._desk.ronda_y_competicion(
+                RoundId(round_id), bloquear=True
+            )
             es_capitan = self._desk.equipo_de(competition, user_id) is not None
-            if not is_admin and not competition.is_creator(user_id) and not es_capitan:
+            arbitra = is_admin or competition.is_creator(user_id)
+            if not arbitra and not es_capitan:
                 raise NotCompetitionCreatorError(
                     "Los sobres los abre el organizador o uno de los capitanes"
                 )
+            if not arbitra:
+                # Un capitan no puede forzar que el rival se rellene solo: el
+                # relleno automatico es PREDECIBLE —por handicap—, asi que
+                # entregar y abrir de inmediato deja armar la lista propia para
+                # ganar todos los cruces. El azar de esto esta en no saber que
+                # hizo el otro. El organizador si puede: es quien arbitra, y si
+                # un capitan no aparece no se queda todo parado
+                await self._comprobar_que_los_dos_entregaron(ronda)
 
             ahora = datetime.now(UTC).replace(tzinfo=None)
             automaticos = []
@@ -80,4 +100,20 @@ class RevealEnvelopesUseCase:
                 round_id=ronda.id.value,
                 matchups=_cruzados(sobres["A"], sobres["B"]),
                 filled_automatically=automaticos,
+            )
+
+    async def _comprobar_que_los_dos_entregaron(self, ronda) -> None:
+        """Los dos sobres tienen que estar dentro.
+
+        Raises:
+            RivalEnvelopeMissingError: Si falta alguno
+        """
+        entregados = {
+            sobre.team
+            for sobre in await self._uow.envelopes.find_by_round(ronda.id)
+            if sobre.is_submitted()
+        }
+        if entregados != {"A", "B"}:
+            raise RivalEnvelopeMissingError(
+                "El otro capitán todavía no ha entregado su sobre: los abre el organizador"
             )

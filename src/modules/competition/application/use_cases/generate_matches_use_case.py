@@ -203,18 +203,10 @@ class GenerateMatchesUseCase:
 
             max_playing_handicap = competition.max_playing_handicap
 
-            # Los sobres abiertos ya decidieron los enfrentamientos (FE #655):
-            # sin esto el organizador pulsaria «generar» y la aplicacion
-            # emparejaria por handicap como si nadie hubiera entregado nada
-            pairings = request.manual_pairings or await EnvelopePairings.de_la_ronda(
-                self._uow, round_entity.id
+            # Los sobres de los capitanes deciden, si los hay (FE #655)
+            pairings = await EnvelopePairings.decidir(
+                self._uow, round_entity.id, request.manual_pairings
             )
-            if not pairings:
-                # Sin emparejamientos fijados se empareja por ranking, y eso con
-                # un sobre entregado y cerrado seria tirar su lista a la basura
-                await EnvelopePairings.comprobar_que_no_hay_sobres_sin_abrir(
-                    self._uow, round_entity.id
-                )
 
             if pairings:
                 matches_created = await self._generate_manual(
@@ -568,11 +560,7 @@ class GenerateMatchesUseCase:
             (tee_color, tee_gender, tee_rating, handicap_index)
         """
         enrollment = enrollment_map.get(str(user_id.value))
-        tee_color = (
-            enrollment.tee_color
-            if enrollment and enrollment.tee_color
-            else TeeColor.YELLOW
-        )
+        tee_color = enrollment.tee_color if enrollment and enrollment.tee_color else TeeColor.YELLOW
         user_gender = user_gender_map.get(str(user_id.value))
 
         # Auto-resolve tee: (colour, user_gender) → (colour, None) fallback
@@ -972,10 +960,12 @@ class GenerateMatchesUseCase:
         #    equipo cuando los dos juegan la misma; si juegan barras distintas no
         #    hay una tarjeta que sea "la del equipo" y se cae a la del campo.
         team_a_strokes = calculator.compute_strokes_received(
-            team_a_ph, self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index)
+            team_a_ph,
+            self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )
         team_b_strokes = calculator.compute_strokes_received(
-            team_b_ph, self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index)
+            team_b_ph,
+            self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )
 
         team_a_players = []

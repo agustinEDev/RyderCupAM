@@ -31,6 +31,12 @@ class EnvelopesViewDTO(BaseModel):
     revealed: bool = Field(..., description="Si ya se abrieron.")
     team_a_submitted: bool = Field(..., description="Si el equipo A entrego.")
     team_b_submitted: bool = Field(..., description="Si el equipo B entrego.")
+    team_a_automatic: bool = Field(
+        False, description="Si el sobre del equipo A lo relleno la aplicacion."
+    )
+    team_b_automatic: bool = Field(
+        False, description="Si el sobre del equipo B lo relleno la aplicacion."
+    )
     mine: EnvelopeDTO | None = Field(None, description="El sobre de quien pregunta, si capitanea.")
     rival: EnvelopeDTO | None = Field(None, description="El del rival, solo si estan abiertos.")
     rival_submitted: bool = Field(False, description="Si el rival ya entrego el suyo.")

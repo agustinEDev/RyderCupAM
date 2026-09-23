@@ -109,6 +109,7 @@ class UpdateRoundUseCase:
             match_format = MatchFormat(request.match_format) if request.match_format else None
             handicap_mode = HandicapMode(request.handicap_mode) if request.handicap_mode else None
 
+            formato_anterior = round_entity.match_format
             try:
                 round_entity.update_details(
                     round_date=request.round_date,
@@ -121,6 +122,13 @@ class UpdateRoundUseCase:
                 )
             except ValueError as e:
                 raise RoundNotModifiableError(str(e)) from e
+
+            if formato_anterior is not None and formato_anterior != round_entity.match_format:
+                # Los sobres eran de otro formato: uno de parejas no vale para
+                # unos individuales —el capitan ya no podria ni corregirlo— y al
+                # reves revienta al generar los partidos. Se tiran, y los
+                # capitanes vuelven a entregar (FE #655)
+                await self._uow.envelopes.delete_by_round(round_entity.id)
 
             await self._uow.rounds.update(round_entity)
 

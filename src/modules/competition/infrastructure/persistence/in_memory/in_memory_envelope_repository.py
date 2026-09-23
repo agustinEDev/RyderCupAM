@@ -25,6 +25,12 @@ class InMemoryEnvelopeRepository(EnvelopeRepositoryInterface):
     async def find_by_round(self, round_id: RoundId) -> list[Envelope]:
         return [e for e in self._envelopes.values() if e.round_id == round_id]
 
+    async def delete_by_round(self, round_id: RoundId) -> int:
+        claves = [k for k, s in self._envelopes.items() if s.round_id == round_id]
+        for clave in claves:
+            del self._envelopes[clave]
+        return len(claves)
+
     async def find_by_round_and_team_for_update(
         self, round_id: RoundId, team: str
     ) -> Envelope | None:
