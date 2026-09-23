@@ -53,6 +53,10 @@ class EnvelopesViewDTO(BaseModel):
     mine: EnvelopeDTO | None = Field(None, description="El sobre de quien pregunta, si capitanea.")
     rival: EnvelopeDTO | None = Field(None, description="El del rival, solo si estan abiertos.")
     rival_submitted: bool = Field(False, description="Si el rival ya entrego el suyo.")
+    # Lo dice la vista y NO el cliente: la regla —el organizador siempre, un
+    # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
+    # la pantalla es justo donde se desincronizan
+    can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
     matchups: list[list[list[UUID]]] = Field(
         default_factory=list, description="Los enfrentamientos, solo si estan abiertos."
     )

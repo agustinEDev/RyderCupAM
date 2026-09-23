@@ -20,10 +20,12 @@ from datetime import datetime
 import pytest
 
 from src.modules.competition.domain.entities.envelope import (
+    DuplicatedPlayerError,
     EmptyEnvelopeError,
     Envelope,
     EnvelopeAlreadyRevealedError,
     PlayerNotInTeamError,
+    RowSizeError,
     TeamNotFullyEnteredError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -66,16 +68,20 @@ class TestEntregarElSobre:
         assert sobre.entries == ((CARLA, ANA), (DANI, BEA))
 
     def test_una_pareja_coja_no_vale(self):
-        """En fourball se juega dos contra dos: una fila de uno no es una pareja."""
+        """En fourball se juega dos contra dos: una fila de uno no es una pareja.
+
+        Con excepción propia y no un `ValueError` pelado: la ruta no puede
+        contestar 500 a una lista mal formada, que es culpa de quien la manda.
+        """
         sobre = _sobre(match_format=MatchFormat.FOURBALL)
 
-        with pytest.raises(ValueError, match="(?i)pareja|dos"):
+        with pytest.raises(RowSizeError):
             sobre.submit([[CARLA, ANA], [DANI]], equipo=EQUIPO, por=ANA, ahora=AHORA)
 
     def test_ni_dos_jugadores_en_un_individual(self):
         sobre = _sobre()
 
-        with pytest.raises(ValueError, match="(?i)individual|uno"):
+        with pytest.raises(RowSizeError):
             sobre.submit([[CARLA, ANA], [DANI], [BEA]], equipo=EQUIPO, por=ANA, ahora=AHORA)
 
     def test_no_se_puede_meter_a_alguien_del_otro_equipo(self):
@@ -87,7 +93,7 @@ class TestEntregarElSobre:
     def test_ni_repetir_a_uno_para_que_juegue_dos_veces(self):
         sobre = _sobre()
 
-        with pytest.raises(ValueError, match="(?i)repetid|dos veces"):
+        with pytest.raises(DuplicatedPlayerError):
             sobre.submit([[ANA], [ANA], [DANI], [BEA]], equipo=EQUIPO, por=ANA, ahora=AHORA)
 
     def test_tienen_que_estar_todos(self):

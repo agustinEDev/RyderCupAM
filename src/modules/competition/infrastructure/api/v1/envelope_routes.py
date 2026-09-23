@@ -36,9 +36,11 @@ from src.modules.competition.application.use_cases.submit_envelope_use_case impo
 )
 from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
 from src.modules.competition.domain.entities.envelope import (
+    DuplicatedPlayerError,
     EmptyEnvelopeError,
     EnvelopeAlreadyRevealedError,
     PlayerNotInTeamError,
+    RowSizeError,
     TeamNotFullyEnteredError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -70,6 +72,8 @@ _ERRORES_DEL_SOBRE = (
     TeamNotFullyEnteredError,
     TeamsNotAssignedError,
     EmptyEnvelopeError,
+    RowSizeError,
+    DuplicatedPlayerError,
 )
 
 

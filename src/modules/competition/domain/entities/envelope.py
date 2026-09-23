@@ -41,6 +41,18 @@ class EmptyEnvelopeError(Exception):
     pass
 
 
+class RowSizeError(Exception):
+    """Una fila no tiene los jugadores que el formato pide."""
+
+    pass
+
+
+class DuplicatedPlayerError(Exception):
+    """Alguien aparece dos veces: nadie juega dos partidos en la misma sesion."""
+
+    pass
+
+
 class PlayerNotInTeamError(Exception):
     """Ese jugador no es de este equipo."""
 
@@ -258,7 +270,7 @@ class Envelope:
         por_fila = self.players_per_row()
         for fila in entries:
             if len(fila) != por_fila:
-                raise ValueError(
+                raise RowSizeError(
                     "En individuales cada fila es de uno"
                     if por_fila == 1
                     else "En parejas cada fila son dos jugadores"
@@ -266,7 +278,9 @@ class Envelope:
 
         puestos = [uid for fila in entries for uid in fila]
         if len(set(puestos)) != len(puestos):
-            raise ValueError("Hay jugadores repetidos: nadie juega dos veces la misma sesión")
+            raise DuplicatedPlayerError(
+                "Hay jugadores repetidos: nadie juega dos veces la misma sesión"
+            )
 
         del_equipo = set(equipo)
         fuera = set(puestos) - del_equipo

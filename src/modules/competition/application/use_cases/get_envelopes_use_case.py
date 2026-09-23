@@ -83,6 +83,10 @@ class GetEnvelopesUseCase:
             )
             handicaps = dict(await self._desk.handicaps_de(competition, mis_jugadores))
 
+            arbitra = competition.is_creator(user_id)
+            los_dos_dentro = bool(
+                sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted()
+            )
             return EnvelopesViewDTO(
                 round_id=ronda.id.value,
                 revealed=abiertos,
@@ -97,6 +101,8 @@ class GetEnvelopesUseCase:
                 # El del rival SOLO cuando ya estan abiertos
                 rival=_a_dto(rival) if abiertos and rival else None,
                 rival_submitted=bool(rival and rival.is_submitted()),
+                can_reveal=(not abiertos)
+                and (arbitra or (mi_equipo is not None and los_dos_dentro)),
                 matchups=_cruzados(sobre_a, sobre_b) if abiertos else [],
                 my_players=[
                     EnvelopePlayerDTO(

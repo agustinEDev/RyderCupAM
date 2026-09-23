@@ -365,6 +365,70 @@ class TestLosNombresQueSeVen:
         assert vista.player_names[str(equipo_b[0].value)]
 
 
+class TestQuienPuedeAbrirlos:
+    async def test_el_organizador_puede_aunque_falte_un_sobre(self):
+        """Es la salida cuando un capitán no aparece.
+
+        Y lo dice la vista, no el cliente: repetir la regla en la pantalla es
+        justo donde se desincronizan. Sin esto el organizador no tenía botón y
+        la sesión se quedaba atascada: el capitán que entregó tampoco podía
+        abrir, y generar partidos fallaba por sobres sin abrir.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, organizador)
+
+        assert vista.can_reveal is True
+
+    async def test_un_capitan_no_puede_mientras_falte_el_del_rival(self):
+        uow, _, round_id, _, equipo_b = await _montar()
+        await _entregar(uow).execute(
+            round_id.value, equipo_b[0], [[str(equipo_b[1].value)], [str(equipo_b[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_b[0])
+
+        assert vista.can_reveal is False
+
+    async def test_y_si_puede_cuando_estan_los_dos(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_b[0])
+
+        assert vista.can_reveal is True
+
+    async def test_quien_solo_mira_nunca_puede(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.can_reveal is False
+
+    async def test_y_abiertos_ya_no_hay_nada_que_abrir(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.can_reveal is False
+
+
 class TestQuienVeQue:
     async def test_el_capitan_ve_el_suyo_y_no_el_del_rival(self):
         """Ver la lista del otro antes de tiempo es el juego entero."""
