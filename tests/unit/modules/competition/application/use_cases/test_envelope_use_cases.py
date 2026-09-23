@@ -15,8 +15,10 @@ Las decisiones del 20 sep que fijan esta tabla:
   como lo hace la Ryder de verdad.
 """
 
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -24,6 +26,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
+)
+from src.modules.competition.application.services.envelope_desk import (
+    RoundAlreadyScheduledError,
 )
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopePairings,
@@ -39,7 +44,6 @@ from src.modules.competition.application.use_cases.reveal_envelopes_use_case imp
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
-    RoundAlreadyScheduledError,
     SubmitEnvelopeUseCase,
 )
 from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
@@ -71,6 +75,24 @@ from tests.unit.modules.competition.application.use_cases.helpers import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _crear_sesion_anterior(uow, comp_id):
+    """Una sesión de mañana el día antes, todavía sin partidos generados."""
+    from datetime import date as _date
+
+    async with uow:
+        ronda = Round.create(
+            competition_id=comp_id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=_date(2026, 5, 31),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        ronda.mark_teams_assigned()
+        await uow.rounds.add(ronda)
+        await uow.commit()
+    return ronda.id
 
 
 async def _marcar_partidos_generados(uow, round_id):
@@ -112,6 +134,26 @@ async def _dar_handicap_propio(uow, competition_id, user_id, handicap):
 _HANDICAPS_DE_PERFIL: dict = {}
 
 
+class _Reloj:
+    """El reloj del servidor, que en los tests se mueve a mano."""
+
+    def __init__(self, ahora):
+        self._ahora = ahora
+
+    def __call__(self):
+        return self._ahora
+
+
+class _Zona:
+    """La zona del campo donde se juega."""
+
+    def __init__(self, zona="Europe/Madrid"):
+        self._zona = zona
+
+    async def for_competition(self, competition):
+        return self._zona
+
+
 class _RepoUsuarios:
     """Un repositorio de usuarios con el hándicap que tenga cada uno."""
 
@@ -144,7 +186,9 @@ class _Handicap:
 
 
 async def _montar(
-    formato: MatchFormat = MatchFormat.SINGLES, jugadores: int = 4, con_equipos: bool = True
+    formato: MatchFormat = MatchFormat.SINGLES,
+    jugadores: int = 4,
+    con_equipos: bool = True,
 ):
     """Una cerrada con equipos repartidos, sus dos capitanes y una ronda.
 
@@ -162,8 +206,12 @@ async def _montar(
     await set_competition_status(uow, creada.id, "CLOSED")
 
     todos = [creator_id, *resto]
-    equipo_a = todos[: len(todos) // 2]
-    equipo_b = todos[len(todos) // 2 :]
+    # Con un número impar, el jugador de más va al equipo A: así el caso de
+    # «A se puede emparejar y B no» se puede montar, que es el orden en el que
+    # el revelado los toca
+    mitad = (len(todos) + 1) // 2
+    equipo_a = todos[:mitad]
+    equipo_b = todos[mitad:]
     _HANDICAPS_DE_PERFIL.clear()
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
@@ -175,7 +223,9 @@ async def _montar(
             await uow.team_assignments.add(
                 TeamAssignment.create(
                     competition_id=comp_id,
-                    mode=TeamAssignmentMode.MANUAL,
+                    # DRAFT y no MANUAL: es de donde vienen estos equipos, y es
+                    # el único modo que admite la diferencia de un jugador
+                    mode=TeamAssignmentMode.DRAFT,
                     team_a_player_ids=equipo_a,
                     team_b_player_ids=equipo_b,
                 )
@@ -379,6 +429,239 @@ class TestLosNombresQueSeVen:
 
         assert vista.player_names[str(equipo_a[1].value)]
         assert vista.player_names[str(equipo_b[0].value)]
+
+
+class TestElRevelado6HorasAntes:
+    async def test_llegada_la_hora_se_abren_solos_al_mirarlos(self):
+        """Como la anotación, que se abre sola al llegar el primer golpe: no hay
+        proceso de fondo mirando el reloj, lo resuelve quien mira."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        # La sesión es de mañana (06:00), así que sus sobres se abren a las
+        # 00:00 de ese mismo día. Con huso explícito: una hora «pelada» se lee
+        # como UTC y en Madrid serían otras
+        reloj = _Reloj(datetime(2026, 6, 1, 0, 30, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is True
+        assert len(vista.matchups) == 2
+
+    async def test_antes_de_esa_hora_siguen_cerrados(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        reloj = _Reloj(datetime(2026, 5, 31, 23, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is False
+        assert vista.matchups == []
+
+    async def test_la_vista_dice_a_que_hora_se_abren(self):
+        """Es el plazo para entregar, así que la pantalla tiene que poder decirlo."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        reloj = _Reloj(datetime(2026, 5, 30, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.reveal_scheduled_at is not None
+        assert vista.reveal_scheduled_at.hour == 0
+        assert vista.reveal_scheduled_at.date() == date(2026, 6, 1)
+
+    async def test_sin_zona_horaria_no_se_abren_solos(self):
+        """Sin campo todavía no hay reloj: los abre el organizador a mano."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona(None)).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is False
+        assert vista.reveal_scheduled_at is None
+
+
+class TestAbrirlosSinEsperarALaHora:
+    async def test_si_los_dos_lo_piden_se_abren_al_entregar_el_segundo(self):
+        """Decidido el 23 sep: el que entrega segundo dispara la apertura."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value,
+                capitan,
+                [[str(equipo[1].value)], [str(equipo[0].value)]],
+                sin_esperar=True,
+            )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.revealed is True
+        assert len(vista.matchups) == 2
+
+    async def test_con_uno_solo_pidiendolo_se_espera(self):
+        """El otro capitán tiene derecho a su plazo."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        await _entregar(uow).execute(
+            round_id.value,
+            equipo_a[0],
+            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
+            sin_esperar=True,
+        )
+        await _entregar(uow).execute(
+            round_id.value, equipo_b[0], [[str(equipo_b[1].value)], [str(equipo_b[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.revealed is False
+
+    async def test_y_la_vista_cuenta_lo_que_ha_pedido_cada_uno(self):
+        """La pantalla tiene que poder decir «solo falta que lo marque el otro»."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _entregar(uow).execute(
+            round_id.value,
+            equipo_a[0],
+            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
+            sin_esperar=True,
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.mine.reveal_when_both_ready is True
+        assert vista.rival_wants_early is False
+
+    async def test_el_rellenado_automatico_no_cuenta_como_que_lo_pide(self):
+        """Ese capitán no entregó nada: no ha pedido adelantar nada.
+
+        Se abre de verdad —con el organizador, que puede con un solo sobre—
+        para que el rellenado se EJECUTE: comprobando solo que no se abriera,
+        el test pasaba aunque `fill` dejara la marca puesta.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _entregar(uow).execute(
+            round_id.value,
+            equipo_a[0],
+            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
+            sin_esperar=True,
+        )
+
+        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        async with uow:
+            sobres = {s.team: s for s in await uow.envelopes.find_by_round(round_id)}
+        assert sobres["B"].automatic is True
+        assert sobres["B"].reveal_when_both_ready is False
+
+
+class TestLoQueElReveladoAutomaticoNoDebeHacer:
+    async def test_no_fabrica_sobres_en_una_sesion_que_ya_tiene_partidos(self):
+        """Serían unos enfrentamientos inventados que no son los partidos reales.
+
+        El camino manual ya lo impedía; el automático no, y cualquiera que
+        abriera la pantalla pasada la hora los creaba.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _marcar_partidos_generados(uow, round_id)
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.revealed is False
+        async with uow:
+            assert await uow.envelopes.find_by_round(round_id) == []
+
+    async def test_un_equipo_impar_en_parejas_no_tumba_la_pantalla(self):
+        """La aplicación no puede rellenar ese sobre, pero eso no es motivo
+        para dejar a nadie sin ver la suya.
+
+        Antes el fallo del relleno subía como un 400 para todo el mundo, y el
+        capitán que sí entregó se quedaba sin ver ni su sobre ni el plazo.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL, jugadores=6)
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.revealed is False
+        assert len(vista.my_players) == 3
+
+    async def test_si_un_sobre_no_se_puede_rellenar_el_otro_no_queda_abierto(self):
+        """O la sesión se queda en un estado del que no se sale.
+
+        Abrir A y fallar al rellenar B dejaba A revelado y B cerrado: el
+        organizador ya no podía abrirlos —el suyo «ya estaba abierto»— y el
+        capitán A tampoco podía corregir su lista. Y el disparador es normal:
+        el draft admite equipos desiguales por uno, y en parejas eso significa
+        que uno de los dos no se puede rellenar.
+        """
+        # Siete jugadores: un equipo de cuatro (que sí se puede emparejar) y
+        # otro de tres, que es justo lo que deja el draft con impares
+        uow, _, round_id, equipo_a, equipo_b = await _montar(
+            formato=MatchFormat.FOURBALL, jugadores=7
+        )
+        par, impar = (equipo_a, equipo_b) if len(equipo_a) % 2 == 0 else (equipo_b, equipo_a)
+        assert len(impar) % 2 != 0
+        await _entregar(uow).execute(
+            round_id.value,
+            par[0],
+            [[str(par[0].value), str(par[1].value)], [str(par[2].value), str(par[3].value)]],
+        )
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, par[0]
+        )
+
+        async with uow:
+            sobres = {s.team: s for s in await uow.envelopes.find_by_round(round_id)}
+        entregado = sobres["A" if par is equipo_a else "B"]
+        assert entregado.is_sealed() is True, "ese sobre no puede quedarse abierto él solo"
+        # Y por tanto el capitán puede seguir corrigiendo
+        await _entregar(uow).execute(
+            round_id.value,
+            par[0],
+            [[str(par[1].value), str(par[0].value)], [str(par[2].value), str(par[3].value)]],
+        )
+
+    async def test_la_sesion_anterior_sin_partidos_todavia_no_ha_acabado(self):
+        """«Cero partidos pendientes» no es lo mismo que «ya se jugó».
+
+        Con una sesión anterior aún sin generar, los sobres de esta se abrían
+        igual: justo lo que la espera quiere evitar.
+        """
+        uow, comp_id, round_id, equipo_a, equipo_b = await _montar()
+        await _crear_sesion_anterior(uow, comp_id)
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        reloj = _Reloj(datetime(2026, 6, 1, 5, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is False
 
 
 class TestQuienPuedeAbrirlos:

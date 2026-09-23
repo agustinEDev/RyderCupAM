@@ -1067,6 +1067,9 @@ envelopes_table = Table(
     ),
     Column("automatic", Boolean, nullable=False, default=False),
     Column("revealed", Boolean, nullable=False, default=False),
+    # Si ese capitan pidio abrirlos en cuanto esten los dos, sin esperar a la
+    # hora. Hacen falta los DOS para que valga (23 sep)
+    Column("reveal_when_both_ready", Boolean, nullable=False, default=False),
     # Uno por equipo y sesion: dos serian dos listas a la vez para el mismo
     # cruce, y nadie sabria cual manda
     UniqueConstraint("round_id", "team", name="uq_envelopes_round_team"),
@@ -1370,6 +1373,7 @@ def start_competition_mappers():
                 "_submitted_by": envelopes_table.c.submitted_by,
                 "_automatic": envelopes_table.c.automatic,
                 "_revealed": envelopes_table.c.revealed,
+                "_reveal_when_both_ready": envelopes_table.c.reveal_when_both_ready,
             },
         )
 

@@ -11,11 +11,11 @@ from uuid import UUID
 from src.modules.competition.application.dto.envelope_dto import (
     EnvelopePlayerDTO,
     EnvelopesViewDTO,
+    envelope_to_dto,
+    matchups_to_dto,
 )
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.application.use_cases.submit_envelope_use_case import _a_dto
-from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -26,22 +26,33 @@ from src.modules.user.domain.value_objects.user_id import UserId
 class GetEnvelopesUseCase:
     """Caso de uso para consultar los sobres de una sesion."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository,
+        clock=None,
+        timezone_service=None,
+    ):
         """
         Args:
             uow: Unit of Work del modulo
             user_repository: Lo pide la mesa de sobres para los handicaps
+            clock: El reloj del servidor, para el revelado del plazo
+            timezone_service: La zona del campo donde se juega
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository)
+        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service)
 
-    async def execute(self, round_id: UUID, user_id: UserId) -> EnvelopesViewDTO:
+    async def execute(
+        self, round_id: UUID, user_id: UserId, is_admin: bool = False
+    ) -> EnvelopesViewDTO:
         """
         Devuelve lo que puede ver quien pregunta.
 
         Args:
             round_id: La sesion
             user_id: Quien mira
+            is_admin: Si es administrador, que tambien puede abrirlos
 
         Returns:
             Su sobre si capitanea, si el rival entrego, y los enfrentamientos
@@ -56,6 +67,9 @@ class GetEnvelopesUseCase:
             ronda, competition = await self._desk.ronda_y_competicion(RoundId(round_id))
             await self._desk.comprobar_que_es_de_la_competicion(competition, user_id)
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
+            # Mirarlos es lo que los abre cuando llega su hora: no hay ningun
+            # proceso de fondo con el reloj, igual que la anotacion (BE #305)
+            await self._desk.revelar_si_toca(ronda, competition, sobres)
             sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
             abiertos = bool(
                 sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed()
@@ -83,10 +97,6 @@ class GetEnvelopesUseCase:
             )
             handicaps = dict(await self._desk.handicaps_de(competition, mis_jugadores))
 
-            arbitra = competition.is_creator(user_id)
-            los_dos_dentro = bool(
-                sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted()
-            )
             return EnvelopesViewDTO(
                 round_id=ronda.id.value,
                 revealed=abiertos,
@@ -97,13 +107,17 @@ class GetEnvelopesUseCase:
                 # diria que entregaron los dos y seria mentira
                 team_a_automatic=bool(sobre_a and sobre_a.automatic),
                 team_b_automatic=bool(sobre_b and sobre_b.automatic),
-                mine=_a_dto(mio) if mio and mio.is_submitted() else None,
+                mine=envelope_to_dto(mio) if mio and mio.is_submitted() else None,
                 # El del rival SOLO cuando ya estan abiertos
-                rival=_a_dto(rival) if abiertos and rival else None,
+                rival=envelope_to_dto(rival) if abiertos and rival else None,
                 rival_submitted=bool(rival and rival.is_submitted()),
-                can_reveal=(not abiertos)
-                and (arbitra or (mi_equipo is not None and los_dos_dentro)),
-                matchups=_cruzados(sobre_a, sobre_b) if abiertos else [],
+                rival_wants_early=bool(rival and rival.reveal_when_both_ready),
+                # La regla vive en un solo sitio: aqui solo se pregunta
+                can_reveal=self._desk.puede_abrirlos(
+                    competition, user_id, sobres, ronda=ronda, is_admin=is_admin
+                ),
+                reveal_scheduled_at=await self._desk.programado_para(ronda, competition),
+                matchups=matchups_to_dto(sobre_a, sobre_b) if abiertos else [],
                 my_players=[
                     EnvelopePlayerDTO(
                         user_id=uid.value,
@@ -114,11 +128,3 @@ class GetEnvelopesUseCase:
                 ],
                 player_names={str(uid.value): nombre for uid, nombre in nombres.items()},
             )
-
-
-def _cruzados(sobre_a: Envelope, sobre_b: Envelope) -> list[list[list[UUID]]]:
-    """Los enfrentamientos, cruzados por posicion."""
-    return [
-        [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]
-        for fila_a, fila_b in Envelope.pair_up(sobre_a, sobre_b)
-    ]

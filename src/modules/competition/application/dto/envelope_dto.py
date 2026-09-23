@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.modules.competition.domain.entities.envelope import Envelope
+
 
 class EnvelopeDTO(BaseModel):
     """Un sobre, con su lista dentro. Solo se devuelve a quien puede verla."""
@@ -18,6 +20,9 @@ class EnvelopeDTO(BaseModel):
     submitted: bool = Field(..., description="Si ya hay algo dentro.")
     submitted_at: datetime | None = Field(None, description="Cuando se entrego.")
     automatic: bool = Field(..., description="True si lo relleno la aplicacion.")
+    reveal_when_both_ready: bool = Field(
+        False, description="Si ese capitan pidio abrirlos en cuanto esten los dos."
+    )
 
 
 class EnvelopePlayerDTO(BaseModel):
@@ -53,10 +58,17 @@ class EnvelopesViewDTO(BaseModel):
     mine: EnvelopeDTO | None = Field(None, description="El sobre de quien pregunta, si capitanea.")
     rival: EnvelopeDTO | None = Field(None, description="El del rival, solo si estan abiertos.")
     rival_submitted: bool = Field(False, description="Si el rival ya entrego el suyo.")
+    rival_wants_early: bool = Field(
+        False, description="Si el rival pidio abrirlos sin esperar a la hora."
+    )
     # Lo dice la vista y NO el cliente: la regla —el organizador siempre, un
     # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
     # la pantalla es justo donde se desincronizan
     can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
+    # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
+    reveal_scheduled_at: datetime | None = Field(
+        None, description="Cuando se abren solos: 6 horas antes de la sesion."
+    )
     matchups: list[list[list[UUID]]] = Field(
         default_factory=list, description="Los enfrentamientos, solo si estan abiertos."
     )
@@ -81,3 +93,28 @@ class RevealEnvelopesResponseDTO(BaseModel):
     filled_automatically: list[str] = Field(
         default_factory=list, description="Los equipos cuyo sobre relleno la aplicacion."
     )
+
+
+def envelope_to_dto(sobre) -> EnvelopeDTO:
+    """El sobre tal como lo ve quien puede verlo.
+
+    Aqui y no dentro de un caso de uso: los tres lo necesitan, y tenerlo en uno
+    obligaba a los otros dos a importarle una funcion privada.
+    """
+    return EnvelopeDTO(
+        round_id=sobre.round_id.value,
+        team=sobre.team,
+        entries=[[uid.value for uid in fila] for fila in sobre.entries],
+        submitted=sobre.is_submitted(),
+        submitted_at=sobre.submitted_at,
+        automatic=sobre.automatic,
+        reveal_when_both_ready=sobre.reveal_when_both_ready,
+    )
+
+
+def matchups_to_dto(sobre_a, sobre_b) -> list[list[list[UUID]]]:
+    """Los enfrentamientos, cruzados por posicion."""
+    return [
+        [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]
+        for fila_a, fila_b in Envelope.pair_up(sobre_a, sobre_b)
+    ]

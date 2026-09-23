@@ -190,6 +190,50 @@ class TestElQueRellenaLaAplicacion:
         assert sobre.automatic is False
 
 
+class TestAbrirlosEnCuantoEstenLosDos:
+    """Decidido el 23 sep: el capitán puede marcar, al entregar, que no quiere
+    esperar a la hora. Si lo marcan LOS DOS, se abren en cuanto entra el
+    segundo; con uno solo no, que el otro tiene derecho a su plazo."""
+
+    def test_al_entregar_se_puede_pedir_que_no_espere_a_la_hora(self):
+        sobre = _sobre()
+
+        sobre.submit(
+            [[CARLA], [ANA], [DANI], [BEA]],
+            equipo=EQUIPO,
+            por=ANA,
+            ahora=AHORA,
+            sin_esperar=True,
+        )
+
+        assert sobre.reveal_when_both_ready is True
+
+    def test_por_defecto_se_espera_a_la_hora(self):
+        sobre = _sobre()
+
+        sobre.submit([[CARLA], [ANA], [DANI], [BEA]], equipo=EQUIPO, por=ANA, ahora=AHORA)
+
+        assert sobre.reveal_when_both_ready is False
+
+    def test_se_puede_cambiar_de_idea_al_corregir(self):
+        sobre = _sobre()
+        sobre.submit(
+            [[CARLA], [ANA], [DANI], [BEA]], equipo=EQUIPO, por=ANA, ahora=AHORA, sin_esperar=True
+        )
+
+        sobre.submit([[ANA], [BEA], [CARLA], [DANI]], equipo=EQUIPO, por=ANA, ahora=AHORA)
+
+        assert sobre.reveal_when_both_ready is False
+
+    def test_lo_que_rellena_la_aplicacion_no_pide_nada(self):
+        """Ese capitán no entregó: no ha pedido adelantar nada."""
+        sobre = _sobre()
+
+        sobre.fill([(DANI, 24), (ANA, 5), (BEA, 12), (CARLA, 18)], ahora=AHORA)
+
+        assert sobre.reveal_when_both_ready is False
+
+
 class TestQueVeQuien:
     def test_sin_abrir_no_se_ensena_lo_que_hay_dentro(self):
         """Ver la lista del rival antes de tiempo es el juego entero."""

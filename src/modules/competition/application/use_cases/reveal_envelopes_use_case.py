@@ -11,12 +11,14 @@ que se olvido (decidido el 20 sep).
 from datetime import UTC, datetime
 from uuid import UUID
 
-from src.modules.competition.application.dto.envelope_dto import RevealEnvelopesResponseDTO
+from src.modules.competition.application.dto.envelope_dto import (
+    RevealEnvelopesResponseDTO,
+    matchups_to_dto,
+)
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
 )
-from src.modules.competition.application.use_cases.get_envelopes_use_case import _cruzados
 from src.modules.competition.domain.entities.envelope import EnvelopeAlreadyRevealedError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -76,6 +78,7 @@ class RevealEnvelopesUseCase:
                     "Los sobres los abre el organizador o uno de los capitanes"
                 )
             if not arbitra:
+                # La misma regla que le cuenta la vista a la pantalla
                 # Un capitan no puede forzar que el rival se rellene solo: el
                 # relleno automatico es PREDECIBLE —por handicap—, asi que
                 # entregar y abrir de inmediato deja armar la lista propia para
@@ -101,7 +104,7 @@ class RevealEnvelopesUseCase:
 
             return RevealEnvelopesResponseDTO(
                 round_id=ronda.id.value,
-                matchups=_cruzados(sobres["A"], sobres["B"]),
+                matchups=matchups_to_dto(sobres["A"], sobres["B"]),
                 filled_automatically=automaticos,
             )
 

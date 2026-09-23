@@ -10,18 +10,16 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
-from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO
+from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO, envelope_to_dto
+from src.modules.competition.application.exceptions import RoundNotFoundError
 from src.modules.competition.application.services.envelope_desk import (
     EnvelopeDesk,
-    RoundAlreadyScheduledError,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-__all__ = ["NotATeamCaptainError", "RoundAlreadyScheduledError", "SubmitEnvelopeUseCase"]
 
 
 class NotATeamCaptainError(Exception):
@@ -33,17 +31,30 @@ class NotATeamCaptainError(Exception):
 class SubmitEnvelopeUseCase:
     """Caso de uso para entregar —o corregir— el sobre de un equipo."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository,
+        clock=None,
+        timezone_service=None,
+    ):
         """
         Args:
             uow: Unit of Work del modulo
             user_repository: Lo pide la mesa de sobres para los handicaps
+            clock: El reloj del servidor, para saber si el plazo ya venció
+            timezone_service: La zona del campo. Sin ella el plazo no existe y
+                solo se abren los sobres a mano
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository)
+        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service)
 
     async def execute(
-        self, round_id: UUID, user_id: UserId, entries: Sequence[Sequence[str | UUID]]
+        self,
+        round_id: UUID,
+        user_id: UserId,
+        entries: Sequence[Sequence[str | UUID]],
+        sin_esperar: bool = False,
     ) -> EnvelopeDTO:
         """
         Guarda la lista del capitan para esa sesion.
@@ -53,6 +64,8 @@ class SubmitEnvelopeUseCase:
             user_id: Quien entrega. De aqui sale el equipo: pedirlo en el
                 cuerpo dejaria entregar el sobre del rival
             entries: Las filas, en orden
+            sin_esperar: Si este capitan pide abrirlos en cuanto esten los dos,
+                sin aguardar a la hora. Hacen falta los DOS para que valga
 
         Returns:
             El sobre tal como queda
@@ -76,25 +89,28 @@ class SubmitEnvelopeUseCase:
             if team is None:
                 raise NotATeamCaptainError("Solo los capitanes entregan su sobre")
 
+            # El plazo se mira ANTES de aceptar: si ya venció, los sobres se
+            # abren y la entrega llega tarde. Si no, entregar después de la
+            # hora colaba mientras nadie abriera la pantalla
+            sobres_de_la_sesion = {
+                s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)
+            }
+            await self._desk.revelar_si_toca(ronda, competition, sobres_de_la_sesion)
+
             sobre = await self._desk.sobre_de(ronda, team, crear=True)
+            if sobre is None:  # `crear=True` siempre devuelve uno; esto es para el tipo
+                raise RoundNotFoundError("No se pudo preparar el sobre de esta sesión")
             jugadores = await self._desk.jugadores_de(competition, team)
             sobre.submit(
                 [[UserId(UUID(str(uid))) for uid in fila] for fila in entries],
                 equipo=jugadores,
                 por=user_id,
                 ahora=datetime.now(UTC).replace(tzinfo=None),
+                sin_esperar=sin_esperar,
             )
             await self._uow.envelopes.update(sobre)
-            return _a_dto(sobre)
-
-
-def _a_dto(sobre) -> EnvelopeDTO:
-    """El sobre tal como lo ve quien puede verlo."""
-    return EnvelopeDTO(
-        round_id=sobre.round_id.value,
-        team=sobre.team,
-        entries=[[uid.value for uid in fila] for fila in sobre.entries],
-        submitted=sobre.is_submitted(),
-        submitted_at=sobre.submitted_at,
-        automatic=sobre.automatic,
-    )
+            # Y despues: si los dos pidieron no esperar, el segundo en entregar
+            # dispara la apertura
+            sobres_de_la_sesion[team] = sobre
+            await self._desk.revelar_si_toca(ronda, competition, sobres_de_la_sesion)
+            return envelope_to_dto(sobre)
