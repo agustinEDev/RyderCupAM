@@ -8,8 +8,12 @@ entero—. Abiertos, los ve todo el mundo con sus enfrentamientos.
 
 from uuid import UUID
 
-from src.modules.competition.application.dto.envelope_dto import EnvelopesViewDTO
+from src.modules.competition.application.dto.envelope_dto import (
+    EnvelopePlayerDTO,
+    EnvelopesViewDTO,
+)
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.use_cases.submit_envelope_use_case import _a_dto
 from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -61,6 +65,24 @@ class GetEnvelopesUseCase:
             mio = sobres.get(mi_equipo) if mi_equipo else None
             rival = sobres.get("B" if mi_equipo == "A" else "A") if mi_equipo else None
 
+            mis_jugadores = (
+                await self._desk.jugadores_de(competition, mi_equipo) if mi_equipo else []
+            )
+            aparecen = [
+                *mis_jugadores,
+                *(
+                    uid
+                    for sobre in sobres.values()
+                    if not sobre.is_sealed()
+                    for fila in sobre.entries
+                    for uid in fila
+                ),
+            ]
+            nombres = await PlayerNames.de_la_competicion(
+                list(dict.fromkeys(aparecen)), competition.id, self._desk.user_repository, self._uow
+            )
+            handicaps = dict(await self._desk.handicaps_de(competition, mis_jugadores))
+
             return EnvelopesViewDTO(
                 round_id=ronda.id.value,
                 revealed=abiertos,
@@ -76,6 +98,15 @@ class GetEnvelopesUseCase:
                 rival=_a_dto(rival) if abiertos and rival else None,
                 rival_submitted=bool(rival and rival.is_submitted()),
                 matchups=_cruzados(sobre_a, sobre_b) if abiertos else [],
+                my_players=[
+                    EnvelopePlayerDTO(
+                        user_id=uid.value,
+                        name=nombres.get(uid, ""),
+                        handicap=handicaps.get(uid),
+                    )
+                    for uid in mis_jugadores
+                ],
+                player_names={str(uid.value): nombre for uid, nombre in nombres.items()},
             )
 
 

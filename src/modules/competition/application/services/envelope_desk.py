@@ -45,6 +45,11 @@ class EnvelopeDesk:
         self._uow = uow
         self._user_repo = user_repository
 
+    @property
+    def user_repository(self) -> UserRepositoryInterface:
+        """De donde salen nombres y handicaps."""
+        return self._user_repo
+
     async def ronda_y_competicion(
         self, round_id: RoundId, bloquear: bool = False
     ) -> tuple[Round, Competition]:

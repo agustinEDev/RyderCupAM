@@ -108,14 +108,20 @@ class _RepoUsuarios:
             self.id = user_id
             self.handicap = handicap
 
+        def display_name_or_legal(self, nombre_legal: bool) -> str:
+            return f"Jugador {str(self.id.value)[:4]}"
+
     async def find_by_id(self, user_id):
         handicap = _HANDICAPS_DE_PERFIL.get(user_id)
-        if handicap is None:
-            return None
-        return self._Usuario(user_id, _Handicap(handicap))
+        return self._Usuario(user_id, _Handicap(handicap) if handicap is not None else None)
 
     async def find_by_ids(self, user_ids):
-        return [u for u in (await self.find_by_id(uid) for uid in user_ids) if u]
+        encontrados = []
+        for uid in user_ids:
+            usuario = await self.find_by_id(uid)
+            if usuario:
+                encontrados.append(usuario)
+        return encontrados
 
 
 class _Handicap:
@@ -318,6 +324,45 @@ class TestCuandoFaltanLosEquipos:
 
         with pytest.raises(EmptyEnvelopeError):
             await _entregar(uow).execute(round_id.value, equipo_a[0], [])
+
+
+class TestLosNombresQueSeVen:
+    async def test_el_capitan_recibe_a_los_suyos_con_nombre_y_handicap(self):
+        """Es lo único con lo que ordena, y de los UUID no sale ningún nombre.
+
+        Sin esto la pantalla tendría que pedir aparte las inscripciones —una
+        llamada más y otra ronda de permisos— para pintar su propia lista.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        for jugador in equipo_a:
+            await _dar_handicap_de_usuario(uow, jugador, Decimal("12"))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert {j.user_id for j in vista.my_players} == {uid.value for uid in equipo_a}
+        assert all(j.name and j.handicap is not None for j in vista.my_players)
+
+    async def test_quien_no_capitanea_no_recibe_ninguna_lista(self):
+        """No tiene sobre que rellenar: los nombres no le hacen falta."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.my_players == []
+
+    async def test_abiertos_los_enfrentamientos_llevan_los_nombres(self):
+        """Quien los mira no tiene de dónde sacarlos: vería dos columnas de UUID."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar()
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.player_names[str(equipo_a[1].value)]
+        assert vista.player_names[str(equipo_b[0].value)]
 
 
 class TestQuienVeQue:

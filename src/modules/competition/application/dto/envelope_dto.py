@@ -1,6 +1,7 @@
 """DTOs de los sobres (FE #655)."""
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -17,6 +18,18 @@ class EnvelopeDTO(BaseModel):
     submitted: bool = Field(..., description="Si ya hay algo dentro.")
     submitted_at: datetime | None = Field(None, description="Cuando se entrego.")
     automatic: bool = Field(..., description="True si lo relleno la aplicacion.")
+
+
+class EnvelopePlayerDTO(BaseModel):
+    """Un jugador del equipo de quien pregunta, para armar su sobre.
+
+    Nombre y handicap, como en la sala de draft: es con lo que se ordena, y
+    cualquier otro dato convertiria la decision en un informe.
+    """
+
+    user_id: UUID = Field(..., description="ID del jugador.")
+    name: str = Field(..., description="Nombre con el que se le pinta.")
+    handicap: Decimal | None = Field(None, description="Handicap que cuenta en esta competicion.")
 
 
 class EnvelopesViewDTO(BaseModel):
@@ -42,6 +55,15 @@ class EnvelopesViewDTO(BaseModel):
     rival_submitted: bool = Field(False, description="Si el rival ya entrego el suyo.")
     matchups: list[list[list[UUID]]] = Field(
         default_factory=list, description="Los enfrentamientos, solo si estan abiertos."
+    )
+    # Los nombres viajan con la vista: de un UUID no sale ninguno, y sin esto
+    # la pantalla tendria que pedir aparte las inscripciones
+    my_players: list[EnvelopePlayerDTO] = Field(
+        default_factory=list,
+        description="Los del equipo de quien pregunta, si capitanea alguno.",
+    )
+    player_names: dict[str, str] = Field(
+        default_factory=dict, description="Nombre de cada jugador que aparece en la vista."
     )
 
 
