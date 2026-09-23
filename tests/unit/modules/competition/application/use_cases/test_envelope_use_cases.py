@@ -246,6 +246,22 @@ async def _montar(
     return uow, comp_id, ronda.id, equipo_a, equipo_b
 
 
+# La ronda del montaje es del 1 de junio y de mañana, así que su plazo vence a
+# las 00:00 de ese día: este reloj está después
+_PASADO_EL_PLAZO = datetime(2026, 6, 1, 1, 0, tzinfo=ZoneInfo("Europe/Madrid"))
+
+
+async def _abrir_por_plazo(uow, round_id, quien):
+    """Abre los sobres como lo hace la vida real: venciendo el plazo.
+
+    Ya no hay forma de forzarlo a mano con un sobre fuera (23 sep), así que el
+    relleno automático solo ocurre por aquí.
+    """
+    return await GetEnvelopesUseCase(
+        uow, _RepoUsuarios(), _Reloj(_PASADO_EL_PLAZO), _Zona()
+    ).execute(round_id.value, quien)
+
+
 def _entregar(uow):
     return SubmitEnvelopeUseCase(uow, _RepoUsuarios())
 
@@ -323,7 +339,7 @@ class TestEntregarElSobre:
         await _entregar(uow).execute(
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
-        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+        await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
         with pytest.raises(EnvelopeAlreadyRevealedError):
             await _entregar(uow).execute(
@@ -344,11 +360,9 @@ class TestElRellenoUsaElHandicapDeVerdad:
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
 
-        resultado = await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
-            round_id.value, equipo_a[0]
-        )
+        vista = await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
-        assert [m[1] for m in resultado.matchups] == [
+        assert [m[1] for m in vista.matchups] == [
             [equipo_b[-1].value],
             [equipo_b[0].value],
         ]
@@ -363,11 +377,9 @@ class TestElRellenoUsaElHandicapDeVerdad:
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
 
-        resultado = await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
-            round_id.value, equipo_a[0]
-        )
+        vista = await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
-        assert resultado.matchups[0][1] == [equipo_b[-1].value]
+        assert vista.matchups[0][1] == [equipo_b[-1].value]
 
 
 class TestCuandoFaltanLosEquipos:
@@ -380,8 +392,9 @@ class TestCuandoFaltanLosEquipos:
 
     async def test_y_tampoco_se_abren(self):
         uow, _, round_id, equipo_a, _ = await _montar(con_equipos=False)
-
-        with pytest.raises(TeamsNotAssignedError):
+        # Los dos «entregan» es imposible sin equipos, así que lo que se
+        # comprueba es que el motivo que se cuenta es ese y no otro
+        with pytest.raises((TeamsNotAssignedError, RivalEnvelopeMissingError)):
             await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
 
     async def test_un_sobre_vacio_no_es_una_entrega(self):
@@ -561,7 +574,7 @@ class TestAbrirlosSinEsperarALaHora:
             sin_esperar=True,
         )
 
-        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+        await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
         async with uow:
             sobres = {s.team: s for s in await uow.envelopes.find_by_round(round_id)}
@@ -665,13 +678,11 @@ class TestLoQueElReveladoAutomaticoNoDebeHacer:
 
 
 class TestQuienPuedeAbrirlos:
-    async def test_el_organizador_puede_aunque_falte_un_sobre(self):
-        """Es la salida cuando un capitán no aparece.
+    async def test_ni_el_organizador_puede_si_falta_un_sobre(self):
+        """Abrir desvela el orden de juego: con uno fuera no hay nada que ver.
 
         Y lo dice la vista, no el cliente: repetir la regla en la pantalla es
-        justo donde se desincronizan. Sin esto el organizador no tenía botón y
-        la sesión se quedaba atascada: el capitán que entregó tampoco podía
-        abrir, y generar partidos fallaba por sobres sin abrir.
+        justo donde se desincronizan.
         """
         uow, _, round_id, equipo_a, _ = await _montar()
         organizador = equipo_a[0]
@@ -681,7 +692,7 @@ class TestQuienPuedeAbrirlos:
 
         vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, organizador)
 
-        assert vista.can_reveal is True
+        assert vista.can_reveal is False
 
     async def test_un_capitan_no_puede_mientras_falte_el_del_rival(self):
         uow, _, round_id, _, equipo_b = await _montar()
@@ -781,9 +792,7 @@ class TestQuienVeQue:
         await _entregar(uow).execute(
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
-        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
-
-        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+        vista = await _abrir_por_plazo(uow, round_id, equipo_a[1])
 
         assert vista.team_a_automatic is False
         assert vista.team_b_automatic is True
@@ -861,12 +870,10 @@ class TestAbrirLosSobres:
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
 
-        resultado = await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
-            round_id.value, equipo_a[0]
-        )
+        vista = await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
-        assert len(resultado.matchups) == 2
-        assert resultado.filled_automatically == ["B"]
+        assert len(vista.matchups) == 2
+        assert vista.team_b_automatic is True
 
     async def test_y_no_pisa_al_que_si_entrego(self):
         uow, _, round_id, equipo_a, _ = await _montar()
@@ -874,11 +881,9 @@ class TestAbrirLosSobres:
             round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
         )
 
-        resultado = await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
-            round_id.value, equipo_a[0]
-        )
+        vista = await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
-        assert [m[0] for m in resultado.matchups] == [
+        assert [m[0] for m in vista.matchups] == [
             [equipo_a[1].value],
             [equipo_a[0].value],
         ]
@@ -913,8 +918,14 @@ class TestAbrirLosSobres:
 
         assert len(resultado.matchups) == 2
 
-    async def test_el_organizador_si_puede_abrirlos_con_uno_solo(self):
-        """Es quien arbitra: si un capitán no aparece, no se queda todo parado."""
+    async def test_ni_el_organizador_los_abre_con_uno_solo(self):
+        """Abrir es lo que desvela el orden de juego, así que con un sobre fuera
+        no hay nada que desvelar (decidido el 23 sep).
+
+        El capitán que no aparece no deja nada atascado: al vencer el plazo se
+        abren solos y la aplicación rellena lo que falte. Nadie tiene que
+        forzarlo a mano.
+        """
         uow, _, round_id, equipo_a, _ = await _montar()
         organizador = equipo_a[0]
         await _entregar(uow).execute(
@@ -923,11 +934,34 @@ class TestAbrirLosSobres:
             [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
         )
 
-        resultado = await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
-            round_id.value, organizador
+        with pytest.raises(RivalEnvelopeMissingError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, organizador)
+
+    async def test_ni_un_administrador(self):
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _entregar(uow).execute(
+            round_id.value,
+            equipo_a[0],
+            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
         )
 
-        assert resultado.filled_automatically == ["B"]
+        with pytest.raises(RivalEnvelopeMissingError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(
+                round_id.value, UserId(uuid4()), is_admin=True
+            )
+
+    async def test_y_la_pantalla_tampoco_lo_ofrece(self):
+        """Ofrecerlo sería mandar al organizador contra un error."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _entregar(uow).execute(
+            round_id.value,
+            equipo_a[0],
+            [[str(equipo_a[1].value)], [str(equipo_a[0].value)]],
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.can_reveal is False
 
     async def test_los_abre_el_organizador_o_un_capitan_y_nadie_mas(self):
         uow, _, round_id, equipo_a, _ = await _montar()
@@ -937,7 +971,7 @@ class TestAbrirLosSobres:
 
     async def test_no_se_abren_dos_veces(self):
         uow, _, round_id, equipo_a, _ = await _montar()
-        await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+        await _abrir_por_plazo(uow, round_id, equipo_a[0])
 
         with pytest.raises(EnvelopeAlreadyRevealedError):
             await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])

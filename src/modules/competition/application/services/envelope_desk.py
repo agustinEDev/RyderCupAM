@@ -260,10 +260,15 @@ class EnvelopeDesk:
     ) -> bool:
         """Si esa persona puede abrir los sobres AHORA.
 
-        El organizador siempre —es quien arbitra, y si un capitan no aparece no
-        se queda todo parado—; un capitan solo con los dos sobres dentro,
-        porque el relleno automatico es predecible y abrir antes le dejaria
-        armar su lista para ganar todos los cruces.
+        **Hacen falta los dos sobres dentro, sea quien sea** (decidido el 23
+        sep): abrir es lo que desvela el orden de juego, y con uno fuera no hay
+        nada que desvelar. Ni el organizador ni un administrador lo fuerzan.
+
+        El capitan que no aparece no deja nada atascado: al vencer el plazo se
+        abren solos y la aplicacion rellena lo que falte.
+
+        Quien: el organizador, un administrador o uno de los dos capitanes;
+        quien solo mira, no.
 
         Vive aqui y no en cada caso de uso: la comprobacion de verdad y lo que
         la vista le cuenta a la pantalla tienen que decir lo mismo.
@@ -275,9 +280,8 @@ class EnvelopeDesk:
         # ofrecerlo seria mandar a la pantalla contra un 400
         if ronda is not None and ronda.status in _CON_PARTIDOS_YA_HECHOS:
             return False
-        if is_admin or competition.is_creator(user_id):
-            return True
-        if self.equipo_de(competition, user_id) is None:
+        arbitra = is_admin or competition.is_creator(user_id)
+        if not arbitra and self.equipo_de(competition, user_id) is None:
             return False
         return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
 

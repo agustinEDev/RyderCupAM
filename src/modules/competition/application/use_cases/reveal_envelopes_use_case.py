@@ -62,8 +62,7 @@ class RevealEnvelopesUseCase:
         Raises:
             RoundNotFoundError: Si la sesion no existe
             NotCompetitionCreatorError: Si no es el organizador ni un capitan
-            RivalEnvelopeMissingError: Si los abre un capitan y el rival no ha
-                entregado todavia
+            RivalEnvelopeMissingError: Si falta algun sobre por entregar
             EnvelopeAlreadyRevealedError: Si ya estaban abiertos
         """
         async with self._uow:
@@ -77,15 +76,18 @@ class RevealEnvelopesUseCase:
                 raise NotCompetitionCreatorError(
                     "Los sobres los abre el organizador o uno de los capitanes"
                 )
-            if not arbitra:
-                # La misma regla que le cuenta la vista a la pantalla
-                # Un capitan no puede forzar que el rival se rellene solo: el
-                # relleno automatico es PREDECIBLE —por handicap—, asi que
-                # entregar y abrir de inmediato deja armar la lista propia para
-                # ganar todos los cruces. El azar de esto esta en no saber que
-                # hizo el otro. El organizador si puede: es quien arbitra, y si
-                # un capitan no aparece no se queda todo parado
-                await self._comprobar_que_los_dos_entregaron(ronda)
+            # Hacen falta los dos sobres dentro, sea quien sea: abrir es lo que
+            # desvela el orden de juego, y con uno fuera no hay nada que
+            # desvelar. Ademas, el relleno automatico es PREDECIBLE —por
+            # handicap—, asi que entregar y abrir de inmediato dejaria armar la
+            # lista propia para ganar todos los cruces.
+            #
+            # El capitan que no aparece no deja nada atascado: al vencer el
+            # plazo se abren solos y la aplicacion rellena lo que falte.
+            #
+            # Unos sobres ya abiertos pasan por aqui —rellenar deja entradas
+            # dentro—, y el error de «ya estaban abiertos» lo da el bucle
+            await self._comprobar_que_los_dos_entregaron(ronda)
 
             ahora = datetime.now(UTC).replace(tzinfo=None)
             automaticos = []
@@ -121,5 +123,6 @@ class RevealEnvelopesUseCase:
         }
         if entregados != {"A", "B"}:
             raise RivalEnvelopeMissingError(
-                "El otro capitán todavía no ha entregado su sobre: los abre el organizador"
+                "Falta un sobre por entregar: hasta que estén los dos no hay nada que abrir. "
+                "Al vencer el plazo se abren solos"
             )
