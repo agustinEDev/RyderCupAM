@@ -61,10 +61,15 @@ class EnvelopesViewDTO(BaseModel):
     rival_wants_early: bool = Field(
         False, description="Si el rival pidio abrirlos sin esperar a la hora."
     )
-    # Lo dice la vista y NO el cliente: la regla —el organizador siempre, un
-    # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
-    # la pantalla es justo donde se desincronizan
+    # Lo dice la vista y NO el cliente: la regla —hacen falta los dos sobres
+    # dentro, sea quien sea— vive en un sitio, y repetirla en la pantalla es
+    # justo donde se desincronizan
     can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
+    # Idem: que el front sepa «estos formatos son de parejas» es duplicar una
+    # regla del agregado. Lo que la pantalla necesita es cuantos van por fila
+    players_per_row: int = Field(
+        1, description="Jugadores por fila: 1 en individuales, 2 en los formatos de parejas."
+    )
     # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
     reveal_scheduled_at: datetime | None = Field(
         None, description="Cuando se abren solos: 6 horas antes de la sesion."

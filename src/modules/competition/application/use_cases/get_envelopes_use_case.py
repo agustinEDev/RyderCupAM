@@ -16,6 +16,7 @@ from src.modules.competition.application.dto.envelope_dto import (
 )
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -114,6 +115,7 @@ class GetEnvelopesUseCase:
                 rival_submitted=bool(rival and rival.is_submitted()),
                 rival_wants_early=bool(rival and rival.reveal_when_both_ready),
                 # La regla vive en un solo sitio: aqui solo se pregunta
+                players_per_row=Envelope.players_per_row_for(ronda.match_format),
                 can_reveal=self._desk.puede_abrirlos(
                     competition,
                     user_id,

@@ -872,6 +872,31 @@ class TestCuandoNoHayPlazoQueVencer:
         assert vista.reveal_scheduled_at is None
         assert vista.can_reveal is True
 
+class TestLaVistaDiceComoSeRellena:
+    """La pantalla no puede saber sola si esa sesión va de uno en uno.
+
+    Que el front repita «estos formatos son de parejas» es duplicar una regla
+    que ya vive en el agregado, y es donde se desincronizan.
+    """
+
+    async def test_en_individuales_va_uno_por_fila(self):
+        uow, _, round_id, equipo_a, _ = await _montar()
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.players_per_row == 1
+
+    async def test_y_en_parejas_van_dos(self):
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.players_per_row == 2
+
 
 class TestQuienVeQue:
     async def test_el_capitan_ve_el_suyo_y_no_el_del_rival(self):
