@@ -518,6 +518,15 @@ class CompetitionResponseDTO(BaseModel):
             "en los listados, donde no se calcula."
         ),
     )
+    actual_team_assignment: str | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: como se repartieron los equipos DE VERDAD. La "
+            "competicion guarda el modo con el que nacio —del tipo Ryder sale "
+            "MANUAL—, asi que unos equipos elegidos en la sala de draft salian "
+            "como repartidos a mano. Null mientras no haya reparto."
+        ),
+    )
     can_delete: bool | None = Field(
         None,
         description=(

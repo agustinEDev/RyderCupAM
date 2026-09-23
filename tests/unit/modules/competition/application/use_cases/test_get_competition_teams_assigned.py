@@ -84,3 +84,43 @@ async def test_el_reparto_de_otra_competicion_no_cuenta():
         await uow.commit()
 
     assert await GetCompetitionUseCase(uow).tiene_equipos(CompetitionId(segunda.id)) is False
+
+
+async def test_sin_reparto_no_hay_modo_que_contar():
+    """
+    Given: una competición sin equipos repartidos
+    When: se pregunta cómo se repartieron
+    Then: todavía no se repartieron de ninguna manera
+    """
+    uow = InMemoryUnitOfWork()
+    creada = await create_competition(uow, UserId(uuid4()))
+
+    assert await GetCompetitionUseCase(uow).reparto_real(CompetitionId(creada.id)) is None
+
+
+async def test_manda_como_se_repartieron_de_verdad():
+    """
+    Given: unos equipos salidos de una sala de draft
+    When: se pregunta cómo se repartieron
+    Then: DRAFT, no lo que la competición lleve configurado
+
+    La competición guarda el modo con el que NACIÓ —del tipo Ryder sale
+    MANUAL—, así que la ficha decía «Asignación de Equipos: Manual» de unos
+    equipos que eligieron los capitanes uno a uno.
+    """
+    uow = InMemoryUnitOfWork()
+    creada = await create_competition(uow, UserId(uuid4()))
+    async with uow:
+        await uow.team_assignments.add(
+            TeamAssignment.create(
+                competition_id=CompetitionId(creada.id),
+                mode=TeamAssignmentMode.DRAFT,
+                team_a_player_ids=[UserId(uuid4())],
+                team_b_player_ids=[UserId(uuid4())],
+            )
+        )
+        await uow.commit()
+
+    reparto = await GetCompetitionUseCase(uow).reparto_real(CompetitionId(creada.id))
+
+    assert reparto == "DRAFT"
