@@ -5,12 +5,17 @@ Entregar, mirar y abrir necesitan lo mismo: la ronda, la competicion a la que
 pertenece, y quien es capitan de que equipo.
 """
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
+)
+from src.modules.competition.application.ports.competition_timezone import (
+    ICompetitionTimezone,
 )
 from src.modules.competition.application.services.team_roster import TeamRoster
 from src.modules.competition.domain.entities.competition import (
@@ -22,9 +27,16 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.envelope_reveal_service import (
+    EnvelopeRevealService,
+)
+from src.modules.competition.domain.services.scoring_opening_service import (
+    ScoringOpeningService,
+)
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -38,6 +50,14 @@ _CON_PARTIDOS_YA_HECHOS = (
 )
 
 
+# El orden de las sesiones dentro de un dia
+_ORDEN_DE_SESION = {
+    SessionType.MORNING: 0,
+    SessionType.AFTERNOON: 1,
+    SessionType.EVENING: 2,
+}
+
+
 class RoundAlreadyScheduledError(Exception):
     """Esa sesion ya tiene sus partidos generados."""
 
@@ -48,16 +68,33 @@ class EnvelopeDesk:
     """La mesa donde se reciben y se abren los sobres."""
 
     def __init__(
-        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface,
+        clock: Callable[[], datetime] | None = None,
+        timezone_service: ICompetitionTimezone | None = None,
     ):
         """
         Args:
             uow: Unit of Work del modulo
             user_repository: De donde sale el handicap de quien no tiene uno
                 propio en esta competicion, que es casi todo el mundo
+            clock: El reloj del SERVIDOR, para el revelado de las 12 horas. Se
+                inyecta para poder moverlo en los tests, nunca para que lo
+                ponga el cliente
+            timezone_service: La zona del campo donde se juega. Sin ella no hay
+                hora que calcular y los sobres los abre el organizador a mano
         """
         self._uow = uow
         self._user_repo = user_repository
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._timezone = timezone_service
+
+    @property
+    def ahora(self) -> datetime:
+        """La hora del servidor, con huso: se compara con horas de campo."""
+        momento = self._clock()
+        return momento if momento.tzinfo else momento.replace(tzinfo=UTC)
 
     @property
     def user_repository(self) -> UserRepositoryInterface:
@@ -207,3 +244,93 @@ class EnvelopeDesk:
             )
             await self._uow.envelopes.add(sobre)
         return sobre
+
+    def puede_abrirlos(
+        self, competition: Competition, user_id: UserId, sobres: dict[str, Envelope]
+    ) -> bool:
+        """Si esa persona puede abrir los sobres AHORA.
+
+        El organizador siempre —es quien arbitra, y si un capitan no aparece no
+        se queda todo parado—; un capitan solo con los dos sobres dentro,
+        porque el relleno automatico es predecible y abrir antes le dejaria
+        armar su lista para ganar todos los cruces.
+
+        Vive aqui y no en cada caso de uso: la comprobacion de verdad y lo que
+        la vista le cuenta a la pantalla tienen que decir lo mismo.
+        """
+        sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
+        if sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed():
+            return False
+        if competition.is_creator(user_id):
+            return True
+        if self.equipo_de(competition, user_id) is None:
+            return False
+        return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
+
+    async def programado_para(self, ronda: Round, competition: Competition) -> datetime | None:
+        """A que hora se abren solos los sobres de esa sesion."""
+        if self._timezone is None:
+            return None
+        zona = await self._timezone.for_competition(competition)
+        return EnvelopeRevealService.scheduled_for(ronda.round_date, ronda.session_type, zona)
+
+    async def revelar_si_toca(
+        self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
+    ) -> bool:
+        """Abre los sobres si ya toca, y dice si los ha abierto.
+
+        Lo resuelve quien mira, como la anotacion se abre sola al llegar el
+        primer golpe (BE #305): no hay ningun proceso de fondo mirando el reloj.
+        """
+        sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
+        if sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed():
+            return False
+
+        programado = await self.programado_para(ronda, competition)
+        if programado is None:
+            return False
+
+        zona = await self._timezone.for_competition(competition)
+        comienzo = ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
+        anterior_acabo = EnvelopeRevealService.previous_session_is_over(
+            await self._partidos_pendientes_de_la_anterior(ronda, competition),
+            comienzo,
+            self.ahora,
+        )
+        if not EnvelopeRevealService.is_due(programado, anterior_acabo, self.ahora):
+            return False
+
+        ahora_sin_huso = self.ahora.replace(tzinfo=None)
+        for team in ("A", "B"):
+            sobre = await self.sobre_de(ronda, team, crear=True)
+            if sobre is None:  # `crear=True` siempre devuelve uno; esto es para el tipo
+                continue
+            if not sobre.is_submitted():
+                jugadores = await self.jugadores_de(competition, team)
+                sobre.fill(await self.handicaps_de(competition, jugadores), ahora=ahora_sin_huso)
+            sobre.reveal()
+            await self._uow.envelopes.update(sobre)
+            sobres[team] = sobre
+        return True
+
+    async def _partidos_pendientes_de_la_anterior(
+        self, ronda: Round, competition: Competition
+    ) -> int | None:
+        """Cuantos partidos le quedan por terminar a la sesion anterior.
+
+        Devuelve None cuando esta es la primera del torneo: ahi manda el reloj.
+        """
+        rondas = sorted(
+            await self._uow.rounds.find_by_competition(competition.id),
+            key=lambda r: (r.round_date, _ORDEN_DE_SESION.get(r.session_type, 0)),
+        )
+        anteriores = [
+            r
+            for r in rondas
+            if (r.round_date, _ORDEN_DE_SESION.get(r.session_type, 0))
+            < (ronda.round_date, _ORDEN_DE_SESION.get(ronda.session_type, 0))
+        ]
+        if not anteriores:
+            return None
+        partidos = await self._uow.matches.find_by_round(anteriores[-1].id)
+        return sum(1 for m in partidos if not m.status.is_finished())

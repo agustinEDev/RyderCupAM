@@ -15,8 +15,10 @@ Las decisiones del 20 sep que fijan esta tabla:
   como lo hace la Ryder de verdad.
 """
 
+from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -24,6 +26,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
+)
+from src.modules.competition.application.services.envelope_desk import (
+    RoundAlreadyScheduledError,
 )
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopePairings,
@@ -39,7 +44,6 @@ from src.modules.competition.application.use_cases.reveal_envelopes_use_case imp
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
-    RoundAlreadyScheduledError,
     SubmitEnvelopeUseCase,
 )
 from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
@@ -112,6 +116,26 @@ async def _dar_handicap_propio(uow, competition_id, user_id, handicap):
 _HANDICAPS_DE_PERFIL: dict = {}
 
 
+class _Reloj:
+    """El reloj del servidor, que en los tests se mueve a mano."""
+
+    def __init__(self, ahora):
+        self._ahora = ahora
+
+    def __call__(self):
+        return self._ahora
+
+
+class _Zona:
+    """La zona del campo donde se juega."""
+
+    def __init__(self, zona="Europe/Madrid"):
+        self._zona = zona
+
+    async def for_competition(self, competition):
+        return self._zona
+
+
 class _RepoUsuarios:
     """Un repositorio de usuarios con el hándicap que tenga cada uno."""
 
@@ -144,7 +168,10 @@ class _Handicap:
 
 
 async def _montar(
-    formato: MatchFormat = MatchFormat.SINGLES, jugadores: int = 4, con_equipos: bool = True
+    formato: MatchFormat = MatchFormat.SINGLES,
+    jugadores: int = 4,
+    con_equipos: bool = True,
+    con_zona: bool = False,
 ):
     """Una cerrada con equipos repartidos, sus dos capitanes y una ronda.
 
@@ -379,6 +406,71 @@ class TestLosNombresQueSeVen:
 
         assert vista.player_names[str(equipo_a[1].value)]
         assert vista.player_names[str(equipo_b[0].value)]
+
+
+class TestElRevelado12HorasAntes:
+    async def test_llegada_la_hora_se_abren_solos_al_mirarlos(self):
+        """Como la anotación, que se abre sola al llegar el primer golpe: no hay
+        proceso de fondo mirando el reloj, lo resuelve quien mira."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar(con_zona=True)
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        # La sesión es de mañana: sus sobres se abren a las 18:00 del día anterior
+        # Con huso explícito: una hora «pelada» se lee como UTC, y las 17:00 UTC
+        # ya son las 19:00 en Madrid
+        reloj = _Reloj(datetime(2026, 5, 31, 18, 30, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is True
+        assert len(vista.matchups) == 2
+
+    async def test_antes_de_esa_hora_siguen_cerrados(self):
+        uow, _, round_id, equipo_a, equipo_b = await _montar(con_zona=True)
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        reloj = _Reloj(datetime(2026, 5, 31, 17, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is False
+        assert vista.matchups == []
+
+    async def test_la_vista_dice_a_que_hora_se_abren(self):
+        """Para que la pantalla pueda contarlo en vez de dejar al capitán a ciegas."""
+        uow, _, round_id, equipo_a, _ = await _montar(con_zona=True)
+        reloj = _Reloj(datetime(2026, 5, 30, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, equipo_a[0]
+        )
+
+        assert vista.reveal_scheduled_at is not None
+        assert vista.reveal_scheduled_at.hour == 18
+
+    async def test_sin_zona_horaria_no_se_abren_solos(self):
+        """Sin campo todavía no hay reloj: los abre el organizador a mano."""
+        uow, _, round_id, equipo_a, equipo_b = await _montar(con_zona=False)
+        for capitan, equipo in ((equipo_a[0], equipo_a), (equipo_b[0], equipo_b)):
+            await _entregar(uow).execute(
+                round_id.value, capitan, [[str(equipo[1].value)], [str(equipo[0].value)]]
+            )
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona(None)).execute(
+            round_id.value, equipo_a[1]
+        )
+
+        assert vista.revealed is False
+        assert vista.reveal_scheduled_at is None
 
 
 class TestQuienPuedeAbrirlos:

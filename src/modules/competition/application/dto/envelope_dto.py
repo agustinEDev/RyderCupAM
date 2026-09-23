@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.modules.competition.domain.entities.envelope import Envelope
+
 
 class EnvelopeDTO(BaseModel):
     """Un sobre, con su lista dentro. Solo se devuelve a quien puede verla."""
@@ -57,6 +59,10 @@ class EnvelopesViewDTO(BaseModel):
     # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
     # la pantalla es justo donde se desincronizan
     can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
+    # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
+    reveal_scheduled_at: datetime | None = Field(
+        None, description="Cuando se abren solos: 12 horas antes de la sesion."
+    )
     matchups: list[list[list[UUID]]] = Field(
         default_factory=list, description="Los enfrentamientos, solo si estan abiertos."
     )
@@ -81,3 +87,27 @@ class RevealEnvelopesResponseDTO(BaseModel):
     filled_automatically: list[str] = Field(
         default_factory=list, description="Los equipos cuyo sobre relleno la aplicacion."
     )
+
+
+def envelope_to_dto(sobre) -> EnvelopeDTO:
+    """El sobre tal como lo ve quien puede verlo.
+
+    Aqui y no dentro de un caso de uso: los tres lo necesitan, y tenerlo en uno
+    obligaba a los otros dos a importarle una funcion privada.
+    """
+    return EnvelopeDTO(
+        round_id=sobre.round_id.value,
+        team=sobre.team,
+        entries=[[uid.value for uid in fila] for fila in sobre.entries],
+        submitted=sobre.is_submitted(),
+        submitted_at=sobre.submitted_at,
+        automatic=sobre.automatic,
+    )
+
+
+def matchups_to_dto(sobre_a, sobre_b) -> list[list[list[UUID]]]:
+    """Los enfrentamientos, cruzados por posicion."""
+    return [
+        [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]
+        for fila_a, fila_b in Envelope.pair_up(sobre_a, sobre_b)
+    ]
