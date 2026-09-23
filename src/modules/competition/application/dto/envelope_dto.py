@@ -123,3 +123,13 @@ def matchups_to_dto(sobre_a, sobre_b) -> list[list[list[UUID]]]:
         [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]
         for fila_a, fila_b in Envelope.pair_up(sobre_a, sobre_b)
     ]
+
+
+class ResetEnvelopesResponseDTO(BaseModel):
+    """Lo que se ha llevado por delante rehacer los sobres de una sesion."""
+
+    round_id: UUID = Field(..., description="La sesion que se ha rehecho.")
+    envelopes_removed: int = Field(..., description="Sobres que se han tirado.")
+    matches_removed: int = Field(
+        ..., description="Partidos que se han tirado: ya no salian de ningun sobre."
+    )

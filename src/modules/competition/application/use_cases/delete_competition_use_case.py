@@ -17,11 +17,11 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.lo_jugado import LoJugado
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -82,7 +82,7 @@ class DeleteCompetitionUseCase:
             #    otra pestana se colaba y se iba en cascada sin que nadie lo
             #    supiera. Mismo bloqueo que usa handle_enrollment para el cupo.
             #    Anotar, conceder o terminar no pasan por esta fila: de eso se
-            #    encarga `_tiene_algo_jugado(bloquear=True)`
+            #    encarga `LoJugado(...).en_la_competicion(bloquear=True)`
             competition_id = CompetitionId(request.competition_id)
             competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
@@ -107,7 +107,7 @@ class DeleteCompetitionUseCase:
             # Lo jugado se consulta porque el estado se puede andar hacia atras
             # sin deshacerlo: un torneo ya jugado puede estar de vuelta en
             # ACTIVE, y la cascada se llevaria sus partidos y sus golpes
-            jugado = await self._tiene_algo_jugado(competition_id, bloquear=True)
+            jugado = await LoJugado(self._uow).en_la_competicion(competition_id, bloquear=True)
             if not competition.allows_deletion(has_played=jugado):
                 raise CompetitionNotDeletableError(
                     "No se puede eliminar una competición con partidos jugados o "
@@ -159,48 +159,5 @@ class DeleteCompetitionUseCase:
             if not competition.status.allows_deletion():
                 return False
             return competition.allows_deletion(
-                has_played=await self._tiene_algo_jugado(competition_id)
+                has_played=await LoJugado(self._uow).en_la_competicion(competition_id)
             )
-
-    async def _tiene_algo_jugado(
-        self, competition_id: CompetitionId, bloquear: bool = False
-    ) -> bool:
-        """Indica si el torneo llego a jugarse, aunque sea un hoyo (BE #347).
-
-        Es lo unico que hay que proteger aqui: se protege lo jugado, no lo
-        montado (decidido con el dueno del producto el 21 y 22 sep). Un
-        calendario sin jugar o un sorteo de equipos se rehacen; un golpe no.
-
-        Jugado es un partido terminado —con resultado, walkover o concedido,
-        aunque no tenga golpes— o un hoyo anotado en uno abierto. Tener tarjetas
-        no basta: se crean vacias al abrir el partido, y la anotacion se abre
-        sola a la hora de la sesion (BE #305) sin que nadie haya jugado. Los
-        partidos SCHEDULED no se miran: sus tarjetas nacen al empezar, y nada
-        devuelve un partido a SCHEDULED.
-
-        Con `bloquear`, que usa el borrado, partidos y tarjetas se leen con su
-        fila bloqueada: anotar un hoyo en un partido abierto, conceder o
-        terminar no bloquean la competicion. Si el golpe llega antes, el borrado
-        lo espera y lo ve; si llega despues, ya no encuentra la fila. Primero
-        los partidos y luego sus tarjetas, el mismo orden en que la anotacion
-        escribe. La pregunta de la ficha no bloquea: retendria a quien anota.
-        """
-        partidos_de = (
-            self._uow.matches.find_by_round_for_update
-            if bloquear
-            else self._uow.matches.find_by_round
-        )
-        tarjetas_de = (
-            self._uow.hole_scores.find_by_match_for_update
-            if bloquear
-            else self._uow.hole_scores.find_by_match
-        )
-        for ronda in await self._uow.rounds.find_by_competition(competition_id):
-            for partido in await partidos_de(ronda.id):
-                if partido.status.is_finished():
-                    return True
-                if partido.status == MatchStatus.IN_PROGRESS:
-                    tarjetas = await tarjetas_de(partido.id)
-                    if any(tarjeta.is_recorded for tarjeta in tarjetas):
-                        return True
-        return False
