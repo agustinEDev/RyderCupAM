@@ -55,12 +55,14 @@ _CON_PARTIDOS_YA_HECHOS = (
 )
 
 
-# El orden de las sesiones dentro de un dia
-_ORDEN_DE_SESION = {
+# El orden de las sesiones dentro de un dia. Por HORA y no por letra, que
+# alfabeticamente la tarde iria antes que la mañana
+ORDEN_DE_SESION = {
     SessionType.MORNING: 0,
     SessionType.AFTERNOON: 1,
     SessionType.EVENING: 2,
 }
+_ORDEN_DE_SESION = ORDEN_DE_SESION
 
 
 class RoundAlreadyScheduledError(Exception):

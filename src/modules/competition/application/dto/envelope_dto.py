@@ -1,6 +1,6 @@
 """DTOs de los sobres (FE #655)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -140,3 +140,14 @@ class ResetEnvelopesResponseDTO(BaseModel):
     matches_removed: int = Field(
         ..., description="Partidos que se han tirado: ya no salian de ningun sobre."
     )
+
+
+class PendingEnvelopeDTO(BaseModel):
+    """Un sobre que un capitan todavia tiene que entregar (FE #655)."""
+
+    round_id: UUID = Field(..., description="La sesion.")
+    competition_id: UUID = Field(..., description="Su competicion.")
+    competition_name: str = Field(..., description="Para pintarlo sin pedirla aparte.")
+    round_date: date = Field(..., description="Que dia se juega.")
+    session_type: str = Field(..., description="Manana, tarde o noche.")
+    team: str = Field(..., description="El equipo que capitanea: A o B.")
