@@ -12,6 +12,9 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.repositories.draft_repository_interface import (
+    DraftRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
 )
@@ -35,6 +38,9 @@ from src.modules.competition.domain.repositories.team_assignment_repository_inte
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.draft_repository import (
+    SQLAlchemyDraftRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
     SQLAlchemyEnrollmentRepository,
@@ -83,6 +89,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._envelopes = SQLAlchemyEnvelopeRepository(session)
         self._invitations = SQLAlchemyInvitationRepository(session)
         self._hole_scores = SQLAlchemyHoleScoreRepository(session)
+        self._drafts = SQLAlchemyDraftRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -107,6 +114,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         return self._team_assignments
+
+    @property
+    def drafts(self) -> DraftRepositoryInterface:
+        return self._drafts
 
     @property
     def envelopes(self) -> EnvelopeRepositoryInterface:

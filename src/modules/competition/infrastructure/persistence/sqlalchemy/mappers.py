@@ -34,6 +34,7 @@ from src.modules.competition.domain.entities.competition import (
 from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
+from src.modules.competition.domain.entities.draft import Draft, DraftPick
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.entities.hole_score import HoleScore
@@ -56,6 +57,8 @@ from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.draft_id import DraftId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
@@ -290,6 +293,25 @@ class RoundIdDecorator(TypeDecorator):
         return RoundId(uuid.UUID(value))
 
 
+class DraftIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir DraftId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: "DraftId | str | None", dialect) -> str | None:
+        if isinstance(value, DraftId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> "DraftId | None":
+        if value is None:
+            return None
+        return DraftId(uuid.UUID(value))
+
+
 class EnvelopeIdDecorator(TypeDecorator):
     """TypeDecorator para convertir EnvelopeId (UUID VO) a/desde VARCHAR(36)."""
 
@@ -426,7 +448,9 @@ class MatchPlayersJsonType(TypeDecorator):
                 "tee_color": p.tee_color.value,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
-                "player_handicap": str(p.player_handicap) if p.player_handicap is not None else None,
+                "player_handicap": str(p.player_handicap)
+                if p.player_handicap is not None
+                else None,
             }
             for p in value
         ]
@@ -468,6 +492,44 @@ class UserIdsJsonType(TypeDecorator):
         if value is None:
             return None
         return tuple(UserId(uuid.UUID(uid_str)) for uid_str in value)
+
+
+class DraftPicksJsonType(TypeDecorator):
+    """TypeDecorator para las elecciones del draft, como array de objetos JSONB.
+
+    En la misma fila que la sala y no en otra tabla: son pocas, siempre se leen
+    juntas y nunca se consultan por separado, igual que los participantes de una
+    partida rapida (FE #653).
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if value is None:
+            return None
+        return [
+            {
+                "user_id": str(pick.user_id.value),
+                "team": pick.team,
+                "order": pick.order,
+                "automatic": pick.automatic,
+            }
+            for pick in value
+        ]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple | None:
+        if value is None:
+            return None
+        return tuple(
+            DraftPick(
+                user_id=UserId(uuid.UUID(pick["user_id"])),
+                team=pick["team"],
+                order=pick["order"],
+                automatic=pick.get("automatic", False),
+            )
+            for pick in value
+        )
 
 
 class EnvelopeEntriesJsonType(TypeDecorator):
@@ -913,6 +975,47 @@ matches_table = Table(
 # TABLA TEAM_ASSIGNMENTS
 # =============================================================================
 
+DraftStatusDecorator = _create_enum_decorator(DraftStatus)
+
+# =============================================================================
+# TABLA DRAFTS (FE #653)
+# =============================================================================
+
+drafts_table = Table(
+    "drafts",
+    metadata,
+    Column("id", DraftIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    ),
+    # RESTRICT: una sala sin capitan no existe, asi que borrar a uno con un
+    # draft vivo se para antes, en el panel de administracion
+    Column(
+        "team_a_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column(
+        "team_b_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("status", DraftStatusDecorator, nullable=False),
+    Column("first_pick", String(1), nullable=True),
+    Column("current_team", String(1), nullable=True),
+    # El reloj es del servidor: de aqui sale cuanto queda de turno (BE #305)
+    Column("turn_started_at", DateTime, nullable=True),
+    Column("picks", DraftPicksJsonType, nullable=False),
+    Column("seconds_per_turn", Integer, nullable=False),
+)
+
+
 team_assignments_table = Table(
     "team_assignments",
     metadata,
@@ -1229,6 +1332,25 @@ def start_competition_mappers():
                 "_team_a_player_ids": team_assignments_table.c.team_a_player_ids,
                 "_team_b_player_ids": team_assignments_table.c.team_b_player_ids,
                 "_created_at": team_assignments_table.c.created_at,
+            },
+        )
+
+    # Mapear Draft (FE #653)
+    if Draft not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            Draft,
+            drafts_table,
+            properties={
+                "_id": drafts_table.c.id,
+                "_competition_id": drafts_table.c.competition_id,
+                "_team_a_captain_id": drafts_table.c.team_a_captain_id,
+                "_team_b_captain_id": drafts_table.c.team_b_captain_id,
+                "_status": drafts_table.c.status,
+                "_first_pick": drafts_table.c.first_pick,
+                "_current_team": drafts_table.c.current_team,
+                "_turn_started_at": drafts_table.c.turn_started_at,
+                "_picks": drafts_table.c.picks,
+                "_seconds_per_turn": drafts_table.c.seconds_per_turn,
             },
         )
 

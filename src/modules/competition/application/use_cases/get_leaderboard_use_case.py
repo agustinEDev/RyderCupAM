@@ -7,6 +7,7 @@ from src.modules.competition.application.dto.scoring_dto import (
     LeaderboardResponseDTO,
 )
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -227,26 +228,8 @@ class GetLeaderboardUseCase:
         pantallas donde más se lee un nombre, así que la preferencia por
         competición se lee de las inscripciones, no del perfil.
 
-        Se pide `find_by_user_ids_and_competition` con los `user_ids` ya
-        acotados a quien aparece en la clasificación, no `find_by_competition`
-        con toda la competición: esta última acumula sin límite filas de
-        peticiones rechazadas, retiros y altas de nuevo, y traerlas todas
-        —paginando— para acabar usando solo un puñado exigía una consulta
-        por página en cada carga de la clasificación.
+        La misma regla que usa la sala de draft (FE #653), en un solo sitio.
         """
-        if not user_ids:
-            return {}
-        users = await self._user_repo.find_by_ids(user_ids)
-        enrollments = await self._uow.enrollments.find_by_user_ids_and_competition(
-            user_ids, competition_id
+        return await PlayerNames.de_la_competicion(
+            user_ids, competition_id, self._user_repo, self._uow
         )
-        real_name_wanted = {e.user_id for e in enrollments if e.use_real_name}
-        names: dict[UserId, str] = {
-            user.id: user.display_name_or_legal(user.id in real_name_wanted)
-            for user in users
-            if user.id is not None
-        }
-        for uid in user_ids:
-            if uid not in names:
-                names[uid] = ""
-        return names

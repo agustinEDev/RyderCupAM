@@ -6,7 +6,7 @@ fila del sobre porque el ORDEN es el dato; una tabla aparte obligaria a ordenar
 por una columna que no aporta nada mas.
 
 Revision ID: c7d3a1e58b94
-Revises: f1a4c7d29b63
+Revises: b2e9d4c71a58
 Create Date: 2026-09-23
 
 """
@@ -17,7 +17,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision = "c7d3a1e58b94"
-down_revision = "f1a4c7d29b63"
+# Detras de la tabla de drafts: las dos nacieron colgando de la misma revision
+# y al juntarlas quedaban DOS cabezas, que tumban el arranque y el Build Docker
+down_revision = "b2e9d4c71a58"
 branch_labels = None
 depends_on = None
 

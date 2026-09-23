@@ -68,6 +68,7 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
 )
@@ -97,6 +98,9 @@ from src.modules.competition.application.use_cases.list_enrollments_use_case imp
 )
 from src.modules.competition.application.use_cases.list_my_invitations_use_case import (
     ListMyInvitationsUseCase,
+)
+from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
+    MakeDraftPickUseCase,
 )
 from src.modules.competition.application.use_cases.name_captains_use_case import (
     NameCaptainsUseCase,
@@ -148,6 +152,9 @@ from src.modules.competition.application.use_cases.set_name_preference_use_case 
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.start_draft_use_case import (
+    StartDraftUseCase,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     SubmitEnvelopeUseCase,
@@ -2051,6 +2058,28 @@ def get_assign_teams_use_case(
     )
 
 
+def get_start_draft_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> StartDraftUseCase:
+    """Proveedor del caso de uso StartDraftUseCase (FE #653)."""
+    return StartDraftUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_draft_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetDraftUseCase:
+    """Proveedor del caso de uso GetDraftUseCase (FE #653)."""
+    return GetDraftUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_make_draft_pick_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> MakeDraftPickUseCase:
+    """Proveedor del caso de uso MakeDraftPickUseCase (FE #653)."""
+    return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
 def get_submit_envelope_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),

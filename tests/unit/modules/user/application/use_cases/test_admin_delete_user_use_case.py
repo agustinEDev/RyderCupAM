@@ -51,13 +51,16 @@ class TestAdminDeleteUserUseCase:
         has_scores=False,
         quick_match_created=False,
         golf_courses_created=0,
+        capitanea_un_draft=False,
     ):
         competitions_repo = AsyncMock()
         competitions_repo.count_by_creator = AsyncMock(return_value=competitions_created)
         hole_scores_repo = AsyncMock()
         hole_scores_repo.exists_by_player = AsyncMock(return_value=has_scores)
+        drafts_repo = AsyncMock()
+        drafts_repo.exists_by_captain = AsyncMock(return_value=capitanea_un_draft)
         competition_uow = _make_uow_mock(
-            competitions=competitions_repo, hole_scores=hole_scores_repo
+            competitions=competitions_repo, hole_scores=hole_scores_repo, drafts=drafts_repo
         )
 
         quick_matches_repo = AsyncMock()
@@ -111,3 +114,19 @@ class TestAdminDeleteUserUseCase:
         use_case = self._make_use_case(user_uow)
         with pytest.raises(UserNotFoundError):
             await use_case.execute(str(uuid4()))
+
+    @pytest.mark.asyncio
+    async def test_blocks_delete_when_user_captains_a_draft(self, user_uow, existing_user):
+        """
+        Given: un usuario que capitanea una sala de draft
+        When: un administrador intenta borrarlo
+        Then: se le dice que tiene actividad, y no se estrella contra la clave ajena
+        """
+        use_case = self._make_use_case(user_uow, capitanea_un_draft=True)
+
+        with pytest.raises(UserHasActivityException) as error:
+            await use_case.execute(str(existing_user.id.value))
+
+        assert "draft" in str(error.value).lower()
+        async with user_uow:
+            assert await user_uow.users.find_by_id(existing_user.id) is not None
