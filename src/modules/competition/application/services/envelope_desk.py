@@ -297,10 +297,20 @@ class EnvelopeDesk:
 
     async def programado_para(self, ronda: Round, competition: Competition) -> datetime | None:
         """A que hora se abren solos los sobres de esa sesion."""
+        zona = await self._zona_de(ronda)
+        return EnvelopeRevealService.scheduled_for(ronda.round_date, ronda.session_type, zona)
+
+    async def _zona_de(self, ronda: Round) -> str | None:
+        """La zona del campo de ESA sesion, no la del primero de la competicion.
+
+        Una competicion se puede jugar en varios campos, y cada sesion tiene el
+        suyo. Con el primero mandando, una sesion heredaba la hora de otro
+        sitio, y desde el 23 sep tambien la llave: el primero sin zona repartia
+        salida de emergencia a sesiones que si tenian plazo.
+        """
         if self._timezone is None:
             return None
-        zona = await self._timezone.for_competition(competition)
-        return EnvelopeRevealService.scheduled_for(ronda.round_date, ronda.session_type, zona)
+        return await self._timezone.for_course(ronda.golf_course_id)
 
     def sin_plazo_que_vencer(self, programado: datetime | None) -> bool:
         """Si esa sesion no tiene hora a la que abrirse sola.
@@ -401,8 +411,9 @@ class EnvelopeDesk:
         if programado is None or self.ahora < programado:
             return False
 
-        zona = await self._timezone.for_competition(competition) if self._timezone else None
-        comienzo = ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
+        comienzo = ScoringOpeningService.opens_at(
+            ronda.round_date, ronda.session_type, await self._zona_de(ronda)
+        )
         anterior_acabo = EnvelopeRevealService.previous_session_is_over(
             await self._partidos_pendientes_de_la_anterior(ronda, competition),
             comienzo,

@@ -145,13 +145,21 @@ class _Reloj:
 
 
 class _Zona:
-    """La zona del campo donde se juega."""
+    """La zona del campo donde se juega.
 
-    def __init__(self, zona="Europe/Madrid"):
+    `de_la_sesion` es la del campo de esa ronda, que en una competición de
+    varios campos NO tiene por qué ser la del primero.
+    """
+
+    def __init__(self, zona="Europe/Madrid", de_la_sesion="igual"):
         self._zona = zona
+        self._de_la_sesion = zona if de_la_sesion == "igual" else de_la_sesion
 
     async def for_competition(self, competition):
         return self._zona
+
+    async def for_course(self, golf_course_id):
+        return self._de_la_sesion
 
 
 class _RepoUsuarios:
@@ -827,6 +835,42 @@ class TestCuandoNoHayPlazoQueVencer:
             await RevealEnvelopesUseCase(uow, _RepoUsuarios(), _Zona()).execute(
                 round_id.value, organizador
             )
+
+    async def test_manda_el_campo_de_la_sesion_y_no_el_primero(self):
+        """Una competición de varios campos: cada sesión va donde se juega.
+
+        Con el primero sin zona, una sesión que sí la tiene conserva su plazo y
+        nadie consigue llave por la puerta de atrás.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+        zona = _Zona(None, de_la_sesion="Europe/Madrid")
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), _Reloj(_ANTES), zona).execute(
+            round_id.value, organizador
+        )
+
+        assert vista.reveal_scheduled_at is not None
+        assert vista.can_reveal is False
+
+    async def test_y_al_reves_la_sesion_sin_zona_conserva_su_salida(self):
+        """El primero con zona no le quita la salida a la sesión que no la tiene."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        organizador = equipo_a[0]
+        await _entregar(uow).execute(
+            round_id.value, organizador, [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+        zona = _Zona("Europe/Madrid", de_la_sesion=None)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios(), _Reloj(_ANTES), zona).execute(
+            round_id.value, organizador
+        )
+
+        assert vista.reveal_scheduled_at is None
+        assert vista.can_reveal is True
 
 
 class TestQuienVeQue:
