@@ -61,7 +61,12 @@ class UpdateRoundUseCase:
                 raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
 
             # 2. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+            # Con la fila bloqueada: cambiar el formato tira los sobres de la
+            # sesion (FE #655), y hacerlo mientras un capitan entrega el suyo
+            # dejaria uno del formato viejo dentro
+            competition = await self._uow.competitions.find_by_id_for_update(
+                round_entity.competition_id
+            )
 
             if not competition:
                 raise CompetitionNotFoundError("La competición asociada no existe")

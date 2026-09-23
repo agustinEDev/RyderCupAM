@@ -11,12 +11,17 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import EnvelopeDTO
-from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.envelope_desk import (
+    EnvelopeDesk,
+    RoundAlreadyScheduledError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+__all__ = ["NotATeamCaptainError", "RoundAlreadyScheduledError", "SubmitEnvelopeUseCase"]
 
 
 class NotATeamCaptainError(Exception):
@@ -66,6 +71,7 @@ class SubmitEnvelopeUseCase:
             ronda, competition = await self._desk.ronda_y_competicion(
                 RoundId(round_id), bloquear=True
             )
+            self._desk.comprobar_que_la_sesion_admite_sobres(ronda)
             team = self._desk.equipo_de(competition, user_id)
             if team is None:
                 raise NotATeamCaptainError("Solo los capitanes entregan su sobre")

@@ -23,6 +23,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionParticipantError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.envelope_desk import (
+    RoundAlreadyScheduledError,
+)
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
 )
@@ -39,6 +42,7 @@ from src.modules.competition.domain.entities.envelope import (
     DuplicatedPlayerError,
     EmptyEnvelopeError,
     EnvelopeAlreadyRevealedError,
+    OddTeamForPairsError,
     PlayerNotInTeamError,
     RowSizeError,
     TeamNotFullyEnteredError,
@@ -74,6 +78,8 @@ _ERRORES_DEL_SOBRE = (
     EmptyEnvelopeError,
     RowSizeError,
     DuplicatedPlayerError,
+    RoundAlreadyScheduledError,
+    OddTeamForPairsError,
 )
 
 
@@ -138,6 +144,10 @@ async def get_envelopes(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionParticipantError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except _ERRORES_DEL_SOBRE as e:
+        # Mirar los sobres de una competicion sin equipos repartidos es una
+        # peticion valida con una respuesta clara, no un 500
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(

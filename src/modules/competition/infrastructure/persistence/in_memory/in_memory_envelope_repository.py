@@ -14,7 +14,12 @@ class InMemoryEnvelopeRepository(EnvelopeRepositoryInterface):
         self._envelopes: dict[tuple[str, str], Envelope] = {}
 
     async def add(self, envelope: Envelope) -> None:
-        self._envelopes[(str(envelope.round_id.value), envelope.team)] = envelope
+        # Como en Postgres, que tiene la clave unica: aceptarlo en silencio
+        # daba por bueno en los tests un camino que en produccion revienta
+        clave = (str(envelope.round_id.value), envelope.team)
+        if clave in self._envelopes:
+            raise ValueError(f"Ya hay un sobre del equipo {envelope.team} para esa sesión")
+        self._envelopes[clave] = envelope
 
     async def update(self, envelope: Envelope) -> None:
         self._envelopes[(str(envelope.round_id.value), envelope.team)] = envelope

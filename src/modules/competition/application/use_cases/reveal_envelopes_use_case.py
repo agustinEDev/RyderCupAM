@@ -13,7 +13,9 @@ from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import RevealEnvelopesResponseDTO
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
-from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.envelope_desk import (
+    EnvelopeDesk,
+)
 from src.modules.competition.application.use_cases.get_envelopes_use_case import _cruzados
 from src.modules.competition.domain.entities.envelope import EnvelopeAlreadyRevealedError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -66,6 +68,7 @@ class RevealEnvelopesUseCase:
             ronda, competition = await self._desk.ronda_y_competicion(
                 RoundId(round_id), bloquear=True
             )
+            self._desk.comprobar_que_la_sesion_admite_sobres(ronda)
             es_capitan = self._desk.equipo_de(competition, user_id) is not None
             arbitra = is_admin or competition.is_creator(user_id)
             if not arbitra and not es_capitan:

@@ -39,9 +39,11 @@ from src.modules.competition.application.use_cases.reveal_envelopes_use_case imp
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
+    RoundAlreadyScheduledError,
     SubmitEnvelopeUseCase,
 )
 from src.modules.competition.domain.entities.competition import TeamsNotAssignedError
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.envelope import (
     EmptyEnvelopeError,
     EnvelopeAlreadyRevealedError,
@@ -51,6 +53,7 @@ from src.modules.competition.domain.entities.envelope import (
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
@@ -68,6 +71,15 @@ from tests.unit.modules.competition.application.use_cases.helpers import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _marcar_partidos_generados(uow, round_id):
+    """Deja la sesión como queda cuando ya se han generado sus partidos."""
+    async with uow:
+        ronda = await uow.rounds.find_by_id(round_id)
+        ronda.mark_matches_generated()
+        await uow.rounds.update(ronda)
+        await uow.commit()
 
 
 async def _cambiar_formato(uow, comp_id, round_id, organizador, formato):
@@ -175,6 +187,10 @@ async def _montar(
             session_type=SessionType.MORNING,
             match_format=formato,
         )
+        if con_equipos:
+            # Como la deja el reparto: al asignar equipos, las rondas que los
+            # esperaban pasan a esperar partidos
+            ronda.mark_teams_assigned()
         await uow.rounds.add(ronda)
         await uow.commit()
     return uow, comp_id, ronda.id, equipo_a, equipo_b
@@ -457,6 +473,25 @@ class TestQuienVeQue:
         with pytest.raises(NotCompetitionParticipantError):
             await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, UserId(uuid4()))
 
+    async def test_un_retirado_tampoco_los_ve(self):
+        """Estar inscrito no basta: hay que estarlo APROBADO.
+
+        Una inscripción rechazada o retirada seguía valiendo de llave, y con
+        ella se leía quién ha entregado y, abiertos, los enfrentamientos.
+        """
+        uow, comp_id, round_id, _, _ = await _montar()
+        retirado = UserId(uuid4())
+        async with uow:
+            inscripcion = Enrollment.direct_enroll(
+                id=EnrollmentId.generate(), competition_id=comp_id, user_id=retirado
+            )
+            inscripcion.withdraw()
+            await uow.enrollments.add(inscripcion)
+            await uow.commit()
+
+        with pytest.raises(NotCompetitionParticipantError):
+            await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, retirado)
+
     async def test_lo_que_relleno_la_aplicacion_se_distingue_de_una_entrega(self):
         """Si no, la pantalla dice que los dos capitanes entregaron y es falso."""
         uow, _, round_id, equipo_a, _ = await _montar()
@@ -703,6 +738,30 @@ class TestLosPartidosSalenDeLosSobres:
 
         async with uow:
             await EnvelopePairings.comprobar_que_no_hay_sobres_sin_abrir(uow, round_id)
+
+
+class TestConLosPartidosYaGenerados:
+    async def test_no_se_entrega_un_sobre_para_una_sesion_ya_montada(self):
+        """Los partidos ya están hechos: el sobre no cambiaría nada y mentiría.
+
+        Antes se guardaba tan tranquilo, y la sesión quedaba con unos partidos
+        que no salían de ningún sobre y unos sobres que no eran de esos
+        partidos.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _marcar_partidos_generados(uow, round_id)
+
+        with pytest.raises(RoundAlreadyScheduledError):
+            await _entregar(uow).execute(
+                round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+            )
+
+    async def test_ni_se_abren(self):
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _marcar_partidos_generados(uow, round_id)
+
+        with pytest.raises(RoundAlreadyScheduledError):
+            await RevealEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
 
 
 class TestCuandoCambiaElFormatoDeLaSesion:

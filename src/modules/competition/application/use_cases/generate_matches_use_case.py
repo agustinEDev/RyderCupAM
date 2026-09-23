@@ -124,7 +124,12 @@ class GenerateMatchesUseCase:
                 raise RoundNotFoundError(f"No existe ronda con ID {request.round_id}")
 
             # 2. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+            # Con la fila bloqueada, como al entregar y al abrir sobres: los
+            # enfrentamientos de esta sesion pueden salir de ellos (FE #655), y
+            # decidirlo mientras un capitan entrega es decidir con datos viejos
+            competition = await self._uow.competitions.find_by_id_for_update(
+                round_entity.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 

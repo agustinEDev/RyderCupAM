@@ -24,6 +24,7 @@ from src.modules.competition.domain.entities.envelope import (
     EmptyEnvelopeError,
     Envelope,
     EnvelopeAlreadyRevealedError,
+    OddTeamForPairsError,
     PlayerNotInTeamError,
     RowSizeError,
     TeamNotFullyEnteredError,
@@ -119,6 +120,35 @@ class TestEntregarElSobre:
 
         with pytest.raises(EnvelopeAlreadyRevealedError):
             sobre.submit([[ANA], [BEA], [CARLA], [DANI]], equipo=EQUIPO, por=ANA, ahora=AHORA)
+
+
+class TestCuandoElEquipoEsImparEnParejas:
+    def test_no_se_entrega_un_sobre_al_que_le_falte_alguien(self):
+        """Con tres en un equipo de parejas, uno se queda sin pareja.
+
+        `faltan >= por_fila` dejaba pasar que faltara UNO: se guardaba el sobre
+        y ese jugador se quedaba sin partido, porque el cruce va por posición y
+        su fila no existe.
+        """
+        sobre = _sobre(match_format=MatchFormat.FOURBALL)
+
+        with pytest.raises(TeamNotFullyEnteredError):
+            sobre.submit([[CARLA, ANA]], equipo=[ANA, BEA, CARLA], por=ANA, ahora=AHORA)
+
+    def test_y_la_aplicacion_tampoco_rellena_uno_cojo(self):
+        """Antes se quedaba con `len // 2` parejas y el del medio desaparecía."""
+        sobre = _sobre(match_format=MatchFormat.FOURBALL)
+
+        with pytest.raises(OddTeamForPairsError):
+            sobre.fill([(ANA, 5), (BEA, 12), (CARLA, 18)], ahora=AHORA)
+
+    def test_en_individuales_un_equipo_impar_no_es_problema(self):
+        """Ahí cada uno va en su fila; el que sobra lo resuelve el cruce."""
+        sobre = _sobre()
+
+        sobre.fill([(ANA, 5), (BEA, 12), (CARLA, 18)], ahora=AHORA)
+
+        assert sobre.entries == ((ANA,), (BEA,), (CARLA,))
 
 
 class TestElQueRellenaLaAplicacion:

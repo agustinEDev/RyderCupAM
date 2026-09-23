@@ -27,6 +27,8 @@ from ..value_objects.match_format import MatchFormat
 from ..value_objects.round_id import RoundId
 
 EQUIPOS = ("A", "B")
+# Cuantos jugadores lleva cada fila segun el formato
+EN_PAREJAS = 2
 
 
 class EnvelopeAlreadyRevealedError(Exception):
@@ -49,6 +51,12 @@ class RowSizeError(Exception):
 
 class DuplicatedPlayerError(Exception):
     """Alguien aparece dos veces: nadie juega dos partidos en la misma sesion."""
+
+    pass
+
+
+class OddTeamForPairsError(Exception):
+    """Un equipo impar no se puede repartir en parejas: alguien se queda fuera."""
 
     pass
 
@@ -168,7 +176,7 @@ class Envelope:
 
     def players_per_row(self) -> int:
         """Cuántos jugadores lleva cada fila: uno en individuales, dos en parejas."""
-        return 1 if self._match_format == MatchFormat.SINGLES else 2
+        return 1 if self._match_format == MatchFormat.SINGLES else EN_PAREJAS
 
     # ==================== Acciones ====================
 
@@ -218,6 +226,13 @@ class Envelope:
             return
 
         ordenados = [uid for uid, _ in sorted(jugadores, key=lambda par: Decimal(str(par[1])))]
+        if self.players_per_row() == EN_PAREJAS and len(ordenados) % EN_PAREJAS != 0:
+            # Antes se quedaba con `len // 2` parejas y el del medio desaparecia
+            # sin decir nada: el cruce va por posicion y su fila no existia
+            raise OddTeamForPairsError(
+                f"El equipo {self._team} tiene {len(ordenados)} jugadores y esta sesión es de "
+                "parejas: alguien se quedaría fuera"
+            )
         if self.players_per_row() == 1:
             self._entries = tuple((uid,) for uid in ordenados)
         else:
@@ -287,11 +302,12 @@ class Envelope:
         if fuera:
             raise PlayerNotInTeamError("Hay jugadores que no son de este equipo")
 
-        # Juegan todos: aqui no se descansa (20 sep). Con un numero impar de
-        # jugadores para el formato, el que sobra se queda sin fila, y eso se
-        # ve al cruzar los dos sobres, no aqui
+        # Juegan todos: aqui no se descansa (20 sep). Ni uno puede faltar, que
+        # el cruce va por posicion y quien no tiene fila no tiene partido. En
+        # parejas eso significa ademas que el equipo tiene que ser par, y de eso
+        # avisa `fill` cuando le toca rellenar
         faltan = del_equipo - set(puestos)
-        if len(faltan) >= por_fila:
+        if faltan:
             raise TeamNotFullyEnteredError(
                 f"Faltan {len(faltan)} jugadores del equipo, y aquí juegan todos"
             )

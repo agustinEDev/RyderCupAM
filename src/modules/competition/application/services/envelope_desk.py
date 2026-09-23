@@ -24,10 +24,24 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# A partir de aqui la sesion ya tiene partidos generados
+_CON_PARTIDOS_YA_HECHOS = (
+    RoundStatus.SCHEDULED,
+    RoundStatus.IN_PROGRESS,
+    RoundStatus.COMPLETED,
+)
+
+
+class RoundAlreadyScheduledError(Exception):
+    """Esa sesion ya tiene sus partidos generados."""
+
+    pass
 
 
 class EnvelopeDesk:
@@ -105,7 +119,9 @@ class EnvelopeDesk:
         inscripcion = await self._uow.enrollments.find_by_user_and_competition(
             user_id, competition.id
         )
-        if inscripcion is None:
+        # APROBADA: una rechazada o retirada seguia valiendo de llave, y con
+        # ella se leia quien ha entregado y, abiertos, los enfrentamientos
+        if inscripcion is None or inscripcion.status != EnrollmentStatus.APPROVED:
             raise NotCompetitionParticipantError(
                 "Esta sesión es de una competición en la que no participas"
             )
@@ -160,6 +176,24 @@ class EnvelopeDesk:
                 )
             )
         return con_handicap
+
+    @staticmethod
+    def comprobar_que_la_sesion_admite_sobres(ronda: Round) -> None:
+        """Con los partidos ya generados, los sobres no pintan nada.
+
+        Entregar o abrir despues dejaria la sesion con unos partidos que no
+        salen de ningun sobre y unos sobres que no son de esos partidos.
+
+        Sin equipos repartidos —PENDING_TEAMS— NO se queja aqui: ese problema
+        es otro y lo cuenta `jugadores_de` con su nombre.
+
+        Raises:
+            RoundAlreadyScheduledError: Si la sesion ya tiene partidos
+        """
+        if ronda.status in _CON_PARTIDOS_YA_HECHOS:
+            raise RoundAlreadyScheduledError(
+                "Esta sesión ya tiene sus partidos: los sobres se entregan antes de generarlos"
+            )
 
     async def sobre_de(self, ronda: Round, team: str, crear: bool = False) -> Envelope | None:
         """El sobre de ese equipo para esa sesion, creandolo si hace falta."""

@@ -64,6 +64,10 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError as WalkoverNotCreatorError,
     RoundNotFoundError as StatusRoundNotFoundError,
 )
+from src.modules.competition.application.services.envelope_pairings import (
+    EnvelopesDecideThePairingsError,
+    EnvelopesNotRevealedError,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
@@ -725,6 +729,11 @@ async def generate_matches(
         NoTeamAssignmentError,
         GenMatchesInsufficientError,
         TeeColorNotFoundError,
+        # Los sobres de los capitanes deciden los enfrentamientos de su sesion
+        # (FE #655): que no esten abiertos, o que se manden emparejamientos a
+        # mano habiendolos, es culpa de quien pide y no un fallo del servidor
+        EnvelopesDecideThePairingsError,
+        EnvelopesNotRevealedError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
