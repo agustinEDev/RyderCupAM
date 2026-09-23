@@ -76,6 +76,22 @@ async def _montar(capitanes: str = "los dos"):
     return uow, comp_id, creator_id, jugadores, (capitan_a, capitan_b)
 
 
+async def test_el_reparto_por_api_no_acepta_el_modo_draft():
+    """DRAFT no es una forma de repartir que el organizador dispare.
+
+    Es lo que queda cuando la sala de draft termina. Admitirlo aquí guardaría
+    un reparto calculado por la aplicación diciendo que lo eligieron los
+    capitanes, y además bloquearía la sala de verdad: con equipos hechos ya no
+    se abre.
+    """
+    uow, comp_id, creator_id, _, _ = await _montar()
+
+    with pytest.raises(ValueError, match="(?i)draft"):
+        await _use_case(uow).execute(
+            AssignTeamsRequestDTO(competition_id=comp_id.value, mode="DRAFT"), creator_id
+        )
+
+
 def _use_case(uow) -> AssignTeamsUseCase:
     """El caso de uso con un repositorio de usuarios que no encuentra a nadie."""
     repo = AsyncMock()
