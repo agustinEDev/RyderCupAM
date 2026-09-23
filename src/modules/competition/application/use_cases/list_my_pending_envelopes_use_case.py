@@ -22,7 +22,11 @@ from src.modules.competition.application.services.envelope_desk import (
     ORDEN_DE_SESION,
     EnvelopeDesk,
 )
-from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition import (
+    Competition,
+    TeamsNotAssignedError,
+)
+from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -82,12 +86,16 @@ class ListMyPendingEnvelopesUseCase:
             ahora = ahora if ahora.tzinfo else ahora.replace(tzinfo=UTC)
             desk = EnvelopeDesk(self._uow, None, timezone_service=self._timezone)
             pendientes: list[PendingEnvelopeDTO] = []
+            plazos: list[tuple] = []
             for competition in await self._mis_competiciones(user_id):
                 equipo = EnvelopeDesk.equipo_de(competition, user_id)
                 if equipo is None:
                     continue
                 for ronda in await self._uow.rounds.find_by_competition(competition.id):
-                    if await self._toca_entregarlo(ronda, equipo, ahora, desk, competition):
+                    plazo = await desk.programado_para(ronda, competition)
+                    if await self._toca_entregarlo(ronda, equipo, ahora, desk, competition, plazo):
+                        # El plazo manda en el orden, asi que viaja al lado
+                        plazos.append((ronda.id.value, plazo))
                         pendientes.append(
                             PendingEnvelopeDTO(
                                 round_id=ronda.id.value,
@@ -98,13 +106,44 @@ class ListMyPendingEnvelopesUseCase:
                                 team=equipo,
                             )
                         )
-            # Lo primero que hay que atender va primero: la sesion mas
-            # proxima. La franja ordena por HORA y no por letra, que
-            # alfabeticamente la tarde va antes que la mañana
+            # Lo primero que hay que atender va primero, y eso lo dice el
+            # PLAZO, no la hora local: con dos competiciones en husos
+            # distintos, la tarde de una puede vencer antes que la mañana de
+            # la otra, y ordenar por franja escondia debajo la que corria mas
+            # prisa. Las que no tienen plazo —campo sin zona— van al final: no
+            # se abren solas nunca, asi que no urgen
+            de_cada_una = dict(plazos)
+            sin_plazo = datetime.max.replace(tzinfo=UTC)
             return sorted(
                 pendientes,
-                key=lambda p: (p.round_date, ORDEN_DE_SESION_POR_NOMBRE.get(p.session_type, 0)),
+                key=lambda p: (
+                    de_cada_una.get(p.round_id) or sin_plazo,
+                    p.round_date,
+                    ORDEN_DE_SESION_POR_NOMBRE.get(p.session_type, 0),
+                ),
             )
+
+    async def _su_equipo_cabe_en_las_filas(
+        self, desk: EnvelopeDesk, competition: Competition, equipo: str, ronda: Round
+    ) -> bool:
+        """Si el equipo de ESE capitan se puede repartir en las filas del formato.
+
+        Solo el suyo, no los dos: en parejas, un equipo impar no tiene sobre
+        posible —el cruce va por posicion y alguien se quedaria fuera—, pero si
+        el impar es el del RIVAL, este capitan si puede entregar el suyo y
+        avisarle es correcto.
+
+        Sin equipos repartidos no hay nada que atender: entregar tampoco se
+        puede, y la sesion ya esta fuera por su estado.
+        """
+        por_fila = Envelope.players_per_row_for(ronda.match_format)
+        if por_fila == 1:
+            return True
+        try:
+            jugadores = await desk.jugadores_de(competition, equipo)
+        except TeamsNotAssignedError:
+            return False
+        return len(jugadores) % por_fila == 0
 
     async def _mis_competiciones(self, user_id: UserId) -> list[Competition]:
         """Las competiciones en las que participa, por sus inscripciones.
@@ -146,6 +185,7 @@ class ListMyPendingEnvelopesUseCase:
         ahora: datetime,
         desk: EnvelopeDesk,
         competition: Competition,
+        plazo: datetime | None,
     ) -> bool:
         """Si esa sesion tiene un sobre que ese equipo pueda entregar ahora.
 
@@ -159,11 +199,13 @@ class ListMyPendingEnvelopesUseCase:
           vence a las 00:00 de ESE mismo dia.
         - Sin zona del campo no hay plazo que vencer: esos sobres no se abren
           solos nunca, asi que siguen pendientes de verdad.
+        - Y su equipo tiene que caber en las filas de esa sesion.
         """
         if ronda.status != RoundStatus.PENDING_MATCHES:
             return False
-        plazo = await desk.programado_para(ronda, competition)
         if plazo is not None and ahora >= plazo:
+            return False
+        if not await self._su_equipo_cabe_en_las_filas(desk, competition, equipo, ronda):
             return False
         sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
         # Abiertos ya no se tocan, ni el propio ni el del rival

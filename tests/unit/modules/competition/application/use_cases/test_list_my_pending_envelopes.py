@@ -80,25 +80,37 @@ class _Reloj:
 
 
 class _Zona:
-    """La zona del campo donde se juega."""
+    """La zona del campo donde se juega.
 
-    def __init__(self, zona="Europe/Madrid"):
+    Con `por_campo` cada sesión puede estar en un huso distinto, que es lo que
+    pasa de verdad cuando una competición se juega en varios campos.
+    """
+
+    def __init__(self, zona="Europe/Madrid", por_campo=None):
         self._zona = zona
+        self._por_campo = por_campo or {}
 
     async def for_competition(self, competition):
         return self._zona
 
     async def for_course(self, golf_course_id):
-        return self._zona
+        return self._por_campo.get(golf_course_id, self._zona)
 
 
-async def _montar(con_equipos: bool = True, modo=None, estado: str = "CLOSED"):
+async def _montar(
+    con_equipos: bool = True,
+    modo=None,
+    estado: str = "CLOSED",
+    session_type: SessionType = SessionType.MORNING,
+    formato: MatchFormat = MatchFormat.SINGLES,
+    jugadores: int = 4,
+):
     """Una cerrada con equipos, sus capitanes y una sesion del 1 de junio."""
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
     creada = await create_competition(uow, creator_id)
     comp_id = CompetitionId(creada.id)
-    resto = [UserId(uuid4()) for _ in range(3)]
+    resto = [UserId(uuid4()) for _ in range(jugadores - 1)]
     for jugador in resto:
         await create_approved_enrollment(uow, creada.id, jugador)
     # Siempre CLOSED primero: nombrar capitanes exige una competición en pie,
@@ -106,7 +118,8 @@ async def _montar(con_equipos: bool = True, modo=None, estado: str = "CLOSED"):
     await set_competition_status(uow, creada.id, "CLOSED")
 
     todos = [creator_id, *resto]
-    equipo_a, equipo_b = todos[:2], todos[2:]
+    mitad = (len(todos) + 1) // 2
+    equipo_a, equipo_b = todos[:mitad], todos[mitad:]
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
         if modo is not None:
@@ -126,8 +139,8 @@ async def _montar(con_equipos: bool = True, modo=None, estado: str = "CLOSED"):
             competition_id=comp_id,
             golf_course_id=GolfCourseId.generate(),
             round_date=date(2026, 6, 1),
-            session_type=SessionType.MORNING,
-            match_format=MatchFormat.SINGLES,
+            session_type=session_type,
+            match_format=formato,
         )
         if con_equipos:
             ronda.mark_teams_assigned()
@@ -187,6 +200,34 @@ class TestLoQueMeFaltaPorEntregar:
 
 
 class TestElOrden:
+    async def test_manda_el_plazo_y_no_la_hora_local(self):
+        """Dos husos: la tarde de Madrid vence ANTES que la mañana de California.
+
+        Ordenando por franja local, la mañana sale primero y esconde debajo el
+        plazo que corre más prisa.
+        """
+        uow, comp_id, madrid_id, equipo_a, _ = await _montar(session_type=SessionType.AFTERNOON)
+        campo_lejos = GolfCourseId.generate()
+        async with uow:
+            lejos = Round.create(
+                competition_id=comp_id,
+                golf_course_id=campo_lejos,
+                round_date=date(2026, 6, 1),
+                session_type=SessionType.MORNING,
+                match_format=MatchFormat.SINGLES,
+            )
+            lejos.mark_teams_assigned()
+            await uow.rounds.add(lejos)
+            await uow.commit()
+        zona = _Zona(por_campo={campo_lejos: "America/Los_Angeles"})
+
+        pendientes = await _pendientes(uow, zona=zona).execute(equipo_a[0])
+
+        # Madrid 12:00 (10:00Z) vence a las 04:00Z; California 6:00 (13:00Z), a las 07:00Z
+        assert [p.round_id for p in pendientes] == [madrid_id.value, lejos.id.value]
+
+
+class TestElOrdenViejo:
     async def test_la_sesion_mas_proxima_va_primero(self):
         """La franja ordena por hora, no por letra: AFTERNOON < EVENING < MORNING."""
         uow, comp_id, _, equipo_a, _ = await _montar()
@@ -239,9 +280,9 @@ class TestLoQueNoEsNadaQueAtender:
         """Esos sobres no se abren solos nunca: siguen pendientes de verdad."""
         uow, _, _, equipo_a, _ = await _montar()
 
-        pendientes = await _pendientes(
-            uow, ahora=_PASADO_EL_PLAZO, zona=_Zona(None)
-        ).execute(equipo_a[0])
+        pendientes = await _pendientes(uow, ahora=_PASADO_EL_PLAZO, zona=_Zona(None)).execute(
+            equipo_a[0]
+        )
 
         assert len(pendientes) == 1
 
@@ -287,6 +328,22 @@ class TestLoQueNoEsNadaQueAtender:
         uow, _, _, equipo_a, _ = await _montar(estado="CANCELLED")
 
         assert await _pendientes(uow).execute(equipo_a[0]) == []
+
+    async def test_un_equipo_impar_en_parejas_no_puede_entregar(self):
+        """Su sobre lo rechaza el servidor siempre: el cruce va por posición.
+
+        Con 5 jugadores el equipo A no cabe en filas de dos, así que avisar a
+        su capitán lo manda a un callejón sin salida.
+        """
+        uow, _, _, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL, jugadores=5)
+
+        assert await _pendientes(uow).execute(equipo_a[0]) == []
+
+    async def test_pero_el_rival_si_puede_con_el_suyo(self):
+        """Mira SOLO el equipo del capitán: el impar es el otro."""
+        uow, _, _, _, equipo_b = await _montar(formato=MatchFormat.FOURBALL, jugadores=5)
+
+        assert len(await _pendientes(uow).execute(equipo_b[0])) == 1
 
     async def test_una_competicion_sin_equipos_repartidos(self):
         """Sin equipos no hay sobre que entregar: primero se reparten."""
