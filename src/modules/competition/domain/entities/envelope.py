@@ -88,6 +88,7 @@ class Envelope:
         submitted_by: UserId | None = None,
         automatic: bool = False,
         revealed: bool = False,
+        reveal_when_both_ready: bool = False,
     ):
         if team not in EQUIPOS:
             raise ValueError(f"El equipo tiene que ser A o B, no {team!r}")
@@ -101,6 +102,7 @@ class Envelope:
         self._submitted_by = submitted_by
         self._automatic = automatic
         self._revealed = revealed
+        self._reveal_when_both_ready = reveal_when_both_ready
 
     @classmethod
     def create(
@@ -166,6 +168,16 @@ class Envelope:
         """Si lo rellenó la aplicación al vencer el plazo."""
         return self._automatic
 
+    @property
+    def reveal_when_both_ready(self) -> bool:
+        """Si este capitán no quiere esperar a la hora.
+
+        Con que lo pidan LOS DOS, los sobres se abren en cuanto entra el
+        segundo. Con uno solo no: el otro tiene derecho a su plazo (decidido
+        el 23 sep).
+        """
+        return self._reveal_when_both_ready
+
     def is_submitted(self) -> bool:
         """Si ya hay algo dentro."""
         return bool(self._entries)
@@ -186,6 +198,7 @@ class Envelope:
         equipo: Sequence[UserId],
         por: UserId,
         ahora: datetime,
+        sin_esperar: bool = False,
     ) -> None:
         """Entrega —o corrige— la lista del capitán.
 
@@ -194,6 +207,9 @@ class Envelope:
             equipo: Los jugadores de este equipo, para comprobar que están todos
             por: Quién lo entrega
             ahora: La hora del servidor
+            sin_esperar: Si este capitán pide abrirlos en cuanto estén los dos,
+                sin aguardar a la hora. Se vuelve a decir en cada entrega: al
+                corregir la lista también se puede cambiar de idea
 
         Raises:
             EnvelopeAlreadyRevealedError: Si ya se abrió
@@ -207,6 +223,7 @@ class Envelope:
         self._submitted_at = ahora
         self._submitted_by = por
         self._automatic = False
+        self._reveal_when_both_ready = sin_esperar
 
     def fill(
         self, jugadores: Sequence[tuple[UserId, Decimal | int | float]], ahora: datetime
@@ -244,6 +261,8 @@ class Envelope:
         self._submitted_at = ahora
         self._submitted_by = None
         self._automatic = True
+        # Quien no entrego no ha pedido adelantar nada
+        self._reveal_when_both_ready = False
 
     def reveal(self) -> None:
         """Abre el sobre. A partir de aquí ya no se toca.

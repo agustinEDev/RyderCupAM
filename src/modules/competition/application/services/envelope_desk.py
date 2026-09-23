@@ -22,7 +22,11 @@ from src.modules.competition.domain.entities.competition import (
     Competition,
     TeamsNotAssignedError,
 )
-from src.modules.competition.domain.entities.envelope import Envelope
+from src.modules.competition.domain.entities.envelope import (
+    EmptyEnvelopeError,
+    Envelope,
+    OddTeamForPairsError,
+)
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -79,7 +83,7 @@ class EnvelopeDesk:
             uow: Unit of Work del modulo
             user_repository: De donde sale el handicap de quien no tiene uno
                 propio en esta competicion, que es casi todo el mundo
-            clock: El reloj del SERVIDOR, para el revelado de las 12 horas. Se
+            clock: El reloj del SERVIDOR, para el revelado del plazo. Se
                 inyecta para poder moverlo en los tests, nunca para que lo
                 ponga el cliente
             timezone_service: La zona del campo donde se juega. Sin ella no hay
@@ -246,7 +250,12 @@ class EnvelopeDesk:
         return sobre
 
     def puede_abrirlos(
-        self, competition: Competition, user_id: UserId, sobres: dict[str, Envelope]
+        self,
+        competition: Competition,
+        user_id: UserId,
+        sobres: dict[str, Envelope],
+        ronda: Round | None = None,
+        is_admin: bool = False,
     ) -> bool:
         """Si esa persona puede abrir los sobres AHORA.
 
@@ -261,7 +270,11 @@ class EnvelopeDesk:
         sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
         if sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed():
             return False
-        if competition.is_creator(user_id):
+        # Con los partidos hechos ya no se abren: el endpoint lo rechaza, y
+        # ofrecerlo seria mandar a la pantalla contra un 400
+        if ronda is not None and ronda.status in _CON_PARTIDOS_YA_HECHOS:
+            return False
+        if is_admin or competition.is_creator(user_id):
             return True
         if self.equipo_de(competition, user_id) is None:
             return False
@@ -281,25 +294,82 @@ class EnvelopeDesk:
 
         Lo resuelve quien mira, como la anotacion se abre sola al llegar el
         primer golpe (BE #305): no hay ningun proceso de fondo mirando el reloj.
+
+        **Nunca tumba la lectura.** Esto se llama desde el GET de la pantalla,
+        asi que un motivo para no poder abrirlos —equipos sin repartir, un
+        equipo impar en una sesion de parejas— se traga y se sigue pintando:
+        el capitan que si entrego tiene que poder ver su sobre y el plazo. El
+        camino manual si explica por que no puede.
         """
         sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
         if sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed():
             return False
 
-        programado = await self.programado_para(ronda, competition)
-        if programado is None:
+        # Con los partidos ya hechos, unos sobres nuevos serian enfrentamientos
+        # inventados que no se parecen a lo que se juega
+        if ronda.status in _CON_PARTIDOS_YA_HECHOS:
             return False
 
-        zona = await self._timezone.for_competition(competition)
+        if not await self._toca_abrirlos(ronda, competition, sobres):
+            return False
+
+        try:
+            await self._abrir(ronda, competition, sobres)
+        except (TeamsNotAssignedError, OddTeamForPairsError, EmptyEnvelopeError):
+            return False
+        return True
+
+    async def _toca_abrirlos(
+        self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
+    ) -> bool:
+        """Si ha llegado el momento, sin tocar nada todavia.
+
+        Lo barato primero: el reloj se mira ANTES de resolver la zona, listar
+        las rondas y contar los partidos de la anterior. Esta pantalla se
+        refresca, y dias antes del revelado todo eso seria trabajo tirado.
+        """
+        # La via corta: los DOS capitanes pidieron no esperar a la hora. Con
+        # uno solo no vale, que el otro tiene derecho a su plazo (23 sep)
+        if self._los_dos_quieren_sin_esperar(sobres):
+            return True
+
+        programado = await self.programado_para(ronda, competition)
+        if programado is None or self.ahora < programado:
+            return False
+
+        zona = await self._timezone.for_competition(competition) if self._timezone else None
         comienzo = ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
         anterior_acabo = EnvelopeRevealService.previous_session_is_over(
             await self._partidos_pendientes_de_la_anterior(ronda, competition),
             comienzo,
             self.ahora,
         )
-        if not EnvelopeRevealService.is_due(programado, anterior_acabo, self.ahora):
-            return False
+        return EnvelopeRevealService.is_due(programado, anterior_acabo, self.ahora)
 
+    @staticmethod
+    def _los_dos_quieren_sin_esperar(sobres: dict[str, Envelope]) -> bool:
+        """Si los dos capitanes pidieron abrirlos en cuanto estuvieran los dos."""
+        sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
+        return bool(
+            sobre_a
+            and sobre_b
+            and sobre_a.is_submitted()
+            and sobre_b.is_submitted()
+            and sobre_a.reveal_when_both_ready
+            and sobre_b.reveal_when_both_ready
+        )
+
+    async def _abrir(
+        self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
+    ) -> None:
+        """Rellena lo que falte y abre los dos.
+
+        Con la competicion bloqueada: aqui se CREAN sobres, y dos capitanes
+        mirando la pantalla a la hora del revelado leerian los dos que no
+        existen, los dos los crearian y uno reventaria contra la clave unica.
+        `FOR UPDATE` no bloquea una fila que todavia no esta.
+        """
+        await self._uow.competitions.find_by_id_for_update(competition.id)
         ahora_sin_huso = self.ahora.replace(tzinfo=None)
         for team in ("A", "B"):
             sobre = await self.sobre_de(ronda, team, crear=True)
@@ -311,7 +381,6 @@ class EnvelopeDesk:
             sobre.reveal()
             await self._uow.envelopes.update(sobre)
             sobres[team] = sobre
-        return True
 
     async def _partidos_pendientes_de_la_anterior(
         self, ronda: Round, competition: Competition
@@ -332,5 +401,13 @@ class EnvelopeDesk:
         ]
         if not anteriores:
             return None
-        partidos = await self._uow.matches.find_by_round(anteriores[-1].id)
+        anterior = anteriores[-1]
+        if anterior.status == RoundStatus.COMPLETED:
+            return 0
+        partidos = await self._uow.matches.find_by_round(anterior.id)
+        if not partidos:
+            # Sin partidos generados NO es «ya se jugo»: es que ni siquiera ha
+            # empezado. Contar cero pendientes abria los sobres de la siguiente
+            # con la anterior por delante, que es lo que la espera evita
+            return 1
         return sum(1 for m in partidos if not m.status.is_finished())

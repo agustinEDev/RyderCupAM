@@ -37,19 +37,22 @@ class GetEnvelopesUseCase:
         Args:
             uow: Unit of Work del modulo
             user_repository: Lo pide la mesa de sobres para los handicaps
-            clock: El reloj del servidor, para el revelado de las 12 horas
+            clock: El reloj del servidor, para el revelado del plazo
             timezone_service: La zona del campo donde se juega
         """
         self._uow = uow
         self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service)
 
-    async def execute(self, round_id: UUID, user_id: UserId) -> EnvelopesViewDTO:
+    async def execute(
+        self, round_id: UUID, user_id: UserId, is_admin: bool = False
+    ) -> EnvelopesViewDTO:
         """
         Devuelve lo que puede ver quien pregunta.
 
         Args:
             round_id: La sesion
             user_id: Quien mira
+            is_admin: Si es administrador, que tambien puede abrirlos
 
         Returns:
             Su sobre si capitanea, si el rival entrego, y los enfrentamientos
@@ -108,8 +111,11 @@ class GetEnvelopesUseCase:
                 # El del rival SOLO cuando ya estan abiertos
                 rival=envelope_to_dto(rival) if abiertos and rival else None,
                 rival_submitted=bool(rival and rival.is_submitted()),
+                rival_wants_early=bool(rival and rival.reveal_when_both_ready),
                 # La regla vive en un solo sitio: aqui solo se pregunta
-                can_reveal=self._desk.puede_abrirlos(competition, user_id, sobres),
+                can_reveal=self._desk.puede_abrirlos(
+                    competition, user_id, sobres, ronda=ronda, is_admin=is_admin
+                ),
                 reveal_scheduled_at=await self._desk.programado_para(ronda, competition),
                 matchups=matchups_to_dto(sobre_a, sobre_b) if abiertos else [],
                 my_players=[

@@ -2085,9 +2085,18 @@ def get_make_draft_pick_use_case(
 def get_submit_envelope_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> SubmitEnvelopeUseCase:
-    """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655)."""
-    return SubmitEnvelopeUseCase(uow, user_uow.users)
+    """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655).
+
+    Lleva la zona del campo porque entregar mira el plazo: pasada la hora los
+    sobres se abren y la entrega llega tarde.
+    """
+    return SubmitEnvelopeUseCase(
+        uow,
+        user_uow.users,
+        timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_envelopes_use_case(
@@ -2098,7 +2107,7 @@ def get_envelopes_use_case(
     """Proveedor del caso de uso GetEnvelopesUseCase (FE #655).
 
     Lleva la zona del campo porque mirar los sobres es lo que los abre cuando
-    llega su hora —12 horas antes de la sesion—, sin ningun proceso de fondo.
+    llega su hora —6 horas antes de la sesion—, sin ningun proceso de fondo.
     """
     return GetEnvelopesUseCase(
         uow,

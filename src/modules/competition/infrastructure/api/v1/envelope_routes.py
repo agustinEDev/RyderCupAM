@@ -64,6 +64,14 @@ class SubmitEnvelopeBodyDTO(BaseModel):
             "firma la petición."
         ),
     )
+    reveal_when_both_ready: bool = Field(
+        False,
+        description=(
+            "Pide abrir los sobres en cuanto estén los dos, sin esperar a la "
+            "hora. Hacen falta LOS DOS capitanes para que valga: con uno solo "
+            "se espera, porque el otro tiene derecho a su plazo."
+        ),
+    )
 
 
 # Lo que es culpa de quien pide: una lista que no cuadra con su equipo, un
@@ -108,7 +116,12 @@ async def submit_envelope(
 ):
     """Entrega el sobre del capitán (FE #655)."""
     try:
-        return await use_case.execute(round_id, UserId(str(current_user.id)), body.entries)
+        return await use_case.execute(
+            round_id,
+            UserId(str(current_user.id)),
+            body.entries,
+            sin_esperar=body.reveal_when_both_ready,
+        )
     except (RoundNotFoundError, CompetitionNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotATeamCaptainError as e:
@@ -139,7 +152,9 @@ async def get_envelopes(
 ):
     """Devuelve los sobres de una sesión (FE #655)."""
     try:
-        return await use_case.execute(round_id, UserId(str(current_user.id)))
+        return await use_case.execute(
+            round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
     except (RoundNotFoundError, CompetitionNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionParticipantError as e:

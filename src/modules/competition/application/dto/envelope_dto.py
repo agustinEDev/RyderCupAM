@@ -20,6 +20,9 @@ class EnvelopeDTO(BaseModel):
     submitted: bool = Field(..., description="Si ya hay algo dentro.")
     submitted_at: datetime | None = Field(None, description="Cuando se entrego.")
     automatic: bool = Field(..., description="True si lo relleno la aplicacion.")
+    reveal_when_both_ready: bool = Field(
+        False, description="Si ese capitan pidio abrirlos en cuanto esten los dos."
+    )
 
 
 class EnvelopePlayerDTO(BaseModel):
@@ -55,13 +58,16 @@ class EnvelopesViewDTO(BaseModel):
     mine: EnvelopeDTO | None = Field(None, description="El sobre de quien pregunta, si capitanea.")
     rival: EnvelopeDTO | None = Field(None, description="El del rival, solo si estan abiertos.")
     rival_submitted: bool = Field(False, description="Si el rival ya entrego el suyo.")
+    rival_wants_early: bool = Field(
+        False, description="Si el rival pidio abrirlos sin esperar a la hora."
+    )
     # Lo dice la vista y NO el cliente: la regla —el organizador siempre, un
     # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
     # la pantalla es justo donde se desincronizan
     can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
     # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
     reveal_scheduled_at: datetime | None = Field(
-        None, description="Cuando se abren solos: 12 horas antes de la sesion."
+        None, description="Cuando se abren solos: 6 horas antes de la sesion."
     )
     matchups: list[list[list[UUID]]] = Field(
         default_factory=list, description="Los enfrentamientos, solo si estan abiertos."
@@ -102,6 +108,7 @@ def envelope_to_dto(sobre) -> EnvelopeDTO:
         submitted=sobre.is_submitted(),
         submitted_at=sobre.submitted_at,
         automatic=sobre.automatic,
+        reveal_when_both_ready=sobre.reveal_when_both_ready,
     )
 
 
