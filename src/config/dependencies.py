@@ -126,6 +126,9 @@ from src.modules.competition.application.use_cases.reorder_golf_courses_use_case
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     RequestEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.reset_envelopes_use_case import (
+    ResetEnvelopesUseCase,
+)
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
 )
@@ -2135,6 +2138,18 @@ def get_reveal_envelopes_use_case(
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
     )
+
+
+def get_reset_envelopes_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ResetEnvelopesUseCase:
+    """Proveedor del caso de uso ResetEnvelopesUseCase (FE #655).
+
+    Sin zona horaria: rehacer los sobres no mira ningun reloj, solo que no se
+    haya jugado nada de esa sesion.
+    """
+    return ResetEnvelopesUseCase(uow, user_uow.users)
 
 
 def get_generate_matches_use_case(

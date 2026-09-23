@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from src.config.dependencies import (
     get_current_user,
     get_envelopes_use_case,
+    get_reset_envelopes_use_case,
     get_reveal_envelopes_use_case,
     get_submit_envelope_use_case,
 )
@@ -15,6 +16,7 @@ from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.envelope_dto import (
     EnvelopeDTO,
     EnvelopesViewDTO,
+    ResetEnvelopesResponseDTO,
     RevealEnvelopesResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -28,6 +30,11 @@ from src.modules.competition.application.services.envelope_desk import (
 )
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
+)
+from src.modules.competition.application.use_cases.reset_envelopes_use_case import (
+    NothingToResetError,
+    ResetEnvelopesUseCase,
+    SessionAlreadyPlayedError,
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
     RevealEnvelopesUseCase,
@@ -201,4 +208,38 @@ async def reveal_envelopes(
         # 409 y no 400: la petición es correcta, es que todavía no toca
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post(
+    "/rounds/{round_id}/envelopes/reset",
+    response_model=ResetEnvelopesResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Rehacer los sobres de una sesión",
+    description=(
+        "Tira los dos sobres **y los partidos** de esa sesión para que los "
+        "capitanes vuelvan a entregar. Cuando uno no llega a tiempo, lo que "
+        "viene después no es editar el resultado: es rehacer el proceso. Lo "
+        "pide **solo el organizador** —es quien arbitra— y solo mientras no se "
+        "haya jugado nada de esa sesión."
+    ),
+    tags=["Competitions - Envelopes"],
+)
+@limiter.limit("10/minute")
+async def reset_envelopes(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ResetEnvelopesUseCase = Depends(get_reset_envelopes_use_case),
+):
+    """Rehace los sobres de una sesión (FE #655)."""
+    try:
+        return await use_case.execute(
+            round_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
+    except (RoundNotFoundError, CompetitionNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (SessionAlreadyPlayedError, NothingToResetError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

@@ -207,6 +207,30 @@ class Round:
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def reset_to_pending_matches(self) -> None:
+        """
+        Devuelve la sesión a PENDING_MATCHES para rehacer sus sobres (FE #655).
+        Transición: SCHEDULED | IN_PROGRESS → PENDING_MATCHES
+
+        Distinto de `reopen_for_regeneration`, que solo admite SCHEDULED: allí
+        se recalculan los golpes de partidos que siguen en pie, y una sesión
+        arrancada ya tiene resultados que se reescribirían.
+
+        Aquí no queda nada que reescribir. Rehacer los sobres se lleva los
+        partidos por delante y solo se permite si NO se ha jugado nada —ni un
+        partido terminado ni un hoyo anotado—, así que una sesión IN_PROGRESS
+        es una que arrancó sola a su hora (BE #305) sin que nadie jugara. Sin
+        esta transición se quedaba en IN_PROGRESS y vacía, y generar partidos
+        exige PENDING_MATCHES: no habría forma de rehacerla.
+        """
+        if self._status not in (RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS):
+            raise ValueError(
+                f"Cannot reset a round in status {self._status}. "
+                "Expected SCHEDULED or IN_PROGRESS"
+            )
+        self._status = RoundStatus.PENDING_MATCHES
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     def start(self) -> None:
         """
         Inicia la sesión (al menos un partido comenzó).

@@ -61,10 +61,22 @@ class EnvelopesViewDTO(BaseModel):
     rival_wants_early: bool = Field(
         False, description="Si el rival pidio abrirlos sin esperar a la hora."
     )
-    # Lo dice la vista y NO el cliente: la regla —el organizador siempre, un
-    # capitan solo con los dos sobres dentro— vive en un sitio, y repetirla en
-    # la pantalla es justo donde se desincronizan
+    # Lo dice la vista y NO el cliente: la regla —hacen falta los dos sobres
+    # dentro, sea quien sea— vive en un sitio, y repetirla en la pantalla es
+    # justo donde se desincronizan
     can_reveal: bool = Field(False, description="Si quien pregunta puede abrirlos ahora.")
+    # Idem: que el front sepa «estos formatos son de parejas» es duplicar una
+    # regla del agregado. Lo que la pantalla necesita es cuantos van por fila
+    players_per_row: int = Field(
+        1, description="Jugadores por fila: 1 en individuales, 2 en los formatos de parejas."
+    )
+    # Un equipo impar en parejas deja la sesion atascada sin decir nada: no se
+    # puede entregar, el relleno automatico revienta y el plazo vence sin abrir
+    # nada. Lo ve TODO el que entra, tambien el organizador, que es quien puede
+    # arreglarlo cambiando el formato o rehaciendo los equipos
+    teams_fit_format: bool = Field(
+        True, description="Si los dos equipos cuadran con el formato de la sesion."
+    )
     # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
     reveal_scheduled_at: datetime | None = Field(
         None, description="Cuando se abren solos: 6 horas antes de la sesion."
@@ -118,3 +130,13 @@ def matchups_to_dto(sobre_a, sobre_b) -> list[list[list[UUID]]]:
         [[uid.value for uid in fila_a], [uid.value for uid in fila_b]]
         for fila_a, fila_b in Envelope.pair_up(sobre_a, sobre_b)
     ]
+
+
+class ResetEnvelopesResponseDTO(BaseModel):
+    """Lo que se ha llevado por delante rehacer los sobres de una sesion."""
+
+    round_id: UUID = Field(..., description="La sesion que se ha rehecho.")
+    envelopes_removed: int = Field(..., description="Sobres que se han tirado.")
+    matches_removed: int = Field(
+        ..., description="Partidos que se han tirado: ya no salian de ningun sobre."
+    )

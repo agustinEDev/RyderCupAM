@@ -873,6 +873,64 @@ class TestCuandoNoHayPlazoQueVencer:
         assert vista.can_reveal is True
 
 
+class TestLaVistaDiceComoSeRellena:
+    """La pantalla no puede saber sola si esa sesión va de uno en uno.
+
+    Que el front repita «estos formatos son de parejas» es duplicar una regla
+    que ya vive en el agregado, y es donde se desincronizan.
+    """
+
+    async def test_en_individuales_va_uno_por_fila(self):
+        uow, _, round_id, equipo_a, _ = await _montar()
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.players_per_row == 1
+
+    async def test_y_en_parejas_van_dos(self):
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.players_per_row == 2
+
+    async def test_dice_si_los_equipos_no_cuadran_con_el_formato(self):
+        """Un equipo impar en parejas deja la sesión atascada sin decir nada.
+
+        El relleno automático revienta con `OddTeamForPairsError`, la lectura
+        se lo traga para poder pintar, y el plazo vence sin abrir nada: ni el
+        capitán que entregó ni el organizador se enteran de por qué.
+        """
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL, jugadores=5)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.teams_fit_format is False
+
+    async def test_y_lo_ve_tambien_quien_no_capitanea(self):
+        """El organizador es quien puede arreglarlo, y no tiene sobre."""
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL, jugadores=5)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[1])
+
+        assert vista.teams_fit_format is False
+
+    async def test_con_los_equipos_pares_cuadran(self):
+        uow, _, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.teams_fit_format is True
+
+    async def test_y_en_individuales_siempre_cuadran(self):
+        """Un equipo impar en individuales es normal: el draft lo permite."""
+        uow, _, round_id, equipo_a, _ = await _montar(jugadores=5)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, equipo_a[0])
+
+        assert vista.teams_fit_format is True
+
+
 class TestQuienVeQue:
     async def test_el_capitan_ve_el_suyo_y_no_el_del_rival(self):
         """Ver la lista del otro antes de tiempo es el juego entero."""

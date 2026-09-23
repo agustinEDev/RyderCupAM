@@ -190,6 +190,33 @@ class TestRoundStatusTransitions:
         with pytest.raises(ValueError, match="Expected SCHEDULED"):
             round.reopen_for_regeneration()
 
+    @pytest.mark.parametrize("status", [RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS])
+    def test_reset_to_pending_matches_desde_montada_o_arrancada(self, status):
+        """Rehacer los sobres se lleva los partidos y la sesión vuelve atrás.
+
+        También desde IN_PROGRESS, al revés que `reopen_for_regeneration`: una
+        sesión arranca sola a su hora (BE #305) sin que nadie haya jugado, y el
+        reset solo llega hasta aquí si no hay nada jugado. Sin esto se quedaba
+        arrancada y vacía, y generar partidos exige PENDING_MATCHES.
+        """
+        round = self._scheduled_round(status=status)
+
+        round.reset_to_pending_matches()
+
+        assert round.status == RoundStatus.PENDING_MATCHES
+        assert round.can_generate_matches()
+
+    @pytest.mark.parametrize(
+        "status",
+        [RoundStatus.PENDING_MATCHES, RoundStatus.COMPLETED, RoundStatus.PENDING_TEAMS],
+    )
+    def test_reset_to_pending_matches_rechaza_los_demas_estados(self, status):
+        """Una sesión terminada tiene resultados, y una sin equipos no tiene sobres."""
+        round = self._scheduled_round(status=status)
+
+        with pytest.raises(ValueError, match="Expected SCHEDULED or IN_PROGRESS"):
+            round.reset_to_pending_matches()
+
     def test_start_from_scheduled(self):
         """SCHEDULED → IN_PROGRESS."""
         round = Round.reconstruct(
