@@ -23,6 +23,7 @@ from src.modules.competition.domain.entities.competition import (
     TeamsNotAssignedError,
 )
 from src.modules.competition.domain.entities.envelope import (
+    EN_PAREJAS,
     EmptyEnvelopeError,
     Envelope,
     OddTeamForPairsError,
@@ -314,10 +315,46 @@ class EnvelopeDesk:
             return False
 
         try:
-            await self._abrir(ronda, competition, sobres)
+            # Se comprueba que los DOS se pueden preparar antes de tocar
+            # ninguno: abrir uno y fallar al rellenar el otro dejaba la sesión
+            # medio abierta, y de ahí no se sale —el organizador ya no puede
+            # abrirlos porque uno «ya estaba abierto», y su capitán tampoco
+            # puede corregir—
+            relleno = await self._relleno_necesario(ronda, competition, sobres)
         except (TeamsNotAssignedError, OddTeamForPairsError, EmptyEnvelopeError):
             return False
+
+        await self._abrir(ronda, competition, sobres, relleno)
         return True
+
+    async def _relleno_necesario(
+        self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
+    ) -> dict[str, list[tuple[UserId, Decimal]]]:
+        """Lo que habria que rellenar en cada equipo, comprobando que se puede.
+
+        No toca nada: solo reune los datos y deja que salte el motivo por el
+        que no se podria —equipos sin repartir, un equipo vacio, o uno impar en
+        una sesion de parejas—.
+
+        Raises:
+            TeamsNotAssignedError, EmptyEnvelopeError, OddTeamForPairsError
+        """
+        hace_falta: dict[str, list[tuple[UserId, Decimal]]] = {}
+        for team in ("A", "B"):
+            sobre = sobres.get(team)
+            if sobre is not None and sobre.is_submitted():
+                continue
+            jugadores = await self.jugadores_de(competition, team)
+            if not jugadores:
+                raise EmptyEnvelopeError(f"El equipo {team} no tiene jugadores que colocar")
+            por_fila = Envelope.players_per_row_for(ronda.match_format)
+            if por_fila == EN_PAREJAS and len(jugadores) % EN_PAREJAS != 0:
+                raise OddTeamForPairsError(
+                    f"El equipo {team} tiene {len(jugadores)} jugadores y esta sesión es de "
+                    "parejas: alguien se quedaría fuera"
+                )
+            hace_falta[team] = await self.handicaps_de(competition, jugadores)
+        return hace_falta
 
     async def _toca_abrirlos(
         self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
@@ -360,7 +397,11 @@ class EnvelopeDesk:
         )
 
     async def _abrir(
-        self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
+        self,
+        ronda: Round,
+        competition: Competition,
+        sobres: dict[str, Envelope],
+        relleno: dict[str, list[tuple[UserId, Decimal]]],
     ) -> None:
         """Rellena lo que falte y abre los dos.
 
@@ -376,8 +417,7 @@ class EnvelopeDesk:
             if sobre is None:  # `crear=True` siempre devuelve uno; esto es para el tipo
                 continue
             if not sobre.is_submitted():
-                jugadores = await self.jugadores_de(competition, team)
-                sobre.fill(await self.handicaps_de(competition, jugadores), ahora=ahora_sin_huso)
+                sobre.fill(relleno[team], ahora=ahora_sin_huso)
             sobre.reveal()
             await self._uow.envelopes.update(sobre)
             sobres[team] = sobre

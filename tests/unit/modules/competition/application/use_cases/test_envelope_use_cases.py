@@ -206,8 +206,12 @@ async def _montar(
     await set_competition_status(uow, creada.id, "CLOSED")
 
     todos = [creator_id, *resto]
-    equipo_a = todos[: len(todos) // 2]
-    equipo_b = todos[len(todos) // 2 :]
+    # Con un número impar, el jugador de más va al equipo A: así el caso de
+    # «A se puede emparejar y B no» se puede montar, que es el orden en el que
+    # el revelado los toca
+    mitad = (len(todos) + 1) // 2
+    equipo_a = todos[:mitad]
+    equipo_b = todos[mitad:]
     _HANDICAPS_DE_PERFIL.clear()
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
@@ -219,7 +223,9 @@ async def _montar(
             await uow.team_assignments.add(
                 TeamAssignment.create(
                     competition_id=comp_id,
-                    mode=TeamAssignmentMode.MANUAL,
+                    # DRAFT y no MANUAL: es de donde vienen estos equipos, y es
+                    # el único modo que admite la diferencia de un jugador
+                    mode=TeamAssignmentMode.DRAFT,
                     team_a_player_ids=equipo_a,
                     team_b_player_ids=equipo_b,
                 )
@@ -598,6 +604,44 @@ class TestLoQueElReveladoAutomaticoNoDebeHacer:
 
         assert vista.revealed is False
         assert len(vista.my_players) == 3
+
+    async def test_si_un_sobre_no_se_puede_rellenar_el_otro_no_queda_abierto(self):
+        """O la sesión se queda en un estado del que no se sale.
+
+        Abrir A y fallar al rellenar B dejaba A revelado y B cerrado: el
+        organizador ya no podía abrirlos —el suyo «ya estaba abierto»— y el
+        capitán A tampoco podía corregir su lista. Y el disparador es normal:
+        el draft admite equipos desiguales por uno, y en parejas eso significa
+        que uno de los dos no se puede rellenar.
+        """
+        # Siete jugadores: un equipo de cuatro (que sí se puede emparejar) y
+        # otro de tres, que es justo lo que deja el draft con impares
+        uow, _, round_id, equipo_a, equipo_b = await _montar(
+            formato=MatchFormat.FOURBALL, jugadores=7
+        )
+        par, impar = (equipo_a, equipo_b) if len(equipo_a) % 2 == 0 else (equipo_b, equipo_a)
+        assert len(impar) % 2 != 0
+        await _entregar(uow).execute(
+            round_id.value,
+            par[0],
+            [[str(par[0].value), str(par[1].value)], [str(par[2].value), str(par[3].value)]],
+        )
+        reloj = _Reloj(datetime(2030, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        await GetEnvelopesUseCase(uow, _RepoUsuarios(), reloj, _Zona()).execute(
+            round_id.value, par[0]
+        )
+
+        async with uow:
+            sobres = {s.team: s for s in await uow.envelopes.find_by_round(round_id)}
+        entregado = sobres["A" if par is equipo_a else "B"]
+        assert entregado.is_sealed() is True, "ese sobre no puede quedarse abierto él solo"
+        # Y por tanto el capitán puede seguir corrigiendo
+        await _entregar(uow).execute(
+            round_id.value,
+            par[0],
+            [[str(par[1].value), str(par[0].value)], [str(par[2].value), str(par[3].value)]],
+        )
 
     async def test_la_sesion_anterior_sin_partidos_todavia_no_ha_acabado(self):
         """«Cero partidos pendientes» no es lo mismo que «ya se jugó».

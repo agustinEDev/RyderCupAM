@@ -188,7 +188,16 @@ class Envelope:
 
     def players_per_row(self) -> int:
         """Cuántos jugadores lleva cada fila: uno en individuales, dos en parejas."""
-        return 1 if self._match_format == MatchFormat.SINGLES else EN_PAREJAS
+        return Envelope.players_per_row_for(self._match_format)
+
+    @staticmethod
+    def players_per_row_for(match_format: MatchFormat) -> int:
+        """Lo mismo, sabiendo solo el formato.
+
+        Hace falta antes de que el sobre exista: al decidir si un equipo se
+        puede repartir, hay que saber si van de uno o de dos.
+        """
+        return 1 if match_format == MatchFormat.SINGLES else EN_PAREJAS
 
     # ==================== Acciones ====================
 
