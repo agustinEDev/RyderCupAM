@@ -254,3 +254,36 @@ class TestGuardarYLeerElSobre:
         bloqueado = await repo.find_by_round_and_team_for_update(ronda.id, "A")
 
         assert bloqueado.is_sealed() is False
+
+    async def test_los_dos_se_borran_juntos(self, db_session, ronda, jugadores):
+        """Rehacer los sobres borra los DOS de una vez (FE #655).
+
+        Visto en el Kind el 23 sep: al confirmar «Rehacer los sobres» el
+        servidor devolvía un 503. Para vaciar la sesión, SQLAlchemy ordena por
+        clave primaria los objetos que va a borrar, y `EnvelopeId` no se podía
+        comparar con otro `EnvelopeId`, así que reventaba con
+        `InvalidRequestError`. Con un solo sobre no hay nada que ordenar y no
+        se notaba: ni los tests en memoria ni los de aquí lo tocaban.
+        """
+        repo = SQLAlchemyEnvelopeRepository(db_session)
+        for team in ("A", "B"):
+            sobre = Envelope.create(
+                competition_id=ronda.competition_id,
+                round_id=ronda.id,
+                team=team,
+                match_format=MatchFormat.SINGLES,
+            )
+            sobre.submit(
+                [[jugadores[0]], [jugadores[1]], [jugadores[2]], [jugadores[3]]],
+                equipo=jugadores,
+                por=jugadores[0],
+                ahora=AHORA,
+            )
+            await repo.add(sobre)
+        await db_session.commit()
+
+        await repo.delete_by_round(ronda.id)
+        await db_session.commit()
+        db_session.expunge_all()
+
+        assert await repo.find_by_round(ronda.id) == []
