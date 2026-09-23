@@ -295,6 +295,28 @@ class EnvelopeDesk:
             return True
         return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
 
+    async def los_equipos_cuadran(self, competition: Competition, por_fila: int) -> bool:
+        """Si los dos equipos se pueden repartir en filas de `por_fila`.
+
+        En parejas, un equipo impar no tiene sobre posible: el cruce va por
+        posicion y alguien se quedaria fuera. Sin esto la sesion se atasca en
+        silencio —no se entrega, el relleno revienta y el plazo vence sin abrir
+        nada— y quien puede arreglarlo, el organizador, no lo ve por ningun
+        lado.
+
+        Sin equipos repartidos todavia no hay nada que no cuadre: eso lo dice
+        su propio error cuando toca.
+        """
+        if por_fila == 1:
+            return True
+        try:
+            for team in ("A", "B"):
+                if len(await self.jugadores_de(competition, team)) % por_fila != 0:
+                    return False
+        except TeamsNotAssignedError:
+            return True
+        return True
+
     async def programado_para(self, ronda: Round, competition: Competition) -> datetime | None:
         """A que hora se abren solos los sobres de esa sesion."""
         zona = await self._zona_de(ronda)

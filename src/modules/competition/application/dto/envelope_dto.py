@@ -70,6 +70,13 @@ class EnvelopesViewDTO(BaseModel):
     players_per_row: int = Field(
         1, description="Jugadores por fila: 1 en individuales, 2 en los formatos de parejas."
     )
+    # Un equipo impar en parejas deja la sesion atascada sin decir nada: no se
+    # puede entregar, el relleno automatico revienta y el plazo vence sin abrir
+    # nada. Lo ve TODO el que entra, tambien el organizador, que es quien puede
+    # arreglarlo cambiando el formato o rehaciendo los equipos
+    teams_fit_format: bool = Field(
+        True, description="Si los dos equipos cuadran con el formato de la sesion."
+    )
     # Para que la pantalla lo cuente en vez de dejar al capitan a ciegas
     reveal_scheduled_at: datetime | None = Field(
         None, description="Cuando se abren solos: 6 horas antes de la sesion."
