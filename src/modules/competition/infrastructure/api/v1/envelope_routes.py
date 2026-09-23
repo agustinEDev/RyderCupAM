@@ -264,7 +264,12 @@ async def reset_envelopes(
     ),
     tags=["Competitions - Envelopes"],
 )
-@limiter.limit("60/minute")
+# Lo dispara el panel de TODO el mundo en cada montaje, y en produccion el
+# cubo es unico para toda la aplicacion (ADR-038): con 60/min, doce moviles
+# volviendo a «Inicio» en un torneo se llevan un 429. Como la llamada va
+# dentro de un `allSettled`, el fallo seria mudo: al capitan simplemente no le
+# saldria el aviso. El GET de la sala de draft subio a 300 por lo mismo
+@limiter.limit("300/minute")
 async def list_my_pending_envelopes(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     current_user: UserResponseDTO = Depends(get_current_user),

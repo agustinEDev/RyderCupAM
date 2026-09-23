@@ -10,8 +10,9 @@ Solo lo que se puede hacer AHORA: un sobre ya entregado, uno ya abierto o una
 sesion con los partidos hechos no son nada que atender.
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -26,6 +27,7 @@ from src.modules.competition.domain.entities.team_assignment import TeamAssignme
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
@@ -42,9 +44,11 @@ from tests.unit.modules.competition.application.use_cases.helpers import (
 
 pytestmark = pytest.mark.asyncio
 
-# La sesion del montaje es del 1 de junio
-_ANTES = date(2026, 5, 20)
-_DESPUES = date(2026, 6, 5)
+# La sesion del montaje es del 1 de junio por la manana: empieza a las 6:00 del
+# campo y su plazo vence 6 horas antes, o sea a las 00:00 de ese mismo dia
+_ANTES = datetime(2026, 5, 20, 10, 0, tzinfo=ZoneInfo("Europe/Madrid"))
+_EN_EL_PLAZO = datetime(2026, 5, 31, 23, 30, tzinfo=ZoneInfo("Europe/Madrid"))
+_PASADO_EL_PLAZO = datetime(2026, 6, 1, 0, 30, tzinfo=ZoneInfo("Europe/Madrid"))
 
 
 class _RepoUsuarios:
@@ -65,17 +69,30 @@ class _RepoUsuarios:
         return [self._Usuario(uid) for uid in user_ids]
 
 
-class _Calendario:
-    """El dia de hoy segun el servidor, que en los tests se mueve a mano."""
+class _Reloj:
+    """La hora del servidor, que en los tests se mueve a mano."""
 
-    def __init__(self, hoy: date):
-        self._hoy = hoy
+    def __init__(self, ahora: datetime):
+        self._ahora = ahora
 
-    def __call__(self) -> date:
-        return self._hoy
+    def __call__(self) -> datetime:
+        return self._ahora
 
 
-async def _montar(con_equipos: bool = True):
+class _Zona:
+    """La zona del campo donde se juega."""
+
+    def __init__(self, zona="Europe/Madrid"):
+        self._zona = zona
+
+    async def for_competition(self, competition):
+        return self._zona
+
+    async def for_course(self, golf_course_id):
+        return self._zona
+
+
+async def _montar(con_equipos: bool = True, modo=None, estado: str = "CLOSED"):
     """Una cerrada con equipos, sus capitanes y una sesion del 1 de junio."""
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
@@ -84,12 +101,16 @@ async def _montar(con_equipos: bool = True):
     resto = [UserId(uuid4()) for _ in range(3)]
     for jugador in resto:
         await create_approved_enrollment(uow, creada.id, jugador)
+    # Siempre CLOSED primero: nombrar capitanes exige una competición en pie,
+    # y el estado que pida el test se aplica al final
     await set_competition_status(uow, creada.id, "CLOSED")
 
     todos = [creator_id, *resto]
     equipo_a, equipo_b = todos[:2], todos[2:]
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
+        if modo is not None:
+            competicion._setup_mode = modo
         competicion.name_captains(equipo_a[0], equipo_b[0], todos, has_teams=False)
         await uow.competitions.update(competicion)
         if con_equipos:
@@ -112,11 +133,13 @@ async def _montar(con_equipos: bool = True):
             ronda.mark_teams_assigned()
         await uow.rounds.add(ronda)
         await uow.commit()
+    if estado != "CLOSED":
+        await set_competition_status(uow, creada.id, estado)
     return uow, comp_id, ronda.id, equipo_a, equipo_b
 
 
-def _pendientes(uow, hoy: date = _ANTES):
-    return ListMyPendingEnvelopesUseCase(uow, _Calendario(hoy))
+def _pendientes(uow, ahora: datetime = _ANTES, zona=None):
+    return ListMyPendingEnvelopesUseCase(uow, _Reloj(ahora), zona or _Zona())
 
 
 async def _entregar(uow, round_id, capitan, equipo):
@@ -163,6 +186,27 @@ class TestLoQueMeFaltaPorEntregar:
         assert len(await _pendientes(uow).execute(equipo_b[0])) == 1
 
 
+class TestElOrden:
+    async def test_la_sesion_mas_proxima_va_primero(self):
+        """La franja ordena por hora, no por letra: AFTERNOON < EVENING < MORNING."""
+        uow, comp_id, _, equipo_a, _ = await _montar()
+        async with uow:
+            tarde = Round.create(
+                competition_id=comp_id,
+                golf_course_id=GolfCourseId.generate(),
+                round_date=date(2026, 6, 1),
+                session_type=SessionType.AFTERNOON,
+                match_format=MatchFormat.SINGLES,
+            )
+            tarde.mark_teams_assigned()
+            await uow.rounds.add(tarde)
+            await uow.commit()
+
+        pendientes = await _pendientes(uow).execute(equipo_a[0])
+
+        assert [p.session_type for p in pendientes] == ["MORNING", "AFTERNOON"]
+
+
 class TestLoQueNoEsNadaQueAtender:
     async def test_quien_no_capitanea_no_tiene_sobres(self):
         uow, _, _, equipo_a, _ = await _montar()
@@ -174,17 +218,32 @@ class TestLoQueNoEsNadaQueAtender:
 
         assert await _pendientes(uow).execute(UserId(uuid4())) == []
 
-    async def test_una_sesion_que_ya_paso(self):
-        """Su plazo venció: la aplicación ya rellenó lo que faltara."""
+    async def test_pasado_el_plazo_ya_no_hay_nada_que_hacer(self):
+        """A esa hora los sobres se abren solos en cuanto alguien mire.
+
+        La sesión es del día 1 por la mañana —empieza a las 6:00 del campo— y
+        el plazo vence 6 horas antes, a las 00:00 de ese mismo día. Avisar a
+        las 8:00 manda al capitán a una pantalla que, al abrirse, rellena su
+        lista por hándicap delante de él.
+        """
         uow, _, _, equipo_a, _ = await _montar()
 
-        assert await _pendientes(uow, hoy=_DESPUES).execute(equipo_a[0]) == []
+        assert await _pendientes(uow, ahora=_PASADO_EL_PLAZO).execute(equipo_a[0]) == []
 
-    async def test_el_dia_de_la_sesion_todavia_cuenta(self):
-        """Hasta que se abren, el capitán puede corregir su lista."""
+    async def test_hasta_el_plazo_si_cuenta(self):
         uow, _, _, equipo_a, _ = await _montar()
 
-        assert len(await _pendientes(uow, hoy=date(2026, 6, 1)).execute(equipo_a[0])) == 1
+        assert len(await _pendientes(uow, ahora=_EN_EL_PLAZO).execute(equipo_a[0])) == 1
+
+    async def test_sin_zona_del_campo_no_hay_plazo_que_vencer(self):
+        """Esos sobres no se abren solos nunca: siguen pendientes de verdad."""
+        uow, _, _, equipo_a, _ = await _montar()
+
+        pendientes = await _pendientes(
+            uow, ahora=_PASADO_EL_PLAZO, zona=_Zona(None)
+        ).execute(equipo_a[0])
+
+        assert len(pendientes) == 1
 
     async def test_una_sesion_con_los_partidos_ya_hechos(self):
         uow, _, round_id, equipo_a, _ = await _montar()
@@ -210,6 +269,22 @@ class TestLoQueNoEsNadaQueAtender:
                     sobre.reveal()
                     await uow.envelopes.update(sobre)
             await uow.commit()
+
+        assert await _pendientes(uow).execute(equipo_a[0]) == []
+
+    async def test_una_competicion_que_no_va_por_sobres(self):
+        """En automático y en manual los partidos NO salen de los sobres.
+
+        Avisar allí ofrece un paso que ese torneo no tiene, y si el capitán
+        pica y entrega, generar los partidos se bloquea hasta que se abran.
+        """
+        uow, _, _, equipo_a, _ = await _montar(modo=SetupMode.AUTOMATIC)
+
+        assert await _pendientes(uow).execute(equipo_a[0]) == []
+
+    async def test_una_competicion_cancelada(self):
+        """Cancelar no toca las rondas: se quedaban avisando hasta la fecha."""
+        uow, _, _, equipo_a, _ = await _montar(estado="CANCELLED")
 
         assert await _pendientes(uow).execute(equipo_a[0]) == []
 

@@ -2145,13 +2145,18 @@ def get_reveal_envelopes_use_case(
 
 def get_list_my_pending_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> ListMyPendingEnvelopesUseCase:
     """Proveedor del caso de uso ListMyPendingEnvelopesUseCase (FE #655).
 
-    El dia de hoy lo pone el SERVIDOR: con la fecha del movil, un telefono
-    atrasado resucitaria avisos de sesiones ya jugadas.
+    La hora la pone el SERVIDOR: con la del movil, un telefono atrasado
+    resucitaria avisos de sesiones ya jugadas. Y la zona del campo es lo que
+    convierte la franja en una hora, que es contra lo que se mide el plazo.
     """
-    return ListMyPendingEnvelopesUseCase(uow)
+    return ListMyPendingEnvelopesUseCase(
+        uow,
+        timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+    )
 
 
 def get_reset_envelopes_use_case(
