@@ -94,3 +94,15 @@ class GetCompetitionUseCase:
         async with self._uow:
             reparto = await self._uow.team_assignments.find_by_competition(competition_id)
             return reparto is not None
+
+    async def reparto_real(self, competition_id: CompetitionId) -> str | None:
+        """Como se repartieron los equipos DE VERDAD, o None si aun no hay.
+
+        La competicion guarda el modo con el que nacio —del tipo Ryder sale
+        MANUAL— y la ficha lo ensenaba tal cual, asi que unos equipos elegidos
+        uno a uno por los capitanes en la sala de draft salian como
+        «Asignacion de Equipos: Manual».
+        """
+        async with self._uow:
+            reparto = await self._uow.team_assignments.find_by_competition(competition_id)
+            return reparto.mode.value if reparto else None

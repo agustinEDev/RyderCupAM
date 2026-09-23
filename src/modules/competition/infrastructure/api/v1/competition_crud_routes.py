@@ -452,6 +452,10 @@ async def get_competition(
         )
         # Igual, solo en la ficha: con él elige el botón de capitanes (FE #692)
         dto.teams_assigned = await get_competition_uc.tiene_equipos(competition_vo_id)
+        # Cómo se repartieron DE VERDAD: la competición guarda el modo con el
+        # que nació, y así unos equipos salidos del draft se contaban como
+        # repartidos a mano
+        dto.actual_team_assignment = await get_competition_uc.reparto_real(competition_vo_id)
         return dto
 
     except ValueError as e:
