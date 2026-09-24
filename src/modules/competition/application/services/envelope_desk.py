@@ -286,11 +286,12 @@ class EnvelopeDesk:
         is_admin: bool = False,
         sin_plazo: bool = False,
     ) -> bool:
-        """Si esa persona puede abrir los sobres AHORA.
+        """Si esa persona puede abrir los sobres A MANO, ahora.
 
-        **Hacen falta los dos sobres dentro, sea quien sea** (decidido el 23
-        sep): abrir es lo que desvela el orden de juego, y con uno fuera no hay
-        nada que desvelar. Ni el organizador ni un administrador lo fuerzan.
+        **Nadie, con plazo que vencer** (BE #374, decidido el 24 sep): abrir
+        antes de hora es decision de LOS DOS capitanes, y cada uno da su permiso
+        al entregar; con los dos, se abren solos. Ni un capitan solo ni el
+        organizador los abren a mano, tampoco con los dos sobres dentro.
 
         El capitan que no aparece no deja nada atascado: al vencer el plazo se
         abren solos y la aplicacion rellena lo que falte.
@@ -317,9 +318,7 @@ class EnvelopeDesk:
         arbitra = is_admin or competition.is_creator(user_id)
         if not arbitra and self.equipo_de(competition, user_id) is None:
             return False
-        if arbitra and sin_plazo:
-            return True
-        return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
+        return arbitra and sin_plazo
 
     async def los_equipos_cuadran(self, competition: Competition, por_fila: int) -> bool:
         """Si los dos equipos se pueden repartir en filas de `por_fila`.

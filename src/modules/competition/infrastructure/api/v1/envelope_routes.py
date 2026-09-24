@@ -49,8 +49,8 @@ from src.modules.competition.application.use_cases.reset_envelopes_use_case impo
     SessionAlreadyPlayedError,
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
+    EarlyRevealNeedsBothCaptainsError,
     RevealEnvelopesUseCase,
-    RivalEnvelopeMissingError,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
@@ -216,7 +216,7 @@ async def reveal_envelopes(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except RivalEnvelopeMissingError as e:
+    except EarlyRevealNeedsBothCaptainsError as e:
         # 409 y no 400: la petición es correcta, es que todavía no toca
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:

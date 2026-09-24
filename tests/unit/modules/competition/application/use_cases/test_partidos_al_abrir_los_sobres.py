@@ -113,11 +113,16 @@ class _Reloj:
 
 
 class _Zona:
+    """La zona del campo; `None` es un campo sin zona, cuya sesión no vence."""
+
+    def __init__(self, zona="Europe/Madrid"):
+        self._zona = zona
+
     async def for_competition(self, competition):
-        return "Europe/Madrid"
+        return self._zona
 
     async def for_course(self, golf_course_id):
-        return "Europe/Madrid"
+        return self._zona
 
 
 class _Usuario:
@@ -227,7 +232,24 @@ class _Torneo:
         )
 
     def abrir(self):
-        return RevealEnvelopesUseCase(self.uow, self.usuarios, generador=self.generador())
+        """Abre los sobres como en la vida real: vencido el plazo, al mirarlos.
+
+        Abrirlos a mano ya no lo hace nadie con plazo que vencer (BE #374): antes
+        de hora solo con el permiso de los dos capitanes.
+        """
+        mirar = self.mirar(_Reloj(_PASADO_EL_PLAZO))
+
+        class _PorPlazo:
+            async def execute(self, round_id, quien):
+                return await mirar.execute(round_id, quien)
+
+        return _PorPlazo()
+
+    def abrir_a_mano_sin_plazo(self):
+        """La única llave que queda: el organizador, en una sesión que no vence."""
+        return RevealEnvelopesUseCase(
+            self.uow, self.usuarios, _Zona(None), generador=self.generador()
+        )
 
     async def entregan_los_dos(self, sin_esperar=(False, False)):
         """Cada capitán entrega su orden tal cual está el equipo."""
@@ -346,10 +368,11 @@ def _parejas(partidos):
 
 class TestLosPartidosSalenAlAbrir:
     async def test_p1_abrir_a_mano_crea_los_partidos_de_los_sobres(self):
+        """A mano solo abre el organizador en una sesión sin plazo (BE #374)."""
         torneo = await _montar()
         await torneo.entregan_los_dos()
 
-        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+        await torneo.abrir_a_mano_sin_plazo().execute(torneo.ronda_id.value, torneo.organizador)
 
         partidos = await torneo.partidos()
         assert _parejas(partidos) == [

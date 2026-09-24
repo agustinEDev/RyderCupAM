@@ -61,3 +61,35 @@ class TestLasRutasDeLosSobres:
         )
 
         assert respuesta.status_code in (401, 403), respuesta.text
+
+    async def test_abrir_sin_el_permiso_de_los_dos_es_un_409_con_el_motivo(
+        self, client: AsyncClient
+    ):
+        """BE #374: el rechazo llega como 409 con su motivo, no como un 500.
+
+        El caso de uso se sustituye por uno que rechaza: montar por la API un
+        torneo con capitanes, equipos y dos sobres entregados es otra prueba, y
+        la regla ya la cubren los tests del caso de uso.
+        """
+        from main import app
+        from src.config.dependencies import get_reveal_envelopes_use_case
+        from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
+            EarlyRevealNeedsBothCaptainsError,
+        )
+
+        class _Rechaza:
+            async def execute(self, *args, **kwargs):
+                raise EarlyRevealNeedsBothCaptainsError("Hacen falta los dos capitanes")
+
+        usuario = await create_authenticated_user(
+            client, "sobres-4@test.com", "P@ssw0rd123!", "Sobres", "Cuatro"
+        )
+        set_auth_cookies(client, usuario["cookies"])
+        app.dependency_overrides[get_reveal_envelopes_use_case] = lambda: _Rechaza()
+        try:
+            respuesta = await client.post(f"/api/v1/competitions/rounds/{uuid4()}/envelopes/reveal")
+        finally:
+            app.dependency_overrides.pop(get_reveal_envelopes_use_case, None)
+
+        assert respuesta.status_code == 409, respuesta.text
+        assert "los dos capitanes" in respuesta.json()["detail"]

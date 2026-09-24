@@ -30,8 +30,8 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class RivalEnvelopeMissingError(Exception):
-    """Faltan sobres por entregar: nadie abre hasta que esten los dos."""
+class EarlyRevealNeedsBothCaptainsError(Exception):
+    """Abrir antes de hora lo deciden los dos capitanes, no uno ni el organizador (BE #374)."""
 
     pass
 
@@ -77,7 +77,8 @@ class RevealEnvelopesUseCase:
         Raises:
             RoundNotFoundError: Si la sesion no existe
             NotCompetitionCreatorError: Si no es el organizador ni un capitan
-            RivalEnvelopeMissingError: Si falta algun sobre por entregar
+            EarlyRevealNeedsBothCaptainsError: Si la sesion tiene plazo: antes de
+                hora solo se abren con el permiso de los dos capitanes
             EnvelopeAlreadyRevealedError: Si ya estaban abiertos
         """
         async with self._uow:
@@ -91,26 +92,39 @@ class RevealEnvelopesUseCase:
                 raise NotCompetitionCreatorError(
                     "Los sobres los abre el organizador o uno de los capitanes"
                 )
-            # Hacen falta los dos sobres dentro, sea quien sea: abrir es lo que
-            # desvela el orden de juego, y con uno fuera no hay nada que
-            # desvelar. Ademas, el relleno automatico es PREDECIBLE —por
-            # handicap—, asi que entregar y abrir de inmediato dejaria armar la
-            # lista propia para ganar todos los cruces.
+            # Abrir antes de hora es decision de LOS DOS capitanes (BE #374):
+            # cada uno da su permiso al entregar, y se abren cuando estan los
+            # dos. Ni un capitan solo ni el organizador los abren a mano: el
+            # orden de juego es de los capitanes, y el relleno automatico es
+            # PREDECIBLE —por handicap—, asi que abrir por su cuenta dejaria
+            # armar la lista propia para ganar todos los cruces.
             #
             # El capitan que no aparece no deja nada atascado: al vencer el
             # plazo se abren solos y la aplicacion rellena lo que falte.
             #
             # Salvo en una sesion SIN plazo —campo sin zona horaria—, que no se
-            # abre sola nunca: ahi el que arbitra conserva la llave o la sesion
-            # se queda atascada para siempre.
+            # abre sola nunca: ahi el que arbitra conserva la llave, aunque
+            # falte un sobre, o la sesion se queda atascada para siempre.
             #
             # Unos sobres ya abiertos pasan por aqui —rellenar deja entradas
             # dentro—, y el error de «ya estaban abiertos» lo da el bucle
             sin_plazo = self._desk.sin_plazo_que_vencer(
                 await self._desk.programado_para(ronda, competition)
             )
-            if not (arbitra and sin_plazo):
-                await self._comprobar_que_los_dos_entregaron(ronda)
+            sobres_ahora = {
+                sobre.team: sobre for sobre in await self._uow.envelopes.find_by_round(ronda.id)
+            }
+            # Ya abiertos, el motivo es ese, no el permiso que faltaría
+            if any(not sobre.is_sealed() for sobre in sobres_ahora.values()):
+                raise EnvelopeAlreadyRevealedError("Los sobres de esta sesión ya se abrieron")
+            # La misma regla que enseña la vista: vive en un solo sitio
+            if not self._desk.puede_abrirlos(
+                competition, user_id, sobres_ahora, is_admin=is_admin, sin_plazo=sin_plazo
+            ):
+                raise EarlyRevealNeedsBothCaptainsError(
+                    "Los sobres se abren solos a su hora, o antes si los dos "
+                    "capitanes lo piden al entregar"
+                )
 
             ahora = datetime.now(UTC).replace(tzinfo=None)
             automaticos = []
@@ -134,24 +148,4 @@ class RevealEnvelopesUseCase:
                 round_id=ronda.id.value,
                 matchups=matchups_to_dto(sobres["A"], sobres["B"]),
                 filled_automatically=automaticos,
-            )
-
-    async def _comprobar_que_los_dos_entregaron(self, ronda) -> None:
-        """Los dos sobres tienen que estar dentro.
-
-        Raises:
-            RivalEnvelopeMissingError: Si falta alguno
-        """
-        entregados = {
-            sobre.team
-            for sobre in await self._uow.envelopes.find_by_round(ronda.id)
-            if sobre.is_submitted()
-        }
-        if entregados != {"A", "B"}:
-            raise RivalEnvelopeMissingError(
-                # Sin promesas sobre el plazo: la pantalla ya lo enseña, y
-                # hay sesiones que no se abren solas —campo sin zona, un
-                # equipo impar en parejas— donde prometerlo manda a esperar
-                # algo que no va a llegar
-                "Falta un sobre por entregar: hasta que estén los dos no hay nada que abrir"
             )

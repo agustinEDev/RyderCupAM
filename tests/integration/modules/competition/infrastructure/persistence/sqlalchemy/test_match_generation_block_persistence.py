@@ -156,6 +156,16 @@ class TestElSavepoint:
         assert final.match_generation_block.reason == PLAYERS_WITHOUT_TEE
 
 
+class _SinZona:
+    """Un campo sin zona horaria: su sesión no vence nunca sola."""
+
+    async def for_competition(self, competition):
+        return None
+
+    async def for_course(self, golf_course_id):
+        return None
+
+
 class _GeneradorQueRevientaAMitad:
     """El peor caso: marca la sesión con partidos, lo escribe y revienta."""
 
@@ -232,9 +242,10 @@ class TestAbrirLosSobresContraPostgres:
         db_session.expunge_all()
         round_id = ronda.id
 
+        # A mano solo abre el organizador en una sesión sin plazo (BE #374)
         respuesta = await RevealEnvelopesUseCase(
-            uow, None, generador=_GeneradorQueRevientaAMitad(uow)
-        ).execute(round_id.value, equipo_a[0])
+            uow, None, timezone_service=_SinZona(), generador=_GeneradorQueRevientaAMitad(uow)
+        ).execute(round_id.value, competicion.creator_id)
 
         assert len(respuesta.matchups) == 1
         db_session.expunge_all()
