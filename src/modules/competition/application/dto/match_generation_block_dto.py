@@ -34,7 +34,8 @@ class MatchGenerationBlockDTO(BaseModel):
     reason: str = Field(
         ...,
         description=(
-            "PLAYERS_WITHOUT_TEE, NOT_ENOUGH_PLAYERS, NO_TEAMS, NO_GOLF_COURSE o UNEXPECTED."
+            "PLAYERS_WITHOUT_TEE, NOT_ENOUGH_PLAYERS, NO_TEAMS, NO_GOLF_COURSE, "
+            "ENROLLMENT_OPEN o UNEXPECTED."
         ),
     )
     players: list[BlockedPlayerDTO] = Field(

@@ -399,6 +399,11 @@ class EnvelopeDesk:
         if ronda.status in _CON_PARTIDOS_YA_HECHOS:
             return False
 
+        # Cancelada o terminada ya no hay nada que jugar: abrirlos seria
+        # escribir en una competicion que se acabo, la mire quien la mire
+        if competition.status.is_final():
+            return False
+
         if not await self._toca_abrirlos(ronda, competition, sobres):
             return False
 

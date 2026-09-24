@@ -790,6 +790,19 @@ class TestLaAgendaTambienLosAbre:
             sobres = await torneo.uow.envelopes.find_by_round(torneo.ronda_id)
         assert all(sobre.is_sealed() for sobre in sobres)
 
+    async def test_s5b_ni_mirando_la_pagina_del_sobre(self):
+        """La regla vive en `revelar_si_toca`: la agenda no es la única puerta."""
+        torneo = await _montar(estado="CANCELLED")
+        await torneo.entregan_los_dos()
+
+        await torneo.mirar(_Reloj(_PASADO_EL_PLAZO)).execute(
+            torneo.ronda_id.value, torneo.organizador
+        )
+
+        async with torneo.uow:
+            sobres = await torneo.uow.envelopes.find_by_round(torneo.ronda_id)
+        assert all(sobre.is_sealed() for sobre in sobres)
+
     async def test_s4_en_modo_manual_nunca(self):
         torneo = await _montar(montaje=SetupMode.MANUAL)
 
