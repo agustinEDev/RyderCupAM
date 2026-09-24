@@ -12,8 +12,31 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.services.competition_policy import (
+    MAX_ENROLLMENTS_PER_USER,
+)
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.competition_status import (
+    CompetitionStatus,
+)
+from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
+    SQLAlchemyCompetitionRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
+    SQLAlchemyEnrollmentRepository,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 from tests.conftest import _URL_DE_LA_BD_DE_TEST
 from tests.integration.api.v1.helpers.auth_helper import create_and_login_user
 
@@ -100,6 +123,69 @@ async def test_llena_es_un_400_con_el_motivo(client: AsyncClient):
 
     assert respuesta.status_code == 400, respuesta.text
     assert "completa" in respuesta.json()["detail"]
+
+
+async def test_con_el_maximo_de_inscripciones_es_un_400_con_el_motivo(client: AsyncClient):
+    """Sin esto, quitar el 400 de la ruta no lo cazaba nada (CodeRabbit en la #373).
+
+    Las veinte en las que ya está van directas a la base de datos: por la API
+    chocan con sus límites por hora, que no son lo que se prueba aquí.
+    """
+    usuario, cookies = await create_and_login_user(
+        client,
+        email=f"maximo_{uuid4()}@test.com",
+        password="SecurePass123!",
+        first_name="Maximo",
+        last_name="Club",
+    )
+    quien = UserId(str(usuario["id"]))
+    organizador = UserId(str(uuid4()))
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with AsyncSession(engine) as sesion:
+            await sesion.execute(
+                text(
+                    "INSERT INTO users (id, first_name, last_name, email, password, created_at, "
+                    "updated_at, email_verified, failed_login_attempts, is_admin) VALUES "
+                    "(:id, 'Org', 'Club', :email, 'x', now(), now(), true, 0, false)"
+                ),
+                {"id": str(organizador.value), "email": f"org_{uuid4()}@test.com"},
+            )
+            competiciones = SQLAlchemyCompetitionRepository(sesion)
+            inscripciones = SQLAlchemyEnrollmentRepository(sesion)
+            for _ in range(MAX_ENROLLMENTS_PER_USER):
+                otra = _competicion_publica(organizador)
+                await competiciones.add(otra)
+                await inscripciones.add(
+                    Enrollment.direct_enroll(
+                        id=EnrollmentId.generate(), competition_id=otra.id, user_id=quien
+                    )
+                )
+            await sesion.commit()
+    finally:
+        await engine.dispose()
+    competicion_id, _ = await _publica(client, date.today() + timedelta(days=5))
+
+    respuesta = await _pide(client, competicion_id, cookies)
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert "máximo" in respuesta.json()["detail"]
+
+
+def _competicion_publica(organizador: UserId) -> Competition:
+    empieza = date.today() + timedelta(days=5)
+    return Competition(
+        id=CompetitionId.generate(),
+        creator_id=organizador,
+        name=CompetitionName(f"Club {uuid4().hex[:6]}"),
+        dates=DateRange(empieza, empieza + timedelta(days=1)),
+        location=Location(CountryCode("ES")),
+        team_1_name="Europa",
+        team_2_name="América",
+        play_mode=PlayMode.SCRATCH,
+        status=CompetitionStatus.ACTIVE,
+        visibility=Visibility.PUBLIC,
+    )
 
 
 async def test_aprobar_con_la_competicion_llena_es_un_400_con_el_motivo(client: AsyncClient):
