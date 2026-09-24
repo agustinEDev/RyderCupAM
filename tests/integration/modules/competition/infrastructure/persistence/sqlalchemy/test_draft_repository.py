@@ -161,7 +161,7 @@ class TestGuardarYLeerLaSala:
         assert leida.current_team is None
         assert leida.turn_started_at is None
         assert leida.teams() == draft.teams()
-        assert leida.picks[-1].automatic is True
+        assert (leida.picks[-1].last_remaining, leida.picks[-1].automatic) == (True, False)
 
     async def test_sin_sala_devuelve_none(self, db_session, competition_id):
         repo = SQLAlchemyDraftRepository(db_session)

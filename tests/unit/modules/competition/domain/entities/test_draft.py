@@ -181,10 +181,7 @@ class TestElUltimoEntraSolo:
 
         sala.pick(EVA, elegibles=ELEGIBLES, ahora=AHORA)
 
-        assert [(p.user_id, p.team, p.automatic) for p in sala.picks[-2:]] == [
-            (EVA, "A", False),
-            (FEDE, "B", True),
-        ]
+        assert [(p.user_id, p.team) for p in sala.picks[-2:]] == [(EVA, "A"), (FEDE, "B")]
         assert sala.status == DraftStatus.COMPLETED
         assert sala.current_team is None
         assert sala.turn_started_at is None
@@ -208,6 +205,35 @@ class TestElUltimoEntraSolo:
 
         assert [(p.user_id, p.team) for p in sala.picks[-2:]] == [(CARLA, "B"), (FEDE, "A")]
         assert sala.status == DraftStatus.COMPLETED
+
+    def test_el_ultimo_se_marca_como_tal_y_no_como_minuto_agotado(self):
+        """No lo eligió nadie: ni el capitán, ni la app por un minuto que no se agotó."""
+        sala = _empezada("A")
+        for jugador in (CARLA, DANI, EVA):
+            sala.pick(jugador, elegibles=ELEGIBLES, ahora=AHORA)
+
+        ultimo = sala.picks[-1]
+        assert (ultimo.last_remaining, ultimo.automatic) == (True, False)
+        assert not any(p.last_remaining for p in sala.picks[:-1])
+
+    def test_con_un_solo_elegible_al_sortear_va_al_equipo_del_sorteo(self):
+        """Tres inscritos: los capitanes y uno más. El sorteo decide dónde va."""
+        sala = _sala()
+
+        sala.start(first_pick="B", ahora=AHORA, elegibles=ELEGIBLES[:1])
+
+        assert [(p.user_id, p.team, p.last_remaining) for p in sala.picks] == [(CARLA, "B", True)]
+        assert sala.status == DraftStatus.COMPLETED
+        assert sala.current_team is None
+        assert sala.turn_started_at is None
+
+    def test_con_dos_elegibles_al_sortear_se_elige(self):
+        sala = _sala()
+
+        sala.start(first_pick="A", ahora=AHORA, elegibles=ELEGIBLES[:2])
+
+        assert sala.picks == ()
+        assert sala.status == DraftStatus.IN_PROGRESS
 
     def test_con_dos_elegibles_la_primera_eleccion_cierra_la_sala(self):
         sala = _empezada("A")

@@ -253,14 +253,26 @@ class TestAbrirLaSala:
         with pytest.raises(InsufficientPlayersError):
             await start.execute(comp_id.value, creator_id)
 
-    async def test_con_un_solo_elegible_si_se_abre(self):
-        """Tres inscritos: los dos capitanes y uno más. Equipos de 2 y 1."""
-        uow, comp_id, creator_id, _, usuarios = await _montar(jugadores=3)
+    async def test_con_un_solo_elegible_se_abre_ya_terminada(self):
+        """Tres inscritos: los dos capitanes y uno más. Equipos de 2 y 1.
+
+        No hay nada que elegir: va al equipo que sale en el sorteo, y los
+        equipos quedan hechos sin que nadie pulse nada.
+        """
+        uow, comp_id, creator_id, resto, usuarios = await _montar(jugadores=3)
         start, _, _, _ = _casos(uow, usuarios)
 
         sala = await start.execute(comp_id.value, creator_id)
 
-        assert len(sala.available_players) == 1
+        assert sala.status == DraftStatus.COMPLETED.value
+        assert [(p.user_id, p.team) for p in sala.picks] == [(resto[1].value, sala.first_pick)]
+        async with uow:
+            reparto = await uow.team_assignments.find_by_competition(comp_id)
+        assert reparto is not None
+        del_sorteo = (
+            reparto.team_a_player_ids if sala.first_pick == "A" else reparto.team_b_player_ids
+        )
+        assert resto[1] in del_sorteo
 
     async def test_no_se_vuelve_a_sortear_con_la_sala_en_marcha(self):
         """Volver a sortear cambiaría el orden con elecciones ya hechas."""
@@ -509,6 +521,37 @@ class TestElMinutoQueSeAgota:
         with pytest.raises(NotYourTurnError):
             await pick.execute(comp_id.value, capitan, sala.available_players[1].user_id)
 
+    async def test_tarde_en_el_penultimo_turno_tambien_es_turno_perdido(self):
+        """La app elige por él y el último entra solo: la sala ya terminó.
+
+        Es el mismo caso que el de arriba —se le acabó el minuto—, y la pantalla
+        tiene que contarlo igual, no con «el draft no está en marcha».
+        """
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, _, pick, reloj = _casos(uow, usuarios)
+        sala = await start.execute(comp_id.value, creator_id)
+        for _ in range(2):
+            capitan = creator_id if sala.current_team == "A" else resto[0]
+            sala = await pick.execute(comp_id.value, capitan, sala.available_players[0].user_id)
+        capitan = creator_id if sala.current_team == "A" else resto[0]
+        reloj.avanza(61)
+
+        with pytest.raises(NotYourTurnError):
+            await pick.execute(comp_id.value, capitan, sala.available_players[0].user_id)
+
+    async def test_y_al_otro_capitan_no_se_le_cuenta_un_minuto_que_no_era_suyo(self):
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, _, pick, reloj = _casos(uow, usuarios)
+        sala = await start.execute(comp_id.value, creator_id)
+        for _ in range(2):
+            capitan = creator_id if sala.current_team == "A" else resto[0]
+            sala = await pick.execute(comp_id.value, capitan, sala.available_players[0].user_id)
+        el_otro = resto[0] if sala.current_team == "A" else creator_id
+        reloj.avanza(61)
+
+        with pytest.raises(DraftNotRunningError):
+            await pick.execute(comp_id.value, el_otro, sala.available_players[0].user_id)
+
     async def test_mirar_sin_turno_vencido_no_bloquea_ninguna_fila(self):
         """La sala la refrescan doce móviles cada pocos segundos.
 
@@ -578,7 +621,8 @@ class TestCuandoTermina:
 
         assert sala.status == DraftStatus.COMPLETED.value
         assert sala.available_players == []
-        assert [p.automatic for p in sala.picks] == [False, False, False, True]
+        assert [p.last_remaining for p in sala.picks] == [False, False, False, True]
+        assert not any(p.automatic for p in sala.picks)
         async with uow:
             reparto = await uow.team_assignments.find_by_competition(comp_id)
         assert reparto is not None
@@ -671,7 +715,7 @@ async def _crear_ronda(uow, comp_id):
 
 
 async def _completar(uow, comp_id, creator_id, resto, pick, reloj, usuarios):
-    """Elige a todos a mano, cada capitán en su turno, hasta que la sala cierra."""
+    """Elige a mano, cada capitán en su turno, hasta que la sala cierra (el último entra solo)."""
     from src.modules.competition.application.use_cases.get_draft_use_case import (
         GetDraftUseCase,
     )

@@ -158,6 +158,28 @@ class TestLaSalaPorHttp:
         assert sorted(reparto["team_a_player_ids"]) == sorted(sala["team_a"])
         assert sorted(reparto["team_b_player_ids"]) == sorted(sala["team_b"])
 
+    async def test_con_un_solo_elegible_nace_terminada_y_con_los_equipos(self, client: AsyncClient):
+        """
+        Given: los dos capitanes y un jugador más
+        When: el organizador lanza el sorteo
+        Then: el único va al equipo del sorteo, sin que nadie pulse nada, y la
+              agenda ya tiene los equipos
+        """
+        montaje = await _cerrada_con_capitanes(client, jugadores=3)
+        comp_id = montaje["comp"]["id"]
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+
+        sala = (await client.post(f"/api/v1/competitions/{comp_id}/draft")).json()
+
+        assert sala["status"] == "COMPLETED"
+        assert [(p["team"], p["last_remaining"]) for p in sala["picks"]] == [
+            (sala["first_pick"], True)
+        ]
+        agenda = await client.get(f"/api/v1/competitions/{comp_id}/schedule")
+        reparto = agenda.json()["team_assignment"]
+        assert sorted(reparto["team_a_player_ids"]) == sorted(sala["team_a"])
+        assert sorted(reparto["team_b_player_ids"]) == sorted(sala["team_b"])
+
     async def test_el_reparto_por_api_no_acepta_el_modo_draft(self, client: AsyncClient):
         """Un reparto calculado por la aplicación no puede decir que lo eligieron
         los capitanes, y además bloquearía la sala: con equipos hechos ya no se abre."""

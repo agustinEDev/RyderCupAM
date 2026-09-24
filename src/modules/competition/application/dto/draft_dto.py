@@ -32,6 +32,9 @@ class DraftPickDTO(BaseModel):
     automatic: bool = Field(
         ..., description="True si la eligio la aplicacion al agotarse el minuto."
     )
+    last_remaining: bool = Field(
+        False, description="True si entro solo por ser el ultimo: no habia nada que elegir."
+    )
 
 
 class DraftStateDTO(BaseModel):

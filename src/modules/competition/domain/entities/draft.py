@@ -50,12 +50,18 @@ class PlayerAlreadyPickedError(Exception):
 
 @dataclass(frozen=True)
 class DraftPick:
-    """Una eleccion: quien, para que equipo, en que orden y si la hizo la app."""
+    """Una eleccion: quien, para que equipo, en que orden y como.
+
+    `automatic` es la app eligiendo porque se agoto el minuto; `last_remaining`,
+    el ultimo, que entra solo porque no quedaba nada que elegir. Son dos cosas:
+    contar al ultimo como minuto agotado decia algo que no paso.
+    """
 
     user_id: UserId
     team: str
     order: int
     automatic: bool = False
+    last_remaining: bool = False
 
 
 class Draft:
@@ -200,8 +206,13 @@ class Draft:
 
     # ==================== Acciones ====================
 
-    def start(self, first_pick: str, ahora: datetime) -> None:
+    def start(
+        self, first_pick: str, ahora: datetime, elegibles: Sequence[PlayerForDraft] = ()
+    ) -> None:
         """Empieza el draft con el equipo que salió en el sorteo.
+
+        Con un solo elegible no hay nada que elegir: va al equipo del sorteo y
+        la sala termina ahí mismo, como al elegir al penúltimo.
 
         Raises:
             ValueError: Si el equipo no es A ni B
@@ -217,6 +228,9 @@ class Draft:
         self._first_pick = first_pick
         self._current_team = first_pick
         self._turn_started_at = ahora
+        # Sin la lista no se sabe cuántos quedan: no se cierra nada a ciegas
+        if elegibles:
+            self._cerrar_si_no_queda_eleccion(elegibles)
 
     def pick(self, player: UserId, elegibles: Sequence[PlayerForDraft], ahora: datetime) -> None:
         """Elige a un jugador para el equipo de turno.
@@ -271,7 +285,7 @@ class Draft:
         if self._status != DraftStatus.IN_PROGRESS:
             raise DraftNotRunningError(f"El draft no está en marcha: {self._status.value}")
 
-    def _anotar(self, player: UserId, automatic: bool) -> None:
+    def _anotar(self, player: UserId, automatic: bool, last_remaining: bool = False) -> None:
         # En marcha siempre hay equipo de turno: `_comprobar_en_marcha` ya pasó
         turno = self._current_team
         if turno is None:
@@ -283,22 +297,27 @@ class Draft:
                 team=turno,
                 order=len(self._picks) + 1,
                 automatic=automatic,
+                last_remaining=last_remaining,
             ),
         )
 
     def _pasar_turno(self, elegibles: Sequence[PlayerForDraft], ahora: datetime) -> None:
-        """Al otro capitán, o cierra la sala si ya no queda nadie.
-
-        Si solo queda uno, no hay nada que elegir (decidido el 24 sep): va al
-        equipo al que le toca y la sala termina, sin que nadie espere su minuto.
-        """
-        disponibles = self._disponibles(elegibles)
-        if disponibles:
+        """Al otro capitán, o cierra la sala si ya no queda nada que elegir."""
+        if self._disponibles(elegibles):
             self._current_team = "B" if self._current_team == "A" else "A"
             self._turn_started_at = ahora
+        self._cerrar_si_no_queda_eleccion(elegibles)
+
+    def _cerrar_si_no_queda_eleccion(self, elegibles: Sequence[PlayerForDraft]) -> None:
+        """Con uno solo, no hay nada que elegir (decidido el 24 sep).
+
+        Va al equipo al que le toca y la sala termina, sin que nadie espere su
+        minuto. Sin nadie, la sala termina sin más.
+        """
+        disponibles = self._disponibles(elegibles)
         if len(disponibles) == 1:
             (ultimo,) = disponibles
-            self._anotar(ultimo, automatic=True)
+            self._anotar(ultimo, automatic=False, last_remaining=True)
             disponibles = set()
         if not disponibles:
             self._status = DraftStatus.COMPLETED
