@@ -37,6 +37,13 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 )
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_TEE_COLOR,
+    NO_GOLF_COURSE,
+    NO_TEAMS,
+    NOT_ENOUGH_PLAYERS,
+    PLAYERS_WITHOUT_TEE,
+)
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -1087,6 +1094,141 @@ class TestGenerateMatchesUseCase:
         # Act & Assert
         with pytest.raises(ValueError, match="campo de golf"):
             await use_case.execute(request, creator_id)
+
+    # ==================== El reintento a mano apunta el motivo (BE #360) ====================
+    #
+    # Al abrir los sobres el motivo queda en la sesión y la pantalla lo cuenta
+    # en su idioma. El reintento a mano («Generar») lo apunta igual: si no, la
+    # tarjeta seguía enseñando el motivo de antes y el fallo nuevo solo llegaba
+    # como una frase en español
+
+    async def _motivo(self, uow, round_entity):
+        async with uow:
+            ronda = await uow.rounds.find_by_id(round_entity.id)
+        return ronda.match_generation_block
+
+    async def test_r1_sin_barras_apunta_a_quien_le_falta_que(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1, TeeColor.WHITE)
+        gc_repo.find_by_id = AsyncMock(
+            return_value=self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
+        )
+
+        async def mock_find_user(uid):
+            return self._build_mock_user(uid, 12.0, Gender.MALE)
+
+        user_repo.find_by_id = AsyncMock(side_effect=mock_find_user)
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        # La excepción de siempre, para no cambiarle nada a quien la captura
+        with pytest.raises(TeeColorNotFoundError):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
+            )
+
+        motivo = await self._motivo(uow, round_entity)
+        assert motivo.reason == PLAYERS_WITHOUT_TEE
+        assert {(p.missing, p.tee_color) for p in motivo.players} == {(MISSING_TEE_COLOR, "WHITE")}
+        assert len(motivo.players) == 2
+        assert motivo.at is not None
+
+    async def test_r2_sin_equipos(self, uow, creator_id, golf_course_id, gc_repo, user_repo):
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(uow, competition, golf_course_id)
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        with pytest.raises(NoTeamAssignmentError):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
+            )
+
+        assert (await self._motivo(uow, round_entity)).reason == NO_TEAMS
+
+    async def test_r3_sin_jugadores_suficientes(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.FOURBALL
+        )
+        await self._create_teams_and_enrollments(uow, competition, 1, 1)
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        with pytest.raises(InsufficientPlayersError):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
+            )
+
+        assert (await self._motivo(uow, round_entity)).reason == NOT_ENOUGH_PLAYERS
+
+    async def test_r4_sin_campo_en_modo_handicap(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        competition = await self._create_handicap_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, MatchFormat.SINGLES
+        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1)
+        gc_repo.find_by_id = AsyncMock(return_value=None)
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        with pytest.raises(ValueError, match="campo de golf"):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
+            )
+
+        assert (await self._motivo(uow, round_entity)).reason == NO_GOLF_COURSE
+
+    async def test_r5_al_regenerar_desde_el_script_no_se_apunta_nada(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        """El script rehace sesiones ya montadas: un fallo ahí se deshace entero."""
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(uow, competition, golf_course_id)
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        with pytest.raises(NoTeamAssignmentError):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value),
+                creator_id,
+                allow_regeneration=True,
+            )
+
+        assert await self._motivo(uow, round_entity) is None
+
+    async def test_r6_un_fallo_inesperado_no_se_disfraza_de_motivo(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        """Con alguien pulsando, lo inesperado sube como error y se registra."""
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(uow, competition, golf_course_id)
+        await self._create_teams_and_enrollments(uow, competition, 1, 1)
+        gc_repo.find_by_id = AsyncMock(side_effect=RuntimeError("se cayó la base de datos"))
+        use_case = GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        )
+
+        with pytest.raises(RuntimeError):
+            await use_case.execute(
+                GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
+            )
+
+        assert await self._motivo(uow, round_entity) is None
 
     async def test_max_playing_handicap_is_applied_in_singles(
         self,

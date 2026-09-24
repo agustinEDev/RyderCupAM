@@ -9,6 +9,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_assign_teams_use_case,
@@ -25,6 +26,7 @@ from src.config.dependencies import (
     get_update_round_use_case,
 )
 from src.config.rate_limit import limiter
+from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
     AssignTeamsBodyDTO,
     AssignTeamsRequestDTO,
@@ -110,11 +112,13 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     CompetitionNotClosedError as GenMatchesNotClosedError,
     GenerateMatchesUseCase,
     InsufficientPlayersError as GenMatchesInsufficientError,
+    NoGolfCourseForHandicapError,
     NotCompetitionCreatorError as GenMatchesNotCreatorError,
     NoTeamAssignmentError,
     RoundNotFoundError as GenMatchesRoundNotFoundError,
     RoundNotPendingMatchesError,
     TeeColorNotFoundError,
+    bloqueo_por,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
@@ -706,7 +710,10 @@ async def generate_matches(
 
     **Returns:**
     - 201: Partidos generados
-    - 400: Estado inválido, sin equipos, o jugadores insuficientes
+    - 400: Estado inválido, sin equipos, o jugadores insuficientes. Cuando es
+      uno de los motivos que la sesión apunta (`error_code`
+      `MATCH_GENERATION_BLOCKED`), va en claves en `match_generation_block`,
+      igual que en la agenda, y queda apuntado en la sesión (BE #360)
     - 404: Ronda no encontrada
     """
     try:
@@ -728,11 +735,29 @@ async def generate_matches(
             detail=str(e),
         ) from e
     except (
+        GenMatchesInsufficientError,
+        NoTeamAssignmentError,
+        TeeColorNotFoundError,
+        NoGolfCourseForHandicapError,
+    ) as e:
+        motivo = bloqueo_por(e, at=None)
+        if motivo is None:
+            # Un color que falta sin la lista de quién: no hay motivo que contar
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        # Claves y no frases (decidido el 24 sep): la pantalla lo escribe en su
+        # idioma. `error_code` en la RAIZ, que es donde lo lee el cliente, como
+        # SCORING_NOT_OPEN_YET. `detail` queda como texto para quien no lo conozca
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": str(e),
+                "error_code": "MATCH_GENERATION_BLOCKED",
+                "match_generation_block": block_to_dto(motivo).model_dump(mode="json"),
+            },
+        )
+    except (
         GenMatchesNotClosedError,
         RoundNotPendingMatchesError,
-        NoTeamAssignmentError,
-        GenMatchesInsufficientError,
-        TeeColorNotFoundError,
         # Los sobres de los capitanes deciden los enfrentamientos de su sesion
         # (FE #655): que no esten abiertos, o que se manden emparejamientos a
         # mano habiendolos, es culpa de quien pide y no un fallo del servidor

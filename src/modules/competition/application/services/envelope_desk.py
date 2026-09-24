@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
-    InsufficientPlayersError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
 )
@@ -22,9 +21,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.application.services.team_roster import TeamRoster
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
-    NoGolfCourseForHandicapError,
-    NoTeamAssignmentError,
-    PlayersWithoutTeeError,
+    bloqueo_por,
 )
 from src.modules.competition.domain.entities.competition import (
     Competition,
@@ -53,10 +50,6 @@ from src.modules.competition.domain.value_objects.competition_status import (
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     ENROLLMENT_OPEN,
-    NO_GOLF_COURSE,
-    NO_TEAMS,
-    NOT_ENOUGH_PLAYERS,
-    PLAYERS_WITHOUT_TEE,
     UNEXPECTED,
     MatchGenerationBlock,
 )
@@ -485,16 +478,10 @@ class EnvelopeDesk:
     def _motivo(self, error: Exception) -> MatchGenerationBlock:
         """De la excepcion al motivo que se apunta en la sesion."""
         ahora = self.ahora.replace(tzinfo=None)
-        if isinstance(error, PlayersWithoutTeeError):
-            return MatchGenerationBlock(
-                reason=PLAYERS_WITHOUT_TEE, players=tuple(error.players), at=ahora
-            )
-        if isinstance(error, InsufficientPlayersError):
-            return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=ahora)
-        if isinstance(error, NoTeamAssignmentError):
-            return MatchGenerationBlock(reason=NO_TEAMS, at=ahora)
-        if isinstance(error, NoGolfCourseForHandicapError):
-            return MatchGenerationBlock(reason=NO_GOLF_COURSE, at=ahora)
+        # El mismo que apunta el reintento a mano: una sola traducción
+        motivo = bloqueo_por(error, ahora)
+        if motivo is not None:
+            return motivo
         # Lo que no se esperaba se registra entero: el motivo solo dice que falló
         logger.exception("No se pudieron generar los partidos al abrir los sobres")
         return MatchGenerationBlock(reason=UNEXPECTED, at=ahora)
