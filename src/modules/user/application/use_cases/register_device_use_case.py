@@ -120,7 +120,7 @@ class RegisterDeviceUseCase:
 
                     if existing_device:
                         # Device found via cookie - update timestamps and IP
-                        existing_device.update_last_used()
+                        await self._reanuda(existing_device)
                         existing_device.update_ip_address(request.ip_address)
                         await self._uow.user_devices.save(existing_device)
 
@@ -154,7 +154,7 @@ class RegisterDeviceUseCase:
 
             if existing_device:
                 # Device found via fingerprint - update timestamps and IP
-                existing_device.update_last_used()
+                await self._reanuda(existing_device)
                 existing_device.update_ip_address(request.ip_address)
                 await self._uow.user_devices.save(existing_device)
 
@@ -186,3 +186,15 @@ class RegisterDeviceUseCase:
                 message=f"Nuevo dispositivo detectado: {new_device.device_name}",
                 set_device_cookie=True,  # Caller must set cookie
             )
+
+    async def _reanuda(self, device: UserDevice) -> None:
+        """Vuelve a usar un dispositivo: su último uso pasa a ahora.
+
+        Si estaba inactivo (BE #376), antes se revocan sus tokens anteriores. La
+        caducidad por inactividad solo revoca un token cuando alguien intenta
+        refrescar con él; sin esto, poner «último uso: ahora» haría valer otra
+        vez los que nadie llegó a usar, uno robado incluido (CWE-613).
+        """
+        if device.is_idle():
+            await self._uow.refresh_tokens.revoke_all_for_device(device.id)
+        device.update_last_used()

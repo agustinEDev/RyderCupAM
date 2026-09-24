@@ -19,7 +19,7 @@ Reglas de Negocio:
 - Cada acceso actualiza el timestamp de último uso
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.modules.user.domain.events.device_revoked_event import DeviceRevokedEvent
 from src.modules.user.domain.events.new_device_detected_event import (
@@ -29,6 +29,12 @@ from src.modules.user.domain.value_objects.device_fingerprint import DeviceFinge
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+
+# Tiempo sin usar la app tras el que la sesión de ESE dispositivo deja de valer
+# (BE #376). OWASP A07 pide invalidar por inactividad, y el servidor es quien
+# puede hacerlo: un temporizador en el navegador no invalida nada con la pestaña
+# cerrada. 24 h cubren una jornada de torneo aunque el móvil no se toque en horas
+SESSION_IDLE_TIMEOUT = timedelta(hours=24)
 
 
 class UserDevice:
@@ -284,6 +290,10 @@ class UserDevice:
             revoked_by_user=False,  # Automático por sistema
         )
         self._add_domain_event(event)
+
+    def is_idle(self, now: datetime | None = None) -> bool:
+        """Si lleva más de `SESSION_IDLE_TIMEOUT` sin usarse (BE #376)."""
+        return (now or datetime.now()) - self._last_used_at > SESSION_IDLE_TIMEOUT
 
     def update_last_used(self) -> None:
         """

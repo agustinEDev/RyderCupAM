@@ -333,7 +333,7 @@ async def logout_user(
        - Logout inmediato en el cliente
 
     2. **Revocar refresh tokens en BD** (NUEVO - v1.8.0):
-       - Marca todos los refresh tokens del usuario como revocados
+       - Revoca los refresh tokens de ESTE dispositivo; los demás siguen (BE #376)
        - Previene renovación de access tokens después del logout
        - OWASP A01: Broken Access Control
 
@@ -385,6 +385,9 @@ async def logout_user(
         request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
     )
     logout_request.user_agent = get_user_agent(request)
+    # Solo se cierra la sesión de este dispositivo (BE #376): su token de
+    # refresco sale de su cookie httpOnly, nunca de lo que mande el cliente
+    logout_request.refresh_token = request.cookies.get(get_refresh_cookie_name())
 
     logout_response = await use_case.execute(logout_request, user_id, token)
 
