@@ -626,3 +626,77 @@ class TestElCableado:
         assert generador._uow is caso._uow
         # Y sin RFEG: al abrir no se llama a la red
         assert generador._handicap_service is None
+
+
+class TestLaRevisionLocal:
+    """Lo que encontró la revisión antes de subir (R1-R4)."""
+
+    async def test_r1_si_otro_ya_los_creo_no_se_borran_ni_se_rehacen(self):
+        """Dos móviles abren a la vez: el segundo llega con la sesión vieja
+        en memoria, pero los partidos del primero ya están en la base de datos.
+        """
+        from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+        torneo = await _montar()
+        await torneo.entregan_los_dos()
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+        antes = {p.id for p in await torneo.partidos()}
+        assert len(antes) == 2
+
+        async with torneo.uow:
+            # Lo que el segundo tiene en memoria: la sesión aún sin partidos
+            vieja = await torneo.uow.rounds.find_by_id(torneo.ronda_id)
+            vieja._status = RoundStatus.PENDING_MATCHES
+            competicion = await torneo.uow.competitions.find_by_id(torneo.comp_id)
+            desk = EnvelopeDesk(torneo.uow, torneo.usuarios, generador=torneo.generador())
+
+            await desk.generar_los_partidos(vieja, competicion)
+
+        assert {p.id for p in await torneo.partidos()} == antes
+        assert (await torneo.ronda()).match_generation_block is None
+
+    async def test_r2_con_genero_pero_sin_barras_de_su_genero_es_el_color(self):
+        torneo = await _montar(
+            barras=[(TeeColor.YELLOW, Gender.MALE)],
+            sexos=[Gender.MALE, Gender.FEMALE, Gender.MALE, Gender.MALE],
+        )
+        await torneo.entregan_los_dos()
+
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+
+        [jugadora] = (await torneo.ronda()).match_generation_block.players
+        assert jugadora.name == "Bea Dos"
+        assert jugadora.missing == "TEE_COLOR"
+        assert jugadora.tee_color == "YELLOW"
+
+    async def test_r3_una_sesion_que_no_espera_partidos_no_revienta_la_apertura(self):
+        from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+        torneo = await _montar()
+        async with torneo.uow:
+            sesion = await torneo.uow.rounds.find_by_id(torneo.ronda_id)
+            sesion._status = RoundStatus.PENDING_TEAMS
+            competicion = await torneo.uow.competitions.find_by_id(torneo.comp_id)
+            generador = torneo.generador()
+            generador.generar_dentro = AsyncMock(wraps=generador.generar_dentro)
+            desk = EnvelopeDesk(torneo.uow, torneo.usuarios, generador=generador)
+
+            await desk.generar_los_partidos(sesion, competicion)
+
+        # Ni se intenta: intentarlo es un error «inesperado» en el registro
+        generador.generar_dentro.assert_not_awaited()
+        assert (await torneo.ronda()).match_generation_block is None
+        assert await torneo.partidos() == []
+
+    async def test_r4_un_retirado_es_falta_de_inscripcion_no_de_genero(self):
+        torneo = await _montar(sexos=[Gender.MALE, None, Gender.MALE, Gender.MALE])
+        await torneo.entregan_los_dos()
+        async with torneo.uow:
+            for inscripcion in await torneo.uow.enrollments.find_by_competition(torneo.comp_id):
+                if inscripcion.user_id == torneo.equipo_a[1]:
+                    inscripcion._status = EnrollmentStatus.WITHDRAWN
+                    await torneo.uow.enrollments.update(inscripcion)
+
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+
+        assert (await torneo.ronda()).match_generation_block.reason == "NOT_ENOUGH_PLAYERS"

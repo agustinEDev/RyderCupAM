@@ -46,7 +46,7 @@ from src.modules.competition.domain.services.envelope_reveal_service import (
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     NO_GOLF_COURSE,
@@ -431,7 +431,17 @@ class EnvelopeDesk:
             return
         # Cancelada o terminada no hay partidos que jugar: abrirse, se abren,
         # pero no hay nada que avisar
-        if competition.status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
+        if competition.status not in SE_JUEGA:
+            return
+        # Solo la que espera partidos: en otro estado no hay nada que generar,
+        # y apuntar un motivo ahi reventaria la lectura entera
+        if ronda.status != RoundStatus.PENDING_MATCHES:
+            return
+        # Dos moviles abren a la vez: el segundo espera el bloqueo y sigue con
+        # la sesion que leyo antes, sin partidos. Mirarlo en la base de datos
+        # es lo que evita que borre y rehaga los del primero, con ids nuevos
+        # que dejarian colgada a cualquier pantalla que ya tuviera los viejos
+        if await self._uow.matches.find_by_round(ronda.id):
             return
         motivo: MatchGenerationBlock | None = None
         # El id se guarda ANTES: si el savepoint se deshace, SQLAlchemy caduca

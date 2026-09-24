@@ -16,12 +16,8 @@ from src.modules.competition.application.services.envelope_desk import ORDEN_DE_
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.user.domain.value_objects.user_id import UserId
-
-# Las competiciones que todavia se pueden jugar: de una terminada o cancelada
-# no queda nada que arreglar
-_EN_MARCHA = (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS)
 
 # Un organizador con mucho historial no puede perder el aviso por el corte por
 # defecto del repositorio, que son 100
@@ -54,7 +50,8 @@ class ListMySessionsWithoutMatchesUseCase:
             for competition in await self._uow.competitions.find_by_creator(
                 user_id, limit=_TODAS_LAS_SUYAS
             ):
-                if competition.status not in _EN_MARCHA:
+                # De una terminada o cancelada no queda nada que arreglar
+                if competition.status not in SE_JUEGA:
                     continue
                 for ronda in await self._uow.rounds.find_by_competition(competition.id):
                     # Generarlos a mano o rehacer los sobres borra el motivo, asi

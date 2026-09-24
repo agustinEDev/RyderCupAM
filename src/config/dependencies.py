@@ -2091,6 +2091,25 @@ def get_make_draft_pick_use_case(
     return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
 
 
+def _construir_generador(
+    uow, gc_uow, user_uow, scoring_service, handicap_service=None
+) -> GenerateMatchesUseCase:
+    """El unico sitio que monta GenerateMatchesUseCase.
+
+    Lo usan el boton de «Generar» y la apertura de los sobres (BE #361): con
+    dos sitios, una dependencia nueva del constructor se olvidaria en uno y la
+    generacion automatica saldria cableada distinta sin que nadie lo notara.
+    """
+    return GenerateMatchesUseCase(
+        uow=uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+        handicap_calculator=PlayingHandicapCalculator(),
+        scoring_service=scoring_service,
+        handicap_service=handicap_service,
+    )
+
+
 def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatchesUseCase:
     """Lo que crea los partidos al abrirse los sobres (BE #361).
 
@@ -2099,13 +2118,7 @@ def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatch
     abrir no se pregunta a la RFEG, que seria una llamada de red por jugador
     dentro de la lectura de la pantalla.
     """
-    return GenerateMatchesUseCase(
-        uow=uow,
-        golf_course_repository=gc_uow.golf_courses,
-        user_repository=user_uow.users,
-        handicap_calculator=PlayingHandicapCalculator(),
-        scoring_service=scoring_service,
-    )
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service)
 
 
 def get_list_my_sessions_without_matches_use_case(
@@ -2212,14 +2225,7 @@ def get_generate_matches_use_case(
     handicap_service: HandicapService = Depends(get_handicap_service),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
-    return GenerateMatchesUseCase(
-        uow=uow,
-        golf_course_repository=gc_uow.golf_courses,
-        user_repository=user_uow.users,
-        handicap_calculator=PlayingHandicapCalculator(),
-        scoring_service=scoring_service,
-        handicap_service=handicap_service,
-    )
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service, handicap_service)
 
 
 def get_reassign_match_players_use_case(

@@ -8,6 +8,7 @@ from decimal import Decimal
 from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     GenerateMatchesResponseDTO,
+    ManualPairingDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotClosedError,
@@ -23,7 +24,9 @@ from src.modules.competition.application.services.player_names import PlayerName
 from src.modules.competition.application.services.tee_context_builder import (
     TeeContextBuilder,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -32,7 +35,7 @@ from src.modules.competition.domain.services.playing_handicap_calculator import 
     TeeRating,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
@@ -52,9 +55,6 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
 logger = logging.getLogger(__name__)
-
-# Dónde se pueden generar: cerrada, o en juego para las sesiones que vienen
-_SE_PUEDEN_GENERAR = (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -195,7 +195,7 @@ class GenerateMatchesUseCase:
             # sobres se abren sesión a sesión, 6 h antes de cada una, así que
             # los de la sesión del domingo se abren con el torneo empezado el
             # sábado: exigir CLOSED dejaba esa sesión sin partidos posibles
-            if competition.status not in _SE_PUEDEN_GENERAR:
+            if competition.status not in SE_JUEGA:
                 raise CompetitionNotClosedError(
                     "La competición tiene que estar cerrada o en juego para generar "
                     f"partidos. Estado: {competition.status.value}"
@@ -219,9 +219,9 @@ class GenerateMatchesUseCase:
 
     async def generar_dentro(
         self,
-        round_entity,
-        competition,
-        manual_pairings=None,
+        round_entity: Round,
+        competition: Competition,
+        manual_pairings: list[ManualPairingDTO] | None = None,
         refrescar_handicap_rfeg: bool = True,
     ) -> int:
         """
@@ -303,6 +303,11 @@ class GenerateMatchesUseCase:
         # Los sobres de los capitanes deciden, si los hay (FE #655)
         pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
 
+        # Quien no tiene la inscripcion aprobada, antes que las barras: sin
+        # inscripcion su color sale del defecto y su falta pareceria otra
+        if pairings:
+            self._comprobar_inscripciones(pairings, enrollment_map)
+
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360)
         if not is_scratch:
@@ -363,6 +368,20 @@ class GenerateMatchesUseCase:
         return matches_created
 
     @staticmethod
+    def _comprobar_inscripciones(pairings, enrollment_map) -> None:
+        """Todos los emparejados tienen que tener la inscripción aprobada.
+
+        Raises:
+            InsufficientPlayersError: Con el primero que no la tiene
+        """
+        for pairing in pairings:
+            for uid in list(pairing.team_a_player_ids) + list(pairing.team_b_player_ids):
+                if str(uid) not in enrollment_map:
+                    raise InsufficientPlayersError(
+                        f"El jugador {uid} no tiene inscripción aprobada"
+                    )
+
+    @staticmethod
     def _jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team) -> list[UserId]:
         """Quién va a jugar esta sesión, en el orden en que saldrá.
 
@@ -399,9 +418,11 @@ class GenerateMatchesUseCase:
             )
             if tee_rating is not None:
                 continue
-            # Si ese color existe para algún sexo, lo que falta es el suyo
+            # Solo es su género lo que falta si de verdad no lo tiene y el color
+            # existe para alguno: con género, lo que falta es su color para él
             existe_el_color = any(color == tee_color.value for color, _ in tee_ratings)
-            sin_barras.append((uid, tee_color, existe_el_color))
+            sin_genero = user_gender_map.get(str(uid.value)) is None
+            sin_barras.append((uid, tee_color, existe_el_color and sin_genero))
         if not sin_barras:
             return
 
@@ -413,10 +434,10 @@ class GenerateMatchesUseCase:
                 BlockedPlayer(
                     user_id=uid,
                     name=nombres.get(uid, ""),
-                    missing=MISSING_GENDER if existe_el_color else MISSING_TEE_COLOR,
-                    tee_color=None if existe_el_color else tee_color.value,
+                    missing=MISSING_GENDER if le_falta_el_genero else MISSING_TEE_COLOR,
+                    tee_color=None if le_falta_el_genero else tee_color.value,
                 )
-                for uid, tee_color, existe_el_color in sin_barras
+                for uid, tee_color, le_falta_el_genero in sin_barras
             ]
         )
 
@@ -639,14 +660,6 @@ class GenerateMatchesUseCase:
         Los trae el organizador en la petición, o los fijan los sobres de los
         capitanes cuando ya se abrieron (FE #655).
         """
-        # Validar que todos los jugadores estén inscritos (APPROVED)
-        for pairing in pairings:
-            for uid in list(pairing.team_a_player_ids) + list(pairing.team_b_player_ids):
-                if str(uid) not in enrollment_map:
-                    raise InsufficientPlayersError(
-                        f"El jugador {uid} no tiene inscripción aprobada"
-                    )
-
         match_format = round_entity.match_format
 
         matches_created = 0
