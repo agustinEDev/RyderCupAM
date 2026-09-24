@@ -14,6 +14,7 @@ el modal se cerraba y el jugador no se enteraba de nada.
 """
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -21,6 +22,7 @@ import pytest
 from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentRequestDTO,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     CompetitionFullError,
     EnrollmentClosedError,
@@ -47,8 +49,24 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
+
+
+class _Usuarios:
+    """Todos con el género dicho, o el que se diga para uno."""
+
+    def __init__(self, genero=Gender.MALE, sin_genero=()):
+        self._genero = genero
+        self._sin_genero = set(sin_genero)
+
+    async def find_by_id(self, user_id):
+        genero = None if user_id in self._sin_genero else self._genero
+        return SimpleNamespace(id=user_id, gender=genero)
+
+
+_CON_GENERO = _Usuarios()
 
 
 async def _publica(uow, empieza: date, max_players: int = 12) -> Competition:
@@ -91,7 +109,7 @@ async def test_r1_se_pide_plaza_el_mismo_dia_del_torneo():
     uow = InMemoryUnitOfWork()
     competicion = await _publica(uow, empieza=date.today())
 
-    respuesta = await RequestEnrollmentUseCase(uow).execute(_pide(competicion))
+    respuesta = await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
 
     assert respuesta.status == "REQUESTED"
 
@@ -101,7 +119,7 @@ async def test_r2_empezado_el_torneo_no_y_lo_dice():
     competicion = await _publica(uow, empieza=date.today() - timedelta(days=1))
 
     with pytest.raises(EnrollmentClosedError, match="ya ha empezado"):
-        await RequestEnrollmentUseCase(uow).execute(_pide(competicion))
+        await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
 
 
 async def test_r3_llena_no_y_lo_dice():
@@ -111,7 +129,7 @@ async def test_r3_llena_no_y_lo_dice():
     await _dentro(uow, competicion.id)
 
     with pytest.raises(CompetitionFullError, match="completa"):
-        await RequestEnrollmentUseCase(uow).execute(_pide(competicion))
+        await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
 
 
 async def test_r4_con_el_maximo_de_inscripciones_no_y_lo_dice():
@@ -123,4 +141,23 @@ async def test_r4_con_el_maximo_de_inscripciones_no_y_lo_dice():
     competicion = await _publica(uow, empieza=date.today() + timedelta(days=3))
 
     with pytest.raises(TooManyEnrollmentsError, match=str(MAX_ENROLLMENTS_PER_USER)):
-        await RequestEnrollmentUseCase(uow).execute(_pide(competicion, quien.value))
+        await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion, quien.value))
+
+
+# ==================== El género es obligatorio para apuntarse (#710, 24 sep) ====================
+# Las barras se valoran por género: sin él, al generar los partidos se bloqueaba
+# la sesión entera. Se exige al entrar, no al final
+
+
+async def test_g1_sin_genero_no_se_pide_plaza_y_lo_dice():
+    uow = InMemoryUnitOfWork()
+    competicion = await _publica(uow, empieza=date.today() + timedelta(days=3))
+    quien = UserId(uuid4())
+
+    with pytest.raises(GenderRequiredError, match="tu género en tu perfil"):
+        await RequestEnrollmentUseCase(uow, _Usuarios(sin_genero=[quien])).execute(
+            _pide(competicion, quien.value)
+        )
+
+    async with uow:
+        assert await uow.enrollments.find_by_user_and_competition(quien, competicion.id) is None

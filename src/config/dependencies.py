@@ -1933,16 +1933,18 @@ def get_reorder_golf_courses_use_case(
 
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> RequestEnrollmentUseCase:
     """Proveedor del caso de uso RequestEnrollmentUseCase."""
-    return RequestEnrollmentUseCase(uow)
+    return RequestEnrollmentUseCase(uow, user_uow.users)
 
 
 def get_direct_enroll_player_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> DirectEnrollPlayerUseCase:
     """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow)
+    return DirectEnrollPlayerUseCase(uow, user_uow.users)
 
 
 def get_handle_enrollment_use_case(

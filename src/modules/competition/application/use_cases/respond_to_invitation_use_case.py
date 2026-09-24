@@ -9,6 +9,7 @@ from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
@@ -126,6 +127,10 @@ class RespondToInvitationUseCase:
             raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 
         CompetitionPolicy.can_accept_invitation(competition.status)
+
+        # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
+        # la invitación se queda pendiente para cuando lo rellene
+        await exigir_genero(self._user_uow.users, current_user_id, es_quien_se_apunta=True)
 
         existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
             current_user_id, invitation.competition_id

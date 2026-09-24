@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
@@ -38,6 +39,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import set_competition_status
 
 pytestmark = pytest.mark.asyncio
@@ -55,13 +57,19 @@ class TestRespondToInvitationUseCase:
         return UserInMemoryUoW()
 
     async def _create_user(
-        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+        self,
+        user_uow,
+        email="user@test.com",
+        first_name="Test",
+        last_name="User",
+        gender=Gender.MALE,
     ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
             email_str=email,
             plain_password="SecureP@ssw0rd123",
+            gender=gender,
         )
         async with user_uow:
             await user_uow.users.save(user)
@@ -159,6 +167,51 @@ class TestRespondToInvitationUseCase:
 
     async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        result = await uc.execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+
+        assert result.status == "DECLINED"
+
+    # ==================== El género es obligatorio para apuntarse (#710) ====================
+
+    async def _invitado_sin_genero(self, comp_uow, user_uow):
+        creator = await self._create_user(user_uow, email="c2@test.com")
+        invitee = await self._create_user(user_uow, email="sg@test.com", gender=None)
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "sg@test.com"
+        )
+        return invitation, invitee
+
+    async def test_g4_sin_genero_no_se_acepta_y_la_invitacion_sigue_ahi(
+        self, comp_uow, user_uow
+    ):
+        invitation, invitee = await self._invitado_sin_genero(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(GenderRequiredError, match="tu género en tu perfil"):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            inscripcion = await comp_uow.enrollments.find_by_user_and_competition(
+                invitee.id, invitation.competition_id
+            )
+        # Pendiente: la acepta en cuanto rellene su perfil
+        assert guardada.status == InvitationStatus.PENDING
+        assert inscripcion is None
+
+    async def test_g5_sin_genero_se_puede_rechazar(self, comp_uow, user_uow):
+        invitation, invitee = await self._invitado_sin_genero(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
         result = await uc.execute(

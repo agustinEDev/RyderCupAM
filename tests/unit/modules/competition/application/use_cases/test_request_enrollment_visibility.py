@@ -7,6 +7,7 @@ para evitar: que un desconocido llame a la puerta de la Ryder de unos amigos.
 """
 
 from datetime import date
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -31,8 +32,19 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
+
+
+class _ConGenero:
+    """Cualquiera tiene el género puesto: esto prueba la visibilidad, no el género."""
+
+    async def find_by_id(self, user_id):
+        return SimpleNamespace(id=user_id, gender=Gender.MALE)
+
+
+_CON_GENERO = _ConGenero()
 
 
 class TestAskingForAPlace:
@@ -63,7 +75,7 @@ class TestAskingForAPlace:
         """La puerta de un torneo entre amigos no se toca desde fuera."""
         created = await self._competition_open_to(uow, creator_id, Visibility.PRIVATE)
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         with pytest.raises(CompetitionIsPrivateError):
             await uc.execute(
                 RequestEnrollmentRequestDTO(competition_id=created.id, user_id=uuid4())
@@ -73,7 +85,7 @@ class TestAskingForAPlace:
         """Y en la de un club, cualquiera puede pedir sitio."""
         created = await self._competition_open_to(uow, creator_id, Visibility.PUBLIC)
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         respuesta = await uc.execute(
             RequestEnrollmentRequestDTO(competition_id=created.id, user_id=uuid4())
         )
@@ -85,7 +97,7 @@ class TestAskingForAPlace:
         created = await self._competition_open_to(uow, creator_id, Visibility.PRIVATE)
         quien = uuid4()
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         with pytest.raises(CompetitionIsPrivateError):
             await uc.execute(RequestEnrollmentRequestDTO(competition_id=created.id, user_id=quien))
 
