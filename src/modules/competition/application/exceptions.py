@@ -176,3 +176,12 @@ class NotCompetitionParticipantError(Exception):
     """
 
     pass
+
+
+class CompetitionFullError(Exception):
+    """La competición no tiene plazas libres (BE #372).
+
+    Tanto al pedir plaza como al aprobarla: la violación del dominio sin
+    traducir llegaba como un 500 sin cabeceras de CORS, y el navegador lo veía
+    como un fallo de red.
+    """

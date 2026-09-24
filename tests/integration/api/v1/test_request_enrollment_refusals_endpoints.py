@@ -100,3 +100,25 @@ async def test_llena_es_un_400_con_el_motivo(client: AsyncClient):
 
     assert respuesta.status_code == 400, respuesta.text
     assert "completa" in respuesta.json()["detail"]
+
+
+async def test_aprobar_con_la_competicion_llena_es_un_400_con_el_motivo(client: AsyncClient):
+    """El gemelo del organizador: el día del torneo puede haber más solicitudes
+    pendientes que plazas, y aprobar la que sobra reventaba igual."""
+    competicion_id, organiza = await _publica(
+        client, date.today() + timedelta(days=5), max_players=2
+    )
+    primera = await _pide(client, competicion_id, await _jugador(client, "primera"))
+    segunda = await _pide(client, competicion_id, await _jugador(client, "segunda"))
+    assert primera.status_code == segunda.status_code == 201
+    aprobada = await client.post(
+        f"/api/v1/enrollments/{primera.json()['id']}/approve", cookies=organiza
+    )
+    assert aprobada.status_code == 200, aprobada.text
+
+    respuesta = await client.post(
+        f"/api/v1/enrollments/{segunda.json()['id']}/approve", cookies=organiza
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert "completa" in respuesta.json()["detail"]

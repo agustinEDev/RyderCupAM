@@ -9,9 +9,13 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError,
     EnrollmentNotFoundError,
     NotCreatorError,
+)
+from src.modules.competition.domain.exceptions.competition_violations import (
+    CompetitionFullViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -102,9 +106,14 @@ class HandleEnrollmentUseCase:
                 approved_count = await self._uow.enrollments.count_approved_by_competition(
                     enrollment.competition_id
                 )
-                CompetitionPolicy.validate_capacity(
-                    approved_count, competition.max_players, enrollment.competition_id
-                )
+                try:
+                    CompetitionPolicy.validate_capacity(
+                        approved_count, competition.max_players, enrollment.competition_id
+                    )
+                except CompetitionFullViolation as e:
+                    raise CompetitionFullError(
+                        f"La competición está completa: {competition.max_players} plazas ocupadas."
+                    ) from e
                 enrollment.approve()
             elif request.action == "REJECT":
                 enrollment.reject()

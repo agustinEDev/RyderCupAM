@@ -9,6 +9,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError,
     InvalidTeeColorError,
 )
@@ -56,11 +57,7 @@ class AlreadyEnrolledError(Exception):
 
 # Los «no» de la política que antes se escapaban sin traducir y llegaban como un
 # 500 mudo: sin cabeceras de CORS, el navegador lo ve como un fallo de red y el
-# jugador no se entera de nada (BE #372)
-class CompetitionFullError(Exception):
-    """La competición no tiene plazas libres."""
-
-
+# jugador no se entera de nada (BE #372). El de «llena» es compartido con aprobar
 class EnrollmentClosedError(Exception):
     """El torneo ya ha empezado: pasado su primer día no se pide plaza."""
 

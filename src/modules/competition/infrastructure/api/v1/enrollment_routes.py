@@ -45,6 +45,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError as DirectCompetitionNotFoundError,
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as HandleCompetitionNotFoundError,
@@ -83,7 +84,6 @@ from src.modules.competition.application.use_cases.remove_custom_handicap_use_ca
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError as RequestAlreadyEnrolledError,
-    CompetitionFullError,
     CompetitionIsPrivateError,
     CompetitionNotActiveError,
     EnrollmentClosedError,
@@ -395,7 +395,7 @@ async def approve_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except EnrollmentStateError as e:
+    except (EnrollmentStateError, CompetitionFullError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
