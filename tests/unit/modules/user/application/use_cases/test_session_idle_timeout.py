@@ -12,6 +12,8 @@ dispositivos. Ahora lo decide el servidor, por dispositivo, al refrescar.
     R1  refrescar, usado hace 1 h                        | se refresca
     R2  refrescar, 25 h sin usar                         | None (401) y su token revocado
     R3  token sin dispositivo (anterior a los dispositivos) | se refresca: lo acotan los 7 días
+    R4  refrescar cuenta como uso del dispositivo del TOKEN  | aunque la huella reconozca otro
+    R5  caducar por inactividad                          | queda en el registro de seguridad
 """
 
 from datetime import datetime, timedelta
@@ -124,3 +126,32 @@ class TestRefrescarSegunElUso:
         respuesta = await self._refresca(uow, token_service, user, None)
 
         assert respuesta is not None
+
+    async def test_r4_refrescar_cuenta_como_uso_del_dispositivo_del_token(
+        self, user, token_service
+    ):
+        """El registro de dispositivos puede apuntar a otro (sin cookie, IP nueva):
+        si el uso solo se apuntase allí, el del token caducaría estando en uso."""
+        uow = InMemoryUnitOfWork()
+        dispositivo = _dispositivo(user, timedelta(hours=23))
+
+        await self._refresca(uow, token_service, user, dispositivo)
+
+        guardado = await uow.user_devices.find_by_id(dispositivo.id)
+        assert guardado.is_idle(now=datetime.now() + timedelta(hours=2)) is False
+
+    async def test_r5_caducar_por_inactividad_queda_registrado(
+        self, user, token_service, monkeypatch
+    ):
+        registro = Mock()
+        monkeypatch.setattr(
+            "src.modules.user.application.use_cases.refresh_access_token_use_case."
+            "get_security_logger",
+            lambda: registro,
+        )
+        uow = InMemoryUnitOfWork()
+
+        await self._refresca(uow, token_service, user, _dispositivo(user, timedelta(hours=25)))
+
+        registro.log_refresh_token_revoked.assert_called_once()
+        assert registro.log_refresh_token_revoked.call_args.kwargs["reason"] == "idle"

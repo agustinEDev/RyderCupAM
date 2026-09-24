@@ -23,6 +23,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -154,11 +155,27 @@ class RefreshAccessTokenUseCase:
         # OWASP A07). Se revoca: el token no vuelve a servir aunque llegue de otra
         # forma. Un token sin dispositivo es anterior a los dispositivos y lo
         # acota su caducidad de 7 días
-        if await self._dispositivo_inactivo(refresh_token_entity):
+        dispositivo = await self._dispositivo_del_token(refresh_token_entity)
+        if dispositivo is not None and dispositivo.is_idle():
             async with self._uow:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
+            # Que quede constancia: «la app me echó» tiene que poder explicarse
+            security_logger.log_refresh_token_revoked(
+                user_id=user_id_str,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tokens_revoked_count=1,
+                reason="idle",
+            )
             return None
+        # Refrescar es usar ESTE dispositivo, el del token. El registro de
+        # dispositivos de más abajo puede reconocer otro (sin cookie, IP nueva) y
+        # entonces el del token caducaría a las 24 h estando en uso
+        if dispositivo is not None:
+            async with self._uow:
+                dispositivo.update_last_used()
+                await self._uow.user_devices.save(dispositivo)
 
         # 5. Device Fingerprinting (v2.0.4): Actualizar last_used_at y ip_address del dispositivo
         # Cookie-based identification: device_id_from_cookie tiene prioridad
@@ -204,8 +221,7 @@ class RefreshAccessTokenUseCase:
             should_set_device_cookie=should_set_device_cookie,
         )
 
-    async def _dispositivo_inactivo(self, refresh_token_entity: RefreshToken) -> bool:
+    async def _dispositivo_del_token(self, refresh_token_entity: RefreshToken) -> UserDevice | None:
         if refresh_token_entity.device_id is None:
-            return False
-        dispositivo = await self._uow.user_devices.find_by_id(refresh_token_entity.device_id)
-        return dispositivo is not None and dispositivo.is_idle()
+            return None
+        return await self._uow.user_devices.find_by_id(refresh_token_entity.device_id)
