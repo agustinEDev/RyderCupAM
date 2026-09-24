@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
-    InsufficientPlayersError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
 )
@@ -22,9 +21,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.application.services.team_roster import TeamRoster
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
-    NoGolfCourseForHandicapError,
-    NoTeamAssignmentError,
-    PlayersWithoutTeeError,
+    bloqueo_por,
 )
 from src.modules.competition.domain.entities.competition import (
     Competition,
@@ -46,13 +43,13 @@ from src.modules.competition.domain.services.envelope_reveal_service import (
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
-from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
+from src.modules.competition.domain.value_objects.competition_status import (
+    SE_JUEGA,
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
-    NO_GOLF_COURSE,
-    NO_TEAMS,
-    NOT_ENOUGH_PLAYERS,
-    PLAYERS_WITHOUT_TEE,
+    ENROLLMENT_OPEN,
     UNEXPECTED,
     MatchGenerationBlock,
 )
@@ -286,11 +283,12 @@ class EnvelopeDesk:
         is_admin: bool = False,
         sin_plazo: bool = False,
     ) -> bool:
-        """Si esa persona puede abrir los sobres AHORA.
+        """Si esa persona puede abrir los sobres A MANO, ahora.
 
-        **Hacen falta los dos sobres dentro, sea quien sea** (decidido el 23
-        sep): abrir es lo que desvela el orden de juego, y con uno fuera no hay
-        nada que desvelar. Ni el organizador ni un administrador lo fuerzan.
+        **Nadie, con plazo que vencer** (BE #374, decidido el 24 sep): abrir
+        antes de hora es decision de LOS DOS capitanes, y cada uno da su permiso
+        al entregar; con los dos, se abren solos. Ni un capitan solo ni el
+        organizador los abren a mano, tampoco con los dos sobres dentro.
 
         El capitan que no aparece no deja nada atascado: al vencer el plazo se
         abren solos y la aplicacion rellena lo que falte.
@@ -317,9 +315,7 @@ class EnvelopeDesk:
         arbitra = is_admin or competition.is_creator(user_id)
         if not arbitra and self.equipo_de(competition, user_id) is None:
             return False
-        if arbitra and sin_plazo:
-            return True
-        return bool(sobre_a and sobre_a.is_submitted() and sobre_b and sobre_b.is_submitted())
+        return arbitra and sin_plazo
 
     async def los_equipos_cuadran(self, competition: Competition, por_fila: int) -> bool:
         """Si los dos equipos se pueden repartir en filas de `por_fila`.
@@ -396,6 +392,11 @@ class EnvelopeDesk:
         if ronda.status in _CON_PARTIDOS_YA_HECHOS:
             return False
 
+        # Cancelada o terminada ya no hay nada que jugar: abrirlos seria
+        # escribir en una competicion que se acabo, la mire quien la mire
+        if competition.status.is_final():
+            return False
+
         if not await self._toca_abrirlos(ronda, competition, sobres):
             return False
 
@@ -432,6 +433,17 @@ class EnvelopeDesk:
         # Cancelada o terminada no hay partidos que jugar: abrirse, se abren,
         # pero no hay nada que avisar
         if competition.status not in SE_JUEGA:
+            # Reabierta, en cambio, volverá a cerrarse: sin un motivo apuntado
+            # la sesión se quedaba atascada, porque en modo Ryder «Generar» solo
+            # sale como reintento y los sobres ya están abiertos
+            if (
+                competition.status == CompetitionStatus.ACTIVE
+                and ronda.status == RoundStatus.PENDING_MATCHES
+            ):
+                ronda.block_match_generation(
+                    MatchGenerationBlock(reason=ENROLLMENT_OPEN, at=self.ahora.replace(tzinfo=None))
+                )
+                await self._uow.rounds.update(ronda)
             return
         # Solo la que espera partidos: en otro estado no hay nada que generar,
         # y apuntar un motivo ahi reventaria la lectura entera
@@ -466,16 +478,10 @@ class EnvelopeDesk:
     def _motivo(self, error: Exception) -> MatchGenerationBlock:
         """De la excepcion al motivo que se apunta en la sesion."""
         ahora = self.ahora.replace(tzinfo=None)
-        if isinstance(error, PlayersWithoutTeeError):
-            return MatchGenerationBlock(
-                reason=PLAYERS_WITHOUT_TEE, players=tuple(error.players), at=ahora
-            )
-        if isinstance(error, InsufficientPlayersError):
-            return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=ahora)
-        if isinstance(error, NoTeamAssignmentError):
-            return MatchGenerationBlock(reason=NO_TEAMS, at=ahora)
-        if isinstance(error, NoGolfCourseForHandicapError):
-            return MatchGenerationBlock(reason=NO_GOLF_COURSE, at=ahora)
+        # El mismo que apunta el reintento a mano: una sola traducción
+        motivo = bloqueo_por(error, ahora)
+        if motivo is not None:
+            return motivo
         # Lo que no se esperaba se registra entero: el motivo solo dice que falló
         logger.exception("No se pudieron generar los partidos al abrir los sobres")
         return MatchGenerationBlock(reason=UNEXPECTED, at=ahora)

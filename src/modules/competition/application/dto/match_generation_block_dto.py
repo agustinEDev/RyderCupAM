@@ -21,7 +21,11 @@ class BlockedPlayerDTO(BaseModel):
     user_id: UUID = Field(..., description="El jugador.")
     name: str = Field(..., description="Su nombre en esta competición.")
     missing: str = Field(
-        ..., description="Lo que le falta: GENDER (su género) o TEE_COLOR (su color en el campo)."
+        ...,
+        description=(
+            "Lo que le falta: GENDER (su género), TEE_COLOR (su color en el campo) o "
+            "ENROLLMENT (la inscripción aprobada)."
+        ),
     )
     tee_color: str | None = Field(
         None, description="El color que se le asignó, si lo que falta es ese color en el campo."
@@ -34,7 +38,8 @@ class MatchGenerationBlockDTO(BaseModel):
     reason: str = Field(
         ...,
         description=(
-            "PLAYERS_WITHOUT_TEE, NOT_ENOUGH_PLAYERS, NO_TEAMS, NO_GOLF_COURSE o UNEXPECTED."
+            "PLAYERS_WITHOUT_TEE, NOT_ENOUGH_PLAYERS, NO_TEAMS, NO_GOLF_COURSE, "
+            "ENROLLMENT_OPEN o UNEXPECTED."
         ),
     )
     players: list[BlockedPlayerDTO] = Field(

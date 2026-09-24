@@ -6,6 +6,7 @@ from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -100,30 +101,30 @@ class TestMatchSubmitScorecard:
         a = _make_player()
         b = _make_player()
         match = _create_match(team_a=[a], team_b=[b], status=MatchStatus.IN_PROGRESS)
-        match.submit_scorecard(a.user_id)
-        assert match.has_submitted_scorecard(a.user_id)
-        assert not match.has_submitted_scorecard(b.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
+        assert match.has_submitted_scorecard(a.user_id, MatchFormat.SINGLES)
+        assert not match.has_submitted_scorecard(b.user_id, MatchFormat.SINGLES)
 
     def test_all_scorecards_submitted(self):
         a = _make_player()
         b = _make_player()
         match = _create_match(team_a=[a], team_b=[b], status=MatchStatus.IN_PROGRESS)
-        match.submit_scorecard(a.user_id)
-        assert not match.all_scorecards_submitted()
-        match.submit_scorecard(b.user_id)
-        assert match.all_scorecards_submitted()
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
+        assert not match.all_scorecards_submitted(MatchFormat.SINGLES)
+        match.submit_scorecard(b.user_id, MatchFormat.SINGLES)
+        assert match.all_scorecards_submitted(MatchFormat.SINGLES)
 
     def test_submit_non_player_raises(self):
         match = _create_match(status=MatchStatus.IN_PROGRESS)
         with pytest.raises(ValueError, match="not a player"):
-            match.submit_scorecard(UserId.generate())
+            match.submit_scorecard(UserId.generate(), MatchFormat.SINGLES)
 
     def test_submit_duplicate_raises(self):
         a = _make_player()
         match = _create_match(team_a=[a], team_b=[_make_player()], status=MatchStatus.IN_PROGRESS)
-        match.submit_scorecard(a.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
         with pytest.raises(ValueError, match="already submitted"):
-            match.submit_scorecard(a.user_id)
+            match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
 
 
 class TestMatchMarkDecided:
@@ -206,6 +207,64 @@ class TestMatchScoringReconstruct:
             decided_result={"winner": "A", "score": "5&4"},
         )
         assert len(match.marker_assignments) == 1
-        assert match.has_submitted_scorecard(a.user_id)
+        assert match.has_submitted_scorecard(a.user_id, MatchFormat.SINGLES)
         assert match.is_decided is True
         assert match.decided_result["winner"] == "A"
+
+
+class TestUnaTarjetaPorBandoEnFoursomes:
+    """BE #377: en foursomes hay UNA bola por bando (decidido en agosto), así
+    que hay una tarjeta por bando. La entrega de uno vale por los dos, y el
+    partido se cierra con la de cada bando, no con las cuatro. En fourball e
+    individuales, cada uno la suya, como siempre.
+
+        #   formato    | caso                                  | esperado
+        ----|----------|---------------------------------------|---------------------
+        M1  foursomes  | entregó el compañero                  | el bando ya entregó
+        M2  foursomes  | el compañero intenta entregar         | se rechaza
+        M3  foursomes  | una por bando                         | todas entregadas
+        M4  fourball   | una por bando                         | no basta
+        M5  foursomes  | la lista para la pantalla             | salen los dos del bando
+    """
+
+    def _parejas(self):
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        return _create_match(team_a=[a1, a2], team_b=[b1, b2]), a1, a2, b1, b2
+
+    def test_m1_si_entrego_el_companero_el_bando_ya_entrego(self):
+        match, a1, a2, _, _ = self._parejas()
+
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
+
+        assert match.has_submitted_scorecard(a2.user_id, MatchFormat.FOURSOMES)
+
+    def test_m2_el_companero_no_la_entrega_otra_vez(self):
+        match, a1, a2, _, _ = self._parejas()
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
+
+        with pytest.raises(ValueError):
+            match.submit_scorecard(a2.user_id, MatchFormat.FOURSOMES)
+
+    def test_m3_con_la_de_cada_bando_estan_todas(self):
+        match, a1, _, b1, _ = self._parejas()
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
+        match.submit_scorecard(b1.user_id, MatchFormat.FOURSOMES)
+
+        assert match.all_scorecards_submitted(MatchFormat.FOURSOMES)
+
+    def test_m4_en_fourball_cada_uno_la_suya(self):
+        match, a1, a2, b1, _ = self._parejas()
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURBALL)
+        match.submit_scorecard(b1.user_id, MatchFormat.FOURBALL)
+
+        assert not match.all_scorecards_submitted(MatchFormat.FOURBALL)
+        assert not match.has_submitted_scorecard(a2.user_id, MatchFormat.FOURBALL)
+
+    def test_m5_la_pantalla_ve_entregado_al_bando_entero(self):
+        match, a1, a2, _b1, _b2 = self._parejas()
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
+
+        entregadas = match.scorecards_submitted_by(MatchFormat.FOURSOMES)
+
+        assert set(entregadas) == {a1.user_id, a2.user_id}
+        assert set(match.scorecards_submitted_by(MatchFormat.FOURBALL)) == {a1.user_id}

@@ -21,10 +21,15 @@ NOT_ENOUGH_PLAYERS = "NOT_ENOUGH_PLAYERS"
 NO_TEAMS = "NO_TEAMS"
 NO_GOLF_COURSE = "NO_GOLF_COURSE"
 UNEXPECTED = "UNEXPECTED"
+# Se abrieron con las inscripciones reabiertas: al cerrarlas, «Generar» los
+# crea con esos sobres (revisión de la FE #711)
+ENROLLMENT_OPEN = "ENROLLMENT_OPEN"
 
 # Lo que le falta a cada jugador
 MISSING_GENDER = "GENDER"
 MISSING_TEE_COLOR = "TEE_COLOR"
+# Emparejado sin la inscripción aprobada: se retiró, o no llegó a aprobarse
+MISSING_ENROLLMENT = "ENROLLMENT"
 
 
 @dataclass(frozen=True)

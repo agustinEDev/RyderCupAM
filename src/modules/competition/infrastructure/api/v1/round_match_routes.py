@@ -9,6 +9,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_assign_teams_use_case,
@@ -25,6 +26,7 @@ from src.config.dependencies import (
     get_update_round_use_case,
 )
 from src.config.rate_limit import limiter
+from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
     AssignTeamsBodyDTO,
     AssignTeamsRequestDTO,
@@ -110,11 +112,13 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     CompetitionNotClosedError as GenMatchesNotClosedError,
     GenerateMatchesUseCase,
     InsufficientPlayersError as GenMatchesInsufficientError,
+    NoGolfCourseForHandicapError,
     NotCompetitionCreatorError as GenMatchesNotCreatorError,
     NoTeamAssignmentError,
     RoundNotFoundError as GenMatchesRoundNotFoundError,
     RoundNotPendingMatchesError,
     TeeColorNotFoundError,
+    motivo_apuntado,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
@@ -149,6 +153,9 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 from src.modules.competition.domain.entities.competition import (
     CaptainMissingError,
     CaptainOnWrongTeamError,
+)
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -679,6 +686,14 @@ async def assign_teams(
         ) from e
 
 
+def frase_del_bloqueo(motivo: MatchGenerationBlock) -> str:
+    """La frase del 400 para el cliente que aún no lee las claves (BE #360)."""
+    if motivo.players:
+        nombres = ", ".join(p.name or "un jugador" for p in motivo.players)
+        return f"No se pueden generar los partidos: faltan datos de {nombres}"
+    return "No se pueden generar los partidos: el motivo está en la sesión"
+
+
 @router.post(
     "/rounds/{round_id}/matches/generate",
     response_model=GenerateMatchesResponseDTO,
@@ -706,7 +721,11 @@ async def generate_matches(
 
     **Returns:**
     - 201: Partidos generados
-    - 400: Estado inválido, sin equipos, o jugadores insuficientes
+    - 400: Estado inválido, sin equipos, o jugadores insuficientes. Cuando es
+      uno de los motivos que la sesión apunta (`error_code`
+      `MATCH_GENERATION_BLOCKED`), va en claves en `match_generation_block`,
+      con la misma forma que en la agenda, y queda apuntado en la sesión
+      (BE #360)
     - 404: Ronda no encontrada
     """
     try:
@@ -728,11 +747,31 @@ async def generate_matches(
             detail=str(e),
         ) from e
     except (
+        GenMatchesInsufficientError,
+        NoTeamAssignmentError,
+        TeeColorNotFoundError,
+        NoGolfCourseForHandicapError,
+    ) as e:
+        # El que se guardó en la sesión, con su hora: el mismo que da la agenda
+        motivo = motivo_apuntado(e)
+        if motivo is None:
+            # Un color que falta sin la lista de quién: no hay motivo que contar
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        # Claves y no frases (decidido el 24 sep): la pantalla lo escribe en su
+        # idioma. `error_code` en la RAIZ, que es donde lo lee el cliente, como
+        # SCORING_NOT_OPEN_YET. `detail` es para quien aún no lo lee, y se
+        # compone aquí con el motivo, no con el mensaje de la excepción
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": frase_del_bloqueo(motivo),
+                "error_code": "MATCH_GENERATION_BLOCKED",
+                "match_generation_block": block_to_dto(motivo).model_dump(mode="json"),
+            },
+        )
+    except (
         GenMatchesNotClosedError,
         RoundNotPendingMatchesError,
-        NoTeamAssignmentError,
-        GenMatchesInsufficientError,
-        TeeColorNotFoundError,
         # Los sobres de los capitanes deciden los enfrentamientos de su sesion
         # (FE #655): que no esten abiertos, o que se manden emparejamientos a
         # mano habiendolos, es culpa de quien pide y no un fallo del servidor

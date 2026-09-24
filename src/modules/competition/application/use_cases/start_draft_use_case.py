@@ -130,7 +130,8 @@ class StartDraftUseCase:
                 team_b_captain_id=capitan_b,
             )
             # El sorteo, delante de los dos, y una sola vez
-            draft.start(first_pick=self._sorteo(), ahora=self._room.ahora)
+            draft.start(first_pick=self._sorteo(), ahora=self._room.ahora, elegibles=elegibles)
             await self._uow.drafts.add(draft)
+            await self._room.equipos_si_termino(competition, draft)
 
             return await self._room.estado(competition, draft, elegibles)

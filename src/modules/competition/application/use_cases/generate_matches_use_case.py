@@ -39,9 +39,15 @@ from src.modules.competition.domain.value_objects.competition_status import SE_J
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_ENROLLMENT,
     MISSING_GENDER,
     MISSING_TEE_COLOR,
+    NO_GOLF_COURSE,
+    NO_TEAMS,
+    NOT_ENOUGH_PLAYERS,
+    PLAYERS_WITHOUT_TEE,
     BlockedPlayer,
+    MatchGenerationBlock,
 )
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
@@ -75,40 +81,39 @@ class TeeColorNotFoundError(Exception):
     pass
 
 
-# Colores en palabras, como los llama la aplicación (golfCourses.form.teeColors)
-_COLORES = {
-    "WHITE": "blancas",
-    "YELLOW": "amarillas",
-    "BLUE": "azules",
-    "RED": "rojas",
-    "BLACK": "negras",
-    "GREEN": "verdes",
-    "ORANGE": "naranjas",
-    "PINK": "rosas",
-    "GOLD": "doradas",
-    "OTHER": "de otro color",
-}
-
-
 class PlayersWithoutTeeError(TeeColorNotFoundError):
     """Hay jugadores sin barras en el campo, y aquí van TODOS (BE #360, #361).
 
     Hereda del error de siempre para no cambiarle nada a quien ya lo captura.
-    El mensaje es para el organizador: quién y qué le falta, en palabras. La
-    lista es para quien lo pinta en otro idioma.
+    Lo que lee el organizador es la lista, en claves: la pantalla la pone en su
+    idioma (decidido el 24 sep: claves siempre). El mensaje es para los logs.
     """
 
     def __init__(self, players: list[BlockedPlayer]):
         self.players = players
-        partes = []
-        for p in players:
-            quien = p.name or "Un jugador"
-            if p.missing == MISSING_GENDER:
-                partes.append(f"{quien} no tiene el género en su perfil")
-            else:
-                color = _COLORES.get(p.tee_color or "", p.tee_color or "")
-                partes.append(f"{quien} juega de barras {color} y este campo no las tiene")
-        super().__init__("No se pueden generar los partidos: " + "; ".join(partes) + ".")
+        super().__init__(
+            "No se pueden generar los partidos: falta saber desde qué barras juegan "
+            + _nombres(players)
+        )
+
+
+class PlayersNotEnrolledError(InsufficientPlayersError):
+    """Hay emparejados sin la inscripción aprobada, y aquí van TODOS (BE #360).
+
+    Hereda del error de siempre para no cambiarle nada a quien ya lo captura.
+    """
+
+    def __init__(self, players: list[BlockedPlayer]):
+        self.players = players
+        super().__init__(
+            "No se pueden generar los partidos: no tienen la inscripción aprobada "
+            + _nombres(players)
+        )
+
+
+def _nombres(players: list[BlockedPlayer]) -> str:
+    """Para el mensaje, que acaba en los logs y en un cliente que aún no lee claves."""
+    return ", ".join(p.name or "un jugador" for p in players)
 
 
 class NoGolfCourseForHandicapError(ValueError):
@@ -118,6 +123,37 @@ class NoGolfCourseForHandicapError(ValueError):
     """
 
     pass
+
+
+def bloqueo_por(error: Exception, at: datetime | None) -> MatchGenerationBlock | None:
+    """El motivo que se apunta en la sesión por este fallo al generar (BE #360, #361).
+
+    None si no es uno de los que se saben contar: lo inesperado no se disfraza
+    de motivo. La apertura de los sobres, que nadie está mirando, lo apunta como
+    UNEXPECTED; el reintento a mano lo deja subir como error.
+    """
+    if isinstance(error, PlayersWithoutTeeError):
+        return MatchGenerationBlock(reason=PLAYERS_WITHOUT_TEE, players=tuple(error.players), at=at)
+    # Antes que su clase madre: con él va quién
+    if isinstance(error, PlayersNotEnrolledError):
+        return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, players=tuple(error.players), at=at)
+    if isinstance(error, InsufficientPlayersError):
+        return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=at)
+    if isinstance(error, NoTeamAssignmentError):
+        return MatchGenerationBlock(reason=NO_TEAMS, at=at)
+    if isinstance(error, NoGolfCourseForHandicapError):
+        return MatchGenerationBlock(reason=NO_GOLF_COURSE, at=at)
+    return None
+
+
+def motivo_apuntado(error: Exception) -> MatchGenerationBlock | None:
+    """El motivo que el reintento a mano guardó en la sesión por este error.
+
+    El mismo objeto, con su hora: la respuesta no tiene que calcular otro que
+    no coincidiría con el de la agenda.
+    """
+    motivo = getattr(error, "_motivo_apuntado", None)
+    return motivo if isinstance(motivo, MatchGenerationBlock) else None
 
 
 class GenerateMatchesUseCase:
@@ -202,20 +238,60 @@ class GenerateMatchesUseCase:
                 )
 
             # 5. Verificar ronda PENDING_MATCHES
-            if allow_regeneration and round_entity.status == RoundStatus.SCHEDULED:
-                # La misma transaccion que borra y recrea los partidos: si algo
-                # falla despues, la ronda vuelve sola a SCHEDULED al deshacerse.
-                round_entity.reopen_for_regeneration()
+            fallo: Exception | None = None
+            if allow_regeneration:
+                if round_entity.status == RoundStatus.SCHEDULED:
+                    # La misma transaccion que borra y recrea los partidos: si
+                    # algo falla despues, la ronda vuelve sola a SCHEDULED al
+                    # deshacerse. Por eso aqui no se apunta ningun motivo
+                    round_entity.reopen_for_regeneration()
+                matches_created = await self.generar_dentro(
+                    round_entity, competition, request.manual_pairings
+                )
+            else:
+                matches_created, fallo = await self._generar_o_apuntar_el_motivo(
+                    round_entity, competition, request.manual_pairings
+                )
 
-            matches_created = await self.generar_dentro(
-                round_entity, competition, request.manual_pairings
-            )
+        # Fuera del `with`: el motivo apuntado ya se ha guardado
+        if fallo is not None:
+            raise fallo
 
         return GenerateMatchesResponseDTO(
             round_id=round_entity.id.value,
             matches_generated=matches_created,
             round_status=round_entity.status.value,
         )
+
+    async def _generar_o_apuntar_el_motivo(
+        self,
+        round_entity: Round,
+        competition: Competition,
+        manual_pairings: list[ManualPairingDTO] | None,
+    ) -> tuple[int, Exception | None]:
+        """Genera, o apunta en la sesión por qué no se pudo (BE #360).
+
+        Como al abrir los sobres: lo escrito a medias se deshace con el
+        SAVEPOINT y el motivo se guarda con la transacción. Así la tarjeta
+        cuenta el fallo de ESTE intento, en el idioma de la pantalla, y no el
+        de la apertura.
+
+        Returns:
+            Los partidos creados, y el error que devolver si no se pudo
+        """
+        try:
+            async with self._uow.savepoint():
+                return await self.generar_dentro(round_entity, competition, manual_pairings), None
+        except Exception as error:
+            motivo = bloqueo_por(error, datetime.now(UTC).replace(tzinfo=None))
+            if motivo is None:
+                raise
+            # Todos los motivos saltan antes de tocar la sesión: no hay nada
+            # caducado que volver a leer, al contrario que al abrir los sobres
+            round_entity.block_match_generation(motivo)
+            await self._uow.rounds.update(round_entity)
+            error._motivo_apuntado = motivo
+            return 0, error
 
     async def generar_dentro(
         self,
@@ -306,7 +382,7 @@ class GenerateMatchesUseCase:
         # Quien no tiene la inscripcion aprobada, antes que las barras: sin
         # inscripcion su color sale del defecto y su falta pareceria otra
         if pairings:
-            self._comprobar_inscripciones(pairings, enrollment_map)
+            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360)
@@ -367,19 +443,30 @@ class GenerateMatchesUseCase:
         await self._uow.rounds.update(round_entity)
         return matches_created
 
-    @staticmethod
-    def _comprobar_inscripciones(pairings, enrollment_map) -> None:
+    async def _comprobar_inscripciones(self, pairings, enrollment_map, competition) -> None:
         """Todos los emparejados tienen que tener la inscripción aprobada.
 
         Raises:
-            InsufficientPlayersError: Con el primero que no la tiene
+            PlayersNotEnrolledError: Con TODOS los que no la tienen, y su
+                nombre: de uno en uno eran tantos viajes como retirados
         """
-        for pairing in pairings:
-            for uid in list(pairing.team_a_player_ids) + list(pairing.team_b_player_ids):
-                if str(uid) not in enrollment_map:
-                    raise InsufficientPlayersError(
-                        f"El jugador {uid} no tiene inscripción aprobada"
-                    )
+        sin_inscripcion = [
+            UserId(uid)
+            for pairing in pairings
+            for uid in [*pairing.team_a_player_ids, *pairing.team_b_player_ids]
+            if str(uid) not in enrollment_map
+        ]
+        if not sin_inscripcion:
+            return
+        nombres = await PlayerNames.de_la_competicion(
+            sin_inscripcion, competition.id, self._user_repo, self._uow
+        )
+        raise PlayersNotEnrolledError(
+            [
+                BlockedPlayer(user_id=uid, name=nombres.get(uid, ""), missing=MISSING_ENROLLMENT)
+                for uid in sin_inscripcion
+            ]
+        )
 
     @staticmethod
     def _jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team) -> list[UserId]:

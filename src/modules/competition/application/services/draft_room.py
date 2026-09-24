@@ -155,6 +155,13 @@ class DraftRoom:
     async def guardar(self, competition: Competition, draft: Draft) -> None:
         """Guarda la sala y, si termino, deja los equipos hechos."""
         await self._uow.drafts.update(draft)
+        await self.equipos_si_termino(competition, draft)
+
+    async def equipos_si_termino(self, competition: Competition, draft: Draft) -> None:
+        """Con la sala terminada, los equipos quedan como el reparto.
+
+        Tambien al abrirla: con un solo elegible nace terminada.
+        """
         if draft.status == DraftStatus.COMPLETED:
             equipo_a, equipo_b = draft.teams()
             await TeamAssignmentWriter.guardar(
@@ -204,6 +211,7 @@ class DraftRoom:
                     team=pick.team,
                     order=pick.order,
                     automatic=pick.automatic,
+                    last_remaining=pick.last_remaining,
                 )
                 for pick in draft.picks
             ],

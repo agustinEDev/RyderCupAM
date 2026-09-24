@@ -12,11 +12,15 @@ from uuid import UUID
 
 from src.modules.competition.application.dto.draft_dto import DraftStateDTO
 from src.modules.competition.application.services.draft_room import DraftRoom
-from src.modules.competition.domain.entities.draft import DraftNotRunningError
+from src.modules.competition.domain.entities.draft import (
+    DraftNotRunningError,
+    NotYourTurnError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -71,9 +75,17 @@ class MakeDraftPickUseCase:
                 raise DraftNotRunningError("Todavía no se ha lanzado el sorteo")
 
             elegibles = await self._room.elegibles(competition)
+            de_turno = {"A": draft.team_a_captain_id, "B": draft.team_b_captain_id}.get(
+                draft.current_team or ""
+            )
             # Antes de comprobar el turno: si se agoto el minuto, ya no es suyo
             await self._room.al_dia(competition, draft, elegibles)
 
+            # Si con su minuto agotado la sala termino (la app eligio al
+            # penultimo y el ultimo entro solo), para el sigue siendo un turno
+            # perdido: «el draft no esta en marcha» no le cuenta lo que paso
+            if draft.status == DraftStatus.COMPLETED and user_id == de_turno:
+                raise NotYourTurnError("Se te acabó el minuto y el draft ya ha terminado")
             draft.check_turn(user_id)
             draft.pick(UserId(player_id), elegibles, self._room.ahora)
             await self._room.guardar(competition, draft)

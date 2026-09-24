@@ -156,6 +156,16 @@ class TestElSavepoint:
         assert final.match_generation_block.reason == PLAYERS_WITHOUT_TEE
 
 
+class _SinZona:
+    """Un campo sin zona horaria: su sesión no vence nunca sola."""
+
+    async def for_competition(self, competition):
+        return None
+
+    async def for_course(self, golf_course_id):
+        return None
+
+
 class _GeneradorQueRevientaAMitad:
     """El peor caso: marca la sesión con partidos, lo escribe y revienta."""
 
@@ -169,6 +179,64 @@ class _GeneradorQueRevientaAMitad:
         await self._uow.rounds.update(ronda)
         await self._uow.flush()
         raise RuntimeError("se cae a mitad de escribir los partidos")
+
+
+async def _dos_sobres_entregados(db_session, ronda, jugadores):
+    """Una cerrada con capitanes, equipos y los dos sobres entregados."""
+    from src.modules.competition.domain.entities.enrollment import Enrollment
+    from src.modules.competition.domain.entities.team_assignment import TeamAssignment
+    from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+    from src.modules.competition.domain.value_objects.team_assignment_mode import (
+        TeamAssignmentMode,
+    )
+
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    equipo_a, equipo_b = jugadores[:2], jugadores[2:]
+    competicion = await uow.competitions.find_by_id(ronda.competition_id)
+    if competicion.is_draft():
+        competicion.activate()
+    competicion.name_captains(
+        equipo_a[0], equipo_b[0], approved_player_ids=jugadores, has_teams=False
+    )
+    await uow.competitions.update(competicion)
+    for uid in jugadores:
+        await uow.enrollments.add(
+            Enrollment.direct_enroll(
+                id=EnrollmentId.generate(), competition_id=competicion.id, user_id=uid
+            )
+        )
+    await uow.team_assignments.add(
+        TeamAssignment.create(
+            competition_id=competicion.id,
+            mode=TeamAssignmentMode.DRAFT,
+            team_a_player_ids=equipo_a,
+            team_b_player_ids=equipo_b,
+        )
+    )
+    sesion = await uow.rounds.find_by_id(ronda.id)
+    sesion.mark_teams_assigned()
+    await uow.rounds.update(sesion)
+    for team, equipo in (("A", equipo_a), ("B", equipo_b)):
+        sobre = Envelope.create(
+            competition_id=competicion.id,
+            round_id=ronda.id,
+            team=team,
+            match_format=MatchFormat.FOURBALL,
+        )
+        sobre.submit([equipo], equipo=equipo, por=equipo[0], ahora=CUANDO)
+        await uow.envelopes.add(sobre)
+    await uow.commit()
+    db_session.expunge_all()
+    round_id = ronda.id
+    return uow, competicion, round_id
+
+
+class _ZonaMadrid:
+    async def for_competition(self, competition):
+        return "Europe/Madrid"
+
+    async def for_course(self, golf_course_id):
+        return "Europe/Madrid"
 
 
 class TestAbrirLosSobresContraPostgres:
@@ -186,59 +254,52 @@ class TestAbrirLosSobresContraPostgres:
         from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
             RevealEnvelopesUseCase,
         )
-        from src.modules.competition.domain.entities.enrollment import Enrollment
-        from src.modules.competition.domain.entities.team_assignment import TeamAssignment
-        from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-        from src.modules.competition.domain.value_objects.team_assignment_mode import (
-            TeamAssignmentMode,
-        )
 
-        uow = SQLAlchemyCompetitionUnitOfWork(db_session)
-        equipo_a, equipo_b = jugadores[:2], jugadores[2:]
-        competicion = await uow.competitions.find_by_id(ronda.competition_id)
-        if competicion.is_draft():
-            competicion.activate()
-        competicion.name_captains(
-            equipo_a[0], equipo_b[0], approved_player_ids=jugadores, has_teams=False
-        )
-        await uow.competitions.update(competicion)
-        for uid in jugadores:
-            await uow.enrollments.add(
-                Enrollment.direct_enroll(
-                    id=EnrollmentId.generate(), competition_id=competicion.id, user_id=uid
-                )
-            )
-        await uow.team_assignments.add(
-            TeamAssignment.create(
-                competition_id=competicion.id,
-                mode=TeamAssignmentMode.DRAFT,
-                team_a_player_ids=equipo_a,
-                team_b_player_ids=equipo_b,
-            )
-        )
-        sesion = await uow.rounds.find_by_id(ronda.id)
-        sesion.mark_teams_assigned()
-        await uow.rounds.update(sesion)
-        for team, equipo in (("A", equipo_a), ("B", equipo_b)):
-            sobre = Envelope.create(
-                competition_id=competicion.id,
-                round_id=ronda.id,
-                team=team,
-                match_format=MatchFormat.FOURBALL,
-            )
-            sobre.submit([equipo], equipo=equipo, por=equipo[0], ahora=CUANDO)
-            await uow.envelopes.add(sobre)
-        await uow.commit()
-        db_session.expunge_all()
-        round_id = ronda.id
+        uow, competicion, round_id = await _dos_sobres_entregados(db_session, ronda, jugadores)
 
+        # A mano solo abre el organizador en una sesión sin plazo (BE #374)
         respuesta = await RevealEnvelopesUseCase(
-            uow, None, generador=_GeneradorQueRevientaAMitad(uow)
-        ).execute(round_id.value, equipo_a[0])
+            uow, None, timezone_service=_SinZona(), generador=_GeneradorQueRevientaAMitad(uow)
+        ).execute(round_id.value, competicion.creator_id)
 
         assert len(respuesta.matchups) == 1
         db_session.expunge_all()
         final = await uow.rounds.find_by_id(round_id)
         assert final.status == RoundStatus.PENDING_MATCHES
         assert final.match_generation_block.reason == "UNEXPECTED"
+        assert all(not s.is_sealed() for s in await uow.envelopes.find_by_round(round_id))
+
+    async def test_leer_la_agenda_los_abre_sin_missing_greenlet(self, db_session, ronda, jugadores):
+        """BE #367: mirar la agenda abre los sobres vencidos, contra Postgres.
+
+        El peor caso otra vez —la generación revienta a mitad—, porque es el que
+        deja objetos caducados: la agenda tiene que responder igual.
+        """
+        from datetime import UTC
+
+        from src.modules.competition.application.dto.round_match_dto import (
+            GetScheduleRequestDTO,
+        )
+        from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+        from src.modules.competition.application.use_cases.get_schedule_use_case import (
+            GetScheduleUseCase,
+        )
+
+        uow, competicion, round_id = await _dos_sobres_entregados(db_session, ronda, jugadores)
+        mesa = EnvelopeDesk(
+            uow,
+            None,
+            lambda: datetime(2030, 1, 1, tzinfo=UTC),
+            _ZonaMadrid(),
+            _GeneradorQueRevientaAMitad(uow),
+        )
+
+        agenda = await GetScheduleUseCase(uow, sobres=mesa).execute(
+            GetScheduleRequestDTO(competition_id=competicion.id.value)
+        )
+
+        sesion = agenda.days[0].rounds[0]
+        assert sesion.status == "PENDING_MATCHES"
+        assert sesion.match_generation_block.reason == "UNEXPECTED"
+        db_session.expunge_all()
         assert all(not s.is_sealed() for s in await uow.envelopes.find_by_round(round_id))

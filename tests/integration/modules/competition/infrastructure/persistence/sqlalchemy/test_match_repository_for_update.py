@@ -189,6 +189,13 @@ class TestFindByIdForUpdate:
         assert bloqueado.status == MatchStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
+    async def test_bloquea_la_fila_del_partido(self, db_session, match):
+        """Es lo que impide entregar dos veces la misma tarjeta (BE #377): la
+        segunda petición espera a la primera y ya la ve entregada."""
+        await SQLAlchemyMatchRepository(db_session).find_by_id_for_update(match.id)
+
+        assert await _esta_bloqueada(db_session, "matches", match.id.value) is True
+
     async def test_un_partido_que_no_existe_devuelve_none(self, db_session, match):
         from src.modules.competition.domain.value_objects.match_id import MatchId
 

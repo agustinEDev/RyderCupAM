@@ -46,6 +46,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     GetScheduleRequestDTO,
 )
+from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
     PlayersWithoutTeeError,
@@ -80,9 +81,11 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import ENROLLMENT_OPEN
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.team_assignment import (
     TeamAssignment as TeamAssignmentVO,
 )
@@ -113,11 +116,16 @@ class _Reloj:
 
 
 class _Zona:
+    """La zona del campo; `None` es un campo sin zona, cuya sesión no vence."""
+
+    def __init__(self, zona="Europe/Madrid"):
+        self._zona = zona
+
     async def for_competition(self, competition):
-        return "Europe/Madrid"
+        return self._zona
 
     async def for_course(self, golf_course_id):
-        return "Europe/Madrid"
+        return self._zona
 
 
 class _Usuario:
@@ -227,7 +235,24 @@ class _Torneo:
         )
 
     def abrir(self):
-        return RevealEnvelopesUseCase(self.uow, self.usuarios, generador=self.generador())
+        """Abre los sobres como en la vida real: vencido el plazo, al mirarlos.
+
+        Abrirlos a mano ya no lo hace nadie con plazo que vencer (BE #374): antes
+        de hora solo con el permiso de los dos capitanes.
+        """
+        mirar = self.mirar(_Reloj(_PASADO_EL_PLAZO))
+
+        class _PorPlazo:
+            async def execute(self, round_id, quien):
+                return await mirar.execute(round_id, quien)
+
+        return _PorPlazo()
+
+    def abrir_a_mano_sin_plazo(self):
+        """La única llave que queda: el organizador, en una sesión que no vence."""
+        return RevealEnvelopesUseCase(
+            self.uow, self.usuarios, _Zona(None), generador=self.generador()
+        )
 
     async def entregan_los_dos(self, sin_esperar=(False, False)):
         """Cada capitán entrega su orden tal cual está el equipo."""
@@ -260,6 +285,7 @@ async def _montar(
     modo=PlayMode.HANDICAP,
     color=None,
     estado="CLOSED",
+    montaje=SetupMode.RYDER_CUP,
 ):
     """Monta el torneo. `sexos` es el de cada jugador: A1, A2, B1, B2."""
     uow = InMemoryUnitOfWork()
@@ -282,6 +308,7 @@ async def _montar(
         team_assignment=TeamAssignmentVO.MANUAL,
         team_1_name="Europa",
         team_2_name="Estados Unidos",
+        setup_mode=montaje,
     )
     if competicion.is_draft():
         competicion.activate()
@@ -292,6 +319,10 @@ async def _montar(
         competicion.close_enrollments()
     if estado == "IN_PROGRESS":
         competicion.start()
+    if estado == "ACTIVE":
+        competicion.reopen_enrollments()
+    if estado == "CANCELLED":
+        competicion.cancel()
 
     ronda = Round.create(
         competition_id=competicion.id,
@@ -346,10 +377,11 @@ def _parejas(partidos):
 
 class TestLosPartidosSalenAlAbrir:
     async def test_p1_abrir_a_mano_crea_los_partidos_de_los_sobres(self):
+        """A mano solo abre el organizador en una sesión sin plazo (BE #374)."""
         torneo = await _montar()
         await torneo.entregan_los_dos()
 
-        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+        await torneo.abrir_a_mano_sin_plazo().execute(torneo.ronda_id.value, torneo.organizador)
 
         partidos = await torneo.partidos()
         assert _parejas(partidos) == [
@@ -693,10 +725,111 @@ class TestLaRevisionLocal:
         await torneo.entregan_los_dos()
         async with torneo.uow:
             for inscripcion in await torneo.uow.enrollments.find_by_competition(torneo.comp_id):
-                if inscripcion.user_id == torneo.equipo_a[1]:
+                if inscripcion.user_id in (torneo.equipo_a[1], torneo.equipo_b[1]):
                     inscripcion._status = EnrollmentStatus.WITHDRAWN
                     await torneo.uow.enrollments.update(inscripcion)
 
         await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
 
-        assert (await torneo.ronda()).match_generation_block.reason == "NOT_ENOUGH_PLAYERS"
+        motivo = (await torneo.ronda()).match_generation_block
+        assert motivo.reason == "NOT_ENOUGH_PLAYERS"
+        # Y QUIÉN: sin esto el organizador no sabe a cuál de doce mirar (BE #360)
+        assert {(p.user_id, p.missing) for p in motivo.players} == {
+            (torneo.equipo_a[1], "ENROLLMENT"),
+            (torneo.equipo_b[1], "ENROLLMENT"),
+        }
+        assert all(p.name for p in motivo.players)
+
+
+class TestLaAgendaTambienLosAbre:
+    """Mirar la agenda —la de la ficha o la de «Equipos y partidos»— abre los
+    sobres vencidos (BE #367). Si nadie abría la página del sobre, la sesión
+    llegaba a su hora con los sobres cerrados y, desde la #361, sin partidos.
+
+        #   caso                                               | al leer la agenda
+        ----|--------------------------------------------------|---------------------
+        S1  Ryder, entregados y vencido, nadie mira el sobre   | se abren y salen los partidos
+        S2  lo mismo sin que nadie entregara                   | se rellenan, se abren y salen
+        S3  antes del plazo                                    | nada
+        S4  modo manual, vencido                               | nunca abre ni genera
+    """
+
+    def _agenda(self, torneo, reloj):
+        mesa = EnvelopeDesk(torneo.uow, torneo.usuarios, _Reloj(reloj), _Zona(), torneo.generador())
+        return GetScheduleUseCase(torneo.uow, sobres=mesa).execute(
+            GetScheduleRequestDTO(competition_id=torneo.comp_id.value)
+        )
+
+    async def test_s1_vencido_leer_la_agenda_los_abre_y_salen_los_partidos(self):
+        torneo = await _montar()
+        await torneo.entregan_los_dos()
+
+        agenda = await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert len(await torneo.partidos()) == 2
+        assert agenda.days[0].rounds[0].status == "SCHEDULED"
+        assert len(agenda.days[0].rounds[0].matches) == 2
+
+    async def test_s2_sin_que_nadie_entregara_tambien(self):
+        torneo = await _montar()
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert len(await torneo.partidos()) == 2
+
+    async def test_s3_antes_del_plazo_no_abre_nada(self):
+        torneo = await _montar()
+        await torneo.entregan_los_dos()
+
+        await self._agenda(torneo, datetime(2026, 5, 20, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        assert await torneo.partidos() == []
+
+    async def test_s5_de_una_cancelada_no_se_abre_nada(self):
+        """Revisión de la #367: ya no hay nada que jugar, y ahora mirarla puede
+        cualquiera. Abrirlos sería escribir en una competición que se acabó."""
+        torneo = await _montar(estado="CANCELLED")
+        await torneo.entregan_los_dos()
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        async with torneo.uow:
+            sobres = await torneo.uow.envelopes.find_by_round(torneo.ronda_id)
+        assert all(sobre.is_sealed() for sobre in sobres)
+
+    async def test_s5b_ni_mirando_la_pagina_del_sobre(self):
+        """La regla vive en `revelar_si_toca`: la agenda no es la única puerta."""
+        torneo = await _montar(estado="CANCELLED")
+        await torneo.entregan_los_dos()
+
+        await torneo.mirar(_Reloj(_PASADO_EL_PLAZO)).execute(
+            torneo.ronda_id.value, torneo.organizador
+        )
+
+        async with torneo.uow:
+            sobres = await torneo.uow.envelopes.find_by_round(torneo.ronda_id)
+        assert all(sobre.is_sealed() for sobre in sobres)
+
+    async def test_s4_en_modo_manual_nunca(self):
+        torneo = await _montar(montaje=SetupMode.MANUAL)
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert await torneo.partidos() == []
+
+
+class TestConLaCompeticionReabierta:
+    """Revisión de la FE #711: los sobres se abren con las inscripciones
+    reabiertas. No hay partidos que crear todavía, pero sin un motivo apuntado,
+    al volver a cerrarla la sesión se quedaba atascada: en modo Ryder «Generar»
+    solo sale como reintento, y los sobres ya estaban abiertos."""
+
+    async def test_abrirse_con_las_inscripciones_abiertas_deja_el_motivo(self):
+        torneo = await _montar(estado="ACTIVE")
+        await torneo.entregan_los_dos()
+
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+
+        ronda = await torneo.ronda()
+        assert await torneo.partidos() == []
+        assert ronda.match_generation_block.reason == ENROLLMENT_OPEN

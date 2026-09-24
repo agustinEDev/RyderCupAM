@@ -49,8 +49,8 @@ from src.modules.competition.application.use_cases.reset_envelopes_use_case impo
     SessionAlreadyPlayedError,
 )
 from src.modules.competition.application.use_cases.reveal_envelopes_use_case import (
+    EarlyRevealNeedsBothCaptainsError,
     RevealEnvelopesUseCase,
-    RivalEnvelopeMissingError,
 )
 from src.modules.competition.application.use_cases.submit_envelope_use_case import (
     NotATeamCaptainError,
@@ -192,11 +192,11 @@ async def get_envelopes(
     description=(
         "Abre los dos a la vez y devuelve los enfrentamientos, cruzando las dos "
         "listas por posición. A partir de aquí los partidos de esa sesión salen "
-        "de los sobres. Lo pide el organizador o cualquiera de los dos capitanes, "
-        "y **hacen falta los dos sobres entregados**: abrir es lo que desvela el "
-        "orden de juego. Lo que falte se rellena por hándicap cuando los abre el "
-        "reloj al vencer el plazo, o cuando los abre el organizador en una sesión "
-        "sin plazo que vencer (un campo sin zona horaria)."
+        "de los sobres. **Solo el organizador (o un administrador) y solo en una "
+        "sesión sin plazo que vencer** (un campo sin zona horaria), que nunca se "
+        "abre sola; ahí, lo que falte se rellena por hándicap. En el resto, antes "
+        "de hora se abren con el permiso de los dos capitanes, que se da al "
+        "entregar, y si no, al vencer el plazo (BE #374): 409."
     ),
     tags=["Competitions - Envelopes"],
 )
@@ -216,7 +216,7 @@ async def reveal_envelopes(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except RivalEnvelopeMissingError as e:
+    except EarlyRevealNeedsBothCaptainsError as e:
         # 409 y no 400: la petición es correcta, es que todavía no toca
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except _ERRORES_DEL_SOBRE as e:

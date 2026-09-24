@@ -43,7 +43,9 @@ class SubmitScorecardUseCase:
     ) -> SubmitScorecardResponseDTO:
         async with self._uow:
             match_id = MatchId(match_id_str)
-            match = await self._uow.matches.find_by_id(match_id)
+            # Con la fila bloqueada: un solo toque mandaba dos envíos a la vez
+            # y los dos pasaban la comprobación de «ya la entregaste» (BE #377)
+            match = await self._uow.matches.find_by_id_for_update(match_id)
             if not match:
                 raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
 
@@ -55,34 +57,34 @@ class SubmitScorecardUseCase:
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
 
-            if match.has_submitted_scorecard(user_id):
-                raise ScorecardAlreadySubmittedError("Ya entregaste tu tarjeta")
+            # El formato decide de quién es la tarjeta: en foursomes, del bando
+            round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            if not round_entity:
+                raise RoundNotFoundError(f"Round not found for match {match_id_str}")
+            match_format = round_entity.match_format
 
-            # Validate all played holes have MATCH status
             player_scores = await self._uow.hole_scores.find_by_match_and_player(match_id, user_id)
-            unvalidated = [
-                hs
-                for hs in player_scores
-                if hs.own_submitted and hs.validation_status != ValidationStatus.MATCH
-            ]
-            if unvalidated:
-                holes = [hs.hole_number for hs in unvalidated]
-                raise ScorecardNotReadyError(
-                    f"Hoyos sin validar: {holes}. Todos los hoyos jugados deben tener validation_status MATCH."
+            ya_entregada = match.has_submitted_scorecard(user_id, match_format)
+            # Un partido con todas las tarjetas y todavía abierto se cierra en vez
+            # de rechazarse: con la regla de antes cada uno entregaba la suya, y un
+            # foursomes a medias al desplegar ya está completo por la de ahora.
+            # Sin esto, nadie podría cerrarlo (revisión de la BE #377)
+            if ya_entregada and not match.all_scorecards_submitted(match_format):
+                if user_id in match.scorecard_submitted_by:
+                    raise ScorecardAlreadySubmittedError("Ya entregaste tu tarjeta")
+                raise ScorecardAlreadySubmittedError(
+                    "Tu compañero ya entregó la tarjeta de vuestra pareja"
                 )
 
-            # Submit scorecard
-            match.submit_scorecard(user_id)
+            if not ya_entregada:
+                self._comprueba_que_todo_esta_validado(player_scores)
+                match.submit_scorecard(user_id, match_format)
 
             match_complete = False
             points = {"team_a": 0.0, "team_b": 0.0}
 
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
-            round_entity = await self._uow.rounds.find_by_id(match.round_id)
-            if not round_entity:
-                raise RoundNotFoundError(f"Round not found for match {match_id_str}")
-            match_format = round_entity.match_format
             hole_results = self._compute_hole_results(all_scores, match_format)
 
             # Result is derived from whichever holes are already validated, so the
@@ -98,7 +100,7 @@ class SubmitScorecardUseCase:
                 result_data = {"winner": None, "score": None}
 
             # Check if all scorecards submitted
-            if match.all_scorecards_submitted():
+            if match.all_scorecards_submitted(match_format):
                 match_complete = True
                 match.complete(result_data)
                 points = self._scoring_service.calculate_ryder_cup_points(
@@ -130,6 +132,20 @@ class SubmitScorecardUseCase:
             stats=stats,
             match_complete=match_complete,
         )
+
+    @staticmethod
+    def _comprueba_que_todo_esta_validado(player_scores) -> None:
+        """Todos los hoyos jugados tienen que estar validados (MATCH)."""
+        unvalidated = [
+            hs
+            for hs in player_scores
+            if hs.own_submitted and hs.validation_status != ValidationStatus.MATCH
+        ]
+        if unvalidated:
+            holes = [hs.hole_number for hs in unvalidated]
+            raise ScorecardNotReadyError(
+                f"Hoyos sin validar: {holes}. Todos los hoyos jugados deben tener validation_status MATCH."
+            )
 
     def _compute_hole_results(self, all_scores, match_format):
         """Computa resultados por hoyo."""

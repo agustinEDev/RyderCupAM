@@ -1,6 +1,5 @@
 """Caso de Uso: Obtener vista de scoring de un partido."""
 
-
 from src.modules.competition.application.dto.scoring_dto import (
     DecidedResultDTO,
     HoleInfoDTO,
@@ -131,7 +130,12 @@ class GetScoringViewUseCase:
                 holes=holes_dto,
                 scores=scores_dto,
                 match_standing=MatchStandingDTO(**standing),
-                scorecard_submitted_by=[str(uid) for uid in match.scorecard_submitted_by],
+                # Con la regla del formato ya aplicada: en foursomes, si uno del
+                # bando la entregó, la tienen los dos (BE #377). La pantalla no
+                # tiene que saber la regla, solo mirar si está en la lista
+                scorecard_submitted_by=[
+                    str(uid) for uid in match.scorecards_submitted_by(round_entity.match_format)
+                ],
                 # Para que el cliente ofrezca anotar desde esa hora, tambien sin
                 # cobertura, en vez de adivinar si alguien pulso START (BE #305)
                 scoring_opens_at=ScoringOpeningService.opens_at(

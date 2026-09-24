@@ -31,6 +31,7 @@ import pytest
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
+    MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
     ScoringNotOpenYetError,
@@ -152,6 +153,7 @@ async def _monta(
     round_date: date | None = DIA,
     session_type: SessionType | None = SessionType.MORNING,
     competicion_en_curso: bool = True,
+    reabierta: bool = False,
 ):
     """Deja en el UoW una competicion, su ronda y un partido de dos jugadores."""
     competition = Competition.create(
@@ -169,6 +171,8 @@ async def _monta(
     competition.close_enrollments()
     if competicion_en_curso:
         competition.start()
+    elif reabierta:
+        competition.reopen_enrollments()
 
     round_entity = Round.create(
         competition_id=competition.id,
@@ -333,11 +337,52 @@ class TestNoSeAbre:
             await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
     @pytest.mark.asyncio
-    async def test_4_competicion_no_en_curso_es_rechazo_definitivo(
+    async def test_h1_cerrada_y_ya_es_la_hora_arranca_la_competicion(
         self, uow, user_repo, scoring_service, campos
     ):
-        """No es «aun no»: reintentarlo no lo va a salvar hasta que alguien la arranque."""
-        _c, _r, match, a, b = await _monta(uow, competicion_en_curso=False)
+        """BE #375: la competición está en juego en cuanto su primer partido se
+        puede anotar. Si nadie pulsó «Iniciar», el primer golpe la arranca: sin
+        esto, en el campo sin cobertura no se anotaba nada."""
+        competicion, _r, match, a, b = await _monta(uow, competicion_en_curso=False)
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, DESPUES, campos)
+        await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+        async with uow:
+            assert (await uow.competitions.find_by_id(competicion.id)).is_in_progress()
+            assert (await uow.matches.find_by_id(match.id)).status == MatchStatus.IN_PROGRESS
+
+    @pytest.mark.asyncio
+    async def test_h2_cerrada_y_antes_de_la_hora_espera_y_no_arranca(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        competicion, _r, match, a, b = await _monta(uow, competicion_en_curso=False)
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, ANTES, campos)
+        with pytest.raises(ScoringNotOpenYetError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+        async with uow:
+            assert not (await uow.competitions.find_by_id(competicion.id)).is_in_progress()
+
+    @pytest.mark.asyncio
+    async def test_h3b_reabierta_antes_de_la_hora_tampoco_es_un_todavia_no(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Si fuese el «aún no» reintentable, el móvil guardaría el golpe esperando
+        una hora que no lo va a arreglar: no está lista hasta que la cierren."""
+        _c, _r, match, a, b = await _monta(uow, competicion_en_curso=False, reabierta=True)
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, ANTES, campos)
+        with pytest.raises(MatchNotScoringError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+    @pytest.mark.asyncio
+    async def test_h3_con_las_inscripciones_reabiertas_es_rechazo_definitivo(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Reabierta no está lista para jugarse: reintentar no la va a salvar."""
+        _c, _r, match, a, b = await _monta(uow, competicion_en_curso=False, reabierta=True)
 
         uc = _caso_de_uso(uow, user_repo, scoring_service, DESPUES, campos)
         with pytest.raises(MatchNotScoringError):
@@ -552,6 +597,63 @@ class TestNoSeAbreDosVeces:
         await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
         assert pedidos == [match.id]
+
+    @pytest.mark.asyncio
+    async def test_5e_un_golpe_normal_tambien_lo_pide_bloqueado(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Revisión de la BE #377: sin bloqueo, el golpe del compañero que llega
+        mientras él entrega la tarjeta del bando la ve sin entregar."""
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+        pedidos = []
+        original = uow.matches.find_by_id_for_update
+
+        async def espia(match_id):
+            pedidos.append(match_id)
+            return await original(match_id)
+
+        uow.matches.find_by_id_for_update = espia
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+        assert pedidos == [match.id]
+
+    @pytest.mark.asyncio
+    async def test_5f_si_lo_terminan_mientras_espera_el_bloqueo_no_se_anota(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Revisión de la BE #377: lo que se decide tras el bloqueo se decide con
+        lo que hay DESPUÉS de él. Un golpe que esperaba mientras el organizador
+        daba el partido por terminado no puede reescribir sus golpes."""
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+        original = uow.matches.find_by_id_for_update
+
+        async def lo_terminan_entre_medias(match_id):
+            partido = await original(match_id)
+            partido.complete(result={"winner": "A", "score": "2&1"})
+            return partido
+
+        uow.matches.find_by_id_for_update = lo_terminan_entre_medias
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(MatchNotScoringError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+    @pytest.mark.asyncio
+    async def test_5g_si_lo_borran_mientras_espera_tampoco_sigue_con_el_viejo(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+
+        async def lo_borran_entre_medias(match_id):
+            return None
+
+        uow.matches.find_by_id_for_update = lo_borran_entre_medias
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(MatchNotFoundError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
     @pytest.mark.asyncio
     async def test_5d_si_lo_conceden_entre_medias_es_rechazo_no_un_500(

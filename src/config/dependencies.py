@@ -14,6 +14,7 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
 )
+from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -2022,9 +2023,24 @@ def get_delete_round_use_case(
 def get_get_schedule_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> GetScheduleUseCase:
-    """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse)."""
-    return GetScheduleUseCase(uow, gc_uow.golf_courses)
+    """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse).
+
+    Lleva la mesa de sobres: mirar la agenda abre los que ya tocan, como mirar
+    la página del sobre (BE #367).
+    """
+    return GetScheduleUseCase(
+        uow,
+        gc_uow.golf_courses,
+        sobres=EnvelopeDesk(
+            uow,
+            user_uow.users,
+            timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+            generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        ),
+    )
 
 
 def get_get_match_detail_use_case(

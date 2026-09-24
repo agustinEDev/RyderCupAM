@@ -517,6 +517,7 @@ class DraftPicksJsonType(TypeDecorator):
                 "team": pick.team,
                 "order": pick.order,
                 "automatic": pick.automatic,
+                "last_remaining": pick.last_remaining,
             }
             for pick in value
         ]
@@ -530,6 +531,7 @@ class DraftPicksJsonType(TypeDecorator):
                 team=pick["team"],
                 order=pick["order"],
                 automatic=pick.get("automatic", False),
+                last_remaining=pick.get("last_remaining", False),
             )
             for pick in value
         )
