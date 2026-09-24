@@ -171,8 +171,7 @@ class RequestEnrollmentUseCase:
                 ) from e
             except MaxEnrollmentsExceededViolation as e:
                 raise TooManyEnrollmentsError(
-                    f"Ya estás en {MAX_ENROLLMENTS_PER_USER} competiciones, "
-                    "el máximo a la vez."
+                    f"Ya estás en {MAX_ENROLLMENTS_PER_USER} competiciones, el máximo a la vez."
                 ) from e
 
             # 4. Crear enrollment con factory method
