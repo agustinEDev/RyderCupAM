@@ -26,6 +26,33 @@ from tests.conftest import (
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
+async def _campo_aprobado(client: AsyncClient, cookies, admin_cookies):
+    """Un campo de golf aprobado, listo para asociarlo a una competición."""
+    campo = await create_golf_course(
+        client,
+        cookies,
+        golf_course_data={
+            "name": f"Campo agenda {uuid.uuid4().hex[:8]}",
+            "country_code": "ES",
+            "course_type": "STANDARD_18",
+            "location": {"latitude": 40.4168, "longitude": -3.7038},
+            "tees": [
+                {
+                    "identifier": "Blanco",
+                    "color": "WHITE",
+                    "tee_gender": "MALE",
+                    "course_rating": 72.5,
+                    "slope_rating": 135,
+                    "par": 72,
+                }
+            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
+        },
+    )
+    await approve_golf_course(client, admin_cookies, campo["id"])
+    return campo
+
+
 async def _abierta_con_campo(client: AsyncClient, sufijo: str):
     """Una competición recién creada —nace con inscripciones abiertas— y su campo."""
     admin = await create_admin_user(
@@ -47,28 +74,7 @@ async def _abierta_con_campo(client: AsyncClient, sufijo: str):
         },
     )
     assert comp["status"] == "ACTIVE"
-    campo = await create_golf_course(
-        client,
-        user["cookies"],
-        golf_course_data={
-            "name": f"Campo agenda {uuid.uuid4().hex[:8]}",
-            "country_code": "ES",
-            "course_type": "STANDARD_18",
-            "location": {"latitude": 40.4168, "longitude": -3.7038},
-            "tees": [
-                {
-                    "identifier": "Blanco",
-                    "color": "WHITE",
-                    "tee_gender": "MALE",
-                    "course_rating": 72.5,
-                    "slope_rating": 135,
-                    "par": 72,
-                }
-            ],
-            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
-        },
-    )
-    await approve_golf_course(client, admin["cookies"], campo["id"])
+    campo = await _campo_aprobado(client, user["cookies"], admin["cookies"])
     set_auth_cookies(client, user["cookies"])
     asociado = await client.post(
         f"/api/v1/competitions/{comp['id']}/golf-courses",
@@ -167,3 +173,39 @@ class TestLaAgendaDesdeElPrincipio:
 
         assert cambiada.status_code == 200, cambiada.text
         assert borrada.status_code == 200, borrada.text
+
+
+class TestLosCamposSeAnadenConLaAgendaPuesta:
+    """Con la agenda propuesta al crear, añadir un campo no espera a nada (BE #368)."""
+
+    async def test_con_sesiones_se_anade_otro_campo(self, client: AsyncClient):
+        user, comp, _, _ = await _abierta_con_campo(client, "segundo-campo")
+        assert (await _configurar(client, comp["id"])).status_code == 200
+        admin = await create_admin_user(
+            client, "agenda-admin-campo2@test.com", "P@ssw0rd123!", "Admin", "Campos"
+        )
+        otro = await _campo_aprobado(client, user["cookies"], admin["cookies"])
+        set_auth_cookies(client, user["cookies"])
+
+        respuesta = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": otro["id"]},
+        )
+
+        assert respuesta.status_code == 201, respuesta.text
+        assert respuesta.json()["display_order"] == 2
+
+    async def test_cancelada_es_un_400_con_el_motivo(self, client: AsyncClient):
+        user, comp, campo, _ = await _abierta_con_campo(client, "campo-cancelada")
+        cancelada = await client.post(
+            f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"]
+        )
+        assert cancelada.status_code == 200, cancelada.text
+
+        respuesta = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": campo["id"]},
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+        assert "cancelada" in respuesta.json()["detail"]

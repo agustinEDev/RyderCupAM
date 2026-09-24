@@ -8,9 +8,9 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseRequestDTO,
 )
+from src.modules.competition.application.exceptions import AgendaNotEditableError
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
-    CompetitionNotDraftError,
     CompetitionNotFoundError,
     GolfCourseAlreadyAssignedError,
     GolfCourseNotApprovedError,
@@ -232,7 +232,7 @@ class TestAddGolfCourseToCompetitionUseCase:
         with pytest.raises(NotCompetitionCreatorError):
             await use_case.execute(request_dto, other_user_id)
 
-    async def test_should_fail_when_there_is_already_a_schedule(
+    async def test_adds_a_course_with_the_agenda_already_set(
         self,
         competition_uow: InMemoryUnitOfWork,
         golf_course_uow: InMemoryGolfCourseUnitOfWork,
@@ -241,16 +241,9 @@ class TestAddGolfCourseToCompetitionUseCase:
         creator_id: UserId,
     ):
         """
-        Verifica que no se anaden campos con el calendario ya montado.
-
-        Given: Una competicion reabierta (ACTIVE) con una ronda programada
-        When: Se intenta anadir otro campo
-        Then: Lanza CompetitionNotDraftError
-
-        `ACTIVE` no implica que no haya nada montado: se vuelve ahi desde CLOSED
-        con `reopen_enrollments`. Y quien ya esta inscrito lleva un color de
-        barras elegido sobre los campos de entonces; cambiarlos por debajo hace
-        que la generacion de partidos falle mucho despues, sin pista de por que.
+        Con la agenda propuesta al crear, toda competicion Ryder nace con
+        sesiones: si eso cerrase la puerta, nunca se podria anadir un segundo
+        campo (BE #368). Anadir solo amplia la lista; ninguna sesion cambia.
         """
         competition.activate()
         async with competition_uow:
@@ -281,27 +274,31 @@ class TestAddGolfCourseToCompetitionUseCase:
             golf_course_id=str(golf_course.id.value),
         )
 
-        with pytest.raises(CompetitionNotDraftError):
-            await use_case.execute(request_dto, creator_id)
+        await use_case.execute(request_dto, creator_id)
 
-    async def test_should_fail_once_enrollment_is_closed(
+        async with competition_uow:
+            guardada = await competition_uow.competitions.find_by_id(competition.id)
+        assert [c.golf_course_id for c in guardada.golf_courses] == [golf_course.id]
+
+    @pytest.mark.parametrize(
+        "transiciones",
+        [
+            pytest.param(("activate", "close_enrollments"), id="CLOSED"),
+            pytest.param(("activate", "close_enrollments", "start"), id="IN_PROGRESS"),
+        ],
+    )
+    async def test_adds_a_course_until_the_competition_ends(
         self,
         competition_uow: InMemoryUnitOfWork,
         golf_course_uow: InMemoryGolfCourseUnitOfWork,
         competition: Competition,
         golf_course: GolfCourse,
         creator_id: UserId,
+        transiciones: tuple[str, ...],
     ):
-        """
-        Verifica que solo se pueden añadir campos en estado DRAFT.
-
-        Given: Una competición en estado ACTIVE
-        When: Se intenta añadir un campo
-        Then: Lanza CompetitionNotDraftError
-        """
-        # Arrange
-        competition.activate()
-        competition.close_enrollments()
+        """Cerradas las inscripciones o ya en juego, el campo se sigue anadiendo."""
+        for transicion in transiciones:
+            getattr(competition, transicion)()
         async with competition_uow:
             await competition_uow.competitions.update(competition)
 
@@ -314,8 +311,44 @@ class TestAddGolfCourseToCompetitionUseCase:
             golf_course_id=str(golf_course.id.value),
         )
 
-        # Act & Assert
-        with pytest.raises(CompetitionNotDraftError):
+        await use_case.execute(request_dto, creator_id)
+
+        async with competition_uow:
+            guardada = await competition_uow.competitions.find_by_id(competition.id)
+        assert [c.golf_course_id for c in guardada.golf_courses] == [golf_course.id]
+
+    @pytest.mark.parametrize(
+        "transiciones",
+        [
+            pytest.param(("activate", "close_enrollments", "start", "complete"), id="COMPLETED"),
+            pytest.param(("cancel",), id="CANCELLED"),
+        ],
+    )
+    async def test_refuses_a_course_once_the_competition_is_over(
+        self,
+        competition_uow: InMemoryUnitOfWork,
+        golf_course_uow: InMemoryGolfCourseUnitOfWork,
+        competition: Competition,
+        golf_course: GolfCourse,
+        creator_id: UserId,
+        transiciones: tuple[str, ...],
+    ):
+        """Terminada o cancelada, la competicion ya no se monta."""
+        for transicion in transiciones:
+            getattr(competition, transicion)()
+        async with competition_uow:
+            await competition_uow.competitions.update(competition)
+
+        use_case = AddGolfCourseToCompetitionUseCase(
+            uow=competition_uow,
+            golf_course_repository=golf_course_uow.golf_courses,
+        )
+        request_dto = AddGolfCourseRequestDTO(
+            competition_id=str(competition.id.value),
+            golf_course_id=str(golf_course.id.value),
+        )
+
+        with pytest.raises(AgendaNotEditableError):
             await use_case.execute(request_dto, creator_id)
 
     async def test_should_fail_when_golf_course_not_found(
