@@ -81,23 +81,25 @@ class SubmitHoleScoreUseCase:
             if not match.status.can_record_scores():
                 match = await self._abre_si_toca(match, llegada)
 
+            # El formato decide de quién es la tarjeta: en foursomes, del bando
+            # (BE #377). Si el compañero la entregó, la bola ya no cambia
+            round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            if not round_entity:
+                raise RoundNotFoundError("La ronda asociada no existe")
+            match_format = round_entity.match_format
+
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
-            own_score_locked = match.has_submitted_scorecard(user_id)
+            own_score_locked = match.has_submitted_scorecard(user_id, match_format)
 
             marked_player_uid = UserId(body.marked_player_id)
             if match.find_player(marked_player_uid) is None:
                 raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
 
             # Tarjeta del marcado entregada: marker_score ignorado, own_score sigue editable
-            marker_score_locked = match.has_submitted_scorecard(marked_player_uid)
+            marker_score_locked = match.has_submitted_scorecard(marked_player_uid, match_format)
 
             if not MIN_HOLE <= hole_number <= MAX_HOLE:
                 raise InvalidHoleNumberError(f"Hoyo invalido: {hole_number}")
-
-            round_entity = await self._uow.rounds.find_by_id(match.round_id)
-            if not round_entity:
-                raise RoundNotFoundError("La ronda asociada no existe")
-            match_format = round_entity.match_format
 
             # Omitir un score NO es mandarlo nulo (#301). Nulo es un hoyo
             # recogido —conceder, en match play—, y un campo que no viene es un

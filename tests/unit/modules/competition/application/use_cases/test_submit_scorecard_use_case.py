@@ -37,6 +37,17 @@ def _make_player(user_id=None):
     )
 
 
+def _sesion(uow, formato=MatchFormat.SINGLES):
+    """Una sesión en juego con su formato, que decide de quién es la tarjeta."""
+    ronda = MagicMock()
+    ronda.id = RoundId.generate()
+    ronda.match_format = formato
+    ronda.status = RoundStatus.IN_PROGRESS
+    ronda.competition_id = MagicMock()
+    uow._rounds._rounds[ronda.id] = ronda
+    return ronda
+
+
 @pytest.fixture
 def uow():
     return InMemoryUnitOfWork()
@@ -80,11 +91,12 @@ class TestSubmitScorecardValidation:
     @pytest.mark.asyncio
     async def test_scorecard_already_submitted(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
+        ronda = _sesion(uow)
         match = Match.create(
-            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+            round_id=ronda.id, match_number=1, team_a_players=[a], team_b_players=[b]
         )
         match.start()
-        match.submit_scorecard(a.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
         await uow.matches.add(match)
         uc = SubmitScorecardUseCase(uow, scoring_service)
         with pytest.raises(ScorecardAlreadySubmittedError):
@@ -94,7 +106,7 @@ class TestSubmitScorecardValidation:
     async def test_unvalidated_holes_raise(self, uow, scoring_service):
         a, b = _make_player(), _make_player()
         match = Match.create(
-            round_id=RoundId.generate(), match_number=1, team_a_players=[a], team_b_players=[b]
+            round_id=_sesion(uow).id, match_number=1, team_a_players=[a], team_b_players=[b]
         )
         match.start()
         await uow.matches.add(match)
@@ -232,7 +244,7 @@ class TestSubmitScorecardHappyPath:
             hs_b.recalculate_validation()
             await uow.hole_scores.add(hs_b)
 
-        match.submit_scorecard(a.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
         await uow.matches.add(match)
 
         uc = SubmitScorecardUseCase(uow, scoring_service)
@@ -284,7 +296,7 @@ class TestSubmitScorecardHappyPath:
 
         # Mark match as decided at hole 14 with correct "5&4" format
         match.mark_decided({"winner": "A", "score": "5&4"})
-        match.submit_scorecard(a.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
         await uow.matches.add(match)
 
         uc = SubmitScorecardUseCase(uow, scoring_service)
@@ -294,3 +306,44 @@ class TestSubmitScorecardHappyPath:
         # Should preserve "5&4" not recalculate to "18UP" from all 18 holes
         assert result.result.score == "5&4"
         assert result.result.winner == "A"
+
+
+class TestUnaTarjetaPorBando:
+    """BE #377: en foursomes la tarjeta es del bando.
+
+        #   caso                                          | esperado
+        ----|---------------------------------------------|---------------------------
+        U1  entrega uno de cada bando                     | el partido se cierra
+        U2  el compañero intenta entregarla otra vez      | se rechaza, diciendo por qué
+    """
+
+    def _foursomes(self, uow):
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        ronda = _sesion(uow, MatchFormat.FOURSOMES)
+        match = Match.create(
+            round_id=ronda.id, match_number=1, team_a_players=[a1, a2], team_b_players=[b1, b2]
+        )
+        match.start()
+        return match, a1, a2, b1
+
+    @pytest.mark.asyncio
+    async def test_u1_con_una_por_bando_se_cierra_el_partido(self, uow, scoring_service):
+        match, a1, _, b1 = self._foursomes(uow)
+        await uow.matches.add(match)
+        uc = SubmitScorecardUseCase(uow, scoring_service)
+
+        primera = await uc.execute(str(match.id), a1.user_id)
+        segunda = await uc.execute(str(match.id), b1.user_id)
+
+        assert primera.match_complete is False
+        assert segunda.match_complete is True
+
+    @pytest.mark.asyncio
+    async def test_u2_el_companero_no_la_entrega_otra_vez(self, uow, scoring_service):
+        match, a1, a2, _ = self._foursomes(uow)
+        await uow.matches.add(match)
+        uc = SubmitScorecardUseCase(uow, scoring_service)
+        await uc.execute(str(match.id), a1.user_id)
+
+        with pytest.raises(ScorecardAlreadySubmittedError, match="compañer"):
+            await uc.execute(str(match.id), a2.user_id)
