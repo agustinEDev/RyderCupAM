@@ -97,6 +97,9 @@ class CompetitionRepositoryInterface(ABC):
         Útil para: Operaciones que requieren consistencia transaccional,
         como la aprobación de inscripciones con validación de capacidad.
 
+        Devuelve el agregado entero, como `find_by_id`, campos de golf incluidos
+        (BE #370): quien bloquea luego pregunta por ellos.
+
         Args:
             competition_id: El identificador único de la competición
 

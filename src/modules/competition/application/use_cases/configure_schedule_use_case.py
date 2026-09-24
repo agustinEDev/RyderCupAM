@@ -60,10 +60,8 @@ class ConfigureScheduleUseCase:
             competition_id = CompetitionId(request.competition_id)
             # Bloqueada: sustituir la agenda mientras otra petición genera los
             # partidos de una sesión la borraría con ellos dentro. Generar y
-            # abrir sobres bloquean la misma fila. Y luego leída con sus campos:
-            # la del bloqueo no los trae, y leerlos después en asíncrono revienta
-            await self._uow.competitions.find_by_id_for_update(competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # abrir sobres bloquean la misma fila
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
