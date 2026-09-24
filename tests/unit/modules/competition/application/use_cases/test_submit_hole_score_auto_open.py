@@ -31,6 +31,7 @@ import pytest
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
+    MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
     ScoringNotOpenYetError,
@@ -617,6 +618,42 @@ class TestNoSeAbreDosVeces:
         await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
         assert pedidos == [match.id]
+
+    @pytest.mark.asyncio
+    async def test_5f_si_lo_terminan_mientras_espera_el_bloqueo_no_se_anota(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Revisión de la BE #377: lo que se decide tras el bloqueo se decide con
+        lo que hay DESPUÉS de él. Un golpe que esperaba mientras el organizador
+        daba el partido por terminado no puede reescribir sus golpes."""
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+        original = uow.matches.find_by_id_for_update
+
+        async def lo_terminan_entre_medias(match_id):
+            partido = await original(match_id)
+            partido.complete(result={"winner": "A", "score": "2&1"})
+            return partido
+
+        uow.matches.find_by_id_for_update = lo_terminan_entre_medias
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(MatchNotScoringError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+    @pytest.mark.asyncio
+    async def test_5g_si_lo_borran_mientras_espera_tampoco_sigue_con_el_viejo(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+
+        async def lo_borran_entre_medias(match_id):
+            return None
+
+        uow.matches.find_by_id_for_update = lo_borran_entre_medias
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(MatchNotFoundError):
+            await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
     @pytest.mark.asyncio
     async def test_5d_si_lo_conceden_entre_medias_es_rechazo_no_un_500(

@@ -87,7 +87,17 @@ class SubmitHoleScoreUseCase:
                 # del bando la ve sin entregar y reescribe la bola ya validada
                 # (revisión de la BE #377). Abrirlo ya la bloquea; y siempre
                 # después de saber que es suyo, como al abrirlo (BE #305)
-                match = await self._uow.matches.find_by_id_for_update(match.id) or match
+                bloqueado = await self._uow.matches.find_by_id_for_update(match.id)
+                # Y lo que se decide, con lo que hay DESPUÉS del bloqueo: si
+                # mientras esperaba lo terminaron, lo concedieron o lo borraron,
+                # este golpe ya no entra (revisión de la BE #377)
+                if bloqueado is None:
+                    raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
+                if not bloqueado.status.can_record_scores():
+                    raise MatchNotScoringError(
+                        f"Partido no esta en estado para scoring. Estado: {bloqueado.status.value}"
+                    )
+                match = bloqueado
 
             # El formato decide de quién es la tarjeta: en foursomes, del bando
             # (BE #377). Si el compañero la entregó, la bola ya no cambia

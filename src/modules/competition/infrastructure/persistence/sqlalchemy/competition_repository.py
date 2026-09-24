@@ -122,11 +122,16 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
+        # `populate_existing` no es un adorno: sin el, SQLAlchemy devuelve el
+        # objeto que la sesion ya tenia, con el estado de ANTES del bloqueo, y
+        # quien comprueba tras bloquear decide con datos viejos (revision de la
+        # BE #375: un golpe pisaba una reapertura). Mismo patron que los partidos
         stmt = (
             select(Competition)
             .where(Competition._id == competition_id)
             .options(*self._agregado_completo())
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()

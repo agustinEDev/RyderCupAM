@@ -11,6 +11,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -69,3 +70,28 @@ async def test_bloquea_la_fila_de_la_competicion(db_session, creator_id, golf_co
     await SQLAlchemyCompetitionRepository(db_session).find_by_id_for_update(creada.id)
 
     assert await _esta_bloqueada(db_session, "competitions", creada.id.value) is True
+
+
+async def test_trae_el_estado_de_la_base_de_datos_no_el_que_ya_tenia(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    """Revisión de la BE #375: sin forzar la relectura, SQLAlchemy devuelve el
+    objeto que la sesión ya tenía, con el estado de ANTES del bloqueo. Un golpe
+    que arrancaba la competición pisaba una reapertura hecha entre medias."""
+    creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyCompetitionRepository(db_session)
+    vieja = await repo.find_by_id(creada.id)
+    assert vieja.status.value == "DRAFT"
+
+    # Otra conexión la cambia y confirma: otra transacción, como el organizador
+    async with db_session.bind.begin() as conn:
+        await conn.execute(
+            text("UPDATE competitions SET status = 'ACTIVE' WHERE id = :id"),
+            {"id": str(creada.id.value)},
+        )
+
+    releida = await repo.find_by_id_for_update(creada.id)
+
+    assert releida.status.value == "ACTIVE"
