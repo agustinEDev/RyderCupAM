@@ -7,6 +7,7 @@ la sesión entera. Se exige al entrar, por cualquiera de los caminos.
 
 from datetime import date, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -91,3 +92,18 @@ async def test_g3b_con_genero_se_inscribe():
     )
 
     assert respuesta.status == "APPROVED"
+
+
+async def test_inscribir_bloquea_la_fila_de_la_competicion():
+    """El punto gemelo: inscribir directamente también leía «abierta» sin bloquear."""
+    uow = InMemoryUnitOfWork()
+    organizador = UserId(uuid4())
+    competicion = await _abierta(uow, organizador)
+    uow.competitions.find_by_id_for_update = AsyncMock(wraps=uow.competitions.find_by_id_for_update)
+
+    await DirectEnrollPlayerUseCase(uow, _Usuarios(Gender.MALE)).execute(
+        DirectEnrollPlayerRequestDTO(competition_id=competicion.id.value, user_id=uuid4()),
+        organizador,
+    )
+
+    uow.competitions.find_by_id_for_update.assert_awaited()

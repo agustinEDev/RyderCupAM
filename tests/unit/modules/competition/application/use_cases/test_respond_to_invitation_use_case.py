@@ -1,6 +1,7 @@
 """Tests para RespondToInvitationUseCase."""
 
 from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -195,6 +196,27 @@ class TestRespondToInvitationUseCase:
         with pytest.raises(InvalidInvitationStatusViolation, match="No quedan plazas"):
             await uc.execute(pedir)
 
+    async def test_aceptar_bloquea_la_fila_de_la_competicion(self, comp_uow, user_uow):
+        """Contra el cierre a la vez (CodeRabbit en la #380): con la fila
+        bloqueada, uno espera al otro y lee el estado de verdad."""
+        creator = await self._create_user(user_uow, email="lc@test.com")
+        invitee = await self._create_user(user_uow, email="li@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "li@test.com"
+        )
+        comp_uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=comp_uow.competitions.find_by_id_for_update
+        )
+
+        await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+            )
+        )
+
+        comp_uow.competitions.find_by_id_for_update.assert_awaited()
+
     async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
@@ -218,9 +240,7 @@ class TestRespondToInvitationUseCase:
         )
         return invitation, invitee
 
-    async def test_g4_sin_genero_no_se_acepta_y_la_invitacion_sigue_ahi(
-        self, comp_uow, user_uow
-    ):
+    async def test_g4_sin_genero_no_se_acepta_y_la_invitacion_sigue_ahi(self, comp_uow, user_uow):
         invitation, invitee = await self._invitado_sin_genero(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 

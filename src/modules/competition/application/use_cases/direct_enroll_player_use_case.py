@@ -98,7 +98,9 @@ class DirectEnrollPlayerUseCase:
             player_id = UserId(request.user_id)
 
             # 1. Verificar que la competicion existe
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada: sin ella, inscribir a la vez que se cierra
+            # leía «abierta» y metía a alguien tras el cierre (#710)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {request.competition_id}"

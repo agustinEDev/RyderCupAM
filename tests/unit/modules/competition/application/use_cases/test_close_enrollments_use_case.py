@@ -1,6 +1,7 @@
 """Tests para CloseEnrollmentsUseCase."""
 
 from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -314,3 +315,32 @@ class TestCloseEnrollmentsUseCase:
             assert events[2].__class__.__name__ == "CompetitionEnrollmentsClosedEvent"
             assert events[2].competition_id == str(created.id)
             assert events[2].total_enrollments == 1  # Solo el creador (auto-enrolled)
+
+
+# ==================== Con la fila bloqueada (#710, CodeRabbit en la #380) ====================
+# Sin bloqueo, aceptar leía la competición ABIERTA, cerrar confirmaba CLOSED y
+# las invitaciones sin plaza, y la aceptación se confirmaba después: entraba
+# alguien con la inscripción ya cerrada
+
+
+async def test_cerrar_bloquea_la_fila_de_la_competicion():
+    uow = InMemoryUnitOfWork()
+    creator_id = UserId(uuid4())
+    create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+    creada = await create_use_case.execute(
+        CreateCompetitionRequestDTO(
+            name="Bloqueo",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        ),
+        creator_id,
+    )
+    uow.competitions.find_by_id_for_update = AsyncMock(wraps=uow.competitions.find_by_id_for_update)
+
+    await CloseEnrollmentsUseCase(uow).execute(
+        CloseEnrollmentsRequestDTO(competition_id=creada.id), creator_id
+    )
+
+    uow.competitions.find_by_id_for_update.assert_awaited()

@@ -133,7 +133,9 @@ class RespondToInvitationUseCase:
 
     async def _handle_accept(self, invitation, current_user_id: UserId):
         """Procesa la aceptacion de una invitacion. Retorna (enrollment_id, competition_name)."""
-        competition = await self._uow.competitions.find_by_id(invitation.competition_id)
+        # Con la fila bloqueada: si se cierra a la vez, uno espera al otro y aquí
+        # se lee el estado de verdad, no un «abierta» de antes del cierre (#710)
+        competition = await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
         if not competition:
             raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 

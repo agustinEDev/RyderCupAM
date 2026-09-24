@@ -74,7 +74,9 @@ class CloseEnrollmentsUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada, como al nombrar capitanes: una aceptación a
+            # la vez leería «abierta» y entraría tras el cierre (#710)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
