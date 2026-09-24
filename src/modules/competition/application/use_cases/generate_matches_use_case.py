@@ -313,11 +313,11 @@ class GenerateMatchesUseCase:
         if not is_scratch:
             await self._comprobar_que_todos_tienen_barras(
                 self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team),
-                competition,
-                enrollment_map,
-                tee_ratings,
-                user_handicap_map,
-                user_gender_map,
+                competition=competition,
+                enrollment_map=enrollment_map,
+                tee_ratings=tee_ratings,
+                user_handicap_map=user_handicap_map,
+                user_gender_map=user_gender_map,
             )
 
         # 11. Eliminar partidos existentes (re-generación)
@@ -400,6 +400,7 @@ class GenerateMatchesUseCase:
     async def _comprobar_que_todos_tienen_barras(
         self,
         jugadores,
+        *,
         competition,
         enrollment_map,
         tee_ratings,
