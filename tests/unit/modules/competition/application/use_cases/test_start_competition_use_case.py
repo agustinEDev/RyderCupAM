@@ -24,6 +24,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -58,7 +59,9 @@ class TestStartCompetitionUseCase:
         Then: Se inicia correctamente y cambia a estado IN_PROGRESS
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -123,7 +126,9 @@ class TestStartCompetitionUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -161,7 +166,9 @@ class TestStartCompetitionUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear competición (queda en DRAFT)
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -195,7 +202,9 @@ class TestStartCompetitionUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -232,7 +241,9 @@ class TestStartCompetitionUseCase:
         Then: Se emite el evento de dominio
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),

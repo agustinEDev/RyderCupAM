@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -57,7 +58,9 @@ class TestAskingForAPlace:
         return UserId(uuid4())
 
     async def _competition_open_to(self, uow, creator_id, visibility):
-        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_uc.execute(
             CreateCompetitionRequestDTO(
                 name="Ryder de los amigos",

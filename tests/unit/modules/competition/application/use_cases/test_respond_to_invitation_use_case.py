@@ -41,7 +41,10 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
 from src.shared.domain.value_objects.gender import Gender
-from tests.unit.modules.competition.application.use_cases.helpers import set_competition_status
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    set_competition_status,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -77,7 +80,9 @@ class TestRespondToInvitationUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, max_players=24):
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),

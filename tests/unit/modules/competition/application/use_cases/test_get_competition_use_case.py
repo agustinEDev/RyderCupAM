@@ -24,6 +24,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 MADRID = "Europe/Madrid"
 
@@ -65,7 +66,9 @@ class TestGetCompetitionUseCase:
         Then: Se retorna el DTO completo
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -102,7 +105,9 @@ class TestGetCompetitionUseCase:
         Then: El DTO muestra play_mode como SCRATCH
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Scratch Cup",
             start_date=date(2025, 6, 1),
@@ -148,7 +153,9 @@ class TestGetCompetitionUseCase:
         Then: Los países adyacentes son None en el DTO
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Single Country Cup",
             start_date=date(2025, 6, 1),
@@ -194,7 +201,9 @@ class TestScheduledOpening:
         el dia en que la fecha fijada queda por detras.
         """
         empieza = date.today() + timedelta(days=empieza_en)
-        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_uc.execute(
             CreateCompetitionRequestDTO(
                 name="Torneo del club",

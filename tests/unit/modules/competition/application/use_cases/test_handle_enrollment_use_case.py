@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -71,7 +72,9 @@ class TestHandleEnrollmentUseCase:
         self, uow: InMemoryUnitOfWork, creator_id: UserId, max_players: int = 24
     ):
         """Helper: crea y activa una competición."""
-        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),

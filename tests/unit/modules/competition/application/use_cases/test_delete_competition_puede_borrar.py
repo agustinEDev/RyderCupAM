@@ -37,7 +37,10 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from tests.unit.modules.competition.application.use_cases.helpers import montar_calendario
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    montar_calendario,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -85,9 +88,9 @@ async def _montar(uow: InMemoryUnitOfWork, creator_id: UserId, estado: str, como
         # Programada lejos: nace esperando su apertura, que es lo que es un borrador
         enrollment_opens_days_before=5 if programada else None,
     )
-    creada = await CreateCompetitionUseCase(uow, LocationBuilder(uow.countries)).execute(
-        request, creator_id
-    )
+    creada = await CreateCompetitionUseCase(
+        uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+    ).execute(request, creator_id)
     competition_id = CompetitionId(creada.id)
 
     async with uow:

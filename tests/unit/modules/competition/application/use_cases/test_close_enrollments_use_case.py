@@ -28,6 +28,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -62,7 +63,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se cierran correctamente y cambia a estado CLOSED
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -99,7 +102,9 @@ class TestCloseEnrollmentsUseCase:
     ):
         """Decidido el 24 sep (#710): al cerrar, las pendientes se rechazan por
         falta de plazas. Aceptar una después metía a alguien con el draft hecho."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         crear = lambda nombre: CreateCompetitionRequestDTO(  # noqa: E731
             name=nombre,
             start_date=date(2025, 6, 1),
@@ -175,7 +180,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -212,7 +219,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear competición (queda en DRAFT)
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -246,7 +255,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -284,7 +295,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se emite el evento de dominio
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -326,7 +339,9 @@ class TestCloseEnrollmentsUseCase:
 async def test_cerrar_bloquea_la_fila_de_la_competicion():
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
-    create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+    create_use_case = CreateCompetitionUseCase(
+        uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+    )
     creada = await create_use_case.execute(
         CreateCompetitionRequestDTO(
             name="Bloqueo",

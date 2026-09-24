@@ -33,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -62,7 +63,9 @@ class TestUpdateCompetitionUseCase:
         Then: El nombre se actualiza correctamente
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Original Name",
             start_date=date(2025, 6, 1),
@@ -101,7 +104,9 @@ class TestUpdateCompetitionUseCase:
         La localización se reconstruía solo si llegaba `main_country`, así que
         una edición de solo los acompañantes devolvía 200 sin cambiar nada.
         """
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_use_case.execute(
             CreateCompetitionRequestDTO(
                 name="Original",
@@ -128,7 +133,9 @@ class TestUpdateCompetitionUseCase:
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """Lo mismo con el nombre canónico del campo, no solo con `countries`."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_use_case.execute(
             CreateCompetitionRequestDTO(
                 name="Original",
@@ -159,7 +166,9 @@ class TestUpdateCompetitionUseCase:
 
         Es como los quita la pantalla: manda `countries: []`, no omite el campo.
         """
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_use_case.execute(
             CreateCompetitionRequestDTO(
                 name="Original",
@@ -187,7 +196,9 @@ class TestUpdateCompetitionUseCase:
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """Lo que no se manda no se toca: una edición de solo el nombre no borra países."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_use_case.execute(
             CreateCompetitionRequestDTO(
                 name="Original",
@@ -213,7 +224,9 @@ class TestUpdateCompetitionUseCase:
 
     async def _competicion(self, uow, creator_id, countries=None):
         """Competición en DRAFT, en España, con los acompañantes que se pidan."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         return await create_use_case.execute(
             CreateCompetitionRequestDTO(
                 name="Original",
@@ -340,7 +353,9 @@ class TestUpdateCompetitionUseCase:
         Then: Todos los campos se actualizan correctamente
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Original",
             start_date=date(2025, 6, 1),
@@ -379,7 +394,9 @@ class TestUpdateCompetitionUseCase:
         Then: El play_mode se actualiza correctamente
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -431,7 +448,9 @@ class TestUpdateCompetitionUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear con creator_id
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -453,7 +472,9 @@ class TestUpdateCompetitionUseCase:
 
     async def _create_and_open(self, uow, creator_id, **extra):
         """Crea una competicion y la deja con las inscripciones abiertas."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),
@@ -703,7 +724,9 @@ class TestUpdateCompetitionUseCase:
         Then: Se llama a commit() en el UoW
         """
         # Arrange
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Test",
             start_date=date(2025, 6, 1),

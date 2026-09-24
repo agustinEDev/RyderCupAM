@@ -19,7 +19,11 @@ class GenderRequiredError(Exception):
 
 
 async def exigir_genero(
-    user_repository: UserRepositoryInterface, user_id: UserId, *, es_quien_se_apunta: bool
+    user_repository: UserRepositoryInterface,
+    user_id: UserId,
+    *,
+    es_quien_se_apunta: bool,
+    al_crear: bool = False,
 ) -> None:
     """
     Args:
@@ -27,6 +31,8 @@ async def exigir_genero(
         user_id: Quien entra en la competición
         es_quien_se_apunta: Si lo pide el propio jugador (le toca a él
             rellenarlo) o el organizador por él
+        al_crear: Si es el organizador creándola: crearla le inscribe como
+            jugador, y el mensaje tiene que decir por qué se le pide
 
     Raises:
         GenderRequiredError: Si existe y no tiene el género puesto
@@ -35,6 +41,11 @@ async def exigir_genero(
     # Uno que no existe no es cosa de esta regla: no se le acusa de nada
     if usuario is None or usuario.gender is not None:
         return
+    if al_crear:
+        raise GenderRequiredError(
+            "Para crear una competición, indica tu género en tu perfil: como "
+            "organizador juegas en ella y las barras de salida se valoran por género."
+        )
     if es_quien_se_apunta:
         raise GenderRequiredError(
             "Para apuntarte, indica tu género en tu perfil: las barras de salida "

@@ -34,7 +34,10 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from tests.unit.modules.competition.application.use_cases.helpers import montar_calendario
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    montar_calendario,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -43,7 +46,9 @@ async def _cerrada_con_partido_abierto() -> tuple[InMemoryUnitOfWork, Competitio
     """Una cerrada con un partido abierto y sus tarjetas vacías: se puede borrar."""
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
-    creada = await CreateCompetitionUseCase(uow, LocationBuilder(uow.countries)).execute(
+    creada = await CreateCompetitionUseCase(
+        uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+    ).execute(
         CreateCompetitionRequestDTO(
             name="Ryder Cup 2030",
             start_date=date(2030, 6, 1),
