@@ -24,6 +24,7 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -164,7 +165,12 @@ class SubmitHoleScoreUseCase:
             raise no_se_puede
 
         competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
-        if not competition or not competition.is_in_progress():
+        # Cerrada también vale: la competición está en juego en cuanto su primer
+        # partido se puede anotar, y si nadie pulsó «Iniciar» la arranca el
+        # primer golpe (BE #375). Reabierta o sin cerrar, no está lista
+        if not competition or not (
+            competition.is_in_progress() or competition.status == CompetitionStatus.CLOSED
+        ):
             raise no_se_puede
 
         # La hora es la LOCAL del campo donde se juega esa ronda, no la de la
@@ -188,6 +194,9 @@ class SubmitHoleScoreUseCase:
                 opens_at=opens_at,
             )
 
+        if not competition.is_in_progress():
+            await self._arranca_la_competicion(competition.id, no_se_puede)
+
         # Con la fila bloqueada, y releyendo el estado: dos jugadores pueden
         # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
         # hoyos de cada jugador —`add_many` no deduplica—. El segundo se
@@ -206,6 +215,23 @@ class SubmitHoleScoreUseCase:
         await self._uow.matches.update(match)
         await self._uow.rounds.update(round_entity)
         return match
+
+    async def _arranca_la_competicion(self, competition_id, no_se_puede) -> None:
+        """Pone la competición en juego con su fila bloqueada (BE #375).
+
+        Dos primeros golpes a la vez la arrancarían dos veces: el segundo espera
+        el bloqueo y se la encuentra ya en juego. Si entre medias la reabrieron,
+        ya no está lista y el golpe se rechaza como siempre.
+        """
+        competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+        if competition is None:
+            raise no_se_puede
+        if competition.is_in_progress():
+            return
+        if competition.status != CompetitionStatus.CLOSED:
+            raise no_se_puede
+        competition.start()
+        await self._uow.competitions.update(competition)
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
         """Actualiza own_score para los jugadores afectados."""
