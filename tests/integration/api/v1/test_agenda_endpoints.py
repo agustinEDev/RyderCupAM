@@ -197,7 +197,10 @@ class TestLosCamposSeAnadenConLaAgendaPuesta:
 
     async def test_cancelada_es_un_400_con_el_motivo(self, client: AsyncClient):
         user, comp, campo, _ = await _abierta_con_campo(client, "campo-cancelada")
-        await client.post(f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"])
+        cancelada = await client.post(
+            f"/api/v1/competitions/{comp['id']}/cancel", cookies=user["cookies"]
+        )
+        assert cancelada.status_code == 200, cancelada.text
 
         respuesta = await client.post(
             f"/api/v1/competitions/{comp['id']}/golf-courses",
