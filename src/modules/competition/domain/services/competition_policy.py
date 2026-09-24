@@ -109,7 +109,7 @@ class CompetitionPolicy:
             DuplicateEnrollmentViolation: Si el usuario ya está inscrito
             MaxEnrollmentsExceededViolation: Si excede el límite de inscripciones
             InvalidCompetitionStatusViolation: Si el estado no permite enrollments
-            EnrollmentPastStartDateViolation: Si intenta inscribirse después del inicio
+            EnrollmentPastStartDateViolation: Si intenta inscribirse pasado el día de inicio
 
         Example:
             >>> CompetitionPolicy.can_enroll(
@@ -141,10 +141,12 @@ class CompetitionPolicy:
                 "Enrollments only allowed in ACTIVE or CLOSED status."
             )
 
-        # 4. Validar restricción temporal (competición no debe haber empezado)
-        if datetime.now().date() >= competition_start_date:
+        # 4. Validar restricción temporal: hasta el día de inicio INCLUIDO (BE #372).
+        # El día del torneo es cuando más gente se apunta; lo que protege el
+        # torneo es el estado (en juego ya no) y la aprobación del organizador
+        if datetime.now().date() > competition_start_date:
             raise EnrollmentPastStartDateViolation(
-                f"Competition starts on {competition_start_date}. Cannot enroll after start date."
+                f"Competition started on {competition_start_date}. Cannot enroll after start date."
             )
 
     @staticmethod

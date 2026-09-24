@@ -11,6 +11,7 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionFullError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
@@ -21,9 +22,6 @@ from src.modules.competition.application.use_cases.handle_enrollment_use_case im
     NotCreatorError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.exceptions.competition_violations import (
-    CompetitionFullViolation,
-)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
@@ -68,7 +66,6 @@ class TestHandleEnrollmentUseCase:
             max_players=max_players,
         )
         created = await create_uc.execute(request, creator_id)
-
 
         return created
 
@@ -239,7 +236,8 @@ class TestHandleEnrollmentUseCase:
             action="APPROVE",
         )
 
-        with pytest.raises(CompetitionFullViolation):
+        # Traducida: la violación pelada llegaba como un 500 mudo (BE #372)
+        with pytest.raises(CompetitionFullError, match="completa"):
             await use_case.execute(approve_request3, creator_id)
 
     async def test_should_allow_reject_when_competition_is_full(

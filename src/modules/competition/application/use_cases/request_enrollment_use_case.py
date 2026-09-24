@@ -9,18 +9,25 @@ from src.modules.competition.application.dto.enrollment_dto import (
     RequestEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError,
     InvalidTeeColorError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
+    CompetitionFullViolation,
     DuplicateEnrollmentViolation,
+    EnrollmentPastStartDateViolation,
     InvalidCompetitionStatusViolation,
+    MaxEnrollmentsExceededViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
+from src.modules.competition.domain.services.competition_policy import (
+    MAX_ENROLLMENTS_PER_USER,
+    CompetitionPolicy,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -46,6 +53,17 @@ class AlreadyEnrolledError(Exception):
     """Excepcion lanzada cuando el usuario ya tiene una inscripcion en esta competicion."""
 
     pass
+
+
+# Los «no» de la política que antes se escapaban sin traducir y llegaban como un
+# 500 mudo: sin cabeceras de CORS, el navegador lo ve como un fallo de red y el
+# jugador no se entera de nada (BE #372). El de «llena» es compartido con aprobar
+class EnrollmentClosedError(Exception):
+    """El torneo ya ha empezado: pasado su primer día no se pide plaza."""
+
+
+class TooManyEnrollmentsError(Exception):
+    """Quien pide ya está en el máximo de competiciones a la vez."""
 
 
 class RequestEnrollmentUseCase:
@@ -113,9 +131,14 @@ class RequestEnrollmentUseCase:
             approved_count = await self._uow.enrollments.count_approved_by_competition(
                 competition_id
             )
-            CompetitionPolicy.validate_capacity(
-                approved_count, competition.max_players, competition_id
-            )
+            try:
+                CompetitionPolicy.validate_capacity(
+                    approved_count, competition.max_players, competition_id
+                )
+            except CompetitionFullViolation as e:
+                raise CompetitionFullError(
+                    f"La competición está completa: {competition.max_players} plazas ocupadas."
+                ) from e
 
             # 3. Business logic guards: Validar enrollment completo (duplicados, limites, temporal, estado)
             existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
@@ -139,7 +162,14 @@ class RequestEnrollmentUseCase:
                 raise AlreadyEnrolledError(str(e)) from e
             except InvalidCompetitionStatusViolation as e:
                 raise CompetitionNotActiveError(str(e)) from e
-            # MaxEnrollmentsExceededViolation, EnrollmentPastStartDateViolation propagate as-is
+            except EnrollmentPastStartDateViolation as e:
+                raise EnrollmentClosedError(
+                    "El torneo ya ha empezado: no se admiten más inscripciones."
+                ) from e
+            except MaxEnrollmentsExceededViolation as e:
+                raise TooManyEnrollmentsError(
+                    f"Ya estás en {MAX_ENROLLMENTS_PER_USER} competiciones, el máximo a la vez."
+                ) from e
 
             # 4. Crear enrollment con factory method
             try:
