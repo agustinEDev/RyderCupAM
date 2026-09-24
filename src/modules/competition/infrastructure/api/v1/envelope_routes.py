@@ -192,11 +192,11 @@ async def get_envelopes(
     description=(
         "Abre los dos a la vez y devuelve los enfrentamientos, cruzando las dos "
         "listas por posición. A partir de aquí los partidos de esa sesión salen "
-        "de los sobres. Lo pide el organizador o cualquiera de los dos capitanes, "
-        "y **hacen falta los dos sobres entregados**: abrir es lo que desvela el "
-        "orden de juego. Lo que falte se rellena por hándicap cuando los abre el "
-        "reloj al vencer el plazo, o cuando los abre el organizador en una sesión "
-        "sin plazo que vencer (un campo sin zona horaria)."
+        "de los sobres. **Solo el organizador (o un administrador) y solo en una "
+        "sesión sin plazo que vencer** (un campo sin zona horaria), que nunca se "
+        "abre sola; ahí, lo que falte se rellena por hándicap. En el resto, antes "
+        "de hora se abren con el permiso de los dos capitanes, que se da al "
+        "entregar, y si no, al vencer el plazo (BE #374): 409."
     ),
     tags=["Competitions - Envelopes"],
 )

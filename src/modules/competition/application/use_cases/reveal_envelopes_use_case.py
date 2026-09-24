@@ -90,7 +90,7 @@ class RevealEnvelopesUseCase:
             arbitra = is_admin or competition.is_creator(user_id)
             if not arbitra and not es_capitan:
                 raise NotCompetitionCreatorError(
-                    "Los sobres los abre el organizador o uno de los capitanes"
+                    "Los sobres de esta sesión son de sus dos capitanes"
                 )
             # Abrir antes de hora es decision de LOS DOS capitanes (BE #374):
             # cada uno da su permiso al entregar, y se abren cuando estan los
@@ -122,7 +122,10 @@ class RevealEnvelopesUseCase:
                 competition, user_id, sobres_ahora, is_admin=is_admin, sin_plazo=sin_plazo
             ):
                 raise EarlyRevealNeedsBothCaptainsError(
-                    "Los sobres se abren solos a su hora, o antes si los dos "
+                    # Sin prometer hora: hay sesiones que tardan en abrirse
+                    # (la anterior sin acabar) o no se abren solas (un equipo
+                    # impar en parejas), y la pantalla ya enseña el plazo
+                    "Antes de hora, los sobres solo se abren si los dos "
                     "capitanes lo piden al entregar"
                 )
 
