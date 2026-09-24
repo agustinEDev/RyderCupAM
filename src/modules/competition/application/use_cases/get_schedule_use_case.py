@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 
+from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
     GetScheduleRequestDTO,
     GetScheduleResponseDTO,
@@ -127,6 +128,7 @@ class GetScheduleUseCase:
                     round_entity.session_type,
                     zonas_por_campo.get(round_entity.golf_course_id),
                 ),
+                match_generation_block=block_to_dto(round_entity.match_generation_block),
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )

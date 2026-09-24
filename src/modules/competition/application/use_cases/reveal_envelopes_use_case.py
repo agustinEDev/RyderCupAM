@@ -44,6 +44,7 @@ class RevealEnvelopesUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository,
         timezone_service: ICompetitionTimezone | None = None,
+        generador=None,
     ):
         """
         Args:
@@ -52,9 +53,12 @@ class RevealEnvelopesUseCase:
             timezone_service: La zona del campo donde se juega. Hace falta para
                 saber si esta sesion llega a tener plazo: sin el, la respuesta
                 es que si, y manda la regla estricta
+            generador: Crea los partidos en cuanto se abren (BE #361)
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository, timezone_service=timezone_service)
+        self._desk = EnvelopeDesk(
+            uow, user_repository, timezone_service=timezone_service, generador=generador
+        )
 
     async def execute(
         self, round_id: UUID, user_id: UserId, is_admin: bool = False
@@ -122,6 +126,9 @@ class RevealEnvelopesUseCase:
                 sobre.reveal()
                 await self._uow.envelopes.update(sobre)
                 sobres[team] = sobre
+
+            # Con los enfrentamientos decididos, los partidos salen ya (BE #361)
+            await self._desk.generar_los_partidos(ronda, competition)
 
             return RevealEnvelopesResponseDTO(
                 round_id=ronda.id.value,

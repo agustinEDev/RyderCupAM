@@ -14,6 +14,7 @@ from src.modules.competition.application.dto.envelope_dto import (
     envelope_to_dto,
     matchups_to_dto,
 )
+from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.envelope import Envelope
@@ -33,6 +34,7 @@ class GetEnvelopesUseCase:
         user_repository,
         clock=None,
         timezone_service=None,
+        generador=None,
     ):
         """
         Args:
@@ -40,9 +42,10 @@ class GetEnvelopesUseCase:
             user_repository: Lo pide la mesa de sobres para los handicaps
             clock: El reloj del servidor, para el revelado del plazo
             timezone_service: La zona del campo donde se juega
+            generador: Crea los partidos si mirar es lo que los abre (BE #361)
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service)
+        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service, generador)
 
     async def execute(
         self, round_id: UUID, user_id: UserId, is_admin: bool = False
@@ -70,7 +73,13 @@ class GetEnvelopesUseCase:
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             # Mirarlos es lo que los abre cuando llega su hora: no hay ningun
             # proceso de fondo con el reloj, igual que la anotacion (BE #305)
+            # El id antes de abrir: si crear los partidos falla, la ronda puede
+            # quedar caducada, y leerle un atributo revienta en asincrono
+            id_de_la_ronda = ronda.id
             await self._desk.revelar_si_toca(ronda, competition, sobres)
+            # Abrir puede haber creado los partidos o apuntado por que no: la
+            # sesion se vuelve a leer para contar lo que hay de verdad
+            ronda = await self._uow.rounds.find_by_id(id_de_la_ronda) or ronda
             sobre_a, sobre_b = sobres.get("A"), sobres.get("B")
             abiertos = bool(
                 sobre_a and sobre_b and not sobre_a.is_sealed() and not sobre_b.is_sealed()
@@ -138,4 +147,5 @@ class GetEnvelopesUseCase:
                     for uid in mis_jugadores
                 ],
                 player_names={str(uid.value): nombre for uid, nombre in nombres.items()},
+                match_generation_block=block_to_dto(ronda.match_generation_block),
             )

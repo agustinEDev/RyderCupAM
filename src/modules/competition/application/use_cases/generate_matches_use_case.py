@@ -19,6 +19,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopePairings,
 )
+from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.tee_context_builder import (
     TeeContextBuilder,
 )
@@ -34,6 +35,11 @@ from src.modules.competition.domain.services.scoring_service import ScoringServi
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_GENDER,
+    MISSING_TEE_COLOR,
+    BlockedPlayer,
+)
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -46,6 +52,9 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
 logger = logging.getLogger(__name__)
+
+# Dónde se pueden generar: cerrada, o en juego para las sesiones que vienen
+_SE_PUEDEN_GENERAR = (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -62,6 +71,51 @@ class NoTeamAssignmentError(Exception):
 
 class TeeColorNotFoundError(Exception):
     """No se encontró el color de barras del jugador en el campo."""
+
+    pass
+
+
+# Colores en palabras, como los llama la aplicación (golfCourses.form.teeColors)
+_COLORES = {
+    "WHITE": "blancas",
+    "YELLOW": "amarillas",
+    "BLUE": "azules",
+    "RED": "rojas",
+    "BLACK": "negras",
+    "GREEN": "verdes",
+    "ORANGE": "naranjas",
+    "PINK": "rosas",
+    "GOLD": "doradas",
+    "OTHER": "de otro color",
+}
+
+
+class PlayersWithoutTeeError(TeeColorNotFoundError):
+    """Hay jugadores sin barras en el campo, y aquí van TODOS (BE #360, #361).
+
+    Hereda del error de siempre para no cambiarle nada a quien ya lo captura.
+    El mensaje es para el organizador: quién y qué le falta, en palabras. La
+    lista es para quien lo pinta en otro idioma.
+    """
+
+    def __init__(self, players: list[BlockedPlayer]):
+        self.players = players
+        partes = []
+        for p in players:
+            quien = p.name or "Un jugador"
+            if p.missing == MISSING_GENDER:
+                partes.append(f"{quien} no tiene el género en su perfil")
+            else:
+                color = _COLORES.get(p.tee_color or "", p.tee_color or "")
+                partes.append(f"{quien} juega de barras {color} y este campo no las tiene")
+        super().__init__("No se pueden generar los partidos: " + "; ".join(partes) + ".")
+
+
+class NoGolfCourseForHandicapError(ValueError):
+    """Modo HANDICAP sin campo: no hay de dónde sacar las barras.
+
+    Es un ValueError, como antes, para no cambiarle nada a quien lo captura.
+    """
 
     pass
 
@@ -137,10 +191,14 @@ class GenerateMatchesUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede generar partidos")
 
-            # 4. Verificar competición CLOSED
-            if competition.status != CompetitionStatus.CLOSED:
+            # 4. Verificar la competición: cerrada, o ya en juego (BE #361). Los
+            # sobres se abren sesión a sesión, 6 h antes de cada una, así que
+            # los de la sesión del domingo se abren con el torneo empezado el
+            # sábado: exigir CLOSED dejaba esa sesión sin partidos posibles
+            if competition.status not in _SE_PUEDEN_GENERAR:
                 raise CompetitionNotClosedError(
-                    f"La competición debe estar en CLOSED. Estado: {competition.status.value}"
+                    "La competición tiene que estar cerrada o en juego para generar "
+                    f"partidos. Estado: {competition.status.value}"
                 )
 
             # 5. Verificar ronda PENDING_MATCHES
@@ -149,106 +207,9 @@ class GenerateMatchesUseCase:
                 # falla despues, la ronda vuelve sola a SCHEDULED al deshacerse.
                 round_entity.reopen_for_regeneration()
 
-            if not round_entity.can_generate_matches():
-                raise RoundNotPendingMatchesError(
-                    f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
-                )
-
-            # 6. Obtener asignación de equipos
-            team_assignment = await self._uow.team_assignments.find_by_competition(
-                round_entity.competition_id
+            matches_created = await self.generar_dentro(
+                round_entity, competition, request.manual_pairings
             )
-            if not team_assignment:
-                raise NoTeamAssignmentError(
-                    "No hay asignación de equipos. Use AssignTeamsUseCase primero."
-                )
-
-            # 7. Obtener enrollments y campo
-            enrollments = await self._uow.enrollments.find_by_competition_and_status(
-                round_entity.competition_id, EnrollmentStatus.APPROVED
-            )
-
-            # Mapear user_id → enrollment
-            enrollment_map = {str(e.user_id.value): e for e in enrollments}
-
-            # 8. Obtener campo de golf y tees
-            golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-
-            # 9. Determinar modo de juego
-            is_scratch = competition.play_mode == PlayMode.SCRATCH
-            allowance = round_entity.get_effective_allowance()
-            calculator = self._calculator
-
-            # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
-            (
-                tee_ratings,
-                holes_by_stroke_index,
-                user_handicap_map,
-                user_gender_map,
-                holes_by_tee,
-            ) = await self._build_handicap_data(
-                golf_course,
-                is_scratch,
-                team_assignment,
-                enrollment_map,
-            )
-
-            # 11. Eliminar partidos existentes (re-generación)
-            existing_matches = await self._uow.matches.find_by_round(round_id)
-            for m in existing_matches:
-                await self._uow.matches.delete(m.id)
-
-            if existing_matches:
-                await self._uow.flush()  # Forzar DELETE antes de INSERT (unique constraint)
-
-            # 12. Generar partidos
-            players_per_team = round_entity.players_per_team_in_match()
-            team_a_ids = list(team_assignment.team_a_player_ids)
-            team_b_ids = list(team_assignment.team_b_player_ids)
-
-            max_playing_handicap = competition.max_playing_handicap
-
-            # Los sobres de los capitanes deciden, si los hay (FE #655)
-            pairings = await EnvelopePairings.decidir(
-                self._uow, round_entity.id, request.manual_pairings
-            )
-
-            if pairings:
-                matches_created = await self._generate_manual(
-                    pairings,
-                    round_entity,
-                    enrollment_map,
-                    tee_ratings,
-                    calculator,
-                    allowance,
-                    is_scratch,
-                    user_handicap_map,
-                    holes_by_stroke_index,
-                    user_gender_map,
-                    max_playing_handicap,
-                    holes_by_tee,
-                )
-            else:
-                matches_created = await self._generate_auto(
-                    round_entity,
-                    team_a_ids,
-                    team_b_ids,
-                    enrollment_map,
-                    tee_ratings,
-                    calculator,
-                    allowance,
-                    is_scratch,
-                    players_per_team,
-                    user_handicap_map,
-                    holes_by_stroke_index,
-                    user_gender_map,
-                    max_playing_handicap,
-                    holes_by_tee,
-                )
-
-            # 13. Transicionar ronda
-            round_entity.mark_matches_generated()
-            await self._uow.rounds.update(round_entity)
 
         return GenerateMatchesResponseDTO(
             round_id=round_entity.id.value,
@@ -256,7 +217,217 @@ class GenerateMatchesUseCase:
             round_status=round_entity.status.value,
         )
 
-    async def _build_handicap_data(self, golf_course, is_scratch, team_assignment, enrollment_map):
+    async def generar_dentro(
+        self,
+        round_entity,
+        competition,
+        manual_pairings=None,
+        refrescar_handicap_rfeg: bool = True,
+    ) -> int:
+        """
+        Genera los partidos de la sesión en la transacción que ya esté abierta.
+
+        Separado de `execute` para que abrir los sobres pueda crear los
+        partidos en su misma transacción (BE #361), sin volver a comprobar
+        quién lo pide: ahí no lo pide nadie, lo pide el reloj.
+
+        Args:
+            round_entity: La sesión, ya cargada
+            competition: Su competición, ya bloqueada
+            manual_pairings: Los emparejamientos del organizador, si los manda
+            refrescar_handicap_rfeg: Si preguntar a la RFEG por el hándicap de
+                cada jugador. Al abrir los sobres NO: eso ocurre dentro de la
+                lectura de la pantalla, con la competición bloqueada, y una
+                llamada de red por jugador la dejaría colgada
+
+        Returns:
+            Cuántos partidos se han creado
+
+        Raises:
+            RoundNotPendingMatchesError, NoTeamAssignmentError,
+            InsufficientPlayersError, PlayersWithoutTeeError,
+            NoGolfCourseForHandicapError, EnvelopesDecideThePairingsError,
+            EnvelopesNotRevealedError
+        """
+        if not round_entity.can_generate_matches():
+            raise RoundNotPendingMatchesError(
+                f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
+            )
+
+        # 6. Obtener asignación de equipos
+        team_assignment = await self._uow.team_assignments.find_by_competition(
+            round_entity.competition_id
+        )
+        if not team_assignment:
+            raise NoTeamAssignmentError(
+                "No hay asignación de equipos. Use AssignTeamsUseCase primero."
+            )
+
+        # 7. Obtener enrollments y campo
+        enrollments = await self._uow.enrollments.find_by_competition_and_status(
+            round_entity.competition_id, EnrollmentStatus.APPROVED
+        )
+
+        # Mapear user_id → enrollment
+        enrollment_map = {str(e.user_id.value): e for e in enrollments}
+
+        # 8. Obtener campo de golf y tees
+        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+
+        # 9. Determinar modo de juego
+        is_scratch = competition.play_mode == PlayMode.SCRATCH
+        allowance = round_entity.get_effective_allowance()
+        calculator = self._calculator
+
+        # 10. Construir datos de handicap (tee ratings, holes, user handicaps, genders)
+        (
+            tee_ratings,
+            holes_by_stroke_index,
+            user_handicap_map,
+            user_gender_map,
+            holes_by_tee,
+        ) = await self._build_handicap_data(
+            golf_course,
+            is_scratch,
+            team_assignment,
+            enrollment_map,
+            refrescar_handicap_rfeg,
+        )
+
+        players_per_team = round_entity.players_per_team_in_match()
+        team_a_ids = list(team_assignment.team_a_player_ids)
+        team_b_ids = list(team_assignment.team_b_player_ids)
+
+        max_playing_handicap = competition.max_playing_handicap
+
+        # Los sobres de los capitanes deciden, si los hay (FE #655)
+        pairings = await EnvelopePairings.decidir(self._uow, round_entity.id, manual_pairings)
+
+        # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
+        # arreglar a doce jugadores eran doce viajes (BE #360)
+        if not is_scratch:
+            await self._comprobar_que_todos_tienen_barras(
+                self._jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team),
+                competition,
+                enrollment_map,
+                tee_ratings,
+                user_handicap_map,
+                user_gender_map,
+            )
+
+        # 11. Eliminar partidos existentes (re-generación)
+        existing_matches = await self._uow.matches.find_by_round(round_entity.id)
+        for m in existing_matches:
+            await self._uow.matches.delete(m.id)
+
+        if existing_matches:
+            await self._uow.flush()  # Forzar DELETE antes de INSERT (unique constraint)
+
+        # 12. Generar partidos
+        if pairings:
+            matches_created = await self._generate_manual(
+                pairings,
+                round_entity,
+                enrollment_map,
+                tee_ratings,
+                calculator,
+                allowance,
+                is_scratch,
+                user_handicap_map,
+                holes_by_stroke_index,
+                user_gender_map,
+                max_playing_handicap,
+                holes_by_tee,
+            )
+        else:
+            matches_created = await self._generate_auto(
+                round_entity,
+                team_a_ids,
+                team_b_ids,
+                enrollment_map,
+                tee_ratings,
+                calculator,
+                allowance,
+                is_scratch,
+                players_per_team,
+                user_handicap_map,
+                holes_by_stroke_index,
+                user_gender_map,
+                max_playing_handicap,
+                holes_by_tee,
+            )
+
+        # 13. Transicionar ronda
+        round_entity.mark_matches_generated()
+        await self._uow.rounds.update(round_entity)
+        return matches_created
+
+    @staticmethod
+    def _jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team) -> list[UserId]:
+        """Quién va a jugar esta sesión, en el orden en que saldrá.
+
+        Con emparejamientos, los que traen; sin ellos, los que caben en los
+        partidos que salen del reparto por ranking.
+        """
+        if pairings:
+            return [
+                UserId(uid)
+                for pairing in pairings
+                for uid in [*pairing.team_a_player_ids, *pairing.team_b_player_ids]
+            ]
+        caben = min(len(team_a_ids), len(team_b_ids)) // players_per_team * players_per_team
+        return [*team_a_ids[:caben], *team_b_ids[:caben]]
+
+    async def _comprobar_que_todos_tienen_barras(
+        self,
+        jugadores,
+        competition,
+        enrollment_map,
+        tee_ratings,
+        user_handicap_map,
+        user_gender_map,
+    ) -> None:
+        """
+        Raises:
+            PlayersWithoutTeeError: Con TODOS los que no tienen barras en el
+                campo, y lo que le falta a cada uno
+        """
+        sin_barras = []
+        for uid in jugadores:
+            tee_color, _, tee_rating, _ = self._resolve_player_data(
+                uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+            )
+            if tee_rating is not None:
+                continue
+            # Si ese color existe para algún sexo, lo que falta es el suyo
+            existe_el_color = any(color == tee_color.value for color, _ in tee_ratings)
+            sin_barras.append((uid, tee_color, existe_el_color))
+        if not sin_barras:
+            return
+
+        nombres = await PlayerNames.de_la_competicion(
+            [uid for uid, _, _ in sin_barras], competition.id, self._user_repo, self._uow
+        )
+        raise PlayersWithoutTeeError(
+            [
+                BlockedPlayer(
+                    user_id=uid,
+                    name=nombres.get(uid, ""),
+                    missing=MISSING_GENDER if existe_el_color else MISSING_TEE_COLOR,
+                    tee_color=None if existe_el_color else tee_color.value,
+                )
+                for uid, tee_color, existe_el_color in sin_barras
+            ]
+        )
+
+    async def _build_handicap_data(
+        self,
+        golf_course,
+        is_scratch,
+        team_assignment,
+        enrollment_map,
+        refrescar_handicap_rfeg: bool = True,
+    ):
         """Pre-fetch tee ratings, hole stroke order, user handicaps, and user genders."""
         tee_ratings: dict[tuple[str, str | None], TeeRating] = {}
         holes_by_stroke_index: list[int] = []
@@ -265,7 +436,7 @@ class GenerateMatchesUseCase:
         user_gender_map: dict[str, Gender | None] = {}
 
         if not is_scratch and not golf_course:
-            raise ValueError(
+            raise NoGolfCourseForHandicapError(
                 "Se requiere un campo de golf para el modo HANDICAP. "
                 "Asocie un campo de golf aprobado a la competición."
             )
@@ -289,7 +460,7 @@ class GenerateMatchesUseCase:
                     has_custom_handicap = (
                         enrollment is not None and enrollment.custom_handicap is not None
                     )
-                    if not has_custom_handicap:
+                    if not has_custom_handicap and refrescar_handicap_rfeg:
                         await self._maybe_refresh_rfeg_handicap(user)
                     if user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))

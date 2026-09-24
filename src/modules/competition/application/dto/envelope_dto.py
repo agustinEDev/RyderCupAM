@@ -6,6 +6,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.modules.competition.application.dto.match_generation_block_dto import (
+    MatchGenerationBlockDTO,
+)
 from src.modules.competition.domain.entities.envelope import Envelope
 
 
@@ -92,6 +95,13 @@ class EnvelopesViewDTO(BaseModel):
     )
     player_names: dict[str, str] = Field(
         default_factory=dict, description="Nombre de cada jugador que aparece en la vista."
+    )
+    match_generation_block: MatchGenerationBlockDTO | None = Field(
+        None,
+        description=(
+            "Si los sobres se abrieron y los partidos no se pudieron crear, por qué "
+            "(BE #361). None si se crearon o si todavía no se ha intentado."
+        ),
     )
 
 

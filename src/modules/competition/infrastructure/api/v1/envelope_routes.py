@@ -9,6 +9,7 @@ from src.config.dependencies import (
     get_current_user,
     get_envelopes_use_case,
     get_list_my_pending_envelopes_use_case,
+    get_list_my_sessions_without_matches_use_case,
     get_reset_envelopes_use_case,
     get_reveal_envelopes_use_case,
     get_submit_envelope_use_case,
@@ -20,6 +21,9 @@ from src.modules.competition.application.dto.envelope_dto import (
     PendingEnvelopeDTO,
     ResetEnvelopesResponseDTO,
     RevealEnvelopesResponseDTO,
+)
+from src.modules.competition.application.dto.match_generation_block_dto import (
+    SessionWithoutMatchesDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -35,6 +39,9 @@ from src.modules.competition.application.use_cases.get_envelopes_use_case import
 )
 from src.modules.competition.application.use_cases.list_my_pending_envelopes_use_case import (
     ListMyPendingEnvelopesUseCase,
+)
+from src.modules.competition.application.use_cases.list_my_sessions_without_matches_use_case import (
+    ListMySessionsWithoutMatchesUseCase,
 )
 from src.modules.competition.application.use_cases.reset_envelopes_use_case import (
     NothingToResetError,
@@ -276,4 +283,31 @@ async def list_my_pending_envelopes(
     use_case: ListMyPendingEnvelopesUseCase = Depends(get_list_my_pending_envelopes_use_case),
 ):
     """Los sobres que me faltan por entregar (FE #655)."""
+    return await use_case.execute(UserId(str(current_user.id)))
+
+
+@router.get(
+    "/me/sessions-without-matches",
+    response_model=list[SessionWithoutMatchesDTO],
+    status_code=status.HTTP_200_OK,
+    summary="Mis sesiones que se quedaron sin partidos",
+    description=(
+        "Las sesiones de las competiciones que organiza quien pregunta cuyos "
+        "sobres ya se abrieron y cuyos partidos NO se pudieron crear, con el "
+        "motivo y a quién le falta qué (BE #361). Alimenta el bloque «Requiere "
+        "tu Atención» del panel: sin esto, el organizador se enteraría a la "
+        "hora de jugar. Vacío casi siempre."
+    ),
+    tags=["Competitions - Envelopes"],
+)
+# El mismo panel que dispara la de los sobres pendientes, y por lo mismo
+@limiter.limit("300/minute")
+async def list_my_sessions_without_matches(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ListMySessionsWithoutMatchesUseCase = Depends(
+        get_list_my_sessions_without_matches_use_case
+    ),
+):
+    """Las sesiones que tengo que arreglar para que tengan partidos (BE #361)."""
     return await use_case.execute(UserId(str(current_user.id)))

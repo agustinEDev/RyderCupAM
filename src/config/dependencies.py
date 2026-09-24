@@ -102,6 +102,9 @@ from src.modules.competition.application.use_cases.list_my_invitations_use_case 
 from src.modules.competition.application.use_cases.list_my_pending_envelopes_use_case import (
     ListMyPendingEnvelopesUseCase,
 )
+from src.modules.competition.application.use_cases.list_my_sessions_without_matches_use_case import (
+    ListMySessionsWithoutMatchesUseCase,
+)
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
 )
@@ -2088,10 +2091,35 @@ def get_make_draft_pick_use_case(
     return MakeDraftPickUseCase(uow=uow, user_repository=user_uow.users)
 
 
+def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatchesUseCase:
+    """Lo que crea los partidos al abrirse los sobres (BE #361).
+
+    Sobre la MISMA Unit of Work que el caso de uso de los sobres: abrirlos y
+    crear los partidos van en una transaccion. Sin servicio de handicap: al
+    abrir no se pregunta a la RFEG, que seria una llamada de red por jugador
+    dentro de la lectura de la pantalla.
+    """
+    return GenerateMatchesUseCase(
+        uow=uow,
+        golf_course_repository=gc_uow.golf_courses,
+        user_repository=user_uow.users,
+        handicap_calculator=PlayingHandicapCalculator(),
+        scoring_service=scoring_service,
+    )
+
+
+def get_list_my_sessions_without_matches_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ListMySessionsWithoutMatchesUseCase:
+    """Proveedor del caso de uso ListMySessionsWithoutMatchesUseCase (BE #361)."""
+    return ListMySessionsWithoutMatchesUseCase(uow)
+
+
 def get_submit_envelope_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> SubmitEnvelopeUseCase:
     """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655).
 
@@ -2102,6 +2130,7 @@ def get_submit_envelope_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
     )
 
 
@@ -2109,6 +2138,7 @@ def get_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> GetEnvelopesUseCase:
     """Proveedor del caso de uso GetEnvelopesUseCase (FE #655).
 
@@ -2119,6 +2149,7 @@ def get_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
     )
 
 
@@ -2126,6 +2157,7 @@ def get_reveal_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> RevealEnvelopesUseCase:
     """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
 
@@ -2140,6 +2172,7 @@ def get_reveal_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
     )
 
 

@@ -5,12 +5,14 @@ Entregar, mirar y abrir necesitan lo mismo: la ronda, la competicion a la que
 pertenece, y quien es capitan de que equipo.
 """
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
+    InsufficientPlayersError,
     NotCompetitionParticipantError,
     RoundNotFoundError,
 )
@@ -18,6 +20,12 @@ from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
 from src.modules.competition.application.services.team_roster import TeamRoster
+from src.modules.competition.application.use_cases.generate_matches_use_case import (
+    GenerateMatchesUseCase,
+    NoGolfCourseForHandicapError,
+    NoTeamAssignmentError,
+    PlayersWithoutTeeError,
+)
 from src.modules.competition.domain.entities.competition import (
     Competition,
     TeamsNotAssignedError,
@@ -38,7 +46,16 @@ from src.modules.competition.domain.services.envelope_reveal_service import (
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    NO_GOLF_COURSE,
+    NO_TEAMS,
+    NOT_ENOUGH_PLAYERS,
+    PLAYERS_WITHOUT_TEE,
+    UNEXPECTED,
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -46,6 +63,8 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 # A partir de aqui la sesion ya tiene partidos generados
 _CON_PARTIDOS_YA_HECHOS = (
@@ -80,6 +99,7 @@ class EnvelopeDesk:
         user_repository: UserRepositoryInterface,
         clock: Callable[[], datetime] | None = None,
         timezone_service: ICompetitionTimezone | None = None,
+        generador: GenerateMatchesUseCase | None = None,
     ):
         """
         Args:
@@ -92,8 +112,12 @@ class EnvelopeDesk:
             timezone_service: La zona del campo donde se juega. Sin ella no
                 hay hora que calcular: esos sobres no se abren solos nunca y
                 los abre a mano el que arbitra, que es el unico con llave ahi
+            generador: Lo que crea los partidos al abrirse los sobres (BE #361),
+                sobre la MISMA Unit of Work. Los proveedores de la API lo
+                inyectan siempre; sin el, abrir no crea partidos
         """
         self._uow = uow
+        self._generador = generador
         self._user_repo = user_repository
         self._clock = clock or (lambda: datetime.now(UTC))
         self._timezone = timezone_service
@@ -386,7 +410,65 @@ class EnvelopeDesk:
             return False
 
         await self._abrir(ronda, competition, sobres, relleno)
+        await self.generar_los_partidos(ronda, competition)
         return True
+
+    async def generar_los_partidos(self, ronda: Round, competition: Competition) -> None:
+        """Crea los partidos de una sesion recien abierta (BE #361).
+
+        Con los sobres abiertos los enfrentamientos ya estan decididos: pulsar
+        «Generar» solo los copiaba, y mientras nadie lo pulsaba la sesion podia
+        llegar a su hora sin partidos.
+
+        **El fallo no es mudo, ni tumba la apertura.** Esto ocurre dentro de la
+        lectura de la pantalla o de la entrega del segundo sobre: si no se
+        pueden crear, los sobres se quedan abiertos, la sesion sin partidos y el
+        motivo apuntado en ella para que el organizador lo vea. Lo escrito a
+        medias se deshace con el SAVEPOINT, no con la transaccion entera, que
+        es la que lleva la apertura.
+        """
+        if self._generador is None:
+            return
+        # Cancelada o terminada no hay partidos que jugar: abrirse, se abren,
+        # pero no hay nada que avisar
+        if competition.status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
+            return
+        motivo: MatchGenerationBlock | None = None
+        # El id se guarda ANTES: si el savepoint se deshace, SQLAlchemy caduca
+        # lo que se toco dentro, y leer un atributo caducado es una carga
+        # sincrona que en asincrono revienta (MissingGreenlet)
+        round_id = ronda.id
+        try:
+            async with self._uow.savepoint():
+                await self._generador.generar_dentro(
+                    ronda, competition, refrescar_handicap_rfeg=False
+                )
+        except Exception as error:
+            motivo = self._motivo(error)
+        if motivo is None:
+            return
+        # Lo que la generacion cambio en memoria se ha deshecho en la base de
+        # datos, pero no en el objeto: se vuelve a leer antes de apuntar nada
+        ronda_de_verdad = await self._uow.rounds.find_by_id(round_id) or ronda
+        ronda_de_verdad.block_match_generation(motivo)
+        await self._uow.rounds.update(ronda_de_verdad)
+
+    def _motivo(self, error: Exception) -> MatchGenerationBlock:
+        """De la excepcion al motivo que se apunta en la sesion."""
+        ahora = self.ahora.replace(tzinfo=None)
+        if isinstance(error, PlayersWithoutTeeError):
+            return MatchGenerationBlock(
+                reason=PLAYERS_WITHOUT_TEE, players=tuple(error.players), at=ahora
+            )
+        if isinstance(error, InsufficientPlayersError):
+            return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=ahora)
+        if isinstance(error, NoTeamAssignmentError):
+            return MatchGenerationBlock(reason=NO_TEAMS, at=ahora)
+        if isinstance(error, NoGolfCourseForHandicapError):
+            return MatchGenerationBlock(reason=NO_GOLF_COURSE, at=ahora)
+        # Lo que no se esperaba se registra entero: el motivo solo dice que falló
+        logger.exception("No se pudieron generar los partidos al abrir los sobres")
+        return MatchGenerationBlock(reason=UNEXPECTED, at=ahora)
 
     async def _relleno_necesario(
         self, ronda: Round, competition: Competition, sobres: dict[str, Envelope]
