@@ -46,6 +46,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     GetScheduleRequestDTO,
 )
+from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
     PlayersWithoutTeeError,
@@ -83,6 +84,7 @@ from src.modules.competition.domain.value_objects.match_format import MatchForma
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.team_assignment import (
     TeamAssignment as TeamAssignmentVO,
 )
@@ -282,6 +284,7 @@ async def _montar(
     modo=PlayMode.HANDICAP,
     color=None,
     estado="CLOSED",
+    montaje=SetupMode.RYDER_CUP,
 ):
     """Monta el torneo. `sexos` es el de cada jugador: A1, A2, B1, B2."""
     uow = InMemoryUnitOfWork()
@@ -304,6 +307,7 @@ async def _montar(
         team_assignment=TeamAssignmentVO.MANUAL,
         team_1_name="Europa",
         team_2_name="Estados Unidos",
+        setup_mode=montaje,
     )
     if competicion.is_draft():
         competicion.activate()
@@ -723,3 +727,57 @@ class TestLaRevisionLocal:
         await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
 
         assert (await torneo.ronda()).match_generation_block.reason == "NOT_ENOUGH_PLAYERS"
+
+
+class TestLaAgendaTambienLosAbre:
+    """Mirar la agenda —la de la ficha o la de «Equipos y partidos»— abre los
+    sobres vencidos (BE #367). Si nadie abría la página del sobre, la sesión
+    llegaba a su hora con los sobres cerrados y, desde la #361, sin partidos.
+
+        #   caso                                               | al leer la agenda
+        ----|--------------------------------------------------|---------------------
+        S1  Ryder, entregados y vencido, nadie mira el sobre   | se abren y salen los partidos
+        S2  lo mismo sin que nadie entregara                   | se rellenan, se abren y salen
+        S3  antes del plazo                                    | nada
+        S4  modo manual, vencido                               | nunca abre ni genera
+    """
+
+    def _agenda(self, torneo, reloj):
+        mesa = EnvelopeDesk(
+            torneo.uow, torneo.usuarios, _Reloj(reloj), _Zona(), torneo.generador()
+        )
+        return GetScheduleUseCase(torneo.uow, sobres=mesa).execute(
+            GetScheduleRequestDTO(competition_id=torneo.comp_id.value)
+        )
+
+    async def test_s1_vencido_leer_la_agenda_los_abre_y_salen_los_partidos(self):
+        torneo = await _montar()
+        await torneo.entregan_los_dos()
+
+        agenda = await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert len(await torneo.partidos()) == 2
+        assert agenda.days[0].rounds[0].status == "SCHEDULED"
+        assert len(agenda.days[0].rounds[0].matches) == 2
+
+    async def test_s2_sin_que_nadie_entregara_tambien(self):
+        torneo = await _montar()
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert len(await torneo.partidos()) == 2
+
+    async def test_s3_antes_del_plazo_no_abre_nada(self):
+        torneo = await _montar()
+        await torneo.entregan_los_dos()
+
+        await self._agenda(torneo, datetime(2026, 5, 20, 12, 0, tzinfo=ZoneInfo("Europe/Madrid")))
+
+        assert await torneo.partidos() == []
+
+    async def test_s4_en_modo_manual_nunca(self):
+        torneo = await _montar(montaje=SetupMode.MANUAL)
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        assert await torneo.partidos() == []

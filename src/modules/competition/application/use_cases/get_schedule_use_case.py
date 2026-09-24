@@ -1,6 +1,7 @@
 """Caso de Uso: Obtener Schedule de la competición."""
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
@@ -22,9 +23,16 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+
+if TYPE_CHECKING:
+    # Solo para el tipo: la mesa de sobres llega hasta aquí por el generador de
+    # partidos, e importarla de verdad cierra un círculo
+    from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 
 
 class GetScheduleUseCase:
@@ -41,8 +49,13 @@ class GetScheduleUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repo: IGolfCourseRepository | None = None,
+        sobres: "EnvelopeDesk | None" = None,
     ):
         self._uow = uow
+        # Mirar la agenda abre los sobres que ya tocan (BE #367), como mirar la
+        # página del sobre: si nadie la abría, la sesión llegaba a su hora con
+        # los sobres cerrados y, desde la #361, sin partidos
+        self._sobres = sobres
         # Para la hora a la que abre la anotacion de cada ronda, que es la LOCAL
         # de SU campo (BE #305). De aqui saca el movil su lista de proximos
         # partidos, asi que sin esto no puede ofrecer «Anotar» sin cobertura
@@ -61,6 +74,7 @@ class GetScheduleUseCase:
 
             # 2. Obtener todas las rondas
             rounds = await self._uow.rounds.find_by_competition(competition_id)
+            await self._abre_los_sobres_que_tocan(competition, rounds)
 
             # 3. Obtener partidos para cada ronda
             total_matches = 0
@@ -163,3 +177,19 @@ class GetScheduleUseCase:
             total_matches=total_matches,
             team_assignment=ta_dto,
         )
+
+    async def _abre_los_sobres_que_tocan(self, competition, rounds) -> None:
+        """Abre los sobres vencidos de las sesiones que esperan partidos.
+
+        Solo en modo Ryder, que es donde hay sobres: en el manual, leer la
+        agenda no puede ponerse a generar partidos. Y solo las sesiones que
+        esperan partidos, porque la agenda la lee mucha más gente que la
+        página del sobre: el resto no cuesta ni una consulta.
+        """
+        if self._sobres is None or competition.setup_mode != SetupMode.RYDER_CUP:
+            return
+        for ronda in rounds:
+            if ronda.status != RoundStatus.PENDING_MATCHES:
+                continue
+            sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
+            await self._sobres.revelar_si_toca(ronda, competition, sobres)
