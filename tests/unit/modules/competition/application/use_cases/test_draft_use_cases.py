@@ -491,12 +491,12 @@ class TestElMinutoQueSeAgota:
         uow, comp_id, creator_id, resto, usuarios = await _montar()
         start, ver, _, reloj = _casos(uow, usuarios)
         await start.execute(comp_id.value, creator_id)
-        reloj.avanza(61 * 3)
+        reloj.avanza(61 * 2)
 
         sala = await ver.execute(comp_id.value, resto[-1])
 
-        assert [p.automatic for p in sala.picks] == [True, True, True]
-        assert len(sala.available_players) == 1
+        assert [p.automatic for p in sala.picks] == [True, True]
+        assert len(sala.available_players) == 2
 
     async def test_al_elegir_tarde_el_turno_ya_no_es_tuyo(self):
         """El capitán que se duerme no elige por encima de lo que hizo la app."""
@@ -566,6 +566,24 @@ class TestCuandoTermina:
         assert reparto.mode == TeamAssignmentMode.DRAFT
         assert sorted(uid.value for uid in reparto.team_a_player_ids) == sorted(sala.team_a)
         assert sorted(uid.value for uid in reparto.team_b_player_ids) == sorted(sala.team_b)
+
+    async def test_el_ultimo_entra_solo_y_queda_en_el_reparto(self):
+        """Al elegir el penúltimo la sala termina: el último no espera su minuto."""
+        uow, comp_id, creator_id, resto, usuarios = await _montar()
+        start, _, pick, _ = _casos(uow, usuarios)
+        sala = await start.execute(comp_id.value, creator_id)
+        for _ in range(3):
+            capitan = creator_id if sala.current_team == "A" else resto[0]
+            sala = await pick.execute(comp_id.value, capitan, sala.available_players[0].user_id)
+
+        assert sala.status == DraftStatus.COMPLETED.value
+        assert sala.available_players == []
+        assert [p.automatic for p in sala.picks] == [False, False, False, True]
+        async with uow:
+            reparto = await uow.team_assignments.find_by_competition(comp_id)
+        assert reparto is not None
+        elegidos = {*reparto.team_a_player_ids, *reparto.team_b_player_ids}
+        assert set(resto[1:]) <= elegidos
 
     async def test_cada_capitan_encabeza_su_equipo(self):
         uow, comp_id, creator_id, resto, usuarios = await _montar()

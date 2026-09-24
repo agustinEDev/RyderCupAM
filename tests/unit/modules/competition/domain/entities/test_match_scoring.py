@@ -261,7 +261,7 @@ class TestUnaTarjetaPorBandoEnFoursomes:
         assert not match.has_submitted_scorecard(a2.user_id, MatchFormat.FOURBALL)
 
     def test_m5_la_pantalla_ve_entregado_al_bando_entero(self):
-        match, a1, a2, b1, b2 = self._parejas()
+        match, a1, a2, _b1, _b2 = self._parejas()
         match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
 
         entregadas = match.scorecards_submitted_by(MatchFormat.FOURSOMES)

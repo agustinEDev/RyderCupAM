@@ -94,7 +94,7 @@ async def competition_id(db_session, capitanes) -> CompetitionId:
 @pytest_asyncio.fixture
 async def elegibles(db_session) -> list[PlayerForDraft]:
     jugadores = []
-    for handicap in ("5.0", "12.0", "18.0"):
+    for handicap in ("5.0", "12.0", "18.0", "24.0"):
         user_id = UserId.generate()
         await _insert_user(db_session, user_id)
         jugadores.append(PlayerForDraft(user_id=user_id, handicap=Decimal(handicap)))
@@ -148,7 +148,8 @@ class TestGuardarYLeerLaSala:
         """Los equipos salen de las elecciones: si no vuelven, el draft se pierde."""
         repo = SQLAlchemyDraftRepository(db_session)
         draft = await _sala_guardada(db_session, competition_id, capitanes)
-        for jugador in elegibles:
+        # El último no se elige: entra solo al elegir el penúltimo
+        for jugador in elegibles[:-1]:
             draft.pick(jugador.user_id, elegibles, AHORA)
         await repo.update(draft)
         await db_session.commit()
@@ -160,6 +161,7 @@ class TestGuardarYLeerLaSala:
         assert leida.current_team is None
         assert leida.turn_started_at is None
         assert leida.teams() == draft.teams()
+        assert leida.picks[-1].automatic is True
 
     async def test_sin_sala_devuelve_none(self, db_session, competition_id):
         repo = SQLAlchemyDraftRepository(db_session)

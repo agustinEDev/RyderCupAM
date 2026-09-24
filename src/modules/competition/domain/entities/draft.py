@@ -287,11 +287,20 @@ class Draft:
         )
 
     def _pasar_turno(self, elegibles: Sequence[PlayerForDraft], ahora: datetime) -> None:
-        """Al otro capitán, o cierra la sala si ya no queda nadie."""
-        if not self._disponibles(elegibles):
+        """Al otro capitán, o cierra la sala si ya no queda nadie.
+
+        Si solo queda uno, no hay nada que elegir (decidido el 24 sep): va al
+        equipo al que le toca y la sala termina, sin que nadie espere su minuto.
+        """
+        disponibles = self._disponibles(elegibles)
+        if disponibles:
+            self._current_team = "B" if self._current_team == "A" else "A"
+            self._turn_started_at = ahora
+        if len(disponibles) == 1:
+            (ultimo,) = disponibles
+            self._anotar(ultimo, automatic=True)
+            disponibles = set()
+        if not disponibles:
             self._status = DraftStatus.COMPLETED
             self._current_team = None
             self._turn_started_at = None
-            return
-        self._current_team = "B" if self._current_team == "A" else "A"
-        self._turn_started_at = ahora
