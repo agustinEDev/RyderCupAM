@@ -63,7 +63,9 @@ def test_la_politica_es_de_24_horas():
 )
 def test_el_dispositivo_sabe_si_esta_inactivo(usado_hace, inactivo):
     user = User.create(
-        first_name="Ana", last_name="Golf", email_str="ana@example.com",
+        first_name="Ana",
+        last_name="Golf",
+        email_str="ana@example.com",
         plain_password="V@l1dP@ss123!",
     )
     assert _dispositivo(user, usado_hace).is_idle() is inactivo
@@ -74,7 +76,9 @@ class TestRefrescarSegunElUso:
     @pytest.fixture
     def user(self) -> User:
         return User.create(
-            first_name="Ana", last_name="Golf", email_str="ana@example.com",
+            first_name="Ana",
+            last_name="Golf",
+            email_str="ana@example.com",
             plain_password="V@l1dP@ss123!",
         )
 

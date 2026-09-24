@@ -92,8 +92,12 @@ async def test_l4_no_se_revoca_el_token_de_otra_persona():
     uow = InMemoryUnitOfWork()
     ana = await _persona(uow, "ana@example.com")
     luis = await _persona(uow, "luis@example.com")
-    await _sesion(uow, luis, "jwt-de-luis", UserDeviceId.generate())
+    # Sin dispositivo es el caso peligroso: ahí se revocaría el token tal cual llega
+    await _sesion(uow, luis, "jwt-de-luis", None)
+    await _sesion(uow, luis, "jwt-de-luis-movil", UserDeviceId.generate())
 
     await LogoutUserUseCase(uow).execute(_salir("jwt-de-luis"), str(ana.id.value))
+    await LogoutUserUseCase(uow).execute(_salir("jwt-de-luis-movil"), str(ana.id.value))
 
     assert await _revocado(uow, "jwt-de-luis") is False
+    assert await _revocado(uow, "jwt-de-luis-movil") is False
