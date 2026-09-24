@@ -713,7 +713,8 @@ async def generate_matches(
     - 400: Estado inválido, sin equipos, o jugadores insuficientes. Cuando es
       uno de los motivos que la sesión apunta (`error_code`
       `MATCH_GENERATION_BLOCKED`), va en claves en `match_generation_block`,
-      igual que en la agenda, y queda apuntado en la sesión (BE #360)
+      con la misma forma que en la agenda, y queda apuntado en la sesión
+      (BE #360)
     - 404: Ronda no encontrada
     """
     try:

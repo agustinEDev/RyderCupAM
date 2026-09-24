@@ -28,6 +28,8 @@ ENROLLMENT_OPEN = "ENROLLMENT_OPEN"
 # Lo que le falta a cada jugador
 MISSING_GENDER = "GENDER"
 MISSING_TEE_COLOR = "TEE_COLOR"
+# Emparejado sin la inscripción aprobada: se retiró, o no llegó a aprobarse
+MISSING_ENROLLMENT = "ENROLLMENT"
 
 
 @dataclass(frozen=True)

@@ -21,7 +21,11 @@ class BlockedPlayerDTO(BaseModel):
     user_id: UUID = Field(..., description="El jugador.")
     name: str = Field(..., description="Su nombre en esta competición.")
     missing: str = Field(
-        ..., description="Lo que le falta: GENDER (su género) o TEE_COLOR (su color en el campo)."
+        ...,
+        description=(
+            "Lo que le falta: GENDER (su género), TEE_COLOR (su color en el campo) o "
+            "ENROLLMENT (la inscripción aprobada)."
+        ),
     )
     tee_color: str | None = Field(
         None, description="El color que se le asignó, si lo que falta es ese color en el campo."

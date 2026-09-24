@@ -39,6 +39,7 @@ from src.modules.competition.domain.value_objects.competition_status import SE_J
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_ENROLLMENT,
     MISSING_GENDER,
     MISSING_TEE_COLOR,
     NO_GOLF_COURSE,
@@ -90,12 +91,29 @@ class PlayersWithoutTeeError(TeeColorNotFoundError):
 
     def __init__(self, players: list[BlockedPlayer]):
         self.players = players
-        partes = [
-            f"{p.name or p.user_id.value} ({p.missing}"
-            + (f" {p.tee_color})" if p.missing == MISSING_TEE_COLOR else ")")
-            for p in players
-        ]
-        super().__init__("Jugadores sin barras en el campo: " + ", ".join(partes))
+        super().__init__(
+            "No se pueden generar los partidos: falta saber desde qué barras juegan "
+            + _nombres(players)
+        )
+
+
+class PlayersNotEnrolledError(InsufficientPlayersError):
+    """Hay emparejados sin la inscripción aprobada, y aquí van TODOS (BE #360).
+
+    Hereda del error de siempre para no cambiarle nada a quien ya lo captura.
+    """
+
+    def __init__(self, players: list[BlockedPlayer]):
+        self.players = players
+        super().__init__(
+            "No se pueden generar los partidos: no tienen la inscripción aprobada "
+            + _nombres(players)
+        )
+
+
+def _nombres(players: list[BlockedPlayer]) -> str:
+    """Para el mensaje, que acaba en los logs y en un cliente que aún no lee claves."""
+    return ", ".join(p.name or "un jugador" for p in players)
 
 
 class NoGolfCourseForHandicapError(ValueError):
@@ -116,6 +134,9 @@ def bloqueo_por(error: Exception, at: datetime | None) -> MatchGenerationBlock |
     """
     if isinstance(error, PlayersWithoutTeeError):
         return MatchGenerationBlock(reason=PLAYERS_WITHOUT_TEE, players=tuple(error.players), at=at)
+    # Antes que su clase madre: con él va quién
+    if isinstance(error, PlayersNotEnrolledError):
+        return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, players=tuple(error.players), at=at)
     if isinstance(error, InsufficientPlayersError):
         return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=at)
     if isinstance(error, NoTeamAssignmentError):
@@ -350,7 +371,7 @@ class GenerateMatchesUseCase:
         # Quien no tiene la inscripcion aprobada, antes que las barras: sin
         # inscripcion su color sale del defecto y su falta pareceria otra
         if pairings:
-            self._comprobar_inscripciones(pairings, enrollment_map)
+            await self._comprobar_inscripciones(pairings, enrollment_map, competition)
 
         # Antes de escribir nada, todos los que no tienen barras: de uno en uno,
         # arreglar a doce jugadores eran doce viajes (BE #360)
@@ -411,19 +432,30 @@ class GenerateMatchesUseCase:
         await self._uow.rounds.update(round_entity)
         return matches_created
 
-    @staticmethod
-    def _comprobar_inscripciones(pairings, enrollment_map) -> None:
+    async def _comprobar_inscripciones(self, pairings, enrollment_map, competition) -> None:
         """Todos los emparejados tienen que tener la inscripción aprobada.
 
         Raises:
-            InsufficientPlayersError: Con el primero que no la tiene
+            PlayersNotEnrolledError: Con TODOS los que no la tienen, y su
+                nombre: de uno en uno eran tantos viajes como retirados
         """
-        for pairing in pairings:
-            for uid in list(pairing.team_a_player_ids) + list(pairing.team_b_player_ids):
-                if str(uid) not in enrollment_map:
-                    raise InsufficientPlayersError(
-                        f"El jugador {uid} no tiene inscripción aprobada"
-                    )
+        sin_inscripcion = [
+            UserId(uid)
+            for pairing in pairings
+            for uid in [*pairing.team_a_player_ids, *pairing.team_b_player_ids]
+            if str(uid) not in enrollment_map
+        ]
+        if not sin_inscripcion:
+            return
+        nombres = await PlayerNames.de_la_competicion(
+            sin_inscripcion, competition.id, self._user_repo, self._uow
+        )
+        raise PlayersNotEnrolledError(
+            [
+                BlockedPlayer(user_id=uid, name=nombres.get(uid, ""), missing=MISSING_ENROLLMENT)
+                for uid in sin_inscripcion
+            ]
+        )
 
     @staticmethod
     def _jugadores_que_juegan(pairings, team_a_ids, team_b_ids, players_per_team) -> list[UserId]:

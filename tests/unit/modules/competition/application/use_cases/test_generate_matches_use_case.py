@@ -1132,6 +1132,9 @@ class TestGenerateMatchesUseCase:
             await use_case.execute(
                 GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
             )
+        # Confirmado: la excepción sale DESPUÉS de cerrar la transacción. Antes de
+        # leer el motivo, que abre su propia transacción
+        assert uow.committed is True
 
         motivo = await self._motivo(uow, round_entity)
         assert motivo.reason == PLAYERS_WITHOUT_TEE
@@ -1150,6 +1153,9 @@ class TestGenerateMatchesUseCase:
             await use_case.execute(
                 GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
             )
+        # Confirmado: la excepción sale DESPUÉS de cerrar la transacción. Antes de
+        # leer el motivo, que abre su propia transacción
+        assert uow.committed is True
 
         assert (await self._motivo(uow, round_entity)).reason == NO_TEAMS
 
@@ -1169,6 +1175,9 @@ class TestGenerateMatchesUseCase:
             await use_case.execute(
                 GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
             )
+        # Confirmado: la excepción sale DESPUÉS de cerrar la transacción. Antes de
+        # leer el motivo, que abre su propia transacción
+        assert uow.committed is True
 
         assert (await self._motivo(uow, round_entity)).reason == NOT_ENOUGH_PLAYERS
 
@@ -1189,6 +1198,9 @@ class TestGenerateMatchesUseCase:
             await use_case.execute(
                 GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
             )
+        # Confirmado: la excepción sale DESPUÉS de cerrar la transacción. Antes de
+        # leer el motivo, que abre su propia transacción
+        assert uow.committed is True
 
         assert (await self._motivo(uow, round_entity)).reason == NO_GOLF_COURSE
 

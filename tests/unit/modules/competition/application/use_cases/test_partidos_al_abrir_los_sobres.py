@@ -725,13 +725,20 @@ class TestLaRevisionLocal:
         await torneo.entregan_los_dos()
         async with torneo.uow:
             for inscripcion in await torneo.uow.enrollments.find_by_competition(torneo.comp_id):
-                if inscripcion.user_id == torneo.equipo_a[1]:
+                if inscripcion.user_id in (torneo.equipo_a[1], torneo.equipo_b[1]):
                     inscripcion._status = EnrollmentStatus.WITHDRAWN
                     await torneo.uow.enrollments.update(inscripcion)
 
         await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
 
-        assert (await torneo.ronda()).match_generation_block.reason == "NOT_ENOUGH_PLAYERS"
+        motivo = (await torneo.ronda()).match_generation_block
+        assert motivo.reason == "NOT_ENOUGH_PLAYERS"
+        # Y QUIÉN: sin esto el organizador no sabe a cuál de doce mirar (BE #360)
+        assert {(p.user_id, p.missing) for p in motivo.players} == {
+            (torneo.equipo_a[1], "ENROLLMENT"),
+            (torneo.equipo_b[1], "ENROLLMENT"),
+        }
+        assert all(p.name for p in motivo.players)
 
 
 class TestLaAgendaTambienLosAbre:
