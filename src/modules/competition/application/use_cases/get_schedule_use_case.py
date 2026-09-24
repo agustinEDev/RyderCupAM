@@ -23,16 +23,34 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 if TYPE_CHECKING:
     # Solo para el tipo: la mesa de sobres llega hasta aquí por el generador de
     # partidos, e importarla de verdad cierra un círculo
     from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+
+def _descansan(team_assignment, inscritos: set[UserId], matches: list) -> list[UserId]:
+    """Los inscritos de los equipos que no juegan ningún partido de la sesión (#710).
+
+    Con equipos desiguales el que sobra se quedaba sin partido y nadie lo decía.
+    Sin partidos todavía no se sabe quién juega, así que nadie descansa aún.
+    """
+    if not team_assignment or not matches:
+        return []
+    juegan = {p.user_id for m in matches for p in [*m.team_a_players, *m.team_b_players]}
+    return [
+        uid
+        for uid in [*team_assignment.team_a_player_ids, *team_assignment.team_b_player_ids]
+        if uid in inscritos and uid not in juegan
+    ]
 
 
 class GetScheduleUseCase:
@@ -86,6 +104,17 @@ class GetScheduleUseCase:
 
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
+            # Quién sigue dentro: un retirado no «descansa», no está (#710)
+            inscritos = (
+                {
+                    e.user_id
+                    for e in await self._uow.enrollments.find_by_competition_and_status(
+                        competition_id, EnrollmentStatus.APPROVED
+                    )
+                }
+                if team_assignment
+                else set()
+            )
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
@@ -143,6 +172,9 @@ class GetScheduleUseCase:
                     zonas_por_campo.get(round_entity.golf_course_id),
                 ),
                 match_generation_block=block_to_dto(round_entity.match_generation_block),
+                resting_player_ids=[
+                    uid.value for uid in _descansan(team_assignment, inscritos, matches)
+                ],
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )

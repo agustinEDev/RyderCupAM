@@ -104,6 +104,14 @@ class RoundResponseDTO(BaseModel):
             "(BE #361): a quién le falta qué. None si no hay nada que avisar."
         ),
     )
+    resting_player_ids: list[UUID] = Field(
+        default_factory=list,
+        description=(
+            "Los inscritos de los equipos que no juegan ningún partido de esta sesión "
+            "(#710): el que sobra con equipos desiguales. Vacío hasta que la sesión "
+            "tiene partidos."
+        ),
+    )
     created_at: datetime = Field(..., description="Fecha de creación.")
     updated_at: datetime = Field(..., description="Fecha de actualización.")
 
