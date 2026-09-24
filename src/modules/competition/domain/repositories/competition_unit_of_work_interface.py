@@ -6,6 +6,7 @@ Esta interfaz extiende la base añadiendo acceso a los repositorios de competici
 """
 
 from abc import abstractmethod
+from contextlib import AbstractAsyncContextManager
 
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -89,4 +90,15 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         """Acceso al repositorio de hole scores."""
+        pass
+
+    @abstractmethod
+    def savepoint(self) -> AbstractAsyncContextManager[None]:
+        """Un punto de vuelta dentro de la transaccion abierta (BE #361).
+
+        Lo que se escriba dentro se deshace si sale una excepcion, y lo de
+        antes se queda. Lo necesita abrir los sobres: los partidos se generan
+        en la misma transaccion, y si fallan a mitad no pueden dejar ni los
+        sobres cerrados ni la mitad de los partidos escritos.
+        """
         pass

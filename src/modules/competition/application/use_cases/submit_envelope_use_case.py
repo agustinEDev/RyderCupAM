@@ -37,6 +37,7 @@ class SubmitEnvelopeUseCase:
         user_repository,
         clock=None,
         timezone_service=None,
+        generador=None,
     ):
         """
         Args:
@@ -45,9 +46,11 @@ class SubmitEnvelopeUseCase:
             clock: El reloj del servidor, para saber si el plazo ya venció
             timezone_service: La zona del campo. Sin ella el plazo no existe y
                 solo se abren los sobres a mano
+            generador: Crea los partidos si esta entrega es la que los abre
+                —los dos pidieron no esperar— (BE #361)
         """
         self._uow = uow
-        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service)
+        self._desk = EnvelopeDesk(uow, user_repository, clock, timezone_service, generador)
 
     async def execute(
         self,

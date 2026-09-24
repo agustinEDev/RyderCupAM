@@ -1,5 +1,9 @@
 """In-Memory Unit of Work para Competition Module (testing)."""
 
+import copy
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
@@ -126,6 +130,33 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
 
     async def flush(self) -> None:
         pass
+
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """Guarda una copia de todo y la repone si algo falla dentro.
+
+        El `rollback` de aqui no deshace nada, asi que sin esto un test no
+        veria la diferencia entre deshacer lo escrito a medias y dejarlo.
+        """
+        repositorios = [
+            self._competitions,
+            self._enrollments,
+            self._rounds,
+            self._matches,
+            self._team_assignments,
+            self._drafts,
+            self._envelopes,
+            self._invitations,
+            self._hole_scores,
+        ]
+        copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
+        try:
+            yield
+        except BaseException:
+            for repo, copia in zip(repositorios, copias, strict=True):
+                repo.__dict__.clear()
+                repo.__dict__.update(copia)
+            raise
 
     def is_active(self) -> bool:
         return True

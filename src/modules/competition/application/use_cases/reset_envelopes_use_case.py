@@ -105,6 +105,11 @@ class ResetEnvelopesUseCase:
             if ronda.status in (RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS):
                 ronda.reset_to_pending_matches()
                 await self._uow.rounds.update(ronda)
+            # Si al abrirlos no salieron los partidos, el motivo era de ESOS
+            # sobres: con los nuevos se vuelve a intentar desde cero (BE #361)
+            if ronda.match_generation_block is not None:
+                ronda.clear_match_generation_block()
+                await self._uow.rounds.update(ronda)
 
             await self._uow.commit()
             return ResetEnvelopesResponseDTO(

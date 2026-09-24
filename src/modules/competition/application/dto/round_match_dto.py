@@ -5,6 +5,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.modules.competition.application.dto.match_generation_block_dto import (
+    MatchGenerationBlockDTO,
+)
 from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 
 # ======================================================================================
@@ -92,6 +95,13 @@ class RoundResponseDTO(BaseModel):
             "con su desfase (BE #305). El cliente la usa para ofrecer «Anotar» "
             "—también sin cobertura, desde lo que tenga guardado— en vez de "
             "adivinar si alguien pulsó START."
+        ),
+    )
+    match_generation_block: MatchGenerationBlockDTO | None = Field(
+        None,
+        description=(
+            "Por qué esta sesión no tiene partidos aunque sus sobres ya se abrieron "
+            "(BE #361): a quién le falta qué. None si no hay nada que avisar."
         ),
     )
     created_at: datetime = Field(..., description="Fecha de creación.")
