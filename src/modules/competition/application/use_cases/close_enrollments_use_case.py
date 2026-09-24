@@ -13,6 +13,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -91,14 +94,8 @@ class CloseEnrollmentsUseCase:
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
-            # 6. Las invitaciones pendientes se quedan sin plaza (decidido el
-            # 24 sep, #710): aceptar una despues metia a alguien con el draft
-            # hecho y descuadraba los partidos
-            for invitacion in await self._uow.invitations.find_pending_by_competition(
-                competition_id
-            ):
-                invitacion.reject_for_no_room()
-                await self._uow.invitations.update(invitacion)
+            # 6. Las invitaciones pendientes se quedan sin plaza (#710)
+            await sin_plaza_para_las_pendientes(self._uow, competition_id)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(

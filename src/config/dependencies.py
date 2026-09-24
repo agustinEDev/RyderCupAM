@@ -1949,9 +1949,10 @@ def get_direct_enroll_player_use_case(
 
 def get_handle_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> HandleEnrollmentUseCase:
     """Proveedor del caso de uso HandleEnrollmentUseCase."""
-    return HandleEnrollmentUseCase(uow)
+    return HandleEnrollmentUseCase(uow, user_uow.users)
 
 
 def get_cancel_enrollment_use_case(

@@ -165,6 +165,36 @@ class TestRespondToInvitationUseCase:
         assert guardada.status == InvitationStatus.NO_ROOM
         assert inscripcion is None
 
+    async def test_i6b_otro_usuario_no_la_deja_sin_plaza(self, comp_uow, user_uow):
+        """Solo el invitado responde: con el id de otra no se le cambia el estado."""
+        invitation, _ = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        intruso = await self._create_user(user_uow, email="x@test.com")
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(NotInviteeError):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=intruso.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+        assert guardada.status == InvitationStatus.PENDING
+
+    async def test_i6c_una_ya_sin_plaza_lo_dice_en_su_idioma(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+        pedir = RespondInvitationRequestDTO(
+            invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+        )
+        with pytest.raises(InvalidInvitationStatusViolation):
+            await uc.execute(pedir)
+
+        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»
+        with pytest.raises(InvalidInvitationStatusViolation, match="No quedan plazas"):
+            await uc.execute(pedir)
+
     async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)

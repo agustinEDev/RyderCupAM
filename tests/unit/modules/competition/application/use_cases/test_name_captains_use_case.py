@@ -25,10 +25,13 @@ from src.modules.competition.domain.entities.competition import (
     CompetitionStateError,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
@@ -244,3 +247,23 @@ async def test_bloquea_la_fila_de_la_competicion():
     await NameCaptainsUseCase(uow).execute(_peticion(comp_id, ana, bea), creator_id)
 
     assert llamadas == [CompetitionId(comp_id)]
+
+
+async def test_nombrarlos_deja_sin_plaza_las_invitaciones_pendientes():
+    """Nombrar capitanes también cierra la inscripción (#710, revisión local): las
+    pendientes se quedan sin plaza igual que al cerrarla a mano."""
+    uow, comp_id, creator_id, (ana, bea, *_) = await _montar()
+    pendiente = Invitation.create(
+        id=InvitationId.generate(),
+        competition_id=CompetitionId(comp_id),
+        inviter_id=creator_id,
+        invitee_email="p@test.com",
+    )
+    async with uow:
+        await uow.invitations.add(pendiente)
+
+    await NameCaptainsUseCase(uow).execute(_peticion(comp_id, ana, bea), creator_id)
+
+    async with uow:
+        guardada = await uow.invitations.find_by_id(pendiente.id)
+    assert guardada.status == InvitationStatus.NO_ROOM

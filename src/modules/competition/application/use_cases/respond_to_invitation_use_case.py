@@ -25,6 +25,7 @@ from src.modules.competition.domain.services.competition_policy import (
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -71,7 +72,12 @@ class RespondToInvitationUseCase:
                 # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
                 await self._uow.invitations.update(invitation)
                 non_pending_status = invitation.status.value
-            elif action == "ACCEPT" and await self._inscripcion_cerrada(invitation):
+            elif (
+                action == "ACCEPT"
+                # Solo el invitado: con el id de otra no se le cambia nada
+                and self._es_el_invitado(invitation, current_user_id, current_user_email)
+                and await self._inscripcion_cerrada(invitation)
+            ):
                 # Una pendiente de antes de que el cierre las rechazara (#710):
                 # se queda sin plaza, guardado, y no se entra
                 invitation.reject_for_no_room()
@@ -79,6 +85,9 @@ class RespondToInvitationUseCase:
                 sin_plaza = True
 
         if sin_plaza:
+            raise InvalidInvitationStatusViolation(SIN_PLAZAS)
+        # Una ya sin plaza lo dice en su idioma, no con el estado en crudo
+        if non_pending_status == InvitationStatus.NO_ROOM.value:
             raise InvalidInvitationStatusViolation(SIN_PLAZAS)
         # Si la invitacion no estaba pending, el commit ya ocurrio; ahora lanzamos
         if non_pending_status:
@@ -98,10 +107,7 @@ class RespondToInvitationUseCase:
                 raise InvalidInvitationStatusViolation("Invitation is no longer pending.")
 
             # Verificar current_user es invitee
-            is_invitee = invitation.is_for_user(current_user_id) or (
-                invitation.is_for_email(current_user_email)
-            )
-            if not is_invitee:
+            if not self._es_el_invitado(invitation, current_user_id, current_user_email):
                 raise NotInviteeError("You are not the invitee of this invitation.")
 
             # Ejecutar accion
@@ -114,6 +120,11 @@ class RespondToInvitationUseCase:
 
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
+
+    @staticmethod
+    def _es_el_invitado(invitation, user_id: UserId, email: str) -> bool:
+        """Si quien responde es el invitado, por su cuenta o por su email."""
+        return invitation.is_for_user(user_id) or invitation.is_for_email(email)
 
     async def _inscripcion_cerrada(self, invitation) -> bool:
         """Si su competicion ya cerro la inscripcion: no quedan plazas."""

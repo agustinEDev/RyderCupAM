@@ -1,6 +1,7 @@
 """Tests para HandleEnrollmentUseCase."""
 
 from datetime import date
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
 )
 from src.modules.competition.application.exceptions import CompetitionFullError
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
@@ -25,12 +27,25 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
+
+
+class _Usuarios:
+    """Todos con género, salvo los que se digan."""
+
+    def __init__(self, sin_genero=()):
+        self._sin_genero = set(sin_genero)
+
+    async def find_by_id(self, user_id):
+        genero = None if user_id in self._sin_genero else Gender.MALE
+        return SimpleNamespace(id=user_id, gender=genero)
 
 
 class TestHandleEnrollmentUseCase:
@@ -94,7 +109,7 @@ class TestHandleEnrollmentUseCase:
         created = await self._create_active_competition(uow, creator_id)
         enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment.id.value,
             action="APPROVE",
@@ -103,6 +118,38 @@ class TestHandleEnrollmentUseCase:
 
         assert response.status == "APPROVED"
         assert response.user_id == other_user_id.value
+
+    async def test_h1_sin_genero_no_se_aprueba_y_lo_dice(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
+    ):
+        """Una solicitud de antes de la regla, o de quien luego borró su género (#710)."""
+        created = await self._create_active_competition(uow, creator_id)
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
+
+        with pytest.raises(GenderRequiredError, match="no tiene el género"):
+            await HandleEnrollmentUseCase(uow, _Usuarios(sin_genero=[other_user_id])).execute(
+                HandleEnrollmentRequestDTO(enrollment_id=enrollment.id.value, action="APPROVE"),
+                creator_id,
+            )
+
+        async with uow:
+            guardada = await uow.enrollments.find_by_id(enrollment.id)
+        assert guardada.status == EnrollmentStatus.REQUESTED
+
+    async def test_h2_sin_genero_se_puede_rechazar(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
+    ):
+        created = await self._create_active_competition(uow, creator_id)
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
+
+        respuesta = await HandleEnrollmentUseCase(
+            uow, _Usuarios(sin_genero=[other_user_id])
+        ).execute(
+            HandleEnrollmentRequestDTO(enrollment_id=enrollment.id.value, action="REJECT"),
+            creator_id,
+        )
+
+        assert respuesta.status == "REJECTED"
 
     async def test_should_reject_enrollment_successfully(
         self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId
@@ -115,7 +162,7 @@ class TestHandleEnrollmentUseCase:
         created = await self._create_active_competition(uow, creator_id)
         enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment.id.value,
             action="REJECT",
@@ -133,7 +180,7 @@ class TestHandleEnrollmentUseCase:
         When: Se intenta manejar
         Then: Se lanza EnrollmentNotFoundError
         """
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=uuid4(),
             action="APPROVE",
@@ -153,7 +200,7 @@ class TestHandleEnrollmentUseCase:
         created = await self._create_active_competition(uow, creator_id)
         enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment.id.value,
             action="APPROVE",
@@ -177,7 +224,7 @@ class TestHandleEnrollmentUseCase:
         created = await self._create_active_competition(uow, creator_id)
         enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment.id.value,
             action="APPROVE",
@@ -218,7 +265,7 @@ class TestHandleEnrollmentUseCase:
         player2_id = UserId(uuid4())
         enrollment2 = await self._create_requested_enrollment(uow, created.id, player2_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         approve_request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment2.id.value,
             action="APPROVE",
@@ -254,7 +301,7 @@ class TestHandleEnrollmentUseCase:
         player2_id = UserId(uuid4())
         enrollment2 = await self._create_requested_enrollment(uow, created.id, player2_id)
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         approve_req = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment2.id.value,
             action="APPROVE",
@@ -292,7 +339,7 @@ class TestHandleEnrollmentUseCase:
             await uow.enrollments.add(enrollment)
             await uow.commit()
 
-        use_case = HandleEnrollmentUseCase(uow)
+        use_case = HandleEnrollmentUseCase(uow, _Usuarios())
         request = HandleEnrollmentRequestDTO(
             enrollment_id=enrollment.id.value,
             action="APPROVE",

@@ -1,6 +1,6 @@
 """Tests para CloseEnrollmentsUseCase."""
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -118,11 +118,14 @@ class TestCloseEnrollmentsUseCase:
             )
 
         pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
+        # Caducada sin que nadie la pasara a EXPIRED: caducada, no «sin plaza»
+        caducada = invitacion(esta, "c@test.com")
+        caducada._expires_at = datetime.now() - timedelta(days=1)
         aceptada = invitacion(esta, "a@test.com")
         aceptada.accept()
         de_otra = invitacion(otra, "o@test.com")
         async with uow:
-            for inv in [*pendientes, aceptada, de_otra]:
+            for inv in [*pendientes, caducada, aceptada, de_otra]:
                 await uow.invitations.add(inv)
 
         await CloseEnrollmentsUseCase(uow).execute(
@@ -132,9 +135,10 @@ class TestCloseEnrollmentsUseCase:
         async with uow:
             estados = {
                 inv.id: (await uow.invitations.find_by_id(inv.id)).status
-                for inv in [*pendientes, aceptada, de_otra]
+                for inv in [*pendientes, caducada, aceptada, de_otra]
             }
         assert [estados[p.id] for p in pendientes] == [InvitationStatus.NO_ROOM] * 2
+        assert estados[caducada.id] == InvitationStatus.EXPIRED
         assert estados[aceptada.id] == InvitationStatus.ACCEPTED
         assert estados[de_otra.id] == InvitationStatus.PENDING
 
