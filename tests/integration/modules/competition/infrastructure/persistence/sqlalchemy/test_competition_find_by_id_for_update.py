@@ -57,6 +57,10 @@ async def test_trae_los_campos_de_golf(db_session, creator_id, golf_course_id): 
     leida = await SQLAlchemyCompetitionRepository(db_session).find_by_id_for_update(creada.id)
 
     assert leida.has_golf_course(golf_course_id) is True
+    # Y con sus salidas, que es lo que se consulta al generar partidos
+    # (CodeRabbit en la #371): sin ellas, otra carga perezosa igual
+    salidas = leida.golf_courses[0].golf_course.tees
+    assert [(t.color.value, t.gender.value) for t in salidas] == [("YELLOW", "MALE")]
 
 
 async def test_bloquea_la_fila_de_la_competicion(db_session, creator_id, golf_course_id):  # noqa: F811
