@@ -9,6 +9,9 @@ from datetime import UTC, date, datetime
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -53,6 +56,7 @@ class Round:
         allowance_percentage: int | None,
         created_at: datetime,
         updated_at: datetime,
+        match_generation_block: MatchGenerationBlock | None = None,
     ):
         """Constructor privado (usar factory methods)."""
         self._id = id
@@ -66,6 +70,7 @@ class Round:
         self._allowance_percentage = allowance_percentage
         self._created_at = created_at
         self._updated_at = updated_at
+        self._match_generation_block = match_generation_block
 
     @classmethod
     def create(
@@ -143,6 +148,7 @@ class Round:
         allowance_percentage: int | None,
         created_at: datetime,
         updated_at: datetime,
+        match_generation_block: MatchGenerationBlock | None = None,
     ) -> "Round":
         """Reconstruye desde BD (sin validaciones)."""
         return cls(
@@ -157,6 +163,7 @@ class Round:
             allowance_percentage=allowance_percentage,
             created_at=created_at,
             updated_at=updated_at,
+            match_generation_block=match_generation_block,
         )
 
     # ==================== Business Methods ====================
@@ -184,6 +191,32 @@ class Round:
                 f"Expected PENDING_MATCHES"
             )
         self._status = RoundStatus.SCHEDULED
+        # Con los partidos hechos, el motivo por el que no salian ya no vale
+        self._match_generation_block = None
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def block_match_generation(self, block: MatchGenerationBlock) -> None:
+        """
+        Apunta por que no se han podido generar los partidos (BE #361).
+
+        Los partidos se crean al abrirse los sobres, dentro de una lectura que
+        nadie esta mirando como un error: sin esto la sesion se quedaba con los
+        enfrentamientos a la vista y sin partidos, y nadie sabia por que.
+
+        Solo mientras la sesion espera sus partidos: con ellos ya hechos no hay
+        nada que explicar.
+        """
+        if self._status != RoundStatus.PENDING_MATCHES:
+            raise ValueError(
+                f"Cannot block match generation from status {self._status}. "
+                "Expected PENDING_MATCHES"
+            )
+        self._match_generation_block = block
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def clear_match_generation_block(self) -> None:
+        """Olvida el motivo: se han rehecho los sobres y se empieza de nuevo."""
+        self._match_generation_block = None
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def reopen_for_regeneration(self) -> None:
@@ -403,6 +436,11 @@ class Round:
     def handicap_mode(self) -> HandicapMode | None:
         """Modo de handicap (solo para SINGLES: MATCH_PLAY)."""
         return self._handicap_mode
+
+    @property
+    def match_generation_block(self) -> MatchGenerationBlock | None:
+        """Por que esta sesion no tiene partidos, si se intento y no se pudo."""
+        return self._match_generation_block
 
     @property
     def allowance_percentage(self) -> int | None:

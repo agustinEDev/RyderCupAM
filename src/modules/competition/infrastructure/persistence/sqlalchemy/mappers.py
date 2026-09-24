@@ -71,6 +71,9 @@ from src.modules.competition.domain.value_objects.invitation_status import Invit
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -569,6 +572,23 @@ class MatchResultJsonType(TypeDecorator):
         return value
 
 
+class MatchGenerationBlockJsonType(TypeDecorator):
+    """
+    TypeDecorator para el motivo por el que una sesion no tiene partidos (BE #361).
+
+    NULL en BD es «no hay motivo»: o se generaron, o nadie lo ha intentado.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: MatchGenerationBlock | None, dialect) -> dict | None:
+        return value.to_dict() if value is not None else None
+
+    def process_result_value(self, value: dict | None, dialect) -> MatchGenerationBlock | None:
+        return MatchGenerationBlock.from_dict(value) if value else None
+
+
 class MarkerAssignmentsJsonType(TypeDecorator):
     """
     TypeDecorator para serializar tuple[MarkerAssignment, ...] a/desde JSONB.
@@ -938,6 +958,8 @@ rounds_table = Table(
     Column("allowance_percentage", Integer, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    # Por que no se pudieron generar sus partidos al abrir los sobres (BE #361)
+    Column("match_generation_block", MatchGenerationBlockJsonType, nullable=True),
 )
 
 
@@ -1296,6 +1318,7 @@ def start_competition_mappers():
                 "_allowance_percentage": rounds_table.c.allowance_percentage,
                 "_created_at": rounds_table.c.created_at,
                 "_updated_at": rounds_table.c.updated_at,
+                "_match_generation_block": rounds_table.c.match_generation_block,
             },
         )
 

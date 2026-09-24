@@ -154,3 +154,9 @@ class CompetitionStatus(StrEnum):
         Requerido para que SQLAlchemy pueda persistir el Value Object.
         """
         return (self.value,)
+
+
+# Donde hay partidos que crear: cerrada, o ya en juego para las sesiones que
+# vienen (BE #361). Una sola lista para la generacion a mano, la que sale al
+# abrir los sobres y el aviso del organizador: si difieren, se contradicen
+SE_JUEGA = (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS)

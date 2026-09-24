@@ -45,9 +45,12 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         """Busca una competición por su ID con bloqueo (no-op en memoria)."""
         return self._competitions.get(competition_id)
 
-    async def find_by_creator(self, creator_id: UserId) -> list[Competition]:
-        """Busca todas las competiciones creadas por un usuario."""
-        return [comp for comp in self._competitions.values() if comp.creator_id == creator_id]
+    async def find_by_creator(
+        self, creator_id: UserId, limit: int = 100, offset: int = 0
+    ) -> list[Competition]:
+        """Busca las competiciones creadas por un usuario, paginadas como la de SQL."""
+        suyas = [comp for comp in self._competitions.values() if comp.creator_id == creator_id]
+        return suyas[offset : offset + limit]
 
     async def find_by_status(self, status: CompetitionStatus) -> list[Competition]:
         """Busca todas las competiciones con un estado específico."""

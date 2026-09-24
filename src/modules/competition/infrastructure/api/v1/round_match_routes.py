@@ -701,7 +701,8 @@ async def generate_matches(
     - El creador o admin puede generar partidos
     - La ronda debe estar en estado PENDING_MATCHES
     - Debe existir asignación de equipos
-    - La competición debe estar en estado CLOSED
+    - La competición debe estar cerrada o en juego: los sobres de las sesiones
+      del segundo día se abren con el torneo empezado (BE #361)
 
     **Returns:**
     - 201: Partidos generados

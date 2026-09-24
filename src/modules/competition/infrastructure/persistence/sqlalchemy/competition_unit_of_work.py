@@ -5,6 +5,9 @@ Implementacion asincrona del Unit of Work para el modulo de competiciones.
 Coordina transacciones entre 8 repositorios.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
@@ -148,6 +151,12 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
 
     async def flush(self) -> None:
         await self._session.flush()
+
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """SAVEPOINT de Postgres: deshace solo lo escrito dentro."""
+        async with self._session.begin_nested():
+            yield
 
     def is_active(self) -> bool:
         return self._session.is_active
