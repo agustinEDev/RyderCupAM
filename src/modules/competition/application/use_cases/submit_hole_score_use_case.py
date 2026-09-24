@@ -81,6 +81,13 @@ class SubmitHoleScoreUseCase:
             # abierto» lleva la hora, que tampoco es suya (BE #305)
             if not match.status.can_record_scores():
                 match = await self._abre_si_toca(match, llegada)
+            else:
+                # Con la fila bloqueada para decidir qué está cerrado: si no, un
+                # golpe del compañero que llega mientras él entrega la tarjeta
+                # del bando la ve sin entregar y reescribe la bola ya validada
+                # (revisión de la BE #377). Abrirlo ya la bloquea; y siempre
+                # después de saber que es suyo, como al abrirlo (BE #305)
+                match = await self._uow.matches.find_by_id_for_update(match.id) or match
 
             # El formato decide de quién es la tarjeta: en foursomes, del bando
             # (BE #377). Si el compañero la entregó, la bola ya no cambia

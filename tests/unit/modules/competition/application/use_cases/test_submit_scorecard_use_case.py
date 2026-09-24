@@ -347,3 +347,22 @@ class TestUnaTarjetaPorBando:
 
         with pytest.raises(ScorecardAlreadySubmittedError, match="compañer"):
             await uc.execute(str(match.id), a2.user_id)
+
+    @pytest.mark.asyncio
+    async def test_u4_un_partido_a_medias_del_despliegue_se_cierra_y_no_se_atasca(
+        self, uow, scoring_service
+    ):
+        """Revisión de la #377: con la regla de antes cada uno entregaba la suya.
+        Un partido con A1 y B1 entregados al desplegar ya está completo por la
+        regla nueva; si A2 lo intenta y se le rechaza, nadie puede cerrarlo."""
+        match, a1, a2, b1 = self._foursomes(uow)
+        match.submit_scorecard(a1.user_id, MatchFormat.SINGLES)
+        match.submit_scorecard(b1.user_id, MatchFormat.SINGLES)
+        await uow.matches.add(match)
+        uc = SubmitScorecardUseCase(uow, scoring_service)
+
+        respuesta = await uc.execute(str(match.id), a2.user_id)
+
+        assert respuesta.match_complete is True
+        assert (await uow.matches.find_by_id(match.id)).status.value == "COMPLETED"
+

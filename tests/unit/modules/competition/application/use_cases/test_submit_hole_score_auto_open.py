@@ -598,6 +598,27 @@ class TestNoSeAbreDosVeces:
         assert pedidos == [match.id]
 
     @pytest.mark.asyncio
+    async def test_5e_un_golpe_normal_tambien_lo_pide_bloqueado(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """Revisión de la BE #377: sin bloqueo, el golpe del compañero que llega
+        mientras él entrega la tarjeta del bando la ve sin entregar."""
+        _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
+        pedidos = []
+        original = uow.matches.find_by_id_for_update
+
+        async def espia(match_id):
+            pedidos.append(match_id)
+            return await original(match_id)
+
+        uow.matches.find_by_id_for_update = espia
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        await uc.execute(str(match.id), 1, _body(b), a.user_id)
+
+        assert pedidos == [match.id]
+
+    @pytest.mark.asyncio
     async def test_5d_si_lo_conceden_entre_medias_es_rechazo_no_un_500(
         self, uow, user_repo, scoring_service, campos
     ):
