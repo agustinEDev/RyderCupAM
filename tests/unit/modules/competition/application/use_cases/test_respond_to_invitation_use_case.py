@@ -38,6 +38,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from tests.unit.modules.competition.application.use_cases.helpers import set_competition_status
 
 pytestmark = pytest.mark.asyncio
 
@@ -123,6 +124,50 @@ class TestRespondToInvitationUseCase:
         assert result.enrollment_id is not None
         assert result.inviter_name == "Creator Boss"
         assert result.invitee_name == "Invitee Player"
+
+    # ==================== Con la inscripción cerrada (#710, 24 sep) ====================
+
+    async def _pendiente_en_una_cerrada(self, comp_uow, user_uow):
+        """Una invitación de antes del cambio, que se quedó pendiente al cerrar."""
+        creator = await self._create_user(user_uow, email="c@test.com")
+        invitee = await self._create_user(user_uow, email="i@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "i@test.com"
+        )
+        await set_competition_status(comp_uow, created.id, "CLOSED")
+        return invitation, invitee
+
+    async def test_i6_aceptarla_cerrada_la_deja_sin_plaza(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(InvalidInvitationStatusViolation, match="plazas"):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            inscripcion = await comp_uow.enrollments.find_by_user_and_competition(
+                invitee.id, invitation.competition_id
+            )
+        assert guardada.status == InvitationStatus.NO_ROOM
+        assert inscripcion is None
+
+    async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        result = await uc.execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+
+        assert result.status == "DECLINED"
 
     async def test_decline_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: rechazar invitacion."""

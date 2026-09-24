@@ -75,6 +75,13 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
 
+    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
+        return [
+            inv
+            for inv in self._invitations.values()
+            if inv.competition_id == competition_id and inv.status == InvitationStatus.PENDING
+        ]
+
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId
     ) -> Invitation | None:

@@ -16,7 +16,11 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
+from src.modules.competition.domain.services.competition_policy import (
+    INSCRIPCION_CERRADA,
+    SIN_PLAZAS,
+    CompetitionPolicy,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
@@ -54,6 +58,7 @@ class RespondToInvitationUseCase:
 
         # Fase 1: Verificar expiracion y persistir si cambio
         non_pending_status = None
+        sin_plaza = False
         async with self._uow:
             invitation = await self._uow.invitations.find_by_id(invitation_id)
             if not invitation:
@@ -65,7 +70,15 @@ class RespondToInvitationUseCase:
                 # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
                 await self._uow.invitations.update(invitation)
                 non_pending_status = invitation.status.value
+            elif action == "ACCEPT" and await self._inscripcion_cerrada(invitation):
+                # Una pendiente de antes de que el cierre las rechazara (#710):
+                # se queda sin plaza, guardado, y no se entra
+                invitation.reject_for_no_room()
+                await self._uow.invitations.update(invitation)
+                sin_plaza = True
 
+        if sin_plaza:
+            raise InvalidInvitationStatusViolation(SIN_PLAZAS)
         # Si la invitacion no estaba pending, el commit ya ocurrio; ahora lanzamos
         if non_pending_status:
             raise InvalidInvitationStatusViolation(
@@ -100,6 +113,11 @@ class RespondToInvitationUseCase:
 
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
+
+    async def _inscripcion_cerrada(self, invitation) -> bool:
+        """Si su competicion ya cerro la inscripcion: no quedan plazas."""
+        competition = await self._uow.competitions.find_by_id(invitation.competition_id)
+        return competition is not None and competition.status in INSCRIPCION_CERRADA
 
     async def _handle_accept(self, invitation, current_user_id: UserId):
         """Procesa la aceptacion de una invitacion. Retorna (enrollment_id, competition_name)."""

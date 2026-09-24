@@ -265,6 +265,20 @@ class Invitation:
         )
         self.add_domain_event(event)
 
+    def reject_for_no_room(self) -> None:
+        """Rechaza la invitacion por falta de plazas (PENDING -> NO_ROOM, #710).
+
+        La rechaza la aplicacion al cerrarse la inscripcion, no el invitado.
+        """
+        if not self._status.can_transition_to(InvitationStatus.NO_ROOM):
+            raise InvalidInvitationStatusViolation(
+                f"Cannot reject for no room an invitation in status {self._status.value}."
+            )
+        now = datetime.now()
+        self._status = InvitationStatus.NO_ROOM
+        self._responded_at = now
+        self._updated_at = now
+
     def check_expiration(self) -> None:
         """Verifica y actualiza el estado si la invitacion ha expirado."""
         if self._status == InvitationStatus.PENDING and self.is_expired():

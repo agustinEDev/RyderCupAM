@@ -18,8 +18,11 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CreateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -89,6 +92,51 @@ class TestCloseEnrollmentsUseCase:
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             assert competition.status.value == "CLOSED"
+
+    async def test_i5_las_invitaciones_pendientes_se_quedan_sin_plaza(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Decidido el 24 sep (#710): al cerrar, las pendientes se rechazan por
+        falta de plazas. Aceptar una después metía a alguien con el draft hecho."""
+        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        crear = lambda nombre: CreateCompetitionRequestDTO(  # noqa: E731
+            name=nombre,
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+        esta = await create_use_case.execute(crear("Esta"), creator_id)
+        otra = await create_use_case.execute(crear("Otra"), creator_id)
+
+        def invitacion(competicion, email):
+            return Invitation.create(
+                id=InvitationId.generate(),
+                competition_id=CompetitionId(competicion.id),
+                inviter_id=creator_id,
+                invitee_email=email,
+            )
+
+        pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
+        aceptada = invitacion(esta, "a@test.com")
+        aceptada.accept()
+        de_otra = invitacion(otra, "o@test.com")
+        async with uow:
+            for inv in [*pendientes, aceptada, de_otra]:
+                await uow.invitations.add(inv)
+
+        await CloseEnrollmentsUseCase(uow).execute(
+            CloseEnrollmentsRequestDTO(competition_id=esta.id), creator_id
+        )
+
+        async with uow:
+            estados = {
+                inv.id: (await uow.invitations.find_by_id(inv.id)).status
+                for inv in [*pendientes, aceptada, de_otra]
+            }
+        assert [estados[p.id] for p in pendientes] == [InvitationStatus.NO_ROOM] * 2
+        assert estados[aceptada.id] == InvitationStatus.ACCEPTED
+        assert estados[de_otra.id] == InvitationStatus.PENDING
 
     async def test_should_raise_error_when_competition_not_found(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
