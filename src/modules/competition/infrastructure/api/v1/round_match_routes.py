@@ -84,6 +84,7 @@ from src.modules.competition.application.use_cases.configure_schedule_use_case i
     ConfigureScheduleUseCase,
     NoGolfCoursesError,
     NotCompetitionCreatorError as ConfigSchedNotCreatorError,
+    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.use_cases.create_round_use_case import (
     CompetitionNotClosedError as CreateRoundNotClosedError,
@@ -793,6 +794,8 @@ async def configure_schedule(
     except (
         ConfigSchedNotClosedError,
         NoGolfCoursesError,
+        # Ya hay sesiones con partidos: sustituirlas se llevaría lo jugado
+        ScheduleAlreadyInPlayError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

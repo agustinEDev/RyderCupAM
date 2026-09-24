@@ -14,7 +14,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import AGENDA_EDITABLE
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -45,7 +45,7 @@ class CreateRoundUseCase:
     Caso de uso para crear una ronda/sesión de competición.
 
     Restricciones:
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
     - Solo el creador puede crear rondas
     - El campo de golf debe estar asociado a la competición
     - No pueden existir sesiones duplicadas (misma fecha + tipo)
@@ -72,10 +72,11 @@ class CreateRoundUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede crear rondas")
 
-            # 3. Verificar estado CLOSED
-            if competition.status != CompetitionStatus.CLOSED:
+            # La agenda se edita desde que la competición existe (BE #365): lo
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión
+            if competition.status not in AGENDA_EDITABLE:
                 raise CompetitionNotClosedError(
-                    f"La competición debe estar en estado CLOSED. "
+                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
                     f"Estado actual: {competition.status.value}"
                 )
 

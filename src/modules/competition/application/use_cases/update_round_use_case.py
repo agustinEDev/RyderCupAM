@@ -14,7 +14,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.competition_status import AGENDA_EDITABLE
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -42,7 +42,7 @@ class UpdateRoundUseCase:
     Restricciones:
     - La ronda debe existir
     - Solo el creador puede actualizar
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
     - La ronda debe estar en estado modificable (PENDING_TEAMS/PENDING_MATCHES)
     """
 
@@ -75,10 +75,11 @@ class UpdateRoundUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
 
-            # 4. Verificar competición CLOSED
-            if competition.status != CompetitionStatus.CLOSED:
+            # La agenda se edita desde que la competición existe (BE #365): lo
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión
+            if competition.status not in AGENDA_EDITABLE:
                 raise CompetitionNotClosedError(
-                    f"La competición debe estar en estado CLOSED. "
+                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
                     f"Estado actual: {competition.status.value}"
                 )
 

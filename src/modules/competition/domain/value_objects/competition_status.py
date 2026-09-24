@@ -144,3 +144,14 @@ class CompetitionStatus(StrEnum):
         Requerido para que SQLAlchemy pueda persistir el Value Object.
         """
         return (self.value,)
+
+
+# Cuando se edita la agenda: desde que la competicion existe hasta que termina
+# (BE #365). Lo que se protege es tocar una sesion ya jugada, y eso lo decide
+# cada sesion, no el estado de la competicion (diseño del 20 sep)
+AGENDA_EDITABLE = (
+    CompetitionStatus.DRAFT,
+    CompetitionStatus.ACTIVE,
+    CompetitionStatus.CLOSED,
+    CompetitionStatus.IN_PROGRESS,
+)
