@@ -56,10 +56,8 @@ class CreateRoundUseCase:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
             # Bloqueada, como la agenda automática: si no, una sesión creada
-            # mientras se sustituye la agenda se quedaba fuera de la sustitución.
-            # Y luego leída con sus campos, que la lectura bloqueada no trae
-            await self._uow.competitions.find_by_id_for_update(competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # mientras se sustituye la agenda se quedaba fuera de la sustitución
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(

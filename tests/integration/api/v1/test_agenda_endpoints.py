@@ -209,3 +209,40 @@ class TestLosCamposSeAnadenConLaAgendaPuesta:
 
         assert respuesta.status_code == 400, respuesta.text
         assert "cancelada" in respuesta.json()["detail"]
+
+
+class TestCambiarElCampoDeUnaSesion:
+    """Cambiar el campo de una sesión desde la agenda (BE #370).
+
+    La competición se lee bloqueada, y esa lectura no traía los campos: al
+    comprobar que el nuevo es de la competición, SQLAlchemy intentaba cargarlos
+    por su cuenta dentro de código asíncrono y reventaba con un 500.
+    """
+
+    async def test_se_cambia_al_segundo_campo(self, client: AsyncClient):
+        user, comp, _, _ = await _abierta_con_campo(client, "cambiar-campo")
+        admin = await create_admin_user(
+            client, "agenda-admin-cambiar@test.com", "P@ssw0rd123!", "Admin", "Cambia"
+        )
+        otro = await _campo_aprobado(client, user["cookies"], admin["cookies"])
+        set_auth_cookies(client, user["cookies"])
+        anadido = await client.post(
+            f"/api/v1/competitions/{comp['id']}/golf-courses",
+            json={"golf_course_id": otro["id"]},
+        )
+        assert anadido.status_code == 201, anadido.text
+        assert (await _configurar(client, comp["id"])).status_code == 200
+        agenda = await client.get(f"/api/v1/competitions/{comp['id']}/schedule")
+        sesion = agenda.json()["days"][0]["rounds"][0]
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/rounds/{sesion['id']}",
+            json={"golf_course_id": otro["id"]},
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        releida = await client.get(f"/api/v1/competitions/{comp['id']}/schedule")
+        cambiada = next(
+            r for d in releida.json()["days"] for r in d["rounds"] if r["id"] == sesion["id"]
+        )
+        assert cambiada["golf_course_id"] == otro["id"]
