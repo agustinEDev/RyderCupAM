@@ -150,6 +150,10 @@ class UpdateRoundUseCase:
                 # reves revienta al generar los partidos. Se tiran, y los
                 # capitanes vuelven a entregar (FE #655)
                 await self._uow.envelopes.delete_by_round(round_entity.id)
+                # Y el motivo por el que no salieron los partidos era de ESOS
+                # sobres: si se queda, «Generar» se ofrece como reintento y, sin
+                # sobres, empareja por handicap (revision de la FE #711)
+                round_entity.clear_match_generation_block()
 
             await self._uow.rounds.update(round_entity)
 

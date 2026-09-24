@@ -46,9 +46,13 @@ from src.modules.competition.domain.services.envelope_reveal_service import (
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
-from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
+from src.modules.competition.domain.value_objects.competition_status import (
+    SE_JUEGA,
+    CompetitionStatus,
+)
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
+    ENROLLMENT_OPEN,
     NO_GOLF_COURSE,
     NO_TEAMS,
     NOT_ENOUGH_PLAYERS,
@@ -431,6 +435,17 @@ class EnvelopeDesk:
         # Cancelada o terminada no hay partidos que jugar: abrirse, se abren,
         # pero no hay nada que avisar
         if competition.status not in SE_JUEGA:
+            # Reabierta, en cambio, volverá a cerrarse: sin un motivo apuntado
+            # la sesión se quedaba atascada, porque en modo Ryder «Generar» solo
+            # sale como reintento y los sobres ya están abiertos
+            if (
+                competition.status == CompetitionStatus.ACTIVE
+                and ronda.status == RoundStatus.PENDING_MATCHES
+            ):
+                ronda.block_match_generation(
+                    MatchGenerationBlock(reason=ENROLLMENT_OPEN, at=self.ahora.replace(tzinfo=None))
+                )
+                await self._uow.rounds.update(ronda)
             return
         # Solo la que espera partidos: en otro estado no hay nada que generar,
         # y apuntar un motivo ahi reventaria la lectura entera

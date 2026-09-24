@@ -81,6 +81,7 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import ENROLLMENT_OPEN
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -318,6 +319,10 @@ async def _montar(
         competicion.close_enrollments()
     if estado == "IN_PROGRESS":
         competicion.start()
+    if estado == "ACTIVE":
+        competicion.reopen_enrollments()
+    if estado == "CANCELLED":
+        competicion.cancel()
 
     ronda = Round.create(
         competition_id=competicion.id,
@@ -743,9 +748,7 @@ class TestLaAgendaTambienLosAbre:
     """
 
     def _agenda(self, torneo, reloj):
-        mesa = EnvelopeDesk(
-            torneo.uow, torneo.usuarios, _Reloj(reloj), _Zona(), torneo.generador()
-        )
+        mesa = EnvelopeDesk(torneo.uow, torneo.usuarios, _Reloj(reloj), _Zona(), torneo.generador())
         return GetScheduleUseCase(torneo.uow, sobres=mesa).execute(
             GetScheduleRequestDTO(competition_id=torneo.comp_id.value)
         )
@@ -775,9 +778,38 @@ class TestLaAgendaTambienLosAbre:
 
         assert await torneo.partidos() == []
 
+    async def test_s5_de_una_cancelada_no_se_abre_nada(self):
+        """Revisión de la #367: ya no hay nada que jugar, y ahora mirarla puede
+        cualquiera. Abrirlos sería escribir en una competición que se acabó."""
+        torneo = await _montar(estado="CANCELLED")
+        await torneo.entregan_los_dos()
+
+        await self._agenda(torneo, _PASADO_EL_PLAZO)
+
+        async with torneo.uow:
+            sobres = await torneo.uow.envelopes.find_by_round(torneo.ronda_id)
+        assert all(sobre.is_sealed() for sobre in sobres)
+
     async def test_s4_en_modo_manual_nunca(self):
         torneo = await _montar(montaje=SetupMode.MANUAL)
 
         await self._agenda(torneo, _PASADO_EL_PLAZO)
 
         assert await torneo.partidos() == []
+
+
+class TestConLaCompeticionReabierta:
+    """Revisión de la FE #711: los sobres se abren con las inscripciones
+    reabiertas. No hay partidos que crear todavía, pero sin un motivo apuntado,
+    al volver a cerrarla la sesión se quedaba atascada: en modo Ryder «Generar»
+    solo sale como reintento, y los sobres ya estaban abiertos."""
+
+    async def test_abrirse_con_las_inscripciones_abiertas_deja_el_motivo(self):
+        torneo = await _montar(estado="ACTIVE")
+        await torneo.entregan_los_dos()
+
+        await torneo.abrir().execute(torneo.ronda_id.value, torneo.organizador)
+
+        ronda = await torneo.ronda()
+        assert await torneo.partidos() == []
+        assert ronda.match_generation_block.reason == ENROLLMENT_OPEN

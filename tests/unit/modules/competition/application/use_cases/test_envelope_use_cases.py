@@ -59,6 +59,10 @@ from src.modules.competition.domain.entities.team_assignment import TeamAssignme
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    UNEXPECTED,
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
@@ -1268,6 +1272,21 @@ class TestCuandoCambiaElFormatoDeLaSesion:
 
         async with uow:
             assert await uow.envelopes.find_by_round(round_id) == []
+
+    async def test_y_con_ellos_se_olvida_el_motivo_de_bloqueo(self):
+        """Revisión de la FE #711: el motivo era de ESOS sobres. Si se quedaba,
+        «Generar» seguía ofrecido como reintento y, sin sobres, emparejaba por
+        hándicap: los capitanes ya no podían entregar los nuevos."""
+        uow, comp_id, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL)
+        async with uow:
+            ronda = await uow.rounds.find_by_id(round_id)
+            ronda.block_match_generation(MatchGenerationBlock(reason=UNEXPECTED))
+            await uow.rounds.update(ronda)
+
+        await _cambiar_formato(uow, comp_id, round_id, equipo_a[0], "SINGLES")
+
+        async with uow:
+            assert (await uow.rounds.find_by_id(round_id)).match_generation_block is None
 
     async def test_y_si_el_formato_no_cambia_siguen_donde_estaban(self):
         uow, comp_id, round_id, equipo_a, _ = await _montar(formato=MatchFormat.FOURBALL)

@@ -188,6 +188,10 @@ class GetScheduleUseCase:
         """
         if self._sobres is None or competition.setup_mode != SetupMode.RYDER_CUP:
             return
+        # Cancelada o terminada ya no hay nada que jugar, y la agenda la puede
+        # mirar cualquiera: abrirlos seria escribir en una que se acabo
+        if competition.status.is_final():
+            return
         for ronda in rounds:
             if ronda.status != RoundStatus.PENDING_MATCHES:
                 continue
