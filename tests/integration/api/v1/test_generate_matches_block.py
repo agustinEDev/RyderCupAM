@@ -124,10 +124,14 @@ class TestElReintentoCuentaElMotivo:
         cuerpo = respuesta.json()
         assert cuerpo["error_code"] == "MATCH_GENERATION_BLOCKED"
         assert cuerpo["match_generation_block"]["reason"] == "NOT_ENOUGH_PLAYERS"
-        assert isinstance(cuerpo["detail"], str)
+        # La frase se compone en la ruta, no con el mensaje de la excepción
+        assert cuerpo["detail"] == "No se pueden generar los partidos: el motivo está en la sesión"
 
         agenda = (await client.get(f"/api/v1/competitions/{montaje['comp_id']}/schedule")).json()
         sesiones = [r for dia in agenda["days"] for r in dia["rounds"]]
         sesion = next(r for r in sesiones if r["id"] == montaje["round_id"])
         assert sesion["status"] == "PENDING_MATCHES"
         assert sesion["match_generation_block"]["reason"] == "NOT_ENOUGH_PLAYERS"
+        # El mismo motivo, con la misma hora: el guardado, no uno calculado otra vez
+        assert cuerpo["match_generation_block"]["at"] is not None
+        assert cuerpo["match_generation_block"] == sesion["match_generation_block"]

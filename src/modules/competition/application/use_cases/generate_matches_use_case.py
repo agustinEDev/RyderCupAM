@@ -146,6 +146,16 @@ def bloqueo_por(error: Exception, at: datetime | None) -> MatchGenerationBlock |
     return None
 
 
+def motivo_apuntado(error: Exception) -> MatchGenerationBlock | None:
+    """El motivo que el reintento a mano guardó en la sesión por este error.
+
+    El mismo objeto, con su hora: la respuesta no tiene que calcular otro que
+    no coincidiría con el de la agenda.
+    """
+    motivo = getattr(error, "_motivo_apuntado", None)
+    return motivo if isinstance(motivo, MatchGenerationBlock) else None
+
+
 class GenerateMatchesUseCase:
     """
     Caso de uso para generar partidos en una ronda.
@@ -280,6 +290,7 @@ class GenerateMatchesUseCase:
             # caducado que volver a leer, al contrario que al abrir los sobres
             round_entity.block_match_generation(motivo)
             await self._uow.rounds.update(round_entity)
+            error._motivo_apuntado = motivo
             return 0, error
 
     async def generar_dentro(

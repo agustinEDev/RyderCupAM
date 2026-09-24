@@ -19,6 +19,7 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     RoundNotFoundError,
     RoundNotPendingMatchesError,
     TeeColorNotFoundError,
+    motivo_apuntado,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -1128,7 +1129,7 @@ class TestGenerateMatchesUseCase:
         )
 
         # La excepción de siempre, para no cambiarle nada a quien la captura
-        with pytest.raises(TeeColorNotFoundError):
+        with pytest.raises(TeeColorNotFoundError) as fallo:
             await use_case.execute(
                 GenerateMatchesRequestDTO(round_id=round_entity.id.value), creator_id
             )
@@ -1141,6 +1142,8 @@ class TestGenerateMatchesUseCase:
         assert {(p.missing, p.tee_color) for p in motivo.players} == {(MISSING_TEE_COLOR, "WHITE")}
         assert len(motivo.players) == 2
         assert motivo.at is not None
+        # Y la excepción lleva el MISMO, para que la respuesta no calcule otro
+        assert motivo_apuntado(fallo.value) == motivo
 
     async def test_r2_sin_equipos(self, uow, creator_id, golf_course_id, gc_repo, user_repo):
         competition = await self._create_closed_competition(uow, creator_id)

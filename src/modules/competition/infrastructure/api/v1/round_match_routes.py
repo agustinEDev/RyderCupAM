@@ -118,7 +118,7 @@ from src.modules.competition.application.use_cases.generate_matches_use_case imp
     RoundNotFoundError as GenMatchesRoundNotFoundError,
     RoundNotPendingMatchesError,
     TeeColorNotFoundError,
-    bloqueo_por,
+    motivo_apuntado,
 )
 from src.modules.competition.application.use_cases.get_match_detail_use_case import (
     GetMatchDetailUseCase,
@@ -153,6 +153,9 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 from src.modules.competition.domain.entities.competition import (
     CaptainMissingError,
     CaptainOnWrongTeamError,
+)
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -683,6 +686,14 @@ async def assign_teams(
         ) from e
 
 
+def frase_del_bloqueo(motivo: MatchGenerationBlock) -> str:
+    """La frase del 400 para el cliente que aún no lee las claves (BE #360)."""
+    if motivo.players:
+        nombres = ", ".join(p.name or "un jugador" for p in motivo.players)
+        return f"No se pueden generar los partidos: faltan datos de {nombres}"
+    return "No se pueden generar los partidos: el motivo está en la sesión"
+
+
 @router.post(
     "/rounds/{round_id}/matches/generate",
     response_model=GenerateMatchesResponseDTO,
@@ -741,17 +752,19 @@ async def generate_matches(
         TeeColorNotFoundError,
         NoGolfCourseForHandicapError,
     ) as e:
-        motivo = bloqueo_por(e, at=None)
+        # El que se guardó en la sesión, con su hora: el mismo que da la agenda
+        motivo = motivo_apuntado(e)
         if motivo is None:
             # Un color que falta sin la lista de quién: no hay motivo que contar
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         # Claves y no frases (decidido el 24 sep): la pantalla lo escribe en su
         # idioma. `error_code` en la RAIZ, que es donde lo lee el cliente, como
-        # SCORING_NOT_OPEN_YET. `detail` queda como texto para quien no lo conozca
+        # SCORING_NOT_OPEN_YET. `detail` es para quien aún no lo lee, y se
+        # compone aquí con el motivo, no con el mensaje de la excepción
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={
-                "detail": str(e),
+                "detail": frase_del_bloqueo(motivo),
                 "error_code": "MATCH_GENERATION_BLOCKED",
                 "match_generation_block": block_to_dto(motivo).model_dump(mode="json"),
             },
