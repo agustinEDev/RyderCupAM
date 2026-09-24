@@ -6,8 +6,8 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.round_match_dto import ConfigureScheduleRequestDTO
+from src.modules.competition.application.exceptions import AgendaNotEditableError
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
-    CompetitionNotClosedError,
     CompetitionNotFoundError,
     ConfigureScheduleUseCase,
     NoGolfCoursesError,
@@ -305,7 +305,7 @@ class TestConfigureScheduleUseCase:
         )
 
         # Act & Assert
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await use_case.execute(request, creator_id)
 
     async def test_should_fail_when_no_golf_courses(

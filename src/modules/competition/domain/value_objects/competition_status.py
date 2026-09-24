@@ -85,6 +85,16 @@ class CompetitionStatus(StrEnum):
         """Verifica si es un estado final (no permite más transiciones)."""
         return self in {CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED}
 
+    def allows_agenda_edits(self) -> bool:
+        """Verifica si se pueden crear, cambiar o borrar sesiones (BE #365).
+
+        Desde que la competición existe hasta que termina o se cancela: la
+        agenda se propone al crearla. Lo que se protege es tocar una sesión ya
+        jugada, y eso lo decide cada sesión, no el estado de la competición
+        (diseño del 20 sep).
+        """
+        return not self.is_final()
+
     def allows_modifications(self) -> bool:
         """Verifica si el estado permite modificar la configuración.
 
@@ -144,14 +154,3 @@ class CompetitionStatus(StrEnum):
         Requerido para que SQLAlchemy pueda persistir el Value Object.
         """
         return (self.value,)
-
-
-# Cuando se edita la agenda: desde que la competicion existe hasta que termina
-# (BE #365). Lo que se protege es tocar una sesion ya jugada, y eso lo decide
-# cada sesion, no el estado de la competicion (diseño del 20 sep)
-AGENDA_EDITABLE = (
-    CompetitionStatus.DRAFT,
-    CompetitionStatus.ACTIVE,
-    CompetitionStatus.CLOSED,
-    CompetitionStatus.IN_PROGRESS,
-)

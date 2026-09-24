@@ -8,8 +8,8 @@ import pytest
 from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundRequestDTO,
 )
+from src.modules.competition.application.exceptions import AgendaNotEditableError
 from src.modules.competition.application.use_cases.create_round_use_case import (
-    CompetitionNotClosedError,
     CompetitionNotFoundError,
     CreateRoundUseCase,
     DateOutOfRangeError,
@@ -287,7 +287,7 @@ class TestCreateRoundUseCase:
         )
 
         # Act & Assert
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await use_case.execute(request, creator_id)
 
     async def test_should_fail_when_golf_course_not_in_competition(

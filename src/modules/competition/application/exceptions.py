@@ -33,6 +33,18 @@ class CompetitionNotClosedError(Exception):
     pass
 
 
+class AgendaNotEditableError(Exception):
+    """La competición ya terminó o se canceló: su agenda no se toca (BE #365)."""
+
+    pass
+
+
+class ScheduleAlreadyInPlayError(Exception):
+    """Alguna sesión ya tiene partidos: la agenda automática se la llevaría."""
+
+    pass
+
+
 class MatchNotFoundError(Exception):
     """El partido no existe."""
 

@@ -5,7 +5,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
+    AgendaNotEditableError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -14,7 +14,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import AGENDA_EDITABLE
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -74,8 +73,8 @@ class CreateRoundUseCase:
 
             # La agenda se edita desde que la competición existe (BE #365): lo
             # que se protege es la sesión ya jugada, y eso lo mira la sesión
-            if competition.status not in AGENDA_EDITABLE:
-                raise CompetitionNotClosedError(
+            if not competition.status.allows_agenda_edits():
+                raise AgendaNotEditableError(
                     "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
                     f"Estado actual: {competition.status.value}"
                 )

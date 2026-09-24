@@ -19,6 +19,11 @@ competición, cuando todavía está abierta.
     A8   la agenda automática con las inscripciones abiertas      | la propone, esperando equipos
     A9   la agenda automática con los equipos ya hechos           | nace esperando PARTIDOS
     A10  la agenda automática con alguna sesión ya con partidos   | no: no borra lo que hay
+    A11  la agenda automática con el torneo ya en juego           | no: saldrían días ya pasados
+    E1   con agenda, cambiar el nombre de la competición          | se cambia
+    E2   mover las fechas: con las sesiones dentro sí, fuera no   |
+    E3   el modo de juego sin partidos                            | se cambia
+    E4   el modo de juego con una sesión con partidos             | no
 """
 
 from datetime import date
@@ -33,8 +38,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
+    AgendaNotEditableError,
     RoundNotModifiableError,
+    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
     ConfigureScheduleUseCase,
@@ -172,7 +178,7 @@ class TestCrearSesiones:
     async def test_a4_en_una_terminada_o_cancelada_no(self, estado):
         uow, competicion, organizador, campo = await _montar(estado)
 
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await _crear(uow, competicion, organizador, campo)
 
 
@@ -226,11 +232,11 @@ class TestCambiarYBorrar:
                 guardada.cancel()
             await uow.competitions.update(guardada)
 
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await UpdateRoundUseCase(uow).execute(
                 UpdateRoundRequestDTO(round_id=creada.id, match_format="SINGLES"), organizador
             )
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await DeleteRoundUseCase(uow).execute(
                 DeleteRoundRequestDTO(round_id=creada.id), organizador
             )
@@ -267,6 +273,13 @@ class TestLaAgendaAutomatica:
             rondas = await uow.rounds.find_by_competition(competicion.id)
         assert {r.status for r in rondas} == {RoundStatus.PENDING_MATCHES}
 
+    async def test_a11_con_el_torneo_en_juego_no(self):
+        """Empieza a contar desde el primer día: repondría días ya jugados."""
+        uow, competicion, organizador, _ = await _montar("IN_PROGRESS", con_equipos=True)
+
+        with pytest.raises(AgendaNotEditableError):
+            await self._configurar(uow, competicion, organizador)
+
     async def test_a10_con_alguna_sesion_con_partidos_no_borra_lo_que_hay(self):
         uow, competicion, organizador, campo = await _montar("CLOSED", con_equipos=True)
         creada = await _crear(uow, competicion, organizador, campo)
@@ -275,11 +288,93 @@ class TestLaAgendaAutomatica:
             ronda.mark_matches_generated()
             await uow.rounds.update(ronda)
 
-        from src.modules.competition.application.use_cases.configure_schedule_use_case import (
-            ScheduleAlreadyInPlayError,
-        )
-
         with pytest.raises(ScheduleAlreadyInPlayError):
             await self._configurar(uow, competicion, organizador)
 
         assert await _estado_de(uow, creada.id) == RoundStatus.SCHEDULED
+
+
+class TestEditarLaCompeticionConAgenda:
+    """E1-E4: con la agenda propuesta al crear, la competición se sigue editando.
+
+    Con cualquier sesión ya creada, editar se rechazaba entero (BE #323). Ese
+    motivo era proteger dos cosas, y solo esas se protegen ahora: sesiones que
+    se quedarían fuera de las fechas, y golpes anotados con otro modo de juego.
+    """
+
+    async def _editar(self, uow, competicion, organizador, **cambios):
+        from src.modules.competition.application.dto.competition_dto import (
+            UpdateCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.update_competition_use_case import (
+            UpdateCompetitionUseCase,
+        )
+        from src.modules.competition.domain.services.location_builder import LocationBuilder
+
+        return await UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries)).execute(
+            competicion.id, UpdateCompetitionRequestDTO(**cambios), organizador
+        )
+
+    async def test_e1_el_nombre_se_cambia_aunque_haya_agenda(self):
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        await _crear(uow, competicion, organizador, campo)
+
+        await self._editar(uow, competicion, organizador, name="Ryder de los amigos")
+
+        async with uow:
+            guardada = await uow.competitions.find_by_id(competicion.id)
+        assert str(guardada.name) == "Ryder De Los Amigos"
+
+    async def test_e2_mover_las_fechas_con_las_sesiones_dentro_se_puede(self):
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        await _crear(uow, competicion, organizador, campo, dia=2)
+
+        await self._editar(
+            uow, competicion, organizador, start_date=date(2026, 6, 2), end_date=date(2026, 6, 4)
+        )
+
+        async with uow:
+            guardada = await uow.competitions.find_by_id(competicion.id)
+        assert guardada.dates.start_date == date(2026, 6, 2)
+
+    async def test_e2_y_dejando_una_fuera_no(self):
+        from src.modules.competition.application.use_cases.update_competition_use_case import (
+            CompetitionNotEditableError,
+        )
+
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        await _crear(uow, competicion, organizador, campo, dia=1)
+
+        with pytest.raises(CompetitionNotEditableError):
+            await self._editar(
+                uow,
+                competicion,
+                organizador,
+                start_date=date(2026, 6, 2),
+                end_date=date(2026, 6, 4),
+            )
+
+    async def test_e3_el_modo_de_juego_sin_partidos_se_cambia(self):
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        await _crear(uow, competicion, organizador, campo)
+
+        await self._editar(uow, competicion, organizador, play_mode="HANDICAP")
+
+        async with uow:
+            guardada = await uow.competitions.find_by_id(competicion.id)
+        assert guardada.play_mode.value == "HANDICAP"
+
+    async def test_e4_con_una_sesion_con_partidos_el_modo_de_juego_no(self):
+        from src.modules.competition.application.use_cases.update_competition_use_case import (
+            CompetitionNotEditableError,
+        )
+
+        uow, competicion, organizador, campo = await _montar("ACTIVE", con_equipos=True)
+        creada = await _crear(uow, competicion, organizador, campo)
+        async with uow:
+            ronda = await uow.rounds.find_by_id(RoundId(creada.id))
+            ronda.mark_matches_generated()
+            await uow.rounds.update(ronda)
+
+        with pytest.raises(CompetitionNotEditableError):
+            await self._editar(uow, competicion, organizador, play_mode="HANDICAP")

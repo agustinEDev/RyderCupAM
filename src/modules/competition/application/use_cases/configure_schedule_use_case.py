@@ -7,9 +7,10 @@ from src.modules.competition.application.dto.round_match_dto import (
     ConfigureScheduleResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
+    AgendaNotEditableError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
+    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -17,16 +18,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.schedule_format_service import ScheduleFormatService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import AGENDA_EDITABLE
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class ScheduleAlreadyInPlayError(Exception):
-    """Alguna sesión ya tiene partidos: la agenda automática se la llevaría."""
-
-    pass
 
 
 class NoGolfCoursesError(Exception):
@@ -63,6 +58,11 @@ class ConfigureScheduleUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
+            # Bloqueada: sustituir la agenda mientras otra petición genera los
+            # partidos de una sesión la borraría con ellos dentro. Generar y
+            # abrir sobres bloquean la misma fila. Y luego leída con sus campos:
+            # la del bloqueo no los trae, y leerlos después en asíncrono revienta
+            await self._uow.competitions.find_by_id_for_update(competition_id)
             competition = await self._uow.competitions.find_by_id(competition_id)
 
             if not competition:
@@ -75,10 +75,16 @@ class ConfigureScheduleUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede configurar el schedule")
 
             # 3. La agenda se propone desde que la competición existe (BE #365)
-            if competition.status not in AGENDA_EDITABLE:
-                raise CompetitionNotClosedError(
+            if not competition.status.allows_agenda_edits():
+                raise AgendaNotEditableError(
                     "La agenda solo se puede cambiar hasta que la competición termina "
                     f"o se cancela. Estado: {competition.status.value}"
+                )
+            # La automática empieza a contar desde el primer día: con el torneo
+            # en juego repondría días ya jugados. Ahí, sesión a sesión
+            if competition.status == CompetitionStatus.IN_PROGRESS:
+                raise AgendaNotEditableError(
+                    "Con el torneo en juego la agenda se cambia sesión a sesión"
                 )
 
             # MANUAL mode: solo ack
@@ -171,11 +177,9 @@ class ConfigureScheduleUseCase:
                 "Ya hay sesiones con partidos: la agenda automática las sustituiría "
                 "todas. Cambia las sesiones una a una"
             )
+        # Ninguna tiene partidos —lo acaba de comprobar—, y sus sobres se van
+        # con ella en cascada
         for r in existing_rounds:
-            # Eliminar partidos de la ronda
-            matches = await self._uow.matches.find_by_round(r.id)
-            for m in matches:
-                await self._uow.matches.delete(m.id)
             await self._uow.rounds.delete(r.id)
 
         if existing_rounds:

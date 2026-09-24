@@ -58,11 +58,13 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    AgendaNotEditableError,
     CompetitionNotFoundError as StatusCompNotFoundError,
     NotCompetitionCreatorError as ReassignNotCreatorError,
     NotCompetitionCreatorError as StatusNotCreatorError,
     NotCompetitionCreatorError as WalkoverNotCreatorError,
     RoundNotFoundError as StatusRoundNotFoundError,
+    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
@@ -79,15 +81,12 @@ from src.modules.competition.application.use_cases.assign_teams_use_case import 
     PlayerNotEnrolledError,
 )
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
-    CompetitionNotClosedError as ConfigSchedNotClosedError,
     CompetitionNotFoundError as ConfigSchedNotFoundError,
     ConfigureScheduleUseCase,
     NoGolfCoursesError,
     NotCompetitionCreatorError as ConfigSchedNotCreatorError,
-    ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.use_cases.create_round_use_case import (
-    CompetitionNotClosedError as CreateRoundNotClosedError,
     CompetitionNotFoundError as CreateRoundNotFoundError,
     CreateRoundUseCase,
     DateOutOfRangeError,
@@ -102,7 +101,6 @@ from src.modules.competition.application.use_cases.declare_walkover_use_case imp
     MatchNotFoundError as WalkoverMatchNotFoundError,
 )
 from src.modules.competition.application.use_cases.delete_round_use_case import (
-    CompetitionNotClosedError as DeleteRoundNotClosedError,
     DeleteRoundUseCase,
     NotCompetitionCreatorError as DeleteRoundNotCreatorError,
     RoundNotFoundError as DeleteRoundNotFoundError,
@@ -141,7 +139,6 @@ from src.modules.competition.application.use_cases.update_match_status_use_case 
     UpdateMatchStatusUseCase,
 )
 from src.modules.competition.application.use_cases.update_round_use_case import (
-    CompetitionNotClosedError as UpdateRoundNotClosedError,
     DuplicateSessionError as UpdateRoundDuplicateSessionError,
     GolfCourseNotInCompetitionError as UpdateRoundGCNotInCompError,
     NotCompetitionCreatorError as UpdateRoundNotCreatorError,
@@ -186,7 +183,7 @@ async def create_round(
 
     **Restricciones:**
     - El creador o admin puede crear rondas
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
     - El campo de golf debe estar asociado a la competición
     - No puede haber sesión duplicada (misma fecha + tipo de sesión)
 
@@ -220,7 +217,8 @@ async def create_round(
             detail=str(e),
         ) from e
     except (
-        CreateRoundNotClosedError,
+        # Terminada o cancelada: su agenda ya no se toca (BE #365)
+        AgendaNotEditableError,
         CreateRoundGCNotInCompError,
         CreateRoundDuplicateSessionError,
         DateOutOfRangeError,
@@ -252,7 +250,7 @@ async def update_round(
     **Restricciones:**
     - El creador o admin puede modificar rondas
     - La ronda debe estar en estado modificable (PENDING_TEAMS o PENDING_MATCHES)
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
 
     **Returns:**
     - 200: Ronda actualizada
@@ -285,7 +283,8 @@ async def update_round(
             detail=str(e),
         ) from e
     except (
-        UpdateRoundNotClosedError,
+        # Terminada o cancelada: su agenda ya no se toca (BE #365)
+        AgendaNotEditableError,
         UpdateRoundNotModifiableError,
         UpdateRoundGCNotInCompError,
         UpdateRoundDuplicateSessionError,
@@ -316,7 +315,7 @@ async def delete_round(
     **Restricciones:**
     - El creador o admin puede eliminar rondas
     - La ronda debe estar en estado modificable (PENDING_TEAMS o PENDING_MATCHES)
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
 
     **Returns:**
     - 200: Ronda eliminada
@@ -340,7 +339,8 @@ async def delete_round(
             detail=str(e),
         ) from e
     except (
-        DeleteRoundNotClosedError,
+        # Terminada o cancelada: su agenda ya no se toca (BE #365)
+        AgendaNotEditableError,
         DeleteRoundNotModifiableError,
     ) as e:
         raise HTTPException(
@@ -629,7 +629,7 @@ async def assign_teams(
 
     **Restricciones:**
     - El creador o admin puede asignar equipos
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
     - Debe haber suficientes jugadores inscritos (mínimo 2)
     - En modo MANUAL, los equipos deben estar balanceados
 
@@ -699,7 +699,7 @@ async def generate_matches(
     - El creador o admin puede generar partidos
     - La ronda debe estar en estado PENDING_MATCHES
     - Debe existir asignación de equipos
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
 
     **Returns:**
     - 201: Partidos generados
@@ -762,12 +762,14 @@ async def configure_schedule(
 
     **Restricciones:**
     - El creador o admin puede configurar el schedule
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
+    - Con el torneo en juego no: empezaría por días ya jugados
+    - Ninguna sesión puede tener partidos: la automática las SUSTITUYE todas
     - Debe tener al menos un campo de golf asociado (modo AUTO)
 
     **Returns:**
     - 200: Schedule configurado
-    - 400: Estado inválido o sin campos de golf
+    - 400: Estado inválido, sesiones con partidos o sin campos de golf
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     """
@@ -792,7 +794,8 @@ async def configure_schedule(
             detail=str(e),
         ) from e
     except (
-        ConfigSchedNotClosedError,
+        # Terminada o cancelada: su agenda ya no se toca (BE #365)
+        AgendaNotEditableError,
         NoGolfCoursesError,
         # Ya hay sesiones con partidos: sustituirlas se llevaría lo jugado
         ScheduleAlreadyInPlayError,
