@@ -2,7 +2,7 @@
 Logout User Use Case
 
 Caso de uso para cerrar sesión de un usuario.
-Session Timeout (v1.8.0): Revoca todos los refresh tokens del usuario.
+Cierra la sesión de ESTE dispositivo, no las demás (BE #376).
 Security Logging (v1.8.0): Registra logout con cantidad de tokens revocados.
 """
 
@@ -12,6 +12,7 @@ from src.modules.user.application.dto.user_dto import (
     LogoutRequestDTO,
     LogoutResponseDTO,
 )
+from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -25,12 +26,15 @@ class LogoutUserUseCase:
 
     Responsabilidades:
     - Validar que el usuario existe (del token JWT)
-    - Revocar todos los refresh tokens del usuario (v1.8.0)
+    - Revocar los refresh tokens de ESTE dispositivo (BE #376)
     - Registrar el evento de logout para auditoría
     - Retornar confirmación
 
-    Session Timeout (v1.8.0):
-    - Revoca todos los refresh tokens activos del usuario
+    Solo este dispositivo (BE #376):
+    - Revoca el refresh token con el que se sale y los demás de su dispositivo
+    - Los demás dispositivos siguen dentro: salir en el ordenador de casa no
+      puede echar a nadie del móvil en el campo, sin cobertura para volver a
+      entrar. «Salir de todos» es revocar dispositivos desde su gestión
     - El access token sigue técnicamente válido hasta expiración (15 min)
     - Frontend debe eliminar cookies httpOnly de access y refresh tokens
     - OWASP A01: Previene reuso de refresh tokens después de logout
@@ -91,9 +95,10 @@ class LogoutUserUseCase:
         logout_time = datetime.now()
         user.record_logout(logout_time, token)
 
-        # 3. Obtener todos los refresh tokens del usuario (v1.8.0)
-        # Esto previene que el usuario pueda renovar su access token después del logout
-        refresh_tokens = await self._uow.refresh_tokens.find_all_by_user(user_id_vo)
+        # 3. Los refresh tokens de ESTE dispositivo (BE #376): el que llega en la
+        # petición y los que ese dispositivo guarde de logins anteriores. Uno de
+        # otra persona no se toca, y sin token no hay sesión que cerrar aquí
+        refresh_tokens = await self._de_este_dispositivo(user_id_vo, request.refresh_token)
         tokens_revoked_count = 0
 
         # 4. Persistir cambios usando Unit of Work (Clean Architecture)
@@ -130,3 +135,19 @@ class LogoutUserUseCase:
             )
 
         return LogoutResponseDTO(message="Logout exitoso", logged_out_at=logout_time)
+
+    async def _de_este_dispositivo(
+        self, user_id: UserId, refresh_token_jwt: str | None
+    ) -> list[RefreshToken]:
+        if not refresh_token_jwt:
+            return []
+        actual = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+        if actual is None or actual.user_id != user_id:
+            return []
+        if actual.device_id is None:
+            return [actual]
+        return [
+            token
+            for token in await self._uow.refresh_tokens.find_all_by_user(user_id)
+            if token.device_id == actual.device_id
+        ]
