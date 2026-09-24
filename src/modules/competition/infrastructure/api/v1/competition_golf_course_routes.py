@@ -28,13 +28,13 @@ from src.modules.competition.application.dto.competition_dto import (
     TeeResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    AgendaNotEditableError,
     CompetitionNotFoundError,
     GolfCourseHasRoundsError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
-    CompetitionNotDraftError as AddGCNotDraftError,
     CompetitionNotFoundError as AddGCNotFoundError,
     GolfCourseAlreadyAssignedError,
     GolfCourseNotApprovedError,
@@ -92,7 +92,7 @@ async def add_golf_course_to_competition(
         get_add_golf_course_to_competition_use_case
     ),
 ):
-    """Añade un campo de golf aprobado a una competición en estado DRAFT."""
+    """Añade un campo de golf aprobado a una competición no terminada ni cancelada."""
     try:
         current_user_id = UserId(current_user.id)
 
@@ -112,7 +112,7 @@ async def add_golf_course_to_competition(
     except AddGCNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (
-        AddGCNotDraftError,
+        AgendaNotEditableError,
         GolfCourseNotApprovedError,
         GolfCourseAlreadyAssignedError,
         IncompatibleCountryError,

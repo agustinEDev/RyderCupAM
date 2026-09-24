@@ -1503,11 +1503,11 @@ class TestCompetitionGolfCourses:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_add_golf_course_once_enrollment_closes_returns_400(self, client: AsyncClient):
-        """BE #323: con las inscripciones abiertas sí; cerradas, ya no.
+    async def test_add_golf_course_after_enrollment_closes(self, client: AsyncClient):
+        """BE #323 abrió la puerta con las inscripciones abiertas; BE #368, hasta el final.
 
-        Justo el caso que motivó el cambio: quien invita antes de poner el campo
-        —y con ello abre el torneo— tiene que poder ponerlo después.
+        Añadir solo amplía la lista: ninguna sesión cambia de campo, así que
+        cerrar las inscripciones no es motivo para dejar fuera otro campo.
         """
         # Arrange
         admin = await create_admin_user(
@@ -1532,7 +1532,7 @@ class TestCompetitionGolfCourses:
         )
         assert abierta.status_code == 201
 
-        # Al cerrarlas, ya no
+        # Y al cerrarlas, también
         await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=creator["cookies"],
@@ -1546,8 +1546,8 @@ class TestCompetitionGolfCourses:
             cookies=creator["cookies"],
         )
 
-        assert response.status_code == 400
-        assert "inscripciones" in response.text
+        assert response.status_code == 201, response.text
+        assert response.json()["display_order"] == 2
 
     @pytest.mark.asyncio
     async def test_remove_golf_course_from_competition_success(self, client: AsyncClient):

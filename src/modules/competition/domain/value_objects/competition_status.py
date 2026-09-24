@@ -95,6 +95,17 @@ class CompetitionStatus(StrEnum):
         """
         return not self.is_final()
 
+    def allows_adding_golf_courses(self) -> bool:
+        """Verifica si se pueden añadir campos de golf (BE #368).
+
+        Añadir solo amplía la lista: ninguna sesión cambia de campo. Con la
+        agenda propuesta al crear, toda competición Ryder nace con sesiones, así
+        que esperar a que no las haya dejaba el segundo campo fuera para
+        siempre. Quitar un campo sí puede dejar una sesión sin el suyo, y por
+        eso sigue con `allows_modifications`.
+        """
+        return not self.is_final()
+
     def allows_modifications(self) -> bool:
         """Verifica si el estado permite modificar la configuración.
 

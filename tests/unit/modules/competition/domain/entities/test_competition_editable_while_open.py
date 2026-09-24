@@ -114,14 +114,21 @@ class TestGolfCoursesWhileEnrollmentIsOpen:
 
     @pytest.mark.parametrize(
         "status",
-        [
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
-            CompetitionStatus.COMPLETED,
-            CompetitionStatus.CANCELLED,
-        ],
+        [CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS],
     )
-    def test_no_courses_once_enrollment_closes(self, status):
+    def test_a_course_can_still_be_added_after_enrollment_closes(self, status):
+        """Anadir solo amplia la lista: ninguna sesion cambia (BE #368)."""
+        competition = build_competition(status=status)
+
+        competition.add_golf_course(GolfCourseId.generate(), CountryCode("ES"))
+
+        assert len(competition.golf_courses) == 1
+
+    @pytest.mark.parametrize(
+        "status",
+        [CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED],
+    )
+    def test_no_courses_once_the_competition_is_over(self, status):
         competition = build_competition(status=status)
 
         with pytest.raises(CompetitionStateError):

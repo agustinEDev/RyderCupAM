@@ -1,7 +1,8 @@
 """
 Caso de Uso: Añadir Campo de Golf a Competición.
 
-Permite asociar un campo de golf aprobado a una competición en estado DRAFT.
+Permite asociar un campo de golf aprobado a una competición que no haya
+terminado ni se haya cancelado (BE #368).
 Solo el creador puede realizar esta acción.
 """
 
@@ -12,10 +13,11 @@ from src.modules.competition.application.dto.competition_dto import (
     AddGolfCourseResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotDraftError,
+    AgendaNotEditableError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -105,7 +107,7 @@ class AddGolfCourseToCompetitionUseCase:
         Raises:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
-            CompetitionNotDraftError: Si las inscripciones ya no están abiertas
+            AgendaNotEditableError: Si la competición ya terminó o se canceló
             GolfCourseNotFoundError: Si el campo de golf no existe
             GolfCourseNotApprovedError: Si el campo no está aprobado
             GolfCourseAlreadyAssignedError: Si el campo ya está asociado
@@ -127,22 +129,8 @@ class AddGolfCourseToCompetitionUseCase:
                     "Solo el creador puede añadir campos de golf a la competición"
                 )
 
-            # 3. Verificar que esté en estado DRAFT
-            if not competition.allows_modifications():
-                raise CompetitionNotDraftError(
-                    f"Solo se pueden añadir campos mientras las inscripciones están "
-                    f"abiertas. Estado actual: {competition.status.value}"
-                )
-
-            # Y con el calendario montado tampoco: se vuelve a ACTIVE desde CLOSED
-            # (`reopen_enrollments`), y quien ya esta inscrito eligio su color de
-            # barras sobre los campos de entonces. Cambiarlos por debajo hace que
-            # la generacion de partidos falle mucho despues (BE #323)
-            if await self._uow.rounds.find_by_competition(competition_id):
-                raise CompetitionNotDraftError(
-                    "No se pueden añadir campos: la competición ya tiene rondas "
-                    "programadas."
-                )
+            # 3. Cuándo se puede añadir lo decide la entidad, en el paso 6
+            # (BE #368): aquí no se repite la regla.
 
             # 4. Buscar el campo de golf
             golf_course_id = GolfCourseId(request.golf_course_id)
@@ -163,6 +151,8 @@ class AddGolfCourseToCompetitionUseCase:
             # 6. Añadir el campo a la competición (validación de país + duplicados en dominio)
             try:
                 competition.add_golf_course(golf_course_id, golf_course.country_code)
+            except CompetitionStateError as e:
+                raise AgendaNotEditableError(str(e)) from e
             except ValueError as e:
                 # Puede ser por país incompatible o campo duplicado
                 error_msg = str(e)

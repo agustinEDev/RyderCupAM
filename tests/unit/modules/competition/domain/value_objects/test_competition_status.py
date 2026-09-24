@@ -1,5 +1,7 @@
 """Tests para CompetitionStatus Value Object - transiciones de estado."""
 
+import pytest
+
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
@@ -109,6 +111,21 @@ class TestCompetitionStatusHelpers:
         assert CompetitionStatus.IN_PROGRESS.allows_modifications() is False
         assert CompetitionStatus.COMPLETED.allows_modifications() is False
         assert CompetitionStatus.CANCELLED.allows_modifications() is False
+
+    @pytest.mark.parametrize(
+        ("status", "esperado"),
+        [
+            (CompetitionStatus.DRAFT, True),
+            (CompetitionStatus.ACTIVE, True),
+            (CompetitionStatus.CLOSED, True),
+            (CompetitionStatus.IN_PROGRESS, True),
+            (CompetitionStatus.COMPLETED, False),
+            (CompetitionStatus.CANCELLED, False),
+        ],
+    )
+    def test_golf_courses_can_be_added_until_the_competition_is_over(self, status, esperado):
+        """BE #368: anadir un campo no toca ninguna sesion, asi que no espera a nada."""
+        assert status.allows_adding_golf_courses() is esperado
 
     def test_allows_deletion_while_enrollment_is_open(self):
         """BE #333: un torneo recien creado se puede borrar, abierto o no.

@@ -1066,18 +1066,18 @@ class Competition:
         Añade un campo de golf a la competición.
 
         Business Rules:
-        - Solo en estado DRAFT
+        - Hasta que la competición termina o se cancela (BE #368)
         - El país del campo debe ser compatible con la location de la competición
         - No se permiten duplicados
 
         Raises:
-            CompetitionStateError: Si las inscripciones ya no están abiertas
+            CompetitionStateError: Si la competición ya terminó o se canceló
             ValueError: Si el país no es compatible o el campo ya existe
         """
-        if not self.allows_modifications():
+        if not self._status.allows_adding_golf_courses():
             raise CompetitionStateError(
-                f"Solo puedes añadir campos de golf mientras las inscripciones "
-                f"están abiertas. Estado actual: {self._status.value}"
+                f"No se pueden añadir campos de golf a una competición terminada "
+                f"o cancelada. Estado actual: {self._status.value}"
             )
 
         if not self._is_country_compatible(country_code):
