@@ -117,6 +117,32 @@ class UpdateCompetitionUseCase:
             adjacent_country_2=hueco("adjacent_country_2", actual.adjacent_country_2),
         )
 
+    @staticmethod
+    def _comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request) -> None:
+        """Lo que la agenda ya montada no aguanta que cambie.
+
+        Raises:
+            CompetitionNotEditableError: Si alguna sesion quedaria fuera de las
+                fechas nuevas, o si se cambia el modo de juego con alguna sesion
+                que ya tiene partidos
+        """
+        if not rondas:
+            return
+        if request.start_date and request.end_date:
+            fuera = [
+                r for r in rondas if not request.start_date <= r.round_date <= request.end_date
+            ]
+            if fuera:
+                raise CompetitionNotEditableError(
+                    "No se pueden mover las fechas: alguna sesión quedaría fuera del torneo. "
+                    "Cambia o borra antes esas sesiones."
+                )
+        cambia_el_modo = request.play_mode and request.play_mode != competition.play_mode.value
+        if cambia_el_modo and any(not r.can_modify() for r in rondas):
+            raise CompetitionNotEditableError(
+                "No se puede cambiar el modo de juego: ya hay sesiones con partidos."
+            )
+
     async def execute(
         self,
         competition_id: CompetitionId,
@@ -159,18 +185,18 @@ class UpdateCompetitionUseCase:
                     f"Solo mientras las inscripciones están abiertas."
                 )
 
-            # 3a. Con el calendario ya montado, la configuracion no se toca.
+            # 3a. Con agenda, solo se protege lo que ella necesita (BE #323,
+            # afinado en BE #365). Antes se rechazaba TODO en cuanto habia una
+            # sesion, y desde que la agenda se propone al crear la competicion
+            # eso impedia hasta cambiarle el nombre.
+            #
             # `ACTIVE` no significa «todavia no hay nada»: se vuelve a ACTIVE desde
-            # CLOSED con `reopen_enrollments`, y entonces ya puede haber rondas,
-            # equipos y partidos. Mover las fechas dejaria esas rondas fuera del
-            # rango del torneo, y cambiar el modo de juego dejaria los golpes ya
-            # anotados sin relacion con lo que se ensena (BE #323)
+            # CLOSED con `reopen_enrollments`, y entonces ya puede haber partidos.
+            # Mover las fechas dejaria sesiones fuera del rango del torneo, y
+            # cambiar el modo de juego dejaria los golpes ya anotados sin relacion
+            # con lo que se ensena
             rondas = await self._uow.rounds.find_by_competition(competition_id)
-            if rondas:
-                raise CompetitionNotEditableError(
-                    "No se puede modificar la configuración: la competición ya tiene "
-                    "rondas programadas."
-                )
+            self._comprobar_que_la_agenda_sigue_valiendo(rondas, competition, request)
 
             # 3b. El cupo no puede quedarse por debajo de quien ya esta dentro.
             # Con las inscripciones abiertas ya hay gente apuntada (BE #323), y

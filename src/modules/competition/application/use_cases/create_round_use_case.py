@@ -5,8 +5,9 @@ from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    CompetitionNotClosedError,
+    AgendaNotEditableError,
     CompetitionNotFoundError,
+    DateOutOfRangeError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.round import Round
@@ -14,7 +15,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -34,18 +34,12 @@ class DuplicateSessionError(Exception):
     pass
 
 
-class DateOutOfRangeError(Exception):
-    """La fecha está fuera del rango de la competición."""
-
-    pass
-
-
 class CreateRoundUseCase:
     """
     Caso de uso para crear una ronda/sesión de competición.
 
     Restricciones:
-    - La competición debe estar en estado CLOSED
+    - La competición no puede haber terminado ni estar cancelada (BE #365)
     - Solo el creador puede crear rondas
     - El campo de golf debe estar asociado a la competición
     - No pueden existir sesiones duplicadas (misma fecha + tipo)
@@ -61,6 +55,10 @@ class CreateRoundUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
+            # Bloqueada, como la agenda automática: si no, una sesión creada
+            # mientras se sustituye la agenda se quedaba fuera de la sustitución.
+            # Y luego leída con sus campos, que la lectura bloqueada no trae
+            await self._uow.competitions.find_by_id_for_update(competition_id)
             competition = await self._uow.competitions.find_by_id(competition_id)
 
             if not competition:
@@ -72,10 +70,11 @@ class CreateRoundUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede crear rondas")
 
-            # 3. Verificar estado CLOSED
-            if competition.status != CompetitionStatus.CLOSED:
-                raise CompetitionNotClosedError(
-                    f"La competición debe estar en estado CLOSED. "
+            # La agenda se edita desde que la competición existe (BE #365): lo
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión
+            if not competition.status.allows_agenda_edits():
+                raise AgendaNotEditableError(
+                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
                     f"Estado actual: {competition.status.value}"
                 )
 

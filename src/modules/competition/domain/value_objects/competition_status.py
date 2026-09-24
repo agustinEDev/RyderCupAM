@@ -85,6 +85,16 @@ class CompetitionStatus(StrEnum):
         """Verifica si es un estado final (no permite más transiciones)."""
         return self in {CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED}
 
+    def allows_agenda_edits(self) -> bool:
+        """Verifica si se pueden crear, cambiar o borrar sesiones (BE #365).
+
+        Desde que la competición existe hasta que termina o se cancela: la
+        agenda se propone al crearla. Lo que se protege es tocar una sesión ya
+        jugada, y eso lo decide cada sesión, no el estado de la competición
+        (diseño del 20 sep).
+        """
+        return not self.is_final()
+
     def allows_modifications(self) -> bool:
         """Verifica si el estado permite modificar la configuración.
 
