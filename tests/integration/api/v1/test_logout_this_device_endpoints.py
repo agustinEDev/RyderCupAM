@@ -95,3 +95,41 @@ async def test_veinticuatro_horas_sin_usar_la_sesion_caduca(client: AsyncClient)
     caducada = await client.post("/api/v1/auth/refresh-token", headers={"User-Agent": MOVIL})
 
     assert caducada.status_code == 401, caducada.text
+
+
+async def test_volver_a_entrar_no_resucita_un_token_viejo(client: AsyncClient):
+    """CWE-613 (CodeRabbit en la #378): el login pone «último uso: ahora», y los
+    tokens anteriores de un dispositivo inactivo no pueden volver a valer."""
+    email = f"resucita_{uuid4().hex[:8]}@example.com"
+    alta = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": CLAVE, "first_name": "Ana", "last_name": "Golf"},
+    )
+    assert alta.status_code == 201, alta.text
+    viejo = await _entra(client, email, MOVIL)
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "UPDATE user_devices SET last_used_at = now() - interval '25 hours' "
+                    "WHERE id = :id"
+                ),
+                {"id": viejo["device_id"]},
+            )
+    finally:
+        await engine.dispose()
+
+    # Vuelve a entrar desde ese mismo dispositivo: su cookie incluida
+    _usa(client, viejo)
+    otra_vez = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": CLAVE},
+        headers={"User-Agent": MOVIL},
+    )
+    assert otra_vez.status_code == 200, otra_vez.text
+
+    _usa(client, viejo)
+    resucitado = await client.post("/api/v1/auth/refresh-token", headers={"User-Agent": MOVIL})
+
+    assert resucitado.status_code == 401, resucitado.text
