@@ -83,9 +83,12 @@ from src.modules.competition.application.use_cases.remove_custom_handicap_use_ca
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError as RequestAlreadyEnrolledError,
+    CompetitionFullError,
     CompetitionIsPrivateError,
     CompetitionNotActiveError,
+    EnrollmentClosedError,
     RequestEnrollmentUseCase,
+    TooManyEnrollmentsError,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
     SetCustomHandicapUseCase,
@@ -263,7 +266,12 @@ async def request_enrollment(
 
     except RequestCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except CompetitionNotActiveError as e:
+    except (
+        CompetitionNotActiveError,
+        CompetitionFullError,
+        EnrollmentClosedError,
+        TooManyEnrollmentsError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CompetitionIsPrivateError as e:
         # 403 y no 404: la competicion existe y quien pide ya sabe que existe

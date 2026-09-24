@@ -209,27 +209,37 @@ def test_can_enroll_rejects_when_competition_completed():
         )
 
 
-def test_can_enroll_rejects_when_competition_already_started():
+def test_can_enroll_allows_on_the_start_day():
     """
-    Given: Competition that already started (start_date is today or past)
+    BE #372: el día del torneo es cuando más gente dice «me apunto». Lo que
+    protege el torneo es el estado (en juego ya no) y la aprobación del
+    organizador, no la fecha.
+    """
+    CompetitionPolicy.can_enroll(
+        user_id=UserId.generate(),
+        competition_id=CompetitionId.generate(),
+        existing_enrollment_id=None,
+        competition_status=CompetitionStatus.ACTIVE,
+        competition_start_date=date.today(),
+        user_total_enrollments=5,
+    )
+
+
+def test_can_enroll_rejects_once_the_start_day_has_passed():
+    """
+    Given: Competition that started yesterday but is still ACTIVE
     When: Attempting to enroll
     Then: EnrollmentPastStartDateViolation raised (temporal constraint)
     """
-    user_id = UserId.generate()
-    competition_id = CompetitionId.generate()
-    start_date = date.today()  # Today (already started)
-
-    with pytest.raises(EnrollmentPastStartDateViolation) as exc_info:
+    with pytest.raises(EnrollmentPastStartDateViolation):
         CompetitionPolicy.can_enroll(
-            user_id=user_id,
-            competition_id=competition_id,
+            user_id=UserId.generate(),
+            competition_id=CompetitionId.generate(),
             existing_enrollment_id=None,
             competition_status=CompetitionStatus.ACTIVE,
-            competition_start_date=start_date,
+            competition_start_date=date.today() - timedelta(days=1),
             user_total_enrollments=5,
         )
-
-    assert "cannot enroll after start date" in str(exc_info.value).lower()
 
 
 def test_can_enroll_allows_when_competition_status_closed():
