@@ -27,6 +27,15 @@ class RoundRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, round_id: RoundId) -> Round | None:
+        """Busca una ronda bloqueando su fila, con lo que hay en la base de datos.
+
+        No lo que la sesion tuviera en memoria: quien la lee tras esperar un
+        bloqueo tiene que decidir con el estado de ahora (BE #365).
+        """
+        pass
+
+    @abstractmethod
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         """Busca todas las rondas de una competicion."""
         pass

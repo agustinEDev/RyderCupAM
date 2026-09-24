@@ -378,3 +378,31 @@ class TestEditarLaCompeticionConAgenda:
 
         with pytest.raises(CompetitionNotEditableError):
             await self._editar(uow, competicion, organizador, play_mode="HANDICAP")
+
+
+class TestLaRevisionDeCodeRabbit:
+    """C1-C2: lo que encontró CodeRabbit en la #366."""
+
+    async def test_c1_el_modo_manual_con_el_torneo_en_juego_no_se_rechaza(self):
+        """El manual no crea ni borra nada: solo lo prohibido es la automática."""
+        uow, competicion, organizador, _ = await _montar("IN_PROGRESS", con_equipos=True)
+
+        respuesta = await ConfigureScheduleUseCase(uow).execute(
+            ConfigureScheduleRequestDTO(
+                competition_id=competicion.id.value, mode=ScheduleConfigMode.MANUAL
+            ),
+            organizador,
+        )
+
+        assert respuesta.rounds_created == 0
+
+    async def test_c2_mover_una_sesion_fuera_de_las_fechas_no(self):
+        from src.modules.competition.application.exceptions import DateOutOfRangeError
+
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        creada = await _crear(uow, competicion, organizador, campo)
+
+        with pytest.raises(DateOutOfRangeError):
+            await UpdateRoundUseCase(uow).execute(
+                UpdateRoundRequestDTO(round_id=creada.id, round_date=date(2026, 6, 9)), organizador
+            )

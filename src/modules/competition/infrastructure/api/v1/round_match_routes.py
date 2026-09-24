@@ -285,6 +285,8 @@ async def update_round(
     except (
         # Terminada o cancelada: su agenda ya no se toca (BE #365)
         AgendaNotEditableError,
+        # Fuera de las fechas del torneo, como al crearla
+        DateOutOfRangeError,
         UpdateRoundNotModifiableError,
         UpdateRoundGCNotInCompError,
         UpdateRoundDuplicateSessionError,
@@ -629,7 +631,7 @@ async def assign_teams(
 
     **Restricciones:**
     - El creador o admin puede asignar equipos
-    - La competición no puede haber terminado ni estar cancelada (BE #365)
+    - La competición debe estar en estado CLOSED
     - Debe haber suficientes jugadores inscritos (mínimo 2)
     - En modo MANUAL, los equipos deben estar balanceados
 
@@ -699,7 +701,7 @@ async def generate_matches(
     - El creador o admin puede generar partidos
     - La ronda debe estar en estado PENDING_MATCHES
     - Debe existir asignación de equipos
-    - La competición no puede haber terminado ni estar cancelada (BE #365)
+    - La competición debe estar en estado CLOSED
 
     **Returns:**
     - 201: Partidos generados

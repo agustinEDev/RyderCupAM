@@ -7,6 +7,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError,
+    DateOutOfRangeError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.domain.entities.round import Round
@@ -33,12 +34,6 @@ class DuplicateSessionError(Exception):
     pass
 
 
-class DateOutOfRangeError(Exception):
-    """La fecha está fuera del rango de la competición."""
-
-    pass
-
-
 class CreateRoundUseCase:
     """
     Caso de uso para crear una ronda/sesión de competición.
@@ -60,6 +55,10 @@ class CreateRoundUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
+            # Bloqueada, como la agenda automática: si no, una sesión creada
+            # mientras se sustituye la agenda se quedaba fuera de la sustitución.
+            # Y luego leída con sus campos, que la lectura bloqueada no trae
+            await self._uow.competitions.find_by_id_for_update(competition_id)
             competition = await self._uow.competitions.find_by_id(competition_id)
 
             if not competition:

@@ -39,6 +39,12 @@ class AgendaNotEditableError(Exception):
     pass
 
 
+class DateOutOfRangeError(Exception):
+    """La fecha de la sesión está fuera de las fechas de la competición."""
+
+    pass
+
+
 class ScheduleAlreadyInPlayError(Exception):
     """Alguna sesión ya tiene partidos: la agenda automática se la llevaría."""
 

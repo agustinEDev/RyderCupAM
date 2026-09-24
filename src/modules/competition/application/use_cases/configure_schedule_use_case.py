@@ -80,12 +80,6 @@ class ConfigureScheduleUseCase:
                     "La agenda solo se puede cambiar hasta que la competición termina "
                     f"o se cancela. Estado: {competition.status.value}"
                 )
-            # La automática empieza a contar desde el primer día: con el torneo
-            # en juego repondría días ya jugados. Ahí, sesión a sesión
-            if competition.status == CompetitionStatus.IN_PROGRESS:
-                raise AgendaNotEditableError(
-                    "Con el torneo en juego la agenda se cambia sesión a sesión"
-                )
 
             # MANUAL mode: solo ack
             if request.mode == ScheduleConfigMode.MANUAL:
@@ -97,6 +91,13 @@ class ConfigureScheduleUseCase:
                 )
 
             # AUTOMATIC mode
+            # Empieza a contar desde el primer día: con el torneo en juego
+            # repondría días ya jugados. Ahí, sesión a sesión. El manual no
+            # crea ni borra nada, así que a él no le afecta
+            if competition.status == CompetitionStatus.IN_PROGRESS:
+                raise AgendaNotEditableError(
+                    "Con el torneo en juego la agenda se cambia sesión a sesión"
+                )
             # 4. Verificar campos de golf
             golf_courses = competition.golf_courses
             if not golf_courses:

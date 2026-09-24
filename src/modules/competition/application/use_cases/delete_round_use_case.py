@@ -57,6 +57,10 @@ class DeleteRoundUseCase:
             if not competition:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
+            # Releída tras el bloqueo: si mientras se esperaba otra petición
+            # generó sus partidos, se decide con eso y no con lo de antes
+            round_entity = await self._uow.rounds.find_by_id_for_update(round_id) or round_entity
+
             # 3. Verificar creador
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede eliminar rondas")

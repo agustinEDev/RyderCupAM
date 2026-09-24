@@ -7,6 +7,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError,
+    DateOutOfRangeError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
     RoundNotModifiableError,
@@ -70,6 +71,10 @@ class UpdateRoundUseCase:
             if not competition:
                 raise CompetitionNotFoundError("La competición asociada no existe")
 
+            # Releída tras el bloqueo: si mientras se esperaba otra petición
+            # generó sus partidos, se decide con eso y no con lo de antes
+            round_entity = await self._uow.rounds.find_by_id_for_update(round_id) or round_entity
+
             # 3. Verificar creador
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
@@ -93,6 +98,17 @@ class UpdateRoundUseCase:
                     )
 
             # 6. Verificar sesión duplicada si se cambia fecha o tipo
+            # Dentro del torneo, como al crearla: con la agenda abierta desde el
+            # principio, mover una sesión fuera de las fechas ya no esperaba al
+            # cierre para ser posible (BE #365, CodeRabbit)
+            if request.round_date and not (
+                competition.dates.start_date <= request.round_date <= competition.dates.end_date
+            ):
+                raise DateOutOfRangeError(
+                    f"La fecha {request.round_date} está fuera del rango "
+                    f"({competition.dates.start_date} - {competition.dates.end_date})"
+                )
+
             if request.session_type or request.round_date:
                 check_date = request.round_date or round_entity.round_date
                 check_session = (
