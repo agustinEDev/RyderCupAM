@@ -473,12 +473,14 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
         }
     )
 
-    # Registrar un usuario
+    # Registrar un usuario. Con género: sin él no puede crear ni apuntarse a
+    # ninguna competición (#710)
     user_data = {
         "email": "testuser@example.com",
         "password": "TestPass123!",
         "first_name": "Test",
         "last_name": "User",
+        "gender": "MALE",
     }
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
