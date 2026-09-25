@@ -26,6 +26,7 @@ from src.modules.competition.application.use_cases.respond_to_invitation_use_cas
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
+    InvitationNoRoomViolation,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -156,7 +157,8 @@ class TestRespondToInvitationUseCase:
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
-        with pytest.raises(InvalidInvitationStatusViolation, match="plazas"):
+        # Con su propia excepcion, que la ruta contesta con su codigo (BE #385)
+        with pytest.raises(InvitationNoRoomViolation):
             await uc.execute(
                 RespondInvitationRequestDTO(
                     invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
@@ -197,8 +199,9 @@ class TestRespondToInvitationUseCase:
         with pytest.raises(InvalidInvitationStatusViolation):
             await uc.execute(pedir)
 
-        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»
-        with pytest.raises(InvalidInvitationStatusViolation, match="No quedan plazas"):
+        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»,
+        # y cierto aunque se reabra (BE #385)
+        with pytest.raises(InvitationNoRoomViolation, match="se quedó sin plaza"):
             await uc.execute(pedir)
 
     async def test_aceptar_bloquea_la_fila_de_la_competicion(self, comp_uow, user_uow):

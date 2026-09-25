@@ -164,6 +164,22 @@ class InvalidInvitationStatusViolation(BusinessRuleViolation):
     pass
 
 
+class InvitationNoRoomViolation(InvalidInvitationStatusViolation):
+    """La invitacion se quedo sin plaza al cerrarse la inscripcion (#710).
+
+    Reabrir no la revive, asi que el motivo tiene que ser cierto con la
+    competicion cerrada o reabierta: decia «la inscripción está cerrada» con
+    ella ACTIVE otra vez (BE #385). Hija de la de estado, para que quien ya la
+    capture no note nada.
+    """
+
+    error_code = "INVITATION_NO_ROOM"
+    MENSAJE = "Esta invitación se quedó sin plaza al cerrarse la inscripción"
+
+    def __init__(self) -> None:
+        super().__init__(self.MENSAJE)
+
+
 class InvitationCompetitionStatusViolation(BusinessRuleViolation):
     """Lanzada cuando el estado de la competicion no permite invitaciones."""
 

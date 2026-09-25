@@ -62,6 +62,8 @@ class TestAlCerrarLaInscripcion:
             f"/api/v1/invitations/{mias[0]['id']}/respond", json={"action": "ACCEPT"}
         )
         assert respuesta.status_code == 409, respuesta.text
+        # Con su codigo, para que la pantalla lo diga en su idioma (BE #385)
+        assert respuesta.json()["error_code"] == "INVITATION_NO_ROOM"
         inscripciones = await client.get(
             f"/api/v1/competitions/{montaje['comp']['id']}/enrollments"
         )
@@ -86,3 +88,25 @@ class TestAlCerrarLaInscripcion:
 
         assert respuesta.status_code == 422, respuesta.text
         assert "plazas" in respuesta.json()["detail"]
+
+    async def test_reabierta_sigue_sin_plaza_y_no_dice_que_esta_cerrada(self, client: AsyncClient):
+        """BE #385: reabrir no revive la invitacion, y el motivo tiene que ser
+        cierto tambien entonces. Decia «la inscripción está cerrada» con la
+        competicion ACTIVE otra vez."""
+        montaje = await _invitado_y_cerrada(client)
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+        respuesta = await client.post(
+            f"/api/v1/competitions/{montaje['comp']['id']}/reopen-enrollments"
+        )
+        assert respuesta.status_code == 200, respuesta.text
+
+        set_auth_cookies(client, montaje["invitado"]["cookies"])
+        suya = (await client.get("/api/v1/invitations/me")).json()["invitations"][0]
+        respuesta = await client.post(
+            f"/api/v1/invitations/{suya['id']}/respond", json={"action": "ACCEPT"}
+        )
+
+        assert respuesta.status_code == 409, respuesta.text
+        cuerpo = respuesta.json()
+        assert cuerpo["error_code"] == "INVITATION_NO_ROOM"
+        assert "cerrada" not in cuerpo["detail"]

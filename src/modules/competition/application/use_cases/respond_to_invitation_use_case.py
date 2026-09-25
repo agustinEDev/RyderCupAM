@@ -17,13 +17,13 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
+    InvitationNoRoomViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.competition_policy import (
     INSCRIPCION_CERRADA,
-    SIN_PLAZAS,
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -89,10 +89,10 @@ class RespondToInvitationUseCase:
                 sin_plaza = True
 
         if sin_plaza:
-            raise InvalidInvitationStatusViolation(SIN_PLAZAS)
+            raise InvitationNoRoomViolation()
         # Una ya sin plaza lo dice en su idioma, no con el estado en crudo
         if non_pending_status == InvitationStatus.NO_ROOM.value:
-            raise InvalidInvitationStatusViolation(SIN_PLAZAS)
+            raise InvitationNoRoomViolation()
         # Si la invitacion no estaba pending, el commit ya ocurrio; ahora lanzamos
         if non_pending_status:
             raise InvalidInvitationStatusViolation(
