@@ -26,6 +26,7 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
 )
@@ -34,6 +35,9 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Cerrados sin jugarlos hasta el final: el ganador vive en `result`
+_SIN_JUGAR_HASTA_EL_FINAL = (MatchStatus.CONCEDED, MatchStatus.WALKOVER)
 
 
 def _hole_card_dto(holes) -> list[HoleInfoDTO]:
@@ -104,9 +108,21 @@ class GetScoringViewUseCase:
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
             standing = self._scoring_service.calculate_match_standing(hole_results_list)
-            decided_result = (
-                DecidedResultDTO(**match.decided_result) if match.decided_result else None
+            # Un partido concedido o ganado por walkover tambien esta decidido, y
+            # la pantalla tiene que saber quien gano: ese resultado lo guarda la
+            # concesion o el walkover, no `decided_result`, que es el de los
+            # hoyos (BE #384)
+            sin_jugar_hasta_el_final = (
+                match.status in _SIN_JUGAR_HASTA_EL_FINAL and match.result is not None
             )
+            if sin_jugar_hasta_el_final:
+                decided_result = DecidedResultDTO(
+                    winner=match.result["winner"], score=match.result["score"]
+                )
+            elif match.decided_result:
+                decided_result = DecidedResultDTO(**match.decided_result)
+            else:
+                decided_result = None
             team_a_name = (
                 competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
             )
@@ -119,7 +135,7 @@ class GetScoringViewUseCase:
                 match_number=match.match_number,
                 match_format=round_entity.match_format.value if round_entity.match_format else "",
                 match_status=match.status.value,
-                is_decided=match.is_decided,
+                is_decided=match.is_decided or sin_jugar_hasta_el_final,
                 decided_result=decided_result,
                 round_info=round_info,
                 competition_id=str(competition.id),
