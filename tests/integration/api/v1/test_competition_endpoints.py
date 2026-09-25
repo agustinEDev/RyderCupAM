@@ -13,6 +13,7 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    add_one_session,
     approve_golf_course,
     create_admin_user,
     create_authenticated_user,
@@ -1070,6 +1071,52 @@ class TestCompetitionStateTransitions:
         assert response.json()["status"] == "CANCELLED"
 
     @pytest.mark.asyncio
+    async def test_shortening_the_dates_says_which_sessions_fall_out(self, client: AsyncClient):
+        """#710: con varias sesiones, «alguna quedaría fuera» no decía cuál."""
+        from datetime import date, timedelta
+
+        user = await create_authenticated_user(
+            client, "fechas_fuera@test.com", "P@ssw0rd123!", "Fechas", "Fuera"
+        )
+        comp = await create_competition(client, user["cookies"])
+        sesion = await add_one_session(client, user["cookies"], comp)
+        inicio = date.fromisoformat(comp["start_date"])
+
+        set_auth_cookies(client, user["cookies"])
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={
+                "start_date": (inicio + timedelta(days=1)).isoformat(),
+                "end_date": (inicio + timedelta(days=2)).isoformat(),
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        cuerpo = response.json()
+        assert cuerpo["error_code"] == "DATES_LEAVE_SESSIONS_OUT"
+        assert cuerpo["sessions_outside"] == [
+            {"id": sesion["id"], "round_date": comp["start_date"], "session_type": "MORNING"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_start_without_any_session_returns_400(self, client: AsyncClient):
+        """Sin ninguna sesión no hay torneo que iniciar (#710, 25 sep)."""
+        user = await create_authenticated_user(
+            client, "no_sessions@test.com", "P@ssw0rd123!", "Sin", "Sesiones"
+        )
+        comp = await create_competition(client, user["cookies"])
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
+        )
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 400, response.text
+        assert "sesión" in response.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_full_lifecycle(self, client: AsyncClient):
         """Test del ciclo de vida completo: DRAFT -> ACTIVE -> CLOSED -> IN_PROGRESS -> COMPLETED."""
         user = await create_authenticated_user(
@@ -1093,7 +1140,8 @@ class TestCompetitionStateTransitions:
         )
         assert response.json()["status"] == "CLOSED"
 
-        # 4. Iniciar (IN_PROGRESS)
+        # 4. Iniciar (IN_PROGRESS): sin ninguna sesión no se inicia (#710)
+        await add_one_session(client, user["cookies"], comp)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
         )
@@ -1141,6 +1189,7 @@ class TestCompetitionStateTransitions:
             cookies=user["cookies"],
         )
         assert r2.status_code == 200
+        await add_one_session(client, user["cookies"], comp)
         r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
         assert r3.status_code == 200
 
@@ -1218,6 +1267,7 @@ class TestCompetitionStateTransitions:
             cookies=user["cookies"],
         )
         assert r2.status_code == 200
+        await add_one_session(client, user["cookies"], comp)
         r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
         assert r3.status_code == 200
         r4 = await client.post(

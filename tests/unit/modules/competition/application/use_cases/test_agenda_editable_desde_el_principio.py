@@ -354,6 +354,32 @@ class TestEditarLaCompeticionConAgenda:
                 end_date=date(2026, 6, 4),
             )
 
+    async def test_e2b_y_dice_cuales_quedan_fuera(self):
+        """#710: con varias sesiones, «alguna quedaría fuera» no decía cuál."""
+        from src.modules.competition.application.use_cases.update_competition_use_case import (
+            DatesLeaveSessionsOutError,
+        )
+
+        uow, competicion, organizador, campo = await _montar("ACTIVE")
+        # Creadas al revés: salen en el orden del día, mañana antes que tarde
+        tarde = await _crear(uow, competicion, organizador, campo, dia=1, franja="AFTERNOON")
+        manana = await _crear(uow, competicion, organizador, campo, dia=1, franja="MORNING")
+        await _crear(uow, competicion, organizador, campo, dia=2)
+
+        with pytest.raises(DatesLeaveSessionsOutError) as error:
+            await self._editar(
+                uow,
+                competicion,
+                organizador,
+                start_date=date(2026, 6, 2),
+                end_date=date(2026, 6, 4),
+            )
+
+        assert error.value.sesiones == [
+            (manana.id, date(2026, 6, 1), "MORNING"),
+            (tarde.id, date(2026, 6, 1), "AFTERNOON"),
+        ]
+
     async def test_e3_el_modo_de_juego_sin_partidos_se_cambia(self):
         uow, competicion, organizador, campo = await _montar("ACTIVE")
         await _crear(uow, competicion, organizador, campo)

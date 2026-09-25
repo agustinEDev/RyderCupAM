@@ -4,6 +4,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_competition_uow,
@@ -50,6 +51,7 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     CompetitionNotEditableError,
+    DatesLeaveSessionsOutError,
     UpdateCompetitionUseCase,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -518,6 +520,23 @@ async def update_competition(
     # dos caracteres pero mal formado como "1a" (InvalidCountryCodeError) y el
     # país repetido, que el DTO deja pasar y rechaza la Location
     # (InvalidLocationError). Sin nombrarlos, cada uno sale como un 500.
+    except DatesLeaveSessionsOutError as e:
+        # Cuáles, y no solo que alguna (#710). En claves: la pantalla escribe la
+        # fecha y la franja en su idioma (decidido el 24 sep, BE #360)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": (
+                    "No se pueden mover las fechas: alguna sesión quedaría fuera del torneo. "
+                    "Cambia o borra antes esas sesiones."
+                ),
+                "error_code": "DATES_LEAVE_SESSIONS_OUT",
+                "sessions_outside": [
+                    {"id": str(id_), "round_date": dia.isoformat(), "session_type": franja}
+                    for id_, dia, franja in e.sesiones
+                ],
+            },
+        )
     except (
         CompetitionNotEditableError,
         InvalidCountryError,

@@ -18,17 +18,35 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
     StartCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
 
+
+
+async def _con_una_sesion(uow, competition_id) -> None:
+    """Una sesión: sin ninguna no hay torneo que iniciar (#710, 25 sep)."""
+    async with uow:
+        await uow.rounds.add(
+            Round.create(
+                competition_id=CompetitionId(competition_id),
+                golf_course_id=GolfCourseId(uuid4()),
+                round_date=date(2025, 6, 1),
+                session_type=SessionType.MORNING,
+                match_format=MatchFormat.SINGLES,
+            )
+        )
 
 class TestStartCompetitionUseCase:
     """Suite de tests para el caso de uso StartCompetitionUseCase."""
@@ -77,6 +95,7 @@ class TestStartCompetitionUseCase:
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
+        await _con_una_sesion(uow, created.id)
 
         # Act: Iniciar competición
         start_use_case = StartCompetitionUseCase(uow)
@@ -259,6 +278,7 @@ class TestStartCompetitionUseCase:
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
+        await _con_una_sesion(uow, created.id)
 
         # Act: Iniciar competición
         start_use_case = StartCompetitionUseCase(uow)
@@ -274,3 +294,35 @@ class TestStartCompetitionUseCase:
             assert len(events) == 4
             assert events[3].__class__.__name__ == "CompetitionStartedEvent"
             assert events[3].competition_id == str(created.id)
+
+
+async def test_sin_ninguna_sesion_no_se_inicia_y_lo_dice():
+    """Decidido el 25 sep (#710): un torneo en juego sin nada que jugar no tiene
+    sentido. Antes el servidor lo dejaba y la ficha lo ofrecía."""
+    uow = InMemoryUnitOfWork()
+    creator_id = UserId(uuid4())
+    created = await CreateCompetitionUseCase(
+        uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+    ).execute(
+        CreateCompetitionRequestDTO(
+            name="Sin sesiones",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        ),
+        creator_id,
+    )
+    async with uow:
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+        competition.close_enrollments()
+        await uow.competitions.update(competition)
+
+    with pytest.raises(CompetitionStateError, match="sesión"):
+        await StartCompetitionUseCase(uow).execute(
+            StartCompetitionRequestDTO(competition_id=created.id), creator_id
+        )
+
+    async with uow:
+        competition = await uow.competitions.find_by_id(CompetitionId(created.id))
+    assert competition.status.value == "CLOSED"
