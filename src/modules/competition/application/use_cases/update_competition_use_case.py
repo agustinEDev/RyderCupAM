@@ -4,6 +4,9 @@ Caso de Uso: Actualizar Competition.
 Permite actualizar una competición existente (solo en estado DRAFT).
 """
 
+from datetime import date
+from uuid import UUID
+
 from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
     UpdateCompetitionResponseDTO,
@@ -24,14 +27,34 @@ from src.modules.competition.domain.value_objects.competition_name import (
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
 
+# En el orden del día, para nombrarlas como se juegan
+_ORDEN_DE_FRANJA = {SessionType.MORNING: 0, SessionType.AFTERNOON: 1, SessionType.EVENING: 2}
 
 class CompetitionNotEditableError(Exception):
     """Excepción lanzada cuando la competición no está en estado DRAFT."""
 
     pass
+
+
+class DatesLeaveSessionsOutError(CompetitionNotEditableError):
+    """Las fechas nuevas dejan fuera estas sesiones (#710).
+
+    Hereda del error de siempre para no cambiarle nada a quien ya lo captura.
+    Lleva las sesiones: con varias, «alguna quedaría fuera» no decía cuál. Como
+    datos y no como entidades: se leen fuera de la transacción, ya deshecha, y
+    un atributo caducado revienta (MissingGreenlet)
+    """
+
+    def __init__(self, sesiones: list[tuple[UUID, date, str]]):
+        self.sesiones = sesiones
+        super().__init__(
+            "No se pueden mover las fechas: alguna sesión quedaría fuera del torneo. "
+            "Cambia o borra antes esas sesiones."
+        )
 
 
 class UpdateCompetitionUseCase:
@@ -133,9 +156,11 @@ class UpdateCompetitionUseCase:
                 r for r in rondas if not request.start_date <= r.round_date <= request.end_date
             ]
             if fuera:
-                raise CompetitionNotEditableError(
-                    "No se pueden mover las fechas: alguna sesión quedaría fuera del torneo. "
-                    "Cambia o borra antes esas sesiones."
+                ordenadas = sorted(
+                    fuera, key=lambda r: (r.round_date, _ORDEN_DE_FRANJA[r.session_type])
+                )
+                raise DatesLeaveSessionsOutError(
+                    [(r.id.value, r.round_date, r.session_type.value) for r in ordenadas]
                 )
         cambia_el_modo = request.play_mode and request.play_mode != competition.play_mode.value
         if cambia_el_modo and any(not r.can_modify() for r in rondas):
